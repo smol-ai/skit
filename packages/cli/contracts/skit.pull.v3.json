@@ -1,0 +1,66 @@
+{
+  "$id": "skit.pull.v3",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "collection_id": {
+        "type": "string"
+      },
+      "previous_retained_copy_id": {
+        "type": "string"
+      },
+      "selected_retained_copy_id": {
+        "type": "string"
+      },
+      "snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "changed": {
+        "type": "boolean"
+      },
+      "projected": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Infinity",
+              "-Infinity",
+              "NaN"
+            ]
+          }
+        ]
+      },
+      "deferred": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Infinity",
+              "-Infinity",
+              "NaN"
+            ]
+          }
+        ]
+      }
+    },
+    "required": [
+      "collection_id",
+      "previous_retained_copy_id",
+      "selected_retained_copy_id",
+      "snapshot_digest",
+      "changed",
+      "projected",
+      "deferred"
+    ],
+    "additionalProperties": true
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

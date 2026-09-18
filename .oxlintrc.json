@@ -1,0 +1,126 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
+  "rules": {
+    "skit/no-record-any": "error",
+    "skit/no-record-unknown": "error"
+  },
+  "overrides": [
+    {
+      "files": ["packages/skit-server-effect/worker-configuration.d.ts"],
+      "rules": {
+        "skit/no-record-any": "off",
+        "skit/no-record-unknown": "off"
+      }
+    },
+    {
+      "files": ["packages/cli/test/**/*.ts"],
+      "rules": {
+        "skit/no-cli-output-text-assertions": "error"
+      }
+    },
+    {
+      "files": ["packages/cli/src/**/*.ts"],
+      "excludeFiles": ["packages/cli/src/dispatch.ts", "packages/cli/src/presentation/prompter.ts"],
+      "rules": {
+        "skit/no-direct-cli-output": "error"
+      }
+    },
+    {
+      "files": ["packages/cli/src/handlers/**/*.ts"],
+      "rules": {
+        "skit/no-member-access-on-yield": "error"
+      }
+    },
+    {
+      "files": [
+        "packages/skit/**/*.ts",
+        "packages/skit-server-effect/**/*.ts",
+        "packages/cli/**/*.ts",
+        "packages/tui/**/*.ts",
+        "packages/tui/**/*.tsx"
+      ],
+      "rules": {
+        "skit/no-nested-runtime": "error",
+        "skit/no-run-skit": "error",
+        "skit/no-promise-wrappers": "warn",
+        "skit/no-async-test-callback": "error",
+        "skit/no-throw-in-effect": "warn",
+        "skit/no-error-instanceof": "warn",
+        "skit/no-cast-parsed-json": "error",
+        "skit/no-structural-object-probe": "error",
+        "skit/no-handrolled-fetch-double": "warn",
+        "skit/no-node-fs": "error"
+      }
+    },
+    {
+      "files": ["packages/skit/src/platform/layer.ts", "packages/skit/src/platform/link-stat.ts"],
+      "rules": {
+        "skit/no-nested-runtime": "off",
+        "skit/no-node-fs": "off"
+      }
+    },
+    {
+      "files": ["packages/skit-server-effect/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@smolai/skit-core",
+                "message": "The Worker runs on workerd; import @smolai/skit-core/universal, which never reaches the Node platform layer."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/tui/**/*.ts", "packages/storybook/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\./(?:skit/src/|cli/src/(?!front-end(?:\\.js)?$))",
+                "message": "TUI and Storybook must import CLI/core behavior through packages/cli/src/front-end.ts so core has one runtime identity."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/cli/test/add-acquisition-lifetime.test.ts",
+        "packages/cli/test/add-cli-lifetime.test.ts",
+        "packages/cli/test/add-git-parity.test.ts",
+        "packages/cli/test/application-cli.test.ts",
+        "packages/cli/test/author-cli-lifetime.test.ts",
+        "packages/cli/test/author-initialization-native.test.ts",
+        "packages/cli/test/author-list.test.ts",
+        "packages/cli/test/cli.test.ts",
+        "packages/cli/test/declared-exit-codes.e2e.test.ts",
+        "packages/cli/test/helpers/skit-fixture.ts",
+        "packages/cli/test/live-sources.e2e.ts",
+        "packages/cli/test/publish-cli.test.ts",
+        "packages/cli/test/single-machine-journey.test.ts",
+        "packages/cli/test/source-acquisition.test.ts",
+        "packages/skit-server-effect/test/e2e.test.ts",
+        "packages/skit-server-effect/test/e2e-skills-sh.test.ts"
+      ],
+      "rules": {
+        "skit/no-async-test-callback": "off",
+        "skit/no-node-fs": "off"
+      }
+    },
+    {
+      "files": ["packages/tui/test/library-host.test.ts"],
+      "rules": {
+        "skit/no-async-test-callback": "off"
+      }
+    }
+  ]
+}

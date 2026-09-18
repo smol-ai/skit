@@ -1,0 +1,94 @@
+{
+  "$id": "skit.library.history.v1",
+  "type": "object",
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "enum": [
+              1
+            ]
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "string"
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity": {
+                  "type": "string",
+                  "enum": [
+                    "collection",
+                    "skill",
+                    "version",
+                    "binding",
+                    "projection",
+                    "custody",
+                    "library"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "before": {
+                  "type": "string"
+                },
+                "after": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "entity",
+                "id",
+                "action"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "eventId",
+          "occurredAt",
+          "type",
+          "workflow",
+          "changes"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "events"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

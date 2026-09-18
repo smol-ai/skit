@@ -1,0 +1,38 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "skit-server-effect-test",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-08-24",
+  "vars": {
+    "ACCOUNT_REGISTRATION_MODE": "closed",
+    "PUBLIC_APP_ORIGIN": "https://registry.test",
+    "BETTER_AUTH_SECRET": "skit-worker-test-secret-that-is-at-least-thirty-two-characters",
+    "SKIT_BOOTSTRAP_SECRET": "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "skit-server-effect-test",
+      "database_id": "skit-server-effect-test",
+      "migrations_dir": "../migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "SKIT_BLOBS", "bucket_name": "skit-server-effect-test-blobs" }],
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 },
+    },
+    {
+      "name": "PAT_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 5, "period": 60 },
+    },
+    {
+      "name": "BOOTSTRAP_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 5, "period": 60 },
+    },
+  ],
+}

@@ -1,0 +1,31 @@
+{
+  "$id": "skit.update.plan.v3",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "collection_id": {
+        "type": "string"
+      },
+      "current_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "available_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "changed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "collection_id",
+      "current_snapshot_digest",
+      "available_snapshot_digest",
+      "changed"
+    ],
+    "additionalProperties": true
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

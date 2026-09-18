@@ -1,0 +1,92 @@
+{
+  "$id": "skit.update.projection-retention.plan.v1",
+  "type": "object",
+  "properties": {
+    "revision": {
+      "type": "string"
+    },
+    "skill_id": {
+      "type": "string"
+    },
+    "skill_name": {
+      "type": "string"
+    },
+    "previous_skill_version_id": {
+      "type": "string"
+    },
+    "selected_projection_id": {
+      "type": "string"
+    },
+    "observed_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "snapshot_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "retained_path": {
+      "type": "string"
+    },
+    "retention_required": {
+      "type": "boolean"
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "projection_id": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "observed_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "agreement": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "identical",
+              "different"
+            ]
+          }
+        },
+        "required": [
+          "projection_id",
+          "harness",
+          "path",
+          "observed_digest",
+          "agreement"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "revision",
+    "skill_id",
+    "skill_name",
+    "previous_skill_version_id",
+    "selected_projection_id",
+    "observed_digest",
+    "snapshot_digest",
+    "retained_path",
+    "retention_required",
+    "projections"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

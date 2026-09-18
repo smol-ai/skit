@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+dist/
+.DS_Store
+coverage/
+*.tmp
+
+# Local server deployment configuration generated from the committed example.
+packages/skit-server-effect/wrangler.jsonc
+# Retain the legacy ignores while existing checkouts migrate to wrangler.jsonc.
+packages/skit-server-effect/wrangler.deploy.jsonc
+packages/skit-server-effect/wrangler.deploy.jsonc.tmp
+
+.wrangler/
+
+# Local reference repositories and scratch artifacts.
+/.tmp/

@@ -1,0 +1,7 @@
+# Use D1 and R2 for Author Drafts
+
+SKIT retains its Draft, synchronization, revision, and publication interface while the reference Cloudflare deployment stores revision metadata in D1 and content-addressed Draft bytes in R2. Draft Revision identifiers and optimistic-concurrency rules belong to the SKIT protocol; neither D1 row identifiers nor R2 object keys are portable authoring concepts.
+
+The Worker validates each submitted snapshot, computes its file and bundle digests, writes previously unseen content-addressed blobs to R2, and atomically advances Draft metadata in D1. Publication verifies the selected immutable Draft Revision against its recorded manifest before storing a Release archive in R2. The Worker remains the control plane for account and team authorization, Draft operations, publication permission, Release visibility, discovery, and Library synchronization.
+
+We rejected Cloudflare Artifacts as the default Draft backend because it is remote-only and makes local development, deterministic testing, and first-time self-hosting materially harder. We also rejected exposing an internal Git remote as the authoring interface because it leaks storage mechanics, credentials, and repository administration into the SKIT model. A future storage adapter must preserve the same public Draft contract and earn its operational complexity; it must not make Authors operate the Registry's internal persistence layer.

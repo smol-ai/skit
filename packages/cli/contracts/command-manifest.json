@@ -1,0 +1,2407 @@
+{
+  "commands": [
+    {
+      "path": [
+        "auth",
+        "login"
+      ],
+      "stability": "stable",
+      "summary": "Sign in and store an expiring CLI credential.",
+      "effects": {
+        "capabilities": [
+          "network.write",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.auth.login.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64
+      ],
+      "interactive": true,
+      "examples": [
+        "skit auth login",
+        "skit auth login private",
+        "skit auth login https://skit.example.com",
+        "skit auth login https://skit.example.com --scopes library:sync,authoring:write"
+      ],
+      "positionals": [
+        {
+          "name": "registry",
+          "required": false
+        }
+      ],
+      "flags": {
+        "as": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Name this Registry for device-local routing."
+        },
+        "scopes": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Request comma-separated credential scopes."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "auth",
+        "logout"
+      ],
+      "stability": "stable",
+      "summary": "Revoke and remove a stored CLI credential.",
+      "effects": {
+        "capabilities": [
+          "network.write",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.auth.logout.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit auth logout",
+        "skit auth logout https://skit.example.com"
+      ],
+      "positionals": [
+        {
+          "name": "origin",
+          "required": false
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "auth",
+        "status"
+      ],
+      "stability": "stable",
+      "summary": "Show stored Registry credential metadata.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.auth.status.v2"
+      ],
+      "exitCodes": [
+        0,
+        12
+      ],
+      "interactive": false,
+      "examples": [
+        "skit auth status"
+      ],
+      "positionals": [],
+      "flags": {
+        "registry": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Show one Registry credential."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "add"
+      ],
+      "stability": "stable",
+      "summary": "Add a source to the local library without enabling it.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.add.v3",
+        "skit.add.preview.v3"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit add owner/repository",
+        "skit add skit:owner/package@1.0.0",
+        "skit add ./my-tools --list"
+      ],
+      "positionals": [
+        {
+          "name": "source",
+          "required": true
+        }
+      ],
+      "flags": {
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "registry": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Resolve a Registry source through a name or URL."
+        },
+        "list": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Preview discovered contents without adding them."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "check"
+      ],
+      "stability": "stable",
+      "summary": "Check retained Library custody or verified source changes.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "git clone --mirror",
+          "git fetch --all --prune",
+          "git rev-parse",
+          "git ls-tree",
+          "git cat-file blob",
+          "git log"
+        ]
+      },
+      "outputSchemas": [
+        "skit.check.v6"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit check",
+        "skit check owner/tools"
+      ],
+      "positionals": [
+        {
+          "name": "skit-or-skill",
+          "required": false
+        }
+      ],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "doctor"
+      ],
+      "stability": "stable",
+      "summary": "Diagnose local library and projection state.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.doctor.v2"
+      ],
+      "exitCodes": [
+        0,
+        12,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit doctor"
+      ],
+      "positionals": [],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "disable"
+      ],
+      "stability": "stable",
+      "summary": "Disable retained Skills for selected harnesses and scope.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.disable.v2",
+        "skit.disable.plan.v2"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": true,
+      "examples": [
+        "skit disable review --for codex",
+        "skit disable owner/tools --all --for codex"
+      ],
+      "positionals": [
+        {
+          "name": "skill-or-collection",
+          "required": false
+        }
+      ],
+      "flags": {
+        "for": {
+          "type": "choice",
+          "valueName": "choice",
+          "description": "Select a harness. (choices: codex, claude, claude-code, opencode, devin)"
+        },
+        "repo": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Use repository scope."
+        },
+        "all": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Select every eligible skill in the collection."
+        },
+        "invocation": {
+          "type": "choice",
+          "valueName": "choice",
+          "description": "Override model invocation policy; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+        },
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Report projection changes without applying them."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "enable"
+      ],
+      "stability": "stable",
+      "summary": "Enable retained Skills for selected harnesses and scope.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.enable.v2",
+        "skit.enable.plan.v2"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": true,
+      "examples": [
+        "skit enable review --for codex",
+        "skit enable owner/tools --all --for codex"
+      ],
+      "positionals": [
+        {
+          "name": "skill-or-collection",
+          "required": false
+        }
+      ],
+      "flags": {
+        "for": {
+          "type": "choice",
+          "valueName": "choice",
+          "description": "Select a harness. (choices: codex, claude, claude-code, opencode, devin)"
+        },
+        "repo": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Use repository scope."
+        },
+        "all": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Select every eligible skill in the collection."
+        },
+        "invocation": {
+          "type": "choice",
+          "valueName": "choice",
+          "description": "Override model invocation policy; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+        },
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Report projection changes without applying them."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "inventory"
+      ],
+      "stability": "stable",
+      "summary": "Show every observed Skill instance, its Git state, and refreshed Library projections.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "git ls-files",
+          "git status --porcelain",
+          "codex --version",
+          "claude --version",
+          "opencode --version",
+          "devin --version"
+        ]
+      },
+      "outputSchemas": [
+        "skit.inventory.v4"
+      ],
+      "exitCodes": [
+        0,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit inventory --json"
+      ],
+      "positionals": [],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "library",
+        "history"
+      ],
+      "stability": "stable",
+      "summary": "Show device-local Library change history.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.library.history.v1"
+      ],
+      "exitCodes": [
+        0,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit library history",
+        "skit library history --json"
+      ],
+      "positionals": [],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "list"
+      ],
+      "stability": "stable",
+      "summary": "Browse retained Collections and manage Skill enablement.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.list.v2"
+      ],
+      "exitCodes": [
+        0,
+        12,
+        64,
+        65
+      ],
+      "interactive": true,
+      "examples": [
+        "skit list",
+        "skit list --json"
+      ],
+      "positionals": [],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "pin"
+      ],
+      "stability": "stable",
+      "summary": "Select an already-retained Library Version.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.pin.v4",
+        "skit.pin.plan.v4"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit pin owner/tools --version 2.0.0 --dry-run"
+      ],
+      "positionals": [
+        {
+          "name": "skit-or-skill",
+          "required": true
+        }
+      ],
+      "flags": {
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Acquire and verify the release without applying it."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "pull"
+      ],
+      "stability": "stable",
+      "summary": "Refresh a source already in the local library.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.pull.v3"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit pull owner/tools"
+      ],
+      "positionals": [
+        {
+          "name": "skit-or-skill",
+          "required": true
+        }
+      ],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "registry",
+        "add"
+      ],
+      "stability": "stable",
+      "summary": "Name a Registry for use in source references.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.registry.remote.v1"
+      ],
+      "exitCodes": [
+        0,
+        12,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit registry add public https://registry.example.com"
+      ],
+      "positionals": [
+        {
+          "name": "name",
+          "required": true
+        },
+        {
+          "name": "origin",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "registry",
+        "default"
+      ],
+      "stability": "stable",
+      "summary": "Select the Registry used by registry shorthand.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.registry.remote.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit registry default public"
+      ],
+      "positionals": [
+        {
+          "name": "name",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "registry",
+        "list"
+      ],
+      "stability": "stable",
+      "summary": "List named Registries.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.registry.list.v1"
+      ],
+      "exitCodes": [
+        0,
+        12
+      ],
+      "interactive": false,
+      "examples": [
+        "skit registry list"
+      ],
+      "positionals": [],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "registry",
+        "remove"
+      ],
+      "stability": "stable",
+      "summary": "Remove a Registry name.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.registry.remote.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit registry remove work"
+      ],
+      "positionals": [
+        {
+          "name": "name",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "repository",
+        "list"
+      ],
+      "stability": "stable",
+      "summary": "List repository decisions stored for this machine.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read"
+        ]
+      },
+      "outputSchemas": [
+        "skit.repository.policy.v1"
+      ],
+      "exitCodes": [
+        0
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "repository",
+        "watch"
+      ],
+      "stability": "stable",
+      "summary": "Include a repository in ordinary Skill inventory.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.repository.policy.v1"
+      ],
+      "exitCodes": [
+        0,
+        64
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [
+        {
+          "name": "path",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "repository",
+        "ignore"
+      ],
+      "stability": "stable",
+      "summary": "Exclude a repository from ordinary Skill inventory.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.repository.policy.v1"
+      ],
+      "exitCodes": [
+        0,
+        64
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [
+        {
+          "name": "path",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "repository",
+        "forget"
+      ],
+      "stability": "stable",
+      "summary": "Clear this machine's repository decision.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.repository.policy.v1"
+      ],
+      "exitCodes": [
+        0,
+        64
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [
+        {
+          "name": "path",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "remove"
+      ],
+      "stability": "stable",
+      "summary": "Remove a retained Collection and its owned Projections.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.remove.v3",
+        "skit.remove.plan.v3"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit remove owner/tools --dry-run"
+      ],
+      "positionals": [
+        {
+          "name": "skit-or-skill",
+          "required": true
+        }
+      ],
+      "flags": {
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Report removals without applying them."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "security",
+        "accept"
+      ],
+      "stability": "stable",
+      "summary": "Accept one finding for Projection of an exact retained Skill Artifact.",
+      "effects": {
+        "capabilities": [
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.security.accept.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit security accept owner/tools:review --finding sha256:... --principal tim --rationale reviewed"
+      ],
+      "positionals": [
+        {
+          "name": "skill",
+          "required": true
+        }
+      ],
+      "flags": {
+        "finding": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Accept this exact finding fingerprint."
+        },
+        "principal": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Record the Principal granting acceptance."
+        },
+        "rationale": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Record why this finding is accepted."
+        },
+        "expires-at": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Expire acceptance at this canonical ISO instant."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "security",
+        "review"
+      ],
+      "stability": "stable",
+      "summary": "Review security findings for an exact retained Skill Artifact.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.security.review.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit security review owner/tools:review --json"
+      ],
+      "positionals": [
+        {
+          "name": "skill",
+          "required": true
+        }
+      ],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "server",
+        "bootstrap"
+      ],
+      "stability": "stable",
+      "summary": "Create the first operator for a deployed skit-server.",
+      "effects": {
+        "capabilities": [
+          "network.write",
+          "process.execute",
+          "browser.open"
+        ],
+        "subprocesses": [
+          "wrangler secret put SKIT_BOOTSTRAP_SECRET",
+          "wrangler secret delete SKIT_BOOTSTRAP_SECRET"
+        ]
+      },
+      "outputSchemas": [
+        "skit.server.bootstrap.v1"
+      ],
+      "exitCodes": [
+        0
+      ],
+      "interactive": true,
+      "examples": [
+        "skit server bootstrap",
+        "skit server bootstrap --config wrangler.jsonc"
+      ],
+      "positionals": [],
+      "flags": {
+        "config": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Use this Wrangler configuration file."
+        },
+        "url": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override PUBLIC_APP_ORIGIN from the Wrangler configuration."
+        },
+        "wrangler": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Use this Wrangler executable."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "setup"
+      ],
+      "stability": "stable",
+      "summary": "Remember this machine's repository roots and explain existing Skill Instances.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "git ls-files",
+          "git status --porcelain",
+          "git clone --mirror",
+          "git fetch --all --prune",
+          "git rev-parse",
+          "git ls-tree",
+          "git cat-file blob",
+          "git log",
+          "codex --version",
+          "claude --version",
+          "opencode --version",
+          "devin --version"
+        ]
+      },
+      "outputSchemas": [
+        "skit.setup.v3"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": true,
+      "examples": [
+        "skit setup",
+        "skit setup --work-dir ~/Work",
+        "skit setup --dry-run --json --work-dir ~/Work"
+      ],
+      "positionals": [],
+      "flags": {
+        "work-dir": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Repository root to remember for this machine and scan."
+        },
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Observe without updating machine configuration."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "sync"
+      ],
+      "stability": "stable",
+      "summary": "Synchronize private retained Library bytes with skit-server.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.library.sync.v3"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit sync",
+        "skit sync --apply"
+      ],
+      "positionals": [],
+      "flags": {
+        "apply": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Apply the current Library reconciliation plan."
+        },
+        "adopt": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Explicitly adopt the current remote Library."
+        },
+        "take-remote": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Resolve a named Collection or Binding conflict from the current remote Library."
+        },
+        "registry": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Select the Registry to synchronize."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "update"
+      ],
+      "stability": "stable",
+      "summary": "Update sources from their recorded origins.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.update.v3",
+        "skit.update.plan.v3",
+        "skit.update.projection-retention.v1",
+        "skit.update.projection-retention.plan.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64,
+        65
+      ],
+      "interactive": false,
+      "examples": [
+        "skit update --dry-run",
+        "skit update my-skill --from-projection claude-code --dry-run"
+      ],
+      "positionals": [
+        {
+          "name": "skit-or-skill",
+          "required": false
+        }
+      ],
+      "flags": {
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Report changes without applying them."
+        },
+        "from-projection": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Retain changed bytes from this Projection ID, Harness, or path."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "codex-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex skills root."
+        },
+        "claude-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude skills root."
+        },
+        "opencode-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the OpenCode skills root."
+        },
+        "devin-root": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "version"
+      ],
+      "stability": "stable",
+      "summary": "Print the installed CLI version.",
+      "effects": {
+        "capabilities": []
+      },
+      "outputSchemas": [
+        "skit.version.v1"
+      ],
+      "exitCodes": [
+        0
+      ],
+      "interactive": false,
+      "examples": [
+        "skit version"
+      ],
+      "positionals": [],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "skit.skill-example/v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "skill": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "featured": {
+      "type": "boolean"
+    },
+    "prompt": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+          "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+        },
+        "provenance": {
+          "enum": ["exact", "reconstructed", "synthetic"],
+          "type": "string"
+        }
+      },
+      "required": ["path", "provenance"],
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "isolation": {
+          "enum": ["skill_only", "full_skit", "active_context"],
+          "type": "string"
+        },
+        "network": {
+          "enum": ["disabled", "restricted", "enabled"],
+          "type": "string"
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+            "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+          }
+        }
+      },
+      "required": ["isolation", "network"],
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "kind": {
+            "const": "rubric"
+          },
+          "criterion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": ["id", "kind", "criterion"],
+        "additionalProperties": false
+      }
+    },
+    "screenshots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+            "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+          },
+          "role": {
+            "enum": ["input", "process", "output", "comparison"],
+            "type": "string"
+          },
+          "alt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "caption": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": ["path", "role", "alt"],
+        "additionalProperties": false
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "properties": {
+        "classification": {
+          "enum": ["public_safe", "private"],
+          "type": "string"
+        },
+        "reviewed": {
+          "type": "boolean"
+        }
+      },
+      "required": ["classification", "reviewed"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_version", "id", "skill", "title", "prompt", "execution", "privacy"],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

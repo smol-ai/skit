@@ -1,0 +1,51 @@
+{
+  "name": "@smolai/skit-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./universal": {
+      "types": "./dist/universal.d.ts",
+      "import": "./dist/universal.js"
+    },
+    "./universal/consumer": {
+      "types": "./dist/universal-consumer.d.ts",
+      "import": "./dist/universal-consumer.js"
+    },
+    "./universal/authoring": {
+      "types": "./dist/universal-authoring.d.ts",
+      "import": "./dist/universal-authoring.js"
+    },
+    "./universal/api": {
+      "types": "./dist/universal/api/index.d.ts",
+      "import": "./dist/universal/api/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112",
+    "typeid-js": "^1.2.0",
+    "yaml": "2.8.3",
+    "yazl": "3.3.1"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0-rc.112",
+    "@types/node": "24.10.1",
+    "@types/yazl": "3.3.0",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

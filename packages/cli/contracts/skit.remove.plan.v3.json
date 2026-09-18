@@ -1,0 +1,94 @@
+{
+  "$id": "skit.remove.plan.v3",
+  "type": "object",
+  "properties": {
+    "collection_id": {
+      "type": "string"
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "global_bindings": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "repository_bindings": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "owned_projections": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "collection_id",
+    "versions",
+    "skills",
+    "global_bindings",
+    "repository_bindings",
+    "owned_projections"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,37 @@
+{
+  "$id": "skit.auth.login.v1",
+  "type": "object",
+  "properties": {
+    "origin": {
+      "type": "string"
+    },
+    "tokenPrefix": {
+      "type": "string"
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expiresAt": {
+      "type": "string"
+    },
+    "warning": {
+      "type": "string"
+    },
+    "alias": {
+      "type": "string"
+    },
+    "defaultRegistry": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "origin",
+    "tokenPrefix",
+    "scopes"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

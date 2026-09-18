@@ -1,0 +1,337 @@
+{
+  "$id": "skit.library.sync.v3",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "clean",
+        "push_ready",
+        "pushed",
+        "pull_ready",
+        "pulled",
+        "upgrade_ready",
+        "upgraded",
+        "legacy_remote_conflict",
+        "local_migration_required",
+        "local_bytes_changed",
+        "adoption_required",
+        "adoption_ready",
+        "merge_ready",
+        "merged",
+        "conflicted",
+        "base_mismatch",
+        "resolution_invalid"
+      ]
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "revision_id": {
+      "type": "string"
+    },
+    "snapshots": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "digest": {
+      "type": "string"
+    },
+    "projection_drift": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "projected": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "deferred": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "deferred_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "collection": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "collection",
+          "harness",
+          "skills"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "retired": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "collections_to_remove": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "local": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "collection",
+                  "binding"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "add",
+                  "update",
+                  "remove"
+                ]
+              },
+              "collection_id": {
+                "type": "string"
+              },
+              "collection": {
+                "type": "string"
+              },
+              "collection_before": {
+                "type": "string"
+              },
+              "collection_after": {
+                "type": "string"
+              },
+              "harness": {
+                "type": "string",
+                "enum": [
+                  "codex",
+                  "claude-code",
+                  "opencode",
+                  "devin"
+                ]
+              },
+              "skills_before": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "skills_after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "versions_before": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "versions_after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence_changed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "action",
+              "collection_id",
+              "collection",
+              "skills_before",
+              "skills_after",
+              "versions_before",
+              "versions_after",
+              "evidence_changed"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "remote": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "collection",
+                  "binding"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "add",
+                  "update",
+                  "remove"
+                ]
+              },
+              "collection_id": {
+                "type": "string"
+              },
+              "collection": {
+                "type": "string"
+              },
+              "collection_before": {
+                "type": "string"
+              },
+              "collection_after": {
+                "type": "string"
+              },
+              "harness": {
+                "type": "string",
+                "enum": [
+                  "codex",
+                  "claude-code",
+                  "opencode",
+                  "devin"
+                ]
+              },
+              "skills_before": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "skills_after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "versions_before": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "versions_after": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence_changed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "action",
+              "collection_id",
+              "collection",
+              "skills_before",
+              "skills_after",
+              "versions_before",
+              "versions_after",
+              "evidence_changed"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "local",
+        "remote"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

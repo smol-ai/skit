@@ -1,0 +1,34 @@
+{
+  "$id": "skit.registry.list.v1",
+  "type": "object",
+  "properties": {
+    "registries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "origin",
+          "isDefault"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "registries"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

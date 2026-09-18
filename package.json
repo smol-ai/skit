@@ -1,0 +1,37 @@
+{
+  "name": "skit-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "prepare": "pnpm build",
+    "test": "vitest run --config vitest.lint.config.ts && pnpm -r --if-present test",
+    "test:ci": "vitest run --config vitest.lint.config.ts && pnpm -r --if-present test",
+    "test:e2e": "pnpm build && pnpm --fail-if-no-match --filter @smolai/skit-server-effect test:e2e",
+    "test:e2e:live": "pnpm build && pnpm --filter @smolai/skit test:e2e:live",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint .",
+    "skit": "node packages/cli/bin/skit.js",
+    "tui": "pnpm --filter @smolai/skit-tui dev",
+    "cli:stories": "pnpm --filter @smolai/skit-storybook start",
+    "cli:stories:print": "pnpm --filter @smolai/skit stories",
+    "cli:stories:watch": "pnpm --filter @smolai/skit stories:watch",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck",
+    "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test",
+    "check:ci": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test:ci && pnpm --fail-if-no-match --filter @smolai/skit-server-effect test:e2e"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0",
+    "skills": "1.5.26",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "pnpm@11.23.0"
+}

@@ -1,0 +1,177 @@
+{
+  "derivedFrom": "synthetic schema-v3 migration topology",
+  "tombstoneCount": 2,
+  "entries": [
+    {
+      "entryId": "01990000-0001-7000-8000-000000000001",
+      "identity": {
+        "profile": "github-collection",
+        "version": 1,
+        "owner": "example-org",
+        "repository": "agent-skills"
+      },
+      "collectionRef": "github:example-org/agent-skills",
+      "sourceId": "github:example-org/agent-skills",
+      "displayId": "example-org/agent-skills",
+      "input": "https://github.com/example-org/agent-skills",
+      "selectedVersionId": "01990000-0001-7000-8000-000000000002",
+      "versions": [
+        {
+          "collectionVersionId": "01990000-0001-7000-8000-000000000002",
+          "release": "source",
+          "source": { "type": "git", "ref": "https://github.com/example-org/agent-skills" },
+          "sourceRevision": "1111111111111111111111111111111111111111",
+          "retainedAt": "2026-01-01T00:00:00.000Z",
+          "provenanceCount": 1,
+          "skills": [
+            {
+              "skillRef": "github:example-org/agent-skills#review",
+              "name": "review",
+              "skillVersionId": "01990000-0001-7000-8000-000000000003",
+              "relativePath": "review",
+              "sourcePath": "skills/review",
+              "contentKey": "git-review-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "entryId": "01990000-0002-7000-8000-000000000001",
+      "identity": {
+        "profile": "declared-skit",
+        "version": 1,
+        "skitId": "example/toolkit",
+        "authority": "https://registry.example.com"
+      },
+      "collectionRef": "skit:https://registry.example.com/example/toolkit",
+      "sourceId": "skit:example/toolkit",
+      "displayId": "example/toolkit",
+      "input": "skit://registry.example.com/example/toolkit",
+      "selectedVersionId": "01990000-0002-7000-8000-000000000004",
+      "versions": [
+        {
+          "collectionVersionId": "01990000-0002-7000-8000-000000000002",
+          "release": "1.0.0",
+          "source": {
+            "type": "registry",
+            "ref": "example/toolkit",
+            "authority": "https://registry.example.com"
+          },
+          "retainedAt": "2026-01-01T00:00:00.000Z",
+          "provenanceCount": 0,
+          "skills": [
+            {
+              "skillRef": "skit:https://registry.example.com/example/toolkit#inspect",
+              "name": "inspect",
+              "skillVersionId": "01990000-0002-7000-8000-000000000003",
+              "relativePath": "inspect",
+              "sourcePath": "skills/inspect",
+              "contentKey": "registry-inspect-v1"
+            }
+          ]
+        },
+        {
+          "collectionVersionId": "01990000-0002-7000-8000-000000000004",
+          "release": "1.1.0",
+          "source": {
+            "type": "registry",
+            "ref": "example/toolkit",
+            "authority": "https://registry.example.com"
+          },
+          "retainedAt": "2026-01-02T00:00:00.000Z",
+          "provenanceCount": 0,
+          "skills": [
+            {
+              "skillRef": "skit:https://registry.example.com/example/toolkit#inspect",
+              "name": "inspect",
+              "skillVersionId": "01990000-0002-7000-8000-000000000005",
+              "relativePath": "inspect",
+              "sourcePath": "skills/inspect",
+              "contentKey": "registry-inspect-v2"
+            },
+            {
+              "skillRef": "skit:https://registry.example.com/example/toolkit#sync",
+              "name": "sync",
+              "skillVersionId": "01990000-0002-7000-8000-000000000006",
+              "relativePath": "sync",
+              "sourcePath": "skills/sync",
+              "contentKey": "registry-sync-v1"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "collectionRef": "github:example-org/agent-skills",
+      "harness": "codex",
+      "scope": { "kind": "global" },
+      "skills": ["review"]
+    },
+    {
+      "collectionRef": "skit:https://registry.example.com/example/toolkit",
+      "harness": "claude-code",
+      "scope": { "kind": "global" },
+      "skills": ["inspect", "sync"]
+    }
+  ],
+  "installations": [
+    {
+      "collectionRef": "github:example-org/agent-skills",
+      "installedAt": "2026-01-01T01:00:00.000Z",
+      "harnesses": ["codex"],
+      "skills": [
+        {
+          "skillRef": "github:example-org/agent-skills#review",
+          "name": "review",
+          "contentKey": "git-review-v1",
+          "enabled": true,
+          "projections": [
+            {
+              "projectionId": "projection:github:example-org/agent-skills#review:codex:/home/example/.agents/skills",
+              "harness": "codex",
+              "root": "/home/example/.agents/skills",
+              "projectionPath": "/home/example/.agents/skills/review",
+              "lastObservedHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "expectedHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "status": "installed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "collectionRef": "skit:https://registry.example.com/example/toolkit",
+      "installedAt": "2026-01-02T01:00:00.000Z",
+      "harnesses": ["claude-code"],
+      "skills": [
+        {
+          "skillRef": "skit:https://registry.example.com/example/toolkit#inspect",
+          "name": "inspect",
+          "contentKey": "registry-inspect-v2",
+          "enabled": true,
+          "projections": [
+            {
+              "projectionId": "projection:skit:https://registry.example.com/example/toolkit#inspect:claude-code:/home/example/.claude/skills",
+              "harness": "claude-code",
+              "root": "/home/example/.claude/skills",
+              "projectionPath": "/home/example/.claude/skills/inspect",
+              "lastObservedHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "expectedHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "status": "installed"
+            }
+          ]
+        },
+        {
+          "skillRef": "skit:https://registry.example.com/example/toolkit#sync",
+          "name": "sync",
+          "contentKey": "registry-sync-v1",
+          "enabled": true,
+          "projections": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "$id": "skit.auth.status.v2",
+  "type": "object",
+  "properties": {
+    "credentials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tokenPrefix": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string",
+            "enum": [
+              "known",
+              "unknown"
+            ]
+          },
+          "expired": {
+            "type": "boolean"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "environment",
+              "stored"
+            ]
+          }
+        },
+        "required": [
+          "origin",
+          "aliases",
+          "tokenPrefix",
+          "scopes",
+          "expiry",
+          "expired",
+          "isDefault",
+          "source"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "credentials"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

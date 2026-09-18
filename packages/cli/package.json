@@ -1,0 +1,55 @@
+{
+  "name": "@smolai/skit",
+  "version": "0.1.0",
+  "description": "Install, manage, author, and publish agent skills.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smol-ai/skit.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "skit": "./bin/skit.js"
+  },
+  "files": [
+    "bin/skit.js",
+    "contracts",
+    "dist/src/main.js",
+    "dist/src/main.js.LEGAL.txt",
+    "LICENSE"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "tsc -p tsconfig.json && node scripts/build-distribution.mjs",
+    "prepack": "pnpm --filter @smolai/skit-core build && pnpm build",
+    "generate:contracts": "tsc -p tsconfig.json && node dist/src/commands/generate-contracts.js",
+    "stories": "pnpm build && node dist/src/storybook/main.js",
+    "stories:watch": "pnpm build && pnpm --parallel run \"/^stories:(compile|run)-watch$/\"",
+    "stories:compile-watch": "tsc -p tsconfig.json --watch --preserveWatchOutput --watchFile fixedPollingInterval --watchDirectory fixedPollingInterval",
+    "stories:run-watch": "node --watch-preserve-output dist/src/storybook/main.js $SKIT_STORY",
+    "pretest": "pnpm --filter @smolai/skit-core build && pnpm --filter @smolai/skit build",
+    "test": "vitest run --config vitest.unit.config.ts && vitest run --config vitest.subprocess.config.ts && pnpm test:package",
+    "test:package": "node --test scripts/package.test.mjs",
+    "test:e2e:live": "vitest run --config vitest.live.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
+    "@effect/vitest": "4.0.0-rc.112",
+    "@smolai/skit-core": "workspace:*",
+    "@types/node": "24.10.1",
+    "effect": "4.0.0-rc.112",
+    "esbuild": "0.28.1",
+    "jsonc-parser": "3.3.1",
+    "picocolors": "^1.1.1",
+    "vitest": "4.1.10",
+    "yaml": "2.8.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

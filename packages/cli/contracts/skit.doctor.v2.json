@@ -1,0 +1,85 @@
+{
+  "$id": "skit.doctor.v2",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "skillId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "codex",
+                  "claude-code",
+                  "opencode",
+                  "devin"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "harnesses": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "devin"
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "issues"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

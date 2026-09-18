@@ -1,0 +1,7 @@
+BETTER_AUTH_SECRET="replace-with-at-least-32-random-characters"
+SKIT_BOOTSTRAP_SECRET="replace-with-at-least-32-random-characters"
+# Optional: enable GitHub OAuth only when both values are present.
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
+# Optional: EMAIL_FROM requires an EMAIL Cloudflare Email Service binding.
+EMAIL_FROM=""

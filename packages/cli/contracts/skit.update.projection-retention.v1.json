@@ -1,0 +1,78 @@
+{
+  "$id": "skit.update.projection-retention.v1",
+  "type": "object",
+  "properties": {
+    "skill_id": {
+      "type": "string"
+    },
+    "skill_name": {
+      "type": "string"
+    },
+    "previous_skill_version_id": {
+      "type": "string"
+    },
+    "retained_skill_version_id": {
+      "type": "string"
+    },
+    "retained_copy_id": {
+      "type": "string"
+    },
+    "snapshot_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "retained": {
+      "type": "boolean"
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "projection_id": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "projected",
+              "conflicted",
+              "deferred"
+            ]
+          }
+        },
+        "required": [
+          "projection_id",
+          "harness",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "skill_id",
+    "skill_name",
+    "previous_skill_version_id",
+    "retained_skill_version_id",
+    "retained_copy_id",
+    "snapshot_digest",
+    "retained",
+    "projections"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

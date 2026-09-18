@@ -1,0 +1,1162 @@
+{
+  "$id": "skit.inventory.v4",
+  "type": "object",
+  "properties": {
+    "unmanaged": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "harnesses": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "devin"
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "paths": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observedHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "lastObservedHash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "harness",
+          "path",
+          "observedHash"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "custodyIssues": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "ORPHANED_PROJECTION_CLAIM",
+                  "INVALID_OWNERSHIP_MARKER"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "canonicalPath": {
+                "type": "string"
+              },
+              "harnesses": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "devin"
+                  ]
+                }
+              },
+              "observedHash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "detail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "collectionId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "skillId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "projectionId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "expectedHash": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "matchesExpectedHash": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "path",
+              "canonicalPath",
+              "harnesses",
+              "observedHash"
+            ],
+            "additionalProperties": true
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "scanIssues": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "MISSING_ROOT"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "harness",
+                  "code"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "UNREADABLE_PATH"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "harness",
+                  "code"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "DANGLING_SYMLINK"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "target",
+                  "harness",
+                  "code"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schemaVersion": {
+      "type": "number",
+      "enum": [
+        4
+      ]
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill_id": {
+            "type": "string"
+          },
+          "collection_id": {
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "."
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "upstream_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "."
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "selected_skill_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "skill_version_id": {
+                  "type": "string"
+                },
+                "source_digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "artifact_digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "validation_identity_digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "materialization_profile": {
+                  "type": "string",
+                  "enum": [
+                    "plain-skill/v1",
+                    "declared-skit-skill/v1"
+                  ]
+                },
+                "origins": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "acquisition_id": {
+                        "type": "string"
+                      },
+                      "source_path": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "."
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "acquisition_id",
+                      "source_path"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "skill_version_id",
+                "source_digest",
+                "artifact_digest",
+                "validation_identity_digest",
+                "materialization_profile",
+                "origins"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "skill_id",
+          "collection_id",
+          "path",
+          "name",
+          "versions"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "projection_id": {
+            "type": "string"
+          },
+          "collection_id": {
+            "type": "string"
+          },
+          "skill_id": {
+            "type": "string"
+          },
+          "skill_version_id": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "root": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "expected_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "observed_digest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "installed",
+              "drifted",
+              "conflicted",
+              "unsupported",
+              "suppressed"
+            ]
+          },
+          "suppression_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "native_delete"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "suppressed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projected_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projection_id",
+          "collection_id",
+          "skill_id",
+          "skill_version_id",
+          "harness",
+          "root",
+          "path",
+          "expected_digest",
+          "status",
+          "projected_at"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "adoption_receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "receipt_id": {
+            "type": "string"
+          },
+          "adopted_at": {
+            "type": "string"
+          },
+          "machine_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "observed_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "skill_version_id": {
+            "type": "string"
+          },
+          "projection_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "receipt_id",
+          "adopted_at",
+          "machine_id",
+          "path",
+          "observed_digest",
+          "skill_version_id",
+          "projection_ids"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "machine": {
+      "type": "object",
+      "properties": {
+        "repositoryRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repositoryDecisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "watched",
+                  "ignored"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "status"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "scan": {
+          "type": "object",
+          "properties": {
+            "complete": {
+              "type": "boolean"
+            },
+            "directoriesExamined": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "repositorySearchDepth": {
+              "type": "number",
+              "enum": [
+                1
+              ]
+            },
+            "missingRepositories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "complete",
+            "directoriesExamined",
+            "repositorySearchDepth"
+          ],
+          "additionalProperties": true
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "global",
+                  "project",
+                  "standalone"
+                ]
+              },
+              "harnesses": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "devin"
+                  ]
+                }
+              },
+              "owner": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "skit"
+                        ]
+                      },
+                      "membership": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "retained"
+                                ]
+                              },
+                              "projectionId": {
+                                "type": "string"
+                              },
+                              "collectionId": {
+                                "type": "string"
+                              },
+                              "skillId": {
+                                "type": "string"
+                              },
+                              "skillVersionId": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "source": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "projectionId",
+                              "collectionId",
+                              "skillId",
+                              "skillVersionId",
+                              "displayName"
+                            ],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "missing-from-library"
+                                ]
+                              },
+                              "projectionId": {
+                                "type": "string"
+                              },
+                              "collectionId": {
+                                "type": "string"
+                              },
+                              "skillId": {
+                                "type": "string"
+                              },
+                              "skillVersionId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "projectionId",
+                              "collectionId",
+                              "skillId",
+                              "skillVersionId"
+                            ],
+                            "additionalProperties": true
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "membership"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "invalid-marker"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "authored"
+                        ]
+                      },
+                      "collectionRef": {
+                        "type": "string"
+                      },
+                      "collectionId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "collectionRef"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "skills-sh"
+                        ]
+                      },
+                      "source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "harness"
+                        ]
+                      },
+                      "harness": {
+                        "type": "string",
+                        "enum": [
+                          "codex",
+                          "claude-code",
+                          "opencode",
+                          "devin"
+                        ]
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "bundled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "harness",
+                      "source",
+                      "bundled"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "repository"
+                        ]
+                      },
+                      "repository": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "repository"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "unknown"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "contentIdentity": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "ambiguous",
+                      "none",
+                      "unhashable"
+                    ]
+                  },
+                  "observedHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "libraryMatches": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "collectionId": {
+                          "type": "string"
+                        },
+                        "skillId": {
+                          "type": "string"
+                        },
+                        "skillVersionId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "collectionId",
+                        "skillId",
+                        "skillVersionId",
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "libraryMatches"
+                ],
+                "additionalProperties": true
+              },
+              "git": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "committed",
+                      "modified",
+                      "staged",
+                      "untracked",
+                      "ignored",
+                      "mixed",
+                      "outside-git",
+                      "unavailable"
+                    ]
+                  },
+                  "repository": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": true
+              },
+              "locks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "project",
+                        "global"
+                      ]
+                    },
+                    "lockPath": {
+                      "type": "string"
+                    },
+                    "lockVersion": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "Infinity",
+                            "-Infinity",
+                            "NaN"
+                          ]
+                        }
+                      ]
+                    },
+                    "lockContentHash": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    },
+                    "content": {
+                      "type": "string",
+                      "enum": [
+                        "agrees",
+                        "mismatch",
+                        "unverifiable"
+                      ]
+                    },
+                    "entry": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "sourceType": {
+                          "type": "string"
+                        },
+                        "sourceUrl": {
+                          "type": "string"
+                        },
+                        "sourceBaseUrl": {
+                          "type": "string"
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "skillPath": {
+                          "type": "string"
+                        },
+                        "computedHash": {
+                          "type": "string"
+                        },
+                        "skillFolderHash": {
+                          "type": "string"
+                        },
+                        "wellKnownDigest": {
+                          "type": "string"
+                        },
+                        "originalEntry": {
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "source",
+                        "sourceType",
+                        "originalEntry"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "scope",
+                    "lockPath",
+                    "lockVersion",
+                    "lockContentHash",
+                    "content",
+                    "entry"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "required": [
+              "name",
+              "path",
+              "aliases",
+              "scope",
+              "harnesses",
+              "owner",
+              "contentIdentity",
+              "git",
+              "locks"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "brokenLinks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "harnesses": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "devin"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "path",
+              "target",
+              "harnesses"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "suppressed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "cache",
+                  "dependency",
+                  "generated",
+                  "build",
+                  "skit-state"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "reason"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "repositoryRoots",
+        "repositoryDecisions",
+        "scan",
+        "instances",
+        "brokenLinks",
+        "suppressed"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "unmanaged",
+    "schemaVersion",
+    "skills",
+    "projections",
+    "adoption_receipts",
+    "machine"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

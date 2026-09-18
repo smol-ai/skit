@@ -1,0 +1,186 @@
+{
+  "type": "object",
+  "properties": {
+    "skit": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*\\/[a-z0-9][a-z0-9._-]*$"
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+            "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+          },
+          "source_updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "default_enabled": {
+            "type": "boolean"
+          },
+          "shared": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+                  "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+                },
+                "to": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+                  "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+                }
+              },
+              "required": ["from", "to"],
+              "additionalProperties": false
+            }
+          },
+          "invocation": {
+            "enum": ["explicit", "implicit", "host-policy"],
+            "type": "string"
+          },
+          "trigger_modes": {
+            "$comment": "Deprecated migration input. Use invocation. SKIT normalizes this field when reading v1 descriptors.",
+            "type": "array",
+            "items": {
+              "enum": ["explicit", "implicit", "host_policy", "skill_dependency"],
+              "type": "string"
+            }
+          },
+          "mutation_scopes": {
+            "$comment": "Deprecated migration input. This unenforceable declaration is discarded when read.",
+            "type": "array",
+            "items": {
+              "enum": ["none", "workspace", "repository", "external_system"],
+              "type": "string"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "enum": ["filesystem_read", "filesystem_write", "shell", "network", "mcp", "hooks"],
+              "type": "string"
+            }
+          },
+          "approval": {
+            "$comment": "Deprecated migration input. Runtime approval belongs to the harness and operator; this field is discarded when read.",
+            "enum": ["always", "on_request", "never"],
+            "type": "string"
+          },
+          "expected_outputs": {
+            "$comment": "Deprecated migration input. Expected results belong in executable examples and evaluation checks; this field is discarded when read.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        "required": ["name", "path", "default_enabled"],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "executables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+            "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+          }
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+            "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+          }
+        },
+        "mcp": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$)).+$",
+            "$comment": "Runtime validation also rejects backslashes, NUL bytes, and paths that are not NFC normalized."
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "compatibility": {
+      "type": "object",
+      "properties": {
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operating_systems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": ["skit", "mcp", "executable"],
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["skit", "id", "skills"],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

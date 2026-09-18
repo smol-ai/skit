@@ -1,0 +1,31 @@
+{
+  "$id": "skit.registry.remote.v1",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "origin": {
+      "type": "string"
+    },
+    "isDefault": {
+      "type": "boolean"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "added",
+        "defaulted",
+        "removed"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "origin",
+    "isDefault",
+    "action"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

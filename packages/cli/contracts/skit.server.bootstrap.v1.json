@@ -1,0 +1,22 @@
+{
+  "$id": "skit.server.bootstrap.v1",
+  "type": "object",
+  "properties": {
+    "origin": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "already_complete"
+      ]
+    }
+  },
+  "required": [
+    "origin",
+    "status"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

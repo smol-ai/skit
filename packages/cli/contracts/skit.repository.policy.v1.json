@@ -1,0 +1,48 @@
+{
+  "$id": "skit.repository.policy.v1",
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "list",
+        "watch",
+        "ignore",
+        "forget"
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "watched",
+              "ignored"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "action",
+    "path",
+    "repositories"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

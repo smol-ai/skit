@@ -1,0 +1,11 @@
+{
+  "slug": "tools",
+  "skills": [
+    {
+      "name": "review",
+      "path": "skills/review",
+      "invocation": "explicit",
+      "capabilities": ["filesystem_read"]
+    }
+  ]
+}

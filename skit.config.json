@@ -1,0 +1,11 @@
+{
+  "schema": "skit.config.v1",
+  "discovery": {
+    "exclude": [
+      "packages/cli/test/fixtures/**",
+      "packages/skit-server-effect/test/fixtures/**",
+      "packages/skit/test/fixtures/**"
+    ],
+    "collections": []
+  }
+}

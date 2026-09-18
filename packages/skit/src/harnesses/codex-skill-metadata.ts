@@ -1,0 +1,168 @@
+import type { HarnessDocumentationSource, HarnessSkillMetadataContract } from "./contracts.js";
+
+export const CODEX_SKILL_METADATA_SOURCES = [
+  {
+    id: "openai-codex-openai-yaml-reference",
+    kind: "first-party-source",
+    title: "Codex bundled openai.yaml field reference",
+    url: "https://github.com/openai/codex/blob/main/codex-rs/skills/src/assets/samples/skill-creator/references/openai_yaml.md",
+    verifiedAt: "2026-08-31",
+  },
+  {
+    id: "openai-codex-openai-yaml-loader",
+    kind: "first-party-source",
+    title: "Codex openai.yaml metadata loader",
+    url: "https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/loader/metadata.rs",
+    verifiedAt: "2026-08-31",
+  },
+  {
+    id: "openai-codex-skill-policy-model",
+    kind: "first-party-source",
+    title: "Codex skill invocation policy model",
+    url: "https://github.com/openai/codex/blob/main/codex-rs/skills/src/model.rs",
+    verifiedAt: "2026-08-31",
+  },
+  {
+    id: "openai-codex-openai-yaml-example",
+    kind: "first-party-source",
+    title: "OpenAI plugin openai.yaml invocation-policy example",
+    url: "https://github.com/openai/plugins/blob/main/plugins/build-web-data-visualization/skills/reports-pdfs-and-slide-automation/agents/openai.yaml",
+    verifiedAt: "2026-08-31",
+  },
+] as const satisfies readonly HarnessDocumentationSource[];
+
+export const CODEX_SKILL_METADATA_CONTRACTS = [
+  {
+    id: "skit/skill-metadata/codex/openai-yaml/2026-08-31",
+    variant: "current",
+    default: true,
+    path: "agents/openai.yaml",
+    format: "yaml",
+    consumer: "machine-or-harness",
+    unknownFields: "ignored",
+    sourceIds: [
+      "openai-codex-skills",
+      "openai-codex-openai-yaml-reference",
+      "openai-codex-openai-yaml-loader",
+      "openai-codex-skill-policy-model",
+      "openai-codex-openai-yaml-example",
+    ],
+    fields: [
+      {
+        path: "interface.display_name",
+        requiredness: "optional",
+        type: "string",
+        semantics: "Human-facing title shown in UI skill lists and chips.",
+        evidence: "documented",
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      },
+      {
+        path: "interface.short_description",
+        requiredness: "optional",
+        type: "string",
+        semantics: "Human-facing short UI blurb for quick scanning.",
+        constraints: ["Length is 25 through 64 characters, inclusive."],
+        evidence: "documented",
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      },
+      ...["icon_small", "icon_large"].map((name) => ({
+        path: `interface.${name}`,
+        requiredness: "optional" as const,
+        type: "string" as const,
+        semantics: "Path to an icon asset relative to the skill directory.",
+        constraints: ["Default location is the skill's ./assets/ directory."],
+        evidence: "documented" as const,
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      })),
+      {
+        path: "interface.brand_color",
+        requiredness: "optional",
+        type: "string",
+        semantics: "Hex color used for UI accents such as badges.",
+        constraints: ["Value is a hexadecimal color string."],
+        evidence: "documented",
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      },
+      {
+        path: "interface.default_prompt",
+        requiredness: "optional",
+        type: "string",
+        semantics: "Default prompt snippet inserted when invoking the skill.",
+        constraints: ["The prompt must explicitly mention the skill using $skill-name syntax."],
+        evidence: "documented",
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      },
+      {
+        path: "dependencies.tools",
+        requiredness: "optional",
+        type: "object-list",
+        semantics: "Tool dependencies advertised by the skill; not a permission boundary.",
+        evidence: "documented",
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      },
+      ...["type", "description", "transport", "url"].map((name) => ({
+        path: `dependencies.tools[].${name}`,
+        requiredness:
+          name === "type"
+            ? ("required" as const)
+            : name === "description"
+              ? ("unknown" as const)
+              : ("conditional" as const),
+        type: "string" as const,
+        semantics: `Tool dependency ${name}.`,
+        evidence: "documented" as const,
+        sourceIds: ["openai-codex-openai-yaml-reference"],
+      })),
+      {
+        path: "dependencies.tools[].value",
+        requiredness: "required",
+        type: "string",
+        semantics: "Identifier of the tool dependency.",
+        constraints: ["Absent, empty, or values longer than 1024 characters are dropped."],
+        evidence: "first-party-source",
+        sourceIds: ["openai-codex-openai-yaml-loader"],
+      },
+      {
+        path: "dependencies.tools[].command",
+        requiredness: "optional",
+        type: "string",
+        semantics: "Command used to launch a tool dependency such as a stdio MCP server.",
+        constraints: ["Whitespace is normalized; empty or overlong values are ignored."],
+        evidence: "first-party-source",
+        sourceIds: ["openai-codex-openai-yaml-loader"],
+      },
+      {
+        path: "dependencies.tools[].oauth.callbackPort",
+        requiredness: "optional",
+        type: "integer",
+        semantics: "OAuth callback port for the dependency.",
+        constraints: ["Parsed as an unsigned 16-bit integer; callback_port is an alias."],
+        evidence: "first-party-source",
+        sourceIds: ["openai-codex-openai-yaml-loader"],
+      },
+      {
+        path: "policy.allow_implicit_invocation",
+        requiredness: "optional",
+        type: "boolean",
+        semantics: "Whether the model may select the skill without explicit user invocation.",
+        constraints: ["Defaults to true.", "False preserves explicit $skill invocation."],
+        evidence: "documented",
+        sourceIds: [
+          "openai-codex-skills",
+          "openai-codex-openai-yaml-reference",
+          "openai-codex-skill-policy-model",
+          "openai-codex-openai-yaml-example",
+        ],
+      },
+      {
+        path: "policy.products",
+        requiredness: "optional",
+        type: "string-list",
+        semantics: "Restricts the skill metadata to matching OpenAI products.",
+        constraints: ["An empty list means no product restriction."],
+        evidence: "first-party-source",
+        sourceIds: ["openai-codex-openai-yaml-loader"],
+      },
+    ],
+  },
+] as const satisfies readonly HarnessSkillMetadataContract[];
