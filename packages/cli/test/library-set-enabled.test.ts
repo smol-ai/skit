@@ -5,10 +5,19 @@ import {
   deterministicTreeHashEffect,
   LibraryStore,
   libraryStoreLayer,
+  makeSkillId,
   skitLayer,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import {
+  applyLibraryBindings,
+  previewLibraryBindings,
+} from "../src/workflows/library/set-enabled.js";
+import { planRemoveEffect } from "../src/workflows/library/remove.js";
+import { planUpdatesEffect } from "../src/workflows/library/update.js";
+import { planPinEffect } from "../src/workflows/library/pin.js";
+import { checkSubjectsEffect } from "../src/workflows/library/check.js";
+import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 
 it.effect("partially binds raw Skills and converges after enable and disable", () =>
@@ -77,6 +86,47 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       enabled: true,
       dryRun: true,
     };
+    const member = state.skills.find((skill) => skill.name === "review");
+    assert.ok(member);
+    const memberVersion = member.selected_skill_version_id;
+    assert.ok(memberVersion);
+    const { collection_id: _collectionId, ...standalone } = member;
+    const ambiguous = {
+      ...state,
+      skills: [...state.skills, { ...standalone, skill_id: makeSkillId() }],
+    };
+    assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
+    assert.strictEqual(
+      (yield* planRemoveEffect(ambiguous, "review").pipe(Effect.flip))._tag,
+      "Library.RemoveAmbiguous",
+    );
+    assert.strictEqual(
+      (yield* planUpdatesEffect(ambiguous, base, "review").pipe(Effect.provide(layer), Effect.flip))
+        ._tag,
+      "Library.UpdateAmbiguous",
+    );
+    assert.strictEqual(
+      (yield* checkSubjectsEffect(ambiguous, {}, "review").pipe(Effect.provide(layer), Effect.flip))
+        ._tag,
+      "Library.CheckAmbiguous",
+    );
+    assert.strictEqual(
+      (yield* planPinEffect(ambiguous, {
+        ...base,
+        query: "review",
+        version: memberVersion,
+        dryRun: true,
+      }).pipe(Effect.flip))._tag,
+      "Library.PinAmbiguous",
+    );
+    assert.strictEqual(
+      (yield* previewLibraryBindings(ambiguous, {
+        ...base,
+        query: "review",
+        invocation,
+      }).pipe(Effect.flip))._tag,
+      "Library.SetEnabledAmbiguous",
+    );
     const planned = yield* applyLibraryBindings(state, {
       ...base,
       invocation,

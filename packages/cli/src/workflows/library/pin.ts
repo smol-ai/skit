@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { addLibrarySourceEffect, inspectLibrarySourceEffect, type AddOptions } from "./add.js";
+import { matchingLibrarySubjects } from "./subject-resolution.js";
 
 export class PinNotFound extends Schema.TaggedError<PinNotFound>()("Library.PinNotFound", {
   query: Schema.String,
@@ -50,17 +51,21 @@ const selectSkills = Effect.fn("Library.selectPinSkills")(function* (
   query: string,
   version: string,
 ) {
-  const collections = state.collections.filter((collection) =>
-    [collection.collection_id, collection.label].includes(query),
+  const subjects = matchingLibrarySubjects(state, query);
+  const collections = subjects.filter(
+    (subject) =>
+      subject.kind === "collection" &&
+      [subject.collection.collection_id, subject.collection.label].includes(query),
   );
   if (collections.length > 1) return yield* new PinAmbiguous({ query, version });
-  if (collections.length === 1)
-    return state.skills.filter((skill) => skill.collection_id === collections[0]!.collection_id);
-  const candidates = state.skills.filter(
-    (skill) =>
-      skill.skill_id === query ||
-      skill.name === query ||
-      skill.versions.some((candidate) => candidate.skill_version_id === query),
+  if (collections.length === 1) return collections[0]!.skills;
+  const candidates = subjects.flatMap((subject) =>
+    subject.skills.filter(
+      (skill) =>
+        skill.skill_id === query ||
+        skill.name === query ||
+        skill.versions.some((candidate) => candidate.skill_version_id === query),
+    ),
   );
   if (candidates.length === 0) return yield* new PinNotFound({ query, version });
   if (candidates.length !== 1) return yield* new PinAmbiguous({ query, version });

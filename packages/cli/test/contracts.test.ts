@@ -7,6 +7,7 @@ import { commandContractArtifacts } from "../src/commands/artifacts.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { result } from "../src/handlers/contracts.js";
+import { writeCommandContractArtifacts } from "../src/commands/contract-writer.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");
 
@@ -31,6 +32,20 @@ describe("generated command contracts", () => {
       for (const contents of Object.values(yield* commandContractArtifacts()))
         expect(() => JSON.parse(contents)).not.toThrow();
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-contract-json-test"))),
+  );
+
+  it.effect("refuses to overwrite a changed schema under the same contract ID", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const target = yield* fs.makeTempDirectoryScoped({ prefix: "skit-contract-version-" });
+      const name = "skit.example.v1.json";
+      yield* fs.writeFileString(join(target, name), "old shape\n");
+      const failure = yield* writeCommandContractArtifacts(target, {
+        [name]: "new shape\n",
+      }).pipe(Effect.flip);
+      expect(failure).toMatchObject({ _tag: "CLI.ContractShapeChanged", contract: name });
+      expect(yield* fs.readFileString(join(target, name))).toBe("old shape\n");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
   test("schemas validate representative branching payloads", () => {

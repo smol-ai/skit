@@ -3,14 +3,25 @@ import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { LibraryStore, libraryStoreLayer, retainedTreePath, skitLayer } from "@smolai/skit-core";
+import {
+  LibraryStore,
+  libraryManifestFromLocalStateEffect,
+  libraryStoreLayer,
+  retainedTreePath,
+  skitLayer,
+} from "@smolai/skit-core";
 import {
   addLibrarySourceEffect,
   previewLibrarySourceEffect,
 } from "../src/workflows/library/add.js";
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/library/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
-import { initializeLibraryMachine } from "./helpers/library-home.js";
+import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { executePinEffect } from "../src/workflows/library/pin.js";
+import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
+import { executeRemoveEffect } from "../src/workflows/library/remove.js";
+import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
+import { initializeLibraryMachine, writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
 it.effect("previews without mutation, then retains exact root Skill bytes", () =>
@@ -83,7 +94,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("checks and updates a selected well-known Skill as a standalone subject", () =>
+it.effect("runs the complete lifecycle for a selected well-known standalone Skill", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-standalone-update-" });
@@ -121,7 +132,11 @@ it.effect("checks and updates a selected well-known Skill as a standalone subjec
     });
     const source = { type: "well-known" as const, ref: base, members: ["review"] };
     const options = {
-      roots: { home: root, configHome: join(root, "config"), overrides: {} },
+      roots: {
+        home: root,
+        configHome: join(root, "config"),
+        overrides: { codex: join(root, "codex") },
+      },
       variantsPath: join(home, "variants"),
     };
     const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -135,17 +150,38 @@ it.effect("checks and updates a selected well-known Skill as a standalone subjec
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, undefined);
     assert.strictEqual(skill.upstream?.selection.kind, "selected-skills");
+    assert.deepStrictEqual(
+      librarySubjects(before).map((subject) => [subject.kind, subject.subjectId, subject.label]),
+      [["skill", skill.skill_id, "review"]],
+    );
+    const bindingInput = (enabled: boolean) => ({
+      query: skill.skill_id,
+      all: false,
+      roots: options.roots,
+      variantsPath: options.variantsPath,
+      invocation: {
+        subjects: [skill.skill_id],
+        harnesses: ["codex" as const],
+        scope: { kind: "global" as const },
+        enabled,
+        dryRun: false,
+      },
+    });
+    yield* writingTo(home, run(applyLibraryBindings(before, bindingInput(true))));
+    const enabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+    assert.deepStrictEqual(enabled.global_bindings[0]?.skills, [skill.skill_id]);
+    assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
-      (yield* run(checkSubjectsEffect(before, {}, skill.skill_id)))[0]?.source_status,
+      (yield* run(checkSubjectsEffect(enabled, {}, skill.skill_id)))[0]?.source_status,
       "current",
     );
     artifact = updated;
     assert.strictEqual(
-      (yield* run(planUpdatesEffect(before, options, skill.skill_id)))[0]?.changed,
+      (yield* run(planUpdatesEffect(enabled, options, skill.skill_id)))[0]?.changed,
       true,
     );
     const result = yield* run(
-      updateSubjectsEffect(before, options, skill.skill_id).pipe(
+      updateSubjectsEffect(enabled, options, skill.skill_id).pipe(
         Effect.provide(rendererTestLayer()),
       ),
     );
@@ -154,6 +190,47 @@ it.effect("checks and updates a selected well-known Skill as a standalone subjec
     assert.strictEqual(after.collections.length, 0);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
+    const originalVersion = after.skills[0]?.versions[0]?.skill_version_id;
+    assert.ok(originalVersion);
+    yield* writingTo(
+      home,
+      run(
+        executePinEffect(after, {
+          ...options,
+          query: skill.skill_id,
+          version: originalVersion,
+          dryRun: false,
+        }),
+      ),
+    );
+    const pinned = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+    assert.strictEqual(pinned.skills[0]?.selected_skill_version_id, originalVersion);
+    const desired = yield* libraryManifestFromLocalStateEffect(pinned);
+    const empty = {
+      ...desired,
+      collections: [],
+      skills: [],
+      retained_copies: [],
+      acquisitions: [],
+      snapshot_digests: [],
+      bindings: [],
+    };
+    assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "skill");
+    yield* writingTo(home, run(applyLibraryBindings(pinned, bindingInput(false))));
+    const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+    assert.deepStrictEqual(disabled.global_bindings, []);
+    yield* writingTo(
+      home,
+      run(
+        executeRemoveEffect(disabled, {
+          query: skill.skill_id,
+          dryRun: false,
+          variantsPath: options.variantsPath,
+        }),
+      ),
+    );
+    const removed = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+    assert.deepStrictEqual(removed.skills, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
