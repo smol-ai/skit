@@ -8,8 +8,8 @@ import {
   type LocalAdoptionTarget,
 } from "./local-adoption.js";
 import { PlanIsStale } from "../../library/failures.js";
-import { addPortableLibrarySourceEffect } from "./portable-add.js";
-import { applyLibraryBindings } from "./portable-set-enabled.js";
+import { addLibrarySourceEffect } from "./add.js";
+import { applyLibraryBindings } from "./set-enabled.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 
 export const SetupLocalCustodySelection = Schema.Struct({
@@ -101,7 +101,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
         reason: "source-not-candidate",
       });
     if (candidate.action === "repository-owned") {
-      const retained = yield* addPortableLibrarySourceEffect({}, sourcePath);
+      const retained = yield* addLibrarySourceEffect({}, sourcePath);
       if (retained.collection_id === undefined)
         return yield* new SetupLocalCustodySelectionInvalid({
           name: selection.name,
@@ -157,10 +157,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     );
     if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(adoptionPlan))
       return yield* new PlanIsStale();
-    const retained = yield* addPortableLibrarySourceEffect(
-      { standalone: true },
-      adoptionPlan.sourcePath,
-    );
+    const retained = yield* addLibrarySourceEffect({ standalone: true }, adoptionPlan.sourcePath);
     const subjectId = retained.collection_id ?? retained.skill_ids[0];
     if (subjectId === undefined)
       return yield* new SetupLocalCustodySelectionInvalid({

@@ -40,7 +40,7 @@ const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
 const retainedTreeId = makeRetainedCopyId();
 const projectionId = makeProjectionId();
-const portableBinding = {
+const binding = {
   harness: "codex" as const,
   scope: { kind: "global" as const },
   skills: [skillId],
@@ -429,7 +429,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     scope: { kind: "global" },
     enabled: true,
     changed: true,
-    bindings: [portableBinding],
+    bindings: [binding],
   }),
   resultStory("enable", "applied", outputContracts.enable, {
     subject_id: collectionId,
@@ -438,7 +438,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     scope: { kind: "global" },
     enabled: true,
     changed: true,
-    bindings: [portableBinding],
+    bindings: [binding],
     projections: [{ harness: "codex", status: "projected" }],
   }),
   resultStory("disable", "preview", outputContracts.disablePlan, {

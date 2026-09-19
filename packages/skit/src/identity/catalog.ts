@@ -26,6 +26,6 @@ export function collectionDisplay(identity: CollectionIdentity): string {
   return collectionIdentityProfileCatalog[identity.profile].display(identity);
 }
 
-export function portableCollectionIdentity(identity: CollectionIdentity): boolean {
+export function synchronizableCollectionIdentity(identity: CollectionIdentity): boolean {
   return collectionIdentityProfileCatalog[identity.profile].portable;
 }

@@ -3,7 +3,7 @@ import { LibraryStore, type Digest, type HarnessName } from "@smolai/skit-core";
 import { resolve } from "node:path";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
-import { applyLibraryBindings } from "./portable-set-enabled.js";
+import { applyLibraryBindings } from "./set-enabled.js";
 
 export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistingBindingInvalid>()(
   "SetupExistingBindingInvalid",
@@ -35,7 +35,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
   selectedNames: readonly string[],
 ) {
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
-  const portable = yield* (yield* LibraryStore).load;
+  const state = yield* (yield* LibraryStore).load;
   const selected = new Set<string>();
   const results = [];
   for (const name of selectedNames) {
@@ -72,7 +72,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
     }
 
     results.push(
-      yield* applyLibraryBindings(portable, {
+      yield* applyLibraryBindings(state, {
         query: candidate.subjectId,
         all: false,
         selectedSkills: [name],

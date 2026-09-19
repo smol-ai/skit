@@ -862,7 +862,7 @@ describe("Better Auth adapter", () => {
         snapshot_digests: [archive.digest],
         bindings: [],
       };
-      const writePortable = (expected: string | null, manifest: unknown) =>
+      const writeLibrarySync = (expected: string | null, manifest: unknown) =>
         request("/api/library/portable", {
           method: "PUT",
           headers: {
@@ -872,9 +872,9 @@ describe("Better Auth adapter", () => {
           },
           body: JSON.stringify({ expected_revision_id: expected, manifest }),
         });
-      const committed = yield* writePortable(libraryBody.library.revision_id, portable);
+      const committed = yield* writeLibrarySync(libraryBody.library.revision_id, portable);
       expect(committed.status).toBe(200);
-      const portableBody = Schema.decodeUnknownSync(
+      const syncedBody = Schema.decodeUnknownSync(
         Schema.Struct({
           library: Schema.Struct({
             library_id: Schema.String,
@@ -883,9 +883,9 @@ describe("Better Auth adapter", () => {
           }),
         }),
       )(yield* webPromise(() => committed.json()));
-      const repeated = yield* writePortable(portableBody.library.revision_id, portable);
+      const repeated = yield* writeLibrarySync(syncedBody.library.revision_id, portable);
       expect(repeated.status).toBe(200);
-      expect(yield* webPromise(() => repeated.json())).toEqual(portableBody);
+      expect(yield* webPromise(() => repeated.json())).toEqual(syncedBody);
       expect(
         (yield* request("/api/library/portable", { headers: { cookie: sessionCookie } })).status,
       ).toBe(200);
@@ -935,13 +935,13 @@ describe("Better Auth adapter", () => {
         ],
         snapshot_digests: [],
       };
-      const sourceCommitted = yield* writePortable(portableBody.library.revision_id, sourceBacked);
+      const sourceCommitted = yield* writeLibrarySync(syncedBody.library.revision_id, sourceBacked);
       expect(sourceCommitted.status).toBe(200);
       const sourceBody = Schema.decodeUnknownSync(
         Schema.Struct({ library: Schema.Struct({ revision_id: Schema.String }) }),
       )(yield* webPromise(() => sourceCommitted.json()));
       expect(
-        (yield* writePortable(sourceBody.library.revision_id, {
+        (yield* writeLibrarySync(sourceBody.library.revision_id, {
           ...portable,
           retained_copies: [
             {

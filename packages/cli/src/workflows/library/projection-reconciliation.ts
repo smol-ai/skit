@@ -1,11 +1,11 @@
 import {
   LibraryStore,
-  projectPortableBindingEffect,
-  retirePortableUnboundGlobalProjectionsEffect,
+  projectBindingEffect,
+  retireUnboundGlobalProjectionsEffect,
   withLibraryWriter,
-  type PortableBinding,
-  type PortableDeviceBinding,
-  type PortableRepositoryBinding,
+  type Binding,
+  type DeviceBinding,
+  type RepositoryBinding,
   type Digest,
   type ProjectionId,
   type OwnershipMarker,
@@ -17,12 +17,12 @@ import type { InventoryRootOptions } from "../../projection/roots.js";
 export interface LibraryProjectionReconciliationOptions {
   readonly roots?: InventoryRootOptions;
   readonly rootFor?: (
-    harness: PortableDeviceBinding["harness"],
-    scope: PortableDeviceBinding["scope"] | PortableRepositoryBinding["scope"],
+    harness: DeviceBinding["harness"],
+    scope: DeviceBinding["scope"] | RepositoryBinding["scope"],
   ) => string | undefined;
   readonly variantsPath: string;
-  readonly desiredGlobalBindings?: readonly PortableBinding[];
-  readonly onlyBindings?: readonly (PortableDeviceBinding | PortableRepositoryBinding)[];
+  readonly desiredGlobalBindings?: readonly Binding[];
+  readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
   readonly retireOnly?: boolean;
   readonly acceptedObservations?: ReadonlyMap<
     ProjectionId,
@@ -36,7 +36,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
 ) {
   const retired =
     options.onlyBindings === undefined || options.desiredGlobalBindings !== undefined
-      ? yield* retirePortableUnboundGlobalProjectionsEffect({
+      ? yield* retireUnboundGlobalProjectionsEffect({
           variantsPath: options.variantsPath,
           ...(options.desiredGlobalBindings === undefined
             ? {}
@@ -64,7 +64,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
       outcomes.push({ harness: binding.harness, status: "deferred" });
       continue;
     }
-    yield* projectPortableBindingEffect({
+    yield* projectBindingEffect({
       harness: binding.harness,
       scope: binding.scope,
       root,

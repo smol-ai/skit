@@ -1,6 +1,6 @@
 // Runtime-agnostic contracts and Artifact behavior required by Registry consumer capabilities.
 export * from "./distribution/api-contracts.js";
-export * from "./library/portable-contracts.js";
+export * from "./library/library-contracts.js";
 export * from "./library/entity-ids.js";
 export * from "./library/snapshot-archive-universal.js";
 export * from "./auditing/skill-audit.js";

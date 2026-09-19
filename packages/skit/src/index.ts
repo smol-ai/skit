@@ -53,16 +53,16 @@ export {
   retainedTreePath,
   retainLocalTreeEffect,
 } from "./library/retention/retain-tree.js";
-export * from "./library/portable-contracts.js";
+export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
-export * from "./library/portable-local-state.js";
-export * from "./library/portable-restore.js";
-export * from "./library/installation/retire-portable-unbound.js";
-export * from "./library/installation/remove-portable.js";
+export * from "./library/library-state.js";
+export * from "./library/library-restore.js";
+export * from "./library/installation/retire-unbound.js";
+export * from "./library/installation/remove.js";
 export * from "./library/plain-skill-projection.js";
 export * from "./library/skill-materialization.js";
-export * from "./library/portable-observed-import.js";
-export * from "./library/installation/project-portable.js";
+export * from "./library/observed-import.js";
+export * from "./library/installation/project-binding.js";
 export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";

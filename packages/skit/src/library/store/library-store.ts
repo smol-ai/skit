@@ -2,7 +2,7 @@ import { Context, DateTime, Effect, FileSystem, Layer } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
-import { currentLibraryState, LibraryState } from "../portable-local-state.js";
+import { currentLibraryState, LibraryState } from "../library-state.js";
 import {
   inspectLocalLibraryStateEffect,
   publishLibraryStateEffect,

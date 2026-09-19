@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { LibraryStore, libraryStoreLayer } from "../../src/library/store/library-store.js";
-import type { LibraryState } from "../../src/library/portable-local-state.js";
+import type { LibraryState } from "../../src/library/library-state.js";
 
 /** Run an Effect against the Library rooted at `home`, through the store production consumes. */
 export const inLibrary =

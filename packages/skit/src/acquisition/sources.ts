@@ -1140,7 +1140,7 @@ export function resolveSkitSourceEffect(
     registryBaseUrl?: string;
     registryToken?: string;
     version?: string;
-    /** Portable pin; the Source locator continues to own update tracking and subpath. */
+    /** Library pin; the Source locator continues to own update tracking and subpath. */
     git?: { commit: string; tracking_ref: string | null };
     requireGitRevision?: boolean;
     /** Exact Agent Skills documents supplied by verified external provenance. */

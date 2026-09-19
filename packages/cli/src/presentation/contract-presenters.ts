@@ -7,12 +7,12 @@ import { homedir } from "node:os";
 import { basename, dirname, relative, sep } from "node:path";
 import { harnessLabel } from "../harness/catalog.js";
 import { renderInventory } from "./inventory.js";
-import { renderPortableSetEnabled } from "./portable-set-enabled.js";
-import { renderPortablePin } from "./portable-pin.js";
-import { renderPortableRemove, renderPortableRemovePlan } from "./portable-remove.js";
-import { renderPortableCheck } from "./portable-check.js";
-import { renderPortableLibrarySync } from "./portable-library-sync.js";
-import { renderPortableLibraryList } from "./portable-library-list.js";
+import { renderSetEnabled } from "./set-enabled.js";
+import { renderPin } from "./pin.js";
+import { renderRemove, renderRemovePlan } from "./remove.js";
+import { renderCheck } from "./check.js";
+import { renderLibrarySync } from "./library-sync.js";
+import { renderLibraryList } from "./library-list.js";
 import { renderAudit, renderAuditV1Alpha3 } from "./audit.js";
 import { conditionHeadline, severityHeadline } from "./condition-language.js";
 
@@ -97,7 +97,7 @@ function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): s
   return `Deleted ${data.skit_id}: ${data.draft_revisions} Draft Revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
 }
 
-function renderPortableUpdate(data: ContractDataForId<"skit.update.v3">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v3">): string {
   if (!data.length) return "No device-local Sources to update";
   const updated = data.filter((item) => item.changed).length;
   const current = data.length - updated;
@@ -714,14 +714,14 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.publish.id]: (data) =>
     `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,
   [outputContracts.sync.id]: renderAuthorSync,
-  [outputContracts.pin.id]: (data) => renderPortablePin(data, true),
-  [outputContracts.pinPlan.id]: (data) => renderPortablePin(data, false),
-  [outputContracts.librarySync.id]: renderPortableLibrarySync,
+  [outputContracts.pin.id]: (data) => renderPin(data, true),
+  [outputContracts.pinPlan.id]: (data) => renderPin(data, false),
+  [outputContracts.librarySync.id]: renderLibrarySync,
   [outputContracts.libraryHistory.id]: (data) =>
     data.events.length
       ? data.events.map(renderLibraryHistoryEvent).join("\n")
       : "No Library history recorded.",
-  [outputContracts.list.id]: renderPortableLibraryList,
+  [outputContracts.list.id]: renderLibraryList,
   [outputContracts.experimentalAudit.id]: renderAudit,
   [outputContracts.experimentalAuditV1Alpha3.id]: renderAuditV1Alpha3,
   [outputContracts.authorList.id]: renderAuthorList,
@@ -741,7 +741,7 @@ const contractPresenters: ContractPresenters = {
       ...data.skills.map((skill) => `  ${skill.name}`),
     ].join("\n");
   },
-  [outputContracts.update.id]: renderPortableUpdate,
+  [outputContracts.update.id]: renderUpdate,
   [outputContracts.updatePlan.id]: (data) =>
     data.length
       ? data
@@ -768,12 +768,12 @@ const contractPresenters: ContractPresenters = {
         (projection) => `${projection.harness} · ${projection.path} · ${projection.status}`,
       ),
     ].join("\n"),
-  [outputContracts.remove.id]: renderPortableRemove,
-  [outputContracts.removePlan.id]: renderPortableRemovePlan,
-  [outputContracts.enable.id]: (data) => renderPortableSetEnabled(data, true),
-  [outputContracts.enablePlan.id]: (data) => renderPortableSetEnabled(data, false),
-  [outputContracts.disable.id]: (data) => renderPortableSetEnabled(data, true),
-  [outputContracts.disablePlan.id]: (data) => renderPortableSetEnabled(data, false),
+  [outputContracts.remove.id]: renderRemove,
+  [outputContracts.removePlan.id]: renderRemovePlan,
+  [outputContracts.enable.id]: (data) => renderSetEnabled(data, true),
+  [outputContracts.enablePlan.id]: (data) => renderSetEnabled(data, false),
+  [outputContracts.disable.id]: (data) => renderSetEnabled(data, true),
+  [outputContracts.disablePlan.id]: (data) => renderSetEnabled(data, false),
   [outputContracts.doctor.id]: renderDoctor,
   [outputContracts.inventory.id]: (data) => renderInventory(data, data.machine),
   [outputContracts.setup.id]: renderSetup,
@@ -796,7 +796,7 @@ const contractPresenters: ContractPresenters = {
         ? `Server setup was already complete at ${data.origin}`
         : `Server setup complete at ${data.origin}`
     }\nIf email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.\nNext: skit auth login ${data.origin}`,
-  [outputContracts.check.id]: renderPortableCheck,
+  [outputContracts.check.id]: renderCheck,
   [outputContracts.experimentalHarnessProbe.id]: renderHarnessProbe,
   [outputContracts.validate.id]: renderValidation,
   [outputContracts.securityReview.id]: renderSecurityReview,

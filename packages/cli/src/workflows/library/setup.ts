@@ -26,7 +26,6 @@ import {
   SourceProcess,
   writeJsonAtomicEffect,
   type CollectionIdentity,
-  type CollectionId,
   type HarnessName as Harness,
   type LibraryState,
   type MachineId,

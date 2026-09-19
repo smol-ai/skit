@@ -119,15 +119,6 @@ export class SourceIdentityChanged extends Data.TaggedError("SourceIdentityChang
   }
 }
 
-export class NoPortableLocator extends Data.TaggedError("NoPortableLocator")<{
-  displayId: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Device-local source ${this.displayId} has no portable locator`;
-  }
-}
-
 export class AcquiredEntryMismatch extends Data.TaggedError("AcquiredEntryMismatch")<{
   collectionRef: string;
 }> {
@@ -204,9 +195,9 @@ export class PinRequiresRegistry extends Data.TaggedError("PinRequiresRegistry")
   }
 }
 
-// -- Portable Library reconciliation ---------------------------------------------------------------
+// -- Library reconciliation ------------------------------------------------------------------------
 //
-// Eight sites, every one CONFLICT. Reconciliation is where a portable manifest meets local
+// Eight sites, every one CONFLICT. Reconciliation is where a Library manifest meets local
 // custody, and an operator resolving it needs to know which of these it hit.
 
 export class BindingEntryMissing extends Data.TaggedError("BindingEntryMissing")<{
@@ -254,23 +245,5 @@ export class BindingSkillUnavailable extends Data.TaggedError("BindingSkillUnava
   readonly code = "CONFLICT" as const;
   get message(): string {
     return `Remote Binding for ${this.collectionRef} references an unavailable skill`;
-  }
-}
-
-export class NoPortableRepositoryIdentity extends Data.TaggedError("NoPortableRepositoryIdentity")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Repository binding for ${this.collectionRef} has no portable repository identity`;
-  }
-}
-
-export class NoPortableGitRevision extends Data.TaggedError("NoPortableGitRevision")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Git Entry ${this.collectionRef} has no recorded commit. Run skit update ${this.collectionRef} explicitly before syncing; the retained historical revision cannot be inferred.`;
   }
 }

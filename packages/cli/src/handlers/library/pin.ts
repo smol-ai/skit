@@ -7,7 +7,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { executePortablePinEffect } from "../../workflows/library/portable-pin.js";
+import { executePinEffect } from "../../workflows/library/pin.js";
 import { result } from "../contracts.js";
 
 const subject = Argument.string("skit-or-skill");
@@ -28,10 +28,10 @@ export const pinCliCommand = Command.make(
         const renderer = yield* Renderer;
         const configuration = yield* libraryCommandConfiguration(input);
         const store = yield* LibraryStore;
-        const portable = yield* store.load;
+        const state = yield* store.load;
         const outcome = yield* renderer.withStatus(
           input.dryRun ? "Planning retained Version selection" : "Selecting retained Version",
-          executePortablePinEffect(portable, {
+          executePinEffect(state, {
             query: input.subject,
             version: input.version,
             dryRun: input.dryRun,

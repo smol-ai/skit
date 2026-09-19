@@ -15,7 +15,7 @@ import { BootstrapApi } from "./api/bootstrap.js";
 import { draftHandlers } from "./api/drafts-http.js";
 import { libraryHandlers } from "./api/libraries-http.js";
 import { librarySnapshotHandlers } from "./api/library-snapshots-http.js";
-import { portableLibraryHandlers } from "./api/portable-libraries-http.js";
+import { librarySyncHandlers } from "./api/library-sync-http.js";
 import { readinessHandlers } from "./api/readiness-http.js";
 import { publicationHandlers } from "./api/publication-http.js";
 import { requestDecodingLayer } from "./api/request-decoding.js";
@@ -172,7 +172,7 @@ const consumerAuthenticatedApi = (application: AuthenticatedApplication) => {
     teamHandlers,
     libraryHandlers,
     librarySnapshotHandlers,
-    portableLibraryHandlers,
+    librarySyncHandlers,
     readinessHandlers,
   ).pipe(Layer.provide(application));
   return HttpApiBuilder.layer(ConsumerAuthenticatedApi).pipe(

@@ -1,5 +1,5 @@
 import { Crypto, Effect, Schema } from "effect";
-import { SnapshotArchive } from "./portable-contracts.js";
+import { SnapshotArchive } from "./library-contracts.js";
 
 const MAX_TREE_BYTES = 32 * 1024 * 1024;
 const parentOf = (path: string) =>

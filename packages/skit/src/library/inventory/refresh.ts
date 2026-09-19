@@ -1,7 +1,7 @@
 import { Clock, Effect, FileSystem, Result } from "effect";
 import { dirname, join, resolve } from "node:path";
 import type { HarnessName } from "../../contracts.js";
-import type { LibraryState } from "../portable-local-state.js";
+import type { LibraryState } from "../library-state.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { deterministicTreeHashEffect } from "../../artifact/skit.js";
 import { observationPathIdentityEffect, pathIsWithin } from "../../platform/path-identity.js";
@@ -216,7 +216,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
   return state;
 });
 /** Refresh device observations on authoritative Collections without a legacy Entry view. */
-export const refreshPortableInventory = Effect.fn("Library.refreshPortableInventory")(function* (
+export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventory")(function* (
   loaded: LibraryState,
   selectRoots: (state: LibraryState) => readonly InventoryScanRoot[],
 ) {

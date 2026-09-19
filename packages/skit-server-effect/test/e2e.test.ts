@@ -643,7 +643,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     const createdToken = await fetch(new URL("/api/tokens", registryUrl), {
       method: "POST",
       headers: { cookie, origin: registryUrl.origin, "content-type": "application/json" },
-      body: JSON.stringify({ name: "Portable E2E", scopes: ["library:sync"] }),
+      body: JSON.stringify({ name: "Library E2E", scopes: ["library:sync"] }),
     });
     expect(createdToken.status, await createdToken.clone().text()).toBe(201);
     token = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(

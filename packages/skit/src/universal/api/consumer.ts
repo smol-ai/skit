@@ -5,12 +5,12 @@ import {
   libraryWriteRequestSchema,
 } from "../../distribution/api-contracts.js";
 import {
-  PortableLibraryReadResponse,
-  PortableLibraryResponse,
-  PortableLibraryWriteRequest,
+  LibraryReadResponse,
+  LibraryResponse,
+  LibraryWriteRequest,
   SnapshotArchive,
   SnapshotUploadResponse,
-} from "../../library/portable-contracts.js";
+} from "../../library/library-contracts.js";
 import {
   CreatedPat,
   ListedPat,
@@ -223,15 +223,15 @@ export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
   .middleware(RequestDecoding)
   .middleware(PrincipalAuthentication) {}
 
-export class PortableLibrariesApi extends HttpApiGroup.make("portableLibraries")
+export class LibrarySyncApi extends HttpApiGroup.make("librarySync")
   .add(
     HttpApiEndpoint.get("read", "/api/library/portable", {
-      success: PortableLibraryReadResponse,
+      success: LibraryReadResponse,
       error: [InsufficientScopeResponse, LibraryNotFoundResponse, StorageFailureResponse],
     }),
     HttpApiEndpoint.put("write", "/api/library/portable", {
-      payload: PortableLibraryWriteRequest,
-      success: PortableLibraryResponse,
+      payload: LibraryWriteRequest,
+      success: LibraryResponse,
       error: [
         InsufficientScopeResponse,
         ForbiddenOriginResponse,
@@ -266,6 +266,6 @@ export class ConsumerAuthenticatedApi extends HttpApi.make("skit-consumer-authen
   TeamsApi,
   LibrariesApi,
   LibrarySnapshotsApi,
-  PortableLibrariesApi,
+  LibrarySyncApi,
   ReadinessApi,
 ) {}

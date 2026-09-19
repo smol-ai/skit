@@ -1,4 +1,4 @@
-import type { LibraryState } from "../portable-local-state.js";
+import type { LibraryState } from "../library-state.js";
 import type { LibraryAuditChange } from "./audit-log.js";
 
 type Binding = LibraryState["global_bindings"][number] | LibraryState["local_bindings"][number];

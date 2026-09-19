@@ -16,26 +16,14 @@ import { AuditReport, AuditReportV1Alpha3 } from "../audit/schema.js";
 import { HarnessProbeReport } from "../harness/probe.js";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
-import { PortablePinPlan, PortablePinResult } from "../workflows/library/portable-pin-contract.js";
-import {
-  PortableRemovePlan,
-  PortableRemoveResult,
-} from "../workflows/library/portable-remove-contract.js";
-import { PortableCheckResult } from "../workflows/library/portable-check-contract.js";
-import {
-  PortableAddPreview,
-  PortableAddResult,
-} from "../workflows/library/portable-add-contract.js";
-import {
-  PortableUpdatePlan,
-  PortableUpdateResult,
-} from "../workflows/library/portable-update-contract.js";
-import { PortableSyncResult } from "../workflows/library/portable-sync-contract.js";
-import { PortableListResult } from "../workflows/library/portable-list-contract.js";
-import {
-  PortableSetEnabledPlan,
-  PortableSetEnabledResult,
-} from "../workflows/library/portable-set-enabled-contract.js";
+import { PinPlan, PinResult } from "../workflows/library/pin-contract.js";
+import { RemovePlan, RemoveResult } from "../workflows/library/remove-contract.js";
+import { CheckResult } from "../workflows/library/check-contract.js";
+import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
+import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.js";
+import { SyncResult } from "../workflows/library/library-sync-contract.js";
+import { ListResult } from "../workflows/library/list-contract.js";
+import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 import { RepositoryPolicyResult, SetupResult } from "../workflows/library/setup-contract.js";
 import {
   ProjectionRetentionPlan,
@@ -109,17 +97,17 @@ export const outputContracts = {
     }),
   ),
   authorDelete: effectOutput("skit.author.delete.v1", AuthorSkitDeleteResponse),
-  add: effectOutput("skit.add.v3", PortableAddResult),
-  addPreview: effectOutput("skit.add.preview.v3", PortableAddPreview),
-  pull: effectOutput("skit.pull.v3", PortableUpdateResult),
-  list: effectOutput("skit.list.v2", PortableListResult),
+  add: effectOutput("skit.add.v3", AddResult),
+  addPreview: effectOutput("skit.add.preview.v3", AddPreview),
+  pull: effectOutput("skit.pull.v3", UpdateResult),
+  list: effectOutput("skit.list.v2", ListResult),
   securityReview: effectOutput("skit.security.review.v1", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v1", SkillSecurityReview),
   inventory: effectOutput("skit.inventory.v4", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v2", LibraryDoctorReport),
-  check: effectOutput("skit.check.v6", PortableCheckResult),
-  update: effectOutput("skit.update.v3", PortableUpdateResult),
-  updatePlan: effectOutput("skit.update.plan.v3", PortableUpdatePlan),
+  check: effectOutput("skit.check.v6", CheckResult),
+  update: effectOutput("skit.update.v3", UpdateResult),
+  updatePlan: effectOutput("skit.update.plan.v3", UpdatePlan),
   projectionRetention: effectOutput(
     "skit.update.projection-retention.v1",
     ProjectionRetentionResult,
@@ -128,17 +116,17 @@ export const outputContracts = {
     "skit.update.projection-retention.plan.v1",
     ProjectionRetentionPlan,
   ),
-  pin: effectOutput("skit.pin.v4", PortablePinResult),
-  pinPlan: effectOutput("skit.pin.plan.v4", PortablePinPlan),
-  remove: effectOutput("skit.remove.v3", PortableRemoveResult),
-  removePlan: effectOutput("skit.remove.plan.v3", PortableRemovePlan),
-  enable: effectOutput("skit.enable.v2", PortableSetEnabledResult),
-  enablePlan: effectOutput("skit.enable.plan.v2", PortableSetEnabledPlan),
-  disable: effectOutput("skit.disable.v2", PortableSetEnabledResult),
-  disablePlan: effectOutput("skit.disable.plan.v2", PortableSetEnabledPlan),
+  pin: effectOutput("skit.pin.v4", PinResult),
+  pinPlan: effectOutput("skit.pin.plan.v4", PinPlan),
+  remove: effectOutput("skit.remove.v3", RemoveResult),
+  removePlan: effectOutput("skit.remove.plan.v3", RemovePlan),
+  enable: effectOutput("skit.enable.v2", SetEnabledResult),
+  enablePlan: effectOutput("skit.enable.plan.v2", SetEnabledPlan),
+  disable: effectOutput("skit.disable.v2", SetEnabledResult),
+  disablePlan: effectOutput("skit.disable.plan.v2", SetEnabledPlan),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v2", AuthorSyncResult),
-  librarySync: effectOutput("skit.library.sync.v3", PortableSyncResult),
+  librarySync: effectOutput("skit.library.sync.v3", SyncResult),
   libraryHistory: effectOutput(
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),

@@ -1,17 +1,13 @@
 import { Schema } from "effect";
 import {
-  PortableAcquisitionV4,
-  PortableBindingV4,
-  PortableCollectionV4,
-  PortableSkillV4,
-  migratePortableEntitiesFromV4,
-} from "../portable-contracts.js";
-import {
-  AbsoluteDevicePath,
-  currentLibraryState,
-  type LibraryState,
-} from "../portable-local-state.js";
-import { PortableRetainedCopy } from "../portable-contracts.js";
+  AcquisitionV4,
+  BindingV4,
+  CollectionV4,
+  SkillV4,
+  migrateLibraryEntitiesFromV4,
+} from "../library-contracts.js";
+import { AbsoluteDevicePath, currentLibraryState, type LibraryState } from "../library-state.js";
+import { RetainedCopy } from "../library-contracts.js";
 import {
   AdoptionReceiptId,
   CollectionId,
@@ -28,11 +24,11 @@ import {
   LibraryDeviceStateFields,
 } from "./state-schema.js";
 
-const PortableDeviceBindingV4 = Schema.Struct({
-  ...PortableBindingV4.fields,
+const DeviceBindingV4 = Schema.Struct({
+  ...BindingV4.fields,
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
-const PortableRepositoryBindingV4 = Schema.Struct({
+const RepositoryBindingV4 = Schema.Struct({
   collection_id: CollectionId,
   harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
@@ -54,7 +50,7 @@ const ManagedProjectionV4 = Schema.Struct({
   suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),
   projected_at: Schema.String,
 });
-const PortableAdoptionReceiptV4 = Schema.Struct({
+const AdoptionReceiptV4 = Schema.Struct({
   receipt_id: AdoptionReceiptId,
   adopted_at: Schema.String,
   machine_id: MachineId,
@@ -67,19 +63,19 @@ const PortableAdoptionReceiptV4 = Schema.Struct({
 export const LibraryStateV4 = Schema.Struct({
   ...LibraryDeviceStateFields,
   schemaVersion: Schema.Literal(4),
-  collections: Schema.mutable(Schema.Array(PortableCollectionV4)),
-  skills: Schema.mutable(Schema.Array(PortableSkillV4)),
-  retained_copies: Schema.mutable(Schema.Array(PortableRetainedCopy)),
-  acquisitions: Schema.mutable(Schema.Array(PortableAcquisitionV4)),
-  global_bindings: Schema.mutable(Schema.Array(PortableDeviceBindingV4)),
-  local_bindings: Schema.mutable(Schema.Array(PortableRepositoryBindingV4)),
+  collections: Schema.mutable(Schema.Array(CollectionV4)),
+  skills: Schema.mutable(Schema.Array(SkillV4)),
+  retained_copies: Schema.mutable(Schema.Array(RetainedCopy)),
+  acquisitions: Schema.mutable(Schema.Array(AcquisitionV4)),
+  global_bindings: Schema.mutable(Schema.Array(DeviceBindingV4)),
+  local_bindings: Schema.mutable(Schema.Array(RepositoryBindingV4)),
   projections: Schema.mutable(Schema.Array(ManagedProjectionV4)),
-  adoption_receipts: Schema.mutable(Schema.Array(PortableAdoptionReceiptV4)),
+  adoption_receipts: Schema.mutable(Schema.Array(AdoptionReceiptV4)),
 });
 export type LibraryStateV4 = typeof LibraryStateV4.Type;
 
 export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState => {
-  const migrated = migratePortableEntitiesFromV4({
+  const migrated = migrateLibraryEntitiesFromV4({
     collections: state.collections,
     skills: state.skills,
     acquisitions: state.acquisitions,

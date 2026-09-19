@@ -4,7 +4,7 @@ import {
   inspectOwnershipMarkerEffect,
   LibraryStore,
   prepareObservedCollectionEffect,
-  projectPortableBindingEffect,
+  projectBindingEffect,
   retainChangedProjectionEffect,
   retainedTreePath,
   withLibraryWriter,
@@ -12,8 +12,8 @@ import {
   type ManagedProjection,
   type Digest,
   type OwnershipMarker,
-  type PortableDeviceBinding,
-  type PortableRepositoryBinding,
+  type DeviceBinding,
+  type RepositoryBinding,
   type ProjectionId,
 } from "@smolai/skit-core";
 import { Clock, Effect, Schema } from "effect";
@@ -166,7 +166,7 @@ export const planProjectionRetention = Effect.fn("Library.planProjectionRetentio
 const bindingForProjection = (
   state: LibraryState,
   projection: ManagedProjection,
-): PortableDeviceBinding | PortableRepositoryBinding | undefined =>
+): DeviceBinding | RepositoryBinding | undefined =>
   [...state.global_bindings, ...state.local_bindings].find(
     (binding) =>
       binding.harness === projection.harness &&
@@ -253,7 +253,7 @@ export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetent
         const coordinate = `${binding.harness}\0${canonicalJson(binding.scope)}\0${projection.root}`;
         if (reconciled.has(coordinate)) continue;
         reconciled.add(coordinate);
-        yield* projectPortableBindingEffect({
+        yield* projectBindingEffect({
           harness: binding.harness,
           scope: binding.scope,
           root: projection.root,

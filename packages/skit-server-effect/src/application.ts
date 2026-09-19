@@ -12,7 +12,7 @@ import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
 import { layer as draftsLayer } from "./drafts/service.js";
 import { layer as librariesLayer } from "./library/service.js";
-import { layer as portableLibrariesLayer } from "./library/portable.js";
+import { layer as librarySyncLayer } from "./library/library-sync.js";
 import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
 import { databaseLayer, layer as bindingsLayer, type RuntimeEnv } from "./platform/cloudflare.js";
 import { layer as nativeClockLayer } from "./platform/native-clock.js";
@@ -92,7 +92,7 @@ export const applicationLayers = (
     teamsLayer,
     librariesLayer,
     librarySnapshotsLayer,
-    portableLibrariesLayer,
+    librarySyncLayer,
     readinessLayer(env),
     releaseStoreLayer,
     authorInventoryLayer,

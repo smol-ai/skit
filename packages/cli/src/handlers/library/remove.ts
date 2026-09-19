@@ -7,7 +7,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { executePortableRemoveEffect } from "../../workflows/library/portable-remove.js";
+import { executeRemoveEffect } from "../../workflows/library/remove.js";
 import {
   readAuthorWorkspaceEffect,
   writeAuthorWorkspaceEffect,
@@ -29,10 +29,10 @@ export const removeCliCommand = Command.make(
         const renderer = yield* Renderer;
         const configuration = yield* libraryCommandConfiguration(input);
         const store = yield* LibraryStore;
-        const portable = yield* store.load;
+        const state = yield* store.load;
         const outcome = yield* renderer.withStatus(
           input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
-          executePortableRemoveEffect(portable, {
+          executeRemoveEffect(state, {
             query: input.subject,
             dryRun: input.dryRun,
             variantsPath: configuration.pull.bindings.variantsPath,
@@ -44,13 +44,13 @@ export const removeCliCommand = Command.make(
           );
         const removed =
           outcome.value.subject_kind === "collection"
-            ? portable.collections.find(
+            ? state.collections.find(
                 (collection) => collection.collection_id === outcome.value.subject_id,
               )
             : undefined;
         if (removed?.upstream?.source_identity.kind === "authored-workspace") {
           const acquisitionIds = new Set(
-            portable.skills
+            state.skills
               .filter((skill) => skill.collection_id === removed.collection_id)
               .flatMap((skill) =>
                 skill.versions.flatMap((version) =>
@@ -58,7 +58,7 @@ export const removeCliCommand = Command.make(
                 ),
               ),
           );
-          const workspacePath = portable.acquisitions.find(
+          const workspacePath = state.acquisitions.find(
             (acquisition) =>
               acquisitionIds.has(acquisition.acquisition_id) &&
               acquisition.source_identity.kind === "authored-workspace",

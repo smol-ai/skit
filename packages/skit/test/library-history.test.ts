@@ -5,7 +5,7 @@ import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { LibraryAuditLog, libraryAuditLogLayer } from "../src/library/audit/audit-log.js";
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/portable-observed-import.js";
+import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
 import {
   LibraryActor,
   LibraryStore,

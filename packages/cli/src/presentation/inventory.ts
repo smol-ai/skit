@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename, dirname, sep } from "node:path";
-import type { HarnessName, PortableLibraryInventory } from "@smolai/skit-core";
+import type { HarnessName, LibraryInventory } from "@smolai/skit-core";
 import { harnessLabel } from "../harness/catalog.js";
 import { conditionHeadline, projectionStatusLabel } from "./condition-language.js";
 import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
@@ -271,7 +271,7 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
   return lines.join("\n");
 };
 
-const inventoryFindings = (state: PortableLibraryInventory): string[] => {
+const inventoryFindings = (state: LibraryInventory): string[] => {
   const lines: string[] = [];
   if (state.custodyIssues?.length) {
     lines.push(`Custody issues · ${state.custodyIssues.length}`);
@@ -308,7 +308,7 @@ const inventoryFindings = (state: PortableLibraryInventory): string[] => {
 };
 
 export function renderInventory(
-  state: PortableLibraryInventory,
+  state: LibraryInventory,
   machine?: MachineInventoryResult["machine"],
 ): string {
   const groups = new Map<string, string[]>();

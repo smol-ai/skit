@@ -10,8 +10,8 @@ import {
   decodeLibraryState,
   CURRENT_LIBRARY_STATE_VERSION,
   LibraryState,
-  portableManifestFromLocalStateEffect,
-} from "../portable-local-state.js";
+  libraryManifestFromLocalStateEffect,
+} from "../library-state.js";
 import { LibraryStateV4, migrateLibraryStateFromV4 } from "./state-schema-v4.js";
 import { withLibraryWriterLock } from "./writer-lock.js";
 
@@ -43,7 +43,7 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
   const state = yield* decodeLibraryState(value).pipe(
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library state" })),
   );
-  yield* portableManifestFromLocalStateEffect(state).pipe(
+  yield* libraryManifestFromLocalStateEffect(state).pipe(
     Effect.mapError((error) => new InvalidLibraryState({ path, detail: String(error) })),
   );
   return state;

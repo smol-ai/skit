@@ -29,7 +29,7 @@ import {
   type SkillId as SkillIdType,
   type SkillVersionId as SkillVersionIdType,
 } from "../library/entity-ids.js";
-import type { ManagedProjection } from "../library/portable-local-state.js";
+import type { ManagedProjection } from "../library/library-state.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 const ADOPTION_RECOVERY_FILE = ".skit-adoption-recovery.json";

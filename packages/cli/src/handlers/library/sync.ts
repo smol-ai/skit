@@ -6,12 +6,12 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString, optionValue } from "../../commands/parameters.js";
-import { syncPortableLibraryEffect } from "../../workflows/library/portable-sync.js";
+import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
 import { NoStoredCredentials } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import { renderPortableLibrarySyncPlan } from "../../presentation/portable-library-sync.js";
+import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
@@ -24,7 +24,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   if (auth.origin === undefined) return yield* new NoStoredCredentials();
   const renderer = yield* Renderer;
   return yield* Effect.scoped(
-    syncPortableLibraryEffect({
+    syncLibraryEffect({
       origin: auth.origin,
       ...(auth.token === undefined ? {} : { token: auth.token }),
       apply: options.apply,
@@ -34,7 +34,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       ...(options.apply
         ? {
             onPlan: (plan) =>
-              renderer.note(renderPortableLibrarySyncPlan(plan), "Applying Library sync plan"),
+              renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan"),
           }
         : {}),
     }),

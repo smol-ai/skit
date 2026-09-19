@@ -21,10 +21,10 @@ import type { ProjectionOptions } from "./projection-options.js";
 import {
   applyLibraryBindings,
   libraryStateRevision,
-  PortableSetEnabledStale,
+  SetEnabledStale,
   previewLibraryBindings,
-} from "./portable-set-enabled.js";
-import type { SetEnabledInvocation } from "./set-enabled.js";
+} from "./set-enabled.js";
+import type { SetEnabledInvocation } from "./set-enabled-invocation.js";
 
 export interface LibraryBindingRow {
   readonly harness: Harness;
@@ -321,7 +321,7 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
       Effect.gen(function* () {
         const store = yield* LibraryStore;
         if (libraryStateRevision(yield* store.load) !== pending.libraryRevision)
-          return yield* new PortableSetEnabledStale({
+          return yield* new SetEnabledStale({
             message: "Library changed after this Binding change was previewed",
           });
         yield* Effect.forEach(pending.operations, ({ query, invocation }) =>

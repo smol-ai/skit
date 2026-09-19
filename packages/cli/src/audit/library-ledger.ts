@@ -12,27 +12,27 @@ export function retainedLibraryReferences(value: unknown): Set<string> | undefin
     ...(Array.isArray(value.entries) ? value.entries : []),
     ...(Array.isArray(value.installations) ? value.installations : []),
   ];
-  const portableCollectionRefs = (
-    Array.isArray(value.collections) ? value.collections : []
-  ).flatMap((collection) => {
-    if (!isJsonObject(collection)) return [];
-    const localEntry = objectAt(collection, "local_entry");
-    return [
-      localEntry && stringAt(localEntry, "collection_ref"),
-      stringAt(collection, "collection_id"),
-    ].filter((candidate): candidate is string => typeof candidate === "string");
-  });
-  const portableProjectionRefs = (
-    Array.isArray(value.projections) ? value.projections : []
-  ).flatMap((projection) => {
-    if (!isJsonObject(projection)) return [];
-    return [
-      decodedSkillId(projection.skill_id),
-      stringAt(projection, "collection_id"),
-      stringAt(projection, "marker_collection_ref"),
-    ].filter((candidate): candidate is string => typeof candidate === "string");
-  });
-  const portableSkillRefs = (Array.isArray(value.skills) ? value.skills : []).flatMap((skill) => {
+  const collectionRefs = (Array.isArray(value.collections) ? value.collections : []).flatMap(
+    (collection) => {
+      if (!isJsonObject(collection)) return [];
+      const localEntry = objectAt(collection, "local_entry");
+      return [
+        localEntry && stringAt(localEntry, "collection_ref"),
+        stringAt(collection, "collection_id"),
+      ].filter((candidate): candidate is string => typeof candidate === "string");
+    },
+  );
+  const projectionRefs = (Array.isArray(value.projections) ? value.projections : []).flatMap(
+    (projection) => {
+      if (!isJsonObject(projection)) return [];
+      return [
+        decodedSkillId(projection.skill_id),
+        stringAt(projection, "collection_id"),
+        stringAt(projection, "marker_collection_ref"),
+      ].filter((candidate): candidate is string => typeof candidate === "string");
+    },
+  );
+  const skillRefs = (Array.isArray(value.skills) ? value.skills : []).flatMap((skill) => {
     if (!isJsonObject(skill)) return [];
     const skillId = decodedSkillId(skill.skill_id);
     return skillId === undefined ? [] : [skillId];
@@ -44,6 +44,6 @@ export function retainedLibraryReferences(value: unknown): Set<string> | undefin
           ? [record.collectionRef]
           : [],
       )
-      .concat(portableCollectionRefs, portableProjectionRefs, portableSkillRefs),
+      .concat(collectionRefs, projectionRefs, skillRefs),
   );
 }

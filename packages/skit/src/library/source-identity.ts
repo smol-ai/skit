@@ -1,7 +1,7 @@
 import type { CollectionIdentity } from "../contracts.js";
 import type { MachineId } from "./entity-ids.js";
-import { sanitizePortableClaim } from "./portable-evidence.js";
-import type { SourceIdentity } from "./portable-contracts.js";
+import { sanitizeSourceClaim } from "./acquisition-evidence.js";
+import type { SourceIdentity } from "./library-contracts.js";
 
 const registryParts = (value: string) => {
   const [namespace = "local", slug = value] = value.split("/", 2);
@@ -39,7 +39,7 @@ export function sourceIdentityFromCollectionIdentity(
     case "git-collection":
       return {
         kind: "git",
-        remote: { value: sanitizePortableClaim(identity.remote) },
+        remote: { value: sanitizeSourceClaim(identity.remote) },
         collection_root: identity.path ?? ".",
       };
     case "local-collection":
@@ -47,9 +47,9 @@ export function sourceIdentityFromCollectionIdentity(
         ? undefined
         : { kind: "local", machine_id: machineId, path: { value: identity.path } };
     case "archive-collection":
-      return { kind: "archive", url: { value: sanitizePortableClaim(identity.url) } };
+      return { kind: "archive", url: { value: sanitizeSourceClaim(identity.url) } };
     case "url-collection":
-      return { kind: "url", url: { value: sanitizePortableClaim(identity.url) } };
+      return { kind: "url", url: { value: sanitizeSourceClaim(identity.url) } };
     case "authored-workspace":
       return { kind: "authored-workspace", workspace_id: identity.workspaceId };
     case "declared-skit":
@@ -66,7 +66,7 @@ export function sourceIdentityFromCollectionIdentity(
         slug: identity.slug,
       };
     default:
-      return { kind: "well-known", locator: { value: sanitizePortableClaim(input) } };
+      return { kind: "well-known", locator: { value: sanitizeSourceClaim(input) } };
   }
 }
 

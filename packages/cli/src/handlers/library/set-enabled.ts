@@ -26,7 +26,7 @@ import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js"
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
 import { result } from "../contracts.js";
-import { applyLibraryBindings } from "../../workflows/library/portable-set-enabled.js";
+import { applyLibraryBindings } from "../../workflows/library/set-enabled.js";
 
 const subject = Argument.string("skill-or-collection").pipe(Argument.optional);
 const harness = Flag.choice("for", harnessAliases).pipe(
@@ -75,7 +75,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
 
           const store = yield* LibraryStore;
           yield* store.load;
-          yield* presentPortableSetEnabled({
+          yield* presentSetEnabled({
             action,
             enabled,
             subject: selectedSubject,
@@ -132,7 +132,7 @@ export interface SetEnabledCommandInput {
 }
 
 /** Native Collection binding path; interactive selection supplies names from retained membership. */
-export const presentPortableSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* (
+export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* (
   input: SetEnabledCommandInput,
 ) {
   if (input.subject === undefined && !input.interactive)

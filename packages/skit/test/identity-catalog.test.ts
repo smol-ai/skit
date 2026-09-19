@@ -4,7 +4,7 @@ import {
   collectionIdentity,
   collectionRef,
   makeMachineId,
-  portableCollectionIdentity,
+  synchronizableCollectionIdentity,
   sourceIdentityEquals,
   sourceIdentityFromCollectionIdentity,
   skillRef,
@@ -44,7 +44,7 @@ describe("Collection Identity catalog", () => {
     expect(collectionRef(identity)).toBe("github:mattpocock/skills");
     expect(skillRef(identity, "code-review")).toBe("github:mattpocock/skills#code-review");
     expect(collectionDisplay(identity)).toBe("mattpocock/skills");
-    expect(portableCollectionIdentity(identity)).toBe(true);
+    expect(synchronizableCollectionIdentity(identity)).toBe(true);
   });
   test("distinguishes selected GitHub Skill sets while ignoring the tracking ref", () => {
     const one = collectionIdentity({
@@ -97,7 +97,7 @@ describe("Collection Identity catalog", () => {
   test("marks local collection identity as device-local", () => {
     const identity = collectionIdentity({ type: "local", ref: "/tmp/private-skills" });
     expect(collectionRef(identity)).toBe("local:/tmp/private-skills");
-    expect(portableCollectionIdentity(identity)).toBe(false);
+    expect(synchronizableCollectionIdentity(identity)).toBe(false);
   });
 
   test("gives Author Workspaces opaque device-local references and readable labels", () => {
@@ -109,7 +109,7 @@ describe("Collection Identity catalog", () => {
     };
     expect(collectionRef(identity)).toBe("authored:workspace_0123456789abcdef0123456789abcdef");
     expect(collectionDisplay(identity)).toBe("my-tools");
-    expect(portableCollectionIdentity(identity)).toBe(false);
+    expect(synchronizableCollectionIdentity(identity)).toBe(false);
   });
 
   test("gives raw GitHub Skill URLs a readable collection label", () => {

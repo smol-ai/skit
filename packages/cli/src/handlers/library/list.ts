@@ -21,12 +21,12 @@ export const shouldBrowseInteractively = (input: {
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const store = yield* LibraryStore;
-  const portable = yield* store.load;
+  const state = yield* store.load;
   const value = {
-    collections: portable.collections.map((collection) => ({
+    collections: state.collections.map((collection) => ({
       collection_id: collection.collection_id,
       display_id: collection.label,
-      skills: portable.skills
+      skills: state.skills
         .filter((skill) => skill.collection_id === collection.collection_id)
         .map((skill) => ({
           name: skill.name,
@@ -40,7 +40,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
           })),
         })),
     })),
-    bindings: portable.global_bindings.map((binding) => ({
+    bindings: state.global_bindings.map((binding) => ({
       harness: binding.harness,
       skills: [...binding.skills],
     })),

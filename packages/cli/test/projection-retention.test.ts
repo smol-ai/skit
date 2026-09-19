@@ -5,7 +5,7 @@ import {
   deterministicTreeHashEffect,
   LibraryStore,
   libraryStoreLayer,
-  projectPortableBindingEffect,
+  projectBindingEffect,
   skitLayer,
 } from "@smolai/skit-core";
 import {
@@ -77,7 +77,7 @@ it.effect(
       for (const harness of harnesses)
         yield* writingTo(
           home,
-          projectPortableBindingEffect({
+          projectBindingEffect({
             harness,
             root: rootByHarness[harness],
             variantsPath: join(home, "variants"),

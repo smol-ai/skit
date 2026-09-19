@@ -7,7 +7,7 @@ import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { applySetupObservedCollections } from "../src/workflows/library/setup-observed-collections.js";
-import { checkPortableCollectionsEffect } from "../src/workflows/library/portable-check.js";
+import { checkCollectionsEffect } from "../src/workflows/library/check.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
@@ -107,7 +107,7 @@ it.effect("recovers a skills.sh lock baseline from Git history before reporting 
       })),
     };
     const published = yield* Ref.make<LibraryState | undefined>(undefined);
-    const checked = yield* checkPortableCollectionsEffect(
+    const checked = yield* checkCollectionsEffect(
       localState,
       {},
       localCollection.collection_id,

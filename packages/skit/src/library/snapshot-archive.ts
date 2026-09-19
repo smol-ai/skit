@@ -2,7 +2,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { originalTreeHashEffect } from "./retention/retain-tree.js";
 import { walkTreeEffect } from "../artifact/tree.js";
-import { SnapshotArchive, type SnapshotArchiveEntry } from "./portable-contracts.js";
+import { SnapshotArchive, type SnapshotArchiveEntry } from "./library-contracts.js";
 import {
   SnapshotArchiveInvalid,
   verifySnapshotArchiveEffect,
