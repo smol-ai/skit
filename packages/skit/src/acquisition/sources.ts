@@ -216,6 +216,17 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
         : undefined,
   },
   {
+    id: "https-origin-discovery",
+    priority: 67,
+    aliases: [],
+    recognize: (value) => {
+      const url = URL.parse(value);
+      return url?.protocol === "https:" && url.pathname === "/" && !url.search && !url.hash
+        ? { type: "well-known", ref: url.origin }
+        : undefined;
+    },
+  },
+  {
     id: "archive-url",
     priority: 70,
     aliases: [],
@@ -328,6 +339,8 @@ function classifySource(input: string, cwd: string): Effect.Effect<SkitSource, P
       if (!url) return yield* new UnsafeSourceUrl();
       if (url.protocol !== "https:" || url.username || url.password)
         return yield* new InsecureSourceUrl();
+      if (url.pathname === "/" && (value.includes("?") || value.includes("#")))
+        return yield* new UnsafeSourceUrl();
     }
     for (const profile of sourceLocatorProfiles) {
       const source = profile.recognize(value);

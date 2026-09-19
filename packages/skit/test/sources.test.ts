@@ -338,7 +338,15 @@ describe("source contracts", () => {
         type: "well-known",
         ref: base,
       });
-      const resolved = yield* resolveSkitSourceEffect(`wellknown:${base}`).pipe(
+      expect(yield* parseSkitSourceEffect(base)).toEqual({
+        type: "well-known",
+        ref: base,
+      });
+      expect(yield* parseSkitSourceEffect(`${base}/`)).toEqual({
+        type: "well-known",
+        ref: base,
+      });
+      const resolved = yield* resolveSkitSourceEffect(base).pipe(
         Effect.provideService(HttpClient.HttpClient, client(skill)),
       );
       expect(resolved.source.type).toBe("well-known");
@@ -351,6 +359,28 @@ describe("source contracts", () => {
       expect(failure._tag).toBe("SourcePolicyViolation");
       if (failure._tag === "SourcePolicyViolation")
         expect(failure.reason).toMatchObject({ _tag: "PinMismatch" });
+    }).pipe(provide),
+  );
+
+  it.effect("keeps HTTPS paths as direct document sources", () =>
+    Effect.gen(function* () {
+      expect(yield* parseSkitSourceEffect("https://skills.example/SKILL.md")).toEqual({
+        type: "url",
+        ref: "https://skills.example/SKILL.md",
+      });
+      expect(yield* parseSkitSourceEffect("https://skills.example/catalog")).toEqual({
+        type: "url",
+        ref: "https://skills.example/catalog",
+      });
+      for (const input of [
+        "https://skills.example#skills=review",
+        "https://skills.example?collection=review",
+        "https://skills.example/#",
+        "https://skills.example/?",
+      ]) {
+        const failure = yield* parseSkitSourceEffect(input).pipe(Effect.flip);
+        expect(failure._tag).toBe("UnsafeSourceUrl");
+      }
     }).pipe(provide),
   );
 

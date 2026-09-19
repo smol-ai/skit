@@ -730,10 +730,18 @@ const contractPresenters: ContractPresenters = {
     data
       .map((item) => `${item.collection_id}: ${item.changed ? "refreshed" : "current"}`)
       .join("\n"),
-  [outputContracts.add.id]: (data) =>
-    `Retained ${data.skills.map((skill) => skill.name).join(", ")} in ${data.collection_id}`,
-  [outputContracts.addPreview.id]: (data) =>
-    `${data.kind === "authored" ? "Authored" : "Plain"} Skill source: ${data.skills.map((skill) => skill.name).join(", ")}`,
+  [outputContracts.add.id]: (data) => {
+    const count = data.skills.length;
+    return `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`;
+  },
+  [outputContracts.addPreview.id]: (data) => {
+    const count = data.skills.length;
+    return [
+      `${count} ${count === 1 ? "skill" : "skills"}`,
+      "",
+      ...data.skills.map((skill) => `  ${skill.name}`),
+    ].join("\n");
+  },
   [outputContracts.update.id]: renderPortableUpdate,
   [outputContracts.updatePlan.id]: (data) =>
     data.length
