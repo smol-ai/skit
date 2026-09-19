@@ -72,7 +72,7 @@ export const SetupContentIdentity = Schema.Struct({
   observedHash: Schema.optionalKey(Digest),
   libraryMatches: Schema.Array(
     Schema.Struct({
-      collectionId: CollectionId,
+      collectionId: Schema.optionalKey(CollectionId),
       skillId: SkillId,
       skillVersionId: SkillVersionId,
       name: Schema.String,
@@ -85,7 +85,7 @@ export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("retained"),
     projectionId: ProjectionId,
-    collectionId: CollectionId,
+    collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
     displayName: Schema.String,
@@ -94,7 +94,7 @@ export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("missing-from-library"),
     projectionId: ProjectionId,
-    collectionId: CollectionId,
+    collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
   }),

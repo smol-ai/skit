@@ -71,7 +71,7 @@ const selectCollections = Effect.fn("Library.selectPortableUpdates")(function* (
     );
   const matches = state.collections.filter(
     (collection) =>
-      [collection.collection_id, collection.display_name].includes(query) ||
+      [collection.collection_id, collection.label].includes(query) ||
       state.skills.some(
         (skill) =>
           skill.collection_id === collection.collection_id &&
@@ -129,11 +129,11 @@ export const updatePortableCollectionsEffect = Effect.fn("Library.updatePortable
         return yield* new PortableUpdateNotFound({ query: before.collection_id });
       const retained = yield* renderer.withStatus(
         {
-          pending: `${before.display_name} · Fetching and inspecting Source`,
+          pending: `${before.label} · Fetching and inspecting Source`,
           complete: (value) =>
             value.snapshot_digest === priorTree.digest
-              ? `${before.display_name} · Source is current`
-              : `${before.display_name} · New snapshot retained`,
+              ? `${before.label} · Source is current`
+              : `${before.label} · New snapshot retained`,
         },
         addPortableLibrarySourceEffect(options, yield* acquisitionSourceEffect(acquisition)),
       );
@@ -144,19 +144,25 @@ export const updatePortableCollectionsEffect = Effect.fn("Library.updatePortable
         const current = yield* (yield* LibraryStore).load;
         const reconciled = yield* renderer.withStatus(
           {
-            pending: `${before.display_name} · Updating projected Skills`,
+            pending: `${before.label} · Updating projected Skills`,
             complete: (value) =>
               value.projected
-                ? `${before.display_name} · ${value.projected} projected Skill${value.projected === 1 ? "" : "s"} updated`
+                ? `${before.label} · ${value.projected} projected Skill${value.projected === 1 ? "" : "s"} updated`
                 : value.deferred
-                  ? `${before.display_name} · ${value.deferred} projected Skill${value.deferred === 1 ? "" : "s"} deferred`
-                  : `${before.display_name} · No projected Skills needed updating`,
+                  ? `${before.label} · ${value.deferred} projected Skill${value.deferred === 1 ? "" : "s"} deferred`
+                  : `${before.label} · No projected Skills needed updating`,
           },
           reconcileLibraryProjections({
             roots: options.roots,
             variantsPath: options.variantsPath,
             onlyBindings: [...current.global_bindings, ...current.local_bindings].filter(
-              (binding) => binding.collection_id === before.collection_id,
+              (binding) =>
+                binding.skills.some((skillId) =>
+                  state.skills.some(
+                    (skill) =>
+                      skill.skill_id === skillId && skill.collection_id === before.collection_id,
+                  ),
+                ),
             ),
           }),
         );

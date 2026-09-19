@@ -15,10 +15,9 @@ export class PortableProjectionInvalid extends Schema.TaggedError<PortableProjec
   { detail: Schema.String },
 ) {}
 
-/** Reconcile one retained Collection/Binding against one available Harness root. Caller owns the writer lock. */
+/** Reconcile one Binding against one available Harness root. Caller owns the writer lock. */
 export const projectPortableBindingEffect = Effect.fn("Library.projectPortableBinding")(
   function* (options: {
-    collectionId: string;
     harness: HarnessName;
     scope?: { kind: "global" } | { kind: "repository"; root: string };
     root: string;
@@ -31,27 +30,19 @@ export const projectPortableBindingEffect = Effect.fn("Library.projectPortableBi
   }) {
     const store = yield* LibraryStore;
     const state = yield* store.load;
-    const collection = state.collections.find(
-      (item) => item.collection_id === options.collectionId,
-    );
     const scope = options.scope ?? { kind: "global" as const };
     const binding =
       scope.kind === "global"
-        ? state.global_bindings.find(
-            (item) =>
-              item.collection_id === options.collectionId && item.harness === options.harness,
-          )
+        ? state.global_bindings.find((item) => item.harness === options.harness)
         : state.local_bindings.find(
             (item) =>
-              item.collection_id === options.collectionId &&
-              item.harness === options.harness &&
-              resolve(item.scope.root) === resolve(scope.root),
+              item.harness === options.harness && resolve(item.scope.root) === resolve(scope.root),
           );
-    if (collection === undefined || binding === undefined)
-      return yield* new PortableProjectionInvalid({ detail: "Collection or Binding is missing" });
+    if (binding === undefined)
+      return yield* new PortableProjectionInvalid({ detail: "Binding is missing" });
 
     const selected = state.skills
-      .filter((candidate) => candidate.collection_id === collection.collection_id)
+      .filter((candidate) => binding.skills.includes(candidate.skill_id))
       .flatMap((skill) => {
         const version = skill?.versions.find(
           (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
@@ -91,10 +82,7 @@ export const projectPortableBindingEffect = Effect.fn("Library.projectPortableBi
       (mutation) =>
         Effect.gen(function* () {
           for (const existing of mutation.state.projections.filter(
-            (item) =>
-              item.collection_id === collection.collection_id &&
-              atTarget(item) &&
-              !binding.skills.includes(item.skill_id),
+            (item) => atTarget(item) && !binding.skills.includes(item.skill_id),
           )) {
             const skill = mutation.state.skills.find((item) => item.skill_id === existing.skill_id);
             if (skill === undefined) continue;
@@ -108,9 +96,7 @@ export const projectPortableBindingEffect = Effect.fn("Library.projectPortableBi
           mutation.state.projections.splice(
             0,
             mutation.state.projections.length,
-            ...mutation.state.projections.filter(
-              (item) => !atTarget(item) || item.collection_id !== collection.collection_id,
-            ),
+            ...mutation.state.projections.filter((item) => !atTarget(item)),
           );
           for (const item of selected) {
             const root = retainedTreePath(store.originalsPath, item.tree.digest);
@@ -147,7 +133,7 @@ export const projectPortableBindingEffect = Effect.fn("Library.projectPortableBi
             const policy = binding.invocation_policies?.[item.skill.skill_id];
             const projectionPath = resolve(join(options.root, item.skill.name));
             const projected = yield* mutation.project({
-              installation: { collectionId: collection.collection_id, libraryPath: root },
+              installation: { libraryPath: root },
               skill: {
                 skillId: item.skill.skill_id,
                 skillVersionId: item.version.skill_version_id,
@@ -169,7 +155,6 @@ export const projectPortableBindingEffect = Effect.fn("Library.projectPortableBi
               ...(priorProjection === undefined ? {} : { previous: priorProjection }),
               identity: {
                 projectionId,
-                collectionId: collection.collection_id,
                 skillId: item.skill.skill_id,
                 skillVersionId: item.version.skill_version_id,
               },

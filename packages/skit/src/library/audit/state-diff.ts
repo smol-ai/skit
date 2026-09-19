@@ -5,8 +5,8 @@ type Binding = LibraryState["global_bindings"][number] | LibraryState["local_bin
 
 const bindingId = (binding: Binding) =>
   binding.scope.kind === "repository"
-    ? `${binding.collection_id}:${binding.harness}:repository:${binding.scope.root}`
-    : `${binding.collection_id}:${binding.harness}:${binding.scope.kind}`;
+    ? `${binding.harness}:repository:${binding.scope.root}`
+    : `${binding.harness}:${binding.scope.kind}`;
 
 const byKey = <T>(items: readonly T[], key: (item: T) => string) =>
   new Map(items.map((item) => [key(item), item]));

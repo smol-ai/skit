@@ -15,7 +15,7 @@ import { Option, Schema } from "effect";
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const byKey = <T>(records: readonly T[], key: (record: T) => string) =>
   Object.fromEntries(records.map((record) => [key(record), record])) as Record<string, T>;
-const bindingKey = (binding: PortableBinding) => `${binding.collection_id}\0${binding.harness}`;
+const bindingKey = (binding: PortableBinding) => binding.harness;
 
 export function normalizePortableManifest(
   manifest: PortableLibraryManifest,

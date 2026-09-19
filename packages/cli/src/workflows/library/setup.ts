@@ -1082,28 +1082,31 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     const managedMembership = (() => {
       const marker = "marker" in custodyObservation ? custodyObservation.marker : undefined;
       if (!marker) return undefined;
-      const collection = libraryCollectionsById.get(marker.collection_id);
-      const skillBelongsToCollection = library.skills.some(
-        (skill) =>
-          skill.skill_id === marker.skill_id && skill.collection_id === marker.collection_id,
-      );
-      if (!collection || !skillBelongsToCollection)
+      const skill = library.skills.find((candidate) => candidate.skill_id === marker.skill_id);
+      const collection =
+        skill?.collection_id === undefined
+          ? undefined
+          : libraryCollectionsById.get(skill.collection_id);
+      if (skill === undefined)
         return {
           kind: "missing-from-library" as const,
           projectionId: marker.projection_id,
-          collectionId: marker.collection_id,
           skillId: marker.skill_id,
           skillVersionId: marker.skill_version_id,
         };
       return {
         kind: "retained" as const,
         projectionId: marker.projection_id,
-        collectionId: marker.collection_id,
+        ...(skill.collection_id === undefined ? {} : { collectionId: skill.collection_id }),
         skillId: marker.skill_id,
         skillVersionId: marker.skill_version_id,
-        displayName: collection.display_name,
-        ...(collection.upstream
-          ? { source: sourceIdentityLabel(collection.upstream.source_identity) }
+        displayName: collection?.label ?? skill.name,
+        ...(collection?.upstream || skill.upstream
+          ? {
+              source: sourceIdentityLabel(
+                (collection?.upstream ?? skill.upstream)!.source_identity,
+              ),
+            }
           : {}),
       };
     })();

@@ -64,11 +64,11 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   options: PortableSetEnabledOptions,
 ) {
   yield* Effect.fromResult(validateSetEnabledInvocation(options.invocation));
-  const matches = state.collections.flatMap((collection) => {
+  const collectionMatches = state.collections.flatMap((collection) => {
     const members = state.skills.filter(
       (skill) => skill.collection_id === collection.collection_id,
     );
-    const collectionMatch = [collection.collection_id, collection.display_name].includes(
+    const collectionMatch = [collection.collection_id, collection.label].includes(
       options.query,
     );
     const skill = members.find(
@@ -81,6 +81,21 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
       ? [{ collection, members, collectionMatch, skill }]
       : [];
   });
+  const standaloneMatches = state.skills
+    .filter((skill) => skill.collection_id === undefined)
+    .filter(
+      (skill) =>
+        skill.name === options.query ||
+        skill.skill_id === options.query ||
+        skill.versions.some((version) => version.skill_version_id === options.query),
+    )
+    .map((skill) => ({
+      collection: undefined,
+      members: [skill],
+      collectionMatch: false,
+      skill,
+    }));
+  const matches = [...collectionMatches, ...standaloneMatches];
   if (matches.length === 0)
     return yield* new PortableSetEnabledMissing({
       query: options.query,
@@ -142,12 +157,10 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
       scope.kind === "global"
         ? state.global_bindings.find(
             (binding) =>
-              binding.collection_id === match.collection.collection_id &&
               binding.harness === harness,
           )
         : state.local_bindings.find(
             (binding) =>
-              binding.collection_id === match.collection.collection_id &&
               binding.harness === harness &&
               resolve(binding.scope.root) === resolve(scope.root),
           );
@@ -164,7 +177,6 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
     }
     if (existing === undefined && names.size === 0) continue;
     const common = {
-      collection_id: match.collection.collection_id,
       harness,
       skills: [...names].sort(),
       ...(Object.keys(policies).length ? { invocation_policies: policies } : {}),
@@ -179,18 +191,17 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
     const existing = isDeviceBinding(binding)
       ? state.global_bindings.find(
           (item) =>
-            item.collection_id === binding.collection_id && item.harness === binding.harness,
+            item.harness === binding.harness,
         )
       : state.local_bindings.find(
           (item) =>
-            item.collection_id === binding.collection_id &&
             item.harness === binding.harness &&
             resolve(item.scope.root) === resolve(binding.scope.root),
         );
     return canonicalJson(existing ?? null) !== canonicalJson(binding);
   });
   return {
-    collection_id: match.collection.collection_id,
+    subject_id: match.collection?.collection_id ?? match.skill!.skill_id,
     skills,
     harnesses: [...options.invocation.harnesses],
     scope,
@@ -226,14 +237,13 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
           if (isDeviceBinding(binding)) {
             const index = global_bindings.findIndex(
               (item) =>
-                item.collection_id === binding.collection_id && item.harness === binding.harness,
+                item.harness === binding.harness,
             );
             if (index < 0) global_bindings.push(binding);
             else global_bindings[index] = binding;
           } else {
             const index = local_bindings.findIndex(
               (item) =>
-                item.collection_id === binding.collection_id &&
                 item.harness === binding.harness &&
                 resolve(item.scope.root) === resolve(binding.scope.root),
             );

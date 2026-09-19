@@ -43,16 +43,12 @@ export const deferredPortableBindings = (
 ) =>
   manifest.bindings.flatMap((binding) => {
     if (rootFor(binding.harness) !== undefined) return [];
-    const collection = manifest.collections.find(
-      (candidate) => candidate.collection_id === binding.collection_id,
-    );
     const skills = binding.skills.flatMap((skillId) => {
       const skill = manifest.skills.find((candidate) => candidate.skill_id === skillId);
       return skill === undefined ? [] : [skill.name];
     });
     return [
       {
-        collection: collection?.display_name ?? binding.collection_id,
         harness: binding.harness,
         skills,
       },

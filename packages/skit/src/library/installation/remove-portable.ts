@@ -26,16 +26,6 @@ export const removePortableCollectionEffect = Effect.fn("Library.removePortableC
             (skill) => skill.collection_id === options.collectionId,
           );
           const removedSkillIds = new Set(removedSkills.map((skill) => skill.skill_id));
-          const removedVersionIds = new Set(
-            removedSkills.flatMap((skill) =>
-              skill.versions.map((version) => version.skill_version_id),
-            ),
-          );
-          const removedProjectionIds = new Set(
-            candidate.projections
-              .filter((projection) => projection.collection_id === options.collectionId)
-              .map((projection) => projection.projection_id),
-          );
           const skills = candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id));
           const survivingAcquisitionIds = new Set(
             skills.flatMap((skill) =>
@@ -55,26 +45,25 @@ export const removePortableCollectionEffect = Effect.fn("Library.removePortableC
             collections: candidate.collections.filter(
               (item) => item.collection_id !== options.collectionId,
             ),
-            global_bindings: candidate.global_bindings.filter(
-              (item) => item.collection_id !== options.collectionId,
-            ),
-            local_bindings: candidate.local_bindings.filter(
-              (item) => item.collection_id !== options.collectionId,
-            ),
+            global_bindings: candidate.global_bindings
+              .map((item) => ({
+                ...item,
+                skills: item.skills.filter((skillId) => !removedSkillIds.has(skillId)),
+              }))
+              .filter((item) => item.skills.length > 0),
+            local_bindings: candidate.local_bindings
+              .map((item) => ({
+                ...item,
+                skills: item.skills.filter((skillId) => !removedSkillIds.has(skillId)),
+              }))
+              .filter((item) => item.skills.length > 0),
             projections: candidate.projections.filter(
-              (item) => item.collection_id !== options.collectionId,
+              (item) => !removedSkillIds.has(item.skill_id),
             ),
             skills,
             acquisitions,
             retained_copies: candidate.retained_copies.filter((copy) =>
               survivingCopyIds.has(copy.retained_copy_id),
-            ),
-            adoption_receipts: candidate.adoption_receipts.filter(
-              (receipt) =>
-                !removedVersionIds.has(receipt.skill_version_id) &&
-                receipt.projection_ids.every(
-                  (projectionId) => !removedProjectionIds.has(projectionId),
-                ),
             ),
           });
         },
@@ -82,8 +71,11 @@ export const removePortableCollectionEffect = Effect.fn("Library.removePortableC
       (mutation) =>
         Effect.gen(function* () {
           let retired = 0;
-          for (const projection of mutation.state.projections.filter(
-            (item) => item.collection_id === options.collectionId,
+          for (const projection of mutation.state.projections.filter((item) =>
+            mutation.state.skills.some(
+              (skill) =>
+                skill.skill_id === item.skill_id && skill.collection_id === options.collectionId,
+            ),
           )) {
             const skill = mutation.state.skills.find(
               (item) => item.skill_id === projection.skill_id,

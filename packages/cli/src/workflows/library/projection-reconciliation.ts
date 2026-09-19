@@ -65,7 +65,6 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
       continue;
     }
     yield* projectPortableBindingEffect({
-      collectionId: binding.collection_id,
       harness: binding.harness,
       scope: binding.scope,
       root,

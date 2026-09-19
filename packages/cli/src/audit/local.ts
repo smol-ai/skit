@@ -107,13 +107,9 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
       });
       continue;
     }
-    if (
-      inspection.kind === "valid" &&
-      ledger.kind !== "unreadable" &&
-      !(ledger.kind === "readable" && ledger.retained.has(inspection.marker.collection_id))
-    ) {
+    if (inspection.kind === "valid" && ledger.kind !== "unreadable") {
       const claim = {
-        collectionRef: inspection.marker.collection_id,
+        collectionRef: `skill:${inspection.marker.skill_id}`,
         skillRef: inspection.marker.skill_id,
         expectedHash: inspection.marker.expected_digest,
         transactionId: undefined,

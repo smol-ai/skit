@@ -26,7 +26,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     yield* fs.writeFileString(join(installed, "SKILL.md"), "observed locally\n");
     yield* fs.writeFileString(join(installed, "notes.txt"), "retained too\n");
 
-    const collection = yield* Effect.scoped(
+    const retained = yield* Effect.scoped(
       withLibraryWriterLock(
         firstHome,
         retainObservedCollectionEffect({
@@ -49,8 +49,8 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     const saved = yield* inspectLibrary(firstHome);
     assert.strictEqual(saved.present, true);
     if (!saved.present) return;
-    assert.ok(collection.display_name.length > 0);
-    assert.strictEqual(collection.upstream, undefined);
+    assert.ok(retained.collection?.label.length);
+    assert.strictEqual(retained.collection?.upstream, undefined);
     assert.strictEqual(saved.state.acquisitions[0]?.machine_id, machineId);
     assert.strictEqual(saved.state.acquisitions[0]?.input.value, installed);
     const tree = saved.state.retained_copies[0];

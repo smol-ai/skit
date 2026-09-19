@@ -10,11 +10,10 @@ export const retirePortableUnboundGlobalProjectionsEffect = Effect.fn(
 )(function* (options: { variantsPath: string; desiredBindings?: readonly PortableBinding[] }) {
   const store = yield* LibraryStore;
   const loaded = yield* store.load;
-  const repoSelects = (collectionId: string, harness: string, root: string, skillId: string) =>
+  const repoSelects = (harness: string, root: string, skillId: string) =>
     loaded.local_bindings.some((binding) => {
       const offset = relative(resolve(binding.scope.root), resolve(root));
       return (
-        binding.collection_id === collectionId &&
         binding.harness === harness &&
         !offset.startsWith("..") &&
         !isAbsolute(offset) &&
@@ -25,16 +24,8 @@ export const retirePortableUnboundGlobalProjectionsEffect = Effect.fn(
     (projection) =>
       !(options.desiredBindings ?? loaded.global_bindings).some(
         (binding) =>
-          binding.collection_id === projection.collection_id &&
-          binding.harness === projection.harness &&
-          binding.skills.includes(projection.skill_id),
-      ) &&
-      !repoSelects(
-        projection.collection_id,
-        projection.harness,
-        projection.root,
-        projection.skill_id,
-      ),
+          binding.harness === projection.harness && binding.skills.includes(projection.skill_id),
+      ) && !repoSelects(projection.harness, projection.root, projection.skill_id),
   );
   if (targets.length === 0) return 0;
   const result = yield* withProjectionMutationEffect(

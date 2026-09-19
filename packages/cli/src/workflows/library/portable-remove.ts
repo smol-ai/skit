@@ -30,7 +30,7 @@ export const planPortableRemoveEffect = Effect.fn("Library.planPortableRemove")(
 ) {
   const matches = state.collections.filter(
     (collection) =>
-      [collection.collection_id, collection.display_name].includes(query) ||
+      [collection.collection_id, collection.label].includes(query) ||
       state.skills.some(
         (skill) =>
           skill.collection_id === collection.collection_id &&
@@ -49,13 +49,13 @@ export const planPortableRemoveEffect = Effect.fn("Library.planPortableRemove")(
     versions: skills.reduce((count, skill) => count + skill.versions.length, 0),
     skills: skills.length,
     global_bindings: state.global_bindings.filter(
-      (binding) => binding.collection_id === collection.collection_id,
+      (binding) => binding.skills.some((skillId) => skills.some((skill) => skill.skill_id === skillId)),
     ).length,
     repository_bindings: state.local_bindings.filter(
-      (binding) => binding.collection_id === collection.collection_id,
+      (binding) => binding.skills.some((skillId) => skills.some((skill) => skill.skill_id === skillId)),
     ).length,
     owned_projections: state.projections.filter(
-      (projection) => projection.collection_id === collection.collection_id,
+      (projection) => skills.some((skill) => skill.skill_id === projection.skill_id),
     ).length,
   };
 });

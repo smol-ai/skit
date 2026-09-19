@@ -2,7 +2,7 @@ import { HarnessName, PortableDeviceBinding, PortableRepositoryBinding } from "@
 import { Schema } from "effect";
 
 export const PortableSetEnabledPlan = Schema.Struct({
-  collection_id: PortableDeviceBinding.fields.collection_id,
+  subject_id: Schema.String,
   skills: Schema.Array(Schema.String),
   harnesses: Schema.Array(HarnessName),
   scope: Schema.Union([PortableDeviceBinding.fields.scope, PortableRepositoryBinding.fields.scope]),

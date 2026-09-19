@@ -4,8 +4,8 @@ import { normalizePortableManifest } from "./portable-merge.js";
 export interface PortableSyncChange {
   readonly kind: "collection" | "binding";
   readonly action: "add" | "update" | "remove";
-  readonly collection_id: string;
-  readonly collection: string;
+  readonly collection_id?: string;
+  readonly collection?: string;
   readonly collection_before?: string;
   readonly collection_after?: string;
   readonly harness?: PortableLibraryManifest["bindings"][number]["harness"];
@@ -25,8 +25,8 @@ const action = (before: unknown, after: unknown): PortableSyncChange["action"] =
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 
 const collectionName = (manifest: PortableLibraryManifest, collectionId: string): string =>
-  manifest.collections.find((collection) => collection.collection_id === collectionId)
-    ?.display_name ?? collectionId;
+  manifest.collections.find((collection) => collection.collection_id === collectionId)?.label ??
+  collectionId;
 
 const collectionSkills = (
   manifest: PortableLibraryManifest,
@@ -101,10 +101,9 @@ const changes = (
         kind: "collection",
         action: action(previous, desired),
         collection_id: collectionId,
-        collection:
-          desired?.display_name ?? previous?.display_name ?? collectionName(after, collectionId),
-        ...(previous === undefined ? {} : { collection_before: previous.display_name }),
-        ...(desired === undefined ? {} : { collection_after: desired.display_name }),
+        collection: desired?.label ?? previous?.label ?? collectionName(after, collectionId),
+        ...(previous === undefined ? {} : { collection_before: previous.label }),
+        ...(desired === undefined ? {} : { collection_after: desired.label }),
         skills_before: skillsBefore,
         skills_after: skillsAfter,
         versions_before: versionsBefore,
@@ -112,14 +111,13 @@ const changes = (
         evidence_changed:
           previous !== undefined &&
           desired !== undefined &&
-          previous.display_name === desired.display_name &&
+          previous.label === desired.label &&
           canonicalJson(skillsBefore) === canonicalJson(skillsAfter) &&
           canonicalJson(versionsBefore) === canonicalJson(versionsAfter),
       },
     ];
   });
-  const key = (binding: PortableLibraryManifest["bindings"][number]) =>
-    `${binding.collection_id}\0${binding.harness}`;
+  const key = (binding: PortableLibraryManifest["bindings"][number]) => binding.harness;
   const previousBindings = new Map(before.bindings.map((binding) => [key(binding), binding]));
   const desiredBindings = new Map(after.bindings.map((binding) => [key(binding), binding]));
   const bindingChanges = [...new Set([...previousBindings.keys(), ...desiredBindings.keys()])]
@@ -141,14 +139,6 @@ const changes = (
         {
           kind: "binding",
           action: action(previous, desired),
-          collection_id: binding.collection_id,
-          collection: collectionName(desired ? after : before, binding.collection_id),
-          ...(previous === undefined
-            ? {}
-            : { collection_before: collectionName(before, binding.collection_id) }),
-          ...(desired === undefined
-            ? {}
-            : { collection_after: collectionName(after, binding.collection_id) }),
           harness: binding.harness,
           skills_before: names(before, previous?.skills),
           skills_after: names(after, desired?.skills),

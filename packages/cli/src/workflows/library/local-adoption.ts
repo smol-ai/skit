@@ -188,7 +188,7 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
     const marker = yield* inspectOwnershipMarkerEffect(path);
     const alreadyManaged =
       marker.kind === "valid" &&
-      marker.marker.collection_id === markerCollectionRef &&
+      marker.marker.skill_id === skill.skillId &&
       marker.marker.expected_digest === observedHash;
     if (!alreadyManaged && lossless.blockers.length > 0) {
       blockers.push(...lossless.blockers);

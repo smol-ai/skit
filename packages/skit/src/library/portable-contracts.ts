@@ -29,8 +29,6 @@ export type CollectionRelativePath = typeof CollectionRelativePath.Type;
 
 export const HistoricalLocator = Schema.Struct({ value: Schema.String });
 export interface HistoricalLocator extends Schema.Schema.Type<typeof HistoricalLocator> {}
-export const HistoricalPath = HistoricalLocator;
-export interface HistoricalPath extends Schema.Schema.Type<typeof HistoricalPath> {}
 
 const BoundedOriginalEntry = Schema.JsonObject.check(
   Schema.makeFilter(
@@ -62,7 +60,7 @@ export const SourceIdentity = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("local"),
     machine_id: MachineId,
-    path: HistoricalPath,
+    path: HistoricalLocator,
   }),
   Schema.Struct({
     kind: Schema.Literal("authored-workspace"),
@@ -100,20 +98,20 @@ export const AcquisitionSelection = Schema.Union([
 ]);
 export type AcquisitionSelection = typeof AcquisitionSelection.Type;
 
-export const CollectionUpstream = Schema.Struct({
+export const Upstream = Schema.Struct({
   source_identity: SourceIdentity,
   tracking: SourceTracking,
   selection: AcquisitionSelection,
   last_acquisition_id: Schema.optionalKey(AcquisitionId),
 });
-export type CollectionUpstream = typeof CollectionUpstream.Type;
+export type Upstream = typeof Upstream.Type;
 
 export const PortableSkillsShObservation = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machine_id: MachineId,
   observed_at: Schema.String,
   source_updated_at: Schema.optionalKey(Schema.String),
-  lock_path: HistoricalPath,
+  lock_path: HistoricalLocator,
   lock_version: Schema.Number,
   lock_scope: Schema.Literals(["project", "global"]),
   lock_content_hash: Digest,
@@ -176,10 +174,10 @@ export interface PortableSkillVersion extends Schema.Schema.Type<typeof Portable
 
 export const PortableSkill = Schema.Struct({
   skill_id: SkillId,
-  collection_id: CollectionId,
+  collection_id: Schema.optionalKey(CollectionId),
   path: CollectionRelativePath,
   name: Schema.NonEmptyString,
-  upstream_path: Schema.optionalKey(CollectionRelativePath),
+  upstream: Schema.optionalKey(Upstream),
   selected_skill_version_id: Schema.mutableKey(Schema.optional(SkillVersionId)),
   versions: Schema.mutable(Schema.Array(PortableSkillVersion)),
 });
@@ -187,8 +185,9 @@ export interface PortableSkill extends Schema.Schema.Type<typeof PortableSkill> 
 
 export const PortableCollection = Schema.Struct({
   collection_id: CollectionId,
-  display_name: Schema.NonEmptyString,
-  upstream: Schema.optionalKey(CollectionUpstream),
+  label: Schema.NonEmptyString,
+  membership: Schema.Struct({ kind: Schema.Literals(["descriptor", "source-tree"]) }),
+  upstream: Schema.optionalKey(Upstream),
 });
 export interface PortableCollection extends Schema.Schema.Type<typeof PortableCollection> {}
 
@@ -286,7 +285,6 @@ export const portableSnapshotDigests = (input: {
   ].sort();
 
 export const PortableBinding = Schema.Struct({
-  collection_id: CollectionId,
   harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("global") }),
   skills: Schema.Array(SkillId),
@@ -344,18 +342,22 @@ export const PortableLibraryManifest = Schema.Struct({
         )
           return false;
         if (paths.includes(".") && paths.length !== 1) return false;
-        const upstreamPaths = owned.flatMap((skill) =>
-          skill.upstream_path === undefined ? [] : [skill.upstream_path],
-        );
         if (
-          (collection.upstream === undefined && upstreamPaths.length > 0) ||
-          new Set(upstreamPaths).size !== upstreamPaths.length ||
-          (collection.upstream?.last_acquisition_id !== undefined &&
-            !acquisitions.has(collection.upstream.last_acquisition_id))
+          collection.upstream?.last_acquisition_id !== undefined &&
+          !acquisitions.has(collection.upstream.last_acquisition_id)
         )
           return false;
       }
-      if (manifest.skills.some((skill) => !collections.has(skill.collection_id))) return false;
+      if (
+        manifest.skills.some(
+          (skill) =>
+            (skill.collection_id !== undefined && !collections.has(skill.collection_id)) ||
+            (skill.collection_id !== undefined && skill.upstream !== undefined) ||
+            (skill.upstream?.last_acquisition_id !== undefined &&
+              !acquisitions.has(skill.upstream.last_acquisition_id)),
+        )
+      )
+        return false;
 
       for (const { skill, version } of versions) {
         if (
@@ -407,17 +409,14 @@ export const PortableLibraryManifest = Schema.Struct({
         return false;
       for (const binding of manifest.bindings) {
         if (
-          !collections.has(binding.collection_id) ||
           new Set(binding.skills).size !== binding.skills.length ||
-          binding.skills.some(
-            (skillId) => skills.get(skillId)?.collection_id !== binding.collection_id,
-          )
+          binding.skills.some((skillId) => !skills.has(skillId))
         )
           return false;
       }
       return (
-        new Set(manifest.bindings.map((binding) => `${binding.collection_id}\0${binding.harness}`))
-          .size === manifest.bindings.length
+        new Set(manifest.bindings.map((binding) => binding.harness)).size ===
+        manifest.bindings.length
       );
     },
     {
@@ -447,22 +446,38 @@ export const PortableAcquisitionV4 = Schema.Struct({
   ...PortableAcquisition.fields,
   selection: AcquisitionSelectionV4,
 });
-const CollectionUpstreamV4 = Schema.Struct({
-  ...CollectionUpstream.fields,
+const UpstreamV4 = Schema.Struct({
+  ...Upstream.fields,
   selection: AcquisitionSelectionV4,
 });
 export const PortableCollectionV4 = Schema.Struct({
-  ...PortableCollection.fields,
-  upstream: Schema.optionalKey(CollectionUpstreamV4),
+  collection_id: CollectionId,
+  display_name: Schema.NonEmptyString,
+  upstream: Schema.optionalKey(UpstreamV4),
+});
+export const PortableSkillV4 = Schema.Struct({
+  skill_id: SkillId,
+  collection_id: CollectionId,
+  path: CollectionRelativePath,
+  name: Schema.NonEmptyString,
+  upstream_path: Schema.optionalKey(CollectionRelativePath),
+  selected_skill_version_id: Schema.mutableKey(Schema.optional(SkillVersionId)),
+  versions: Schema.mutable(Schema.Array(PortableSkillVersion)),
+});
+export const PortableBindingV4 = Schema.Struct({
+  collection_id: CollectionId,
+  harness: HarnessName,
+  scope: Schema.Struct({ kind: Schema.Literal("global") }),
+  skills: Schema.Array(SkillId),
 });
 export const PortableLibraryManifestV4 = Schema.Struct({
   schema: Schema.Literal("skit.library.v4"),
   collections: Schema.Array(PortableCollectionV4),
-  skills: Schema.Array(PortableSkill),
+  skills: Schema.Array(PortableSkillV4),
   retained_copies: Schema.Array(PortableRetainedCopy),
   acquisitions: Schema.Array(PortableAcquisitionV4),
   snapshot_digests: Schema.Array(Digest),
-  bindings: Schema.Array(PortableBinding),
+  bindings: Schema.Array(PortableBindingV4),
 });
 export type PortableLibraryManifestV4 = typeof PortableLibraryManifestV4.Type;
 
@@ -477,10 +492,14 @@ const legacyWellKnownSelection = (value: string) => {
 
 export const migratePortableEntitiesFromV4 = (input: {
   readonly collections: readonly (typeof PortableCollectionV4.Type)[];
+  readonly skills: readonly (typeof PortableSkillV4.Type)[];
   readonly acquisitions: readonly (typeof PortableAcquisitionV4.Type)[];
+  readonly bindings: readonly (typeof PortableBindingV4.Type)[];
 }): {
   readonly collections: PortableCollection[];
+  readonly skills: PortableSkill[];
   readonly acquisitions: PortableAcquisition[];
+  readonly bindings: PortableBinding[];
 } => {
   const acquisitions = input.acquisitions.map((acquisition): PortableAcquisition => {
     const legacy =
@@ -499,10 +518,37 @@ export const migratePortableEntitiesFromV4 = (input: {
   const selectionByAcquisition = new Map(
     acquisitions.map((acquisition) => [acquisition.acquisition_id, acquisition.selection]),
   );
-  const collections = input.collections.map((collection): PortableCollection => {
-    if (collection.upstream === undefined) return collection;
+  const acquisitionById = new Map(
+    acquisitions.map((acquisition) => [acquisition.acquisition_id, acquisition]),
+  );
+  const collectionAcquisitions = (collectionId: CollectionId) => {
+    const ids = new Set(
+      input.skills
+        .filter((skill) => skill.collection_id === collectionId)
+        .flatMap((skill) => skill.versions.flatMap((version) => version.origins))
+        .map((origin) => origin.acquisition_id),
+    );
+    return acquisitions.filter((acquisition) => ids.has(acquisition.acquisition_id));
+  };
+  const latestAcquisition = (collectionId: CollectionId) =>
+    collectionAcquisitions(collectionId).toSorted((left, right) =>
+      right.acquired_at.localeCompare(left.acquired_at),
+    )[0];
+  const shouldDissolve = (collection: typeof PortableCollectionV4.Type) => {
+    const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
+    const allPlain = skills.every((skill) =>
+      skill.versions.every((version) => version.materialization_profile === "plain-skill/v1"),
+    );
+    const observed = latestAcquisition(collection.collection_id);
+    return allPlain && observed !== undefined && observed.selection.kind !== "full-tree";
+  };
+  const dissolved = new Set(
+    input.collections.filter(shouldDissolve).map((collection) => collection.collection_id),
+  );
+  const collections = input.collections.flatMap((collection): PortableCollection[] => {
+    if (dissolved.has(collection.collection_id)) return [];
     const matchingAcquisition =
-      collection.upstream.last_acquisition_id === undefined
+      collection.upstream?.last_acquisition_id === undefined
         ? acquisitions
             .filter(
               (acquisition) =>
@@ -516,23 +562,77 @@ export const migratePortableEntitiesFromV4 = (input: {
           );
     const selected =
       matchingAcquisition?.selection ??
-      (collection.upstream.last_acquisition_id === undefined
+      (collection.upstream?.last_acquisition_id === undefined
         ? undefined
         : selectionByAcquisition.get(collection.upstream.last_acquisition_id));
-    return selected?.kind !== "selected-skills"
-      ? collection
-      : {
-          ...collection,
-          upstream: {
-            ...collection.upstream,
-            selection: selected,
-            ...(matchingAcquisition === undefined
-              ? {}
-              : { last_acquisition_id: matchingAcquisition.acquisition_id }),
-          },
-        };
+    const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
+    const descriptor =
+      skills.length > 0 &&
+      skills.every((skill) =>
+        skill.versions.every(
+          (version) => version.materialization_profile === "declared-skit-skill/v1",
+        ),
+      );
+    return [
+      {
+        collection_id: collection.collection_id,
+        label: collection.display_name,
+        membership: { kind: descriptor ? "descriptor" : "source-tree" },
+        ...(collection.upstream === undefined
+          ? {}
+          : {
+              upstream: {
+                ...collection.upstream,
+                selection: selected ?? collection.upstream.selection,
+                ...(matchingAcquisition === undefined
+                  ? {}
+                  : { last_acquisition_id: matchingAcquisition.acquisition_id }),
+              },
+            }),
+      },
+    ];
   });
-  return { collections, acquisitions };
+  const skills = input.skills.map((skill): PortableSkill => {
+    const { upstream_path: _legacyPath, ...fields } = skill;
+    if (!dissolved.has(skill.collection_id)) return fields;
+    const origins = skill.versions
+      .flatMap((version) => version.origins)
+      .flatMap((origin) => {
+        const acquisition = acquisitionById.get(origin.acquisition_id);
+        return acquisition === undefined ? [] : [{ acquisition, sourcePath: origin.source_path }];
+      })
+      .toSorted((left, right) =>
+        right.acquisition.acquired_at.localeCompare(left.acquisition.acquired_at),
+      );
+    const latest = origins[0];
+    const { collection_id: _collectionId, ...standalone } = fields;
+    if (latest === undefined || latest.acquisition.source_identity.kind === "local")
+      return standalone;
+    const selection: AcquisitionSelection =
+      latest.acquisition.source_identity.kind === "github" ||
+      latest.acquisition.source_identity.kind === "git"
+        ? { kind: "selected-paths", paths: [latest.sourcePath] }
+        : { kind: "selected-skills", names: [skill.name] };
+    return {
+      ...standalone,
+      upstream: {
+        source_identity: latest.acquisition.source_identity,
+        tracking: latest.acquisition.tracking,
+        selection,
+        last_acquisition_id: latest.acquisition.acquisition_id,
+      },
+    };
+  });
+  const bindingsByHarness = new Map<string, PortableBinding>();
+  for (const binding of input.bindings) {
+    const prior = bindingsByHarness.get(binding.harness);
+    bindingsByHarness.set(binding.harness, {
+      harness: binding.harness,
+      scope: { kind: "global" },
+      skills: [...new Set([...(prior?.skills ?? []), ...binding.skills])],
+    });
+  }
+  return { collections, skills, acquisitions, bindings: [...bindingsByHarness.values()] };
 };
 
 const PortableLibraryManifestFromV4 = PortableLibraryManifestV4.pipe(
@@ -543,7 +643,9 @@ const PortableLibraryManifestFromV4 = PortableLibraryManifestV4.pipe(
         ...manifest,
         schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
         collections: migrated.collections,
+        skills: migrated.skills,
         acquisitions: migrated.acquisitions,
+        bindings: migrated.bindings,
       };
     }),
     encode: SchemaGetter.forbidden(() => "v4 portable Library manifests are decode-only"),

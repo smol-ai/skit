@@ -4,8 +4,8 @@ import { HarnessName } from "@smolai/skit-core";
 const PortableSyncChange = Schema.Struct({
   kind: Schema.Literals(["collection", "binding"]),
   action: Schema.Literals(["add", "update", "remove"]),
-  collection_id: Schema.String,
-  collection: Schema.String,
+  collection_id: Schema.optionalKey(Schema.String),
+  collection: Schema.optionalKey(Schema.String),
   collection_before: Schema.optionalKey(Schema.String),
   collection_after: Schema.optionalKey(Schema.String),
   harness: Schema.optionalKey(HarnessName),
@@ -22,7 +22,6 @@ const PortableSyncPlan = Schema.Struct({
 });
 
 const DeferredBinding = Schema.Struct({
-  collection: Schema.String,
   harness: HarnessName,
   skills: Schema.Array(Schema.String),
 });

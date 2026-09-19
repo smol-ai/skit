@@ -1,13 +1,6 @@
 import { Effect, Schema, Struct } from "effect";
 import { isAbsolute, resolve } from "node:path";
-import {
-  AdoptionReceiptId,
-  CollectionId,
-  MachineId,
-  ProjectionId,
-  SkillId,
-  SkillVersionId,
-} from "./entity-ids.js";
+import { ProjectionId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
   PortableAcquisition,
   PortableBinding,
@@ -38,7 +31,6 @@ export const PortableDeviceBinding = Schema.Struct({
 export interface PortableDeviceBinding extends Schema.Schema.Type<typeof PortableDeviceBinding> {}
 
 export const PortableRepositoryBinding = Schema.Struct({
-  collection_id: CollectionId,
   harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
   skills: Schema.Array(SkillId),
@@ -50,7 +42,6 @@ export interface PortableRepositoryBinding extends Schema.Schema.Type<
 
 export const ManagedProjection = Schema.Struct({
   projection_id: ProjectionId,
-  collection_id: CollectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
   harness: HarnessName,
@@ -65,17 +56,6 @@ export const ManagedProjection = Schema.Struct({
 });
 export interface ManagedProjection extends Schema.Schema.Type<typeof ManagedProjection> {}
 
-export const PortableAdoptionReceipt = Schema.Struct({
-  receipt_id: AdoptionReceiptId,
-  adopted_at: Schema.String,
-  machine_id: MachineId,
-  path: AbsoluteDevicePath,
-  observed_digest: Digest,
-  skill_version_id: SkillVersionId,
-  projection_ids: Schema.Array(ProjectionId),
-});
-export type PortableAdoptionReceipt = typeof PortableAdoptionReceipt.Type;
-
 export const CURRENT_LIBRARY_STATE_VERSION = 5 as const;
 
 export const LibraryState = Schema.Struct({
@@ -88,16 +68,12 @@ export const LibraryState = Schema.Struct({
   global_bindings: Schema.mutable(Schema.Array(PortableDeviceBinding)),
   local_bindings: Schema.mutable(Schema.Array(PortableRepositoryBinding)),
   projections: Schema.mutable(Schema.Array(ManagedProjection)),
-  adoption_receipts: Schema.mutable(Schema.Array(PortableAdoptionReceipt)),
 }).check(
   Schema.makeFilter(
     (state) => {
-      const collections = new Map(
-        state.collections.map((collection) => [collection.collection_id, collection]),
-      );
       const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
       const localCoordinates = state.local_bindings.map(
-        (binding) => `${binding.collection_id}\0${binding.harness}\0${resolve(binding.scope.root)}`,
+        (binding) => `${binding.harness}\0${resolve(binding.scope.root)}`,
       );
       const projectionCoordinates = state.projections.map(
         (projection) => `${projection.harness}\0${resolve(projection.path)}`,
@@ -107,36 +83,18 @@ export const LibraryState = Schema.Struct({
         new Set(projectionCoordinates).size === projectionCoordinates.length &&
         new Set(state.projections.map((projection) => projection.projection_id)).size ===
           state.projections.length &&
-        state.local_bindings.every(
-          (binding) =>
-            collections.has(binding.collection_id) &&
-            binding.skills.every(
-              (skillId) => skills.get(skillId)?.collection_id === binding.collection_id,
-            ),
+        state.local_bindings.every((binding) =>
+          binding.skills.every((skillId) => skills.has(skillId)),
         ) &&
         state.projections.every((projection) => {
           const skill = skills.get(projection.skill_id);
-          return (
-            skill?.collection_id === projection.collection_id &&
-            skill.versions.some(
-              (version) => version.skill_version_id === projection.skill_version_id,
-            )
+          return skill?.versions.some(
+            (version) => version.skill_version_id === projection.skill_version_id,
           );
-        }) &&
-        state.adoption_receipts.every(
-          (receipt) =>
-            state.skills.some((skill) =>
-              skill.versions.some(
-                (version) => version.skill_version_id === receipt.skill_version_id,
-              ),
-            ) &&
-            receipt.projection_ids.every((projectionId) =>
-              state.projections.some((projection) => projection.projection_id === projectionId),
-            ),
-        )
+        })
       );
     },
-    { message: "Device Bindings, Projections, and receipts must name retained entities" },
+    { message: "Device Bindings and Projections must name retained entities" },
   ),
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}

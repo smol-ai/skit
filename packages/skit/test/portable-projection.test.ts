@@ -28,7 +28,7 @@ const boundCollection = Effect.gen(function* () {
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.makeDirectory(targetRoot, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
-  const collection = yield* Effect.scoped(
+  const retained = yield* Effect.scoped(
     withLibraryWriterLock(
       home,
       retainObservedCollectionEffect({
@@ -52,9 +52,7 @@ const boundCollection = Effect.gen(function* () {
   const initial = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
     Effect.provide(storeLayer),
   );
-  const skillId = initial.skills.find(
-    (skill) => skill.collection_id === collection.collection_id,
-  )?.skill_id;
+  const skillId = retained.skills[0]?.skill_id;
   assert.ok(skillId);
   yield* withLibraryWriterLock(
     home,
@@ -63,7 +61,6 @@ const boundCollection = Effect.gen(function* () {
         ...initial,
         global_bindings: [
           {
-            collection_id: collection.collection_id,
             harness: "codex",
             scope: { kind: "global" },
             skills: [skillId],
@@ -73,20 +70,19 @@ const boundCollection = Effect.gen(function* () {
     ).pipe(Effect.provide(storeLayer)),
   );
 
-  return { fs, home, targetRoot, collection, storeLayer };
+  return { fs, home, targetRoot, storeLayer };
 });
 
 it.effect(
   "projects bound retained bytes, preserves a foreign target, and retires unbound custody",
   () =>
     Effect.gen(function* () {
-      const { fs, home, targetRoot, collection, storeLayer } = yield* boundCollection;
+      const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
 
       const target = join(targetRoot, "review");
       yield* fs.makeDirectory(target);
       yield* fs.writeFileString(join(target, "SKILL.md"), "foreign\n");
       const project = projectPortableBindingEffect({
-        collectionId: collection.collection_id,
         harness: "codex",
         root: targetRoot,
         variantsPath: join(home, "variants"),
@@ -136,14 +132,13 @@ it.effect(
 
 it.effect("publishes nothing when the written Projection does not hash to the retained bytes", () =>
   Effect.gen(function* () {
-    const { home, targetRoot, collection, storeLayer } = yield* boundCollection;
+    const { home, targetRoot, storeLayer } = yield* boundCollection;
     const diverged = Layer.succeed(TreeHasher)({
       hash: () => Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`)),
     });
     const projected = yield* withLibraryWriterLock(
       home,
       projectPortableBindingEffect({
-        collectionId: collection.collection_id,
         harness: "codex",
         root: targetRoot,
         variantsPath: join(home, "variants"),

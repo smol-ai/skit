@@ -74,7 +74,6 @@ export const preparePortableRestoreEffect = Effect.fn("Library.preparePortableRe
       global_bindings: [...manifest.bindings],
       local_bindings: [],
       projections: [],
-      adoption_receipts: [],
       unmanaged: [],
     }),
   ).pipe(
@@ -90,7 +89,6 @@ export function portableMergeCustodyConflicts(
   current: LibraryState,
   manifest: PortableLibraryManifest,
 ) {
-  const collectionIds = new Set(manifest.collections.map((item) => item.collection_id));
   const skillIds = new Set(manifest.skills.map((item) => item.skill_id));
   const versionIds = new Set(
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
@@ -99,29 +97,18 @@ export function portableMergeCustodyConflicts(
     ...current.projections.flatMap((projection) =>
       !manifest.bindings.some(
         (binding) =>
-          binding.collection_id === projection.collection_id &&
-          binding.harness === projection.harness &&
-          binding.skills.includes(projection.skill_id),
+          binding.harness === projection.harness && binding.skills.includes(projection.skill_id),
       ) ||
-      (collectionIds.has(projection.collection_id) &&
-        skillIds.has(projection.skill_id) &&
-        versionIds.has(projection.skill_version_id))
+      (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
         ? []
         : [`device:${projection.projection_id}:managed-projection`],
     ),
     ...current.local_bindings.flatMap((binding) => {
-      const collection = manifest.collections.find(
-        (item) => item.collection_id === binding.collection_id,
-      );
-      return collection !== undefined &&
-        binding.skills.every((skillId) =>
-          manifest.skills.some(
-            (skill) =>
-              skill.skill_id === skillId && skill.collection_id === collection.collection_id,
-          ),
-        )
+      return binding.skills.every((skillId) =>
+        manifest.skills.some((skill) => skill.skill_id === skillId),
+      )
         ? []
-        : [`device:${binding.collection_id}/${binding.harness}:repository-binding`];
+        : [`device:${binding.harness}/${binding.scope.root}:repository-binding`];
     }),
   ];
   return [...new Set(conflicts)].sort();
@@ -144,10 +131,7 @@ export const blendPortableRestoredStateEffect = Effect.fn("Library.blendPortable
     if (custody.length > 0)
       return yield* new PortableRestoreInvalid({ detail: custody.join(", ") });
     const localPolicies = new Map(
-      current.global_bindings.map((binding) => [
-        `${binding.collection_id}\0${binding.harness}`,
-        binding.invocation_policies,
-      ]),
+      current.global_bindings.map((binding) => [binding.harness, binding.invocation_policies]),
     );
     return yield* LibraryState.makeEffect({
       ...current,
@@ -156,7 +140,7 @@ export const blendPortableRestoredStateEffect = Effect.fn("Library.blendPortable
       retained_copies: restored.retained_copies,
       acquisitions: restored.acquisitions,
       global_bindings: restored.global_bindings.map((binding) => {
-        const policies = localPolicies.get(`${binding.collection_id}\0${binding.harness}`);
+        const policies = localPolicies.get(binding.harness);
         return policies === undefined ? binding : { ...binding, invocation_policies: policies };
       }),
     }).pipe(

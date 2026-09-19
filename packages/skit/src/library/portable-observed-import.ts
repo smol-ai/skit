@@ -213,32 +213,44 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ? request.sourceRevision
       : undefined;
   const sourceKey = canonicalJson(source);
-  let collection = state.collections.find((candidate) => {
-    if (
-      candidate.upstream !== undefined &&
-      canonicalJson(candidate.upstream.source_identity) === sourceKey
-    )
-      return true;
-    if (source.kind !== "local") return false;
-    const acquisitionIds = new Set(
-      state.skills
-        .filter((skill) => skill.collection_id === candidate.collection_id)
-        .flatMap((skill) =>
-          skill.versions.flatMap((version) =>
-            version.origins.map((origin) => origin.acquisition_id),
-          ),
-        ),
-    );
-    return state.acquisitions.some(
-      (acquisition) =>
-        acquisitionIds.has(acquisition.acquisition_id) &&
-        canonicalJson(acquisition.source_identity) === sourceKey,
-    );
-  });
-  if (collection === undefined) {
+  const usesCollection =
+    request.facts.every((fact) => fact.materializationProfile === "declared-skit-skill/v1") ||
+    acquiredSelection.kind === "full-tree";
+  let collection = usesCollection
+    ? state.collections.find((candidate) => {
+        if (
+          candidate.upstream !== undefined &&
+          canonicalJson(candidate.upstream.source_identity) === sourceKey
+        )
+          return true;
+        if (source.kind !== "local") return false;
+        const acquisitionIds = new Set(
+          state.skills
+            .filter((skill) => skill.collection_id === candidate.collection_id)
+            .flatMap((skill) =>
+              skill.versions.flatMap((version) =>
+                version.origins.map((origin) => origin.acquisition_id),
+              ),
+            ),
+        );
+        return state.acquisitions.some(
+          (acquisition) =>
+            acquisitionIds.has(acquisition.acquisition_id) &&
+            canonicalJson(acquisition.source_identity) === sourceKey,
+        );
+      })
+    : undefined;
+  if (usesCollection && collection === undefined) {
     collection = {
       collection_id: makeCollectionId(),
-      display_name: collectionDisplay(request.identity),
+      label: collectionDisplay(request.identity),
+      membership: {
+        kind: request.facts.every(
+          (fact) => fact.materializationProfile === "declared-skit-skill/v1",
+        )
+          ? "descriptor"
+          : "source-tree",
+      },
       ...(source.kind === "local"
         ? {}
         : {
@@ -256,23 +268,44 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   );
   const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
   const acquisitionId = makeAcquisitionId();
+  const persistedSkills = [];
   for (const fact of request.facts) {
-    let skill = state.skills.find(
-      (candidate) =>
-        candidate.collection_id === collection.collection_id &&
-        (candidate.upstream_path ?? candidate.path) === fact.sourcePath,
+    const skillSelection =
+      acquiredSelection.kind === "selected-skills"
+        ? { kind: "selected-skills" as const, names: [fact.name] }
+        : acquiredSelection.kind === "selected-paths"
+          ? { kind: "selected-paths" as const, paths: [fact.sourcePath] }
+          : acquiredSelection;
+    let skill = state.skills.find((candidate) =>
+      collection === undefined
+        ? candidate.collection_id === undefined &&
+          candidate.upstream !== undefined &&
+          canonicalJson(candidate.upstream.source_identity) === sourceKey &&
+          candidate.path === fact.sourcePath
+        : candidate.collection_id === collection.collection_id &&
+          candidate.path === fact.sourcePath,
     );
     if (skill === undefined) {
       skill = {
         skill_id: makeSkillId(),
-        collection_id: collection.collection_id,
         path: fact.sourcePath,
         name: fact.name,
-        ...(collection.upstream === undefined ? {} : { upstream_path: fact.sourcePath }),
+        ...(collection === undefined
+          ? source.kind === "local"
+            ? {}
+            : {
+                upstream: {
+                  source_identity: source,
+                  tracking: { kind: "default" as const },
+                  selection: skillSelection,
+                },
+              }
+          : { collection_id: collection.collection_id }),
         versions: [],
       };
       state.skills.push(skill);
     }
+    persistedSkills.push(skill);
     let version = skill.versions.find(
       (candidate) => candidate.artifact_digest === fact.artifactDigest,
     );
@@ -320,7 +353,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     machine_id: machineId,
     observations: portableObservations(request.observations, machineId),
   });
-  if (collection.upstream !== undefined) {
+  if (collection?.upstream !== undefined) {
     const revised = {
       ...collection,
       upstream: {
@@ -330,6 +363,15 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       },
     };
     state.collections[state.collections.indexOf(collection)] = revised;
+  }
+  for (const skill of persistedSkills) {
+    if (skill.upstream === undefined) continue;
+    const revised = {
+      ...skill,
+      upstream: { ...skill.upstream, last_acquisition_id: acquisitionId },
+    };
+    state.skills[state.skills.indexOf(skill)] = revised;
+    persistedSkills[persistedSkills.indexOf(skill)] = revised;
   }
   const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
@@ -350,7 +392,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     ),
   );
   yield* store.publish(successor);
-  return collection;
+  return { collection, skills: persistedSkills };
 });
 
 /** Retain observed bytes while the caller holds Library write authority. */

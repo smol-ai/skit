@@ -17,7 +17,7 @@ const portableSecuritySkill = Effect.fn("Library.portableSecuritySkill")(functio
   query: string,
 ) {
   const matches = state.collections.flatMap((collection) => {
-    const collectionMatch = [collection.collection_id, collection.display_name].includes(query);
+    const collectionMatch = [collection.collection_id, collection.label].includes(query);
     return state.skills
       .filter((candidate) => candidate.collection_id === collection.collection_id)
       .flatMap((skill) => {

@@ -47,7 +47,6 @@ const emptyState = (path: string) =>
       global_bindings: [],
       local_bindings: [],
       projections: [],
-      adoption_receipts: [],
       unmanaged: [],
     }),
   ).pipe(Effect.mapError(invalid(path)));

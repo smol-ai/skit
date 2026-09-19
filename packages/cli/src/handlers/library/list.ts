@@ -25,7 +25,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const value = {
     collections: portable.collections.map((collection) => ({
       collection_id: collection.collection_id,
-      display_id: collection.display_name,
+      display_id: collection.label,
       skills: portable.skills
         .filter((skill) => skill.collection_id === collection.collection_id)
         .map((skill) => ({
@@ -41,7 +41,8 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
         })),
     })),
     bindings: portable.global_bindings.map((binding) => ({
-      collection_id: binding.collection_id,
+      collection_id: state.skills.find((skill) => binding.skills.includes(skill.skill_id))
+        ?.collection_id,
       harness: binding.harness,
       skills: [...binding.skills],
     })),

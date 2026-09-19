@@ -183,7 +183,6 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
       });
     } else if (marker.kind === "valid") {
       const claim = {
-        collectionId: marker.marker.collection_id,
         skillId: marker.marker.skill_id,
         projectionId: marker.marker.projection_id,
         expectedHash: marker.marker.expected_digest,

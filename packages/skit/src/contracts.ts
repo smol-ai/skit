@@ -97,7 +97,7 @@ export interface SkitReleaseIdentity {
   }>;
 }
 
-export const OwnershipMarker = Schema.Struct({
+export const OwnershipMarkerV2 = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   projectionPolicyVersion: Schema.Literal(1),
   projection_id: ProjectionId,
@@ -107,6 +107,21 @@ export const OwnershipMarker = Schema.Struct({
   expected_digest: Digest,
   harness: HarnessName,
 });
+export type OwnershipMarkerV2 = typeof OwnershipMarkerV2.Type;
+
+export const OwnershipMarkerV3 = Schema.Struct({
+  schemaVersion: Schema.Literal(3),
+  projectionPolicyVersion: Schema.Literal(1),
+  projection_id: ProjectionId,
+  skill_id: SkillId,
+  skill_version_id: SkillVersionId,
+  expected_digest: Digest,
+  harness: HarnessName,
+});
+export type OwnershipMarkerV3 = typeof OwnershipMarkerV3.Type;
+
+/** V2 remains readable because ownership markers live outside versioned Library state. */
+export const OwnershipMarker = OwnershipMarkerV3;
 export type OwnershipMarker = typeof OwnershipMarker.Type;
 
 export const SkillAuditFinding = Schema.Struct({
