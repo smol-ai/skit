@@ -157,7 +157,9 @@ const urlCollectionProfile = defineCollectionIdentityProfile("url-collection", {
           version: 1 as const,
           url:
             input.source.type === "well-known" && input.source.members?.length
-              ? `${input.source.ref}#skills=${input.source.members.toSorted().join(",")}`
+              ? // Opaque identity encoding: subset membership is persisted structurally in the
+                // Acquisition selection, but existing Collection refs must remain stable.
+                `${input.source.ref}#skills=${input.source.members.toSorted().join(",")}`
               : input.source.ref,
         }
       : undefined,

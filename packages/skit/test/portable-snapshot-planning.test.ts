@@ -1,9 +1,10 @@
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { makeAcquisitionId, makeMachineId, makeRetainedCopyId } from "../src/library/entity-ids.js";
 import {
   portableAcquisitionIsSourceRestorable,
   portableSnapshotDigests,
+  PortableLibraryManifestAnyVersion,
   SnapshotArchive,
   type PortableAcquisition,
   type PortableLibraryManifest,
@@ -98,7 +99,7 @@ const sourceAcquisition = acquisition({
   retained_copy_id: sourceCopyId,
 });
 const mixedManifest: PortableLibraryManifest = {
-  schema: "skit.library.v4",
+  schema: "skit.library.v5",
   collections: [],
   skills: [],
   retained_copies: [copy, sourceCopy],
@@ -116,6 +117,33 @@ const snapshotArchive = SnapshotArchive.make({
   profile: "verbatim/v1",
   digest,
   entries: [],
+});
+
+it("decodes a v4 portable subset into the current manifest model", () => {
+  const { source_revision: _mutableRevision, ...mutableAcquisition } =
+    mixedManifest.acquisitions[0]!;
+  const { source_revision: _sourceRevision, ...legacySourceAcquisition } = sourceAcquisition;
+  const decoded = Schema.decodeUnknownSync(PortableLibraryManifestAnyVersion)({
+    ...mixedManifest,
+    schema: "skit.library.v4",
+    acquisitions: [
+      mutableAcquisition,
+      {
+        ...legacySourceAcquisition,
+        source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
+        tracking: { kind: "default" },
+        selection: { kind: "full-tree" },
+        input: { value: "wellknown:https://skills.example#skills=review" },
+      },
+    ],
+    snapshot_digests: [digest, sourceDigest].sort(),
+  });
+  assert.strictEqual(decoded.schema, "skit.library.v5");
+  assert.deepStrictEqual(decoded.acquisitions[1]?.selection, {
+    kind: "selected-skills",
+    names: ["review"],
+  });
+  assert.strictEqual(decoded.acquisitions[1]?.input.value, "wellknown:https://skills.example");
 });
 
 it.effect("combines downloaded snapshots with exact source reacquisition", () =>

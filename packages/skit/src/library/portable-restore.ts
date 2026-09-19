@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
 import { materializeVerifiedSnapshotEffect } from "./snapshot-archive.js";
 import { verifySnapshotArchiveEffect } from "./snapshot-archive-universal.js";
-import { LibraryState } from "./portable-local-state.js";
+import { currentLibraryState, LibraryState } from "./portable-local-state.js";
 import {
+  currentPortableLibraryManifest,
   portableSnapshotDigests,
   type PortableLibraryManifest,
   type SnapshotArchive,
@@ -64,18 +65,19 @@ export const preparePortableRestoreEffect = Effect.fn("Library.preparePortableRe
         });
     }
   }
-  const state = yield* LibraryState.makeEffect({
-    schemaVersion: 4,
-    collections: manifest.collections,
-    skills: manifest.skills,
-    retained_copies: manifest.retained_copies,
-    acquisitions: manifest.acquisitions,
-    global_bindings: manifest.bindings,
-    local_bindings: [],
-    projections: [],
-    adoption_receipts: [],
-    unmanaged: [],
-  }).pipe(
+  const state = yield* LibraryState.makeEffect(
+    currentLibraryState({
+      collections: [...manifest.collections],
+      skills: [...manifest.skills],
+      retained_copies: [...manifest.retained_copies],
+      acquisitions: [...manifest.acquisitions],
+      global_bindings: [...manifest.bindings],
+      local_bindings: [],
+      projections: [],
+      adoption_receipts: [],
+      unmanaged: [],
+    }),
+  ).pipe(
     Effect.mapError(
       () => new PortableRestoreInvalid({ detail: "restored state failed Library validation" }),
     ),
@@ -128,8 +130,7 @@ export function portableMergeCustodyConflicts(
 /** Keep current device custody while replacing the portable Library fields. */
 export const blendPortableRestoredStateEffect = Effect.fn("Library.blendPortableRestoredState")(
   function* (current: LibraryState, restored: LibraryState) {
-    const manifest: PortableLibraryManifest = {
-      schema: "skit.library.v4",
+    const manifest: PortableLibraryManifest = currentPortableLibraryManifest({
       collections: restored.collections,
       skills: restored.skills,
       retained_copies: restored.retained_copies,
@@ -138,7 +139,7 @@ export const blendPortableRestoredStateEffect = Effect.fn("Library.blendPortable
       bindings: restored.global_bindings.map(
         ({ invocation_policies: _policies, ...binding }) => binding,
       ),
-    };
+    });
     const custody = portableMergeCustodyConflicts(current, manifest);
     if (custody.length > 0)
       return yield* new PortableRestoreInvalid({ detail: custody.join(", ") });

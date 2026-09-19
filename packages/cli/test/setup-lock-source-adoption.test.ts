@@ -145,8 +145,8 @@ it.effect("imports an approved skills.sh Collection without repeated broad obser
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
-    expect(state.version).toBe(4);
-    if (state.version !== 4) return;
+    expect(state.present).toBe(true);
+    if (!state.present) return;
     const saved = state.state.collections[0];
     expect(
       state.state.skills
@@ -225,9 +225,11 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const persisted = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
-    expect(persisted.version).toBe(4);
-    if (persisted.version !== 4) return;
+    expect(persisted.present).toBe(true);
+    if (!persisted.present) return;
     const acquisition = persisted.state.acquisitions[0]!;
+    expect(acquisition.input.value).toBe(`wellknown:${base}`);
+    expect(acquisition.selection).toEqual({ kind: "selected-skills", names: ["review"] });
     expect(acquisition.observations).toEqual([
       expect.objectContaining({
         source_url: base,
@@ -255,8 +257,8 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
-    expect(reloaded.version).toBe(4);
-    if (reloaded.version !== 4) return;
+    expect(reloaded.present).toBe(true);
+    if (!reloaded.present) return;
     expect(reloaded.state.skills[0]?.versions).toHaveLength(1);
     expect(reloaded.state.acquisitions[0]?.input.value).toContain(base);
     yield* fs.writeFileString(join(repository, "skills-lock.json"), "changed lock snapshot\n");
@@ -456,8 +458,8 @@ it.effect("adopts a selected member from a two-Skill GitHub lock collection", ()
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
-    expect(saved.version).toBe(4);
-    if (saved.version !== 4) return;
+    expect(saved.present).toBe(true);
+    if (!saved.present) return;
     expect(
       saved.state.skills
         .filter((skill) => skill.collection_id === retained.collection_id)

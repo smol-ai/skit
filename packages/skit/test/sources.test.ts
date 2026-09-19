@@ -477,10 +477,12 @@ describe("source contracts", () => {
           ),
         );
       });
-      const locator = `wellknown:${base}#skills=review`;
-      const parsed = yield* parseSkitSourceEffect(locator);
-      expect(parsed).toEqual({ type: "well-known", ref: base, members: ["review"] });
-      expect(sourceLocator(parsed)).toBe(locator);
+      const rejected = yield* parseSkitSourceEffect(`wellknown:${base}#skills=review`).pipe(
+        Effect.flip,
+      );
+      expect(rejected._tag).toBe("UnsafeSourceUrl");
+      const parsed = { type: "well-known" as const, ref: base, members: ["review"] };
+      expect(sourceLocator(parsed)).toBe(`wellknown:${base}`);
       const resolved = yield* resolveSkitSourceEffect(parsed).pipe(
         Effect.provideService(HttpClient.HttpClient, client),
       );

@@ -21,8 +21,8 @@ it.effect("checks retained custody without treating an observed local copy as an
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
-    assert.strictEqual(loaded.version, 4);
-    if (loaded.version !== 4) return;
+    assert.strictEqual(loaded.present, true);
+    if (!loaded.present) return;
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
     const current = yield* checkPortableCollectionsEffect(
       loaded.state,
@@ -91,8 +91,8 @@ it.effect("checks retained custody without treating an observed local copy as an
     const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
-    assert.strictEqual(reloaded.version, 4);
-    if (reloaded.version !== 4) return;
+    assert.strictEqual(reloaded.present, true);
+    if (!reloaded.present) return;
     assert.deepStrictEqual(
       reloaded.state.retained_copies[0]?.digest,
       loaded.state.retained_copies[0]?.digest,

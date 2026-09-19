@@ -18,7 +18,7 @@ content before deciding whether it changed; they do not use a metadata-only upda
 | Other Git remote          | HTTPS `.git`, SSH URL, or `git@...`, optionally with ref/subpath                       | Clone and compare acquired content and commit as above.                                                                                                                                                              | `git ls-remote` can cheaply reveal a tracking ref's commit, but that is only a repository-level signal. A per-path tree object is stronger where the remote and Git transport make it available.                     |
 | Local path                | Directory or `SKILL.md` path                                                           | Read and normalize the current files; compare content. A local path has no separately fetchable upstream.                                                                                                            | Filesystem metadata can suggest a change but cannot prove a new Skill Version. Rehashing the tree proves the observed bytes changed.                                                                                 |
 | HTTPS archive or document | `.zip`, `.tar`, `.tar.gz`, `.tgz`, or a direct `SKILL.md` URL                          | GET the archive or document, normalize it, and compare content. A direct `SKILL.md` URL supplies only that document, not sibling scripts or references.                                                              | `ETag` or `Last-Modified` can avoid a download when the server supports conditional requests, but they are HTTP change signals, not Skill Version identity. SKIT does not currently persist or use them for `check`. |
-| Agent Skills discovery    | `https://example.com`, `wellknown:https://example.com#skills=review`, or an explicit index URL | Fetch the index, acquire selected artifacts or legacy listed files, normalize, and compare content. Verify `0.2.0` artifact digests before retaining.                                                                | A `0.2.0` index digest can identify a candidate without downloading the artifact. Legacy checking requires fetching listed files. SKIT currently reacquires content for `check`.                                     |
+| Agent Skills discovery    | `https://example.com`, `wellknown:https://example.com`, or an explicit index URL | Fetch the index, acquire selected artifacts or legacy listed files, normalize, and compare content. Verify `0.2.0` artifact digests before retaining.                                                                | A `0.2.0` index digest can identify a candidate without downloading the artifact. Legacy checking requires fetching listed files. SKIT currently reacquires content for `check`.                                     |
 
 The syntax catalog and acquisition behavior live in
 [`packages/skit/src/acquisition/sources.ts`](../packages/skit/src/acquisition/sources.ts). The
@@ -41,8 +41,8 @@ content to compare. SKIT accepts the legacy `skills` file-list shape and tries
 `/.well-known/skills/index.json` when the preferred index is absent. Use the explicit
 `wellknown:` locator when discovery needs to be explicit. A bare HTTPS origin also selects
 discovery; an HTTPS URL with a path continues to mean a direct document or archive Source.
-Queries and fragments are rejected on bare origins. On an explicit `wellknown:` locator,
-`#skills=` preserves a selected subset in the saved locator.
+Queries and fragments are rejected on discovery origins. Selected subsets are persisted as
+Library acquisition state rather than locator syntax.
 
 SKIT's Registry also serves routes under `/.well-known/agent-skills/`; that response advertises
 SKIT API route templates, **not** the Agent Skills `index.json` discovery format.

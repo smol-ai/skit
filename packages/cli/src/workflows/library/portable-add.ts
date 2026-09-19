@@ -5,11 +5,14 @@ import {
   validateSkitDirectoryEffect,
   parseSkillFrontmatter,
   parseSkitSourceEffect,
+  sourceLocator,
   prepareObservedCollectionEffect,
   resolveSkitSourceEffect,
   retainAuthoredCollectionUnderLockEffect,
   retainObservedCollectionEffect,
   LibraryStore,
+  type PortableAcquisition,
+  type SkitSource,
 } from "@smolai/skit-core";
 import { Clock, Effect, FileSystem, Schema } from "effect";
 import { basename, join } from "node:path";
@@ -37,12 +40,21 @@ export interface PortableAddOptions {
   readonly selectVersions?: boolean;
 }
 
+export const acquisitionSourceEffect = Effect.fn("Library.acquisitionSource")(function* (
+  acquisition: PortableAcquisition,
+) {
+  const source = yield* parseSkitSourceEffect(acquisition.input.value);
+  return source.type === "well-known" && acquisition.selection.kind === "selected-skills"
+    ? { ...source, members: acquisition.selection.names }
+    : source;
+});
+
 export const inspectPortableLibrarySourceEffect = Effect.fn("Library.inspectPortableSource")(
-  function* (options: PortableAddOptions, input: string, version?: string) {
+  function* (options: PortableAddOptions, input: string | SkitSource, version?: string) {
     const registry = yield* (yield* RegistryAuth).resolve();
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const parsed = yield* parseSkitSourceEffect(input);
+        const parsed = typeof input === "string" ? yield* parseSkitSourceEffect(input) : input;
         if (parsed.type === "registry" && registry.configurationError)
           return yield* Effect.fail(registry.configurationError);
         const resolved = yield* resolveSkitSourceEffect(input, {
@@ -78,7 +90,7 @@ export const inspectPortableLibrarySourceEffect = Effect.fn("Library.inspectPort
         }
         const paths = resolved.observedSkillPaths;
         if (paths === undefined || paths.length === 0)
-          return yield* new PortableAddNoSkills({ source: input });
+          return yield* new PortableAddNoSkills({ source: sourceLocator(parsed) });
         const fs = yield* FileSystem.FileSystem;
         const skills = yield* Effect.forEach(paths, (relativePath) =>
           Effect.gen(function* () {
@@ -115,7 +127,7 @@ export const inspectPortableLibrarySourceEffect = Effect.fn("Library.inspectPort
 );
 
 export const previewPortableLibrarySourceEffect = Effect.fn("Library.previewPortableSource")(
-  function* (options: PortableAddOptions, input: string, version?: string) {
+  function* (options: PortableAddOptions, input: string | SkitSource, version?: string) {
     const inspected = yield* inspectPortableLibrarySourceEffect(options, input, version);
     return { kind: inspected.kind, skills: inspected.skills };
   },
@@ -124,13 +136,14 @@ export const previewPortableLibrarySourceEffect = Effect.fn("Library.previewPort
 /** Retain acquired bytes while the command composition root owns the Library writer lock. */
 export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSource")(function* (
   options: PortableAddOptions,
-  input: string,
+  input: string | SkitSource,
   version?: string,
 ) {
   const registry = yield* (yield* RegistryAuth).resolve();
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const parsed = yield* parseSkitSourceEffect(input);
+      const parsed = typeof input === "string" ? yield* parseSkitSourceEffect(input) : input;
+      const historicalInput = typeof input === "string" ? input : sourceLocator(input);
       if (parsed.type === "registry" && registry.configurationError)
         return yield* Effect.fail(registry.configurationError);
       const resolved = yield* resolveSkitSourceEffect(input, {
@@ -155,14 +168,14 @@ export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSour
         const collection = yield* retainAuthoredCollectionUnderLockEffect({
           root: resolved.root,
           identity,
-          input,
+          input: historicalInput,
           retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           selectVersions: options.selectVersions,
         });
         const state = yield* (yield* LibraryStore).load;
         const retained = state.retained_copies.find((copy) => copy.digest === snapshot);
         if (retained === undefined)
-          return yield* new PortableAddRetainedVersionMissing({ source: input });
+          return yield* new PortableAddRetainedVersionMissing({ source: historicalInput });
         const validated = yield* validateSkitDirectoryEffect(resolved.root, "retained", {
           assessmentContext: "retain",
         });
@@ -178,7 +191,7 @@ export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSour
       }
       const paths = resolved.observedSkillPaths;
       if (paths === undefined || paths.length === 0)
-        return yield* new PortableAddNoSkills({ source: input });
+        return yield* new PortableAddNoSkills({ source: historicalInput });
       const fs = yield* FileSystem.FileSystem;
       const skills = yield* Effect.forEach(paths, (relativePath) =>
         Effect.gen(function* () {
@@ -203,7 +216,8 @@ export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSour
       const prepared = yield* prepareObservedCollectionEffect(skills);
       const collection = yield* retainObservedCollectionEffect({
         identity,
-        input,
+        input: historicalInput,
+        source: resolved.source,
         sourceRevision: resolved.sourceRevision,
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         skills,
@@ -213,7 +227,7 @@ export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSour
       const state = yield* (yield* LibraryStore).load;
       const retained = state.retained_copies.find((copy) => copy.digest === prepared.digest);
       if (retained === undefined)
-        return yield* new PortableAddRetainedVersionMissing({ source: input });
+        return yield* new PortableAddRetainedVersionMissing({ source: historicalInput });
       return {
         collection,
         retained_version_id: retained.retained_copy_id,

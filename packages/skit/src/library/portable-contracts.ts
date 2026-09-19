@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 import { LibraryManifest } from "../distribution/api-contracts.js";
 import { canonicalJson } from "../shared/json.js";
 import {
@@ -85,6 +85,12 @@ export type SourceTracking = typeof SourceTracking.Type;
 
 export const AcquisitionSelection = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("full-tree") }),
+  Schema.Struct({
+    kind: Schema.Literal("selected-skills"),
+    names: Schema.Array(Schema.NonEmptyString).check(
+      Schema.makeFilter((names) => names.length > 0 && new Set(names).size === names.length),
+    ),
+  }),
   Schema.Struct({
     kind: Schema.Literal("selected-paths"),
     paths: Schema.Array(SourceRelativePath).check(
@@ -290,8 +296,10 @@ export interface PortableBinding extends Schema.Schema.Type<typeof PortableBindi
 const isNested = (left: string, right: string) =>
   left !== "." && right !== "." && (left.startsWith(`${right}/`) || right.startsWith(`${left}/`));
 
+export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v5" as const;
+
 export const PortableLibraryManifest = Schema.Struct({
-  schema: Schema.Literal("skit.library.v4"),
+  schema: Schema.Literal(CURRENT_PORTABLE_LIBRARY_SCHEMA),
   collections: Schema.Array(PortableCollection),
   skills: Schema.Array(PortableSkill),
   retained_copies: Schema.Array(PortableRetainedCopy),
@@ -422,6 +430,132 @@ export interface PortableLibraryManifest extends Schema.Schema.Type<
   typeof PortableLibraryManifest
 > {}
 
+export const currentPortableLibraryManifest = (
+  fields: Omit<PortableLibraryManifest, "schema">,
+): PortableLibraryManifest => ({ ...fields, schema: CURRENT_PORTABLE_LIBRARY_SCHEMA });
+
+const AcquisitionSelectionV4 = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("full-tree") }),
+  Schema.Struct({
+    kind: Schema.Literal("selected-paths"),
+    paths: Schema.Array(SourceRelativePath).check(
+      Schema.makeFilter((paths) => paths.length > 0 && new Set(paths).size === paths.length),
+    ),
+  }),
+]);
+export const PortableAcquisitionV4 = Schema.Struct({
+  ...PortableAcquisition.fields,
+  selection: AcquisitionSelectionV4,
+});
+const CollectionUpstreamV4 = Schema.Struct({
+  ...CollectionUpstream.fields,
+  selection: AcquisitionSelectionV4,
+});
+export const PortableCollectionV4 = Schema.Struct({
+  ...PortableCollection.fields,
+  upstream: Schema.optionalKey(CollectionUpstreamV4),
+});
+export const PortableLibraryManifestV4 = Schema.Struct({
+  schema: Schema.Literal("skit.library.v4"),
+  collections: Schema.Array(PortableCollectionV4),
+  skills: Schema.Array(PortableSkill),
+  retained_copies: Schema.Array(PortableRetainedCopy),
+  acquisitions: Schema.Array(PortableAcquisitionV4),
+  snapshot_digests: Schema.Array(Digest),
+  bindings: Schema.Array(PortableBinding),
+});
+export type PortableLibraryManifestV4 = typeof PortableLibraryManifestV4.Type;
+
+const legacyWellKnownSelection = (value: string) => {
+  const match = value.match(/^wellknown:(.+)#skills=([a-z0-9-]+(?:,[a-z0-9-]+)*)$/);
+  if (!match?.[1] || !match[2]) return undefined;
+  return {
+    input: `wellknown:${match[1]}`,
+    names: [...new Set(match[2].split(","))].sort(),
+  };
+};
+
+export const migratePortableEntitiesFromV4 = (input: {
+  readonly collections: readonly (typeof PortableCollectionV4.Type)[];
+  readonly acquisitions: readonly (typeof PortableAcquisitionV4.Type)[];
+}): {
+  readonly collections: PortableCollection[];
+  readonly acquisitions: PortableAcquisition[];
+} => {
+  const acquisitions = input.acquisitions.map((acquisition): PortableAcquisition => {
+    const legacy =
+      acquisition.selection.kind === "full-tree"
+        ? legacyWellKnownSelection(acquisition.input.value)
+        : undefined;
+    return {
+      ...acquisition,
+      ...(legacy === undefined ? {} : { input: { value: legacy.input } }),
+      selection:
+        legacy === undefined
+          ? acquisition.selection
+          : { kind: "selected-skills", names: legacy.names },
+    };
+  });
+  const selectionByAcquisition = new Map(
+    acquisitions.map((acquisition) => [acquisition.acquisition_id, acquisition.selection]),
+  );
+  const collections = input.collections.map((collection): PortableCollection => {
+    if (collection.upstream === undefined) return collection;
+    const matchingAcquisition =
+      collection.upstream.last_acquisition_id === undefined
+        ? acquisitions
+            .filter(
+              (acquisition) =>
+                canonicalJson(acquisition.source_identity) ===
+                canonicalJson(collection.upstream?.source_identity),
+            )
+            .toSorted((left, right) => right.acquired_at.localeCompare(left.acquired_at))[0]
+        : acquisitions.find(
+            (acquisition) =>
+              acquisition.acquisition_id === collection.upstream?.last_acquisition_id,
+          );
+    const selected =
+      matchingAcquisition?.selection ??
+      (collection.upstream.last_acquisition_id === undefined
+        ? undefined
+        : selectionByAcquisition.get(collection.upstream.last_acquisition_id));
+    return selected?.kind !== "selected-skills"
+      ? collection
+      : {
+          ...collection,
+          upstream: {
+            ...collection.upstream,
+            selection: selected,
+            ...(matchingAcquisition === undefined
+              ? {}
+              : { last_acquisition_id: matchingAcquisition.acquisition_id }),
+          },
+        };
+  });
+  return { collections, acquisitions };
+};
+
+const PortableLibraryManifestFromV4 = PortableLibraryManifestV4.pipe(
+  Schema.decodeTo(PortableLibraryManifest, {
+    decode: SchemaGetter.transform((manifest) => {
+      const migrated = migratePortableEntitiesFromV4(manifest);
+      return {
+        ...manifest,
+        schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
+        collections: migrated.collections,
+        acquisitions: migrated.acquisitions,
+      };
+    }),
+    encode: SchemaGetter.forbidden(() => "v4 portable Library manifests are decode-only"),
+  }),
+);
+
+/** Accept every supported wire version and expose only the current manifest model. */
+export const PortableLibraryManifestAnyVersion = Schema.Union([
+  PortableLibraryManifest,
+  PortableLibraryManifestFromV4,
+]);
+
 export const PortableLibraryReceipt = Schema.Struct({
   library_id: Schema.String,
   revision_id: Schema.String,
@@ -432,7 +566,7 @@ export const PortableLibraryResponse = Schema.Struct({ library: PortableLibraryR
 export const PortableLibraryHead = Schema.Struct({
   library_id: Schema.String,
   revision_id: Schema.String,
-  manifest: Schema.Union([PortableLibraryManifest, LibraryManifest]),
+  manifest: Schema.Union([PortableLibraryManifestAnyVersion, LibraryManifest]),
 });
 export interface PortableLibraryHead extends Schema.Schema.Type<typeof PortableLibraryHead> {}
 export const PortableLibraryReadResponse = Schema.Struct({ library: PortableLibraryHead });

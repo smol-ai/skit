@@ -5,7 +5,11 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
-import { inspectPortableLibrarySourceEffect, type PortableAddOptions } from "./portable-add.js";
+import {
+  acquisitionSourceEffect,
+  inspectPortableLibrarySourceEffect,
+  type PortableAddOptions,
+} from "./portable-add.js";
 import { checkSkillsShCollectionEffect } from "./skills-sh-update-check.js";
 
 export class PortableCheckNotFound extends Schema.TaggedError<PortableCheckNotFound>()(
@@ -103,7 +107,10 @@ export const checkPortableCollectionsEffect = Effect.fn("Library.checkPortableCo
         const inspected =
           collection.upstream === undefined || acquisition === undefined
             ? undefined
-            : yield* inspectPortableLibrarySourceEffect(options, acquisition.input.value);
+            : yield* inspectPortableLibrarySourceEffect(
+                options,
+                yield* acquisitionSourceEffect(acquisition),
+              );
         const retained_copies = [];
         for (const copy of copies) {
           retained_copies.push({

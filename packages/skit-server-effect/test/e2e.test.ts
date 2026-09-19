@@ -684,7 +684,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
       }),
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
-      schema: "skit.library.v4",
+      schema: "skit.library.v5",
       snapshot_digests: [selected!.digest],
       bindings: [],
     });

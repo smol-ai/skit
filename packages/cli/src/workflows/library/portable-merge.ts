@@ -1,5 +1,6 @@
 import {
   canonicalJson,
+  currentPortableLibraryManifest,
   planThreeWayRecords,
   portableSnapshotDigests,
   PortableLibraryManifest,
@@ -19,8 +20,7 @@ const bindingKey = (binding: PortableBinding) => `${binding.collection_id}\0${bi
 export function normalizePortableManifest(
   manifest: PortableLibraryManifest,
 ): PortableLibraryManifest {
-  return {
-    schema: "skit.library.v4",
+  return currentPortableLibraryManifest({
     collections: [...manifest.collections].sort((a, b) =>
       a.collection_id.localeCompare(b.collection_id),
     ),
@@ -47,7 +47,7 @@ export function normalizePortableManifest(
     bindings: manifest.bindings
       .map((binding) => ({ ...binding, skills: [...binding.skills].sort() }))
       .sort((a, b) => bindingKey(a).localeCompare(bindingKey(b))),
-  };
+  });
 }
 
 function mergeRecords<T>(
@@ -127,8 +127,7 @@ export function mergePortableManifests(
     bindingKey,
     takeRemote,
   );
-  const manifest = {
-    schema: "skit.library.v4" as const,
+  const manifest = currentPortableLibraryManifest({
     collections: collections.values,
     skills: skills.values,
     retained_copies: trees.values,
@@ -138,7 +137,7 @@ export function mergePortableManifests(
       acquisitions: acquisitions.values,
     }),
     bindings: bindings.values,
-  };
+  });
   const conflicts = [
     ...collections.conflicts,
     ...skills.conflicts,

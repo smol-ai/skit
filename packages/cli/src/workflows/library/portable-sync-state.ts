@@ -1,4 +1,8 @@
-import { PortableLibraryManifest, writeJsonAtomicEffect } from "@smolai/skit-core";
+import {
+  PortableLibraryManifest,
+  PortableLibraryManifestAnyVersion,
+  writeJsonAtomicEffect,
+} from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
 import { join, resolve } from "node:path";
 
@@ -10,6 +14,11 @@ export const PortableAcceptedBase = Schema.Struct({
   base_manifest: PortableLibraryManifest,
 });
 export type PortableAcceptedBase = typeof PortableAcceptedBase.Type;
+
+const PortableAcceptedBaseAnyVersion = Schema.Struct({
+  ...PortableAcceptedBase.fields,
+  base_manifest: PortableLibraryManifestAnyVersion,
+});
 
 export class PortableAcceptedBaseInvalid extends Schema.TaggedError<PortableAcceptedBaseInvalid>()(
   "Library.PortableAcceptedBaseInvalid",
@@ -31,7 +40,7 @@ export const readPortableAcceptedBaseEffect = Effect.fn("Library.readPortableAcc
         ),
       );
     if (text === undefined) return undefined;
-    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PortableAcceptedBase))(
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PortableAcceptedBaseAnyVersion))(
       text,
     ).pipe(
       Effect.mapError(

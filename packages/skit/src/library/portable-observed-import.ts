@@ -107,8 +107,11 @@ const safeRelative = (path: string) =>
 
 const selection = (
   identity: CollectionIdentity,
+  source: SkitSource | undefined,
   skills: PortableObservedImport["skills"],
 ): AcquisitionSelection => {
+  if (source?.type === "well-known" && source.members?.length)
+    return { kind: "selected-skills", names: [...new Set(source.members)].sort() };
   if (identity.profile !== "github-collection" && identity.profile !== "git-collection")
     return { kind: "full-tree" };
   const paths = [
@@ -204,7 +207,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const machineId = request.machineId ?? (yield* readOrCreateMachineId(store.home));
   const state = yield* store.load;
   const source = sourceIdentityFromCollectionIdentity(request.identity, machineId, request.input);
-  const acquiredSelection = selection(request.identity, request.skills);
+  const acquiredSelection = selection(request.identity, request.source, request.skills);
   const pinnedRevision =
     (source.kind === "github" || source.kind === "git") && request.sourceRevision !== undefined
       ? request.sourceRevision
@@ -317,12 +320,23 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     machine_id: machineId,
     observations: portableObservations(request.observations, machineId),
   });
+  if (collection.upstream !== undefined) {
+    const revised = {
+      ...collection,
+      upstream: {
+        ...collection.upstream,
+        selection: acquiredSelection,
+        last_acquisition_id: acquisitionId,
+      },
+    };
+    state.collections[state.collections.indexOf(collection)] = revised;
+  }
   const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
       (error) =>
         new InvalidLibraryState({
           path: join(store.home, "state.json"),
-          detail: `observed v4 Collection failed validation: ${String(error)}`,
+          detail: `observed Collection failed validation: ${String(error)}`,
         }),
     ),
   );
@@ -331,7 +345,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       (error) =>
         new InvalidLibraryState({
           path: join(store.home, "state.json"),
-          detail: `observed v4 Collection would violate the portable manifest: ${String(error)}`,
+          detail: `observed Collection would violate the portable manifest: ${String(error)}`,
         }),
     ),
   );
@@ -380,7 +394,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
   }) {
     const store = yield* LibraryStore;
     const current = yield* store.inspect;
-    if (current.version !== 4)
+    if (!current.present)
       return yield* new InvalidLibraryState({
         path: join(store.home, "state.json"),
         detail: "Projection retention requires current Library state",

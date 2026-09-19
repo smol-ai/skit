@@ -296,7 +296,7 @@
     "schemaVersion": {
       "type": "number",
       "enum": [
-        4
+        5
       ]
     },
     "skills": {

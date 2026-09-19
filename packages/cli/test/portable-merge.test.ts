@@ -64,7 +64,7 @@ const skill = {
   ],
 };
 const manifest = (bindings: unknown[] = []) => ({
-  schema: "skit.library.v4",
+  schema: "skit.library.v5",
   collections: [collection],
   skills: [skill],
   retained_copies: [

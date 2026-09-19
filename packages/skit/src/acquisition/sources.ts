@@ -55,20 +55,8 @@ const discoverySchemaMarker = Schema.Struct({ $schema: Schema.optional(Schema.St
 const discoveryJson = Schema.fromJsonString(Schema.Unknown);
 
 function wellKnownLocator(value: string): SkitSource | undefined {
-  const [ref, fragment] = value.split("#", 2);
-  if (
-    !ref ||
-    value.indexOf("#") !== value.lastIndexOf("#") ||
-    (fragment && !/^skills=[a-z0-9,-]+$/.test(fragment))
-  )
-    return undefined;
-  const selected = fragment ? new URLSearchParams(fragment).get("skills") : null;
-  const members = selected ? selected.split(",") : undefined;
-  if (fragment && (!members?.length || members.some((name) => !discoveryName.test(name))))
-    return undefined;
-  return members
-    ? { type: "well-known", ref: ref.replace(/\/$/, ""), members: [...new Set(members)].sort() }
-    : { type: "well-known", ref: ref.replace(/\/$/, "") };
+  if (!value || value.includes("#")) return undefined;
+  return { type: "well-known", ref: value.replace(/\/$/, "") };
 }
 
 /** A version flag promotes ambiguous shorthand only after an existing local path gets priority. */
@@ -368,8 +356,7 @@ export interface ResolvedSkitSource {
 
 /** Canonical, reparsable locator for a resolved Source. Shorthand never crosses this boundary. */
 export function sourceLocator(source: SkitSource): string {
-  if (source.type === "well-known")
-    return `wellknown:${source.ref}${source.members?.length ? `#skills=${source.members.toSorted().join(",")}` : ""}`;
+  if (source.type === "well-known") return `wellknown:${source.ref}`;
   if (source.type !== "registry") return source.ref;
   if (!source.authority) return `skit:${source.ref}`;
   const authority = URL.parse(source.authority);

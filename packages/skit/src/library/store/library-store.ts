@@ -1,8 +1,8 @@
 import { Context, DateTime, Effect, FileSystem, Layer } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import { InvalidLibraryState } from "../../failures.js";
-import { LibraryState } from "../portable-local-state.js";
+import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
+import { currentLibraryState, LibraryState } from "../portable-local-state.js";
 import {
   inspectLocalLibraryStateEffect,
   publishLibraryStateEffect,
@@ -14,7 +14,7 @@ import { CurrentLibraryWriterRoot, withLibraryWriterLock } from "./writer-lock.j
 
 export type { InspectedLibraryState };
 
-export type LibraryStateReadError = PlatformError | InvalidLibraryState;
+export type LibraryStateReadError = PlatformError | InvalidLibraryState | LibraryBusy;
 export type LibraryStateWriteError = PlatformError | InvalidLibraryState;
 
 export class LibraryStore extends Context.Service<
@@ -38,18 +38,19 @@ const invalid = (path: string) => (error: unknown) =>
   new InvalidLibraryState({ path, detail: String(error) });
 
 const emptyState = (path: string) =>
-  LibraryState.makeEffect({
-    schemaVersion: 4,
-    collections: [],
-    skills: [],
-    retained_copies: [],
-    acquisitions: [],
-    global_bindings: [],
-    local_bindings: [],
-    projections: [],
-    adoption_receipts: [],
-    unmanaged: [],
-  }).pipe(Effect.mapError(invalid(path)));
+  LibraryState.makeEffect(
+    currentLibraryState({
+      collections: [],
+      skills: [],
+      retained_copies: [],
+      acquisitions: [],
+      global_bindings: [],
+      local_bindings: [],
+      projections: [],
+      adoption_receipts: [],
+      unmanaged: [],
+    }),
+  ).pipe(Effect.mapError(invalid(path)));
 
 export function libraryStoreLayer(options: { home: string }) {
   return Layer.effect(
@@ -62,7 +63,7 @@ export function libraryStoreLayer(options: { home: string }) {
         Effect.provideService(FileSystem.FileSystem, fs),
       );
       const load = Effect.flatMap(inspect, (inspected) =>
-        inspected.version === 4 ? Effect.succeed(inspected.state) : emptyState(path),
+        inspected.present ? Effect.succeed(inspected.state) : emptyState(path),
       );
       const publish = Effect.fn("LibraryStore.publish")(function* (state: LibraryState) {
         yield* publishLibraryStateEffect(home, state).pipe(

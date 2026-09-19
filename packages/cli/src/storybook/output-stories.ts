@@ -257,7 +257,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("inventory", "empty", outputContracts.inventory, {
-    schemaVersion: 4,
+    schemaVersion: 5,
     skills: [],
     projections: [],
     unmanaged: [],

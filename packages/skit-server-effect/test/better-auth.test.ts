@@ -788,7 +788,7 @@ describe("Better Auth adapter", () => {
       const acquisitionId = makeAcquisitionId();
       const machineId = makeMachineId();
       const portable = {
-        schema: "skit.library.v4",
+        schema: "skit.library.v5",
         collections: [
           {
             collection_id: collectionId,

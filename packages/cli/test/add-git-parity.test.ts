@@ -51,7 +51,7 @@ const AddPreviewDocument = Schema.fromJsonString(
 );
 const LibraryCountsDocument = Schema.fromJsonString(
   Schema.Struct({
-    schemaVersion: Schema.Literal(4),
+    schemaVersion: Schema.Literal(5),
     collections: Schema.Array(
       Schema.Struct({
         collection_id: Schema.String,
@@ -241,7 +241,7 @@ test.runIf(realGit)(
       const state = Schema.decodeUnknownSync(LibraryCountsDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      expect(state.schemaVersion).toBe(4);
+      expect(state.schemaVersion).toBe(5);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
       expect(state.retained_copies).toHaveLength(1);
       expect(state.retained_copies[0].digest).toBe(entry.snapshot_digest);

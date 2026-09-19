@@ -181,7 +181,10 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
       observedSkills.push({
         name: candidate.name,
         sourcePath: instance.path,
-        relativePath: retainedSkillPath(candidate.skillPath, candidate.name),
+        relativePath:
+          lock.entry.sourceType === "well-known"
+            ? candidate.name
+            : retainedSkillPath(candidate.skillPath, candidate.name),
         observedHash,
       });
       for (const observation of instances.flatMap((item) =>
@@ -216,6 +219,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
         retainObservedCollectionEffect({
           identity,
           input: sourceLocator(source),
+          source,
           retainedAt: observedAt,
           skills: observedSkills,
           observations: provenance,
@@ -224,7 +228,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
     );
   }
   const persisted = yield* (yield* LibraryStore).inspect;
-  if (persisted.version !== 4)
+  if (!persisted.present)
     return yield* new SetupObservedCollectionInvalid({
       name: "Library",
       reason: "retention-missing",

@@ -12,6 +12,7 @@ import {
   PortableAcquisition,
   PortableBinding,
   PortableCollection,
+  currentPortableLibraryManifest,
   PortableLibraryManifest,
   PortableRetainedCopy,
   PortableSkill,
@@ -75,9 +76,11 @@ export const PortableAdoptionReceipt = Schema.Struct({
 });
 export type PortableAdoptionReceipt = typeof PortableAdoptionReceipt.Type;
 
+export const CURRENT_LIBRARY_STATE_VERSION = 5 as const;
+
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
-  schemaVersion: Schema.Literal(4),
+  schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
   collections: Schema.mutable(Schema.Array(PortableCollection)),
   skills: Schema.mutable(Schema.Array(PortableSkill)),
   retained_copies: Schema.mutable(Schema.Array(PortableRetainedCopy)),
@@ -138,6 +141,11 @@ export const LibraryState = Schema.Struct({
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
 
+export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
+  ...fields,
+  schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+});
+
 export const PortableLibraryInventory = LibraryState.mapFields(
   Struct.omit([
     "assessmentAcceptances",
@@ -161,17 +169,18 @@ export const portableManifestFromLocalStateEffect = Effect.fn(
   "Library.portableManifestFromLocalState",
 )(function* (state: LibraryState) {
   const snapshot_digests = portableSnapshotDigests(state);
-  return yield* PortableLibraryManifest.makeEffect({
-    schema: "skit.library.v4",
-    collections: state.collections,
-    skills: state.skills,
-    retained_copies: state.retained_copies,
-    acquisitions: state.acquisitions,
-    snapshot_digests,
-    bindings: state.global_bindings.map(
-      ({ invocation_policies: _policies, ...binding }) => binding,
-    ),
-  });
+  return yield* PortableLibraryManifest.makeEffect(
+    currentPortableLibraryManifest({
+      collections: state.collections,
+      skills: state.skills,
+      retained_copies: state.retained_copies,
+      acquisitions: state.acquisitions,
+      snapshot_digests,
+      bindings: state.global_bindings.map(
+        ({ invocation_policies: _policies, ...binding }) => binding,
+      ),
+    }),
+  );
 });
 
 export const selectedSkillVersion = (skill: PortableSkill) =>

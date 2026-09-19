@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import {
   addPortableLibrarySourceEffect,
+  acquisitionSourceEffect,
   inspectPortableLibrarySourceEffect,
   type PortableAddOptions,
 } from "./portable-add.js";
@@ -98,7 +99,10 @@ export const planPortableUpdatesEffect = Effect.fn("Library.planPortableUpdates"
       );
       if (tree === undefined)
         return yield* new PortableUpdateNotFound({ query: collection.collection_id });
-      const inspected = yield* inspectPortableLibrarySourceEffect(options, acquisition.input.value);
+      const inspected = yield* inspectPortableLibrarySourceEffect(
+        options,
+        yield* acquisitionSourceEffect(acquisition),
+      );
       return {
         collection_id: collection.collection_id,
         current_snapshot_digest: tree.digest,
@@ -131,7 +135,7 @@ export const updatePortableCollectionsEffect = Effect.fn("Library.updatePortable
               ? `${before.display_name} · Source is current`
               : `${before.display_name} · New snapshot retained`,
         },
-        addPortableLibrarySourceEffect(options, acquisition.input.value),
+        addPortableLibrarySourceEffect(options, yield* acquisitionSourceEffect(acquisition)),
       );
       const changed = retained.snapshot_digest !== priorTree.digest;
       let projected = 0;

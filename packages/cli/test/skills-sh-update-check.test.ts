@@ -83,8 +83,8 @@ it.effect("recovers a skills.sh lock baseline from Git history before reporting 
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
-    expect(saved.version).toBe(4);
-    if (saved.version !== 4) return;
+    expect(saved.present).toBe(true);
+    if (!saved.present) return;
     const collection = saved.state.collections[0]!;
     const localCollection = {
       ...collection,
@@ -114,7 +114,7 @@ it.effect("recovers a skills.sh lock baseline from Git history before reporting 
     ).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(localState),
-        inspect: Effect.succeed({ version: 4 as const, state: localState }),
+        inspect: Effect.succeed({ present: true as const, state: localState }),
         publish: (next) => Ref.set(published, next),
         snapshot: Effect.succeed(undefined),
         recordChangesSince: () => Effect.void,

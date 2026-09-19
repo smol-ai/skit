@@ -4,6 +4,7 @@ import {
   blendPortableRestoredStateEffect,
   captureSnapshotArchiveEffect,
   completePortableRestoreArchivesEffect,
+  currentPortableLibraryManifest,
   deterministicTreeHashEffect,
   LibraryStore,
   portableManifestFromLocalStateEffect,
@@ -26,15 +27,14 @@ import {
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planPortableLibrarySync, type PortableSyncPlan } from "./portable-sync-plan.js";
 
-const emptyManifest: PortableLibraryManifest = {
-  schema: "skit.library.v4",
+const emptyManifest: PortableLibraryManifest = currentPortableLibraryManifest({
   collections: [],
   skills: [],
   retained_copies: [],
   acquisitions: [],
   bindings: [],
   snapshot_digests: [],
-};
+});
 const same = (a: PortableLibraryManifest, b: PortableLibraryManifest) =>
   canonicalJson(normalizePortableManifest(a)) === canonicalJson(normalizePortableManifest(b));
 export const deferredPortableBindings = (
@@ -172,7 +172,7 @@ export const syncPortableLibraryEffect = Effect.fn("Library.syncPortable")(funct
   let manifest = emptyManifest;
   const localArchives: SnapshotArchive[] = [];
   const snapshots: SnapshotArchive[] = [];
-  if (local.version === 4) {
+  if (local.present) {
     manifest = yield* portableManifestFromLocalStateEffect(local.state);
     for (const tree of local.state.retained_copies) {
       const archive = yield* captureSnapshotArchiveEffect(
@@ -216,8 +216,7 @@ export const syncPortableLibraryEffect = Effect.fn("Library.syncPortable")(funct
       status: "base_mismatch" as const,
       ...(remote === null ? {} : { revision_id: remote.revision_id }),
     };
-  if (remote === null && local.version === "empty")
-    return { status: "clean" as const, changed: false };
+  if (remote === null && !local.present) return { status: "clean" as const, changed: false };
   if (remote === null) {
     const plan = planPortableLibrarySync(manifest, emptyManifest, manifest);
     if (!options.apply) return { status: "push_ready" as const, snapshots: snapshots.length, plan };
@@ -233,7 +232,7 @@ export const syncPortableLibraryEffect = Effect.fn("Library.syncPortable")(funct
     };
   }
   const remoteManifest = remote.manifest;
-  if (local.version === "empty") {
+  if (!local.present) {
     const required = [...new Set(remoteManifest.retained_copies.map((tree) => tree.digest))];
     const plan = planPortableLibrarySync(emptyManifest, remoteManifest, remoteManifest);
     const deferredBindings = deferredPortableBindings(remoteManifest, projectionOptions.rootFor);
@@ -259,7 +258,7 @@ export const syncPortableLibraryEffect = Effect.fn("Library.syncPortable")(funct
     const restored = yield* Effect.scoped(
       preparePortableRestoreEffect(remoteManifest, archives, store.originalsPath),
     );
-    if ((yield* store.inspect).version !== "empty") return yield* new PortableSyncLocalChanged();
+    if ((yield* store.inspect).present) return yield* new PortableSyncLocalChanged();
     yield* store.publish(restored.state);
     yield* remember(remote.library_id, remote.revision_id, remoteManifest);
     const projections = projectionCounts(
@@ -355,10 +354,7 @@ export const syncPortableLibraryEffect = Effect.fn("Library.syncPortable")(funct
     preparePortableRestoreEffect(merged.manifest, archives, store.originalsPath),
   );
   const fresh = yield* store.inspect;
-  if (
-    fresh.version !== 4 ||
-    !same(yield* portableManifestFromLocalStateEffect(fresh.state), manifest)
-  )
+  if (!fresh.present || !same(yield* portableManifestFromLocalStateEffect(fresh.state), manifest))
     return yield* new PortableSyncLocalChanged();
   for (const archive of snapshots)
     if (
@@ -376,7 +372,7 @@ export const syncPortableLibraryEffect = Effect.fn("Library.syncPortable")(funct
     retireOnly: true,
   });
   const afterRetirement = yield* store.inspect;
-  if (afterRetirement.version !== 4) return yield* new PortableSyncLocalChanged();
+  if (!afterRetirement.present) return yield* new PortableSyncLocalChanged();
   const blended = yield* blendPortableRestoredStateEffect(afterRetirement.state, restored.state);
   yield* store.publish(blended);
   yield* remember(saved.library_id, saved.revision_id, merged.manifest);
