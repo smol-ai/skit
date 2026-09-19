@@ -82,10 +82,10 @@ skit disable
 
 Alternatively, you can supply these flags:
 
-`--for [codex, claude, opencode, devin]` - enable in a single harness
-`--repo [path]` - enable in a single repo
-`--all` - enable all skills in a collection
-`--invocation [declared, explicit, implicit, host-policy]` - control whether an agent can invoke the skill automatically
+- `--for [codex, claude, opencode, devin]` to enable in a single harness
+- `--repo [path]` to enable in a single repo
+- `--all` to enable all skills in a collection
+- `--invocation [declared, explicit, implicit, host-policy]` to control whether an agent can invoke the skill automatically
 
 The interactive `skit list` flow allows you to change invocation settings for all skills.
 
