@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
-import { checkCollectionsEffect } from "../src/workflows/library/check.js";
+import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
@@ -24,7 +24,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     assert.strictEqual(loaded.present, true);
     if (!loaded.present) return;
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkCollectionsEffect(
+    const current = yield* checkSubjectsEffect(
       loaded.state,
       {},
       retained.collection_id,
@@ -48,7 +48,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
     const path = retainedTreePath(join(home, "originals"), loaded.state.retained_copies[0]!.digest);
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkCollectionsEffect(loaded.state, {}, retained.collection_id).pipe(
+    const changed = yield* checkSubjectsEffect(loaded.state, {}, retained.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
@@ -63,7 +63,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutObservedCopy = yield* checkCollectionsEffect(
+    const withoutObservedCopy = yield* checkSubjectsEffect(
       loaded.state,
       {},
       retained.collection_id,

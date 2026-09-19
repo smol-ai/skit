@@ -1,7 +1,7 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 import { harnessLabel } from "../harness/catalog.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v3">;
+type SyncData = ContractDataForId<"skit.library.sync.v4">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 const skillChange = (before: readonly string[], after: readonly string[]): string => {
@@ -23,14 +23,14 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
     }
     for (const change of changes) {
       const marker = { add: "+", update: "~", remove: "-" }[change.action];
-      if (change.kind === "collection") {
+      if (change.kind === "collection" || change.kind === "skill") {
         const identity =
-          change.collection_before &&
-          change.collection_after &&
-          change.collection_before !== change.collection_after
-            ? `${change.collection_before} → ${change.collection_after}`
-            : change.collection;
-        lines.push(`  ${marker} ${change.action} Collection ${identity}`);
+          change.label_before && change.label_after && change.label_before !== change.label_after
+            ? `${change.label_before} → ${change.label_after}`
+            : change.label;
+        lines.push(
+          `  ${marker} ${change.action} ${change.kind === "collection" ? "Collection" : "Skill"} ${identity}`,
+        );
         lines.push(`    Skills: ${skillChange(change.skills_before, change.skills_after)}`);
         if (change.versions_before.join("\0") !== change.versions_after.join("\0"))
           lines.push(`    Versions: ${skillChange(change.versions_before, change.versions_after)}`);
@@ -38,7 +38,7 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
           lines.push("    Retention or acquisition evidence will be updated.");
       } else {
         lines.push(
-          `  ${marker} ${change.action} ${change.collection} → ${change.harness ? harnessLabel(change.harness) : "unknown harness"} (global)`,
+          `  ${marker} ${change.action} Binding → ${change.harness ? harnessLabel(change.harness) : "unknown harness"} (global)`,
         );
         lines.push(`    Skills: ${skillChange(change.skills_before, change.skills_after)}`);
       }

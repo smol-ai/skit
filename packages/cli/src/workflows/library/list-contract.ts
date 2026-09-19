@@ -2,10 +2,11 @@ import { Schema } from "effect";
 import { Digest, HarnessName, SkillId, SkillVersionId } from "@smolai/skit-core";
 
 export const ListResult = Schema.Struct({
-  collections: Schema.Array(
+  subjects: Schema.Array(
     Schema.Struct({
-      collection_id: Schema.String,
-      display_id: Schema.String,
+      subject_id: Schema.String,
+      subject_kind: Schema.Literals(["collection", "skill"]),
+      label: Schema.String,
       skills: Schema.Array(
         Schema.Struct({
           name: Schema.String,

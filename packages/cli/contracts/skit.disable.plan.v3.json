@@ -1,8 +1,8 @@
 {
-  "$id": "skit.disable.v2",
+  "$id": "skit.disable.plan.v3",
   "type": "object",
   "properties": {
-    "collection_id": {
+    "subject_id": {
       "type": "string"
     },
     "skills": {
@@ -77,9 +77,6 @@
           {
             "type": "object",
             "properties": {
-              "collection_id": {
-                "type": "string"
-              },
               "harness": {
                 "type": "string",
                 "enum": [
@@ -123,7 +120,6 @@
               }
             },
             "required": [
-              "collection_id",
               "harness",
               "scope",
               "skills"
@@ -133,9 +129,6 @@
           {
             "type": "object",
             "properties": {
-              "collection_id": {
-                "type": "string"
-              },
               "harness": {
                 "type": "string",
                 "enum": [
@@ -183,7 +176,6 @@
               }
             },
             "required": [
-              "collection_id",
               "harness",
               "scope",
               "skills"
@@ -192,46 +184,16 @@
           }
         ]
       }
-    },
-    "projections": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "harness": {
-            "type": "string",
-            "enum": [
-              "codex",
-              "claude-code",
-              "opencode",
-              "devin"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "projected",
-              "deferred"
-            ]
-          }
-        },
-        "required": [
-          "harness",
-          "status"
-        ],
-        "additionalProperties": true
-      }
     }
   },
   "required": [
-    "collection_id",
+    "subject_id",
     "skills",
     "harnesses",
     "scope",
     "enabled",
     "changed",
-    "bindings",
-    "projections"
+    "bindings"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

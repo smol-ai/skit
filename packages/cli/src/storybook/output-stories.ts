@@ -168,12 +168,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     skills: [{ name: "review", verbatim_path: "." }],
   }),
   resultStory("pull", "current", outputContracts.pull, []),
-  resultStory("list", "empty", outputContracts.list, { collections: [], bindings: [] }),
+  resultStory("list", "empty", outputContracts.list, { subjects: [], bindings: [] }),
   resultStory("list", "populated", outputContracts.list, {
-    collections: [
+    subjects: [
       {
-        collection_id: collectionId,
-        display_id: "story/review",
+        subject_id: collectionId,
+        subject_kind: "collection",
+        label: "story/review",
         skills: [
           {
             name: "review",
@@ -309,8 +310,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   }),
   resultStory("check", "current", outputContracts.check, [
     {
-      collection_id: collectionId,
-      display_name: "review-tools",
+      subject_id: collectionId,
+      subject_kind: "collection",
+      label: "review-tools",
       retained_copies: [{ retained_copy_id: retainedTreeId, digest, retained_bytes_current: true }],
       unresolved_skill_selections: 0,
       source_status: "unverified",
@@ -319,7 +321,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ]),
   resultStory("update", "available", outputContracts.updatePlan, [
     {
-      collection_id: collectionId,
+      subject_id: collectionId,
+      subject_kind: "collection",
       current_snapshot_digest: digest,
       available_snapshot_digest: `sha256:${"1".repeat(64)}`,
       changed: true,
@@ -327,7 +330,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ]),
   resultStory("update", "applied", outputContracts.update, [
     {
-      collection_id: collectionId,
+      subject_id: collectionId,
+      subject_kind: "collection",
       previous_retained_copy_id: versionId,
       selected_retained_copy_id: otherVersionId,
       snapshot_digest: `sha256:${"1".repeat(64)}`,

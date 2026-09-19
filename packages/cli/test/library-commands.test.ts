@@ -69,13 +69,13 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v2");
+    assert.strictEqual(rendered[0]?.schema, "skit.list.v3");
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
-    assert.strictEqual(listing.collections[0]?.collection_id, collection.collection?.collection_id);
-    assert.strictEqual(listing.collections[0]?.display_id, "tim/skills");
+    assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
+    assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
     assert.match(renderLibraryList(listing), /^tim\/skills\n/);
     assert.deepStrictEqual(
-      listing.collections[0]?.skills.map((skill) => skill.name),
+      listing.subjects[0]?.skills.map((skill) => skill.name),
       ["review"],
     );
     assert.deepStrictEqual(listing.bindings, []);
@@ -159,7 +159,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     const unresolvedListing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[1]?.data);
     assert.strictEqual(
-      Object.hasOwn(unresolvedListing.collections[0]?.skills[0] ?? {}, "selected_skill_version_id"),
+      Object.hasOwn(unresolvedListing.subjects[0]?.skills[0] ?? {}, "selected_skill_version_id"),
       false,
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

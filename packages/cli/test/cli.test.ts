@@ -165,7 +165,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v2" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v3" });
 
     const add = spawnSync(
       process.execPath,
@@ -267,7 +267,7 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v2",
+        schema: "skit.enable.v3",
         data: expect.objectContaining({ enabled: true }),
       }),
     );
@@ -328,8 +328,8 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v2",
-      data: { collections: [], bindings: [] },
+      schema: "skit.list.v3",
+      data: { subjects: [], bindings: [] },
     });
     expect(result.stderr).toBe("");
   });
@@ -403,7 +403,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v3",
+        schema: "skit.add.v4",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],
@@ -471,7 +471,7 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v2");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v3");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(StateBindingsDocument)(
       await readFile(join(home, "state.json"), "utf8"),

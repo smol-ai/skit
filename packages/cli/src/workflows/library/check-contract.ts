@@ -24,8 +24,9 @@ const SkillsShMemberCheck = Schema.Struct({
 
 export const CheckResult = Schema.Array(
   Schema.Struct({
-    collection_id: Schema.String,
-    display_name: Schema.String,
+    subject_id: Schema.String,
+    subject_kind: Schema.Literals(["collection", "skill"]),
+    label: Schema.String,
     retained_copies: Schema.Array(
       Schema.Struct({
         retained_copy_id: Schema.String,

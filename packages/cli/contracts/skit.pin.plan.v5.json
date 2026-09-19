@@ -1,8 +1,8 @@
 {
-  "$id": "skit.pin.v4",
+  "$id": "skit.pin.plan.v5",
   "type": "object",
   "properties": {
-    "collection_id": {
+    "subject_id": {
       "type": "string"
     },
     "skills": {
@@ -25,8 +25,7 @@
         },
         "required": [
           "skill_id",
-          "skill",
-          "selected_version_id"
+          "skill"
         ],
         "additionalProperties": true
       }
@@ -58,46 +57,14 @@
           ]
         }
       ]
-    },
-    "projected": {
-      "anyOf": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "string",
-          "enum": [
-            "Infinity",
-            "-Infinity",
-            "NaN"
-          ]
-        }
-      ]
-    },
-    "deferred": {
-      "anyOf": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "string",
-          "enum": [
-            "Infinity",
-            "-Infinity",
-            "NaN"
-          ]
-        }
-      ]
     }
   },
   "required": [
-    "collection_id",
+    "subject_id",
     "skills",
     "retained",
     "changed",
-    "bindings",
-    "projected",
-    "deferred"
+    "bindings"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

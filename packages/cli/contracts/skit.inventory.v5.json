@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v4",
+  "$id": "skit.inventory.v5",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -327,18 +327,413 @@
             "type": "string",
             "minLength": 1
           },
-          "upstream_path": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "."
+          "upstream": {
+            "type": "object",
+            "properties": {
+              "source_identity": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "github"
+                        ]
+                      },
+                      "owner": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "repository": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "collection_root": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "."
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "owner",
+                      "repository",
+                      "collection_root"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "git"
+                        ]
+                      },
+                      "remote": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      },
+                      "collection_root": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "."
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "remote",
+                      "collection_root"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "registry"
+                        ]
+                      },
+                      "authority": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "namespace": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "slug": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "authority",
+                      "namespace",
+                      "slug"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "url"
+                        ]
+                      },
+                      "url": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "url"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "archive"
+                        ]
+                      },
+                      "url": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "url"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "local"
+                        ]
+                      },
+                      "machine_id": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "machine_id",
+                      "path"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "authored-workspace"
+                        ]
+                      },
+                      "workspace_id": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "workspace_id"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "well-known"
+                        ]
+                      },
+                      "locator": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "locator"
+                    ],
+                    "additionalProperties": true
+                  }
                 ]
               },
-              {
+              "tracking": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "default"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "branch"
+                        ]
+                      },
+                      "ref": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "ref"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "tag"
+                        ]
+                      },
+                      "ref": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "ref"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "commit"
+                        ]
+                      },
+                      "ref": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "ref"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "selection": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "full-tree"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "selected-skills"
+                        ]
+                      },
+                      "names": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "names"
+                    ],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "selected-paths"
+                        ]
+                      },
+                      "paths": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "paths"
+                    ],
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "last_acquisition_id": {
                 "type": "string"
               }
-            ]
+            },
+            "required": [
+              "source_identity",
+              "tracking",
+              "selection"
+            ],
+            "additionalProperties": true
           },
           "selected_skill_version_id": {
             "anyOf": [
@@ -421,7 +816,6 @@
         },
         "required": [
           "skill_id",
-          "collection_id",
           "path",
           "name",
           "versions"
@@ -435,9 +829,6 @@
         "type": "object",
         "properties": {
           "projection_id": {
-            "type": "string"
-          },
-          "collection_id": {
             "type": "string"
           },
           "skill_id": {
@@ -516,7 +907,6 @@
         },
         "required": [
           "projection_id",
-          "collection_id",
           "skill_id",
           "skill_version_id",
           "harness",
@@ -525,49 +915,6 @@
           "expected_digest",
           "status",
           "projected_at"
-        ],
-        "additionalProperties": true
-      }
-    },
-    "adoption_receipts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "receipt_id": {
-            "type": "string"
-          },
-          "adopted_at": {
-            "type": "string"
-          },
-          "machine_id": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "observed_digest": {
-            "type": "string",
-            "pattern": "^sha256:[a-f0-9]{64}$"
-          },
-          "skill_version_id": {
-            "type": "string"
-          },
-          "projection_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "receipt_id",
-          "adopted_at",
-          "machine_id",
-          "path",
-          "observed_digest",
-          "skill_version_id",
-          "projection_ids"
         ],
         "additionalProperties": true
       }
@@ -715,7 +1062,6 @@
                             "required": [
                               "kind",
                               "projectionId",
-                              "collectionId",
                               "skillId",
                               "skillVersionId",
                               "displayName"
@@ -747,7 +1093,6 @@
                             "required": [
                               "kind",
                               "projectionId",
-                              "collectionId",
                               "skillId",
                               "skillVersionId"
                             ],
@@ -908,7 +1253,7 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "collectionId": {
+                        "subjectId": {
                           "type": "string"
                         },
                         "skillId": {
@@ -922,7 +1267,7 @@
                         }
                       },
                       "required": [
-                        "collectionId",
+                        "subjectId",
                         "skillId",
                         "skillVersionId",
                         "name"
@@ -1154,7 +1499,6 @@
     "schemaVersion",
     "skills",
     "projections",
-    "adoption_receipts",
     "machine"
   ],
   "additionalProperties": true,

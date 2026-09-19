@@ -14,6 +14,11 @@ export class SkillRemovalMissing extends Schema.TaggedError<SkillRemovalMissing>
   { skill_id: Schema.String },
 ) {}
 
+export class SkillRemovalRequiresCollection extends Schema.TaggedError<SkillRemovalRequiresCollection>()(
+  "Library.SkillRemovalRequiresCollection",
+  { skill_id: Schema.String, collection_id: Schema.String },
+) {}
+
 const removeSkillsEffect = Effect.fn("Library.removeSkills")(function* (options: {
   skillIds: readonly string[];
   collectionId?: string;
@@ -116,6 +121,15 @@ export const removeSkillEffect = Effect.fn("Library.removeSkill")(function* (opt
   skillId: string;
   variantsPath: string;
 }) {
+  const store = yield* LibraryStore;
+  const loaded = yield* store.load;
+  const skill = loaded.skills.find((candidate) => candidate.skill_id === options.skillId);
+  if (skill === undefined) return yield* new SkillRemovalMissing({ skill_id: options.skillId });
+  if (skill.collection_id !== undefined)
+    return yield* new SkillRemovalRequiresCollection({
+      skill_id: skill.skill_id,
+      collection_id: skill.collection_id,
+    });
   const result = yield* removeSkillsEffect({
     skillIds: [options.skillId],
     variantsPath: options.variantsPath,

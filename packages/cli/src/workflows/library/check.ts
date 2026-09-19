@@ -3,27 +3,33 @@ import {
   originalTreeHashEffect,
   retainedTreePath,
   type LibraryState,
+  type SkitSource,
 } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import { acquisitionSourceEffect, inspectLibrarySourceEffect, type AddOptions } from "./add.js";
 import { checkSkillsShCollectionEffect } from "./skills-sh-update-check.js";
+import {
+  latestSubjectAcquisition,
+  matchingLibrarySubjects,
+  subjectAcquisitionIds,
+} from "./subject-resolution.js";
 
 export class CheckNotFound extends Schema.TaggedError<CheckNotFound>()("Library.CheckNotFound", {
   query: Schema.String,
 }) {
   readonly code = "NOT_FOUND" as const;
   readonly exitCode = 11;
-  readonly remediation = "Run `skit list` to find a retained Collection.";
+  readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
 }
 export class CheckAmbiguous extends Schema.TaggedError<CheckAmbiguous>()("Library.CheckAmbiguous", {
   query: Schema.String,
 }) {
   readonly code = "CONFLICT" as const;
   readonly exitCode = 12;
-  readonly remediation = "Use a Collection ID to select one Collection.";
+  readonly remediation = "Use a Skill or Collection ID to select one subject.";
 }
 
-export const checkCollectionsEffect = Effect.fn("Library.checkCollections")(function* (
+export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* (
   state: LibraryState,
   options: AddOptions,
   query?: string,
@@ -44,64 +50,52 @@ export const checkCollectionsEffect = Effect.fn("Library.checkCollections")(func
     verification: "lock-only" | "lock+retained-bytes";
     establishedAt: string;
   }> = [];
-  const collections =
-    query === undefined
-      ? state.collections
-      : state.collections.filter(
-          (collection) =>
-            [collection.collection_id, collection.label].includes(query) ||
-            state.skills.some(
-              (skill) =>
-                skill.collection_id === collection.collection_id &&
-                (skill.skill_id === query ||
-                  skill.name === query ||
-                  skill.versions.some((version) => version.skill_version_id === query)),
-            ),
-        );
-  if (query !== undefined && collections.length === 0) return yield* new CheckNotFound({ query });
-  if (query !== undefined && collections.length !== 1) return yield* new CheckAmbiguous({ query });
-  const checked = yield* Effect.forEach(collections, (collection) =>
+  const subjects = matchingLibrarySubjects(state, query);
+  if (query !== undefined && subjects.length === 0) return yield* new CheckNotFound({ query });
+  if (query !== undefined && subjects.length !== 1) return yield* new CheckAmbiguous({ query });
+  const checked = yield* Effect.forEach(subjects, (subject) =>
     Effect.gen(function* () {
-      if (collection.upstream !== undefined && onCollection !== undefined)
+      if (
+        subject.kind === "collection" &&
+        subject.collection.upstream !== undefined &&
+        onCollection !== undefined
+      )
         yield* onCollection({
-          collection_id: collection.collection_id,
-          display_name: collection.label,
+          collection_id: subject.collection.collection_id,
+          display_name: subject.collection.label,
         });
-      const skills = state.skills.filter(
-        (skill) => skill.collection_id === collection.collection_id,
-      );
-      const acquisitionIds = new Set(
-        skills.flatMap((skill) =>
-          skill.versions.flatMap((version) =>
-            version.origins.map((origin) => origin.acquisition_id),
-          ),
-        ),
-      );
+      const skills = subject.skills;
+      const acquisitionIds = subjectAcquisitionIds(subject);
       const copyIds = new Set(
         state.acquisitions
           .filter((acquisition) => acquisitionIds.has(acquisition.acquisition_id))
           .map((acquisition) => acquisition.retained_copy_id),
       );
       const copies = state.retained_copies.filter((copy) => copyIds.has(copy.retained_copy_id));
-      const acquisition = state.acquisitions
-        .filter((candidate) => acquisitionIds.has(candidate.acquisition_id))
-        .reduce<(typeof state.acquisitions)[number] | undefined>(
-          (latest, candidate) =>
-            latest === undefined || candidate.acquired_at >= latest.acquired_at
-              ? candidate
-              : latest,
-          undefined,
-        );
+      const acquisition = latestSubjectAcquisition(state, subject);
       const currentCopy =
         acquisition === undefined
           ? undefined
           : state.retained_copies.find(
               (copy) => copy.retained_copy_id === acquisition.retained_copy_id,
             );
+      const upstream =
+        subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
+      let source: SkitSource | undefined;
+      if (upstream !== undefined && acquisition !== undefined)
+        source =
+          subject.kind === "collection"
+            ? yield* acquisitionSourceEffect(acquisition)
+            : upstream.source_identity.kind === "well-known" &&
+                upstream.selection.kind === "selected-skills"
+              ? {
+                  type: "well-known",
+                  ref: upstream.source_identity.locator.value,
+                  members: upstream.selection.names,
+                }
+              : undefined;
       const inspected =
-        collection.upstream === undefined || acquisition === undefined
-          ? undefined
-          : yield* inspectLibrarySourceEffect(options, yield* acquisitionSourceEffect(acquisition));
+        source === undefined ? undefined : yield* inspectLibrarySourceEffect(options, source);
       const retained_copies = [];
       for (const copy of copies) {
         retained_copies.push({
@@ -112,12 +106,15 @@ export const checkCollectionsEffect = Effect.fn("Library.checkCollections")(func
             copy.digest,
         });
       }
-      const skillsSh = yield* checkSkillsShCollectionEffect(
-        state,
-        collection,
-        acquisition,
-        currentCopy,
-      );
+      const skillsSh =
+        subject.kind === "collection"
+          ? yield* checkSkillsShCollectionEffect(
+              state,
+              subject.collection,
+              acquisition,
+              currentCopy,
+            )
+          : undefined;
       if (skillsSh && acquisition)
         for (const member of skillsSh.members)
           if (
@@ -151,14 +148,15 @@ export const checkCollectionsEffect = Effect.fn("Library.checkCollections")(func
               });
           }
       return {
-        collection_id: collection.collection_id,
-        display_name: collection.label,
+        subject_id: subject.subjectId,
+        subject_kind: subject.kind,
+        label: subject.label,
         retained_copies,
         unresolved_skill_selections: skills.filter(
           (skill) => skill.selected_skill_version_id === undefined,
         ).length,
         source_status:
-          collection.upstream === undefined
+          upstream === undefined
             ? ("not-applicable" as const)
             : inspected === undefined || currentCopy === undefined
               ? ("unverified" as const)

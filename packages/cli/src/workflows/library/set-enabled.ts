@@ -17,6 +17,7 @@ import {
 } from "./set-enabled-invocation.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
+import { matchingLibrarySubjects } from "./subject-resolution.js";
 
 export class SetEnabledMissing extends Schema.TaggedError<SetEnabledMissing>()(
   "Library.SetEnabledMissing",
@@ -66,36 +67,19 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   options: SetEnabledOptions,
 ) {
   yield* Effect.fromResult(validateSetEnabledInvocation(options.invocation));
-  const collectionMatches = state.collections.flatMap((collection) => {
-    const members = state.skills.filter(
-      (skill) => skill.collection_id === collection.collection_id,
-    );
-    const collectionMatch = [collection.collection_id, collection.label].includes(options.query);
-    const skill = members.find(
+  const matches = matchingLibrarySubjects(state, options.query).map((subject) => {
+    const collection = subject.kind === "collection" ? subject.collection : undefined;
+    const collectionMatch =
+      collection !== undefined &&
+      [collection.collection_id, collection.label].includes(options.query);
+    const skill = subject.skills.find(
       (member) =>
         member.name === options.query ||
         member.skill_id === options.query ||
         member.versions.some((version) => version.skill_version_id === options.query),
     );
-    return collectionMatch || skill !== undefined
-      ? [{ collection, members, collectionMatch, skill }]
-      : [];
+    return { collection, members: subject.skills, collectionMatch, skill };
   });
-  const standaloneMatches = state.skills
-    .filter((skill) => skill.collection_id === undefined)
-    .filter(
-      (skill) =>
-        skill.name === options.query ||
-        skill.skill_id === options.query ||
-        skill.versions.some((version) => version.skill_version_id === options.query),
-    )
-    .map((skill) => ({
-      collection: undefined,
-      members: [skill],
-      collectionMatch: false,
-      skill,
-    }));
-  const matches = [...collectionMatches, ...standaloneMatches];
   if (matches.length === 0)
     return yield* new SetEnabledMissing({
       query: options.query,

@@ -6,6 +6,7 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
 import { libraryManifestFromLocalStateEffect } from "../src/library/library-state.js";
 import { prepareRestoreEffect } from "../src/library/library-restore.js";
+import { removeSkillEffect } from "../src/library/installation/remove.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
@@ -52,6 +53,13 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     assert.strictEqual(retained.collection?.upstream, undefined);
     assert.strictEqual(saved.state.acquisitions[0]?.machine_id, machineId);
     assert.strictEqual(saved.state.acquisitions[0]?.input.value, installed);
+    const memberSkill = saved.state.skills[0];
+    assert.ok(memberSkill);
+    const removalFailure = yield* removeSkillEffect({
+      skillId: memberSkill.skill_id,
+      variantsPath: join(firstHome, "variants"),
+    }).pipe(inLibrary(firstHome), Effect.flip);
+    assert.strictEqual(removalFailure._tag, "Library.SkillRemovalRequiresCollection");
     const tree = saved.state.retained_copies[0];
     assert.ok(tree);
     const firstOriginal = retainedTreePath(join(firstHome, "originals"), tree.digest);

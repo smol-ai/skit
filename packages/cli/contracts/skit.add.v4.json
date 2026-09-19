@@ -1,9 +1,15 @@
 {
-  "$id": "skit.add.v3",
+  "$id": "skit.add.v4",
   "type": "object",
   "properties": {
     "collection_id": {
       "type": "string"
+    },
+    "skill_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "retained_version_id": {
       "type": "string"
@@ -33,7 +39,7 @@
     }
   },
   "required": [
-    "collection_id",
+    "skill_ids",
     "retained_version_id",
     "snapshot_digest",
     "skills"

@@ -792,7 +792,8 @@ describe("Better Auth adapter", () => {
         collections: [
           {
             collection_id: collectionId,
-            display_name: "test/library",
+            label: "test/library",
+            membership: { kind: "source-tree" },
             upstream: {
               source_identity: {
                 kind: "registry",
@@ -812,7 +813,6 @@ describe("Better Auth adapter", () => {
             collection_id: collectionId,
             path: ".",
             name: "library",
-            upstream_path: "library",
             selected_skill_version_id: skillVersionId,
             versions: [
               {
@@ -952,6 +952,35 @@ describe("Better Auth adapter", () => {
           snapshot_digests: [missingDigest],
         })).status,
       ).toBe(400);
+
+      const legacyRevisionId = "library_revision_v4_fixture";
+      const legacyManifest = {
+        ...portable,
+        schema: "skit.library.v4",
+        collections: portable.collections.map(
+          ({ membership: _membership, label, ...collection }) => ({
+            ...collection,
+            display_name: label,
+          }),
+        ),
+        skills: portable.skills.map((skill) => ({ ...skill, upstream_path: skill.path })),
+      };
+      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+        sql.batch([
+          sql`INSERT INTO library_revisions
+                (revision_id, library_id, parent_revision_id, manifest_json, created_at)
+              VALUES (${legacyRevisionId}, ${libraryBody.library.library_id}, ${sourceBody.library.revision_id}, ${JSON.stringify(legacyManifest)}, '2026-01-02T00:00:00.000Z')`,
+          sql`UPDATE libraries SET current_revision_id = ${legacyRevisionId}
+              WHERE library_id = ${libraryBody.library.library_id}`,
+        ]),
+      );
+      const legacyRead = yield* request("/api/library/portable", {
+        headers: { cookie: sessionCookie },
+      });
+      expect(legacyRead.status).toBe(200);
+      expect(yield* webPromise(() => legacyRead.json())).toMatchObject({
+        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v5" } },
+      });
 
       yield* Effect.flatMap(
         D1Client.D1Client,

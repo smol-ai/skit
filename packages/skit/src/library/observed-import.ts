@@ -17,7 +17,11 @@ import {
 } from "./entity-ids.js";
 import { MachineDocumentJson, MachineDocumentV4 } from "./machine-document.js";
 import { acquisitionObservations, sanitizeSourceClaim } from "./acquisition-evidence.js";
-import type { AcquisitionSelection, MaterializationProfile } from "./library-contracts.js";
+import type {
+  AcquisitionSelection,
+  MaterializationProfile,
+  SourceIdentity,
+} from "./library-contracts.js";
 import {
   LibraryState,
   decodeLibraryState,
@@ -129,7 +133,7 @@ const selection = (
 const mergeSelections = (
   previous: AcquisitionSelection,
   acquired: AcquisitionSelection,
-): AcquisitionSelection => {
+): AcquisitionSelection | undefined => {
   if (previous.kind === "full-tree" || acquired.kind === "full-tree") return { kind: "full-tree" };
   if (previous.kind === "selected-paths" && acquired.kind === "selected-paths")
     return {
@@ -141,7 +145,7 @@ const mergeSelections = (
       kind: "selected-skills",
       names: [...new Set([...previous.names, ...acquired.names])].sort(),
     };
-  return acquired;
+  return undefined;
 };
 
 interface PreparedFact {
@@ -220,6 +224,20 @@ interface PersistPreparedRequest extends ObservedImport {
   readonly facts: readonly PreparedFact[];
 }
 
+export const observedImportUsesCollection = (input: {
+  readonly source: SourceIdentity;
+  readonly selection: AcquisitionSelection;
+  readonly materializationProfiles: readonly MaterializationProfile[];
+  readonly standalone?: boolean;
+}): boolean =>
+  !(
+    input.materializationProfiles.every((profile) => profile === "plain-skill/v1") &&
+    ((input.source.kind === "well-known" && input.selection.kind === "selected-skills") ||
+      (input.source.kind === "local" &&
+        input.standalone === true &&
+        input.materializationProfiles.length === 1))
+  );
+
 const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function* (
   request: PersistPreparedRequest,
 ) {
@@ -243,11 +261,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ? ({ kind: "default" } as const)
       : ({ kind: "commit", ref: pinnedRevision } as const);
   const sourceKey = canonicalJson(source);
-  const usesCollection = !(
-    request.facts.every((fact) => fact.materializationProfile === "plain-skill/v1") &&
-    ((source.kind === "well-known" && acquiredSelection.kind === "selected-skills") ||
-      (source.kind === "local" && request.standalone === true && request.facts.length === 1))
-  );
+  const usesCollection = observedImportUsesCollection({
+    source,
+    selection: acquiredSelection,
+    materializationProfiles: request.facts.map((fact) => fact.materializationProfile),
+    standalone: request.standalone,
+  });
   let collection = usesCollection
     ? state.collections.find((candidate) => {
         if (
@@ -273,6 +292,14 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         );
       })
     : undefined;
+  const mergedCollectionSelection =
+    collection?.upstream === undefined
+      ? undefined
+      : mergeSelections(collection.upstream.selection, acquiredSelection);
+  if (collection?.upstream !== undefined && mergedCollectionSelection === undefined)
+    return yield* new ObservedImportInvalid({
+      reason: `source selection changed from ${collection.upstream.selection.kind} to ${acquiredSelection.kind}`,
+    });
   if (usesCollection && collection === undefined) {
     collection = {
       collection_id: makeCollectionId(),
@@ -402,7 +429,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ...collection,
       upstream: {
         ...collection.upstream,
-        selection: mergeSelections(collection.upstream.selection, acquiredSelection),
+        selection: mergedCollectionSelection ?? acquiredSelection,
         last_acquisition_id: acquisitionId,
       },
     };

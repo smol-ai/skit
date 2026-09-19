@@ -168,7 +168,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     yield* applyLibraryBindings(state, {
       query: subjectId,
       all: false,
-      selectedSkills: [selection.name],
+      ...(retained.collection_id === undefined ? {} : { selectedSkills: [selection.name] }),
       invocation: {
         subjects: [subjectId],
         harnesses: [...new Set(targets.map((target) => target.harness))],

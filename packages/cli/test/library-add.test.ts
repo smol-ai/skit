@@ -1,12 +1,15 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { LibraryStore, libraryStoreLayer, retainedTreePath, skitLayer } from "@smolai/skit-core";
 import {
   addLibrarySourceEffect,
   previewLibrarySourceEffect,
 } from "../src/workflows/library/add.js";
-import { planUpdatesEffect, updateCollectionsEffect } from "../src/workflows/library/update.js";
+import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/library/update.js";
+import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
@@ -80,6 +83,80 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("checks and updates a selected well-known Skill as a standalone subject", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-standalone-update-" });
+    const home = join(root, "home");
+    yield* initializeLibraryMachine(home);
+    const base = "https://skills.example.test";
+    const original = "---\nname: review\ndescription: Review.\n---\n\n# Original\n";
+    const updated = "---\nname: review\ndescription: Review.\n---\n\n# Updated\n";
+    let artifact = original;
+    const client = HttpClient.make((request) => {
+      const digest = `sha256:${createHash("sha256").update(artifact).digest("hex")}`;
+      const index = JSON.stringify({
+        $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+        skills: [
+          {
+            name: "review",
+            description: "Review.",
+            type: "skill-md",
+            url: "/review/SKILL.md",
+            digest,
+          },
+        ],
+      });
+      const body = request.url.endsWith("/.well-known/agent-skills/index.json")
+        ? index
+        : request.url.endsWith("/review/SKILL.md")
+          ? artifact
+          : "missing";
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(body, { status: body === "missing" ? 404 : 200 }),
+        ),
+      );
+    });
+    const source = { type: "well-known" as const, ref: base, members: ["review"] };
+    const options = {
+      roots: { home: root, configHome: join(root, "config"), overrides: {} },
+      variantsPath: join(home, "variants"),
+    };
+    const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(
+        Effect.provide(libraryStoreLayer({ home })),
+        Effect.provideService(HttpClient.HttpClient, client),
+      );
+    const added = yield* run(addLibrarySourceEffect({}, source));
+    const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+    assert.strictEqual(before.collections.length, 0);
+    const skill = before.skills[0]!;
+    assert.strictEqual(skill.collection_id, undefined);
+    assert.strictEqual(skill.upstream?.selection.kind, "selected-skills");
+    assert.strictEqual(
+      (yield* run(checkSubjectsEffect(before, {}, skill.skill_id)))[0]?.source_status,
+      "current",
+    );
+    artifact = updated;
+    assert.strictEqual(
+      (yield* run(planUpdatesEffect(before, options, skill.skill_id)))[0]?.changed,
+      true,
+    );
+    const result = yield* run(
+      updateSubjectsEffect(before, options, skill.skill_id).pipe(
+        Effect.provide(rendererTestLayer()),
+      ),
+    );
+    assert.strictEqual(result[0]?.changed, true);
+    const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+    assert.strictEqual(after.collections.length, 0);
+    assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
+    assert.strictEqual(after.skills[0]?.versions.length, 2);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("retains a changed source as a second Skill Version and leaves selection explicit", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -111,7 +188,7 @@ it.effect("retains a changed source as a second Skill Version and leaves selecti
       true,
     );
     const statuses: string[] = [];
-    yield* updateCollectionsEffect(before, options, added.collection_id).pipe(
+    yield* updateSubjectsEffect(before, options, added.collection_id).pipe(
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(
         rendererTestLayer({
@@ -158,8 +235,8 @@ it.effect("repeated updates record acquisitions without inventing snapshot chang
       join(source, ".skit-ownership.json"),
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
-    const update = (state: Parameters<typeof updateCollectionsEffect>[0]) =>
-      updateCollectionsEffect(state, options, added.collection_id).pipe(
+    const update = (state: Parameters<typeof updateSubjectsEffect>[0]) =>
+      updateSubjectsEffect(state, options, added.collection_id).pipe(
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provide(rendererTestLayer()),
       );

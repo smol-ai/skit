@@ -29,7 +29,11 @@ const acquisitionB = makeAcquisitionId();
 const acquisitionC = makeAcquisitionId();
 const copyB = makeRetainedCopyId();
 const copyC = makeRetainedCopyId();
-const collection = { collection_id: collectionId, display_name: "fixture/skills" };
+const collection = {
+  collection_id: collectionId,
+  label: "fixture/skills",
+  membership: { kind: "source-tree" as const },
+};
 const skill = {
   skill_id: skillId,
   collection_id: collectionId,
@@ -193,10 +197,10 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
       {
         kind: "collection",
         action: "update",
-        collection_id: collectionId,
-        collection: "fixture/skills",
-        collection_before: "fixture/skills",
-        collection_after: "fixture/skills",
+        subject_id: collectionId,
+        label: "fixture/skills",
+        label_before: "fixture/skills",
+        label_after: "fixture/skills",
         skills_before: ["review"],
         skills_after: ["review"],
         versions_before: [`review @ ${digest}`],
@@ -206,9 +210,6 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
       {
         kind: "binding",
         action: "add",
-        collection_id: collectionId,
-        collection: "fixture/skills",
-        collection_after: "fixture/skills",
         harness: "codex",
         skills_before: [],
         skills_after: ["review"],
@@ -217,6 +218,77 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         evidence_changed: false,
       },
     ]);
+  }),
+);
+
+it.effect("plans standalone Skill additions and selected-Version changes", () =>
+  Effect.gen(function* () {
+    const { collection_id: _collectionId, ...standaloneSkill } = skill;
+    const standalone = yield* decode({
+      ...manifest(),
+      collections: [],
+      skills: [
+        {
+          ...standaloneSkill,
+          upstream: {
+            source_identity: {
+              kind: "well-known",
+              locator: { value: "https://skills.example.test" },
+            },
+            tracking: { kind: "default" },
+            selection: { kind: "selected-skills", names: ["review"] },
+          },
+        },
+      ],
+      acquisitions: manifest().acquisitions.map((acquisition) => ({
+        ...acquisition,
+        source_identity: {
+          kind: "well-known" as const,
+          locator: { value: "https://skills.example.test" },
+        },
+        selection: { kind: "selected-skills" as const, names: ["review"] },
+      })),
+    });
+    const empty = yield* decode({
+      schema: "skit.library.v5",
+      collections: [],
+      skills: [],
+      retained_copies: [],
+      acquisitions: [],
+      snapshot_digests: [],
+      bindings: [],
+    });
+    assert.deepEqual(planLibrarySync(standalone, empty, standalone).remote, [
+      {
+        kind: "skill",
+        action: "add",
+        subject_id: skillId,
+        label: "review",
+        label_after: "review",
+        skills_before: [],
+        skills_after: ["review"],
+        versions_before: [],
+        versions_after: [`review @ ${digest}`],
+        evidence_changed: false,
+      },
+    ]);
+    const updated = {
+      ...standalone,
+      skills: [{ ...standalone.skills[0]!, selected_skill_version_id: second }],
+    };
+    assert.deepEqual(planLibrarySync(updated, standalone, updated).remote[0], {
+      kind: "skill",
+      action: "update",
+      subject_id: skillId,
+      label: "review",
+      label_before: "review",
+      label_after: "review",
+      skills_before: ["review"],
+      skills_after: ["review"],
+      versions_before: [`review @ ${digest}`],
+      versions_after: [`review @ ${digestB}`],
+      evidence_changed: false,
+    });
   }),
 );
 

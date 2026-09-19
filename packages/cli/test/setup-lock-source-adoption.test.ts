@@ -216,9 +216,8 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     expect(adopted.retained).toHaveLength(1);
     const history = yield* home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
     expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ type: "collection.retained", workflow: "setup" });
+    expect(history[0]).toMatchObject({ type: "skill.added", workflow: "setup" });
     expect(history[0]?.changes.map((change) => `${change.entity}:${change.action}`)).toEqual([
-      "collection:added",
       "skill:added",
     ]);
     const retained = adopted.retained[0]!;

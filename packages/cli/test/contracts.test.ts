@@ -39,7 +39,7 @@ describe("generated command contracts", () => {
     expect(() => Schema.decodeUnknownSync(outputContracts.updatePlan.schema)([])).not.toThrow();
     expect(() =>
       Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
-        collection_id: collectionId,
+        subject_id: collectionId,
         skills: ["review"],
         harnesses: ["codex"],
         scope: { kind: "global" },
@@ -47,7 +47,6 @@ describe("generated command contracts", () => {
         changed: true,
         bindings: [
           {
-            collection_id: collectionId,
             harness: "codex",
             scope: { kind: "global" },
             skills: [skillId],

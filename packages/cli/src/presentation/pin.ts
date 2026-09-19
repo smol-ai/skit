@@ -1,7 +1,7 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
 export function renderPin(
-  data: ContractDataForId<"skit.pin.v4"> | ContractDataForId<"skit.pin.plan.v4">,
+  data: ContractDataForId<"skit.pin.v5"> | ContractDataForId<"skit.pin.plan.v5">,
   applied: boolean,
 ) {
   const selection = data.skills

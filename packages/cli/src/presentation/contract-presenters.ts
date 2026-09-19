@@ -97,7 +97,7 @@ function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): s
   return `Deleted ${data.skit_id}: ${data.draft_revisions} Draft Revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
 }
 
-function renderUpdate(data: ContractDataForId<"skit.update.v3">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v4">): string {
   if (!data.length) return "No device-local Sources to update";
   const updated = data.filter((item) => item.changed).length;
   const current = data.length - updated;
@@ -407,7 +407,7 @@ export function renderSetupDiscovery(data: SetupDiscoveryInput): string {
   return lines.join("\n");
 }
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v3">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -512,7 +512,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v3">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v3">["projections"],
+  projections: ContractDataForId<"skit.setup.v4">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -539,7 +539,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v3">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -559,7 +559,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v3">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v3">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -601,7 +601,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v3">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v3">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v4">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -726,9 +726,7 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.experimentalAuditV1Alpha3.id]: renderAuditV1Alpha3,
   [outputContracts.authorList.id]: renderAuthorList,
   [outputContracts.pull.id]: (data) =>
-    data
-      .map((item) => `${item.collection_id}: ${item.changed ? "refreshed" : "current"}`)
-      .join("\n"),
+    data.map((item) => `${item.subject_id}: ${item.changed ? "refreshed" : "current"}`).join("\n"),
   [outputContracts.add.id]: (data) => {
     const count = data.skills.length;
     return `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`;
@@ -745,7 +743,7 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.updatePlan.id]: (data) =>
     data.length
       ? data
-          .map((item) => `${item.collection_id}: ${item.changed ? "update available" : "current"}`)
+          .map((item) => `${item.subject_id}: ${item.changed ? "update available" : "current"}`)
           .join("\n")
       : "No device-local Sources to update",
   [outputContracts.projectionRetentionPlan.id]: (data) =>

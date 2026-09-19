@@ -1,16 +1,23 @@
 {
-  "$id": "skit.list.v2",
+  "$id": "skit.list.v3",
   "type": "object",
   "properties": {
-    "collections": {
+    "subjects": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "collection_id": {
+          "subject_id": {
             "type": "string"
           },
-          "display_id": {
+          "subject_kind": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "skill"
+            ]
+          },
+          "label": {
             "type": "string"
           },
           "skills": {
@@ -58,8 +65,9 @@
           }
         },
         "required": [
-          "collection_id",
-          "display_id",
+          "subject_id",
+          "subject_kind",
+          "label",
           "skills"
         ],
         "additionalProperties": true
@@ -70,9 +78,6 @@
       "items": {
         "type": "object",
         "properties": {
-          "collection_id": {
-            "type": "string"
-          },
           "harness": {
             "type": "string",
             "enum": [
@@ -90,7 +95,6 @@
           }
         },
         "required": [
-          "collection_id",
           "harness",
           "skills"
         ],
@@ -99,7 +103,7 @@
     }
   },
   "required": [
-    "collections",
+    "subjects",
     "bindings"
   ],
   "additionalProperties": true,

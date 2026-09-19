@@ -1,6 +1,6 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-export function renderRemovePlan(data: ContractDataForId<"skit.remove.plan.v3">) {
+export function renderRemovePlan(data: ContractDataForId<"skit.remove.plan.v4">) {
   const bindings = data.global_bindings + data.repository_bindings;
   return [
     `Would remove ${data.skills} ${data.skills === 1 ? "skill" : "skills"} from your library.`,
@@ -14,7 +14,7 @@ export function renderRemovePlan(data: ContractDataForId<"skit.remove.plan.v3">)
       : []),
   ].join("\n");
 }
-export function renderRemove(data: ContractDataForId<"skit.remove.v3">) {
+export function renderRemove(data: ContractDataForId<"skit.remove.v4">) {
   return [
     `Removed ${data.skills} ${data.skills === 1 ? "skill" : "skills"} from your library.`,
     ...(data.retired

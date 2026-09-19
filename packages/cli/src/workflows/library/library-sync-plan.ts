@@ -2,12 +2,12 @@ import { canonicalJson, type LibraryManifest } from "@smolai/skit-core";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
 export interface SyncChange {
-  readonly kind: "collection" | "binding";
+  readonly kind: "collection" | "skill" | "binding";
   readonly action: "add" | "update" | "remove";
-  readonly collection_id?: string;
-  readonly collection?: string;
-  readonly collection_before?: string;
-  readonly collection_after?: string;
+  readonly subject_id?: string;
+  readonly label?: string;
+  readonly label_before?: string;
+  readonly label_after?: string;
   readonly harness?: LibraryManifest["bindings"][number]["harness"];
   readonly skills_before: readonly string[];
   readonly skills_after: readonly string[];
@@ -91,10 +91,10 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       {
         kind: "collection",
         action: action(previous, desired),
-        collection_id: collectionId,
-        collection: desired?.label ?? previous?.label ?? collectionName(after, collectionId),
-        ...(previous === undefined ? {} : { collection_before: previous.label }),
-        ...(desired === undefined ? {} : { collection_after: desired.label }),
+        subject_id: collectionId,
+        label: desired?.label ?? previous?.label ?? collectionName(after, collectionId),
+        ...(previous === undefined ? {} : { label_before: previous.label }),
+        ...(desired === undefined ? {} : { label_after: desired.label }),
         skills_before: skillsBefore,
         skills_after: skillsAfter,
         versions_before: versionsBefore,
@@ -104,6 +104,66 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
           desired !== undefined &&
           previous.label === desired.label &&
           canonicalJson(skillsBefore) === canonicalJson(skillsAfter) &&
+          canonicalJson(versionsBefore) === canonicalJson(versionsAfter),
+      },
+    ];
+  });
+  const standaloneSkillIds = [
+    ...new Set([
+      ...before.skills
+        .filter((skill) => skill.collection_id === undefined)
+        .map((skill) => skill.skill_id),
+      ...after.skills
+        .filter((skill) => skill.collection_id === undefined)
+        .map((skill) => skill.skill_id),
+    ]),
+  ].sort();
+  const standaloneChanges = standaloneSkillIds.flatMap((skillId): SyncChange[] => {
+    const previous = before.skills.find((skill) => skill.skill_id === skillId);
+    const desired = after.skills.find((skill) => skill.skill_id === skillId);
+    const graph = (manifest: LibraryManifest, skill: typeof previous) => {
+      if (skill === undefined) return undefined;
+      const acquisitionIds = new Set(
+        skill.versions.flatMap((version) => version.origins.map((origin) => origin.acquisition_id)),
+      );
+      const acquisitions = manifest.acquisitions.filter((item) =>
+        acquisitionIds.has(item.acquisition_id),
+      );
+      const retainedCopyIds = new Set(acquisitions.map((item) => item.retained_copy_id));
+      return {
+        skill,
+        acquisitions,
+        retained_copies: manifest.retained_copies.filter((item) =>
+          retainedCopyIds.has(item.retained_copy_id),
+        ),
+      };
+    };
+    if (canonicalJson(graph(before, previous)) === canonicalJson(graph(after, desired))) return [];
+    const selectedVersion = (skill: typeof previous) => {
+      if (skill === undefined) return [];
+      const version = skill.versions.find(
+        (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
+      );
+      return version === undefined ? [] : [`${skill.name} @ ${version.source_digest}`];
+    };
+    const versionsBefore = selectedVersion(previous);
+    const versionsAfter = selectedVersion(desired);
+    return [
+      {
+        kind: "skill",
+        action: action(previous, desired),
+        subject_id: skillId,
+        label: desired?.name ?? previous?.name ?? skillId,
+        ...(previous === undefined ? {} : { label_before: previous.name }),
+        ...(desired === undefined ? {} : { label_after: desired.name }),
+        skills_before: previous === undefined ? [] : [previous.name],
+        skills_after: desired === undefined ? [] : [desired.name],
+        versions_before: versionsBefore,
+        versions_after: versionsAfter,
+        evidence_changed:
+          previous !== undefined &&
+          desired !== undefined &&
+          previous.name === desired.name &&
           canonicalJson(versionsBefore) === canonicalJson(versionsAfter),
       },
     ];
@@ -139,7 +199,7 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
         },
       ];
     });
-  return [...collectionChanges, ...bindingChanges];
+  return [...collectionChanges, ...standaloneChanges, ...bindingChanges];
 };
 
 export const planLibrarySync = (

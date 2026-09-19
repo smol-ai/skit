@@ -3,6 +3,7 @@ import { D1Client } from "@effect/sql-d1";
 import {
   LegacyLibraryManifestV2,
   LibraryManifest,
+  LibraryManifestAnyVersion,
   LibraryHead,
   LibraryReceipt,
 } from "@smolai/skit-core/universal/consumer";
@@ -14,7 +15,7 @@ import { findOwnedLibrary } from "./owner.js";
 const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
 const CountRow = Schema.Struct({ n: Schema.Number });
 const StoredManifest = Schema.fromJsonString(
-  Schema.Union([LibraryManifest, LegacyLibraryManifestV2]),
+  Schema.Union([LibraryManifestAnyVersion, LegacyLibraryManifestV2]),
 );
 
 export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(

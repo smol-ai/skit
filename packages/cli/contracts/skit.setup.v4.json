@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v3",
+  "$id": "skit.setup.v4",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -310,7 +310,6 @@
           }
         },
         "required": [
-          "collectionId",
           "collectionDisplayName",
           "skillId",
           "name",
@@ -387,7 +386,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -419,7 +417,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -655,7 +652,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -687,7 +683,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -833,7 +828,7 @@
                       "bind-existing-entry"
                     ]
                   },
-                  "collectionId": {
+                  "subjectId": {
                     "type": "string"
                   },
                   "skillVersionId": {
@@ -848,7 +843,7 @@
                   "paths",
                   "owner",
                   "action",
-                  "collectionId",
+                  "subjectId",
                   "skillVersionId"
                 ],
                 "additionalProperties": true
@@ -909,7 +904,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -941,7 +935,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1163,7 +1156,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1195,7 +1187,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1413,7 +1404,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1445,7 +1435,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1656,7 +1645,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1688,7 +1676,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1899,7 +1886,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1931,7 +1917,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -2154,7 +2139,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -2186,7 +2170,6 @@
                                 "required": [
                                   "kind",
                                   "projectionId",
-                                  "collectionId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -2535,7 +2518,6 @@
                         "required": [
                           "kind",
                           "projectionId",
-                          "collectionId",
                           "skillId",
                           "skillVersionId",
                           "displayName"
@@ -2567,7 +2549,6 @@
                         "required": [
                           "kind",
                           "projectionId",
-                          "collectionId",
                           "skillId",
                           "skillVersionId"
                         ],
@@ -2728,7 +2709,7 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "collectionId": {
+                    "subjectId": {
                       "type": "string"
                     },
                     "skillId": {
@@ -2742,7 +2723,7 @@
                     }
                   },
                   "required": [
-                    "collectionId",
+                    "subjectId",
                     "skillId",
                     "skillVersionId",
                     "name"

@@ -790,7 +790,8 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       collections: [
         {
           collection_id: collectionId,
-          display_name: "Example skills",
+          label: "Example skills",
+          membership: { kind: "source-tree" },
           upstream: {
             source_identity: { kind: "well-known", locator: { value: locator } },
             tracking: { kind: "default" },
@@ -798,7 +799,15 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
           },
         },
       ],
-      skills: [],
+      skills: [
+        {
+          skill_id: skillId,
+          collection_id: collectionId,
+          path: ".",
+          name: "Bad_Name",
+          versions: [],
+        },
+      ],
       retained_copies: [],
       acquisitions: [],
       global_bindings: [],
@@ -995,7 +1004,8 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       collections: [
         {
           collection_id: collectionId,
-          display_name: "tim/skills",
+          label: "tim/skills",
+          membership: { kind: "descriptor" },
           upstream: {
             source_identity: {
               kind: "registry",
@@ -1119,7 +1129,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     ).toEqual({
       status: "exact",
       observedHash: contentHash,
-      libraryMatches: [{ collectionId, skillId, skillVersionId, name: "council" }],
+      libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "council" }],
     });
     expect(
       observed.instances.find((instance) => instance.aliases.includes(projectedSkill))?.owner,
@@ -1145,7 +1155,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       membership: {
         kind: "missing-from-library",
         projectionId: orphanedProjectionId,
-        collectionId: orphanedCollectionId,
         skillId: orphanedSkillId,
         skillVersionId: orphanedSkillVersionId,
       },
@@ -1275,7 +1284,8 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       collections: [
         {
           collection_id: collectionId,
-          display_name: "test-collection",
+          label: "test-collection",
+          membership: { kind: "source-tree" },
         },
       ],
       skills: [

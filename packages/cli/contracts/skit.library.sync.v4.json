@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v3",
+  "$id": "skit.library.sync.v4",
   "type": "object",
   "properties": {
     "status": {
@@ -89,9 +89,6 @@
       "items": {
         "type": "object",
         "properties": {
-          "collection": {
-            "type": "string"
-          },
           "harness": {
             "type": "string",
             "enum": [
@@ -109,7 +106,6 @@
           }
         },
         "required": [
-          "collection",
           "harness",
           "skills"
         ],
@@ -164,6 +160,7 @@
                 "type": "string",
                 "enum": [
                   "collection",
+                  "skill",
                   "binding"
                 ]
               },
@@ -175,16 +172,16 @@
                   "remove"
                 ]
               },
-              "collection_id": {
+              "subject_id": {
                 "type": "string"
               },
-              "collection": {
+              "label": {
                 "type": "string"
               },
-              "collection_before": {
+              "label_before": {
                 "type": "string"
               },
-              "collection_after": {
+              "label_after": {
                 "type": "string"
               },
               "harness": {
@@ -227,8 +224,6 @@
             "required": [
               "kind",
               "action",
-              "collection_id",
-              "collection",
               "skills_before",
               "skills_after",
               "versions_before",
@@ -247,6 +242,7 @@
                 "type": "string",
                 "enum": [
                   "collection",
+                  "skill",
                   "binding"
                 ]
               },
@@ -258,16 +254,16 @@
                   "remove"
                 ]
               },
-              "collection_id": {
+              "subject_id": {
                 "type": "string"
               },
-              "collection": {
+              "label": {
                 "type": "string"
               },
-              "collection_before": {
+              "label_before": {
                 "type": "string"
               },
-              "collection_after": {
+              "label_after": {
                 "type": "string"
               },
               "harness": {
@@ -310,8 +306,6 @@
             "required": [
               "kind",
               "action",
-              "collection_id",
-              "collection",
               "skills_before",
               "skills_after",
               "versions_before",

@@ -1,7 +1,7 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-export function renderCheck(data: ContractDataForId<"skit.check.v6">) {
-  if (data.length === 0) return "The Library has no retained Collections.";
+export function renderCheck(data: ContractDataForId<"skit.check.v7">) {
+  if (data.length === 0) return "The Library has no retained Library subjects.";
   const lines = data.flatMap((item) => {
     const retainedBytesCurrent = item.retained_copies.every((tree) => tree.retained_bytes_current);
     const members = item.skills_sh?.members ?? [];
@@ -23,18 +23,18 @@ export function renderCheck(data: ContractDataForId<"skit.check.v6">) {
       updates === 0 &&
       problems.length === 0
     )
-      return [`✔ ${item.display_name} is up to date`];
+      return [`✔ ${item.label} is up to date`];
     if (retainedBytesCurrent && updates > 0 && problems.length === 0)
       return [
-        `↑ ${item.display_name} has updates available${members.length > 1 ? ` (${updates} of ${members.length} Skills)` : ""}`,
+        `↑ ${item.label} has updates available${members.length > 1 ? ` (${updates} of ${members.length} Skills)` : ""}`,
       ];
-    if (!retainedBytesCurrent) return [`✖ ${item.display_name} has damaged retained bytes`];
+    if (!retainedBytesCurrent) return [`✖ ${item.label} has damaged retained bytes`];
     if (problems.length)
       return [
-        `! ${item.display_name} needs attention · ${problems.map((member) => `${member.skill_name}: ${member.status}`).join(", ")}`,
+        `! ${item.label} needs attention · ${problems.map((member) => `${member.skill_name}: ${member.status}`).join(", ")}`,
       ];
-    if (item.source_status === "changed") return [`↑ ${item.display_name} has updates available`];
-    return [`? ${item.display_name} could not be fully checked`];
+    if (item.source_status === "changed") return [`↑ ${item.label} has updates available`];
+    return [`? ${item.label} could not be fully checked`];
   });
   return lines.join("\n");
 }

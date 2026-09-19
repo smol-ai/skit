@@ -7,7 +7,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
-import { checkCollectionsEffect } from "../../workflows/library/check.js";
+import { checkSubjectsEffect } from "../../workflows/library/check.js";
 
 const subject = Argument.string("skit-or-skill").pipe(Argument.optional);
 
@@ -20,7 +20,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       const state = yield* store.load;
       const value = yield* renderer.withStatus(
         "Checking retained Collection custody",
-        checkCollectionsEffect(state, {}, Option.getOrUndefined(input.subject), (collection) =>
+        checkSubjectsEffect(state, {}, Option.getOrUndefined(input.subject), (collection) =>
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );

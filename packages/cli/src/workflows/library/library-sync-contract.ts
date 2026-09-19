@@ -2,12 +2,12 @@ import { Schema } from "effect";
 import { HarnessName } from "@smolai/skit-core";
 
 const SyncChange = Schema.Struct({
-  kind: Schema.Literals(["collection", "binding"]),
+  kind: Schema.Literals(["collection", "skill", "binding"]),
   action: Schema.Literals(["add", "update", "remove"]),
-  collection_id: Schema.optionalKey(Schema.String),
-  collection: Schema.optionalKey(Schema.String),
-  collection_before: Schema.optionalKey(Schema.String),
-  collection_after: Schema.optionalKey(Schema.String),
+  subject_id: Schema.optionalKey(Schema.String),
+  label: Schema.optionalKey(Schema.String),
+  label_before: Schema.optionalKey(Schema.String),
+  label_after: Schema.optionalKey(Schema.String),
   harness: Schema.optionalKey(HarnessName),
   skills_before: Schema.Array(Schema.String),
   skills_after: Schema.Array(Schema.String),

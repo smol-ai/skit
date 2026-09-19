@@ -1,11 +1,18 @@
 {
-  "$id": "skit.pull.v3",
+  "$id": "skit.update.v4",
   "type": "array",
   "items": {
     "type": "object",
     "properties": {
-      "collection_id": {
+      "subject_id": {
         "type": "string"
+      },
+      "subject_kind": {
+        "type": "string",
+        "enum": [
+          "collection",
+          "skill"
+        ]
       },
       "previous_retained_copy_id": {
         "type": "string"
@@ -52,7 +59,8 @@
       }
     },
     "required": [
-      "collection_id",
+      "subject_id",
+      "subject_kind",
       "previous_retained_copy_id",
       "selected_retained_copy_id",
       "snapshot_digest",

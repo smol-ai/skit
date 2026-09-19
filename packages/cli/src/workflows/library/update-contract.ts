@@ -3,7 +3,8 @@ import { Schema } from "effect";
 
 export const UpdateResult = Schema.Array(
   Schema.Struct({
-    collection_id: Schema.String,
+    subject_id: Schema.String,
+    subject_kind: Schema.Literals(["collection", "skill"]),
     previous_retained_copy_id: Schema.String,
     selected_retained_copy_id: Schema.String,
     snapshot_digest: Digest,
@@ -16,7 +17,8 @@ export type UpdateResult = typeof UpdateResult.Type;
 
 export const UpdatePlan = Schema.Array(
   Schema.Struct({
-    collection_id: Schema.String,
+    subject_id: Schema.String,
+    subject_kind: Schema.Literals(["collection", "skill"]),
     current_snapshot_digest: Digest,
     available_snapshot_digest: Digest,
     changed: Schema.Boolean,

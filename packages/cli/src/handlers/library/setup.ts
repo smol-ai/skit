@@ -28,7 +28,7 @@ import { applySetupExistingBindings } from "../../workflows/library/setup-existi
 import { applySetupObservedCollections } from "../../workflows/library/setup-observed-collections.js";
 import { result } from "../contracts.js";
 import { LibraryStore } from "@smolai/skit-core";
-import { checkCollectionsEffect } from "../../workflows/library/check.js";
+import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 
 const workDirFlag = optionalString(
@@ -357,9 +357,7 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const checks = yield* renderer.withStatus(
     "Checking retained skills.sh Sources",
     Effect.flatMap(
-      Effect.forEach(collectionIds, (collectionId) =>
-        checkCollectionsEffect(state, {}, collectionId),
-      ),
+      Effect.forEach(collectionIds, (collectionId) => checkSubjectsEffect(state, {}, collectionId)),
       (results) => Effect.succeed(results.flat()),
     ),
   );

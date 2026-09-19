@@ -1,13 +1,20 @@
 {
-  "$id": "skit.check.v6",
+  "$id": "skit.check.v7",
   "type": "array",
   "items": {
     "type": "object",
     "properties": {
-      "collection_id": {
+      "subject_id": {
         "type": "string"
       },
-      "display_name": {
+      "subject_kind": {
+        "type": "string",
+        "enum": [
+          "collection",
+          "skill"
+        ]
+      },
+      "label": {
         "type": "string"
       },
       "retained_copies": {
@@ -144,8 +151,9 @@
       }
     },
     "required": [
-      "collection_id",
-      "display_name",
+      "subject_id",
+      "subject_kind",
+      "label",
       "retained_copies",
       "unresolved_skill_selections",
       "source_status",

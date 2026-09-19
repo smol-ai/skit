@@ -8,7 +8,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import { planUpdatesEffect, updateCollectionsEffect } from "../../workflows/library/update.js";
+import { planUpdatesEffect, updateSubjectsEffect } from "../../workflows/library/update.js";
 import {
   applyProjectionRetention,
   planProjectionRetention,
@@ -70,7 +70,7 @@ export const updateCliCommand = Command.make(
           );
           return yield* renderer.result(result("update", outputContracts.updatePlan, value));
         }
-        const value = yield* updateCollectionsEffect(state, options, query);
+        const value = yield* updateSubjectsEffect(state, options, query);
         yield* renderer.result(result("update", outputContracts.update, value));
       }),
       homePath(input.home),

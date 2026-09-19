@@ -8,7 +8,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import { updateCollectionsEffect } from "../../workflows/library/update.js";
+import { updateSubjectsEffect } from "../../workflows/library/update.js";
 
 const subject = Argument.string("skit-or-skill");
 
@@ -19,7 +19,7 @@ export const pullCliCommand = Command.make("pull", { subject, ...localFlags }, (
       const configuration = yield* libraryCommandConfiguration(input);
       const store = yield* LibraryStore;
       const state = yield* store.load;
-      const values = yield* updateCollectionsEffect(
+      const values = yield* updateSubjectsEffect(
         state,
         {
           roots: configuration.inventory,
