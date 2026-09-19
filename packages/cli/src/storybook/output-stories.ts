@@ -41,7 +41,6 @@ const skillId = makeSkillId();
 const retainedTreeId = makeRetainedCopyId();
 const projectionId = makeProjectionId();
 const portableBinding = {
-  collection_id: collectionId,
   harness: "codex" as const,
   scope: { kind: "global" as const },
   skills: [skillId],
@@ -159,6 +158,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   }),
   resultStory("add", "retained", outputContracts.add, {
     collection_id: collectionId,
+    skill_ids: [skillId],
     retained_version_id: versionId,
     snapshot_digest: digest,
     skills: [{ name: "review", verbatim_path: "." }],
@@ -184,7 +184,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         ],
       },
     ],
-    bindings: [{ collection_id: collectionId, harness: "codex", skills: [skillId] }],
+    bindings: [{ harness: "codex", skills: [skillId] }],
   }),
   resultStory("security-review", "clean", outputContracts.securityReview, {
     skillRef,
@@ -261,7 +261,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     skills: [],
     projections: [],
     unmanaged: [],
-    adoption_receipts: [],
     machine: {
       repositoryRoots: ["/home/story/dev"],
       repositoryDecisions: [],
@@ -375,7 +374,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("pin", "preview", outputContracts.pinPlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: [
       {
         skill_id: skillId,
@@ -389,7 +388,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     bindings: 1,
   }),
   resultStory("pin", "applied", outputContracts.pin, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: [
       {
         skill_id: skillId,
@@ -405,7 +404,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     deferred: 0,
   }),
   resultStory("remove", "preview", outputContracts.removePlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
+    subject_kind: "collection",
     versions: 1,
     skills: 1,
     global_bindings: 1,
@@ -413,7 +413,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     owned_projections: 1,
   }),
   resultStory("remove", "applied", outputContracts.remove, {
-    collection_id: collectionId,
+    subject_id: collectionId,
+    subject_kind: "collection",
     versions: 1,
     skills: 1,
     global_bindings: 1,
@@ -422,7 +423,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     retired: 1,
   }),
   resultStory("enable", "preview", outputContracts.enablePlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
@@ -431,7 +432,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     bindings: [portableBinding],
   }),
   resultStory("enable", "applied", outputContracts.enable, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
@@ -441,7 +442,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     projections: [{ harness: "codex", status: "projected" }],
   }),
   resultStory("disable", "preview", outputContracts.disablePlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
@@ -450,7 +451,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     bindings: [],
   }),
   resultStory("disable", "applied", outputContracts.disable, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },

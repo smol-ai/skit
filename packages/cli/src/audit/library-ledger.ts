@@ -1,4 +1,10 @@
-import { isJsonObject, objectAt, stringAt } from "@smolai/skit-core";
+import { isJsonObject, objectAt, SkillId, stringAt } from "@smolai/skit-core";
+import { Schema } from "effect";
+
+const decodedSkillId = (value: unknown): string | undefined => {
+  const decoded = Schema.decodeUnknownOption(SkillId)(value);
+  return decoded._tag === "Some" ? decoded.value : undefined;
+};
 
 export function retainedLibraryReferences(value: unknown): Set<string> | undefined {
   if (!isJsonObject(value)) return undefined;
@@ -21,9 +27,15 @@ export function retainedLibraryReferences(value: unknown): Set<string> | undefin
   ).flatMap((projection) => {
     if (!isJsonObject(projection)) return [];
     return [
+      decodedSkillId(projection.skill_id),
       stringAt(projection, "collection_id"),
       stringAt(projection, "marker_collection_ref"),
     ].filter((candidate): candidate is string => typeof candidate === "string");
+  });
+  const portableSkillRefs = (Array.isArray(value.skills) ? value.skills : []).flatMap((skill) => {
+    if (!isJsonObject(skill)) return [];
+    const skillId = decodedSkillId(skill.skill_id);
+    return skillId === undefined ? [] : [skillId];
   });
   return new Set(
     legacyRecords
@@ -32,6 +44,6 @@ export function retainedLibraryReferences(value: unknown): Set<string> | undefin
           ? [record.collectionRef]
           : [],
       )
-      .concat(portableCollectionRefs, portableProjectionRefs),
+      .concat(portableCollectionRefs, portableProjectionRefs, portableSkillRefs),
   );
 }

@@ -67,7 +67,7 @@ export function renderPortableLibrarySync(data: SyncData): string {
     ? `\n\nDeferred on this device\n${data.deferred_bindings
         .map(
           (binding) =>
-            `  ${binding.collection} → ${harnessLabel(binding.harness)} (global)\n    Skills: ${binding.skills.join(", ") || "none"}\n    Harness unavailable here. Binding kept; local files unchanged.`,
+            `  ${harnessLabel(binding.harness)} (global)\n    Skills: ${binding.skills.join(", ") || "none"}\n    Harness unavailable here. Binding kept; local files unchanged.`,
         )
         .join("\n")}`
     : data.deferred

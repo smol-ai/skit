@@ -110,12 +110,11 @@ it.effect("retains a changed source as a second Skill Version and leaves selecti
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.strictEqual(
-      (yield* planPortableUpdatesEffect(before, options, added.collection.collection_id))[0]
-        ?.changed,
+      (yield* planPortableUpdatesEffect(before, options, added.collection_id))[0]?.changed,
       true,
     );
     const statuses: string[] = [];
-    yield* updatePortableCollectionsEffect(before, options, added.collection.collection_id).pipe(
+    yield* updatePortableCollectionsEffect(before, options, added.collection_id).pipe(
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(
         rendererTestLayer({
@@ -133,8 +132,8 @@ it.effect("retains a changed source as a second Skill Version and leaves selecti
     assert.ok(after.skills[0]?.selected_skill_version_id);
     assert.strictEqual(after.retained_copies.length, 2);
     assert.deepStrictEqual(statuses, [
-      `${after.collections[0]?.display_name} · Fetching and inspecting Source`,
-      `${after.collections[0]?.display_name} · Updating projected Skills`,
+      `${after.collections[0]?.label} · Fetching and inspecting Source`,
+      `${after.collections[0]?.label} · Updating projected Skills`,
     ]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -163,7 +162,7 @@ it.effect("repeated updates record acquisitions without inventing snapshot chang
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
     const update = (state: Parameters<typeof updatePortableCollectionsEffect>[0]) =>
-      updatePortableCollectionsEffect(state, options, added.collection.collection_id).pipe(
+      updatePortableCollectionsEffect(state, options, added.collection_id).pipe(
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provide(rendererTestLayer()),
       );

@@ -1,0 +1,78 @@
+{
+  "unmanaged": [],
+  "schemaVersion": 4,
+  "collections": [
+    {
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "display_name": "skills.example#review",
+      "upstream": {
+        "source_identity": {
+          "kind": "well-known",
+          "locator": { "value": "https://skills.example" }
+        },
+        "tracking": { "kind": "default" },
+        "selection": { "kind": "full-tree" }
+      }
+    }
+  ],
+  "skills": [
+    {
+      "skill_id": "skill_01m2xxw78pfeva4p3ymmydrc3z",
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "path": "review",
+      "name": "review",
+      "upstream_path": "review",
+      "selected_skill_version_id": "skv_01m2xxw78pfeva4p43y4j73g7k",
+      "versions": [
+        {
+          "skill_version_id": "skv_01m2xxw78pfeva4p43y4j73g7k",
+          "source_digest": "sha256:b2f4d95bf22685697b6ff0384b3cd1e914cfd97f2a50583b3ab0fe6d5fdd882d",
+          "artifact_digest": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+          "validation_identity_digest": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+          "materialization_profile": "plain-skill/v1",
+          "origins": [
+            {
+              "acquisition_id": "acq_01m2xxw78pfeva4p3qvm1hvpgc",
+              "source_path": "review"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "retained_copies": [
+    {
+      "retained_copy_id": "ret_01m2xxw78pfeva4p38pe2h1v0a",
+      "digest": "sha256:b29e120becf612c1be1c7f32fcabd38223538b5879fc229747155e51e64e9115",
+      "copy_profile": "verbatim/v1",
+      "members": [
+        {
+          "source_path": "review",
+          "source_digest": "sha256:b2f4d95bf22685697b6ff0384b3cd1e914cfd97f2a50583b3ab0fe6d5fdd882d",
+          "artifact_digest": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+          "materialization_profile": "plain-skill/v1"
+        }
+      ]
+    }
+  ],
+  "acquisitions": [
+    {
+      "acquisition_id": "acq_01m2xxw78pfeva4p3qvm1hvpgc",
+      "retained_copy_id": "ret_01m2xxw78pfeva4p38pe2h1v0a",
+      "source_identity": {
+        "kind": "well-known",
+        "locator": { "value": "https://skills.example" }
+      },
+      "tracking": { "kind": "default" },
+      "selection": { "kind": "full-tree" },
+      "input": { "value": "wellknown:https://skills.example#skills=review" },
+      "acquired_at": "2026-09-20T00:00:00.000Z",
+      "machine_id": "mach_01k58c0k00e3w9pw6d0q2zj348",
+      "observations": []
+    }
+  ],
+  "global_bindings": [],
+  "local_bindings": [],
+  "projections": [],
+  "adoption_receipts": []
+}

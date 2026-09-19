@@ -156,10 +156,16 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
     ),
   );
   const markerCollectionRef = existingCollection?.collection_id ?? ref;
+  const existingSkill = state.skills.find(
+    (candidate) =>
+      candidate.collection_id === existingCollection?.collection_id &&
+      candidate.name === previewSkill?.name,
+  );
   const skill = previewSkill
     ? {
         name: previewSkill.name,
         markerSkillRef: `${markerCollectionRef}#${encodeURIComponent(previewSkill.name)}`,
+        ...(existingSkill === undefined ? {} : { skillId: existingSkill.skill_id }),
         validationDigest: sourceContentHash,
       }
     : undefined;
@@ -188,6 +194,7 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
     const marker = yield* inspectOwnershipMarkerEffect(path);
     const alreadyManaged =
       marker.kind === "valid" &&
+      skill.skillId !== undefined &&
       marker.marker.skill_id === skill.skillId &&
       marker.marker.expected_digest === observedHash;
     if (!alreadyManaged && lossless.blockers.length > 0) {

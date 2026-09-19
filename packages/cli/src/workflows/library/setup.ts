@@ -1007,30 +1007,26 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
   const librarySkillsByHash = new Map<
     string,
     Array<{
-      collectionId: CollectionId;
+      subjectId: string;
       skillId: SkillId;
       skillVersionId: SkillVersionId;
       name: string;
     }>
   >();
-  for (const collection of library.collections) {
-    for (const skill of library.skills.filter(
-      (candidate) => candidate.collection_id === collection.collection_id,
-    )) {
-      const selected = skill?.versions.find(
-        (version) => version.skill_version_id === skill.selected_skill_version_id,
-      );
-      if (skill === undefined || selected === undefined) continue;
-      librarySkillsByHash.set(selected.validation_identity_digest, [
-        ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
-        {
-          collectionId: collection.collection_id,
-          skillId: skill.skill_id,
-          skillVersionId: selected.skill_version_id,
-          name: skill.name,
-        },
-      ]);
-    }
+  for (const skill of library.skills) {
+    const selected = skill?.versions.find(
+      (version) => version.skill_version_id === skill.selected_skill_version_id,
+    );
+    if (skill === undefined || selected === undefined) continue;
+    librarySkillsByHash.set(selected.validation_identity_digest, [
+      ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
+      {
+        subjectId: skill.collection_id ?? skill.skill_id,
+        skillId: skill.skill_id,
+        skillVersionId: selected.skill_version_id,
+        name: skill.name,
+      },
+    ]);
   }
   const grouped = new Map<string, SkillHit[]>();
   for (const hit of hits) grouped.set(hit.realPath, [...(grouped.get(hit.realPath) ?? []), hit]);
@@ -1155,10 +1151,11 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     const path = projection.path;
     const present = yield* fs.exists(path);
     projections.push({
-      collectionId: projection.collection_id,
+      ...(skill.collection_id === undefined ? {} : { collectionId: skill.collection_id }),
       collectionDisplayName:
-        libraryCollectionsById.get(projection.collection_id)?.display_name ??
-        projection.collection_id,
+        (skill.collection_id === undefined
+          ? undefined
+          : libraryCollectionsById.get(skill.collection_id)?.label) ?? skill.name,
       skillId: skill.skill_id,
       name: skill.name,
       path,
@@ -1275,7 +1272,7 @@ export const classifySetupOnboarding = (
   );
   const retainedByLockEvidence = new Map<
     string,
-    Array<{ collectionId: CollectionId; validationIdentityDigest: string }>
+    Array<{ subjectId: string; validationIdentityDigest: string }>
   >();
   if (retained?.library && retained.machineId) {
     const evidenceKeysByAcquisition = new Map<string, string[]>();
@@ -1299,7 +1296,7 @@ export const classifySetupOnboarding = (
             retainedByLockEvidence.set(key, [
               ...(retainedByLockEvidence.get(key) ?? []),
               {
-                collectionId: skill.collection_id,
+                subjectId: skill.collection_id ?? skill.skill_id,
                 validationIdentityDigest: version.validation_identity_digest,
               },
             ]);
@@ -1381,7 +1378,7 @@ export const classifySetupOnboarding = (
           continue;
         }
         const observedPaths = observedInstances.map((instance) => instance.path).sort();
-        let matchingCollections: Set<CollectionId> | undefined;
+        let matchingCollections: Set<string> | undefined;
         for (const instance of observedInstances) {
           const observedHash = instance.contentIdentity.observedHash;
           const matchingLock = instance.locks.find((item) => setupLockGroupKey(item) === groupKey);
@@ -1398,7 +1395,7 @@ export const classifySetupOnboarding = (
           const collections = new Set(
             (retainedByLockEvidence.get(evidenceKey) ?? [])
               .filter((evidence) => evidence.validationIdentityDigest === observedHash)
-              .map((evidence) => evidence.collectionId),
+              .map((evidence) => evidence.subjectId),
           );
           matchingCollections =
             matchingCollections === undefined
@@ -1434,7 +1431,7 @@ export const classifySetupOnboarding = (
     const matches = group.flatMap((instance) => instance.contentIdentity.libraryMatches);
     const uniqueMatches = [
       ...new Map(
-        matches.map((match) => [`${match.collectionId}\0${match.skillVersionId}`, match]),
+        matches.map((match) => [`${match.subjectId}\0${match.skillVersionId}`, match]),
       ).values(),
     ];
     if (
@@ -1462,7 +1459,15 @@ export const classifySetupOnboarding = (
         if (
           importableLocks.some(([, lock]) => {
             const identity = setupLockCollection(lock)?.identity;
-            const retainedSource = libraryCollectionSourcesById.get(match.collectionId);
+            const retainedSkill = retained?.library?.skills.find(
+              (skill) =>
+                skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
+            );
+            const retainedSource =
+              retainedSkill?.upstream?.source_identity ??
+              (retainedSkill?.collection_id === undefined
+                ? undefined
+                : libraryCollectionSourcesById.get(retainedSkill.collection_id));
             if (identity === undefined || retainedSource === undefined) return false;
             const lockSource = sourceIdentityFromCollectionIdentity(
               identity,
@@ -1482,11 +1487,19 @@ export const classifySetupOnboarding = (
       candidates.push({
         ...base,
         action: "bind-existing-entry",
-        collectionId: match.collectionId,
+        subjectId: match.subjectId,
         skillVersionId: match.skillVersionId,
-        ...(libraryCollectionsById.get(match.collectionId)?.display_name
-          ? { collectionDisplayName: libraryCollectionsById.get(match.collectionId)!.display_name }
-          : {}),
+        ...(() => {
+          const matchedSkill = retained?.library?.skills.find(
+            (skill) =>
+              skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
+          );
+          const label =
+            matchedSkill?.collection_id === undefined
+              ? undefined
+              : libraryCollectionsById.get(matchedSkill.collection_id)?.label;
+          return label === undefined ? {} : { collectionDisplayName: label };
+        })(),
       });
       continue;
     }

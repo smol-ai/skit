@@ -233,16 +233,16 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
       name: "Library",
       reason: "retention-missing",
     });
-  for (const collection of retained) {
-    const saved = persisted.state.collections.find(
-      (item) => item.collection_id === collection.collection_id,
-    );
+  for (const result of retained) {
     if (
-      !saved ||
-      !persisted.state.skills.some((skill) => skill.collection_id === collection.collection_id)
+      result.skills.length === 0 ||
+      result.skills.some(
+        (skill) =>
+          !persisted.state.skills.some((candidate) => candidate.skill_id === skill.skill_id),
+      )
     )
       return yield* new SetupObservedCollectionInvalid({
-        name: collection.collection_id,
+        name: result.collection?.collection_id ?? result.skills[0]?.skill_id ?? "Library",
         reason: "retention-missing",
       });
   }

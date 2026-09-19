@@ -42,9 +42,12 @@ export const removeCliCommand = Command.make(
           return yield* renderer.result(
             result("remove", outputContracts.removePlan, outcome.value),
           );
-        const removed = portable.collections.find(
-          (collection) => collection.collection_id === outcome.value.collection_id,
-        );
+        const removed =
+          outcome.value.subject_kind === "collection"
+            ? portable.collections.find(
+                (collection) => collection.collection_id === outcome.value.subject_id,
+              )
+            : undefined;
         if (removed?.upstream?.source_identity.kind === "authored-workspace") {
           const acquisitionIds = new Set(
             portable.skills

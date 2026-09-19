@@ -13,10 +13,8 @@ export function renderPortableLibraryList(data: ContractDataForId<"skit.list.v2"
       `  ${collection.skills.length} Skill${collection.skills.length === 1 ? "" : "s"} · ${versions} Skill Version${versions === 1 ? "" : "s"}${unresolved === 0 ? "" : ` · ${unresolved} unresolved`}`,
     );
     for (const skill of collection.skills) lines.push(`    ${skill.name}`);
-    for (const binding of data.bindings.filter(
-      (item) => item.collection_id === collection.collection_id,
-    ))
-      lines.push(`  ${binding.harness}: ${binding.skills.join(", ") || "no Skills"}`);
   }
+  for (const binding of data.bindings)
+    lines.push(`${binding.harness}: ${binding.skills.join(", ") || "no Skills"}`);
   return lines.join("\n");
 }

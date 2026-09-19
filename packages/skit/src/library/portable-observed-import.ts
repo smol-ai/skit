@@ -16,7 +16,7 @@ import {
   MachineId,
 } from "./entity-ids.js";
 import { MachineDocumentJson, MachineDocumentV4 } from "./machine-document.js";
-import { portableObservations } from "./portable-evidence.js";
+import { portableObservations, sanitizePortableClaim } from "./portable-evidence.js";
 import type { AcquisitionSelection, MaterializationProfile } from "./portable-contracts.js";
 import {
   LibraryState,
@@ -94,6 +94,8 @@ export interface PortableObservedImport {
   readonly skills: readonly PortableObservedSkill[];
   readonly observations: readonly SkillsShProvenanceObservation[];
   readonly retainLocalEntry?: boolean;
+  /** The caller observed an individual Skill without authoritative source membership. */
+  readonly standalone?: boolean;
   /** Retention may be separated from selection when another workflow owns the selection commit. */
   readonly selectVersions?: boolean;
 }
@@ -122,6 +124,24 @@ const selection = (
   return paths.length === 0 || (paths.length === 1 && paths[0] === ".")
     ? { kind: "full-tree" }
     : { kind: "selected-paths", paths: paths.filter((path) => path !== ".") };
+};
+
+const mergeSelections = (
+  previous: AcquisitionSelection,
+  acquired: AcquisitionSelection,
+): AcquisitionSelection => {
+  if (previous.kind === "full-tree" || acquired.kind === "full-tree") return { kind: "full-tree" };
+  if (previous.kind === "selected-paths" && acquired.kind === "selected-paths")
+    return {
+      kind: "selected-paths",
+      paths: [...new Set([...previous.paths, ...acquired.paths])].sort(),
+    };
+  if (previous.kind === "selected-skills" && acquired.kind === "selected-skills")
+    return {
+      kind: "selected-skills",
+      names: [...new Set([...previous.names, ...acquired.names])].sort(),
+    };
+  return acquired;
 };
 
 interface PreparedFact {
@@ -206,21 +226,34 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const store = yield* LibraryStore;
   const machineId = request.machineId ?? (yield* readOrCreateMachineId(store.home));
   const state = yield* store.load;
-  const source = sourceIdentityFromCollectionIdentity(request.identity, machineId, request.input);
+  const source =
+    request.source?.type === "well-known"
+      ? {
+          kind: "well-known" as const,
+          locator: { value: sanitizePortableClaim(request.source.ref) },
+        }
+      : sourceIdentityFromCollectionIdentity(request.identity, machineId, request.input);
   const acquiredSelection = selection(request.identity, request.source, request.skills);
   const pinnedRevision =
     (source.kind === "github" || source.kind === "git") && request.sourceRevision !== undefined
       ? request.sourceRevision
       : undefined;
+  const acquiredTracking =
+    pinnedRevision === undefined
+      ? ({ kind: "default" } as const)
+      : ({ kind: "commit", ref: pinnedRevision } as const);
   const sourceKey = canonicalJson(source);
-  const usesCollection =
-    request.facts.every((fact) => fact.materializationProfile === "declared-skit-skill/v1") ||
-    acquiredSelection.kind === "full-tree";
+  const usesCollection = !(
+    request.facts.every((fact) => fact.materializationProfile === "plain-skill/v1") &&
+    ((source.kind === "well-known" && acquiredSelection.kind === "selected-skills") ||
+      (source.kind === "local" && request.standalone === true && request.facts.length === 1))
+  );
   let collection = usesCollection
     ? state.collections.find((candidate) => {
         if (
           candidate.upstream !== undefined &&
-          canonicalJson(candidate.upstream.source_identity) === sourceKey
+          canonicalJson(candidate.upstream.source_identity) === sourceKey &&
+          canonicalJson(candidate.upstream.tracking) === canonicalJson(acquiredTracking)
         )
           return true;
         if (source.kind !== "local") return false;
@@ -256,7 +289,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         : {
             upstream: {
               source_identity: source,
-              tracking: { kind: "default" },
+              tracking: acquiredTracking,
               selection: acquiredSelection,
             },
           }),
@@ -279,8 +312,20 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     let skill = state.skills.find((candidate) =>
       collection === undefined
         ? candidate.collection_id === undefined &&
-          candidate.upstream !== undefined &&
-          canonicalJson(candidate.upstream.source_identity) === sourceKey &&
+          (candidate.upstream !== undefined
+            ? canonicalJson(candidate.upstream.source_identity) === sourceKey
+            : source.kind === "local" &&
+              candidate.versions.some((version) =>
+                version.origins.some((origin) => {
+                  const acquisition = state.acquisitions.find(
+                    (item) => item.acquisition_id === origin.acquisition_id,
+                  );
+                  return (
+                    acquisition !== undefined &&
+                    canonicalJson(acquisition.source_identity) === sourceKey
+                  );
+                }),
+              )) &&
           candidate.path === fact.sourcePath
         : candidate.collection_id === collection.collection_id &&
           candidate.path === fact.sourcePath,
@@ -296,7 +341,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
             : {
                 upstream: {
                   source_identity: source,
-                  tracking: { kind: "default" as const },
+                  tracking: acquiredTracking,
                   selection: skillSelection,
                 },
               }
@@ -344,8 +389,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     acquisition_id: acquisitionId,
     retained_copy_id: retainedCopyId,
     source_identity: source,
-    tracking:
-      pinnedRevision === undefined ? { kind: "default" } : { kind: "commit", ref: pinnedRevision },
+    tracking: acquiredTracking,
     selection: acquiredSelection,
     input: { value: request.input },
     ...(pinnedRevision === undefined ? {} : { source_revision: pinnedRevision }),
@@ -358,7 +402,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ...collection,
       upstream: {
         ...collection.upstream,
-        selection: acquiredSelection,
+        selection: mergeSelections(collection.upstream.selection, acquiredSelection),
         last_acquisition_id: acquisitionId,
       },
     };

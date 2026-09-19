@@ -238,7 +238,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       }),
     ]);
     const skill = persisted.state.skills.find(
-      (item) => item.collection_id === retained.collection_id,
+      (item) => item.skill_id === retained.skills[0]?.skill_id,
     );
     expect(skill?.versions[0]?.origins).toEqual([
       expect.objectContaining({ acquisition_id: acquisition.acquisition_id }),
@@ -462,7 +462,7 @@ it.effect("adopts a selected member from a two-Skill GitHub lock collection", ()
     if (!saved.present) return;
     expect(
       saved.state.skills
-        .filter((skill) => skill.collection_id === retained.collection_id)
+        .filter((skill) => skill.collection_id === retained.collection?.collection_id)
         .map((skill) => skill.name),
     ).toEqual(["review"]);
     expect(saved.state.acquisitions[0]?.selection).toEqual({

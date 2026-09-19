@@ -56,7 +56,7 @@ export const checkPortableCollectionsEffect = Effect.fn("Library.checkPortableCo
         ? state.collections
         : state.collections.filter(
             (collection) =>
-              [collection.collection_id, collection.display_name].includes(query) ||
+              [collection.collection_id, collection.label].includes(query) ||
               state.skills.some(
                 (skill) =>
                   skill.collection_id === collection.collection_id &&
@@ -72,7 +72,10 @@ export const checkPortableCollectionsEffect = Effect.fn("Library.checkPortableCo
     const checked = yield* Effect.forEach(collections, (collection) =>
       Effect.gen(function* () {
         if (collection.upstream !== undefined && onCollection !== undefined)
-          yield* onCollection(collection);
+          yield* onCollection({
+            collection_id: collection.collection_id,
+            display_name: collection.label,
+          });
         const skills = state.skills.filter(
           (skill) => skill.collection_id === collection.collection_id,
         );
@@ -162,7 +165,7 @@ export const checkPortableCollectionsEffect = Effect.fn("Library.checkPortableCo
             }
         return {
           collection_id: collection.collection_id,
-          display_name: collection.display_name,
+          display_name: collection.label,
           retained_copies,
           unresolved_skill_selections: skills.filter(
             (skill) => skill.selected_skill_version_id === undefined,

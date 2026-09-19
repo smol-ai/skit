@@ -71,7 +71,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     assert.strictEqual(rendered[0]?.schema, "skit.list.v2");
     const listing = yield* Schema.decodeUnknownEffect(PortableListResult)(rendered[0]?.data);
-    assert.strictEqual(listing.collections[0]?.collection_id, collection.collection_id);
+    assert.strictEqual(listing.collections[0]?.collection_id, collection.collection?.collection_id);
     assert.strictEqual(listing.collections[0]?.display_id, "tim/skills");
     assert.match(renderPortableLibraryList(listing), /^tim\/skills\n/);
     assert.deepStrictEqual(
@@ -136,9 +136,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
                     collection_id: skill.collection_id,
                     path: skill.path,
                     name: skill.name,
-                    ...(skill.upstream_path === undefined
-                      ? {}
-                      : { upstream_path: skill.upstream_path }),
+                    ...(skill.upstream === undefined ? {} : { upstream: skill.upstream }),
                     versions: skill.versions,
                   }
                 : skill,
@@ -228,13 +226,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
             ...state,
             global_bindings: [
               {
-                collection_id: collection.collection_id,
                 harness: "codex",
                 scope: { kind: "global" },
                 skills: [reviewId],
               },
               {
-                collection_id: collection.collection_id,
                 harness: "claude-code",
                 scope: { kind: "global" },
                 skills: [reviewId],
@@ -252,7 +248,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       devinRoot: [],
     });
     const interaction = yield* makeScriptedInteraction([
-      `all:${collection.collection_id}`,
+      `all:${collection.collection?.collection_id}`,
       ["review"],
     ]);
     yield* home.owned(
@@ -270,8 +266,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.strictEqual(prompts.length, 2);
     assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
     assert.deepStrictEqual(prompts[0]?.choices[0], {
-      value: `all:${collection.collection_id}`,
-      label: `${collection.display_name} — everywhere enabled`,
+      value: `all:${collection.collection?.collection_id}`,
+      label: `${collection.collection?.label} — everywhere enabled`,
       hint: "codex · global, claude-code · global",
     });
     assert.strictEqual(prompts[1]?.message, "Select Skills to disable");
@@ -279,7 +275,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       {
         value: "review",
         label: "review",
-        hint: `${collection.display_name} · codex · global, ${collection.display_name} · claude-code · global`,
+        hint: `${collection.collection?.label} · codex · global, ${collection.collection?.label} · claude-code · global`,
       },
     ]);
     assert.strictEqual((yield* interaction.results).length, 2);

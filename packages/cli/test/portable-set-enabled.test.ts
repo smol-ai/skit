@@ -54,7 +54,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.ok(state);
     const base = {
       libraryHome: home,
-      query: collection.collection_id,
+      query: collection.collection?.collection_id ?? "",
       all: false,
       selectedSkills: ["review"],
       roots: {
@@ -71,7 +71,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       now: () => "2026-09-16T00:00:00.000Z",
     };
     const invocation = {
-      subjects: [collection.collection_id],
+      subjects: [collection.collection?.collection_id ?? ""],
       harnesses: ["codex" as const],
       scope: { kind: "global" as const },
       enabled: true,

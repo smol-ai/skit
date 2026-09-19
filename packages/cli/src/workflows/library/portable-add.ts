@@ -38,6 +38,7 @@ export class PortableAddIdentityChanged extends Schema.TaggedError<PortableAddId
 export interface PortableAddOptions {
   readonly expectedCollectionRef?: string;
   readonly selectVersions?: boolean;
+  readonly standalone?: boolean;
 }
 
 export const acquisitionSourceEffect = Effect.fn("Library.acquisitionSource")(function* (
@@ -180,7 +181,10 @@ export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSour
           assessmentContext: "retain",
         });
         return {
-          collection,
+          ...(collection.collection === undefined
+            ? {}
+            : { collection_id: collection.collection.collection_id }),
+          skill_ids: collection.skills.map((skill) => skill.skill_id),
           retained_version_id: retained.retained_copy_id,
           snapshot_digest: snapshot,
           skills: validated.descriptor.skills.map((skill) => ({
@@ -223,13 +227,17 @@ export const addPortableLibrarySourceEffect = Effect.fn("Library.addPortableSour
         skills,
         observations: [],
         selectVersions: options.selectVersions,
+        standalone: options.standalone,
       });
       const state = yield* (yield* LibraryStore).load;
       const retained = state.retained_copies.find((copy) => copy.digest === prepared.digest);
       if (retained === undefined)
         return yield* new PortableAddRetainedVersionMissing({ source: historicalInput });
       return {
-        collection,
+        ...(collection.collection === undefined
+          ? {}
+          : { collection_id: collection.collection.collection_id }),
+        skill_ids: collection.skills.map((skill) => skill.skill_id),
         retained_version_id: retained.retained_copy_id,
         snapshot_digest: prepared.digest,
         skills: prepared.facts.map((skill) => ({

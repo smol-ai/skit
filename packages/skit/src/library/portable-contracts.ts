@@ -353,6 +353,11 @@ export const PortableLibraryManifest = Schema.Struct({
           (skill) =>
             (skill.collection_id !== undefined && !collections.has(skill.collection_id)) ||
             (skill.collection_id !== undefined && skill.upstream !== undefined) ||
+            (skill.upstream !== undefined &&
+              (skill.upstream.source_identity.kind !== "well-known" ||
+                skill.upstream.selection.kind !== "selected-skills" ||
+                skill.upstream.selection.names.length !== 1 ||
+                skill.upstream.selection.names[0] !== skill.name)) ||
             (skill.upstream?.last_acquisition_id !== undefined &&
               !acquisitions.has(skill.upstream.last_acquisition_id)),
         )
@@ -540,13 +545,19 @@ export const migratePortableEntitiesFromV4 = (input: {
       skill.versions.every((version) => version.materialization_profile === "plain-skill/v1"),
     );
     const observed = latestAcquisition(collection.collection_id);
-    return allPlain && observed !== undefined && observed.selection.kind !== "full-tree";
+    return (
+      allPlain &&
+      observed?.source_identity.kind === "well-known" &&
+      observed.selection.kind === "selected-skills"
+    );
   };
   const dissolved = new Set(
     input.collections.filter(shouldDissolve).map((collection) => collection.collection_id),
   );
   const collections = input.collections.flatMap((collection): PortableCollection[] => {
     if (dissolved.has(collection.collection_id)) return [];
+    const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
+    if (skills.length === 0) return [];
     const matchingAcquisition =
       collection.upstream?.last_acquisition_id === undefined
         ? acquisitions
@@ -565,14 +576,11 @@ export const migratePortableEntitiesFromV4 = (input: {
       (collection.upstream?.last_acquisition_id === undefined
         ? undefined
         : selectionByAcquisition.get(collection.upstream.last_acquisition_id));
-    const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
-    const descriptor =
-      skills.length > 0 &&
-      skills.every((skill) =>
-        skill.versions.every(
-          (version) => version.materialization_profile === "declared-skit-skill/v1",
-        ),
-      );
+    const descriptor = skills.every((skill) =>
+      skill.versions.every(
+        (version) => version.materialization_profile === "declared-skit-skill/v1",
+      ),
+    );
     return [
       {
         collection_id: collection.collection_id,
@@ -608,17 +616,12 @@ export const migratePortableEntitiesFromV4 = (input: {
     const { collection_id: _collectionId, ...standalone } = fields;
     if (latest === undefined || latest.acquisition.source_identity.kind === "local")
       return standalone;
-    const selection: AcquisitionSelection =
-      latest.acquisition.source_identity.kind === "github" ||
-      latest.acquisition.source_identity.kind === "git"
-        ? { kind: "selected-paths", paths: [latest.sourcePath] }
-        : { kind: "selected-skills", names: [skill.name] };
     return {
       ...standalone,
       upstream: {
         source_identity: latest.acquisition.source_identity,
         tracking: latest.acquisition.tracking,
-        selection,
+        selection: { kind: "selected-skills", names: [skill.name] },
         last_acquisition_id: latest.acquisition.acquisition_id,
       },
     };

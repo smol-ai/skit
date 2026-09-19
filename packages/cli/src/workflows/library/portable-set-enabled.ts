@@ -68,9 +68,7 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
     const members = state.skills.filter(
       (skill) => skill.collection_id === collection.collection_id,
     );
-    const collectionMatch = [collection.collection_id, collection.label].includes(
-      options.query,
-    );
+    const collectionMatch = [collection.collection_id, collection.label].includes(options.query);
     const skill = members.find(
       (member) =>
         member.name === options.query ||
@@ -155,14 +153,10 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   for (const harness of options.invocation.harnesses) {
     const existing =
       scope.kind === "global"
-        ? state.global_bindings.find(
-            (binding) =>
-              binding.harness === harness,
-          )
+        ? state.global_bindings.find((binding) => binding.harness === harness)
         : state.local_bindings.find(
             (binding) =>
-              binding.harness === harness &&
-              resolve(binding.scope.root) === resolve(scope.root),
+              binding.harness === harness && resolve(binding.scope.root) === resolve(scope.root),
           );
     const names = new Set(existing?.skills ?? []);
     for (const skillId of skillIds)
@@ -189,10 +183,7 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   }
   const changed = bindings.some((binding) => {
     const existing = isDeviceBinding(binding)
-      ? state.global_bindings.find(
-          (item) =>
-            item.harness === binding.harness,
-        )
+      ? state.global_bindings.find((item) => item.harness === binding.harness)
       : state.local_bindings.find(
           (item) =>
             item.harness === binding.harness &&
@@ -235,10 +226,7 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
         const local_bindings = [...current.local_bindings];
         for (const binding of plan.bindings) {
           if (isDeviceBinding(binding)) {
-            const index = global_bindings.findIndex(
-              (item) =>
-                item.harness === binding.harness,
-            );
+            const index = global_bindings.findIndex((item) => item.harness === binding.harness);
             if (index < 0) global_bindings.push(binding);
             else global_bindings[index] = binding;
           } else {

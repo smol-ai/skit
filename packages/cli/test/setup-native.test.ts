@@ -592,7 +592,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: collectionOne,
+              subjectId: collectionOne,
               skillId: exactSkill,
               skillVersionId: exactVersion,
               name: "library-exact",
@@ -606,7 +606,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: collectionOne,
+              subjectId: collectionOne,
               skillId: renamedSkill,
               skillVersionId: renamedVersion,
               name: "original",
@@ -620,13 +620,13 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: collectionOne,
+              subjectId: collectionOne,
               skillId: sharedSkill,
               skillVersionId: sharedVersion,
               name: "skill",
             },
             {
-              collectionId: collectionTwo,
+              subjectId: collectionTwo,
               skillId: sharedSkill,
               skillVersionId: sharedVersion,
               name: "skill",
@@ -732,7 +732,7 @@ it.effect(
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: upstreamCollectionId,
+              subjectId: upstreamCollectionId,
               skillId: upstreamSkillId,
               skillVersionId: upstreamSkillVersionId,
               name: "upstream",
@@ -752,7 +752,7 @@ it.effect(
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: localCollectionId,
+              subjectId: localCollectionId,
               skillId: localSkillId,
               skillVersionId: localSkillVersionId,
               name: "local",
@@ -813,7 +813,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       contentIdentity: {
         status: "exact",
         observedHash: projectHash("Bad_Name"),
-        libraryMatches: [{ collectionId, skillId, skillVersionId, name: "Bad_Name" }],
+        libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "Bad_Name" }],
       },
       locks: [
         {

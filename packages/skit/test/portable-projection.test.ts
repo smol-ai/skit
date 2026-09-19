@@ -107,7 +107,7 @@ it.effect(
       assert.strictEqual(installed.projections[0]?.status, "installed");
       const markerV2 = yield* inspectOwnershipMarkerEffect(target);
       assert.strictEqual(markerV2.kind, "valid");
-      if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 2);
+      if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 3);
 
       yield* withLibraryWriterLock(
         home,

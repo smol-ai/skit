@@ -73,11 +73,11 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
 
     results.push(
       yield* applyLibraryBindings(portable, {
-        query: candidate.collectionId,
+        query: candidate.subjectId,
         all: false,
         selectedSkills: [name],
         invocation: {
-          subjects: [candidate.collectionId],
+          subjects: [candidate.subjectId],
           harnesses: [...new Set(targets.map((target) => target.harness))],
           scope: { kind: "global" },
           enabled: true,

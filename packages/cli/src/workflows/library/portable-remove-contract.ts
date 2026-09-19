@@ -1,7 +1,8 @@
 import { Schema } from "effect";
 
 export const PortableRemovePlan = Schema.Struct({
-  collection_id: Schema.String,
+  subject_id: Schema.String,
+  subject_kind: Schema.Literals(["collection", "skill"]),
   versions: Schema.Number,
   skills: Schema.Number,
   global_bindings: Schema.Number,

@@ -242,7 +242,7 @@ it.effect("names every deferred Binding and its affected Skills", () =>
       deferredPortableBindings(portable, (harness) =>
         harness === "codex" ? "/available" : undefined,
       ),
-      [{ collection: "fixture/skills", harness: "claude-code", skills: ["review"] }],
+      [{ harness: "claude-code", skills: ["review"] }],
     );
   }),
 );

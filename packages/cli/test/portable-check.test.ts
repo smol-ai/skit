@@ -27,7 +27,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     const current = yield* checkPortableCollectionsEffect(
       loaded.state,
       {},
-      retained.collection.collection_id,
+      retained.collection_id,
       (collection) =>
         Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
@@ -51,7 +51,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     const changed = yield* checkPortableCollectionsEffect(
       loaded.state,
       {},
-      retained.collection.collection_id,
+      retained.collection_id,
     ).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
@@ -70,7 +70,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     const withoutObservedCopy = yield* checkPortableCollectionsEffect(
       loaded.state,
       {},
-      retained.collection.collection_id,
+      retained.collection_id,
     ).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),

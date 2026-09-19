@@ -52,6 +52,7 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
 
   const added = succeed(outputContracts.add, "add", source);
   const collectionId = added.collection_id;
+  if (collectionId === undefined) throw new Error("expected source-tree Collection");
   const initialList = succeed(outputContracts.list, "list");
   expect(initialList).toMatchObject({
     collections: [expect.objectContaining({ collection_id: collectionId })],
@@ -68,7 +69,6 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
   expect(succeed(outputContracts.list, "list").bindings).toEqual([
     expect.objectContaining({
-      collection_id: collectionId,
       harness: "codex",
       skills: [skill!.skill_id],
     }),

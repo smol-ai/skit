@@ -27,7 +27,10 @@ it.effect(
       };
       const first = yield* home.owned(ensureAuthoredWorkspaceEffect(source, options));
       assert.ok(first.entry);
-      assert.strictEqual(first.entry.upstream?.source_identity.kind, "authored-workspace");
+      assert.strictEqual(
+        first.entry.collection?.upstream?.source_identity.kind,
+        "authored-workspace",
+      );
       const firstState = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.strictEqual(firstState.retained_copies.length, 1);
       const firstTree = firstState.retained_copies[0];
@@ -41,7 +44,10 @@ it.effect(
       yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated.\n`);
       const refreshed = yield* home.owned(ensureAuthoredWorkspaceEffect(source, options));
       assert.ok(refreshed.entry);
-      assert.strictEqual(refreshed.entry.collection_id, first.entry.collection_id);
+      assert.strictEqual(
+        refreshed.entry.collection?.collection_id,
+        first.entry.collection?.collection_id,
+      );
       const state = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.strictEqual(state.collections.length, 1);
       assert.strictEqual(state.retained_copies.length, 2);

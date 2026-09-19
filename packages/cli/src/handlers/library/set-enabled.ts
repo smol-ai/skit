@@ -162,23 +162,26 @@ export const presentPortableSetEnabled = Effect.fn("CLI.setEnabled.portable")(fu
                   resolve(binding.scope.root) === resolve(input.scope.root))))),
       )
       .flatMap((binding, index) => {
-        const collection = state.collections.find(
-          (candidate) => candidate.collection_id === binding.collection_id,
-        );
         const skills = binding.skills.flatMap((skillId) => {
           const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
           return skill === undefined ? [] : [skill];
         });
-        if (collection === undefined || skills.length === 0) return [];
+        if (skills.length === 0) return [];
+        const collectionIds = [...new Set(skills.map((skill) => skill.collection_id))];
+        const collection =
+          collectionIds.length === 1 && collectionIds[0] !== undefined
+            ? state.collections.find((candidate) => candidate.collection_id === collectionIds[0])
+            : undefined;
+        const subjectId = collection?.collection_id ?? skills[0]!.skill_id;
         const location =
           binding.scope.kind === "global" ? "global" : `repository ${binding.scope.root}`;
         return [
           {
             value: String(index),
-            label: `${collection.display_name} — ${binding.harness} · ${location}`,
+            label: `${collection?.label ?? skills.map((skill) => skill.name).join(", ")} — ${binding.harness} · ${location}`,
             hint: skills.map((skill) => skill.name).join(", "),
             target: {
-              collectionId: collection.collection_id,
+              collectionId: subjectId,
               harness: binding.harness,
               scope: binding.scope,
               skillIds: binding.skills,
@@ -200,7 +203,7 @@ export const presentPortableSetEnabled = Effect.fn("CLI.setEnabled.portable")(fu
       return [
         {
           value: `all:${collectionId}`,
-          label: `${collection?.display_name ?? collectionId} — everywhere enabled`,
+          label: `${collection?.label ?? collectionId} — everywhere enabled`,
           hint: targets
             .map((binding) => `${binding.target.harness} · ${binding.target.location}`)
             .join(", "),
@@ -243,7 +246,7 @@ export const presentPortableSetEnabled = Effect.fn("CLI.setEnabled.portable")(fu
         collections
           .map((collection): { value: string; label: string } => ({
             value: collection.collection_id,
-            label: collection.display_name,
+            label: collection.label,
           }))
           .concat({ value: DONE, label: DONE }),
       )
@@ -251,7 +254,7 @@ export const presentPortableSetEnabled = Effect.fn("CLI.setEnabled.portable")(fu
     if (query === DONE) return;
   }
   const collection = state.collections.find((candidate) =>
-    [candidate.collection_id, candidate.display_name].includes(query),
+    [candidate.collection_id, candidate.label].includes(query),
   );
   const selected = collection
     ? state.skills.filter(
@@ -281,7 +284,7 @@ export const presentPortableSetEnabled = Effect.fn("CLI.setEnabled.portable")(fu
                   .filter((binding) => binding.skillIds.includes(skill.skill_id))
                   .map(
                     (binding) =>
-                      `${collection?.display_name ?? binding.collectionId} · ${binding.harness} · ${binding.location}`,
+                      `${collection?.label ?? binding.collectionId} · ${binding.harness} · ${binding.location}`,
                   )
                   .join(", "),
               }),

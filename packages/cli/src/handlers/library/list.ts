@@ -41,8 +41,6 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
         })),
     })),
     bindings: portable.global_bindings.map((binding) => ({
-      collection_id: state.skills.find((skill) => binding.skills.includes(skill.skill_id))
-        ?.collection_id,
       harness: binding.harness,
       skills: [...binding.skills],
     })),

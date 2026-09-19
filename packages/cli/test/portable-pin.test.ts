@@ -63,11 +63,10 @@ it.effect("selects a retained Version and retries Projection without acquiring a
           ...bound,
           global_bindings: [
             {
-              collection_id: first.collection_id,
               harness: "codex",
               scope: { kind: "global" },
               skills: bound.skills
-                .filter((skill) => skill.collection_id === first.collection_id)
+                .filter((skill) => skill.collection_id === first.collection?.collection_id)
                 .map((skill) => skill.skill_id),
             },
           ],
@@ -77,7 +76,6 @@ it.effect("selects a retained Version and retries Projection without acquiring a
     yield* writingTo(
       home,
       projectPortableBindingEffect({
-        collectionId: first.collection_id,
         harness: "codex",
         root: roots.codexRoot,
         variantsPath: join(home, "variants"),
@@ -91,7 +89,7 @@ it.effect("selects a retained Version and retries Projection without acquiring a
     const beforePin = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(beforePin);
     const collection = beforePin.collections.find(
-      (item) => item.collection_id === first.collection_id,
+      (item) => item.collection_id === first.collection?.collection_id,
     );
     assert.ok(collection);
     const skill = beforePin.skills.find((item) => item.collection_id === collection.collection_id);

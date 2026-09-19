@@ -13,7 +13,8 @@ export const PortableAddPreview = Schema.Struct({
 export type PortableAddPreview = typeof PortableAddPreview.Type;
 
 export const PortableAddResult = Schema.Struct({
-  collection_id: Schema.String,
+  collection_id: Schema.optionalKey(Schema.String),
+  skill_ids: Schema.Array(Schema.String),
   retained_version_id: Schema.String,
   snapshot_digest: Digest,
   skills: Schema.Array(PortableAddSkill),

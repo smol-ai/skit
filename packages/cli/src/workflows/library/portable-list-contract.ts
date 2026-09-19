@@ -23,7 +23,6 @@ export const PortableListResult = Schema.Struct({
   ),
   bindings: Schema.Array(
     Schema.Struct({
-      collection_id: Schema.String,
       harness: HarnessName,
       skills: Schema.Array(Schema.String),
     }),

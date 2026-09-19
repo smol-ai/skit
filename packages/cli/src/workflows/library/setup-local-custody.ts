@@ -57,8 +57,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   yield* (yield* LibraryStore).load;
   const selectedCandidates = new Set<string>();
-  const adopted: Array<{ readonly collection_id: string; readonly retained_version_id: string }> =
-    [];
+  const adopted: Array<{ readonly subject_id: string; readonly retained_version_id: string }> = [];
   const plans: Array<{ name: string; plan: LocalAdoptionPlan }> = [];
   for (const selection of selections) {
     const selectionKey = `${selection.name}\0${selection.sourcePath ?? ""}`;
@@ -103,8 +102,13 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       });
     if (candidate.action === "repository-owned") {
       const retained = yield* addPortableLibrarySourceEffect({}, sourcePath);
+      if (retained.collection_id === undefined)
+        return yield* new SetupLocalCustodySelectionInvalid({
+          name: selection.name,
+          reason: "source-not-candidate",
+        });
       adopted.push({
-        collection_id: retained.collection.collection_id,
+        subject_id: retained.collection_id,
         retained_version_id: retained.retained_version_id,
       });
       continue;
@@ -153,14 +157,23 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     );
     if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(adoptionPlan))
       return yield* new PlanIsStale();
-    const retained = yield* addPortableLibrarySourceEffect({}, adoptionPlan.sourcePath);
+    const retained = yield* addPortableLibrarySourceEffect(
+      { standalone: true },
+      adoptionPlan.sourcePath,
+    );
+    const subjectId = retained.collection_id ?? retained.skill_ids[0];
+    if (subjectId === undefined)
+      return yield* new SetupLocalCustodySelectionInvalid({
+        name: selection.name,
+        reason: "source-not-candidate",
+      });
     const state = yield* (yield* LibraryStore).load;
     yield* applyLibraryBindings(state, {
-      query: retained.collection.collection_id,
+      query: subjectId,
       all: false,
       selectedSkills: [selection.name],
       invocation: {
-        subjects: [retained.collection.collection_id],
+        subjects: [subjectId],
         harnesses: [...new Set(targets.map((target) => target.harness))],
         scope: { kind: "global" },
         enabled: true,
@@ -171,7 +184,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       adoptionObservedHash: adoptionPlan.skill.validationDigest,
     });
     adopted.push({
-      collection_id: retained.collection.collection_id,
+      subject_id: subjectId,
       retained_version_id: retained.retained_version_id,
     });
   }

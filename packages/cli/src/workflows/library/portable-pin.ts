@@ -55,7 +55,7 @@ const selectSkills = Effect.fn("Library.selectPortablePinSkills")(function* (
   version: string,
 ) {
   const collections = state.collections.filter((collection) =>
-    [collection.collection_id, collection.display_name].includes(query),
+    [collection.collection_id, collection.label].includes(query),
   );
   if (collections.length > 1) return yield* new PortablePinAmbiguous({ query, version });
   if (collections.length === 1)
@@ -99,13 +99,15 @@ export const planPortablePinEffect = Effect.fn("Library.planPortablePin")(functi
   const historical = retainedMatches.length === 0;
   const acquisition = historical ? acquisitionFor(state, skills[0]!) : undefined;
   if (historical && acquisition?.source_identity.kind !== "registry")
-    return yield* new PortablePinHistoricalUnsupported({ collection_id: skills[0]!.collection_id });
+    return yield* new PortablePinHistoricalUnsupported({
+      collection_id: skills[0]!.collection_id ?? skills[0]!.skill_id,
+    });
   const inspected = historical
     ? yield* inspectPortableLibrarySourceEffect(options, acquisition!.input.value, options.version)
     : undefined;
   const selectedSkills = historical ? skills : [retainedMatches[0]!.skill];
   return {
-    collection_id: selectedSkills[0]!.collection_id,
+    subject_id: selectedSkills[0]!.collection_id ?? selectedSkills[0]!.skill_id,
     skills: selectedSkills.map((skill) => {
       const version = skill.versions.find(
         (candidate) => candidate.skill_version_id === options.version,
@@ -125,12 +127,8 @@ export const planPortablePinEffect = Effect.fn("Library.planPortablePin")(functi
     changed:
       historical ||
       selectedSkills.some((skill) => skill.selected_skill_version_id !== options.version),
-    bindings: [...state.global_bindings, ...state.local_bindings].filter(
-      (binding) =>
-        binding.collection_id === selectedSkills[0]!.collection_id &&
-        binding.skills.some((skillId) =>
-          selectedSkills.some((skill) => skill.skill_id === skillId),
-        ),
+    bindings: [...state.global_bindings, ...state.local_bindings].filter((binding) =>
+      binding.skills.some((skillId) => selectedSkills.some((skill) => skill.skill_id === skillId)),
     ).length,
   };
 });
@@ -148,7 +146,7 @@ export const executePortablePinEffect = Effect.fn("Library.executePortablePin")(
       (yield* selectSkills(state, options.query, options.version))[0]!,
     );
     if (acquisition?.source_identity.kind !== "registry")
-      return yield* new PortablePinHistoricalUnsupported({ collection_id: plan.collection_id });
+      return yield* new PortablePinHistoricalUnsupported({ collection_id: plan.subject_id });
     yield* addPortableLibrarySourceEffect(
       { ...options, selectVersions: false },
       acquisition.input.value,
@@ -199,10 +197,8 @@ export const executePortablePinEffect = Effect.fn("Library.executePortablePin")(
     });
   const current = yield* store.load;
   const skillIds = plan.skills.map((skill) => skill.skill_id);
-  const bindings = [...current.global_bindings, ...current.local_bindings].filter(
-    (binding) =>
-      binding.collection_id === plan.collection_id &&
-      binding.skills.some((skillId) => skillIds.includes(skillId)),
+  const bindings = [...current.global_bindings, ...current.local_bindings].filter((binding) =>
+    binding.skills.some((skillId) => skillIds.includes(skillId)),
   );
   const reconciled = yield* reconcileLibraryProjections({
     roots: options.roots,

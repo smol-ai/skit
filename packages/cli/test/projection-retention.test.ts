@@ -52,7 +52,7 @@ it.effect(
         Effect.provide(storeLayer),
       );
       const skill = initial.skills.find(
-        (candidate) => candidate.collection_id === collection.collection_id,
+        (candidate) => candidate.collection_id === collection.collection?.collection_id,
       );
       assert.ok(skill);
       const harnesses = ["codex", "claude-code", "opencode"] as const;
@@ -62,7 +62,6 @@ it.effect(
           store.publish({
             ...initial,
             global_bindings: harnesses.map((harness) => ({
-              collection_id: collection.collection_id,
               harness,
               scope: { kind: "global" as const },
               skills: [skill.skill_id],
@@ -79,7 +78,6 @@ it.effect(
         yield* writingTo(
           home,
           projectPortableBindingEffect({
-            collectionId: collection.collection_id,
             harness,
             root: rootByHarness[harness],
             variantsPath: join(home, "variants"),

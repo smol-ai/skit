@@ -169,7 +169,6 @@ const bindingForProjection = (
 ): PortableDeviceBinding | PortableRepositoryBinding | undefined =>
   [...state.global_bindings, ...state.local_bindings].find(
     (binding) =>
-      binding.collection_id === projection.collection_id &&
       binding.harness === projection.harness &&
       binding.skills.includes(projection.skill_id) &&
       (binding.scope.kind === "global" || resolve(binding.scope.root) === resolve(projection.root)),
@@ -255,7 +254,6 @@ export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetent
         if (reconciled.has(coordinate)) continue;
         reconciled.add(coordinate);
         yield* projectPortableBindingEffect({
-          collectionId: binding.collection_id,
           harness: binding.harness,
           scope: binding.scope,
           root: projection.root,

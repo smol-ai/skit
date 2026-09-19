@@ -8,7 +8,6 @@ import { portableManifestFromLocalStateEffect } from "../src/library/portable-lo
 import { preparePortableRestoreEffect } from "../src/library/portable-restore.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
-import { writeJsonAtomicEffect } from "../src/platform/atomic-write.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, publishLibrary } from "./helpers/library-store.js";
@@ -78,83 +77,6 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
       yield* fs.readFileString(join(secondOriginal, "SKILL.md")),
       "observed locally\n",
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("migrates a v4 well-known subset once at the Library boundary", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v4-migration-" });
-    const installed = join(home, "installed", "review");
-    const base = "https://skills.example";
-    yield* fs.makeDirectory(installed, { recursive: true });
-    yield* fs.writeFileString(join(installed, "SKILL.md"), "---\nname: review\n---\n");
-    yield* Effect.scoped(
-      withLibraryWriterLock(
-        home,
-        retainObservedCollectionEffect({
-          machineId,
-          identity: {
-            profile: "url-collection",
-            version: 1,
-            url: `${base}#skills=review`,
-          },
-          input: `wellknown:${base}`,
-          source: { type: "well-known", ref: base, members: ["review"] },
-          retainedAt: "2026-09-20T00:00:00.000Z",
-          skills: [
-            {
-              name: "review",
-              sourcePath: installed,
-              relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(installed),
-            },
-          ],
-          observations: [],
-        }).pipe(inLibrary(home)),
-      ),
-    );
-    const current = yield* inspectLibrary(home);
-    assert.strictEqual(current.present, true);
-    if (!current.present) return;
-    const legacy = {
-      ...current.state,
-      schemaVersion: 4 as const,
-      collections: current.state.collections.map((collection) => {
-        if (collection.upstream === undefined) return collection;
-        const { last_acquisition_id: _lastAcquisitionId, ...upstream } = collection.upstream;
-        return {
-          ...collection,
-          upstream: { ...upstream, selection: { kind: "full-tree" as const } },
-        };
-      }),
-      acquisitions: current.state.acquisitions.map((acquisition) => ({
-        ...acquisition,
-        input: { value: `${acquisition.input.value}#skills=review` },
-        selection: { kind: "full-tree" as const },
-      })),
-    };
-    yield* writeJsonAtomicEffect(join(home, "state.json"), legacy);
-
-    const migrated = yield* inspectLibrary(home);
-    assert.strictEqual(migrated.present, true);
-    if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 5);
-    assert.deepStrictEqual(migrated.state.acquisitions[0]?.selection, {
-      kind: "selected-skills",
-      names: ["review"],
-    });
-    assert.strictEqual(migrated.state.acquisitions[0]?.input.value, `wellknown:${base}`);
-    assert.deepStrictEqual(migrated.state.collections[0]?.upstream?.selection, {
-      kind: "selected-skills",
-      names: ["review"],
-    });
-    assert.match(yield* fs.readFileString(join(home, "state.json")), /"schemaVersion": 5/);
-
-    const reopened = yield* inspectLibrary(home);
-    assert.strictEqual(reopened.present, true);
-    if (!reopened.present) return;
-    assert.deepStrictEqual(reopened.state, migrated.state);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

@@ -72,7 +72,7 @@ export const SetupContentIdentity = Schema.Struct({
   observedHash: Schema.optionalKey(Digest),
   libraryMatches: Schema.Array(
     Schema.Struct({
-      collectionId: Schema.optionalKey(CollectionId),
+      subjectId: Schema.String,
       skillId: SkillId,
       skillVersionId: SkillVersionId,
       name: Schema.String,
@@ -191,7 +191,7 @@ export const SetupAuthoredCollection = Schema.Struct({
 export type SetupAuthoredCollection = typeof SetupAuthoredCollection.Type;
 
 export const SetupProjection = Schema.Struct({
-  collectionId: CollectionId,
+  collectionId: Schema.optionalKey(CollectionId),
   collectionDisplayName: Schema.String,
   skillId: SkillId,
   name: Schema.String,
@@ -220,7 +220,7 @@ export const SetupOnboardingCandidate = Schema.Union([
   Schema.Struct({
     ...SetupOnboardingBase,
     action: Schema.tag("bind-existing-entry"),
-    collectionId: CollectionId,
+    subjectId: Schema.String,
     skillVersionId: SkillVersionId,
     collectionDisplayName: Schema.optionalKey(Schema.String),
   }),

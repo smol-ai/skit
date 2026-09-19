@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { Digest, SkillId, SkillVersionId } from "@smolai/skit-core";
 
 export const PortablePinPlan = Schema.Struct({
-  collection_id: Schema.String,
+  subject_id: Schema.String,
   skills: Schema.Array(
     Schema.Struct({
       skill_id: SkillId,
@@ -20,7 +20,7 @@ export const PortablePinPlan = Schema.Struct({
 export type PortablePinPlan = typeof PortablePinPlan.Type;
 
 export const PortablePinResult = Schema.Struct({
-  collection_id: Schema.String,
+  subject_id: Schema.String,
   skills: Schema.Array(
     Schema.Struct({
       skill_id: SkillId,

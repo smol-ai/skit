@@ -24,7 +24,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
           portable,
           {},
           Option.getOrUndefined(input.subject),
-          (collection) => renderer.updateStatus(`Checking ${collection.label}`),
+          (collection) => renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );
       yield* renderer.result(result("check", outputContracts.check, value));
