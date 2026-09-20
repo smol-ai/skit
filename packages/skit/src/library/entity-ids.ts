@@ -70,10 +70,6 @@ export const makeOperationId = (): OperationId =>
 export const makeAdoptionReceiptId = (): AdoptionReceiptId =>
   typeidUnboxed(EntityIdPrefixes.adoptionReceipt) as unknown as AdoptionReceiptId;
 
-/** Transitional source alias; corrected-v4 contracts use RetainedCopyId terminology. */
-export const RetainedTreeId = RetainedCopyId;
-export type RetainedTreeId = RetainedCopyId;
-
 /** UUIDv7 identities read only from schema-v3 state and machine configuration. */
 export const LegacyMachineId = Schema.String.check(Schema.isUUID(7)).pipe(
   Schema.brand("LegacyMachineId"),
@@ -109,7 +105,7 @@ const timestampBytes = (source: string | Date): Uint8Array => {
   );
 };
 
-/** Domain-separated deterministic UUIDv7 TypeID for the v3 -> corrected-v4 migration. */
+/** Domain-separated deterministic UUIDv7 TypeID for legacy UUID migrations. */
 export const deterministicMigrationId = <Entity extends MigratedEntity>(
   entity: Entity,
   timestampSource: string | Date,

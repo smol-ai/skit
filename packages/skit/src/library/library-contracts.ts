@@ -202,6 +202,11 @@ export const RetainedCopy = Schema.Struct({
   digest: Digest,
   copy_profile: Schema.Literal("verbatim/v1"),
   members: Schema.Array(RetainedCopyMember),
+});
+export interface RetainedCopy extends Schema.Schema.Type<typeof RetainedCopy> {}
+
+export const RetainedCopyV4 = Schema.Struct({
+  ...RetainedCopy.fields,
   v3_normalized_tree: Schema.optionalKey(
     Schema.Struct({
       digest: Digest,
@@ -210,7 +215,6 @@ export const RetainedCopy = Schema.Struct({
     }),
   ),
 });
-export interface RetainedCopy extends Schema.Schema.Type<typeof RetainedCopy> {}
 
 export const Acquisition = Schema.Struct({
   acquisition_id: AcquisitionId,
@@ -498,7 +502,7 @@ export const LibraryManifestV4 = Schema.Struct({
   schema: Schema.Literal("skit.library.v4"),
   collections: Schema.Array(CollectionV4),
   skills: Schema.Array(SkillV4),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(RetainedCopyV4),
   acquisitions: Schema.Array(AcquisitionV4),
   snapshot_digests: Schema.Array(Digest),
   bindings: Schema.Array(BindingV4),
@@ -666,6 +670,9 @@ const LibraryManifestFromV4 = LibraryManifestV4.pipe(
         schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
         collections: migrated.collections,
         skills: migrated.skills,
+        retained_copies: manifest.retained_copies.map(
+          ({ v3_normalized_tree: _legacyNormalizedTree, ...copy }) => copy,
+        ),
         acquisitions: migrated.acquisitions,
         bindings: migrated.bindings,
       };

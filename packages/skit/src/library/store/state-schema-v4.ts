@@ -3,11 +3,11 @@ import {
   AcquisitionV4,
   BindingV4,
   CollectionV4,
+  RetainedCopyV4,
   SkillV4,
   migrateLibraryEntitiesFromV4,
 } from "../library-contracts.js";
 import { AbsoluteDevicePath, currentLibraryState, type LibraryState } from "../library-state.js";
-import { RetainedCopy } from "../library-contracts.js";
 import {
   AdoptionReceiptId,
   CollectionId,
@@ -65,7 +65,7 @@ export const LibraryStateV4 = Schema.Struct({
   schemaVersion: Schema.Literal(4),
   collections: Schema.mutable(Schema.Array(CollectionV4)),
   skills: Schema.mutable(Schema.Array(SkillV4)),
-  retained_copies: Schema.mutable(Schema.Array(RetainedCopy)),
+  retained_copies: Schema.mutable(Schema.Array(RetainedCopyV4)),
   acquisitions: Schema.mutable(Schema.Array(AcquisitionV4)),
   global_bindings: Schema.mutable(Schema.Array(DeviceBindingV4)),
   local_bindings: Schema.mutable(Schema.Array(RepositoryBindingV4)),
@@ -112,6 +112,9 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState =
   }
   return currentLibraryState({
     ...fields,
+    retained_copies: state.retained_copies.map(
+      ({ v3_normalized_tree: _legacyNormalizedTree, ...copy }) => copy,
+    ),
     collections: migrated.collections,
     skills: migrated.skills,
     acquisitions: migrated.acquisitions,

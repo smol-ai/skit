@@ -132,6 +132,17 @@ it("decodes a v4 portable subset into the current manifest model", () => {
   const decoded = Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
     ...mixedManifest,
     schema: "skit.library.v4",
+    retained_copies: [
+      {
+        ...copy,
+        v3_normalized_tree: {
+          digest,
+          profile: "legacy/v1",
+          source_updated_at: "2026-01-01T00:00:00.000Z",
+        },
+      },
+      sourceCopy,
+    ],
     acquisitions: [
       mutableAcquisition,
       {
@@ -145,6 +156,7 @@ it("decodes a v4 portable subset into the current manifest model", () => {
     snapshot_digests: [digest, sourceDigest].sort(),
   });
   assert.strictEqual(decoded.schema, "skit.library.v5");
+  assert.strictEqual("v3_normalized_tree" in decoded.retained_copies[0]!, false);
   assert.deepStrictEqual(decoded.acquisitions[1]?.selection, {
     kind: "selected-skills",
     names: ["review"],
