@@ -52,14 +52,23 @@ export const matchingLibrarySubjects = (
   const subjects = librarySubjects(state);
   if (query === undefined) return subjects;
 
-  // A Collection is selected only by its own identity. A member Skill identity must never
-  // silently widen an operation to the Collection that owns it.
-  return [...collectionSubjects(state), ...skillSubjects(state)].filter((subject) =>
-    subject.kind === "collection"
-      ? subject.subjectId === query || subject.label === query
-      : subject.subjectId === query ||
-        subject.label === query ||
-        subject.skill.versions.some((version) => version.skill_version_id === query),
+  const allSubjects = [...collectionSubjects(state), ...skillSubjects(state)];
+  const identityMatches = allSubjects.filter(
+    (subject) =>
+      subject.subjectId === query ||
+      (subject.kind === "skill" &&
+        subject.skill.versions.some((version) => version.skill_version_id === query)),
+  );
+  if (identityMatches.length > 0) return identityMatches;
+
+  // Labels shown by `skit list` name top-level subjects. Prefer that visible namespace over a
+  // same-named contained Skill, while an otherwise-unmatched member label still selects the Skill
+  // itself and never silently widens the operation to its Collection.
+  const topLevelLabelMatches = subjects.filter((subject) => subject.label === query);
+  if (topLevelLabelMatches.length > 0) return topLevelLabelMatches;
+
+  return skillSubjects(state).filter(
+    (subject) => subject.kind === "skill" && subject.label === query,
   );
 };
 

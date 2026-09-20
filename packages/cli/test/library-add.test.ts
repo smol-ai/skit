@@ -69,17 +69,18 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(refreshed.collections.length, 1);
     assert.strictEqual(refreshed.acquisitions.length, 2);
     assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
-    assert.strictEqual(
-      (yield* planUpdatesEffect(
-        refreshed,
-        {
-          roots: { home: root, configHome: join(root, "config"), overrides: {} },
-          variantsPath: join(home, "variants"),
-        },
-        added.collection_id,
-      ).pipe(Effect.provide(libraryStoreLayer({ home })), Effect.flip))._tag,
-      "Library.UpdateNotRefreshable",
-    );
+    const failure = yield* planUpdatesEffect(
+      refreshed,
+      {
+        roots: { home: root, configHome: join(root, "config"), overrides: {} },
+        variantsPath: join(home, "variants"),
+      },
+      added.collection_id,
+    ).pipe(Effect.provide(libraryStoreLayer({ home })), Effect.flip);
+    if (failure._tag !== "Library.UpdateNotRefreshable")
+      return assert.fail(`Expected UpdateNotRefreshable, received ${failure._tag}`);
+    assert.strictEqual(failure.subject_id, added.collection_id);
+    assert.strictEqual(failure.source, source);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

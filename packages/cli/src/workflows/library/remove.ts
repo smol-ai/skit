@@ -13,6 +13,9 @@ export class RemoveNotFound extends Schema.TaggedError<RemoveNotFound>()("Librar
   readonly code = "NOT_FOUND" as const;
   readonly exitCode = 11;
   readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
+  get message(): string {
+    return `No retained Skill or Collection matches ${this.query}`;
+  }
 }
 export class RemoveAmbiguous extends Schema.TaggedError<RemoveAmbiguous>()(
   "Library.RemoveAmbiguous",
@@ -21,6 +24,9 @@ export class RemoveAmbiguous extends Schema.TaggedError<RemoveAmbiguous>()(
   readonly code = "CONFLICT" as const;
   readonly exitCode = 12;
   readonly remediation = "Use a Skill or Collection ID to name exactly one subject.";
+  get message(): string {
+    return `More than one retained Skill or Collection matches ${this.query}`;
+  }
 }
 
 export interface RemoveOptions {

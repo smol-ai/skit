@@ -18,6 +18,9 @@ export class UpdateNotFound extends Schema.TaggedError<UpdateNotFound>()("Librar
   readonly code = "NOT_FOUND" as const;
   readonly exitCode = 11;
   readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
+  get message(): string {
+    return `No retained Skill or Collection matches ${this.query}`;
+  }
 }
 export class UpdateAmbiguous extends Schema.TaggedError<UpdateAmbiguous>()(
   "Library.UpdateAmbiguous",
@@ -26,15 +29,28 @@ export class UpdateAmbiguous extends Schema.TaggedError<UpdateAmbiguous>()(
   readonly code = "CONFLICT" as const;
   readonly exitCode = 12;
   readonly remediation = "Use a Skill or Collection ID to select one subject.";
+  get message(): string {
+    return `More than one retained Skill or Collection matches ${this.query}`;
+  }
 }
 export class UpdateNotRefreshable extends Schema.TaggedError<UpdateNotRefreshable>()(
   "Library.UpdateNotRefreshable",
-  { subject_id: Schema.String },
+  {
+    subject_id: Schema.String,
+    label: Schema.String,
+    source: Schema.optionalKey(Schema.String),
+  },
 ) {
   readonly code = "CONFLICT" as const;
   readonly exitCode = 12;
-  readonly remediation =
-    "This Library subject has no refresh intent. Re-add its source to retain another snapshot.";
+  get message(): string {
+    return `${this.label} has no upstream source`;
+  }
+  get remediation(): string {
+    return this.source === undefined
+      ? "Add its source again to update it."
+      : `Run \`skit add ${this.source}\` to update it.`;
+  }
 }
 
 export interface UpdateOptions extends AddOptions {
@@ -60,13 +76,20 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
   return matches;
 });
 
-const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (subject: LibrarySubject) {
+const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
+  subject: LibrarySubject,
+  sourceInput?: string,
+) {
   const upstream =
     subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
-  const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
-  if (source === undefined)
-    return yield* new UpdateNotRefreshable({ subject_id: subject.subjectId });
-  return source;
+  const resolved = upstream === undefined ? undefined : sourceFromUpstream(upstream);
+  if (resolved === undefined)
+    return yield* new UpdateNotRefreshable({
+      subject_id: subject.subjectId,
+      label: subject.label,
+      ...(sourceInput === undefined ? {} : { source: sourceInput }),
+    });
+  return resolved;
 });
 
 export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
@@ -79,14 +102,17 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
     Effect.gen(function* () {
       const acquisition = latestSubjectAcquisition(state, subject);
       if (acquisition === undefined)
-        return yield* new UpdateNotRefreshable({ subject_id: subject.subjectId });
+        return yield* new UpdateNotRefreshable({
+          subject_id: subject.subjectId,
+          label: subject.label,
+        });
       const tree = state.retained_copies.find(
         (candidate) => candidate.retained_copy_id === acquisition.retained_copy_id,
       );
       if (tree === undefined) return yield* new UpdateNotFound({ query: subject.subjectId });
       const inspected = yield* inspectLibrarySourceEffect(
         options,
-        yield* subjectSourceEffect(subject),
+        yield* subjectSourceEffect(subject, acquisition.input.value),
       );
       return {
         subject_id: subject.subjectId,
@@ -110,7 +136,10 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
   for (const before of selected) {
     const acquisition = latestSubjectAcquisition(state, before);
     if (acquisition === undefined)
-      return yield* new UpdateNotRefreshable({ subject_id: before.subjectId });
+      return yield* new UpdateNotRefreshable({
+        subject_id: before.subjectId,
+        label: before.label,
+      });
     const priorTree = state.retained_copies.find(
       (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
     );
@@ -125,7 +154,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
       },
       addLibrarySourceEffect(
         { ...options, standalone: before.kind === "skill" },
-        yield* subjectSourceEffect(before),
+        yield* subjectSourceEffect(before, acquisition.input.value),
       ),
     );
     const changed = retained.snapshot_digest !== priorTree.digest;

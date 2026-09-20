@@ -20,6 +20,9 @@ export class CheckNotFound extends Schema.TaggedError<CheckNotFound>()("Library.
   readonly code = "NOT_FOUND" as const;
   readonly exitCode = 11;
   readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
+  get message(): string {
+    return `No retained Skill or Collection matches ${this.query}`;
+  }
 }
 export class CheckAmbiguous extends Schema.TaggedError<CheckAmbiguous>()("Library.CheckAmbiguous", {
   query: Schema.String,
@@ -27,6 +30,9 @@ export class CheckAmbiguous extends Schema.TaggedError<CheckAmbiguous>()("Librar
   readonly code = "CONFLICT" as const;
   readonly exitCode = 12;
   readonly remediation = "Use a Skill or Collection ID to select one subject.";
+  get message(): string {
+    return `More than one retained Skill or Collection matches ${this.query}`;
+  }
 }
 
 export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* (
