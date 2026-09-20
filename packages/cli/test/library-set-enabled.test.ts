@@ -123,17 +123,17 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
     assert.strictEqual(
       (yield* planRemoveEffect(ambiguous, "review").pipe(Effect.flip))._tag,
-      "Library.RemoveAmbiguous",
+      "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
       (yield* planUpdatesEffect(ambiguous, base, "review").pipe(Effect.provide(layer), Effect.flip))
         ._tag,
-      "Library.UpdateAmbiguous",
+      "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
       (yield* checkSubjectsEffect(ambiguous, {}, "review").pipe(Effect.provide(layer), Effect.flip))
         ._tag,
-      "Library.CheckAmbiguous",
+      "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
       (yield* planPinEffect(ambiguous, {
@@ -150,7 +150,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
         query: "review",
         invocation,
       }).pipe(Effect.flip))._tag,
-      "Library.SetEnabledAmbiguous",
+      "Library.SubjectAmbiguous",
     );
     const planned = yield* applyLibraryBindings(state, {
       ...base,

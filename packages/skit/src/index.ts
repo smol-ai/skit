@@ -53,6 +53,11 @@ export {
   retainLocalTreeEffect,
 } from "./library/retention/retain-tree.js";
 export * from "./library/library-contracts.js";
+export {
+  LibraryHead,
+  LibraryManifestAnyVersion,
+  LibraryReadResponse,
+} from "./library/library-contracts-v4.js";
 export * from "./library/source-identity.js";
 export * from "./library/library-state.js";
 export * from "./library/library-restore.js";

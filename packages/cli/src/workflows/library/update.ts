@@ -7,33 +7,11 @@ import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   latestSubjectAcquisition,
-  matchingLibrarySubjects,
-  owningCollectionSubject,
+  resolveOwningLibrarySubjects,
   type LibrarySubject,
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
 
-export class UpdateNotFound extends Schema.TaggedError<UpdateNotFound>()("Library.UpdateNotFound", {
-  query: Schema.String,
-}) {
-  readonly code = "NOT_FOUND" as const;
-  readonly exitCode = 11;
-  readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
-  get message(): string {
-    return `No retained Skill or Collection matches ${this.query}`;
-  }
-}
-export class UpdateAmbiguous extends Schema.TaggedError<UpdateAmbiguous>()(
-  "Library.UpdateAmbiguous",
-  { query: Schema.String },
-) {
-  readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
-  readonly remediation = "Use a Skill or Collection ID to select one subject.";
-  get message(): string {
-    return `More than one retained Skill or Collection matches ${this.query}`;
-  }
-}
 export class UpdateNotRefreshable extends Schema.TaggedError<UpdateNotRefreshable>()(
   "Library.UpdateNotRefreshable",
   {
@@ -63,13 +41,7 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
   state: LibraryState,
   query?: string,
 ) {
-  const matches = [
-    ...new Map(
-      matchingLibrarySubjects(state, query)
-        .map((subject) => owningCollectionSubject(state, subject))
-        .map((subject) => [subject.subjectId, subject]),
-    ).values(),
-  ];
+  const matches = yield* resolveOwningLibrarySubjects(state, query);
   if (query === undefined)
     return matches.filter(
       (subject) =>
@@ -77,8 +49,6 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
         subject.kind === "collection" &&
         subject.collection.upstream !== undefined,
     );
-  if (matches.length === 0) return yield* new UpdateNotFound({ query });
-  if (matches.length !== 1) return yield* new UpdateAmbiguous({ query });
   return matches;
 });
 
@@ -114,7 +84,11 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
       const tree = state.retained_copies.find(
         (candidate) => candidate.retained_copy_id === acquisition.retained_copy_id,
       );
-      if (tree === undefined) return yield* new UpdateNotFound({ query: subject.subjectId });
+      if (tree === undefined)
+        return yield* new UpdateNotRefreshable({
+          subject_id: subject.subjectId,
+          label: subject.label,
+        });
       const inspected = yield* inspectLibrarySourceEffect(
         options,
         yield* subjectSourceEffect(subject, acquisition.input.value),
@@ -148,7 +122,11 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
     const priorTree = state.retained_copies.find(
       (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
     );
-    if (priorTree === undefined) return yield* new UpdateNotFound({ query: before.subjectId });
+    if (priorTree === undefined)
+      return yield* new UpdateNotRefreshable({
+        subject_id: before.subjectId,
+        label: before.label,
+      });
     const retained = yield* renderer.withStatus(
       {
         pending: `${before.label} · Fetching and inspecting Source`,

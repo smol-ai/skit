@@ -4,37 +4,15 @@ import {
   retainedTreePath,
   type LibraryState,
 } from "@smolai/skit-core";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { inspectLibrarySourceEffect, type AddOptions } from "./add.js";
 import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
 import {
   latestSubjectAcquisition,
-  matchingLibrarySubjects,
-  owningCollectionSubject,
+  resolveOwningLibrarySubjects,
   subjectAcquisitionIds,
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
-
-export class CheckNotFound extends Schema.TaggedError<CheckNotFound>()("Library.CheckNotFound", {
-  query: Schema.String,
-}) {
-  readonly code = "NOT_FOUND" as const;
-  readonly exitCode = 11;
-  readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
-  get message(): string {
-    return `No retained Skill or Collection matches ${this.query}`;
-  }
-}
-export class CheckAmbiguous extends Schema.TaggedError<CheckAmbiguous>()("Library.CheckAmbiguous", {
-  query: Schema.String,
-}) {
-  readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
-  readonly remediation = "Use a Skill or Collection ID to select one subject.";
-  get message(): string {
-    return `More than one retained Skill or Collection matches ${this.query}`;
-  }
-}
 
 export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* (
   state: LibraryState,
@@ -57,15 +35,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
     verification: "lock-only" | "lock+retained-bytes";
     establishedAt: string;
   }> = [];
-  const subjects = [
-    ...new Map(
-      matchingLibrarySubjects(state, query)
-        .map((subject) => owningCollectionSubject(state, subject))
-        .map((subject) => [subject.subjectId, subject]),
-    ).values(),
-  ];
-  if (query !== undefined && subjects.length === 0) return yield* new CheckNotFound({ query });
-  if (query !== undefined && subjects.length !== 1) return yield* new CheckAmbiguous({ query });
+  const subjects = yield* resolveOwningLibrarySubjects(state, query);
   const checked = yield* Effect.forEach(subjects, (subject) =>
     Effect.gen(function* () {
       if (

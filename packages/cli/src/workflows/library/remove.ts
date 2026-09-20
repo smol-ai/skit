@@ -4,30 +4,8 @@ import {
   SkillRemovalRequiresCollection,
   type LibraryState,
 } from "@smolai/skit-core";
-import { Effect, Schema } from "effect";
-import { matchingLibrarySubjects } from "./subject-resolution.js";
-
-export class RemoveNotFound extends Schema.TaggedError<RemoveNotFound>()("Library.RemoveNotFound", {
-  query: Schema.String,
-}) {
-  readonly code = "NOT_FOUND" as const;
-  readonly exitCode = 11;
-  readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
-  get message(): string {
-    return `No retained Skill or Collection matches ${this.query}`;
-  }
-}
-export class RemoveAmbiguous extends Schema.TaggedError<RemoveAmbiguous>()(
-  "Library.RemoveAmbiguous",
-  { query: Schema.String },
-) {
-  readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
-  readonly remediation = "Use a Skill or Collection ID to name exactly one subject.";
-  get message(): string {
-    return `More than one retained Skill or Collection matches ${this.query}`;
-  }
-}
+import { Effect } from "effect";
+import { resolveLibrarySubject } from "./subject-resolution.js";
 
 export interface RemoveOptions {
   readonly query: string;
@@ -39,14 +17,9 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
   state: LibraryState,
   query: string,
 ) {
-  const matches = matchingLibrarySubjects(state, query);
-  if (matches.length === 0) return yield* new RemoveNotFound({ query });
-  if (matches.length !== 1) return yield* new RemoveAmbiguous({ query });
-  const subject = matches[0];
-  if (subject === undefined) return yield* new RemoveNotFound({ query });
+  const subject = yield* resolveLibrarySubject(state, query);
   if (subject.kind === "skill") {
     const collectionId = subject.skill.collection_id;
-    if (collectionId === undefined) return yield* new RemoveNotFound({ query });
     const collection = state.collections.find(
       (candidate) => candidate.collection_id === collectionId,
     );

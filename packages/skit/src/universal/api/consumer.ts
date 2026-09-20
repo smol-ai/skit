@@ -5,12 +5,12 @@ import {
   libraryWriteRequestSchema,
 } from "../../distribution/api-contracts.js";
 import {
-  LibraryReadResponse,
   LibraryResponse,
   LibraryWriteRequest,
   SnapshotArchive,
   SnapshotUploadResponse,
 } from "../../library/library-contracts.js";
+import { LibraryReadResponse } from "../../library/library-contracts-v4.js";
 import {
   CreatedPat,
   ListedPat,

@@ -6,7 +6,7 @@ import {
   RetainedCopyV4,
   SkillV4,
   migrateLibraryEntitiesFromV4,
-} from "../library-contracts.js";
+} from "../library-contracts-v4.js";
 import { AbsoluteDevicePath, currentLibraryState, type LibraryState } from "../library-state.js";
 import {
   AdoptionReceiptId,

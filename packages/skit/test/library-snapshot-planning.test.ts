@@ -11,12 +11,12 @@ import {
 import {
   acquisitionIsSourceRestorable,
   librarySnapshotDigests,
-  LibraryManifestAnyVersion,
   SnapshotArchive,
   type Acquisition,
   type LibraryManifest,
   type RetainedCopy,
 } from "../src/library/library-contracts.js";
+import { LibraryManifestAnyVersion } from "../src/library/library-contracts-v4.js";
 import { completeRestoreArchivesEffect } from "../src/library/library-restore.js";
 
 const digest = `sha256:${"a".repeat(64)}`;

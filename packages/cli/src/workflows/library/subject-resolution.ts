@@ -1,4 +1,5 @@
 import type { LibraryState } from "@smolai/skit-core";
+import { Effect, Schema } from "effect";
 
 type Collection = LibraryState["collections"][number];
 type Skill = LibraryState["skills"][number];
@@ -18,6 +19,30 @@ export type LibrarySubject =
       readonly skill: Skill;
       readonly skills: readonly [Skill];
     };
+
+export class LibrarySubjectNotFound extends Schema.TaggedError<LibrarySubjectNotFound>()(
+  "Library.SubjectNotFound",
+  { query: Schema.String },
+) {
+  readonly code = "NOT_FOUND" as const;
+  readonly exitCode = 11;
+  readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
+  get message(): string {
+    return `No retained Skill or Collection matches ${this.query}`;
+  }
+}
+
+export class LibrarySubjectAmbiguous extends Schema.TaggedError<LibrarySubjectAmbiguous>()(
+  "Library.SubjectAmbiguous",
+  { query: Schema.String },
+) {
+  readonly code = "CONFLICT" as const;
+  readonly exitCode = 12;
+  readonly remediation = "Use a Skill or Collection ID to select one subject.";
+  get message(): string {
+    return `More than one retained Skill or Collection matches ${this.query}`;
+  }
+}
 
 const collectionSubjects = (state: LibraryState): readonly LibrarySubject[] =>
   state.collections.map((collection): LibrarySubject => ({
@@ -68,6 +93,18 @@ export const matchingLibrarySubjects = (
   );
 };
 
+export const resolveLibrarySubject = Effect.fn("Library.resolveSubject")(function* (
+  state: LibraryState,
+  query: string,
+) {
+  const matches = matchingLibrarySubjects(state, query);
+  if (matches.length === 0) return yield* new LibrarySubjectNotFound({ query });
+  if (matches.length !== 1) return yield* new LibrarySubjectAmbiguous({ query });
+  const subject = matches[0];
+  if (subject === undefined) return yield* new LibrarySubjectNotFound({ query });
+  return subject;
+});
+
 export const subjectAcquisitionIds = (subject: LibrarySubject): ReadonlySet<string> =>
   new Set(
     subject.skills.flatMap((skill) =>
@@ -86,6 +123,21 @@ export const owningCollectionSubject = (
           candidate.kind === "collection" &&
           candidate.collection.collection_id === subject.skill.collection_id,
       ) ?? subject);
+
+const uniqueSubjects = (subjects: readonly LibrarySubject[]): readonly LibrarySubject[] => [
+  ...new Map(subjects.map((subject) => [subject.subjectId, subject])).values(),
+];
+
+/** Default to all top-level Collections; a query may address a member and widen to its owner. */
+export const resolveOwningLibrarySubjects = Effect.fn("Library.resolveOwningSubjects")(function* (
+  state: LibraryState,
+  query?: string,
+) {
+  if (query === undefined) return librarySubjects(state);
+  return uniqueSubjects([
+    owningCollectionSubject(state, yield* resolveLibrarySubject(state, query)),
+  ]);
+});
 
 export const latestSubjectAcquisition = (state: LibraryState, subject: LibrarySubject) => {
   const preferred =

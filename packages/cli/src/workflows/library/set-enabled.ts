@@ -17,24 +17,7 @@ import {
 } from "./set-enabled-invocation.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
-import { matchingLibrarySubjects } from "./subject-resolution.js";
-
-export class SetEnabledMissing extends Schema.TaggedError<SetEnabledMissing>()(
-  "Library.SetEnabledMissing",
-  { query: Schema.String, message: Schema.String },
-) {
-  readonly code = "NOT_FOUND" as const;
-  readonly exitCode = 11;
-  readonly remediation = "Run `skit list` to find a retained Collection or Skill.";
-}
-export class SetEnabledAmbiguous extends Schema.TaggedError<SetEnabledAmbiguous>()(
-  "Library.SetEnabledAmbiguous",
-  { query: Schema.String, message: Schema.String },
-) {
-  readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
-  readonly remediation = "Use a Collection ID or Skill Version ID to select one match.";
-}
+import { resolveLibrarySubject } from "./subject-resolution.js";
 
 export interface SetEnabledOptions {
   readonly query: string;
@@ -67,36 +50,11 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   options: SetEnabledOptions,
 ) {
   yield* Effect.fromResult(validateSetEnabledInvocation(options.invocation));
-  const matches = matchingLibrarySubjects(state, options.query).map((subject) => {
-    const collection = subject.kind === "collection" ? subject.collection : undefined;
-    const collectionMatch =
-      collection !== undefined &&
-      [collection.collection_id, collection.label].includes(options.query);
-    const skill = subject.skills.find(
-      (member) =>
-        member.name === options.query ||
-        member.skill_id === options.query ||
-        member.versions.some((version) => version.skill_version_id === options.query),
-    );
-    return { collection, members: subject.skills, collectionMatch, skill };
-  });
-  if (matches.length === 0)
-    return yield* new SetEnabledMissing({
-      query: options.query,
-      message: `No retained Collection or Skill matches ${options.query}`,
-    });
-  if (matches.length !== 1)
-    return yield* new SetEnabledAmbiguous({
-      query: options.query,
-      message: `More than one retained Collection or Skill matches ${options.query}`,
-    });
-  const match = matches[0];
-  if (match === undefined)
-    return yield* new SetEnabledMissing({
-      query: options.query,
-      message: `No retained Collection or Skill matches ${options.query}`,
-    });
-  if (options.all && !match.collectionMatch)
+  const subject = yield* resolveLibrarySubject(state, options.query);
+  const collection = subject.kind === "collection" ? subject.collection : undefined;
+  const skill = subject.kind === "skill" ? subject.skill : undefined;
+  const members = subject.skills;
+  if (options.all && collection === undefined)
     return yield* new OptionCombinationInvalid({
       detail: "--all requires a Collection, not one contained Skill",
     });
@@ -104,36 +62,35 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
     return yield* new OptionCombinationInvalid({
       detail: "Choose either --all or selected Skills",
     });
-  if (options.selectedSkills !== undefined && !match.collectionMatch)
+  if (options.selectedSkills !== undefined && collection === undefined)
     return yield* new OptionCombinationInvalid({
       detail: "Selected Skills require a Collection",
     });
   if (
     !options.all &&
     options.selectedSkills === undefined &&
-    match.collectionMatch &&
-    match.members.length !== 1
+    collection !== undefined &&
+    members.length !== 1
   )
     return yield* new OptionCombinationInvalid({
       detail: "Select a contained Skill or use --all for this Collection",
     });
-  if (options.selectedSkills?.some((name) => !match.members.some((member) => member.name === name)))
+  if (options.selectedSkills?.some((name) => !members.some((member) => member.name === name)))
     return yield* new OptionCombinationInvalid({
       detail: "Selected Skill is absent from this Collection",
     });
   const skills = [
     ...new Set(
       options.selectedSkills ??
-        (options.all || match.collectionMatch
-          ? match.members.map((member) => member.name)
-          : match.skill === undefined
+        (options.all || collection !== undefined
+          ? members.map((member) => member.name)
+          : skill === undefined
             ? []
-            : [match.skill.name]),
+            : [skill.name]),
     ),
   ];
-  const skillIds = skills.map(
-    (name) => match.members.find((member) => member.name === name)!.skill_id,
-  );
+  const skillIdsByName = new Map(members.map((member) => [member.name, member.skill_id]));
+  const skillIds = skills.flatMap((name) => skillIdsByName.get(name) ?? []);
   const scope = options.invocation.scope;
   const bindings: Array<DeviceBinding | RepositoryBinding> = [];
   for (const harness of options.invocation.harnesses) {
@@ -178,7 +135,7 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
     return canonicalJson(existing ?? null) !== canonicalJson(binding);
   });
   return {
-    subject_id: match.collection?.collection_id ?? match.skill!.skill_id,
+    subject_id: subject.subjectId,
     skills,
     harnesses: [...options.invocation.harnesses],
     scope,
