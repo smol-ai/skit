@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem, Ref } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
@@ -12,7 +13,7 @@ import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
 
-it.effect("recovers a skills.sh lock baseline from Git history before reporting an update", () =>
+it.effect("checks a standalone skills.sh Skill against its recorded Git source", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -85,29 +86,60 @@ it.effect("recovers a skills.sh lock baseline from Git history before reporting 
     );
     expect(saved.present).toBe(true);
     if (!saved.present) return;
-    const collection = saved.state.collections[0]!;
-    const localCollection = {
-      ...collection,
+    const member = saved.state.skills[0]!;
+    const { collection_id: _collectionId, ...memberFields } = member;
+    const standalone = {
+      ...memberFields,
       upstream: {
-        ...collection.upstream!,
         source_identity: {
-          kind: "git" as const,
-          remote: { value: upstream },
-          collection_root: "." as const,
+          kind: "well-known" as const,
+          locator: { value: "https://skills.example.test" },
         },
+        tracking: { kind: "default" as const },
+        selection: { kind: "selected-skills" as const, names: [member.name] },
+        last_acquisition_id: saved.state.acquisitions[0]!.acquisition_id,
       },
     };
     const localState = {
       ...saved.state,
-      collections: [localCollection],
+      collections: [],
+      skills: [standalone],
       acquisitions: saved.state.acquisitions.map((acquisition) => ({
         ...acquisition,
-        input: { value: upstream },
-        source_identity: localCollection.upstream.source_identity,
+        observations: acquisition.observations.map((observation) => ({
+          ...observation,
+          source_type: "github",
+          source_url: upstream,
+        })),
       })),
     };
     const published = yield* Ref.make<LibraryState | undefined>(undefined);
-    const checked = yield* checkSubjectsEffect(localState, {}, localCollection.collection_id).pipe(
+    const discoveryClient = HttpClient.make((request) => {
+      const digest = `sha256:${createHash("sha256").update(original).digest("hex")}`;
+      const body = request.url.endsWith("/.well-known/agent-skills/index.json")
+        ? JSON.stringify({
+            $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+            skills: [
+              {
+                name: "review",
+                description: "Review.",
+                type: "skill-md",
+                url: "/review/SKILL.md",
+                digest,
+              },
+            ],
+          })
+        : request.url.endsWith("/review/SKILL.md")
+          ? original
+          : "missing";
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(body, { status: body === "missing" ? 404 : 200 }),
+        ),
+      );
+    });
+    const checked = yield* checkSubjectsEffect(localState, {}, standalone.skill_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(localState),
         inspect: Effect.succeed({ present: true as const, state: localState }),
@@ -117,6 +149,7 @@ it.effect("recovers a skills.sh lock baseline from Git history before reporting 
         home: home.home,
         originalsPath: home.originals,
       }),
+      Effect.provideService(HttpClient.HttpClient, discoveryClient),
     );
     expect(checked[0]?.skills_sh?.members).toEqual([
       expect.objectContaining({

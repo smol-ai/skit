@@ -203,6 +203,20 @@ See [the commit protocol](adr/0018-own-cli-workflows-with-effect.md#author-initi
 
 `add` resolves a Source, retains its Original tree, validates and normalizes its content, stores both trees content-addressably, derives Collection Identity through the Collection Identity catalog, and writes a Library Entry. Descriptorless Skill Collections receive source-backed identities such as `github:mattpocock/skills`; they do not receive a synthetic SKIT identity.
 
+A Collection is a coordinated source-tree boundary evidenced by the acquired source or by a SKIT
+Descriptor. Git, URL, archive, and local source trees therefore remain Collections even when the
+acquired tree currently contains one Skill. A refreshable standalone is a well-known individual
+Skill whose source addresses that Skill independently. A source-less standalone is an installed
+Skill adopted by setup when SKIT has no evidence for a coordinated source tree. Consequently,
+`skit add ./path` acquires and retains that path as a source tree, while setup may adopt an
+individual installed Skill without claiming that its surrounding installation directory is a
+Collection.
+
+An upstream records refresh intent; an Acquisition records where retained bytes came from. Local
+Collection acquisitions are provenance, not portable refresh intent, so `check` reports their
+source status as not applicable and `update` refuses them. Re-adding the same local path records a
+new Acquisition on the existing Collection.
+
 `pull` reacquires a recorded origin. It updates stored source and release information while preserving binding intent. `check` reports whether changes are available; `update` applies them.
 
 None of these operations enables a skill merely because it was acquired.

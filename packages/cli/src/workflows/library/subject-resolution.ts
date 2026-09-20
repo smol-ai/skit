@@ -19,43 +19,48 @@ export type LibrarySubject =
       readonly skills: readonly [Skill];
     };
 
-export const librarySubjects = (state: LibraryState): readonly LibrarySubject[] => [
-  ...state.collections.map((collection): LibrarySubject => ({
+const collectionSubjects = (state: LibraryState): readonly LibrarySubject[] =>
+  state.collections.map((collection): LibrarySubject => ({
     kind: "collection",
     subjectId: collection.collection_id,
     label: collection.label,
     collection,
     skills: state.skills.filter((skill) => skill.collection_id === collection.collection_id),
-  })),
-  ...state.skills
-    .filter((skill) => skill.collection_id === undefined)
-    .map((skill): LibrarySubject => ({
-      kind: "skill",
-      subjectId: skill.skill_id,
-      label: skill.name,
-      skill,
-      skills: [skill],
-    })),
-];
+  }));
 
-export const subjectMatches = (subject: LibrarySubject, query: string): boolean =>
-  subject.subjectId === query ||
-  subject.label === query ||
-  subject.skills.some(
-    (skill) =>
-      skill.skill_id === query ||
-      skill.name === query ||
-      skill.versions.some((version) => version.skill_version_id === query),
-  );
+const skillSubjects = (state: LibraryState): readonly LibrarySubject[] =>
+  state.skills.map((skill): LibrarySubject => ({
+    kind: "skill",
+    subjectId: skill.skill_id,
+    label: skill.name,
+    skill,
+    skills: [skill],
+  }));
+
+/** Default commands operate on source boundaries plus source-less standalone Skills. */
+export const librarySubjects = (state: LibraryState): readonly LibrarySubject[] => [
+  ...collectionSubjects(state),
+  ...skillSubjects(state).filter(
+    (subject) => subject.kind === "skill" && subject.skill.collection_id === undefined,
+  ),
+];
 
 export const matchingLibrarySubjects = (
   state: LibraryState,
   query?: string,
 ): readonly LibrarySubject[] => {
   const subjects = librarySubjects(state);
-  return query === undefined
-    ? subjects
-    : subjects.filter((subject) => subjectMatches(subject, query));
+  if (query === undefined) return subjects;
+
+  // A Collection is selected only by its own identity. A member Skill identity must never
+  // silently widen an operation to the Collection that owns it.
+  return [...collectionSubjects(state), ...skillSubjects(state)].filter((subject) =>
+    subject.kind === "collection"
+      ? subject.subjectId === query || subject.label === query
+      : subject.subjectId === query ||
+        subject.label === query ||
+        subject.skill.versions.some((version) => version.skill_version_id === query),
+  );
 };
 
 export const subjectAcquisitionIds = (subject: LibrarySubject): ReadonlySet<string> =>

@@ -1,4 +1,9 @@
-import { removeCollectionEffect, removeSkillEffect, type LibraryState } from "@smolai/skit-core";
+import {
+  removeCollectionEffect,
+  removeSkillEffect,
+  SkillRemovalRequiresCollection,
+  type LibraryState,
+} from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import { matchingLibrarySubjects } from "./subject-resolution.js";
 
@@ -33,6 +38,11 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
   if (matches.length !== 1) return yield* new RemoveAmbiguous({ query });
   const subject = matches[0];
   if (subject === undefined) return yield* new RemoveNotFound({ query });
+  if (subject.kind === "skill" && subject.skill.collection_id !== undefined)
+    return yield* new SkillRemovalRequiresCollection({
+      skill_id: subject.skill.skill_id,
+      collection_id: subject.skill.collection_id,
+    });
   const skills = subject.skills;
   return {
     subject_id: subject.subjectId,

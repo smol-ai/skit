@@ -90,6 +90,14 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.ok(member);
     const memberVersion = member.selected_skill_version_id;
     assert.ok(memberVersion);
+    assert.deepStrictEqual(
+      matchingLibrarySubjects(state, member.skill_id).map((subject) => subject.kind),
+      ["skill"],
+    );
+    assert.strictEqual(
+      (yield* planRemoveEffect(state, member.skill_id).pipe(Effect.flip))._tag,
+      "Library.SkillRemovalRequiresCollection",
+    );
     const { collection_id: _collectionId, ...standalone } = member;
     const ambiguous = {
       ...state,

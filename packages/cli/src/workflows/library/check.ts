@@ -3,16 +3,16 @@ import {
   originalTreeHashEffect,
   retainedTreePath,
   type LibraryState,
-  type SkitSource,
 } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
-import { acquisitionSourceEffect, inspectLibrarySourceEffect, type AddOptions } from "./add.js";
-import { checkSkillsShCollectionEffect } from "./skills-sh-update-check.js";
+import { inspectLibrarySourceEffect, type AddOptions } from "./add.js";
+import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
 import {
   latestSubjectAcquisition,
   matchingLibrarySubjects,
   subjectAcquisitionIds,
 } from "./subject-resolution.js";
+import { sourceFromUpstream } from "./upstream-source.js";
 
 export class CheckNotFound extends Schema.TaggedError<CheckNotFound>()("Library.CheckNotFound", {
   query: Schema.String,
@@ -81,19 +81,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
             );
       const upstream =
         subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
-      let source: SkitSource | undefined;
-      if (upstream !== undefined && acquisition !== undefined)
-        source =
-          subject.kind === "collection"
-            ? yield* acquisitionSourceEffect(acquisition)
-            : upstream.source_identity.kind === "well-known" &&
-                upstream.selection.kind === "selected-skills"
-              ? {
-                  type: "well-known",
-                  ref: upstream.source_identity.locator.value,
-                  members: upstream.selection.names,
-                }
-              : undefined;
+      const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
       const inspected =
         source === undefined ? undefined : yield* inspectLibrarySourceEffect(options, source);
       const retained_copies = [];
@@ -106,15 +94,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
             copy.digest,
         });
       }
-      const skillsSh =
-        subject.kind === "collection"
-          ? yield* checkSkillsShCollectionEffect(
-              state,
-              subject.collection,
-              acquisition,
-              currentCopy,
-            )
-          : undefined;
+      const skillsSh = yield* checkSkillsShSubjectEffect(subject, acquisition, currentCopy);
       if (skillsSh && acquisition)
         for (const member of skillsSh.members)
           if (

@@ -71,8 +71,51 @@
       "observations": []
     }
   ],
-  "global_bindings": [],
-  "local_bindings": [],
-  "projections": [],
-  "adoption_receipts": []
+  "global_bindings": [
+    {
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "harness": "codex",
+      "scope": { "kind": "global" },
+      "skills": ["skill_01m2xxw78pfeva4p3ymmydrc3z"],
+      "invocation_policies": {
+        "skill_01m2xxw78pfeva4p3ymmydrc3z": "explicit"
+      }
+    }
+  ],
+  "local_bindings": [
+    {
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "harness": "codex",
+      "scope": { "kind": "repository", "root": "/workspace" },
+      "skills": ["skill_01m2xxw78pfeva4p3ymmydrc3z"],
+      "invocation_policies": {
+        "skill_01m2xxw78pfeva4p3ymmydrc3z": "implicit"
+      }
+    }
+  ],
+  "projections": [
+    {
+      "projection_id": "proj_01m2xxw78pfeva4p4n42pv0xqg",
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "skill_id": "skill_01m2xxw78pfeva4p3ymmydrc3z",
+      "skill_version_id": "skv_01m2xxw78pfeva4p43y4j73g7k",
+      "harness": "codex",
+      "root": "/skills",
+      "path": "/skills/review",
+      "expected_digest": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+      "status": "installed",
+      "projected_at": "2026-09-20T00:00:00.000Z"
+    }
+  ],
+  "adoption_receipts": [
+    {
+      "receipt_id": "rcpt_01m2xxw78pfeva4p4k9xj0j8rb",
+      "adopted_at": "2026-09-20T00:00:00.000Z",
+      "machine_id": "mach_01k58c0k00e3w9pw6d0q2zj348",
+      "path": "/skills/review",
+      "observed_digest": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+      "skill_version_id": "skv_01m2xxw78pfeva4p43y4j73g7k",
+      "projection_ids": ["proj_01m2xxw78pfeva4p4n42pv0xqg"]
+    }
+  ]
 }

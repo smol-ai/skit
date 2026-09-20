@@ -519,14 +519,16 @@ describe("CLI contracts", () => {
       expect(readFileSync(join(repo, relative), "utf8")).toContain("# v1");
 
     const stateBefore = readFileSync(join(home, "state.json"));
+    const collectionId = JSON.parse(stateBefore.toString()).collections[0].collection_id as string;
     const codexBefore = readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"));
     await writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v2\n");
     for (const args of [
       ["disable", "review", "--for", "codex", "--repo", repo, "--dry-run", "--json"],
-      ["update", "review", "--dry-run", "--json"],
-      ["remove", "review", "--dry-run", "--json"],
+      ["remove", collectionId, "--dry-run", "--json"],
     ])
       expect(run(...args).status).toBe(0);
+    expect(run("update", "review", "--dry-run", "--json").status).toBe(12);
+    expect(run("remove", "review", "--dry-run", "--json").status).not.toBe(0);
     expect(readFileSync(join(home, "state.json"))).toEqual(stateBefore);
     expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"))).toEqual(
       codexBefore,

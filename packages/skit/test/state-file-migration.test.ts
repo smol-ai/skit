@@ -31,6 +31,24 @@ it.effect("migrates a persisted v4 well-known subset once at the state-file boun
       kind: "selected-skills",
       names: ["review"],
     });
+    const skillId = migrated.state.skills[0]!.skill_id;
+    assert.deepStrictEqual(migrated.state.global_bindings[0]?.skills, [skillId]);
+    assert.strictEqual(
+      migrated.state.global_bindings[0]?.invocation_policies?.[skillId],
+      "explicit",
+    );
+    assert.deepStrictEqual(migrated.state.local_bindings[0]?.scope, {
+      kind: "repository",
+      root: "/workspace",
+    });
+    assert.deepStrictEqual(migrated.state.local_bindings[0]?.skills, [skillId]);
+    assert.strictEqual(
+      migrated.state.local_bindings[0]?.invocation_policies?.[skillId],
+      "implicit",
+    );
+    assert.strictEqual(migrated.state.projections.length, 1);
+    assert.strictEqual(migrated.state.projections[0]?.skill_id, migrated.state.skills[0]?.skill_id);
+    assert.strictEqual("collection_id" in migrated.state.projections[0]!, false);
 
     const reopened = yield* inspectLibrary(home);
     assert.strictEqual(reopened.present, true);

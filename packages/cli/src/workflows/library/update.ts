@@ -1,12 +1,7 @@
-import { LibraryStore, type LibraryState, type SkitSource } from "@smolai/skit-core";
+import { LibraryStore, type LibraryState } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import type { InventoryRootOptions } from "../../projection/roots.js";
-import {
-  addLibrarySourceEffect,
-  acquisitionSourceEffect,
-  inspectLibrarySourceEffect,
-  type AddOptions,
-} from "./add.js";
+import { addLibrarySourceEffect, inspectLibrarySourceEffect, type AddOptions } from "./add.js";
 import type { UpdateResult } from "./update-contract.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -15,6 +10,7 @@ import {
   matchingLibrarySubjects,
   type LibrarySubject,
 } from "./subject-resolution.js";
+import { sourceFromUpstream } from "./upstream-source.js";
 
 export class UpdateNotFound extends Schema.TaggedError<UpdateNotFound>()("Library.UpdateNotFound", {
   query: Schema.String,
@@ -31,12 +27,14 @@ export class UpdateAmbiguous extends Schema.TaggedError<UpdateAmbiguous>()(
   readonly exitCode = 12;
   readonly remediation = "Use a Skill or Collection ID to select one subject.";
 }
-export class UpdateNoSource extends Schema.TaggedError<UpdateNoSource>()("Library.UpdateNoSource", {
-  subject_id: Schema.String,
-}) {
+export class UpdateNotRefreshable extends Schema.TaggedError<UpdateNotRefreshable>()(
+  "Library.UpdateNotRefreshable",
+  { subject_id: Schema.String },
+) {
   readonly code = "CONFLICT" as const;
   readonly exitCode = 12;
-  readonly remediation = "This Library subject has no source to validate for update.";
+  readonly remediation =
+    "This Library subject has no refresh intent. Re-add its source to retain another snapshot.";
 }
 
 export interface UpdateOptions extends AddOptions {
@@ -53,29 +51,21 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
     return matches.filter(
       (subject) =>
         latestSubjectAcquisition(state, subject) !== undefined &&
-        (subject.kind === "collection" || subject.skill.upstream !== undefined),
+        (subject.kind === "collection"
+          ? subject.collection.upstream !== undefined
+          : subject.skill.upstream !== undefined),
     );
   if (matches.length === 0) return yield* new UpdateNotFound({ query });
   if (matches.length !== 1) return yield* new UpdateAmbiguous({ query });
   return matches;
 });
 
-const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
-  subject: LibrarySubject,
-  acquisition: LibraryState["acquisitions"][number],
-) {
-  if (subject.kind === "collection") return yield* acquisitionSourceEffect(acquisition);
-  const upstream = subject.skill.upstream;
-  if (
-    upstream?.source_identity.kind !== "well-known" ||
-    upstream.selection.kind !== "selected-skills"
-  )
-    return yield* new UpdateNoSource({ subject_id: subject.subjectId });
-  const source: SkitSource = {
-    type: "well-known",
-    ref: upstream.source_identity.locator.value,
-    members: upstream.selection.names,
-  };
+const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (subject: LibrarySubject) {
+  const upstream =
+    subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
+  const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
+  if (source === undefined)
+    return yield* new UpdateNotRefreshable({ subject_id: subject.subjectId });
   return source;
 });
 
@@ -89,14 +79,14 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
     Effect.gen(function* () {
       const acquisition = latestSubjectAcquisition(state, subject);
       if (acquisition === undefined)
-        return yield* new UpdateNoSource({ subject_id: subject.subjectId });
+        return yield* new UpdateNotRefreshable({ subject_id: subject.subjectId });
       const tree = state.retained_copies.find(
         (candidate) => candidate.retained_copy_id === acquisition.retained_copy_id,
       );
       if (tree === undefined) return yield* new UpdateNotFound({ query: subject.subjectId });
       const inspected = yield* inspectLibrarySourceEffect(
         options,
-        yield* subjectSourceEffect(subject, acquisition),
+        yield* subjectSourceEffect(subject),
       );
       return {
         subject_id: subject.subjectId,
@@ -120,7 +110,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
   for (const before of selected) {
     const acquisition = latestSubjectAcquisition(state, before);
     if (acquisition === undefined)
-      return yield* new UpdateNoSource({ subject_id: before.subjectId });
+      return yield* new UpdateNotRefreshable({ subject_id: before.subjectId });
     const priorTree = state.retained_copies.find(
       (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
     );
@@ -135,7 +125,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
       },
       addLibrarySourceEffect(
         { ...options, standalone: before.kind === "skill" },
-        yield* subjectSourceEffect(before, acquisition),
+        yield* subjectSourceEffect(before),
       ),
     );
     const changed = retained.snapshot_digest !== priorTree.digest;

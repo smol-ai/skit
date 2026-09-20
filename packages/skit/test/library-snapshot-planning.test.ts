@@ -1,6 +1,12 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { makeAcquisitionId, makeMachineId, makeRetainedCopyId } from "../src/library/entity-ids.js";
+import {
+  makeAcquisitionId,
+  makeMachineId,
+  makeRetainedCopyId,
+  makeSkillId,
+  makeSkillVersionId,
+} from "../src/library/entity-ids.js";
 import {
   acquisitionIsSourceRestorable,
   librarySnapshotDigests,
@@ -144,6 +150,59 @@ it("decodes a v4 portable subset into the current manifest model", () => {
     names: ["review"],
   });
   assert.strictEqual(decoded.acquisitions[1]?.input.value, "wellknown:https://skills.example");
+});
+
+it("requires an upstream last Acquisition to govern the standalone Skill", () => {
+  const origin = acquisition({
+    source_identity: { kind: "well-known", locator: { value: "https://skills.example" } },
+    tracking: { kind: "default" },
+    selection: { kind: "selected-skills", names: ["review"] },
+    input: { value: "wellknown:https://skills.example" },
+    source_revision: undefined,
+  });
+  const unrelated = acquisition({
+    source_identity: { kind: "well-known", locator: { value: "https://skills.example" } },
+    tracking: { kind: "default" },
+    selection: { kind: "selected-skills", names: ["review"] },
+    input: { value: "wellknown:https://skills.example" },
+    source_revision: undefined,
+  });
+  const skillId = makeSkillId();
+  const versionId = makeSkillVersionId();
+  assert.throws(() =>
+    Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
+      schema: "skit.library.v5",
+      collections: [],
+      skills: [
+        {
+          skill_id: skillId,
+          path: ".",
+          name: "review",
+          upstream: {
+            source_identity: origin.source_identity,
+            tracking: origin.tracking,
+            selection: origin.selection,
+            last_acquisition_id: unrelated.acquisition_id,
+          },
+          selected_skill_version_id: versionId,
+          versions: [
+            {
+              skill_version_id: versionId,
+              source_digest: digest,
+              artifact_digest: digest,
+              validation_identity_digest: digest,
+              materialization_profile: "plain-skill/v1",
+              origins: [{ acquisition_id: origin.acquisition_id, source_path: "." }],
+            },
+          ],
+        },
+      ],
+      retained_copies: [copy],
+      acquisitions: [origin, unrelated],
+      snapshot_digests: [digest],
+      bindings: [],
+    }),
+  );
 });
 
 it.effect("combines downloaded snapshots with exact source reacquisition", () =>

@@ -256,10 +256,20 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     (source.kind === "github" || source.kind === "git") && request.sourceRevision !== undefined
       ? request.sourceRevision
       : undefined;
-  const acquiredTracking =
+  const acquisitionTracking =
     pinnedRevision === undefined
       ? ({ kind: "default" } as const)
       : ({ kind: "commit", ref: pinnedRevision } as const);
+  const requestedGitRef =
+    request.source?.type === "git"
+      ? (new URLSearchParams(request.source.ref.split("#", 2)[1] ?? "").get("ref") ?? undefined)
+      : undefined;
+  const refreshTracking =
+    requestedGitRef === undefined
+      ? ({ kind: "default" } as const)
+      : /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(requestedGitRef)
+        ? ({ kind: "commit", ref: requestedGitRef } as const)
+        : ({ kind: "branch", ref: requestedGitRef } as const);
   const sourceKey = canonicalJson(source);
   const usesCollection = observedImportUsesCollection({
     source,
@@ -272,7 +282,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         if (
           candidate.upstream !== undefined &&
           canonicalJson(candidate.upstream.source_identity) === sourceKey &&
-          canonicalJson(candidate.upstream.tracking) === canonicalJson(acquiredTracking)
+          canonicalJson(candidate.upstream.tracking) === canonicalJson(refreshTracking)
         )
           return true;
         if (source.kind !== "local") return false;
@@ -316,7 +326,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         : {
             upstream: {
               source_identity: source,
-              tracking: acquiredTracking,
+              tracking: refreshTracking,
               selection: acquiredSelection,
             },
           }),
@@ -340,7 +350,9 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       collection === undefined
         ? candidate.collection_id === undefined &&
           (candidate.upstream !== undefined
-            ? canonicalJson(candidate.upstream.source_identity) === sourceKey
+            ? canonicalJson(candidate.upstream.source_identity) === sourceKey &&
+              canonicalJson(candidate.upstream.tracking) === canonicalJson(refreshTracking) &&
+              canonicalJson(candidate.upstream.selection) === canonicalJson(skillSelection)
             : source.kind === "local" &&
               candidate.versions.some((version) =>
                 version.origins.some((origin) => {
@@ -368,7 +380,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
             : {
                 upstream: {
                   source_identity: source,
-                  tracking: acquiredTracking,
+                  tracking: refreshTracking,
                   selection: skillSelection,
                 },
               }
@@ -416,7 +428,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     acquisition_id: acquisitionId,
     retained_copy_id: retainedCopyId,
     source_identity: source,
-    tracking: acquiredTracking,
+    tracking: acquisitionTracking,
     selection: acquiredSelection,
     input: { value: request.input },
     ...(pinnedRevision === undefined ? {} : { source_revision: pinnedRevision }),

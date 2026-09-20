@@ -57,6 +57,29 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
       bytes,
     );
     assert.strictEqual(state.collections[0]?.upstream, undefined);
+
+    yield* fs.writeFileString(join(source, "SKILL.md"), `${bytes}\nSecond snapshot.\n`);
+    const addedAgain = yield* addLibrarySourceEffect({}, source).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+    const refreshed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+    assert.strictEqual(addedAgain.collection_id, added.collection_id);
+    assert.strictEqual(refreshed.collections.length, 1);
+    assert.strictEqual(refreshed.acquisitions.length, 2);
+    assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
+    assert.strictEqual(
+      (yield* planUpdatesEffect(
+        refreshed,
+        {
+          roots: { home: root, configHome: join(root, "config"), overrides: {} },
+          variantsPath: join(home, "variants"),
+        },
+        added.collection_id,
+      ).pipe(Effect.provide(libraryStoreLayer({ home })), Effect.flip))._tag,
+      "Library.UpdateNotRefreshable",
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -234,7 +257,7 @@ it.effect("runs the complete lifecycle for a selected well-known standalone Skil
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("retains a changed source as a second Skill Version and leaves selection explicit", () =>
+it.effect("re-adding a changed local source retains a second Skill Version", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-update-" });
@@ -246,10 +269,6 @@ it.effect("retains a changed source as a second Skill Version and leaves selecti
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nfirst\n",
     );
-    const options = {
-      roots: { home: root, configHome: join(root, "config"), overrides: {} },
-      variantsPath: join(home, "variants"),
-    };
     const added = yield* addLibrarySourceEffect({}, source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -257,24 +276,8 @@ it.effect("retains a changed source as a second Skill Version and leaves selecti
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
-    const before = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+    const addedAgain = yield* addLibrarySourceEffect({}, source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
-    );
-    assert.strictEqual(
-      (yield* planUpdatesEffect(before, options, added.collection_id))[0]?.changed,
-      true,
-    );
-    const statuses: string[] = [];
-    yield* updateSubjectsEffect(before, options, added.collection_id).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-      Effect.provide(
-        rendererTestLayer({
-          withStatus: (status, operation) =>
-            Effect.sync(() =>
-              statuses.push(typeof status === "string" ? status : status.pending),
-            ).pipe(Effect.andThen(operation)),
-        }),
-      ),
     );
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
@@ -282,14 +285,11 @@ it.effect("retains a changed source as a second Skill Version and leaves selecti
     assert.strictEqual(after.skills[0]?.versions.length, 2);
     assert.ok(after.skills[0]?.selected_skill_version_id);
     assert.strictEqual(after.retained_copies.length, 2);
-    assert.deepStrictEqual(statuses, [
-      `${after.collections[0]?.label} · Fetching and inspecting Source`,
-      `${after.collections[0]?.label} · Updating projected Skills`,
-    ]);
+    assert.strictEqual(addedAgain.collection_id, added.collection_id);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("repeated updates record acquisitions without inventing snapshot changes", () =>
+it.effect("repeated local re-adds record acquisitions without inventing snapshots", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-current-" });
@@ -301,10 +301,6 @@ it.effect("repeated updates record acquisitions without inventing snapshot chang
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\ncurrent\n",
     );
-    const options = {
-      roots: { home: root, configHome: join(root, "config"), overrides: {} },
-      variantsPath: join(home, "variants"),
-    };
     const added = yield* addLibrarySourceEffect({}, source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -312,21 +308,19 @@ it.effect("repeated updates record acquisitions without inventing snapshot chang
       join(source, ".skit-ownership.json"),
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
-    const update = (state: Parameters<typeof updateSubjectsEffect>[0]) =>
-      updateSubjectsEffect(state, options, added.collection_id).pipe(
-        Effect.provide(libraryStoreLayer({ home })),
-        Effect.provide(rendererTestLayer()),
-      );
+    const reAdd = addLibrarySourceEffect({}, source).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
 
-    const first = yield* update(yield* load);
-    const second = yield* update(yield* load);
+    const first = yield* reAdd;
+    const second = yield* reAdd;
     const after = yield* load;
 
-    assert.strictEqual(first[0]?.changed, false);
-    assert.strictEqual(second[0]?.changed, false);
+    assert.strictEqual(first.snapshot_digest, added.snapshot_digest);
+    assert.strictEqual(second.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(after.retained_copies.length, 1);
     assert.strictEqual(after.acquisitions.length, 3);
     assert.strictEqual(

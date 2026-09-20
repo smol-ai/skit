@@ -328,6 +328,13 @@ export const LibraryManifest = Schema.Struct({
         const owned = manifest.skills.filter(
           (skill) => skill.collection_id === collection.collection_id,
         );
+        const governedAcquisitionIds = new Set(
+          owned.flatMap((skill) =>
+            skill.versions.flatMap((version) =>
+              version.origins.map((origin) => origin.acquisition_id),
+            ),
+          ),
+        );
         if (owned.length === 0) return false;
         const paths = owned.map((skill) => skill.path);
         const names = owned.map((skill) => skill.name);
@@ -340,10 +347,23 @@ export const LibraryManifest = Schema.Struct({
         if (paths.includes(".") && paths.length !== 1) return false;
         if (
           collection.upstream?.last_acquisition_id !== undefined &&
-          !acquisitions.has(collection.upstream.last_acquisition_id)
+          (!acquisitions.has(collection.upstream.last_acquisition_id) ||
+            !governedAcquisitionIds.has(collection.upstream.last_acquisition_id))
         )
           return false;
       }
+      const standaloneUpstreamKeys = manifest.skills.flatMap((skill) =>
+        skill.collection_id === undefined && skill.upstream !== undefined
+          ? [
+              canonicalJson({
+                source_identity: skill.upstream.source_identity,
+                tracking: skill.upstream.tracking,
+                selection: skill.upstream.selection,
+              }),
+            ]
+          : [],
+      );
+      if (new Set(standaloneUpstreamKeys).size !== standaloneUpstreamKeys.length) return false;
       if (
         manifest.skills.some(
           (skill) =>
@@ -355,7 +375,12 @@ export const LibraryManifest = Schema.Struct({
                 skill.upstream.selection.names.length !== 1 ||
                 skill.upstream.selection.names[0] !== skill.name)) ||
             (skill.upstream?.last_acquisition_id !== undefined &&
-              !acquisitions.has(skill.upstream.last_acquisition_id)),
+              (!acquisitions.has(skill.upstream.last_acquisition_id) ||
+                !skill.versions.some((version) =>
+                  version.origins.some(
+                    (origin) => origin.acquisition_id === skill.upstream?.last_acquisition_id,
+                  ),
+                ))),
         )
       )
         return false;
