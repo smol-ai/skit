@@ -544,7 +544,6 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
         ),
         global_bindings: Schema.Array(
           Schema.Struct({
-            collection_id: Schema.String,
             harness: Schema.String,
             skills: Schema.Array(Schema.String),
           }),
@@ -653,7 +652,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     first(["add", raw]);
     first(["add", gitRemote]);
     const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(4);
+    expect(retained.schemaVersion).toBe(5);
     expect(retained.collections).toHaveLength(2);
     expect(retained.global_bindings).toEqual([]);
     const collectionId = retained.collections[0].collection_id;
@@ -695,7 +694,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.acquisitions[0].observations).toEqual([]);
     expect(restored.global_bindings).toEqual([]);
@@ -736,7 +735,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect(first(["remove", collectionId])).toMatchObject({
-      data: { collection_id: collectionId },
+      data: { subject_id: collectionId, subject_kind: "collection" },
     });
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect(second(["sync"])).toMatchObject({
