@@ -8,6 +8,7 @@ import { Renderer } from "../../presentation/renderer.js";
 import {
   latestSubjectAcquisition,
   matchingLibrarySubjects,
+  owningCollectionSubject,
   type LibrarySubject,
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
@@ -62,14 +63,19 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
   state: LibraryState,
   query?: string,
 ) {
-  const matches = matchingLibrarySubjects(state, query);
+  const matches = [
+    ...new Map(
+      matchingLibrarySubjects(state, query)
+        .map((subject) => owningCollectionSubject(state, subject))
+        .map((subject) => [subject.subjectId, subject]),
+    ).values(),
+  ];
   if (query === undefined)
     return matches.filter(
       (subject) =>
         latestSubjectAcquisition(state, subject) !== undefined &&
-        (subject.kind === "collection"
-          ? subject.collection.upstream !== undefined
-          : subject.skill.upstream !== undefined),
+        subject.kind === "collection" &&
+        subject.collection.upstream !== undefined,
     );
   if (matches.length === 0) return yield* new UpdateNotFound({ query });
   if (matches.length !== 1) return yield* new UpdateAmbiguous({ query });
@@ -80,8 +86,7 @@ const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
   subject: LibrarySubject,
   sourceInput?: string,
 ) {
-  const upstream =
-    subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
+  const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
   const resolved = upstream === undefined ? undefined : sourceFromUpstream(upstream);
   if (resolved === undefined)
     return yield* new UpdateNotRefreshable({
@@ -152,10 +157,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
             ? `${before.label} · Source is current`
             : `${before.label} · New snapshot retained`,
       },
-      addLibrarySourceEffect(
-        { ...options, standalone: before.kind === "skill" },
-        yield* subjectSourceEffect(before, acquisition.input.value),
-      ),
+      addLibrarySourceEffect(options, yield* subjectSourceEffect(before, acquisition.input.value)),
     );
     const changed = retained.snapshot_digest !== priorTree.digest;
     let projected = 0;

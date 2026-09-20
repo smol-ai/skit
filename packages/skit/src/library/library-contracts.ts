@@ -172,10 +172,9 @@ export interface SkillVersion extends Schema.Schema.Type<typeof SkillVersion> {}
 
 export const Skill = Schema.Struct({
   skill_id: SkillId,
-  collection_id: Schema.optionalKey(CollectionId),
+  collection_id: CollectionId,
   path: CollectionRelativePath,
   name: Schema.NonEmptyString,
-  upstream: Schema.optionalKey(Upstream),
   selected_skill_version_id: Schema.mutableKey(Schema.optional(SkillVersionId)),
   versions: Schema.mutable(Schema.Array(SkillVersion)),
 });
@@ -184,7 +183,6 @@ export interface Skill extends Schema.Schema.Type<typeof Skill> {}
 export const Collection = Schema.Struct({
   collection_id: CollectionId,
   label: Schema.NonEmptyString,
-  membership: Schema.Struct({ kind: Schema.Literals(["descriptor", "source-tree"]) }),
   upstream: Schema.optionalKey(Upstream),
 });
 export interface Collection extends Schema.Schema.Type<typeof Collection> {}
@@ -355,39 +353,36 @@ export const LibraryManifest = Schema.Struct({
             !governedAcquisitionIds.has(collection.upstream.last_acquisition_id))
         )
           return false;
-      }
-      const standaloneUpstreamKeys = manifest.skills.flatMap((skill) =>
-        skill.collection_id === undefined && skill.upstream !== undefined
-          ? [
-              canonicalJson({
-                source_identity: skill.upstream.source_identity,
-                tracking: skill.upstream.tracking,
-                selection: skill.upstream.selection,
-              }),
-            ]
-          : [],
-      );
-      if (new Set(standaloneUpstreamKeys).size !== standaloneUpstreamKeys.length) return false;
-      if (
-        manifest.skills.some(
-          (skill) =>
-            (skill.collection_id !== undefined && !collections.has(skill.collection_id)) ||
-            (skill.collection_id !== undefined && skill.upstream !== undefined) ||
-            (skill.upstream !== undefined &&
-              (skill.upstream.source_identity.kind !== "well-known" ||
-                skill.upstream.selection.kind !== "selected-skills" ||
-                skill.upstream.selection.names.length !== 1 ||
-                skill.upstream.selection.names[0] !== skill.name)) ||
-            (skill.upstream?.last_acquisition_id !== undefined &&
-              (!acquisitions.has(skill.upstream.last_acquisition_id) ||
-                !skill.versions.some((version) =>
-                  version.origins.some(
-                    (origin) => origin.acquisition_id === skill.upstream?.last_acquisition_id,
-                  ),
-                ))),
+        if (
+          collection.upstream?.selection.kind === "selected-skills" &&
+          canonicalJson(collection.upstream.selection.names.toSorted()) !==
+            canonicalJson(names.toSorted())
         )
-      )
-        return false;
+          return false;
+        if (
+          collection.upstream?.selection.kind === "selected-paths" &&
+          canonicalJson(
+            collection.upstream.selection.paths
+              .map((path) =>
+                path.endsWith("/SKILL.md") ? path.slice(0, -"/SKILL.md".length) : path,
+              )
+              .toSorted(),
+          ) !== canonicalJson(paths.toSorted())
+        )
+          return false;
+      }
+      const upstreamKeys = manifest.collections.flatMap((collection) =>
+        collection.upstream === undefined
+          ? []
+          : [
+              canonicalJson({
+                source_identity: collection.upstream.source_identity,
+                tracking: collection.upstream.tracking,
+              }),
+            ],
+      );
+      if (new Set(upstreamKeys).size !== upstreamKeys.length) return false;
+      if (manifest.skills.some((skill) => !collections.has(skill.collection_id))) return false;
 
       for (const { skill, version } of versions) {
         if (
@@ -536,7 +531,14 @@ export const migrateLibraryEntitiesFromV4 = (input: {
         : undefined;
     return {
       ...acquisition,
-      ...(legacy === undefined ? {} : { input: { value: legacy.input } }),
+      ...(legacy === undefined
+        ? {}
+        : {
+            source_identity: {
+              kind: "well-known" as const,
+              locator: { value: legacy.input.replace(/^wellknown:/, "") },
+            },
+          }),
       selection:
         legacy === undefined
           ? acquisition.selection
@@ -545,9 +547,6 @@ export const migrateLibraryEntitiesFromV4 = (input: {
   });
   const selectionByAcquisition = new Map(
     acquisitions.map((acquisition) => [acquisition.acquisition_id, acquisition.selection]),
-  );
-  const acquisitionById = new Map(
-    acquisitions.map((acquisition) => [acquisition.acquisition_id, acquisition]),
   );
   const collectionAcquisitions = (collectionId: CollectionId) => {
     const ids = new Set(
@@ -562,28 +561,12 @@ export const migrateLibraryEntitiesFromV4 = (input: {
     collectionAcquisitions(collectionId).toSorted((left, right) =>
       right.acquired_at.localeCompare(left.acquired_at),
     )[0];
-  const shouldDissolve = (collection: typeof CollectionV4.Type) => {
-    const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
-    const allPlain = skills.every((skill) =>
-      skill.versions.every((version) => version.materialization_profile === "plain-skill/v1"),
-    );
-    const observed = latestAcquisition(collection.collection_id);
-    return (
-      allPlain &&
-      observed?.source_identity.kind === "well-known" &&
-      observed.selection.kind === "selected-skills"
-    );
-  };
-  const dissolved = new Set(
-    input.collections.filter(shouldDissolve).map((collection) => collection.collection_id),
-  );
-  const collections = input.collections.flatMap((collection): Collection[] => {
-    if (dissolved.has(collection.collection_id)) return [];
+  const rawCollections = input.collections.flatMap((collection): Collection[] => {
     const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
     if (skills.length === 0) return [];
     const matchingAcquisition =
       collection.upstream?.last_acquisition_id === undefined
-        ? acquisitions
+        ? collectionAcquisitions(collection.collection_id)
             .filter(
               (acquisition) =>
                 canonicalJson(acquisition.source_identity) ===
@@ -599,21 +582,21 @@ export const migrateLibraryEntitiesFromV4 = (input: {
       (collection.upstream?.last_acquisition_id === undefined
         ? undefined
         : selectionByAcquisition.get(collection.upstream.last_acquisition_id));
-    const descriptor = skills.every((skill) =>
-      skill.versions.every(
-        (version) => version.materialization_profile === "declared-skit-skill/v1",
-      ),
-    );
     return [
       {
         collection_id: collection.collection_id,
-        label: collection.display_name,
-        membership: { kind: descriptor ? "descriptor" : "source-tree" },
+        label:
+          matchingAcquisition?.source_identity.kind === "well-known"
+            ? matchingAcquisition.source_identity.locator.value
+            : collection.display_name,
         ...(collection.upstream === undefined
           ? {}
           : {
               upstream: {
                 ...collection.upstream,
+                ...(matchingAcquisition === undefined
+                  ? {}
+                  : { source_identity: matchingAcquisition.source_identity }),
                 selection: selected ?? collection.upstream.selection,
                 ...(matchingAcquisition === undefined
                   ? {}
@@ -623,32 +606,55 @@ export const migrateLibraryEntitiesFromV4 = (input: {
       },
     ];
   });
-  const skills = input.skills.map((skill): Skill => {
+  const rawSkills = input.skills.map((skill): Skill => {
     const { upstream_path: _legacyPath, ...fields } = skill;
-    if (!dissolved.has(skill.collection_id)) return fields;
-    const origins = skill.versions
-      .flatMap((version) => version.origins)
-      .flatMap((origin) => {
-        const acquisition = acquisitionById.get(origin.acquisition_id);
-        return acquisition === undefined ? [] : [{ acquisition, sourcePath: origin.source_path }];
-      })
-      .toSorted((left, right) =>
-        right.acquisition.acquired_at.localeCompare(left.acquisition.acquired_at),
-      );
-    const latest = origins[0];
-    const { collection_id: _collectionId, ...standalone } = fields;
-    if (latest === undefined || latest.acquisition.source_identity.kind === "local")
-      return standalone;
-    return {
-      ...standalone,
-      upstream: {
-        source_identity: latest.acquisition.source_identity,
-        tracking: latest.acquisition.tracking,
-        selection: { kind: "selected-skills", names: [skill.name] },
-        last_acquisition_id: latest.acquisition.acquisition_id,
-      },
-    };
+    return fields;
   });
+  const collectionRemap = new Map<CollectionId, CollectionId>();
+  const collectionsByUpstream = new Map<string, Collection>();
+  const collections: Collection[] = [];
+  for (const collection of rawCollections.toSorted((left, right) =>
+    left.collection_id.localeCompare(right.collection_id),
+  )) {
+    if (collection.upstream === undefined) {
+      collections.push(collection);
+      collectionRemap.set(collection.collection_id, collection.collection_id);
+      continue;
+    }
+    const key = canonicalJson({
+      source_identity: collection.upstream.source_identity,
+      tracking: collection.upstream.tracking,
+    });
+    const prior = collectionsByUpstream.get(key);
+    if (prior === undefined) {
+      collectionsByUpstream.set(key, collection);
+      collections.push(collection);
+      collectionRemap.set(collection.collection_id, collection.collection_id);
+      continue;
+    }
+    const left = prior.upstream!.selection;
+    const right = collection.upstream.selection;
+    const selection =
+      left.kind === "selected-skills" && right.kind === "selected-skills"
+        ? {
+            kind: "selected-skills" as const,
+            names: [...new Set([...left.names, ...right.names])].sort(),
+          }
+        : left.kind === "selected-paths" && right.kind === "selected-paths"
+          ? {
+              kind: "selected-paths" as const,
+              paths: [...new Set([...left.paths, ...right.paths])].sort(),
+            }
+          : left;
+    const revised = { ...prior, upstream: { ...prior.upstream!, selection } };
+    collections[collections.indexOf(prior)] = revised;
+    collectionsByUpstream.set(key, revised);
+    collectionRemap.set(collection.collection_id, prior.collection_id);
+  }
+  const skills = rawSkills.map((skill): Skill => ({
+    ...skill,
+    collection_id: collectionRemap.get(skill.collection_id) ?? skill.collection_id,
+  }));
   const bindingsByHarness = new Map<string, Binding>();
   for (const binding of input.bindings) {
     const prior = bindingsByHarness.get(binding.harness);

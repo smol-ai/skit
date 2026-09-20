@@ -791,7 +791,6 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
         {
           collection_id: collectionId,
           label: "Example skills",
-          membership: { kind: "source-tree" },
           upstream: {
             source_identity: { kind: "well-known", locator: { value: locator } },
             tracking: { kind: "default" },
@@ -1005,7 +1004,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
         {
           collection_id: collectionId,
           label: "tim/skills",
-          membership: { kind: "descriptor" },
           upstream: {
             source_identity: {
               kind: "registry",
@@ -1285,7 +1283,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
         {
           collection_id: collectionId,
           label: "test-collection",
-          membership: { kind: "source-tree" },
         },
       ],
       skills: [

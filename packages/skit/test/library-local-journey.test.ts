@@ -149,5 +149,25 @@ it.effect("reuses an unchanged Skill Version while retaining a changed sibling V
     );
     assert.strictEqual(saved.state.retained_copies.length, 2);
     assert.strictEqual(saved.state.acquisitions.length, 2);
+
+    const stableSkill = saved.state.skills.find((skill) => skill.name === "stable");
+    assert.ok(stableSkill);
+    yield* removeSkillEffect({
+      skillId: stableSkill.skill_id,
+      variantsPath: join(home, "variants"),
+    }).pipe(inLibrary(home));
+
+    const afterRemoval = yield* inspectLibrary(home);
+    assert.strictEqual(afterRemoval.present, true);
+    if (!afterRemoval.present) return;
+    assert.deepStrictEqual(
+      afterRemoval.state.skills.map((skill) => skill.name),
+      ["review"],
+    );
+    assert.deepStrictEqual(afterRemoval.state.collections[0]?.upstream?.selection, {
+      kind: "selected-paths",
+      paths: ["review"],
+    });
+    assert.strictEqual(afterRemoval.state.collections.length, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -37,13 +37,9 @@ const skillSubjects = (state: LibraryState): readonly LibrarySubject[] =>
     skills: [skill],
   }));
 
-/** Default commands operate on source boundaries plus source-less standalone Skills. */
-export const librarySubjects = (state: LibraryState): readonly LibrarySubject[] => [
-  ...collectionSubjects(state),
-  ...skillSubjects(state).filter(
-    (subject) => subject.kind === "skill" && subject.skill.collection_id === undefined,
-  ),
-];
+/** Default commands operate on Collections; contained Skills remain directly addressable. */
+export const librarySubjects = (state: LibraryState): readonly LibrarySubject[] =>
+  collectionSubjects(state);
 
 export const matchingLibrarySubjects = (
   state: LibraryState,
@@ -79,11 +75,25 @@ export const subjectAcquisitionIds = (subject: LibrarySubject): ReadonlySet<stri
     ),
   );
 
+export const owningCollectionSubject = (
+  state: LibraryState,
+  subject: LibrarySubject,
+): LibrarySubject =>
+  subject.kind === "collection"
+    ? subject
+    : (collectionSubjects(state).find(
+        (candidate) =>
+          candidate.kind === "collection" &&
+          candidate.collection.collection_id === subject.skill.collection_id,
+      ) ?? subject);
+
 export const latestSubjectAcquisition = (state: LibraryState, subject: LibrarySubject) => {
   const preferred =
     subject.kind === "collection"
       ? subject.collection.upstream?.last_acquisition_id
-      : subject.skill.upstream?.last_acquisition_id;
+      : state.collections.find(
+          (collection) => collection.collection_id === subject.skill.collection_id,
+        )?.upstream?.last_acquisition_id;
   if (preferred !== undefined) {
     const acquisition = state.acquisitions.find(
       (candidate) => candidate.acquisition_id === preferred,

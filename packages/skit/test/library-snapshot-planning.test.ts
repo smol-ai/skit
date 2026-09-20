@@ -2,6 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
   makeAcquisitionId,
+  makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
   makeSkillId,
@@ -161,10 +162,13 @@ it("decodes a v4 portable subset into the current manifest model", () => {
     kind: "selected-skills",
     names: ["review"],
   });
-  assert.strictEqual(decoded.acquisitions[1]?.input.value, "wellknown:https://skills.example");
+  assert.strictEqual(
+    decoded.acquisitions[1]?.input.value,
+    "wellknown:https://skills.example#skills=review",
+  );
 });
 
-it("requires an upstream last Acquisition to govern the standalone Skill", () => {
+it("requires an upstream last Acquisition to govern a Collection member", () => {
   const origin = acquisition({
     source_identity: { kind: "well-known", locator: { value: "https://skills.example" } },
     tracking: { kind: "default" },
@@ -180,22 +184,29 @@ it("requires an upstream last Acquisition to govern the standalone Skill", () =>
     source_revision: undefined,
   });
   const skillId = makeSkillId();
+  const collectionId = makeCollectionId();
   const versionId = makeSkillVersionId();
   assert.throws(() =>
     Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
       schema: "skit.library.v5",
-      collections: [],
-      skills: [
+      collections: [
         {
-          skill_id: skillId,
-          path: ".",
-          name: "review",
+          collection_id: collectionId,
+          label: "review",
           upstream: {
             source_identity: origin.source_identity,
             tracking: origin.tracking,
             selection: origin.selection,
             last_acquisition_id: unrelated.acquisition_id,
           },
+        },
+      ],
+      skills: [
+        {
+          skill_id: skillId,
+          collection_id: collectionId,
+          path: ".",
+          name: "review",
           selected_skill_version_id: versionId,
           versions: [
             {

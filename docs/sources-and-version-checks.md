@@ -53,12 +53,11 @@ locks supply the HTTPS discovery base URL (`sourceUrl` in project locks, `source
 locks) and selected Skill names. The saved Source keeps that selection. Setup copies the installed
 bytes without fetching upstream and retains the original lock fields as claims. `skit check` and
 `skit update` subsequently fetch the saved Source to compare or acquire upstream content. A lock
-without a resolvable coordinate or exact GitHub paths does not become a Collection import; its
-on-disk Skill remains a standalone setup candidate.
-Selected Git Skill paths are part of the Collection identity, while the tracking ref is not; two
-selections from the same repository can therefore be retained independently. The retained Source
-uses the Skills actually selected. Conflicting claims about which installed name maps to an
-upstream Git Skill path block adoption.
+without a resolvable coordinate or exact GitHub paths can still be adopted into a local Collection,
+but that Collection has no upstream and cannot be checked or updated from the lock claim.
+Selected Git Skill paths are update policy, not Collection identity. Adding another selection from
+the same repository extends the existing Collection. Conflicting claims about which installed name
+maps to an upstream Git Skill path block adoption.
 
 For retained Git skills.sh observations, `skit check` also evaluates each selected Skill path.
 It first compares the lock hash with the current ref tip. When they differ, it searches commits

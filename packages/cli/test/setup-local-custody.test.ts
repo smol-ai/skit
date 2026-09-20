@@ -79,9 +79,9 @@ it.effect("adds selected skills and takes custody only of eligible global copies
       harness: "codex",
       scope: { kind: "global" },
     });
-    expect(state.collections).toHaveLength(1);
+    expect(state.collections).toHaveLength(2);
     expect(state.collections.every((collection) => collection.upstream === undefined)).toBe(true);
-    expect(state.skills.filter((skill) => skill.collection_id === undefined)).toHaveLength(1);
+    expect(state.skills.every((skill) => skill.collection_id !== undefined)).toBe(true);
     expect(state.retained_copies).toHaveLength(2);
     expect(state.projections).toEqual([
       expect.objectContaining({ path: managedSkill, status: "installed" }),

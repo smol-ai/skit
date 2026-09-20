@@ -41,7 +41,6 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
     {
       collection_id: collectionId,
       label: "review-tools",
-      membership: { kind: "source-tree" },
     },
   ],
   skills: [

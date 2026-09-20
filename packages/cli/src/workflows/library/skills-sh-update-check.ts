@@ -119,8 +119,7 @@ const sourceUrl = (
   subject: LibrarySubject,
   observations: readonly LibraryState["acquisitions"][number]["observations"][number][],
 ) => {
-  const upstream =
-    subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
+  const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
   const source = upstream?.source_identity;
   if (source?.kind === "github")
     return `https://github.com/${source.owner}/${source.repository}.git`;

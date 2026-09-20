@@ -10,6 +10,7 @@ import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
 import {
   latestSubjectAcquisition,
   matchingLibrarySubjects,
+  owningCollectionSubject,
   subjectAcquisitionIds,
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
@@ -56,7 +57,13 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
     verification: "lock-only" | "lock+retained-bytes";
     establishedAt: string;
   }> = [];
-  const subjects = matchingLibrarySubjects(state, query);
+  const subjects = [
+    ...new Map(
+      matchingLibrarySubjects(state, query)
+        .map((subject) => owningCollectionSubject(state, subject))
+        .map((subject) => [subject.subjectId, subject]),
+    ).values(),
+  ];
   if (query !== undefined && subjects.length === 0) return yield* new CheckNotFound({ query });
   if (query !== undefined && subjects.length !== 1) return yield* new CheckAmbiguous({ query });
   const checked = yield* Effect.forEach(subjects, (subject) =>
@@ -85,8 +92,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
           : state.retained_copies.find(
               (copy) => copy.retained_copy_id === acquisition.retained_copy_id,
             );
-      const upstream =
-        subject.kind === "collection" ? subject.collection.upstream : subject.skill.upstream;
+      const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
       const inspected =
         source === undefined ? undefined : yield* inspectLibrarySourceEffect(options, source);

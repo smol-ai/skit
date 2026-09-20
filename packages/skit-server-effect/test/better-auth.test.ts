@@ -793,7 +793,6 @@ describe("Better Auth adapter", () => {
           {
             collection_id: collectionId,
             label: "test/library",
-            membership: { kind: "source-tree" },
             upstream: {
               source_identity: {
                 kind: "registry",
@@ -957,12 +956,10 @@ describe("Better Auth adapter", () => {
       const legacyManifest = {
         ...portable,
         schema: "skit.library.v4",
-        collections: portable.collections.map(
-          ({ membership: _membership, label, ...collection }) => ({
-            ...collection,
-            display_name: label,
-          }),
-        ),
+        collections: portable.collections.map(({ label, ...collection }) => ({
+          ...collection,
+          display_name: label,
+        })),
         skills: portable.skills.map((skill) => ({ ...skill, upstream_path: skill.path })),
       };
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>

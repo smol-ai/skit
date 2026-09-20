@@ -63,7 +63,7 @@ The Descriptor is part of every published SKIT package. It contains no credentia
 | Individual Skill instructions, name, description, and Agent Skills requirements                       | `SKILL.md`                 |
 | SKIT package membership and portable package identity or attribution                                  | `skit.json`                |
 | Principal, Namespace, authoritative SKIT Identity, grants, Drafts, Releases, and visibility           | SKIT Registry              |
-| Retained SKIT packages, standalone Skills or descriptorless Agent Skills packages, and Binding intent | User Library               |
+| Retained SKIT packages, descriptorless Agent Skills Collections, and Binding intent                   | User Library               |
 | Projection paths, Ownership Markers, Custody, drift, conflicts, and observations                      | Device-local Library state |
 
 The same fact should not be independently authored in several layers. When `skit.json` references a contained Skill by name, validation must confirm that it agrees with the canonical name in that Skill's `SKILL.md`; the Descriptor does not become a second authority for the Skill's own metadata.

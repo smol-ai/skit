@@ -147,6 +147,6 @@ export function mergeLibraryManifests(
     conflicts.length === 0 &&
     Option.isNone(Schema.decodeUnknownOption(LibraryManifest)(manifest))
   )
-    conflicts.push("manifest:membership");
+    conflicts.push("manifest:invariants");
   return { manifest, conflicts: [...new Set(conflicts)].sort() };
 }

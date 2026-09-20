@@ -103,7 +103,7 @@ export const outputContracts = {
   list: effectOutput("skit.list.v3", ListResult),
   securityReview: effectOutput("skit.security.review.v1", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v1", SkillSecurityReview),
-  inventory: effectOutput("skit.inventory.v5", MachineInventoryResult),
+  inventory: effectOutput("skit.inventory.v6", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v2", LibraryDoctorReport),
   check: effectOutput("skit.check.v7", CheckResult),
   update: effectOutput("skit.update.v4", UpdateResult),

@@ -46,7 +46,7 @@ describe("Collection Identity catalog", () => {
     expect(collectionDisplay(identity)).toBe("mattpocock/skills");
     expect(synchronizableCollectionIdentity(identity)).toBe(true);
   });
-  test("distinguishes selected GitHub Skill sets while ignoring the tracking ref", () => {
+  test("treats selected GitHub paths and tracking refs as policy, not identity", () => {
     const one = collectionIdentity({
       type: "git",
       ref: "https://github.com/acme/skills.git#ref=main&skill=skills%2Freview%2FSKILL.md",
@@ -55,16 +55,13 @@ describe("Collection Identity catalog", () => {
       type: "git",
       ref: "https://github.com/acme/skills.git#ref=next&skill=skills%2Ftdd%2FSKILL.md",
     });
-    expect(collectionRef(one)).toBe("github:acme/skills?skill=skills%2Freview%2FSKILL.md");
-    expect(collectionRef(another)).toBe("github:acme/skills?skill=skills%2Ftdd%2FSKILL.md");
-    expect(collectionRef(one)).not.toBe(collectionRef(another));
+    expect(collectionRef(one)).toBe("github:acme/skills");
+    expect(collectionRef(another)).toBe("github:acme/skills");
     const two = collectionIdentity({
       type: "git",
       ref: "https://github.com/acme/skills.git#skill=skills%2Freview%2FSKILL.md&skill=skills%2Ftdd%2FSKILL.md",
     });
-    expect(collectionRef(two)).toBe(
-      "github:acme/skills?skill=skills%2Freview%2FSKILL.md&skill=skills%2Ftdd%2FSKILL.md",
-    );
+    expect(collectionRef(two)).toBe("github:acme/skills");
     const subpath = collectionIdentity({
       type: "git",
       ref: "https://github.com/acme/skills.git#path=public%20skills",

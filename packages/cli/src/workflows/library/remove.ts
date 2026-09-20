@@ -44,11 +44,18 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
   if (matches.length !== 1) return yield* new RemoveAmbiguous({ query });
   const subject = matches[0];
   if (subject === undefined) return yield* new RemoveNotFound({ query });
-  if (subject.kind === "skill" && subject.skill.collection_id !== undefined)
-    return yield* new SkillRemovalRequiresCollection({
-      skill_id: subject.skill.skill_id,
-      collection_id: subject.skill.collection_id,
-    });
+  if (subject.kind === "skill") {
+    const collectionId = subject.skill.collection_id;
+    if (collectionId === undefined) return yield* new RemoveNotFound({ query });
+    const collection = state.collections.find(
+      (candidate) => candidate.collection_id === collectionId,
+    );
+    if (collection?.upstream?.selection.kind === "full-tree" || collection?.upstream === undefined)
+      return yield* new SkillRemovalRequiresCollection({
+        skill_id: subject.skill.skill_id,
+        collection_id: collectionId,
+      });
+  }
   const skills = subject.skills;
   return {
     subject_id: subject.subjectId,

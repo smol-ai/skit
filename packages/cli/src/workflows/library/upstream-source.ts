@@ -1,8 +1,6 @@
 import type { LibraryState, SkitSource } from "@smolai/skit-core";
 
-type Upstream = NonNullable<
-  LibraryState["collections"][number]["upstream"] | LibraryState["skills"][number]["upstream"]
->;
+type Upstream = NonNullable<LibraryState["collections"][number]["upstream"]>;
 
 const gitRef = (base: string, upstream: Upstream, collectionRoot: string): string => {
   const parameters = new URLSearchParams();

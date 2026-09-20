@@ -5,6 +5,7 @@ import {
   deterministicTreeHashEffect,
   LibraryStore,
   libraryStoreLayer,
+  makeCollectionId,
   makeSkillId,
   skitLayer,
 } from "@smolai/skit-core";
@@ -98,22 +99,26 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       (yield* planRemoveEffect(state, member.skill_id).pipe(Effect.flip))._tag,
       "Library.SkillRemovalRequiresCollection",
     );
-    const { collection_id: _collectionId, ...standalone } = member;
-    const visibleStandalone = {
+    const sameNamed = {
       ...state,
-      skills: [...state.skills, { ...standalone, skill_id: makeSkillId() }],
+      collections: state.collections.map((candidate) => ({ ...candidate, label: "review" })),
     };
     assert.deepStrictEqual(
-      matchingLibrarySubjects(visibleStandalone, "review").map((subject) => subject.kind),
-      ["skill"],
+      matchingLibrarySubjects(sameNamed, "review").map((subject) => subject.kind),
+      ["collection"],
     );
-    assert.strictEqual(
-      (yield* planRemoveEffect(visibleStandalone, "review")).subject_kind,
-      "skill",
-    );
+    assert.strictEqual((yield* planRemoveEffect(sameNamed, "review")).subject_kind, "collection");
+    const secondCollectionId = makeCollectionId();
     const ambiguous = {
-      ...state,
-      skills: [...visibleStandalone.skills, { ...standalone, skill_id: makeSkillId() }],
+      ...sameNamed,
+      collections: [
+        ...sameNamed.collections,
+        { ...sameNamed.collections[0]!, collection_id: secondCollectionId },
+      ],
+      skills: [
+        ...sameNamed.skills,
+        { ...member, skill_id: makeSkillId(), collection_id: secondCollectionId },
+      ],
     };
     assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
     assert.strictEqual(

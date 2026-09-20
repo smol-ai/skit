@@ -13,7 +13,7 @@ import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
 
-it.effect("checks a standalone skills.sh Skill against its recorded Git source", () =>
+it.effect("checks a skills.sh Collection member against its recorded Git source", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -87,9 +87,8 @@ it.effect("checks a standalone skills.sh Skill against its recorded Git source",
     expect(saved.present).toBe(true);
     if (!saved.present) return;
     const member = saved.state.skills[0]!;
-    const { collection_id: _collectionId, ...memberFields } = member;
-    const standalone = {
-      ...memberFields,
+    const collection = {
+      ...saved.state.collections[0]!,
       upstream: {
         source_identity: {
           kind: "well-known" as const,
@@ -102,8 +101,8 @@ it.effect("checks a standalone skills.sh Skill against its recorded Git source",
     };
     const localState = {
       ...saved.state,
-      collections: [],
-      skills: [standalone],
+      collections: [collection],
+      skills: [member],
       acquisitions: saved.state.acquisitions.map((acquisition) => ({
         ...acquisition,
         observations: acquisition.observations.map((observation) => ({
@@ -139,7 +138,7 @@ it.effect("checks a standalone skills.sh Skill against its recorded Git source",
         ),
       );
     });
-    const checked = yield* checkSubjectsEffect(localState, {}, standalone.skill_id).pipe(
+    const checked = yield* checkSubjectsEffect(localState, {}, member.skill_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(localState),
         inspect: Effect.succeed({ present: true as const, state: localState }),

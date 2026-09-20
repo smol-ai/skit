@@ -157,8 +157,8 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     );
     if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(adoptionPlan))
       return yield* new PlanIsStale();
-    const retained = yield* addLibrarySourceEffect({ standalone: true }, adoptionPlan.sourcePath);
-    const subjectId = retained.collection_id ?? retained.skill_ids[0];
+    const retained = yield* addLibrarySourceEffect({}, adoptionPlan.sourcePath);
+    const subjectId = retained.collection_id;
     if (subjectId === undefined)
       return yield* new SetupLocalCustodySelectionInvalid({
         name: selection.name,
@@ -168,7 +168,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     yield* applyLibraryBindings(state, {
       query: subjectId,
       all: false,
-      ...(retained.collection_id === undefined ? {} : { selectedSkills: [selection.name] }),
+      selectedSkills: [selection.name],
       invocation: {
         subjects: [subjectId],
         harnesses: [...new Set(targets.map((target) => target.harness))],

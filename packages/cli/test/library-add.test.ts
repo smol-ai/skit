@@ -118,7 +118,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("runs the complete lifecycle for a selected well-known standalone Skill", () =>
+it.effect("runs the complete lifecycle for a selected well-known Collection member", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-standalone-update-" });
@@ -170,13 +170,13 @@ it.effect("runs the complete lifecycle for a selected well-known standalone Skil
       );
     const added = yield* run(addLibrarySourceEffect({}, source));
     const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.strictEqual(before.collections.length, 0);
+    assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
-    assert.strictEqual(skill.collection_id, undefined);
-    assert.strictEqual(skill.upstream?.selection.kind, "selected-skills");
+    assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
+    assert.strictEqual(before.collections[0]?.upstream?.selection.kind, "selected-skills");
     assert.deepStrictEqual(
       librarySubjects(before).map((subject) => [subject.kind, subject.subjectId, subject.label]),
-      [["skill", skill.skill_id, "review"]],
+      [["collection", before.collections[0]?.collection_id, base]],
     );
     const bindingInput = (enabled: boolean) => ({
       query: skill.skill_id,
@@ -211,7 +211,7 @@ it.effect("runs the complete lifecycle for a selected well-known standalone Skil
     );
     assert.strictEqual(result[0]?.changed, true);
     const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.strictEqual(after.collections.length, 0);
+    assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
     const originalVersion = after.skills[0]?.versions[0]?.skill_version_id;
@@ -239,7 +239,7 @@ it.effect("runs the complete lifecycle for a selected well-known standalone Skil
       snapshot_digests: [],
       bindings: [],
     };
-    assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "skill");
+    assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
     yield* writingTo(home, run(applyLibraryBindings(pinned, bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.global_bindings, []);

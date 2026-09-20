@@ -37,7 +37,6 @@ export class AddIdentityChanged extends Schema.TaggedError<AddIdentityChanged>()
 export interface AddOptions {
   readonly expectedCollectionRef?: string;
   readonly selectVersions?: boolean;
-  readonly standalone?: boolean;
 }
 
 export const acquisitionSourceEffect = Effect.fn("Library.acquisitionSource")(function* (
@@ -230,7 +229,6 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         skills,
         observations: [],
         selectVersions: options.selectVersions,
-        standalone: options.standalone,
       });
       const state = yield* (yield* LibraryStore).load;
       const retained = state.retained_copies.find((copy) => copy.digest === prepared.digest);

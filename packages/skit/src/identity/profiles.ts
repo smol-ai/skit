@@ -53,7 +53,7 @@ const githubCollectionProfile = defineCollectionIdentityProfile("github-collecti
   portable: true,
   recognize: (input: CollectionIdentityInput) => {
     if (input.declaration || input.source.type !== "git") return;
-    const { remote, path, skillPaths } = gitParts(input.source.ref);
+    const { remote, path } = gitParts(input.source.ref);
     const github = githubParts(remote);
     return github
       ? {
@@ -61,19 +61,12 @@ const githubCollectionProfile = defineCollectionIdentityProfile("github-collecti
           version: 1 as const,
           ...github,
           path,
-          ...(skillPaths.length ? { skillPaths } : {}),
         }
       : undefined;
   },
   reference: (identity) => {
     const path = identity.path ? `?path=${encodeURIComponent(identity.path)}` : "";
-    const skills = (identity.skillPaths ?? [])
-      .map(
-        (skillPath, index) =>
-          `${path || index > 0 ? "&" : "?"}skill=${encodeURIComponent(skillPath)}`,
-      )
-      .join("");
-    return `github:${identity.owner}/${identity.repository}${path}${skills}`;
+    return `github:${identity.owner}/${identity.repository}${path}`;
   },
   display: (identity) =>
     `${identity.owner}/${identity.repository}${identity.path ? `/${identity.path}` : ""}`,
@@ -84,26 +77,19 @@ const gitCollectionProfile = defineCollectionIdentityProfile("git-collection", {
   portable: true,
   recognize: (input: CollectionIdentityInput) => {
     if (input.declaration || input.source.type !== "git") return;
-    const { remote, path, skillPaths } = gitParts(input.source.ref);
+    const { remote, path } = gitParts(input.source.ref);
     return {
       profile: "git-collection" as const,
       version: 1 as const,
       remote,
       path,
-      ...(skillPaths.length ? { skillPaths } : {}),
     };
   },
   reference: (identity) => {
     const path = identity.path
       ? `${identity.remote.includes("?") ? "&" : "?"}path=${encodeURIComponent(identity.path)}`
       : "";
-    const skills = (identity.skillPaths ?? [])
-      .map(
-        (skillPath, index) =>
-          `${path || index > 0 || identity.remote.includes("?") ? "&" : "?"}skill=${encodeURIComponent(skillPath)}`,
-      )
-      .join("");
-    return `git:${identity.remote}${path}${skills}`;
+    return `git:${identity.remote}${path}`;
   },
   display: (identity) =>
     identity.remote.replace(/\.git$/, "") + (identity.path ? `/${identity.path}` : ""),
@@ -155,12 +141,7 @@ const urlCollectionProfile = defineCollectionIdentityProfile("url-collection", {
       ? {
           profile: "url-collection" as const,
           version: 1 as const,
-          url:
-            input.source.type === "well-known" && input.source.members?.length
-              ? // Opaque identity encoding: subset membership is persisted structurally in the
-                // Acquisition selection, but existing Collection refs must remain stable.
-                `${input.source.ref}#skills=${input.source.members.toSorted().join(",")}`
-              : input.source.ref,
+          url: input.source.ref,
         }
       : undefined,
   reference: (identity) => `url:${identity.url}`,

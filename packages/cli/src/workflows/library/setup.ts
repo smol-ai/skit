@@ -1079,9 +1079,7 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
       if (!marker) return undefined;
       const skill = library.skills.find((candidate) => candidate.skill_id === marker.skill_id);
       const collection =
-        skill?.collection_id === undefined
-          ? undefined
-          : libraryCollectionsById.get(skill.collection_id);
+        skill === undefined ? undefined : libraryCollectionsById.get(skill.collection_id);
       if (skill === undefined)
         return {
           kind: "missing-from-library" as const,
@@ -1092,15 +1090,13 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
       return {
         kind: "retained" as const,
         projectionId: marker.projection_id,
-        ...(skill.collection_id === undefined ? {} : { collectionId: skill.collection_id }),
+        collectionId: skill.collection_id,
         skillId: marker.skill_id,
         skillVersionId: marker.skill_version_id,
         displayName: collection?.label ?? skill.name,
-        ...(collection?.upstream || skill.upstream
+        ...(collection?.upstream
           ? {
-              source: sourceIdentityLabel(
-                (collection?.upstream ?? skill.upstream)!.source_identity,
-              ),
+              source: sourceIdentityLabel(collection.upstream.source_identity),
             }
           : {}),
       };
@@ -1150,11 +1146,8 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     const path = projection.path;
     const present = yield* fs.exists(path);
     projections.push({
-      ...(skill.collection_id === undefined ? {} : { collectionId: skill.collection_id }),
-      collectionDisplayName:
-        (skill.collection_id === undefined
-          ? undefined
-          : libraryCollectionsById.get(skill.collection_id)?.label) ?? skill.name,
+      collectionId: skill.collection_id,
+      collectionDisplayName: libraryCollectionsById.get(skill.collection_id)?.label ?? skill.name,
       skillId: skill.skill_id,
       name: skill.name,
       path,
@@ -1463,10 +1456,9 @@ export const classifySetupOnboarding = (
                 skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
             );
             const retainedSource =
-              retainedSkill?.upstream?.source_identity ??
-              (retainedSkill?.collection_id === undefined
+              retainedSkill === undefined
                 ? undefined
-                : libraryCollectionSourcesById.get(retainedSkill.collection_id));
+                : libraryCollectionSourcesById.get(retainedSkill.collection_id);
             if (identity === undefined || retainedSource === undefined) return false;
             const lockSource = sourceIdentityFromCollectionIdentity(
               identity,
@@ -1494,7 +1486,7 @@ export const classifySetupOnboarding = (
               skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
           );
           const label =
-            matchedSkill?.collection_id === undefined
+            matchedSkill === undefined
               ? undefined
               : libraryCollectionsById.get(matchedSkill.collection_id)?.label;
           return label === undefined ? {} : { collectionDisplayName: label };

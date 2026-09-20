@@ -136,7 +136,6 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
                     collection_id: skill.collection_id,
                     path: skill.path,
                     name: skill.name,
-                    ...(skill.upstream === undefined ? {} : { upstream: skill.upstream }),
                     versions: skill.versions,
                   }
                 : skill,

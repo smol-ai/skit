@@ -3,6 +3,7 @@ import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import type { SkillId } from "../entity-ids.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { InvocationPolicy } from "../store/state-schema.js";
+import type { AcquisitionSelection } from "../library-contracts.js";
 
 export class CollectionRemovalMissing extends Schema.TaggedError<CollectionRemovalMissing>()(
   "Library.CollectionRemovalMissing",
@@ -22,6 +23,7 @@ export class SkillRemovalRequiresCollection extends Schema.TaggedError<SkillRemo
 const removeSkillsEffect = Effect.fn("Library.removeSkills")(function* (options: {
   skillIds: readonly string[];
   collectionId?: string;
+  revisedSelection?: { collectionId: string; selection: AcquisitionSelection };
   variantsPath: string;
 }) {
   const store = yield* LibraryStore;
@@ -75,12 +77,40 @@ const removeSkillsEffect = Effect.fn("Library.removeSkills")(function* (options:
               : { invocation_policies }),
           };
         };
+        const collections =
+          options.collectionId === undefined
+            ? candidate.collections.map((collection) => {
+                if (
+                  options.revisedSelection === undefined ||
+                  collection.collection_id !== options.revisedSelection.collectionId ||
+                  collection.upstream === undefined
+                )
+                  return collection;
+                const collectionAcquisitionIds = new Set(
+                  skills
+                    .filter((skill) => skill.collection_id === collection.collection_id)
+                    .flatMap((skill) =>
+                      skill.versions.flatMap((version) =>
+                        version.origins.map((origin) => origin.acquisition_id),
+                      ),
+                    ),
+                );
+                const last = acquisitions
+                  .filter((acquisition) => collectionAcquisitionIds.has(acquisition.acquisition_id))
+                  .toSorted((left, right) => right.acquired_at.localeCompare(left.acquired_at))[0];
+                return {
+                  ...collection,
+                  upstream: {
+                    ...collection.upstream,
+                    selection: options.revisedSelection.selection,
+                    ...(last === undefined ? {} : { last_acquisition_id: last.acquisition_id }),
+                  },
+                };
+              })
+            : candidate.collections.filter((item) => item.collection_id !== options.collectionId);
         return store.publish({
           ...candidate,
-          collections:
-            options.collectionId === undefined
-              ? candidate.collections
-              : candidate.collections.filter((item) => item.collection_id !== options.collectionId),
+          collections,
           global_bindings: candidate.global_bindings
             .map(pruneBinding)
             .filter((item) => item.skills.length > 0),
@@ -125,13 +155,34 @@ export const removeSkillEffect = Effect.fn("Library.removeSkill")(function* (opt
   const loaded = yield* store.load;
   const skill = loaded.skills.find((candidate) => candidate.skill_id === options.skillId);
   if (skill === undefined) return yield* new SkillRemovalMissing({ skill_id: options.skillId });
-  if (skill.collection_id !== undefined)
+  const collection = loaded.collections.find(
+    (candidate) => candidate.collection_id === skill.collection_id,
+  );
+  const selection = collection?.upstream?.selection;
+  if (collection === undefined || selection === undefined || selection.kind === "full-tree")
     return yield* new SkillRemovalRequiresCollection({
       skill_id: skill.skill_id,
       collection_id: skill.collection_id,
     });
+  const remaining = loaded.skills.filter(
+    (candidate) =>
+      candidate.collection_id === collection.collection_id && candidate.skill_id !== skill.skill_id,
+  );
+  if (remaining.length === 0) {
+    const result = yield* removeSkillsEffect({
+      collectionId: collection.collection_id,
+      skillIds: [options.skillId],
+      variantsPath: options.variantsPath,
+    });
+    return { skill_id: options.skillId, retired: result.retired };
+  }
+  const revisedSelection: AcquisitionSelection =
+    selection.kind === "selected-skills"
+      ? { kind: "selected-skills", names: selection.names.filter((name) => name !== skill.name) }
+      : { kind: "selected-paths", paths: selection.paths.filter((path) => path !== skill.path) };
   const result = yield* removeSkillsEffect({
     skillIds: [options.skillId],
+    revisedSelection: { collectionId: collection.collection_id, selection: revisedSelection },
     variantsPath: options.variantsPath,
   });
   return { skill_id: options.skillId, retired: result.retired };
