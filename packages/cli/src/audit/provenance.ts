@@ -36,7 +36,7 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
   if (markerInspection?.kind === "valid") {
     const marker = markerInspection.marker;
     const claim = {
-      skillRef: marker.skill_id,
+      skillId: marker.skill_id,
       expectedHash: marker.expected_digest,
     };
     return {

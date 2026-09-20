@@ -32,7 +32,6 @@ const failureStory = (name: string, failure: CommandFailure): OutputStory =>
   OutputStory.Failure({ group: "failure", name, failure });
 
 const digest = `sha256:${"0".repeat(64)}`;
-const skillRef = "skill-version-story";
 const collectionId = makeCollectionId();
 const versionId = makeRetainedCopyId();
 const otherVersionId = makeRetainedCopyId();
@@ -188,14 +187,14 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     bindings: [{ harness: "codex", skills: [skillId] }],
   }),
   resultStory("security-review", "clean", outputContracts.securityReview, {
-    skillRef,
+    skill_version_id: skillVersionId,
     artifactContentDigest: digest,
     audit: emptyAudit,
     assessment: emptyAssessment,
     acceptances: [],
   }),
   resultStory("security-accept", "clean", outputContracts.securityAccept, {
-    skillRef,
+    skill_version_id: skillVersionId,
     artifactContentDigest: digest,
     audit: emptyAudit,
     assessment: emptyAssessment,
@@ -480,7 +479,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       authority: "registry.example",
       namespace: "smol-ai",
       skit: "review-tools",
-      ref: "registry.example/smol-ai/review-tools",
+      locator: "registry.example/smol-ai/review-tools",
     },
     visibility: "private",
     file_count: 3,
@@ -537,47 +536,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       },
     ],
   }),
-  resultStory("audit", "empty-v1alpha1", outputContracts.experimentalAudit, {
-    generatedAt: "2026-01-01T00:00:00Z",
-    home: "/home/story",
-    cwd: "/work/review-tools",
-    coverage: { supported: [], deferred: [] },
-    observations: [],
-    findings: [],
-    probes: [],
-    summary: { capabilities: 0, findings: 0 },
-  }),
-  resultStory("audit", "findings-v1alpha1", outputContracts.experimentalAudit, {
-    generatedAt: "2026-01-01T00:00:00Z",
-    home: "/home/story",
-    cwd: "/work/review-tools",
-    coverage: { supported: [], deferred: [] },
-    observations: [
-      {
-        kind: "mcp-server",
-        name: "github",
-        harnesses: ["codex"],
-        scope: "user",
-        path: "/home/story/.codex/config.toml",
-        mcp: { transport: "http", url: "https://mcp.example", args: [] },
-        provenance: { confidence: "exact", source: "codex", evidence: "config" },
-      },
-    ],
-    findings: [
-      {
-        severity: "warning",
-        code: "remote-mcp-server",
-        subject: "github",
-        problem: "Remote MCP server can receive repository context",
-        locations: ["/home/story/.codex/config.toml"],
-        details: { transport: "http" },
-      },
-    ],
-    probes: [{ harness: "codex", status: "ok", observed: { mcpServers: 1 } }],
-    summary: { capabilities: 1, findings: 1 },
-  }),
-  resultStory("audit", "empty-v1alpha3", outputContracts.experimentalAuditV1Alpha3, {
-    schemaVersion: "v1alpha3",
+  resultStory("audit", "empty-v1alpha4", outputContracts.experimentalAuditV1Alpha4, {
+    schemaVersion: "v1alpha4",
     generatedAt: "2026-01-01T00:00:00Z",
     roots: { home: "/home/story", cwd: "/work/review-tools" },
     harnesses: [],
@@ -599,8 +559,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       findings: 0,
     },
   }),
-  resultStory("audit", "findings-v1alpha3", outputContracts.experimentalAuditV1Alpha3, {
-    schemaVersion: "v1alpha3",
+  resultStory("audit", "findings-v1alpha4", outputContracts.experimentalAuditV1Alpha4, {
+    schemaVersion: "v1alpha4",
     generatedAt: "2026-01-01T00:00:00Z",
     roots: { home: "/home/story", cwd: "/work/review-tools" },
     harnesses: [

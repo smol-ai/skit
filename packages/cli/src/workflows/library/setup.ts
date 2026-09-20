@@ -4,8 +4,6 @@ import { basename, dirname, join, matchesGlob, posix, relative, resolve, sep } f
 import { Effect, FileSystem, Result, Schema } from "effect";
 import {
   canonicalJson,
-  collectionIdentity,
-  collectionRef,
   Digest,
   LinkStat,
   MachineDocumentJson,
@@ -21,14 +19,15 @@ import {
   pathIsWithin,
   readSkitDescriptorEffect,
   resolveHarnessRoot,
+  sourceLocator,
   sourceIdentityEquals,
-  sourceIdentityFromCollectionIdentity,
+  sourceIdentityFromSource,
   SourceProcess,
   writeJsonAtomicEffect,
-  type CollectionIdentity,
   type HarnessName as Harness,
   type LibraryState,
   type MachineId,
+  type SkitSource,
   type SkillId,
   type SkillVersionId,
   type SourceIdentity,
@@ -815,17 +814,16 @@ const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
 
 export const setupLockCollection = (
   lock: SetupLockMatch,
-): { identity: CollectionIdentity; collectionRef: string } | undefined => {
+): { source: SkitSource; sourceKey: string } | undefined => {
   const source = skillsShLockCoordinate(lock);
   if (!source) return undefined;
-  const identity = collectionIdentity(source);
-  return { identity, collectionRef: collectionRef(identity) };
+  return { source, sourceKey: sourceLocator(source) };
 };
 
 export const setupLockGroupKey = (lock: SetupLockMatch) => {
   const collection = setupLockCollection(lock);
   return collection
-    ? `${lock.lockPath}\0${collection.collectionRef}\0${lock.entry.ref ?? ""}\0${lock.lockContentHash}`
+    ? `${lock.lockPath}\0${collection.sourceKey}\0${lock.entry.ref ?? ""}\0${lock.lockContentHash}`
     : undefined;
 };
 
@@ -849,19 +847,17 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
       Effect.orElseSucceed(() => undefined),
     );
     if (!descriptor || !remote || descriptor.slug !== remote.skit) continue;
-    const identity: CollectionIdentity = {
-      profile: "declared-skit",
-      version: 1,
+    const skitLocator = sourceLocator({
+      type: "registry",
+      locator: `${remote.namespace}/${remote.skit}`,
       authority: remote.origin,
-      skitId: `${remote.namespace}/${remote.skit}`,
+    });
+    const authoredSource: SourceIdentity = {
+      kind: "registry",
+      authority: remote.origin,
+      namespace: remote.namespace,
+      slug: remote.skit,
     };
-    const authoredCollectionRef = collectionRef(identity);
-    const authoredSource = sourceIdentityFromCollectionIdentity(
-      identity,
-      undefined,
-      authoredCollectionRef,
-    );
-    if (authoredSource === undefined) continue;
     const collectionId = library.collections.find(
       (collection) =>
         collection.upstream !== undefined &&
@@ -878,7 +874,7 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
       repository,
       descriptorPath,
       remotePath,
-      collectionRef: authoredCollectionRef,
+      skitLocator,
       origin: remote.origin,
       namespace: remote.namespace,
       skit: remote.skit,
@@ -934,7 +930,7 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
           [
             skill.path,
             {
-              collectionRef: collection.collectionRef,
+              skitLocator: collection.skitLocator,
               ...(collection.collectionId ? { collectionId: collection.collectionId } : {}),
             },
           ] as const,
@@ -1450,7 +1446,7 @@ export const classifySetupOnboarding = (
       if (group.some((instance) => instance.git.repository !== undefined)) {
         if (
           importableLocks.some(([, lock]) => {
-            const identity = setupLockCollection(lock)?.identity;
+            const source = setupLockCollection(lock)?.source;
             const retainedSkill = retained?.library?.skills.find(
               (skill) =>
                 skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
@@ -1459,12 +1455,8 @@ export const classifySetupOnboarding = (
               retainedSkill === undefined
                 ? undefined
                 : libraryCollectionSourcesById.get(retainedSkill.collection_id);
-            if (identity === undefined || retainedSource === undefined) return false;
-            const lockSource = sourceIdentityFromCollectionIdentity(
-              identity,
-              retained?.machineId,
-              lock.entry.source,
-            );
+            if (source === undefined || retainedSource === undefined) return false;
+            const lockSource = sourceIdentityFromSource(source, retained?.machineId);
             return lockSource !== undefined && sourceIdentityEquals(lockSource, retainedSource);
           })
         )

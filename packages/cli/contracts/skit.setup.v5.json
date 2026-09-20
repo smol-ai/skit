@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v4",
+  "$id": "skit.setup.v5",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -220,7 +220,7 @@
           "remotePath": {
             "type": "string"
           },
-          "collectionRef": {
+          "skitLocator": {
             "type": "string"
           },
           "origin": {
@@ -259,7 +259,7 @@
           "repository",
           "descriptorPath",
           "remotePath",
-          "collectionRef",
+          "skitLocator",
           "origin",
           "namespace",
           "skit",
@@ -455,7 +455,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -464,7 +464,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -721,7 +721,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -730,7 +730,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -973,7 +973,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -982,7 +982,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -1225,7 +1225,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -1234,7 +1234,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -1473,7 +1473,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -1482,7 +1482,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -1714,7 +1714,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -1723,7 +1723,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -1955,7 +1955,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -1964,7 +1964,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -2208,7 +2208,7 @@
                               "authored"
                             ]
                           },
-                          "collectionRef": {
+                          "skitLocator": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -2217,7 +2217,7 @@
                         },
                         "required": [
                           "kind",
-                          "collectionRef"
+                          "skitLocator"
                         ],
                         "additionalProperties": true
                       },
@@ -2587,7 +2587,7 @@
                       "authored"
                     ]
                   },
-                  "collectionRef": {
+                  "skitLocator": {
                     "type": "string"
                   },
                   "collectionId": {
@@ -2596,7 +2596,7 @@
                 },
                 "required": [
                   "kind",
-                  "collectionRef"
+                  "skitLocator"
                 ],
                 "additionalProperties": true
               },

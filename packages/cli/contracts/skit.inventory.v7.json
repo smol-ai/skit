@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v6",
+  "$id": "skit.inventory.v7",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -724,7 +724,7 @@
                           "authored"
                         ]
                       },
-                      "collectionRef": {
+                      "skitLocator": {
                         "type": "string"
                       },
                       "collectionId": {
@@ -733,7 +733,7 @@
                     },
                     "required": [
                       "kind",
-                      "collectionRef"
+                      "skitLocator"
                     ],
                     "additionalProperties": true
                   },

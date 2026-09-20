@@ -12,9 +12,9 @@ import {
 } from "@smolai/skit-core";
 import {
   auditLocalCapabilitiesEffect,
-  auditLocalCapabilitiesV1Alpha3Effect,
+  auditLocalCapabilitiesV1Alpha4Effect,
 } from "../src/audit/local.js";
-import { AuditReportV1Alpha3 } from "../src/audit/schema.js";
+import { AuditReportV1Alpha4 } from "../src/audit/schema.js";
 import { normalizeAuditReport } from "../src/audit/normalize.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 
@@ -39,7 +39,7 @@ describe("experimental capability audit", () => {
         skill,
         '---\nname: review\ndescription: Review code.\n---\n\nCall spawn("sh").\n',
       );
-      const report = yield* auditLocalCapabilitiesV1Alpha3Effect({
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({
         home: join(root, "home"),
         cwd: root,
       });
@@ -52,23 +52,23 @@ describe("experimental capability audit", () => {
           location: expect.objectContaining({ path: skill, line: 6, column: 6 }),
         }),
       );
-      expect(Schema.is(AuditReportV1Alpha3)(report)).toBe(true);
-      expect(Schema.is(outputContracts.experimentalAuditV1Alpha3.schema)(report)).toBe(true);
+      expect(Schema.is(AuditReportV1Alpha4)(report)).toBe(true);
+      expect(Schema.is(outputContracts.experimentalAuditV1Alpha4.schema)(report)).toBe(true);
       const futureRuleset = structuredClone(report);
       Reflect.set(
         futureRuleset.skills.find((item) => item.name === "review")!.staticAudit!.ruleset,
         "version",
         "0.3.0",
       );
-      expect(Schema.is(AuditReportV1Alpha3)(futureRuleset)).toBe(true);
+      expect(Schema.is(AuditReportV1Alpha4)(futureRuleset)).toBe(true);
 
       const malformed = structuredClone(report);
       const finding = malformed.skills.find((item) => item.name === "review")!.staticAudit!
         .findings[0];
       Reflect.set(finding, "confidence", "certain");
       Reflect.set(finding.location, "line", "six");
-      expect(Schema.is(AuditReportV1Alpha3)(malformed)).toBe(false);
-      expect(Schema.is(outputContracts.experimentalAuditV1Alpha3.schema)(malformed)).toBe(false);
+      expect(Schema.is(AuditReportV1Alpha4)(malformed)).toBe(false);
+      expect(Schema.is(outputContracts.experimentalAuditV1Alpha4.schema)(malformed)).toBe(false);
     }).pipe(Effect.provide(skitLayer)),
   );
 
@@ -176,13 +176,8 @@ describe("experimental capability audit", () => {
         yield* write(
           join(home, ".skit", "state.json"),
           JSON.stringify({
-            schemaVersion: 4,
-            collections: [
-              {
-                local_entry: { collection_ref: "github:mattpocock/skills" },
-              },
-            ],
-            installations: [],
+            schemaVersion: 5,
+            skills: [],
           }),
         );
 
@@ -198,8 +193,8 @@ describe("experimental capability audit", () => {
         });
         expect(observed?.provenance.transactionId).toBeUndefined();
 
-        const report = yield* auditLocalCapabilitiesV1Alpha3Effect({ home, cwd: root });
-        expect(Schema.is(outputContracts.experimentalAuditV1Alpha3.schema)(report)).toBe(true);
+        const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
+        expect(Schema.is(outputContracts.experimentalAuditV1Alpha4.schema)(report)).toBe(true);
       }).pipe(Effect.provide(skitLayer)),
   );
 
@@ -226,7 +221,7 @@ describe("experimental capability audit", () => {
       yield* write(join(invalid, "SKILL.md"), "---\nname: invalid\ndescription: Invalid.\n---\n");
       yield* write(join(invalid, ".skit-ownership.json"), "{}");
 
-      const report = yield* auditLocalCapabilitiesV1Alpha3Effect({ home, cwd: root });
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
 
       expect(report.findings).toEqual(
         expect.arrayContaining([
@@ -250,51 +245,12 @@ describe("experimental capability audit", () => {
       );
       const orphanProvenance = report.skills.find((skill) => skill.name === "orphan")?.provenance;
       expect(orphanProvenance).toEqual(expect.objectContaining({ source: "SKIT orphan claim" }));
-      expect(orphanProvenance).not.toHaveProperty("collectionRef");
+      expect(orphanProvenance).not.toHaveProperty("collectionId");
       expect(orphanProvenance).not.toHaveProperty("transactionId");
       expect(report.skills.find((skill) => skill.name === "orphan")?.harnessIds).toEqual([
         "codex",
         "devin",
       ]);
-    }).pipe(Effect.provide(skitLayer)),
-  );
-
-  it.effect("recognizes a v1 marker retained by a schema-v4 Projection", () =>
-    Effect.gen(function* () {
-      const root = yield* scratch("skit-audit-v4-projection-");
-      const home = join(root, "home");
-      const skill = join(home, ".agents", "skills", "retained");
-      const collectionRef = "github:fixture/skills";
-      yield* write(join(skill, "SKILL.md"), "---\nname: retained\ndescription: Retained.\n---\n");
-      yield* write(
-        join(skill, ".skit-ownership.json"),
-        JSON.stringify({
-          schemaVersion: 1,
-          projectionId: "projection:github:fixture/skills#retained:codex:/fixture",
-          collectionRef,
-          skillRef: `${collectionRef}#retained`,
-          expectedHash: `sha256:${"a".repeat(64)}`,
-        }),
-      );
-      yield* write(
-        join(home, ".skit", "state.json"),
-        JSON.stringify({
-          schemaVersion: 4,
-          collections: [{ collection_id: "collection_fixture" }],
-          projections: [
-            {
-              collection_id: "collection_fixture",
-              marker_collection_ref: collectionRef,
-            },
-          ],
-        }),
-      );
-
-      const report = yield* auditLocalCapabilitiesV1Alpha3Effect({ home, cwd: root });
-
-      expect(report.findings.some((finding) => finding.code === "orphaned-projection-claim")).toBe(
-        false,
-      );
     }).pipe(Effect.provide(skitLayer)),
   );
 
@@ -307,17 +263,18 @@ describe("experimental capability audit", () => {
       yield* write(
         join(skill, ".skit-ownership.json"),
         JSON.stringify({
-          schemaVersion: 1,
-          projectionId: "projection_retained",
-          collectionRef: "authored:unknown-until-ledger-recovers",
-          skillRef: "authored:unknown-until-ledger-recovers#retained",
-          expectedHash: `sha256:${"a".repeat(64)}`,
-          transactionId: "transaction_retained",
+          schemaVersion: 3,
+          projectionPolicyVersion: 1,
+          projection_id: makeProjectionId(),
+          skill_id: makeSkillId(),
+          skill_version_id: makeSkillVersionId(),
+          expected_digest: `sha256:${"a".repeat(64)}`,
+          harness: "codex",
         }),
       );
       yield* write(join(home, ".skit", "state.json"), "{");
 
-      const report = yield* auditLocalCapabilitiesV1Alpha3Effect({ home, cwd: root });
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
 
       expect(report.findings).toContainEqual(
         expect.objectContaining({ severity: "error", code: "unreadable-library-ledger" }),
@@ -337,7 +294,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({ schemaVersion: 1, entries: [], installations: [] }),
       );
 
-      const report = yield* auditLocalCapabilitiesV1Alpha3Effect({ home, cwd: root });
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
 
       expect(report.findings).toContainEqual(
         expect.objectContaining({
@@ -515,9 +472,8 @@ describe("experimental capability audit", () => {
       yield* write(
         join(home, ".skit", "state.json"),
         JSON.stringify({
-          schemaVersion: 2,
-          entries: [{ collectionRef: "github:example/tools" }],
-          installations: [],
+          schemaVersion: 5,
+          skills: [],
         }),
       );
 

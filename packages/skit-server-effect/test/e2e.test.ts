@@ -277,7 +277,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       ]).stdout,
     );
     expect(createdDraft).toMatchObject({
-      schema: "skit.author.sync.v2",
+      schema: "skit.author.sync.v3",
       data: { status: "created", changed: true, revision_id: expect.any(String) },
     });
     skit(["author", "publish", authorSource, "--version", "1.0.0"]);
@@ -346,7 +346,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       skit(["author", "sync", authorSource, "--home", authorHome, "--json"]).stdout,
     );
     expect(preview).toMatchObject({
-      schema: "skit.author.sync.v2",
+      schema: "skit.author.sync.v3",
       data: {
         status: "merge_ready",
         changed: false,
@@ -357,7 +357,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       skit(["author", "sync", authorSource, "--home", authorHome, "--apply", "--json"]).stdout,
     );
     expect(merged).toMatchObject({
-      schema: "skit.author.sync.v2",
+      schema: "skit.author.sync.v3",
       data: { status: "merged", changed: true, revision_id: expect.any(String) },
     });
     expect(await readFile(join(authorSource, "README.md"), "utf8")).toContain("Edited remotely.");

@@ -2,7 +2,6 @@ import { Effect, FileSystem, Schema } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../artifact/skit.js";
 import { InvalidLibraryState } from "../failures.js";
-import { collectionDisplay } from "../identity/catalog.js";
 import { copyLocalTreeEffect } from "../platform/copy-tree.js";
 import { writeJsonAtomicEffect } from "../platform/atomic-write.js";
 import { canonicalJson } from "../shared/json.js";
@@ -16,7 +15,7 @@ import {
   MachineId,
 } from "./entity-ids.js";
 import { MachineDocumentJson, MachineDocumentV4 } from "./machine-document.js";
-import { acquisitionObservations, sanitizeSourceClaim } from "./acquisition-evidence.js";
+import { acquisitionObservations } from "./acquisition-evidence.js";
 import type {
   AcquisitionSelection,
   MaterializationProfile,
@@ -30,13 +29,12 @@ import {
 import { LibraryStore } from "./store/library-store.js";
 import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
 import { materializedSkillDigestEffect } from "./skill-materialization.js";
-import { sourceIdentityFromCollectionIdentity } from "./source-identity.js";
-import type {
-  CollectionIdentity,
-  Digest,
-  SkitSource,
-  SkillsShProvenanceObservation,
-} from "./store/state-schema.js";
+import {
+  collectionLabelFromSource,
+  sourceIdentityFromSource,
+  type SourceDeclaration,
+} from "./source-identity.js";
+import type { Digest, SkitSource, SkillsShProvenanceObservation } from "./store/state-schema.js";
 
 const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(function* (
   libraryHome: string,
@@ -90,9 +88,9 @@ export interface ObservedSkill {
 }
 export interface ObservedImport {
   readonly machineId?: MachineId;
-  readonly identity: CollectionIdentity;
   readonly input: string;
-  readonly source?: SkitSource;
+  readonly source: SkitSource;
+  readonly declaration?: SourceDeclaration;
   readonly sourceRevision?: string;
   readonly retainedAt: string;
   readonly skills: readonly ObservedSkill[];
@@ -109,19 +107,15 @@ const safeRelative = (path: string) =>
   !path.includes("\0") &&
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
 
-const selection = (
-  identity: CollectionIdentity,
-  source: SkitSource | undefined,
-  skills: ObservedImport["skills"],
-): AcquisitionSelection => {
+const selection = (source: SkitSource, skills: ObservedImport["skills"]): AcquisitionSelection => {
   if (source?.type === "well-known" && source.members?.length)
     return { kind: "selected-skills", names: [...new Set(source.members)].sort() };
-  if (identity.profile !== "github-collection" && identity.profile !== "git-collection")
-    return { kind: "full-tree" };
+  if (source.type !== "git") return { kind: "full-tree" };
+  const selectedPaths = new URLSearchParams(source.locator.split("#", 2)[1] ?? "")
+    .getAll("skill")
+    .map((path) => path.replace(/\/SKILL\.md$/, ""));
   const paths = [
-    ...new Set(
-      identity.skillPaths?.length ? identity.skillPaths : skills.map((skill) => skill.relativePath),
-    ),
+    ...new Set(selectedPaths.length ? selectedPaths : skills.map((skill) => skill.relativePath)),
   ].sort();
   return paths.length === 0 || (paths.length === 1 && paths[0] === ".")
     ? { kind: "full-tree" }
@@ -220,6 +214,8 @@ interface PersistPreparedRequest extends ObservedImport {
   readonly retainedRoot: string;
   readonly retainedDigest: Digest;
   readonly facts: readonly PreparedFact[];
+  readonly sourceIdentity?: SourceIdentity;
+  readonly label?: string;
 }
 
 const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function* (
@@ -229,13 +225,9 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const machineId = request.machineId ?? (yield* readOrCreateMachineId(store.home));
   const state = yield* store.load;
   const source =
-    request.source?.type === "well-known"
-      ? {
-          kind: "well-known" as const,
-          locator: { value: sanitizeSourceClaim(request.source.ref) },
-        }
-      : sourceIdentityFromCollectionIdentity(request.identity, machineId, request.input);
-  const acquiredSelection = selection(request.identity, request.source, request.skills);
+    request.sourceIdentity ??
+    sourceIdentityFromSource(request.source, machineId, request.declaration);
+  const acquiredSelection = selection(request.source, request.skills);
   const pinnedRevision =
     (source.kind === "github" || source.kind === "git") && request.sourceRevision !== undefined
       ? request.sourceRevision
@@ -245,8 +237,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ? ({ kind: "default" } as const)
       : ({ kind: "commit", ref: pinnedRevision } as const);
   const requestedGitRef =
-    request.source?.type === "git"
-      ? (new URLSearchParams(request.source.ref.split("#", 2)[1] ?? "").get("ref") ?? undefined)
+    request.source.type === "git"
+      ? (new URLSearchParams(request.source.locator.split("#", 2)[1] ?? "").get("ref") ?? undefined)
       : undefined;
   const refreshTracking =
     requestedGitRef === undefined
@@ -289,7 +281,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   if (collection === undefined) {
     collection = {
       collection_id: makeCollectionId(),
-      label: collectionDisplay(request.identity),
+      label: request.label ?? collectionLabelFromSource(request.source, request.declaration),
       ...(source.kind === "local"
         ? {}
         : {
@@ -552,7 +544,10 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
 export interface AuthoredImport {
   readonly machineId?: MachineId;
   readonly root: string;
-  readonly identity: CollectionIdentity;
+  readonly source: SkitSource;
+  readonly sourceIdentity?: SourceIdentity;
+  readonly label?: string;
+  readonly declaration?: SourceDeclaration;
   readonly input: string;
   readonly retainedAt: string;
   /** Retention may be separated from selection when another workflow owns the selection commit. */

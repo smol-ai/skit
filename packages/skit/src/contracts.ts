@@ -27,7 +27,6 @@ export {
   SkitValidationDiagnostic,
 };
 export type {
-  CollectionIdentity,
   HarnessInstallStatus,
   CustodyIssue,
   SkitSource,
@@ -205,7 +204,7 @@ export const SkillAssessmentDecision = Schema.Struct({
 export type SkillAssessmentDecision = typeof SkillAssessmentDecision.Type;
 
 export const SkillSecurityReview = Schema.Struct({
-  skillRef: Schema.String,
+  skill_version_id: SkillVersionId,
   artifactContentDigest: Digest,
   audit: SkillAudit,
   assessment: SkillAssessmentDecision,

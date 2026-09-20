@@ -958,7 +958,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     yield* git(f.repository, "commit", "-qm", "authored skit");
 
     const contentHash = yield* deterministicTreeHashEffect(projectedSkill);
-    const collectionRef = "skit:https://registry.test/tim/skills";
+    const skitLocator = "skit://registry.test/tim/skills";
     const collectionId = makeCollectionId();
     const versionId = makeRetainedCopyId();
     const skillVersionId = makeSkillVersionId();
@@ -1110,7 +1110,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
         repository: f.repository,
         descriptorPath: join(f.repository, "skit.json"),
         remotePath: join(f.repository, "skit.remote.json"),
-        collectionRef,
+        skitLocator,
         origin: "https://registry.test",
         namespace: "tim",
         skit: "skills",
@@ -1120,7 +1120,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     ]);
     expect(
       observed.instances.find((instance) => instance.path === authoredSkillRealPath)?.owner,
-    ).toEqual({ kind: "authored", collectionRef, collectionId });
+    ).toEqual({ kind: "authored", skitLocator, collectionId });
     expect(
       observed.instances.find((instance) => instance.path === authoredSkillRealPath)
         ?.contentIdentity,
@@ -1249,8 +1249,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
     const orphanedCollectionId = makeCollectionId();
     const orphanedSkillId = makeSkillId();
     const orphanedVersionId = makeSkillVersionId();
-    const currentRef = currentSkillId;
-    const missingRef = missingSkillId;
     yield* f.fs.writeFileString(
       join(current, ".skit-ownership.json"),
       JSON.stringify({
@@ -1258,7 +1256,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
         projectionPolicyVersion: 1,
         projection_id: currentProjectionId,
         collection_id: collectionId,
-        skill_id: currentRef,
+        skill_id: currentSkillId,
         skill_version_id: currentVersionId,
         expected_digest: currentHash,
         harness: "codex",
@@ -1404,8 +1402,8 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
 
     expect(observed.projections).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ skillId: currentRef, path: current, status: "current" }),
-        expect.objectContaining({ skillId: missingRef, path: missing, status: "missing" }),
+        expect.objectContaining({ skillId: currentSkillId, path: current, status: "current" }),
+        expect.objectContaining({ skillId: missingSkillId, path: missing, status: "missing" }),
       ]),
     );
     expect(observed.instances.find((instance) => instance.name === "current")?.owner.kind).toBe(

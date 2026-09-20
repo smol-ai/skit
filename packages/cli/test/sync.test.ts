@@ -134,7 +134,7 @@ it.effect("first sync previews then records one remote home without publishing i
     ).toMatchObject({
       status: "first_sync_ready",
       changed: false,
-      identity: { ref: "skit://registry.example/tim/tools" },
+      identity: { locator: "skit://registry.example/tim/tools" },
     });
     expect(posts).toBe(0);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);

@@ -12,7 +12,7 @@ import {
   SkitValidationDiagnostic,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { AuditReport, AuditReportV1Alpha3 } from "../audit/schema.js";
+import { AuditReportV1Alpha4 } from "../audit/schema.js";
 import { HarnessProbeReport } from "../harness/probe.js";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
@@ -101,9 +101,9 @@ export const outputContracts = {
   addPreview: effectOutput("skit.add.preview.v3", AddPreview),
   pull: effectOutput("skit.pull.v4", UpdateResult),
   list: effectOutput("skit.list.v3", ListResult),
-  securityReview: effectOutput("skit.security.review.v1", SkillSecurityReview),
-  securityAccept: effectOutput("skit.security.accept.v1", SkillSecurityReview),
-  inventory: effectOutput("skit.inventory.v6", MachineInventoryResult),
+  securityReview: effectOutput("skit.security.review.v2", SkillSecurityReview),
+  securityAccept: effectOutput("skit.security.accept.v2", SkillSecurityReview),
+  inventory: effectOutput("skit.inventory.v7", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v2", LibraryDoctorReport),
   check: effectOutput("skit.check.v7", CheckResult),
   update: effectOutput("skit.update.v4", UpdateResult),
@@ -125,13 +125,13 @@ export const outputContracts = {
   disable: effectOutput("skit.disable.v3", SetEnabledResult),
   disablePlan: effectOutput("skit.disable.plan.v3", SetEnabledPlan),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
-  sync: effectOutput("skit.author.sync.v2", AuthorSyncResult),
+  sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
   librarySync: effectOutput("skit.library.sync.v4", SyncResult),
   libraryHistory: effectOutput(
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
-  setup: effectOutput("skit.setup.v4", SetupResult),
+  setup: effectOutput("skit.setup.v5", SetupResult),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
@@ -180,8 +180,7 @@ export const outputContracts = {
     "skit.experimental.harness-probe.v1alpha1",
     HarnessProbeReport,
   ),
-  experimentalAudit: effectOutput("skit.experimental.audit.v1alpha1", AuditReport),
-  experimentalAuditV1Alpha3: effectOutput("skit.experimental.audit.v1alpha3", AuditReportV1Alpha3),
+  experimentalAuditV1Alpha4: effectOutput("skit.experimental.audit.v1alpha4", AuditReportV1Alpha4),
 } as const;
 
 export type AnyOutputContract = (typeof outputContracts)[keyof typeof outputContracts];

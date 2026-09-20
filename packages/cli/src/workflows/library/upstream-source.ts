@@ -19,7 +19,7 @@ export const sourceFromUpstream = (upstream: Upstream): SkitSource | undefined =
     case "github":
       return {
         type: "git",
-        ref: gitRef(
+        locator: gitRef(
           `https://github.com/${source.owner}/${source.repository}.git`,
           upstream,
           source.collection_root,
@@ -28,22 +28,22 @@ export const sourceFromUpstream = (upstream: Upstream): SkitSource | undefined =
     case "git":
       return {
         type: "git",
-        ref: gitRef(source.remote.value, upstream, source.collection_root),
+        locator: gitRef(source.remote.value, upstream, source.collection_root),
       };
     case "registry":
       return {
         type: "registry",
-        ref: `${source.namespace}/${source.slug}`,
+        locator: `${source.namespace}/${source.slug}`,
         ...(source.authority === "default" ? {} : { authority: source.authority }),
       };
     case "url":
-      return { type: "url", ref: source.url.value };
+      return { type: "url", locator: source.url.value };
     case "archive":
-      return { type: "archive", ref: source.url.value };
+      return { type: "archive", locator: source.url.value };
     case "well-known":
       return {
         type: "well-known",
-        ref: source.locator.value,
+        locator: source.locator.value,
         ...(upstream.selection.kind === "selected-skills"
           ? { members: upstream.selection.names }
           : {}),

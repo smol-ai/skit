@@ -45,7 +45,7 @@ const securitySkill = Effect.fn("Library.securitySkill")(function* (
         return member === undefined || tree === undefined ? [] : [{ version, skill, member, tree }];
       });
   });
-  if (matches.length !== 1) return yield* new UnknownInstalledSkill({ skillRef: query });
+  if (matches.length !== 1) return yield* new UnknownInstalledSkill({ query });
   return matches[0]!;
 });
 
@@ -74,7 +74,7 @@ export const securityReviewFromStateEffect = Effect.fn("Library.securityReviewSn
   const evaluatedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const acceptances = state.assessmentAcceptances ?? [];
   return {
-    skillRef: version.skill_version_id,
+    skill_version_id: version.skill_version_id,
     artifactContentDigest: version.artifact_digest,
     audit,
     assessment: evaluateSkillAudit(audit, {
@@ -84,7 +84,7 @@ export const securityReviewFromStateEffect = Effect.fn("Library.securityReviewSn
       evaluatedAt,
     }),
     acceptances: acceptances
-      .filter((acceptance) => acceptance.skillRef === version.skill_version_id)
+      .filter((acceptance) => acceptance.skill_version_id === version.skill_version_id)
       .map((acceptance) => ({
         ...acceptance,
         status:
@@ -132,7 +132,7 @@ export const acceptSecurityFindingFromStateEffect = Effect.fn(
   const acceptance: SkillAssessmentAcceptance = {
     fingerprint: input.fingerprint,
     artifactContentDigest: review.artifactContentDigest,
-    skillRef: review.skillRef,
+    skill_version_id: review.skill_version_id,
     context: "project",
     principal: input.principal.trim(),
     rationale: input.rationale.trim(),
@@ -144,5 +144,5 @@ export const acceptSecurityFindingFromStateEffect = Effect.fn(
     assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
   };
   yield* (yield* LibraryStore).publish(next);
-  return yield* securityReviewFromStateEffect(next, review.skillRef);
+  return yield* securityReviewFromStateEffect(next, review.skill_version_id);
 });

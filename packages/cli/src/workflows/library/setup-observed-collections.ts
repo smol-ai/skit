@@ -3,7 +3,6 @@ import { Effect, FileSystem, Schema } from "effect";
 import {
   retainObservedCollectionEffect,
   LibraryStore,
-  collectionIdentity,
   sourceLocator,
   type MachineId,
   type SkillsShProvenanceObservation,
@@ -213,11 +212,9 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
         reason: "source-unresolvable",
       });
     const source = resolution.source;
-    const identity = collectionIdentity(source);
     retained.push(
       yield* Effect.scoped(
         retainObservedCollectionEffect({
-          identity,
           input: sourceLocator(source),
           source,
           retainedAt: observedAt,

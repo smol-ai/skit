@@ -753,7 +753,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v6"
+        "skit.inventory.v7"
       ],
       "exitCodes": [
         0,
@@ -1770,7 +1770,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.security.accept.v1"
+        "skit.security.accept.v2"
       ],
       "exitCodes": [
         0,
@@ -1878,7 +1878,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.security.review.v1"
+        "skit.security.review.v2"
       ],
       "exitCodes": [
         0,
@@ -2062,7 +2062,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v4"
+        "skit.setup.v5"
       ],
       "exitCodes": [
         0,

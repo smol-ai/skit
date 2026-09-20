@@ -36,7 +36,7 @@ it.effect("selects a retained Version and retries Projection without acquiring a
           writingTo(
             home,
             retainObservedIn(home)({
-              identity: { profile: "local-collection", version: 1, path: source },
+              source: { type: "local", locator: source },
               input: source,
               retainedAt: "2026-09-16T00:00:00.000Z",
               skills: [

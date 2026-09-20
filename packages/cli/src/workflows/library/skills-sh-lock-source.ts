@@ -40,9 +40,9 @@ function wellKnownBase(lock: SetupLockMatch): string | undefined {
 /** Lock fields identify a candidate coordinate; this performs no upstream observation. */
 export function skillsShLockCoordinate(lock: SetupLockMatch): SkitSource | undefined {
   const github = githubRepository(lock);
-  if (github && safeSkillPath(lock.entry.skillPath)) return { type: "git", ref: github };
+  if (github && safeSkillPath(lock.entry.skillPath)) return { type: "git", locator: github };
   const wellKnown = wellKnownBase(lock);
-  if (wellKnown) return { type: "well-known", ref: wellKnown };
+  if (wellKnown) return { type: "well-known", locator: wellKnown };
   return undefined;
 }
 
@@ -67,7 +67,7 @@ export function resolveSkillsShSelectedSource(
     if (!candidate) return SkillsShSourceResolution.Unresolvable();
     if (
       candidate.type !== coordinate.type ||
-      candidate.ref !== coordinate.ref ||
+      candidate.locator !== coordinate.locator ||
       lock.entry.ref !== first.lock.entry.ref ||
       lock.lockPath !== first.lock.lockPath
     )
@@ -101,6 +101,6 @@ export function resolveSkillsShSelectedSource(
   if (first.lock.entry.ref) fragment.set("ref", first.lock.entry.ref);
   for (const path of [...new Set(paths)].sort()) fragment.append("skill", path);
   return SkillsShSourceResolution.Resolved({
-    source: { ...coordinate, ref: `${coordinate.ref}#${fragment}` },
+    source: { ...coordinate, locator: `${coordinate.locator}#${fragment}` },
   });
 }

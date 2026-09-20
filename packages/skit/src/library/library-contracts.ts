@@ -557,10 +557,6 @@ export const migrateLibraryEntitiesFromV4 = (input: {
     );
     return acquisitions.filter((acquisition) => ids.has(acquisition.acquisition_id));
   };
-  const latestAcquisition = (collectionId: CollectionId) =>
-    collectionAcquisitions(collectionId).toSorted((left, right) =>
-      right.acquired_at.localeCompare(left.acquired_at),
-    )[0];
   const rawCollections = input.collections.flatMap((collection): Collection[] => {
     const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
     if (skills.length === 0) return [];

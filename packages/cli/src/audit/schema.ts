@@ -18,9 +18,9 @@ const AuditProvenance = Schema.Struct({
   confidence: Schema.Literals(["exact", "matched", "unknown"]),
   source: Schema.NullOr(Schema.String),
   evidence: Schema.Union([Schema.String, StringArray]),
-  collectionRef: Schema.optionalKey(Schema.String),
+  collectionId: Schema.optionalKey(Schema.String),
   parentPlugin: Schema.optionalKey(Schema.String),
-  skillRef: Schema.optionalKey(Schema.String),
+  skillId: Schema.optionalKey(Schema.String),
   expectedHash: Schema.optionalKey(Schema.String),
   transactionId: Schema.optionalKey(Schema.String),
 });
@@ -109,23 +109,23 @@ const auditEntryFields = {
   provenance: AuditProvenance,
 };
 
-export const AuditSkillV1Alpha3 = Schema.Struct({
+export const AuditSkillV1Alpha4 = Schema.Struct({
   ...auditEntryFields,
   role: Schema.Literals(["native", "compatibility"]),
   aliases: StringArray,
   staticAudit: Schema.optionalKey(SkillAudit),
   frontmatterCompatibility: Schema.optionalKey(Schema.Array(FrontmatterCompatibilityResult)),
 });
-export type AuditSkillV1Alpha3 = typeof AuditSkillV1Alpha3.Type;
+export type AuditSkillV1Alpha4 = typeof AuditSkillV1Alpha4.Type;
 
-export const AuditPluginV1Alpha3 = Schema.Struct({
+export const AuditPluginV1Alpha4 = Schema.Struct({
   ...auditEntryFields,
   installed: Schema.Boolean,
   enabled: Schema.NullOr(Schema.Boolean),
 });
-export type AuditPluginV1Alpha3 = typeof AuditPluginV1Alpha3.Type;
+export type AuditPluginV1Alpha4 = typeof AuditPluginV1Alpha4.Type;
 
-export const AuditMcpServerV1Alpha3 = Schema.Struct({
+export const AuditMcpServerV1Alpha4 = Schema.Struct({
   ...auditEntryFields,
   enabled: Schema.NullOr(Schema.Boolean),
   active: Schema.Boolean,
@@ -135,20 +135,20 @@ export const AuditMcpServerV1Alpha3 = Schema.Struct({
   cwd: Schema.optionalKey(Schema.String),
   url: Schema.optionalKey(Schema.String),
 });
-export type AuditMcpServerV1Alpha3 = typeof AuditMcpServerV1Alpha3.Type;
+export type AuditMcpServerV1Alpha4 = typeof AuditMcpServerV1Alpha4.Type;
 
-export const AuditRuleV1Alpha3 = Schema.Struct(auditEntryFields);
-export type AuditRuleV1Alpha3 = typeof AuditRuleV1Alpha3.Type;
-export const AuditMarketplaceV1Alpha3 = Schema.Struct(auditEntryFields);
-export type AuditMarketplaceV1Alpha3 = typeof AuditMarketplaceV1Alpha3.Type;
-export type AuditEntryV1Alpha3 =
-  | AuditSkillV1Alpha3
-  | AuditPluginV1Alpha3
-  | AuditMcpServerV1Alpha3
-  | AuditRuleV1Alpha3
-  | AuditMarketplaceV1Alpha3;
+export const AuditRuleV1Alpha4 = Schema.Struct(auditEntryFields);
+export type AuditRuleV1Alpha4 = typeof AuditRuleV1Alpha4.Type;
+export const AuditMarketplaceV1Alpha4 = Schema.Struct(auditEntryFields);
+export type AuditMarketplaceV1Alpha4 = typeof AuditMarketplaceV1Alpha4.Type;
+export type AuditEntryV1Alpha4 =
+  | AuditSkillV1Alpha4
+  | AuditPluginV1Alpha4
+  | AuditMcpServerV1Alpha4
+  | AuditRuleV1Alpha4
+  | AuditMarketplaceV1Alpha4;
 
-const AuditFindingV1Alpha3 = Schema.Struct({
+const AuditFindingV1Alpha4 = Schema.Struct({
   id: Schema.String,
   severity: Schema.Literals(["warning", "error"]),
   code: Schema.String,
@@ -159,8 +159,8 @@ const AuditFindingV1Alpha3 = Schema.Struct({
   details: Schema.Record(Schema.String, Schema.Unknown),
 });
 
-export const AuditReportV1Alpha3 = Schema.Struct({
-  schemaVersion: Schema.Literal("v1alpha3"),
+export const AuditReportV1Alpha4 = Schema.Struct({
+  schemaVersion: Schema.Literal("v1alpha4"),
   generatedAt: Schema.String,
   roots: Schema.Struct({ home: Schema.String, cwd: Schema.String }),
   harnesses: Schema.Array(
@@ -175,12 +175,12 @@ export const AuditReportV1Alpha3 = Schema.Struct({
       entryIds: StringArray,
     }),
   ),
-  skills: Schema.Array(AuditSkillV1Alpha3),
-  plugins: Schema.Array(AuditPluginV1Alpha3),
-  mcpServers: Schema.Array(AuditMcpServerV1Alpha3),
-  rules: Schema.Array(AuditRuleV1Alpha3),
-  marketplaces: Schema.Array(AuditMarketplaceV1Alpha3),
-  findings: Schema.Array(AuditFindingV1Alpha3),
+  skills: Schema.Array(AuditSkillV1Alpha4),
+  plugins: Schema.Array(AuditPluginV1Alpha4),
+  mcpServers: Schema.Array(AuditMcpServerV1Alpha4),
+  rules: Schema.Array(AuditRuleV1Alpha4),
+  marketplaces: Schema.Array(AuditMarketplaceV1Alpha4),
+  findings: Schema.Array(AuditFindingV1Alpha4),
   probes: Schema.Array(
     Schema.Struct({
       harnessId: Schema.String,
@@ -205,4 +205,4 @@ export const AuditReportV1Alpha3 = Schema.Struct({
     findings: Schema.Number,
   }),
 });
-export type AuditReportV1Alpha3 = typeof AuditReportV1Alpha3.Type;
+export type AuditReportV1Alpha4 = typeof AuditReportV1Alpha4.Type;

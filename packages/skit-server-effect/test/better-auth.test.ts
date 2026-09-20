@@ -852,7 +852,7 @@ describe("Better Auth adapter", () => {
               slug: "library",
             },
             tracking: { kind: "default" },
-            selection: { kind: "selected-paths", paths: ["skills/review"] },
+            selection: { kind: "full-tree" },
             acquired_at: "2026-01-01T00:00:00.000Z",
             machine_id: machineId,
             observations: [],

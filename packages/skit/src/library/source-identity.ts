@@ -1,4 +1,5 @@
-import type { CollectionIdentity } from "../contracts.js";
+import { basename } from "node:path";
+import type { SkitSource } from "./store/state-schema.js";
 import type { MachineId } from "./entity-ids.js";
 import { sanitizeSourceClaim } from "./acquisition-evidence.js";
 import type { SourceIdentity } from "./library-contracts.js";
@@ -8,67 +9,120 @@ const registryParts = (value: string) => {
   return { namespace, slug };
 };
 
-export function sourceIdentityFromCollectionIdentity(
-  identity: CollectionIdentity,
+export interface SourceDeclaration {
+  readonly skitId: string;
+  readonly authority?: string;
+}
+
+const gitParts = (locator: string) => {
+  const [remote, fragment = ""] = locator.split("#", 2);
+  const values = new URLSearchParams(fragment);
+  return {
+    remote: remote.replace(/\/$/, ""),
+    collectionRoot: values.get("path") ?? ".",
+  };
+};
+
+const githubParts = (remote: string): { owner: string; repository: string } | undefined => {
+  const match = remote.match(
+    /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/]+)\/([^/]+?)(?:\.git)?$/i,
+  );
+  return match ? { owner: match[1].toLowerCase(), repository: match[2].toLowerCase() } : undefined;
+};
+
+export function sourceIdentityFromSource(
+  source: SkitSource,
   machineId: MachineId,
-  input: string,
+  declaration?: SourceDeclaration,
 ): SourceIdentity;
-export function sourceIdentityFromCollectionIdentity(
-  identity: CollectionIdentity,
+export function sourceIdentityFromSource(
+  source: SkitSource,
   machineId: undefined,
-  input: string,
+  declaration?: SourceDeclaration,
 ): SourceIdentity | undefined;
-export function sourceIdentityFromCollectionIdentity(
-  identity: CollectionIdentity,
+export function sourceIdentityFromSource(
+  source: SkitSource,
   machineId: MachineId | undefined,
-  input: string,
+  declaration?: SourceDeclaration,
 ): SourceIdentity | undefined;
-export function sourceIdentityFromCollectionIdentity(
-  identity: CollectionIdentity,
+export function sourceIdentityFromSource(
+  source: SkitSource,
   machineId: MachineId | undefined,
-  input: string,
+  declaration?: SourceDeclaration,
 ): SourceIdentity | undefined {
-  switch (identity.profile) {
-    case "github-collection":
+  if (declaration !== undefined)
+    return {
+      kind: "registry",
+      authority: declaration.authority ?? "default",
+      ...registryParts(declaration.skitId),
+    };
+  switch (source.type) {
+    case "registry":
       return {
-        kind: "github",
-        owner: identity.owner,
-        repository: identity.repository.replace(/\.git$/, ""),
-        collection_root: identity.path ?? ".",
+        kind: "registry",
+        authority: source.authority ?? "default",
+        ...registryParts(source.locator.split("@")[0]),
       };
-    case "git-collection":
-      return {
-        kind: "git",
-        remote: { value: sanitizeSourceClaim(identity.remote) },
-        collection_root: identity.path ?? ".",
-      };
-    case "local-collection":
+    case "git": {
+      const parts = gitParts(source.locator);
+      const github = githubParts(parts.remote);
+      return github === undefined
+        ? {
+            kind: "git",
+            remote: { value: sanitizeSourceClaim(parts.remote) },
+            collection_root: parts.collectionRoot,
+          }
+        : {
+            kind: "github",
+            ...github,
+            collection_root: parts.collectionRoot,
+          };
+    }
+    case "local":
       return machineId === undefined
         ? undefined
-        : { kind: "local", machine_id: machineId, path: { value: identity.path } };
-    case "archive-collection":
-      return { kind: "archive", url: { value: sanitizeSourceClaim(identity.url) } };
-    case "url-collection":
-      return { kind: "url", url: { value: sanitizeSourceClaim(identity.url) } };
-    case "authored-workspace":
-      return { kind: "authored-workspace", workspace_id: identity.workspaceId };
-    case "declared-skit":
+        : { kind: "local", machine_id: machineId, path: { value: source.locator } };
+    case "archive":
+      return { kind: "archive", url: { value: sanitizeSourceClaim(source.locator) } };
+    case "url":
+      return { kind: "url", url: { value: sanitizeSourceClaim(source.locator) } };
+    case "well-known":
       return {
-        kind: "registry",
-        authority: identity.authority ?? "default",
-        ...registryParts(identity.skitId),
+        kind: "well-known",
+        locator: { value: sanitizeSourceClaim(source.locator) },
       };
-    case "private-collection":
-      return {
-        kind: "registry",
-        authority: "private",
-        namespace: identity.namespace,
-        slug: identity.slug,
-      };
-    default:
-      return { kind: "well-known", locator: { value: sanitizeSourceClaim(input) } };
   }
 }
+
+export const collectionLabelFromSource = (
+  source: SkitSource,
+  declaration?: SourceDeclaration,
+): string => {
+  if (declaration !== undefined) return declaration.skitId;
+  switch (source.type) {
+    case "registry":
+      return source.locator.split("@")[0];
+    case "git": {
+      const parts = gitParts(source.locator);
+      const github = githubParts(parts.remote);
+      const root = parts.collectionRoot === "." ? "" : `/${parts.collectionRoot}`;
+      return github === undefined
+        ? `${parts.remote.replace(/\.git$/, "")}${root}`
+        : `${github.owner}/${github.repository}${root}`;
+    }
+    case "local":
+      return basename(source.locator);
+    case "archive":
+    case "url": {
+      const rawGithub = source.locator.match(
+        /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\//i,
+      );
+      return rawGithub ? `${rawGithub[1]}/${rawGithub[2]}` : source.locator;
+    }
+    case "well-known":
+      return source.locator;
+  }
+};
 
 export const sourceIdentityEquals = (left: SourceIdentity, right: SourceIdentity): boolean => {
   if (left.kind === "url" && right.kind === "well-known")

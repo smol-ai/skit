@@ -24,6 +24,17 @@ import {
   LibraryDeviceStateFields,
 } from "./state-schema.js";
 
+const SkillAssessmentAcceptanceV4 = Schema.Struct({
+  fingerprint: Digest,
+  artifactContentDigest: Digest,
+  skillRef: SkillVersionId,
+  context: Schema.Literal("project"),
+  principal: Schema.String,
+  rationale: Schema.String,
+  acceptedAt: Schema.String,
+  expiresAt: Schema.optionalKey(Schema.String),
+});
+
 const DeviceBindingV4 = Schema.Struct({
   ...BindingV4.fields,
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
@@ -62,6 +73,9 @@ const AdoptionReceiptV4 = Schema.Struct({
 
 export const LibraryStateV4 = Schema.Struct({
   ...LibraryDeviceStateFields,
+  assessmentAcceptances: Schema.mutableKey(
+    Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptanceV4))),
+  ),
   schemaVersion: Schema.Literal(4),
   collections: Schema.mutable(Schema.Array(CollectionV4)),
   skills: Schema.mutable(Schema.Array(SkillV4)),
@@ -90,6 +104,7 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState =
     global_bindings: _legacyGlobalBindings,
     local_bindings,
     projections,
+    assessmentAcceptances,
     ...fields
   } = state;
   const localByCoordinate = new Map<string, LibraryState["local_bindings"][number]>();
@@ -112,6 +127,14 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState =
   }
   return currentLibraryState({
     ...fields,
+    ...(assessmentAcceptances === undefined
+      ? {}
+      : {
+          assessmentAcceptances: assessmentAcceptances.map(({ skillRef, ...acceptance }) => ({
+            ...acceptance,
+            skill_version_id: skillRef,
+          })),
+        }),
     retained_copies: state.retained_copies.map(
       ({ v3_normalized_tree: _legacyNormalizedTree, ...copy }) => copy,
     ),

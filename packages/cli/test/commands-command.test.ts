@@ -12,7 +12,7 @@ it.effect("derives public command metadata from the executable tree", () =>
       const inventory = commands.find((command) => command.path.join(" ") === "inventory");
       assert.ok(inventory);
       assert.deepStrictEqual(inventory.successExitCodes, [0, 65]);
-      assert.ok(inventory.outputSchemas.includes("skit.inventory.v6"));
+      assert.ok(inventory.outputSchemas.includes("skit.inventory.v7"));
       assert.ok(inventory.outputSchemas.includes("skit.error.v1"));
     }),
     Effect.provide(commandApplicationLayer(false, "/tmp/skit-commands-command-test")),

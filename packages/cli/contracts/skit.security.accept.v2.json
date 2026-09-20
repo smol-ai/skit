@@ -1,8 +1,8 @@
 {
-  "$id": "skit.security.accept.v1",
+  "$id": "skit.security.accept.v2",
   "type": "object",
   "properties": {
-    "skillRef": {
+    "skill_version_id": {
       "type": "string"
     },
     "artifactContentDigest": {
@@ -313,7 +313,7 @@
                     "type": "string",
                     "pattern": "^sha256:[a-f0-9]{64}$"
                   },
-                  "skillRef": {
+                  "skill_version_id": {
                     "type": "string"
                   },
                   "context": {
@@ -338,7 +338,7 @@
                 "required": [
                   "fingerprint",
                   "artifactContentDigest",
-                  "skillRef",
+                  "skill_version_id",
                   "context",
                   "principal",
                   "rationale",
@@ -377,7 +377,7 @@
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
-          "skillRef": {
+          "skill_version_id": {
             "type": "string"
           },
           "context": {
@@ -410,7 +410,7 @@
         "required": [
           "fingerprint",
           "artifactContentDigest",
-          "skillRef",
+          "skill_version_id",
           "context",
           "principal",
           "rationale",
@@ -422,7 +422,7 @@
     }
   },
   "required": [
-    "skillRef",
+    "skill_version_id",
     "artifactContentDigest",
     "audit",
     "assessment",

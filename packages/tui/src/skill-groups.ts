@@ -1,11 +1,11 @@
-import type { AuditSkillV1Alpha3 } from "../../cli/src/front-end";
+import type { AuditSkillV1Alpha4 } from "../../cli/src/front-end";
 
-type GroupableSkill = Pick<AuditSkillV1Alpha3, "provenance" | "canonicalLocation">;
+type GroupableSkill = Pick<AuditSkillV1Alpha4, "provenance" | "canonicalLocation">;
 
 export type SkillGroupIdentity =
   | { kind: "all" }
-  | { kind: "collection"; ref: string }
-  | { kind: "plugin"; ref: string }
+  | { kind: "collection"; id: string }
+  | { kind: "plugin"; id: string }
   | { kind: "source"; name: string }
   | { kind: "unattributed" };
 
@@ -16,15 +16,15 @@ export type SkillGroup<T> = {
 };
 
 function identityFor(skill: GroupableSkill): SkillGroupIdentity {
-  if (skill.provenance.collectionRef)
-    return { kind: "collection", ref: skill.provenance.collectionRef };
-  if (skill.provenance.parentPlugin) return { kind: "plugin", ref: skill.provenance.parentPlugin };
+  if (skill.provenance.collectionId)
+    return { kind: "collection", id: skill.provenance.collectionId };
+  if (skill.provenance.parentPlugin) return { kind: "plugin", id: skill.provenance.parentPlugin };
   if (skill.provenance.source) return { kind: "source", name: skill.provenance.source };
   return { kind: "unattributed" };
 }
 
 function provenancePriority(skill: GroupableSkill): number {
-  if (skill.provenance.collectionRef) return 3;
+  if (skill.provenance.collectionId) return 3;
   if (skill.provenance.parentPlugin) return 2;
   if (skill.provenance.source) return 1;
   return 0;
@@ -48,7 +48,7 @@ function identityKey(identity: SkillGroupIdentity): string {
       return identity.kind;
     case "collection":
     case "plugin":
-      return `${identity.kind}:${identity.ref}`;
+      return `${identity.kind}:${identity.id}`;
     case "source":
       return `${identity.kind}:${identity.name}`;
   }
@@ -62,7 +62,7 @@ function identityLabel(identity: SkillGroupIdentity): string {
       return "Unattributed";
     case "collection":
     case "plugin":
-      return identity.ref;
+      return identity.id;
     case "source":
       return identity.name;
   }
@@ -124,9 +124,9 @@ export function groupLocation(identity: SkillGroupIdentity): string {
     case "unattributed":
       return "No collection or source provenance";
     case "collection":
-      return identity.ref;
+      return identity.id;
     case "plugin":
-      return `Plugin ${identity.ref}`;
+      return `Plugin ${identity.id}`;
     case "source":
       return `Source ${identity.name}`;
   }

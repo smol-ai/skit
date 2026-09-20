@@ -13,6 +13,10 @@ import { inspectLibrary } from "./helpers/library-store.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
+interface LegacySkillVersionFixture {
+  readonly [field: string]: unknown;
+}
+
 it.effect("migrates a persisted v4 well-known subset once at the state-file boundary", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -91,7 +95,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
       path: "tdd",
       name: "tdd",
       upstream_path: "tdd",
-      versions: firstSkill.versions.map((version: Record<string, unknown>) => {
+      versions: firstSkill.versions.map((version: LegacySkillVersionFixture) => {
         const skillVersionId = makeSkillVersionId();
         return {
           ...version,

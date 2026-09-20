@@ -32,7 +32,7 @@ it.effect(
         writingTo(
           home,
           retainObservedIn(home)({
-            identity: { profile: "local-collection", version: 1, path: source },
+            source: { type: "local", locator: source },
             input: source,
             retainedAt: now(),
             skills: [

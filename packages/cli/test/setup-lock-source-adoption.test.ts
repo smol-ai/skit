@@ -349,7 +349,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
       _tag: "Resolved",
       source: {
         type: "well-known",
-        ref: "https://skills.example",
+        locator: "https://skills.example",
         members: ["review"],
       },
     });

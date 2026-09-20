@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { AuditSkillV1Alpha3 } from "../../cli/src/front-end";
+import type { AuditSkillV1Alpha4 } from "../../cli/src/front-end";
 import { groupForSkill, groupSkills } from "../src/skill-groups";
 
 describe("skill groups", () => {
@@ -9,7 +9,7 @@ describe("skill groups", () => {
         provenance: {
           confidence: "exact",
           evidence: "fixture",
-          collectionRef: "github:example/tools",
+          collectionId: "coll_01m2xxw78tfeva4p48mn5xbprh",
           source: null,
         },
       },
@@ -29,17 +29,17 @@ describe("skill groups", () => {
         },
       },
       { provenance: { confidence: "unknown", evidence: "fixture", source: null } },
-    ] satisfies Array<Pick<AuditSkillV1Alpha3, "provenance" | "canonicalLocation">>;
+    ] satisfies Array<Pick<AuditSkillV1Alpha4, "provenance" | "canonicalLocation">>;
 
     const groups = groupSkills(skills);
 
     expect(groups.map(({ identity, label }) => ({ identity, label }))).toEqual([
       { identity: { kind: "all" }, label: "All skills" },
       {
-        identity: { kind: "collection", ref: "github:example/tools" },
-        label: "github:example/tools",
+        identity: { kind: "collection", id: "coll_01m2xxw78tfeva4p48mn5xbprh" },
+        label: "coll_01m2xxw78tfeva4p48mn5xbprh",
       },
-      { identity: { kind: "plugin", ref: "review@example" }, label: "review@example" },
+      { identity: { kind: "plugin", id: "review@example" }, label: "review@example" },
       {
         identity: { kind: "source", name: "Skills CLI / skills.sh" },
         label: "Skills CLI / skills.sh",
@@ -48,7 +48,7 @@ describe("skill groups", () => {
     ]);
     expect(groupForSkill(groups, skills[1]!)?.identity).toEqual({
       kind: "plugin",
-      ref: "review@example",
+      id: "review@example",
     });
   });
 
@@ -64,15 +64,18 @@ describe("skill groups", () => {
           confidence: "exact",
           evidence: "projection",
           source: "SKIT projection",
-          collectionRef: "github:example/tools",
+          collectionId: "coll_01m2xxw78tfeva4p48mn5xbprh",
           parentPlugin: "review@example",
         },
       },
-    ] satisfies Array<Pick<AuditSkillV1Alpha3, "provenance" | "canonicalLocation">>;
+    ] satisfies Array<Pick<AuditSkillV1Alpha4, "provenance" | "canonicalLocation">>;
 
     const groups = groupSkills(skills);
 
     expect(groups[0]?.skills).toHaveLength(1);
-    expect(groups[1]?.identity).toEqual({ kind: "collection", ref: "github:example/tools" });
+    expect(groups[1]?.identity).toEqual({
+      kind: "collection",
+      id: "coll_01m2xxw78tfeva4p48mn5xbprh",
+    });
   });
 });

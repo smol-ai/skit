@@ -106,7 +106,7 @@ export const SetupInstanceOwner = Schema.Union([
   Schema.Struct({ kind: Schema.tag("invalid-marker") }),
   Schema.Struct({
     kind: Schema.tag("authored"),
-    collectionRef: Schema.String,
+    skitLocator: Schema.String,
     collectionId: Schema.optionalKey(CollectionId),
   }),
   Schema.Struct({ kind: Schema.tag("skills-sh"), source: Schema.String }),
@@ -176,7 +176,7 @@ export const SetupAuthoredCollection = Schema.Struct({
   repository: Schema.String,
   descriptorPath: Schema.String,
   remotePath: Schema.String,
-  collectionRef: Schema.String,
+  skitLocator: Schema.String,
   origin: Schema.String,
   namespace: Schema.String,
   skit: Schema.String,

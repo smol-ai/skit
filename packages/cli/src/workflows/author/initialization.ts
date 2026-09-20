@@ -70,19 +70,19 @@ const planWorkspaceEffect = Effect.fn("Author.planWorkspace")(function* (
   const retained = sameRoot.find(
     (collection) => collection.upstream?.source_identity.kind === "authored-workspace",
   );
-  const expectedRef = workspace
-    ? `authored:${workspace.workspace_id}`
+  const expectedWorkspaceId = workspace
+    ? workspace.workspace_id
     : retained?.upstream?.source_identity.kind === "authored-workspace"
-      ? `authored:${retained.upstream.source_identity.workspace_id}`
+      ? retained.upstream.source_identity.workspace_id
       : undefined;
   const conflict = sameRoot.find(
     (collection) =>
       collection.upstream?.source_identity.kind !== "authored-workspace" ||
-      `authored:${collection.upstream.source_identity.workspace_id}` !== expectedRef,
+      collection.upstream.source_identity.workspace_id !== expectedWorkspaceId,
   );
   if (conflict)
     return yield* new DirectoryAlreadyRetained({
-      collectionRef: conflict.collection_id,
+      collectionId: conflict.collection_id,
     });
   const planned: AuthorWorkspaceMetadata = workspace ?? {
     schema: "skit.author-workspace.v1",
@@ -104,7 +104,7 @@ const planWorkspaceEffect = Effect.fn("Author.planWorkspace")(function* (
     (yield* fs.realPath(existingInput)) !== physical
   )
     return yield* new AuthorWorkspaceAlreadyRegistered({
-      collectionRef: existing?.collection_id ?? `authored:${planned.workspace_id}`,
+      workspaceId: planned.workspace_id,
       at: existingInput,
     });
   return { workspace: planned, missing: workspace === undefined, existing };
@@ -137,12 +137,12 @@ const registerOwnedWorkspaceEffect = Effect.fn("Author.registerOwnedWorkspace")(
     );
   const collection = yield* retainAuthoredCollectionUnderLockEffect({
     root,
-    identity: {
-      profile: "authored-workspace",
-      version: 1,
-      workspaceId: plan.workspace.workspace_id,
-      slug: validated.identity.slug,
+    source: { type: "local", locator: root },
+    sourceIdentity: {
+      kind: "authored-workspace",
+      workspace_id: plan.workspace.workspace_id,
     },
+    label: validated.identity.slug,
     input: root,
     retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
   });

@@ -37,7 +37,7 @@ export class DedicatedInstallerRequired extends Data.TaggedError(
 
 function githubCoordinate(source: SkitSource): string | undefined {
   if (source.type !== "git") return undefined;
-  const reference = source.ref.split("#", 1)[0];
+  const reference = source.locator.split("#", 1)[0];
   if (!reference) return undefined;
   const url = URL.parse(reference);
   if (!url || url.hostname.toLowerCase() !== "github.com") return undefined;

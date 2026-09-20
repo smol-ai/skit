@@ -1,5 +1,4 @@
 import {
-  collectionRef,
   deterministicTreeHashEffect,
   originalTreeHashEffect,
   validateSkitDirectoryEffect,
@@ -16,10 +15,6 @@ import {
 } from "@smolai/skit-core";
 import { Clock, Effect, FileSystem, Schema } from "effect";
 import { basename, join } from "node:path";
-import {
-  registrySourceDeclaration,
-  resolvedCollectionIdentity,
-} from "../../library/collection-identity.js";
 import { RegistryAuth } from "../../registry/auth-service.js";
 
 export class AddNoSkills extends Schema.TaggedError<AddNoSkills>()("Library.AddNoSkills", {
@@ -29,15 +24,17 @@ export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVer
   "Library.AddRetainedVersionMissing",
   { source: Schema.String },
 ) {}
-export class AddIdentityChanged extends Schema.TaggedError<AddIdentityChanged>()(
-  "Library.AddIdentityChanged",
-  { from: Schema.String, to: Schema.String },
-) {}
-
 export interface AddOptions {
-  readonly expectedCollectionRef?: string;
   readonly selectVersions?: boolean;
 }
+
+const registrySourceDeclaration = (source: SkitSource, authority?: string) =>
+  source.type === "registry"
+    ? {
+        skitId: source.locator.split("@")[0],
+        ...((source.authority ?? authority) ? { authority: source.authority ?? authority } : {}),
+      }
+    : undefined;
 
 export const acquisitionSourceEffect = Effect.fn("Library.acquisitionSource")(function* (
   acquisition: Acquisition,
@@ -65,24 +62,12 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
         ...(version === undefined ? {} : { version }),
         verbatimOnly: true,
       });
-      const identity = resolvedCollectionIdentity(
-        resolved.source,
-        resolved.descriptorKind,
-        registrySourceDeclaration(resolved.source, registry.origin),
-      );
-      const ref = collectionRef(identity);
-      if (options.expectedCollectionRef !== undefined && ref !== options.expectedCollectionRef)
-        return yield* new AddIdentityChanged({
-          from: options.expectedCollectionRef,
-          to: ref,
-        });
       if (resolved.descriptorKind === "declared") {
         const validated = yield* validateSkitDirectoryEffect(resolved.root, "retained", {
           assessmentContext: "retain",
         });
         return {
           kind: "authored" as const,
-          identity,
           snapshot_digest: yield* originalTreeHashEffect(resolved.root),
           skills: validated.descriptor.skills.map((skill) => ({
             name: skill.name,
@@ -116,7 +101,6 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
       const prepared = yield* prepareObservedCollectionEffect(skills);
       return {
         kind: "plain" as const,
-        identity,
         snapshot_digest: prepared.digest,
         skills: prepared.facts.map((skill) => ({
           name: skill.name,
@@ -155,22 +139,16 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         ...(version === undefined ? {} : { version }),
         verbatimOnly: true,
       });
-      const identity = resolvedCollectionIdentity(
-        resolved.source,
-        resolved.descriptorKind,
-        registrySourceDeclaration(resolved.source, registry.origin),
-      );
-      const ref = collectionRef(identity);
-      if (options.expectedCollectionRef !== undefined && ref !== options.expectedCollectionRef)
-        return yield* new AddIdentityChanged({
-          from: options.expectedCollectionRef,
-          to: ref,
-        });
+      const declaration =
+        resolved.descriptorKind === "declared"
+          ? registrySourceDeclaration(resolved.source, registry.origin)
+          : undefined;
       if (resolved.descriptorKind === "declared") {
         const snapshot = yield* originalTreeHashEffect(resolved.root);
         const collection = yield* retainAuthoredCollectionUnderLockEffect({
           root: resolved.root,
-          identity,
+          source: resolved.source,
+          ...(declaration === undefined ? {} : { declaration }),
           input: historicalInput,
           retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           selectVersions: options.selectVersions,
@@ -221,9 +199,9 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
       );
       const prepared = yield* prepareObservedCollectionEffect(skills);
       const collection = yield* retainObservedCollectionEffect({
-        identity,
         input: historicalInput,
         source: resolved.source,
+        ...(declaration === undefined ? {} : { declaration }),
         sourceRevision: resolved.sourceRevision,
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         skills,

@@ -13,7 +13,7 @@ import { renderRemove, renderRemovePlan } from "./remove.js";
 import { renderCheck } from "./check.js";
 import { renderLibrarySync } from "./library-sync.js";
 import { renderLibraryList } from "./library-list.js";
-import { renderAudit, renderAuditV1Alpha3 } from "./audit.js";
+import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, severityHeadline } from "./condition-language.js";
 
 export interface RenderContext {
@@ -58,7 +58,7 @@ function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
   ].join("\n");
 }
 
-function renderSecurityReview(data: ContractDataForId<"skit.security.review.v1">): string {
+function renderSecurityReview(data: ContractDataForId<"skit.security.review.v2">): string {
   return data.audit.findings.length
     ? data.assessment.findingDecisions
         .map((finding) => `${finding.fingerprint} ${finding.disposition} (${finding.ruleId})`)
@@ -268,9 +268,9 @@ function renderHarnessProbe(
     .join("\n\n");
 }
 
-function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v2">): string {
+function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v3">): string {
   if (data.status === "first_sync_ready")
-    return `First Draft sync ready for ${data.identity.ref} (${data.visibility}); no Release will be published; rerun with --apply`;
+    return `First Draft sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
   if (data.status === "merge_ready")
     return `Draft merge ready (${data.paths.length} path(s)); rerun with --apply`;
   const headline = {
@@ -407,7 +407,7 @@ export function renderSetupDiscovery(data: SetupDiscoveryInput): string {
   return lines.join("\n");
 }
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v5">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -512,7 +512,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v4">["projections"],
+  projections: ContractDataForId<"skit.setup.v5">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -539,7 +539,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v5">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -559,7 +559,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v5">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -601,7 +601,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v4">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v5">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -722,8 +722,7 @@ const contractPresenters: ContractPresenters = {
       ? data.events.map(renderLibraryHistoryEvent).join("\n")
       : "No Library history recorded.",
   [outputContracts.list.id]: renderLibraryList,
-  [outputContracts.experimentalAudit.id]: renderAudit,
-  [outputContracts.experimentalAuditV1Alpha3.id]: renderAuditV1Alpha3,
+  [outputContracts.experimentalAuditV1Alpha4.id]: renderAuditV1Alpha4,
   [outputContracts.authorList.id]: renderAuthorList,
   [outputContracts.pull.id]: (data) =>
     data.map((item) => `${item.subject_id}: ${item.changed ? "refreshed" : "current"}`).join("\n"),

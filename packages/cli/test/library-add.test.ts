@@ -154,7 +154,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         ),
       );
     });
-    const source = { type: "well-known" as const, ref: base, members: ["review"] };
+    const source = { type: "well-known" as const, locator: base, members: ["review"] };
     const options = {
       roots: {
         home: root,

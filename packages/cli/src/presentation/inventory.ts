@@ -26,7 +26,7 @@ const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
     case "repository":
       return ["Installed by: repository"];
     case "authored":
-      return [`Authored Collection: ${owner.collectionRef}`];
+      return [`Authored Collection: ${owner.skitLocator}`];
     case "invalid-marker":
       return ["Installed by: invalid SKIT ownership marker"];
     case "unknown":
@@ -124,7 +124,7 @@ const explicitCollectionKey = (instance: MachineInstance): string | undefined =>
     case "skit":
       return `skit:${instance.owner.membership.collectionId}`;
     case "authored":
-      return `authored:${instance.owner.collectionId ?? instance.owner.collectionRef}`;
+      return `authored:${instance.owner.collectionId ?? instance.owner.skitLocator}`;
     case "skills-sh":
       return `skills-sh:${instance.owner.source}`;
     case "invalid-marker":
@@ -202,7 +202,7 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
         { names: string[]; facts: readonly string[]; patterns: readonly string[] }
       >();
       for (const { name, instances: skillInstances } of bySkill.values()) {
-        const collectionRefs = [
+        const collectionKeys = [
           ...new Set(
             skillInstances
               .map(explicitCollectionKey)
@@ -219,7 +219,7 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
             ),
           ),
         ].sort();
-        const collectionKey = collectionRefs.length === 1 ? collectionRefs[0] : `skill:${name}`;
+        const collectionKey = collectionKeys.length === 1 ? collectionKeys[0] : `skill:${name}`;
         const key = JSON.stringify([collectionKey, facts, patterns]);
         const cohort = cohorts.get(key) ?? { names: [], facts, patterns };
         cohort.names.push(name);

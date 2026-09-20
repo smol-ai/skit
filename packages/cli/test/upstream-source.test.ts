@@ -19,7 +19,8 @@ it("reconstructs Git refresh input from upstream tracking and selection", () => 
     }),
     {
       type: "git",
-      ref: "https://github.com/smol-ai/skills.git#ref=main&path=packages&skill=review%2FSKILL.md&skill=test%2FSKILL.md",
+      locator:
+        "https://github.com/smol-ai/skills.git#ref=main&path=packages&skill=review%2FSKILL.md&skill=test%2FSKILL.md",
     },
   );
 });

@@ -1,5 +1,12 @@
 import { Schema } from "effect";
-import { CollectionId, LegacyMachineId, MachineId, ProjectionId, SkillId } from "../entity-ids.js";
+import {
+  CollectionId,
+  LegacyMachineId,
+  MachineId,
+  ProjectionId,
+  SkillId,
+  SkillVersionId,
+} from "../entity-ids.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
@@ -35,80 +42,21 @@ export const SkitSource = Schema.Union([
   Schema.Struct({
     ...ExtensionFields,
     type: Schema.Literal("registry"),
-    ref: Schema.String,
+    locator: Schema.String,
     authority: Schema.optional(Schema.String),
   }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("git"), ref: Schema.String }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("local"), ref: Schema.String }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("archive"), ref: Schema.String }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("url"), ref: Schema.String }),
+  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("git"), locator: Schema.String }),
+  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("local"), locator: Schema.String }),
+  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("archive"), locator: Schema.String }),
+  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("url"), locator: Schema.String }),
   Schema.Struct({
     ...ExtensionFields,
     type: Schema.Literal("well-known"),
-    ref: Schema.String,
+    locator: Schema.String,
     members: Schema.optional(Schema.Array(Schema.String)),
   }),
 ]);
 export type SkitSource = typeof SkitSource.Type;
-export const CollectionIdentity = Schema.Union([
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("github-collection"),
-    version: Schema.Literal(1),
-    owner: Schema.String,
-    repository: Schema.String,
-    path: Schema.optional(Schema.String),
-    skillPaths: Schema.optionalKey(Schema.Array(Schema.String)),
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("git-collection"),
-    version: Schema.Literal(1),
-    remote: Schema.String,
-    path: Schema.optional(Schema.String),
-    skillPaths: Schema.optionalKey(Schema.Array(Schema.String)),
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("url-collection"),
-    version: Schema.Literal(1),
-    url: Schema.String,
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("archive-collection"),
-    version: Schema.Literal(1),
-    url: Schema.String,
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("local-collection"),
-    version: Schema.Literal(1),
-    path: Schema.String,
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("private-collection"),
-    version: Schema.Literal(1),
-    namespace: Schema.String,
-    slug: Schema.String,
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("authored-workspace"),
-    version: Schema.Literal(1),
-    workspaceId: Schema.String,
-    slug: Schema.String,
-  }),
-  Schema.Struct({
-    ...ExtensionFields,
-    profile: Schema.Literal("declared-skit"),
-    version: Schema.Literal(1),
-    skitId: Schema.String,
-    authority: Schema.optional(Schema.String),
-  }),
-]);
-export type CollectionIdentity = typeof CollectionIdentity.Type;
 export const SkillsShProvenanceObservation = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machineId: Schema.Union([LegacyMachineId, MachineId]),
@@ -149,7 +97,7 @@ export type SkitValidationDiagnostic = typeof SkitValidationDiagnostic.Type;
 export const SkillAssessmentAcceptance = Schema.Struct({
   fingerprint: Digest,
   artifactContentDigest: Digest,
-  skillRef: Schema.String,
+  skill_version_id: SkillVersionId,
   context: Schema.Literal("project"),
   principal: Schema.String,
   rationale: Schema.String,

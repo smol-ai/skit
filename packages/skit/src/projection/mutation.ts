@@ -218,7 +218,7 @@ export function expectedProjectionHashResult(
   if (marker && projection.expected_digest !== markerExpectedHash(marker))
     return Result.fail(
       new OwnershipMarkerDisagrees({
-        skillRef: projection.skill_id,
+        skillId: projection.skill_id,
         harness: projection.harness,
       }),
     );

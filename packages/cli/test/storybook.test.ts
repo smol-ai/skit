@@ -23,8 +23,7 @@ describe("CLI storybook catalogs", () => {
           "inventory/empty",
           "update/available",
           "update/applied",
-          "audit/findings-v1alpha1",
-          "audit/findings-v1alpha3",
+          "audit/findings-v1alpha4",
         ]),
       );
       const coveredContracts = new Set(

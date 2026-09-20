@@ -36,10 +36,9 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       writingTo(
         home.home,
         retainObservedIn(home.home)({
-          identity: {
-            profile: "declared-skit",
-            version: 1,
-            skitId: "tim/skills",
+          source: {
+            type: "registry",
+            locator: "tim/skills",
             authority: "https://skit.example.com",
           },
           input: installed,
@@ -191,7 +190,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       writingTo(
         home.home,
         retainObservedIn(home.home)({
-          identity: { profile: "local-collection", version: 1, path: installed },
+          source: { type: "local", locator: installed },
           input: installed,
           retainedAt: "2026-09-17T00:00:00.000Z",
           skills: [
