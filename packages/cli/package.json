@@ -27,6 +27,7 @@
     "build": "tsc -p tsconfig.json && node scripts/build-distribution.mjs",
     "prepack": "pnpm --filter @smolai/skit-core build && pnpm build",
     "generate:contracts": "tsc -p tsconfig.json && node dist/src/commands/generate-contracts.js",
+    "contracts:check": "pnpm --filter @smolai/skit-core build && tsc -p tsconfig.json && node scripts/check-contracts.mjs",
     "stories": "pnpm build && node dist/src/storybook/main.js",
     "stories:watch": "pnpm build && pnpm --parallel run \"/^stories:(compile|run)-watch$/\"",
     "stories:compile-watch": "tsc -p tsconfig.json --watch --preserveWatchOutput --watchFile fixedPollingInterval --watchDirectory fixedPollingInterval",

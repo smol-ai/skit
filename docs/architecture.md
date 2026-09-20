@@ -302,7 +302,12 @@ The typed Command Catalog is the CLI's control-plane definition set. Each comman
 
 Dispatch parses against that catalog and centralizes help, successful results, structured failures, stream selection, and exit behavior. Handlers return a `CommandResult`; they do not independently choose envelope shape or write directly to output streams.
 
-Output contracts are Valibot schemas bound to command definitions. The generated command manifest and JSON Schemas in `packages/cli/contracts/` are committed so public contract changes are visible in review. Tests check catalog invariants, generated-artifact drift, and real payload validation without adding production-time schema parsing.
+Output contracts are Effect Schemas bound to command definitions. The generated command manifest
+and JSON Schemas in `packages/cli/contracts/` are committed so public contract changes are visible
+in review. Branch-local generation overwrites and prunes those artifacts freely. Pull-request CI
+freezes stable contract IDs that exist at the base commit and permits at most the next version in a
+contract family. Tests check catalog invariants, generated-artifact drift, and real payload
+validation without adding production-time schema parsing.
 
 ## Harness knowledge and projections
 

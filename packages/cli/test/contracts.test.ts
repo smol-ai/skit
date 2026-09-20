@@ -29,22 +29,32 @@ describe("generated command contracts", () => {
     Effect.gen(function* () {
       const contracts = Object.values(outputContracts);
       expect(new Set(contracts.map((contract) => contract.id))).toHaveLength(contracts.length);
-      for (const contents of Object.values(yield* commandContractArtifacts()))
+      const artifacts = yield* commandContractArtifacts();
+      for (const contents of Object.values(artifacts))
         expect(() => JSON.parse(contents)).not.toThrow();
+      const manifest: {
+        readonly commands: readonly { readonly outputSchemas: readonly string[] }[];
+      } = JSON.parse(artifacts["command-manifest.json"] ?? "{}");
+      const files = new Set(Object.keys(artifacts));
+      for (const id of manifest.commands.flatMap((command) => command.outputSchemas))
+        expect(files.has(`${id}.json`), `${id} must resolve to a generated contract`).toBe(true);
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-contract-json-test"))),
   );
 
-  it.effect("refuses to overwrite a changed schema under the same contract ID", () =>
+  it.effect("overwrites and prunes branch-local generated artifacts", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const target = yield* fs.makeTempDirectoryScoped({ prefix: "skit-contract-version-" });
       const name = "skit.example.v1.json";
       yield* fs.writeFileString(join(target, name), "old shape\n");
-      const failure = yield* writeCommandContractArtifacts(target, {
+      yield* fs.writeFileString(join(target, "stale.json"), "stale\n");
+      yield* fs.writeFileString(join(target, "notes.txt"), "keep\n");
+      yield* writeCommandContractArtifacts(target, {
         [name]: "new shape\n",
-      }).pipe(Effect.flip);
-      expect(failure).toMatchObject({ _tag: "CLI.ContractShapeChanged", contract: name });
-      expect(yield* fs.readFileString(join(target, name))).toBe("old shape\n");
+      });
+      expect(yield* fs.readFileString(join(target, name))).toBe("new shape\n");
+      expect(yield* fs.exists(join(target, "stale.json"))).toBe(false);
+      expect(yield* fs.readFileString(join(target, "notes.txt"))).toBe("keep\n");
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
