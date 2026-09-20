@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v5",
+  "$id": "skit.setup.v4",
   "type": "object",
   "properties": {
     "machineConfig": {

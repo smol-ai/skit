@@ -407,7 +407,7 @@ export function renderSetupDiscovery(data: SetupDiscoveryInput): string {
   return lines.join("\n");
 }
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v5">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -512,7 +512,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v5">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v5">["projections"],
+  projections: ContractDataForId<"skit.setup.v4">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -539,7 +539,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v5">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -559,7 +559,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v5">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v5">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -601,7 +601,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v5">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v5">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v4">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,

@@ -107,7 +107,7 @@ it("separates installed, repository-authored, and loose skills", () => {
   const managedSkillId = makeSkillId();
   const managedSkillVersionId = makeSkillVersionId();
   const output = renderContract(
-    "skit.setup.v5",
+    "skit.setup.v4",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -308,7 +308,7 @@ it("rolls up collections with more than five skill names", () => {
     ],
   }));
   const output = renderContract(
-    "skit.setup.v5",
+    "skit.setup.v4",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -339,7 +339,7 @@ it("presents authored SKITs without treating their source skills as inferred col
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const output = renderContract(
-    "skit.setup.v5",
+    "skit.setup.v4",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",

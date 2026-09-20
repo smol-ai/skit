@@ -753,7 +753,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v7"
+        "skit.inventory.v5"
       ],
       "exitCodes": [
         0,
@@ -2062,7 +2062,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v5"
+        "skit.setup.v4"
       ],
       "exitCodes": [
         0,

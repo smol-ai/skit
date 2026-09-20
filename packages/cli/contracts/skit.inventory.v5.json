@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v7",
+  "$id": "skit.inventory.v5",
   "type": "object",
   "properties": {
     "unmanaged": {

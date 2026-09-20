@@ -103,7 +103,7 @@ export const outputContracts = {
   list: effectOutput("skit.list.v3", ListResult),
   securityReview: effectOutput("skit.security.review.v2", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v2", SkillSecurityReview),
-  inventory: effectOutput("skit.inventory.v7", MachineInventoryResult),
+  inventory: effectOutput("skit.inventory.v5", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v2", LibraryDoctorReport),
   check: effectOutput("skit.check.v7", CheckResult),
   update: effectOutput("skit.update.v4", UpdateResult),
@@ -131,7 +131,7 @@ export const outputContracts = {
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
-  setup: effectOutput("skit.setup.v5", SetupResult),
+  setup: effectOutput("skit.setup.v4", SetupResult),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
