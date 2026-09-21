@@ -20,7 +20,7 @@ describe("Library installation configuration", () => {
     expect(installation.rootFor("devin")).toBeUndefined();
   });
 
-  test("honors explicit roots and supports detected Devin", () => {
+  test("honors direct overrides while Devin keeps its native projection root", () => {
     const installation = libraryInstallationConfiguration(
       "/library",
       {
