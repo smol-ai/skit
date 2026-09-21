@@ -23,8 +23,7 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
   const inventory = inventoryRootOptions(input);
   const registryAuth = yield* (yield* RegistryAuth).resolve(registry, command);
   const authState = registryAuth.authState;
-  const installation = libraryInstallationConfiguration(libraryHome, inventory.overrides);
-  const detectedHarnesses = detectInstalledHarnessesEffect({
+  const detectedHarnesses = yield* detectInstalledHarnessesEffect({
     home: inventory.home,
     configHome: inventory.configHome,
     codexRoot: inventory.overrides.codex,
@@ -32,11 +31,12 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
     opencodeRoot: inventory.overrides.opencode,
     devinRoots: inventory.overrides.devin,
   });
+  const installation = libraryInstallationConfiguration(libraryHome, inventory, detectedHarnesses);
   return {
     libraryHome,
     inventory,
     authState,
-    detectedHarnesses,
+    detectedHarnesses: Effect.succeed(detectedHarnesses),
     acquisition: {
       installation,
       originalsPath: join(libraryHome, "originals"),

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { HarnessName } from "@smolai/skit-core";
+import { bindingRoot, type InventoryRootOptions } from "../projection/roots.js";
 
 export interface LibraryInstallationConfiguration {
   readonly statePath: string;
@@ -10,22 +11,13 @@ export interface LibraryInstallationConfiguration {
 /** Installation configuration only; never acquires or caches authoritative Library state. */
 export function libraryInstallationConfiguration(
   home: string,
-  roots: {
-    readonly codex?: string;
-    readonly claude?: string;
-    readonly opencode?: string;
-  },
+  roots: InventoryRootOptions,
+  detected: readonly HarnessName[],
 ): LibraryInstallationConfiguration {
   return {
     statePath: join(home, "state.json"),
     variantsPath: join(home, "variants"),
     rootFor: (harness) =>
-      harness === "codex"
-        ? roots.codex
-        : harness === "claude-code"
-          ? roots.claude
-          : harness === "opencode"
-            ? roots.opencode
-            : undefined,
+      detected.includes(harness) ? bindingRoot(harness, { kind: "global" }, roots) : undefined,
   };
 }
