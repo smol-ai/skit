@@ -20,6 +20,7 @@ import {
   OperationFailed,
   TargetCollision,
   ValidationFailed,
+  errorMessage,
 } from "../src/presentation/command-errors.js";
 
 const taxonomy = [
@@ -67,6 +68,12 @@ describe("declared exit codes", () => {
       expect(error.exitCode).toBeGreaterThan(0);
     }
     expect(new Set(taxonomy.map((error) => error.code)).size).toBe(taxonomy.length);
+  });
+
+  test("message-less tagged failures retain their detail", () => {
+    expect(
+      errorMessage({ _tag: "Library.AcceptedBaseInvalid", detail: "invalid accepted sync base" }),
+    ).toBe("invalid accepted sync base");
   });
 });
 
