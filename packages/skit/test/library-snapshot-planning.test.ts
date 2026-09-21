@@ -127,15 +127,50 @@ const snapshotArchive = SnapshotArchive.make({
 });
 
 it("decodes a v4 portable subset into the current manifest model", () => {
+  const collectionId = makeCollectionId();
+  const skillId = makeSkillId();
+  const versionId = makeSkillVersionId();
   const { source_revision: _mutableRevision, ...mutableAcquisition } =
     mixedManifest.acquisitions[0]!;
   const { source_revision: _sourceRevision, ...legacySourceAcquisition } = sourceAcquisition;
   const decoded = Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
     ...mixedManifest,
     schema: "skit.library.v4",
+    collections: [
+      {
+        collection_id: collectionId,
+        display_name: "review",
+        upstream: {
+          source_identity: mutableAcquisition.source_identity,
+          tracking: mutableAcquisition.tracking,
+          selection: { kind: "selected-paths", paths: ["stale/path"] },
+          last_acquisition_id: mutableAcquisition.acquisition_id,
+        },
+      },
+    ],
+    skills: [
+      {
+        skill_id: skillId,
+        collection_id: collectionId,
+        path: "review",
+        name: "review",
+        selected_skill_version_id: versionId,
+        versions: [
+          {
+            skill_version_id: versionId,
+            source_digest: digest,
+            artifact_digest: digest,
+            validation_identity_digest: digest,
+            materialization_profile: "plain-skill/v1",
+            origins: [{ acquisition_id: mutableAcquisition.acquisition_id, source_path: "review" }],
+          },
+        ],
+      },
+    ],
     retained_copies: [
       {
         ...copy,
+        members: [{ ...copy.members[0]!, source_path: "review" }],
         v3_normalized_tree: {
           digest,
           profile: "legacy/v1",
@@ -157,6 +192,10 @@ it("decodes a v4 portable subset into the current manifest model", () => {
     snapshot_digests: [digest, sourceDigest].sort(),
   });
   assert.strictEqual(decoded.schema, "skit.library.v5");
+  assert.deepStrictEqual(decoded.collections[0]?.upstream?.selection, {
+    kind: "selected-paths",
+    paths: ["review"],
+  });
   assert.strictEqual("v3_normalized_tree" in decoded.retained_copies[0]!, false);
   assert.deepStrictEqual(decoded.acquisitions[1]?.selection, {
     kind: "selected-skills",

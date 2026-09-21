@@ -150,6 +150,12 @@ export const migrateLibraryEntitiesFromV4 = (input: {
       (collection.upstream?.last_acquisition_id === undefined
         ? undefined
         : selectionByAcquisition.get(collection.upstream.last_acquisition_id));
+    const selection =
+      selected?.kind === "selected-skills"
+        ? { kind: "selected-skills" as const, names: skills.map((skill) => skill.name).sort() }
+        : selected?.kind === "selected-paths"
+          ? { kind: "selected-paths" as const, paths: skills.map((skill) => skill.path).sort() }
+          : selected;
     return [
       {
         collection_id: collection.collection_id,
@@ -165,7 +171,7 @@ export const migrateLibraryEntitiesFromV4 = (input: {
                 ...(matchingAcquisition === undefined
                   ? {}
                   : { source_identity: matchingAcquisition.source_identity }),
-                selection: selected ?? collection.upstream.selection,
+                selection: selection ?? collection.upstream.selection,
                 ...(matchingAcquisition === undefined
                   ? {}
                   : { last_acquisition_id: matchingAcquisition.acquisition_id }),
@@ -256,7 +262,9 @@ const LibraryManifestFromV4 = LibraryManifestV4.pipe(
 );
 
 /** Accept every supported wire version and expose only the current manifest model. */
-export const LibraryManifestAnyVersion = Schema.Union([LibraryManifest, LibraryManifestFromV4]);
+// Decode the legacy discriminator before the structurally overlapping current manifest so the
+// v4 transformation and its post-migration checks run as one branch.
+export const LibraryManifestAnyVersion = Schema.Union([LibraryManifestFromV4, LibraryManifest]);
 
 export const LibraryHead = Schema.Struct({
   library_id: Schema.String,
