@@ -227,20 +227,11 @@ export class SourceChangedDuringAcquisition extends Data.TaggedError(
 // -- Library custody ---------------------------------------------------------------------------
 
 export class UnknownInstalledSkill extends Data.TaggedError("UnknownInstalledSkill")<{
-  skillRef: string;
+  query: string;
 }> {
   readonly code = "NOT_FOUND" as const;
   get message(): string {
-    return `Unknown installed skill: ${this.skillRef}`;
-  }
-}
-
-export class UnknownInstalledCollection extends Data.TaggedError("UnknownInstalledCollection")<{
-  collectionRef: string;
-}> {
-  readonly code = "NOT_FOUND" as const;
-  get message(): string {
-    return `Unknown installed SKIT: ${this.collectionRef}`;
+    return `Unknown installed skill: ${this.query}`;
   }
 }
 
@@ -252,41 +243,13 @@ export class NoProjectionRoot extends Data.TaggedError("NoProjectionRoot")<{ har
 }
 
 /** A Projection was modified or is conflicted, so custody will not be given up silently. */
-export class ProjectionNotSafeToRemove extends Data.TaggedError("ProjectionNotSafeToRemove")<{
-  harness: string;
-  skillRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Refusing to remove modified or conflicted ${this.harness} projection ${this.skillRef}`;
-  }
-}
-
-/**
- * A pin would have to displace a Projection that is no longer the one SKIT wrote.
- *
- * Pin used to install first and report the survivors as a partial reconciliation, which left the
- * Library recording a release the Harness did not hold. Refusing while nothing has changed is the
- * simpler contract: fix or disable the affected Projections, then pin.
- */
-export class ProjectionNotSafeToPin extends Data.TaggedError("ProjectionNotSafeToPin")<{
-  collectionRef: string;
-  conflicts: ReadonlyArray<{ skillRef: string; harness: string; projectionPath?: string }>;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    const detail = this.conflicts.map((item) => `${item.skillRef} on ${item.harness}`).join(", ");
-    return `Refusing to pin ${this.collectionRef} while modified or conflicted projections would be replaced: ${detail}`;
-  }
-}
-
 export class OwnershipMarkerDisagrees extends Data.TaggedError("OwnershipMarkerDisagrees")<{
-  skillRef: string;
+  skillId: string;
   harness: string;
 }> {
   readonly code = "CONFLICT" as const;
   get message(): string {
-    return `Projection state and ownership marker disagree for ${this.skillRef} on ${this.harness}`;
+    return `Projection state and ownership marker disagree for ${this.skillId} on ${this.harness}`;
   }
 }
 

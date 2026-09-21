@@ -1,10 +1,10 @@
-import { PortableLibraryInventory } from "@smolai/skit-core";
+import { LibraryInventory } from "@smolai/skit-core";
 import { Schema } from "effect";
 import { SetupResult } from "./setup-contract.js";
 
 /** The refreshed Library view plus the complete read-only machine Skill observation. */
 export const MachineInventoryResult = Schema.Struct({
-  ...PortableLibraryInventory.fields,
+  ...LibraryInventory.fields,
   machine: Schema.Struct({
     repositoryRoots: SetupResult.fields.machineConfig.fields.repositoryRoots,
     repositoryDecisions: SetupResult.fields.machineConfig.fields.repositoryDecisions,

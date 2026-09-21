@@ -13,7 +13,7 @@ import {
   COLLECTION_CONTROL_DIRECTORY,
   AUTHOR_WORKSPACE_METADATA_FILE,
   type LibraryState,
-  type PortableCollection,
+  type Collection,
 } from "@smolai/skit-core";
 import {
   AuthorWorkspaceAlreadyRegistered,
@@ -36,7 +36,7 @@ export interface AuthorInitializationOptions extends ProjectionOptions {
   libraryHome: string;
   workspaceId?: () => string;
 }
-const planPortableWorkspaceEffect = Effect.fn("Author.planPortableWorkspace")(function* (
+const planWorkspaceEffect = Effect.fn("Author.planWorkspace")(function* (
   root: string,
   state: LibraryState,
   options: AuthorInitializationOptions,
@@ -44,7 +44,7 @@ const planPortableWorkspaceEffect = Effect.fn("Author.planPortableWorkspace")(fu
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* readAuthorWorkspaceEffect(root);
   const physical = (yield* fs.exists(root)) ? yield* fs.realPath(root) : root;
-  const acquisitionsFor = (collection: PortableCollection) => {
+  const acquisitionsFor = (collection: Collection) => {
     const acquisitionIds = new Set(
       state.skills
         .filter((skill) => skill.collection_id === collection.collection_id)
@@ -58,7 +58,7 @@ const planPortableWorkspaceEffect = Effect.fn("Author.planPortableWorkspace")(fu
       acquisitionIds.has(acquisition.acquisition_id),
     );
   };
-  const sameRoot: PortableCollection[] = [];
+  const sameRoot: Collection[] = [];
   for (const collection of state.collections) {
     const inputs = acquisitionsFor(collection).map((acquisition) => acquisition.input.value);
     for (const input of inputs)
@@ -70,19 +70,19 @@ const planPortableWorkspaceEffect = Effect.fn("Author.planPortableWorkspace")(fu
   const retained = sameRoot.find(
     (collection) => collection.upstream?.source_identity.kind === "authored-workspace",
   );
-  const expectedRef = workspace
-    ? `authored:${workspace.workspace_id}`
+  const expectedWorkspaceId = workspace
+    ? workspace.workspace_id
     : retained?.upstream?.source_identity.kind === "authored-workspace"
-      ? `authored:${retained.upstream.source_identity.workspace_id}`
+      ? retained.upstream.source_identity.workspace_id
       : undefined;
   const conflict = sameRoot.find(
     (collection) =>
       collection.upstream?.source_identity.kind !== "authored-workspace" ||
-      `authored:${collection.upstream.source_identity.workspace_id}` !== expectedRef,
+      collection.upstream.source_identity.workspace_id !== expectedWorkspaceId,
   );
   if (conflict)
     return yield* new DirectoryAlreadyRetained({
-      collectionRef: conflict.collection_id,
+      collectionId: conflict.collection_id,
     });
   const planned: AuthorWorkspaceMetadata = workspace ?? {
     schema: "skit.author-workspace.v1",
@@ -104,55 +104,53 @@ const planPortableWorkspaceEffect = Effect.fn("Author.planPortableWorkspace")(fu
     (yield* fs.realPath(existingInput)) !== physical
   )
     return yield* new AuthorWorkspaceAlreadyRegistered({
-      collectionRef: existing?.collection_id ?? `authored:${planned.workspace_id}`,
+      workspaceId: planned.workspace_id,
       at: existingInput,
     });
   return { workspace: planned, missing: workspace === undefined, existing };
 });
 
-const registerPortableOwnedWorkspaceEffect = Effect.fn("Author.registerPortableOwnedWorkspace")(
-  function* (
-    root: string,
-    options: AuthorInitializationOptions,
-    plan: Effect.Success<ReturnType<typeof planPortableWorkspaceEffect>>,
-    register: boolean,
-  ) {
-    const fs = yield* FileSystem.FileSystem;
-    const validated = yield* validateSkitDirectoryEffect(root, "source", {
-      assessmentContext: "retain",
-    });
-    if (plan.workspace.registration === "removed" && !register && !plan.existing) return undefined;
-    const metadataPath = join(root, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
-    yield* fs.makeDirectory(dirname(metadataPath), { recursive: true, mode: 0o700 });
-    if (plan.missing) yield* writeJsonExclusiveEffect(metadataPath, plan.workspace);
-    yield* fs
-      .writeFileString(join(root, COLLECTION_CONTROL_DIRECTORY, ".gitignore"), "*\n", {
-        flag: "wx",
-        mode: 0o600,
-      })
-      .pipe(
-        Effect.uninterruptible,
-        Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
-        ),
-      );
-    const collection = yield* retainAuthoredCollectionUnderLockEffect({
-      root,
-      identity: {
-        profile: "authored-workspace",
-        version: 1,
-        workspaceId: plan.workspace.workspace_id,
-        slug: validated.identity.slug,
-      },
-      input: root,
-      retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-    });
-    if (validated.descriptor.skills.length === 0)
-      return yield* new RetainedContentInvalid({ diagnostics: ["retained Skills are missing"] });
-    yield* writeJsonAtomicEffect(metadataPath, { ...plan.workspace, registration: "registered" });
-    return collection;
-  },
-);
+const registerOwnedWorkspaceEffect = Effect.fn("Author.registerOwnedWorkspace")(function* (
+  root: string,
+  options: AuthorInitializationOptions,
+  plan: Effect.Success<ReturnType<typeof planWorkspaceEffect>>,
+  register: boolean,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const validated = yield* validateSkitDirectoryEffect(root, "source", {
+    assessmentContext: "retain",
+  });
+  if (plan.workspace.registration === "removed" && !register && !plan.existing) return undefined;
+  const metadataPath = join(root, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
+  yield* fs.makeDirectory(dirname(metadataPath), { recursive: true, mode: 0o700 });
+  if (plan.missing) yield* writeJsonExclusiveEffect(metadataPath, plan.workspace);
+  yield* fs
+    .writeFileString(join(root, COLLECTION_CONTROL_DIRECTORY, ".gitignore"), "*\n", {
+      flag: "wx",
+      mode: 0o600,
+    })
+    .pipe(
+      Effect.uninterruptible,
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
+      ),
+    );
+  const collection = yield* retainAuthoredCollectionUnderLockEffect({
+    root,
+    source: { type: "local", locator: root },
+    sourceIdentity: {
+      kind: "authored-workspace",
+      workspace_id: plan.workspace.workspace_id,
+    },
+    label: validated.identity.slug,
+    input: root,
+    retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+  });
+  if (validated.descriptor.skills.length === 0)
+    return yield* new RetainedContentInvalid({ diagnostics: ["retained Skills are missing"] });
+  yield* writeJsonAtomicEffect(metadataPath, { ...plan.workspace, registration: "registered" });
+  return collection;
+});
 
 export const ensureAuthoredWorkspaceEffect = Effect.fn("Author.ensureWorkspace")(function* (
   input: string,
@@ -162,10 +160,10 @@ export const ensureAuthoredWorkspaceEffect = Effect.fn("Author.ensureWorkspace")
 ) {
   const root = resolve(input);
   const store = yield* LibraryStore;
-  const portable = yield* store.load;
-  const plan = yield* planPortableWorkspaceEffect(root, portable, options);
+  const state = yield* store.load;
+  const plan = yield* planWorkspaceEffect(root, state, options);
   const initialized = scaffold ? yield* initSkitEffect(root) : undefined;
-  const entry = yield* registerPortableOwnedWorkspaceEffect(root, options, plan, register);
+  const entry = yield* registerOwnedWorkspaceEffect(root, options, plan, register);
   return { initialized, entry };
 });
 

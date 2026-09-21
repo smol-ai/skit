@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
-import { auditLocalCapabilitiesV1Alpha3Effect, type AuditOptions } from "../audit/local.js";
+import { auditLocalCapabilitiesV1Alpha4Effect, type AuditOptions } from "../audit/local.js";
 import { handleCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
@@ -12,7 +12,7 @@ export const auditCommand = Effect.fn("CLI.audit")(function* (options: AuditOpti
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     "Auditing local capabilities",
-    auditLocalCapabilitiesV1Alpha3Effect(options),
+    auditLocalCapabilitiesV1Alpha4Effect(options),
   );
 });
 
@@ -50,7 +50,7 @@ export const auditCliCommand = Command.make(
         yield* renderer.result(
           result(
             "audit",
-            outputContracts.experimentalAuditV1Alpha3,
+            outputContracts.experimentalAuditV1Alpha4,
             value,
             failed ? 12 : undefined,
           ),
@@ -66,7 +66,7 @@ export const auditCliCommand = Command.make(
       capabilities: ["filesystem.read", "process.execute"],
       subprocesses: auditSubprocesses,
     },
-    outputSchemas: [outputContracts.experimentalAudit, outputContracts.experimentalAuditV1Alpha3],
+    outputSchemas: [outputContracts.experimentalAuditV1Alpha4],
     exitCodes: [0, 12],
     interactive: false,
   }),

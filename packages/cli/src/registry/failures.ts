@@ -85,11 +85,11 @@ export class AuthorRemoteMetadataInvalid extends Data.TaggedError("AuthorRemoteM
 }
 
 export class AuthorRemoteAlreadyExists extends Data.TaggedError("AuthorRemoteAlreadyExists")<{
-  ref: string;
+  locator: string;
 }> {
   readonly code = "CONFLICT" as const;
   get message(): string {
-    return `Remote home already exists at ${this.ref}`;
+    return `Remote home already exists at ${this.locator}`;
   }
 }
 

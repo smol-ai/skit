@@ -1,6 +1,5 @@
 import {
   canonicalJson,
-  collectionRef,
   deterministicTreeHashEffect,
   Digest as DigestSchema,
   HarnessName,
@@ -13,7 +12,7 @@ import {
 import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import { inspectPortableLibrarySourceEffect } from "./portable-add.js";
+import { inspectLibrarySourceEffect } from "./add.js";
 import type { ProjectionOptions } from "./projection-options.js";
 import type { RetentionOptions } from "./retention-options.js";
 
@@ -59,12 +58,10 @@ export type LocalAdoptionPlannedTarget = typeof LocalAdoptionPlannedTarget.Type;
 export const LocalAdoptionPlan = Schema.Struct({
   revision: Schema.String,
   sourcePath: Schema.optionalKey(Schema.String),
-  sourceIdentityRef: Schema.optionalKey(Schema.String),
   snapshotDigest: Schema.optionalKey(DigestSchema),
   skill: Schema.optionalKey(
     Schema.Struct({
       name: Schema.String,
-      markerSkillRef: Schema.String,
       validationDigest: DigestSchema,
     }),
   ),
@@ -132,11 +129,10 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
     resolve(left.path).localeCompare(resolve(right.path)),
   );
   const sourcePath = resolve(nominatedSourcePath ?? selected[0]!.path);
-  const preview = yield* inspectPortableLibrarySourceEffect({}, sourcePath);
+  const preview = yield* inspectLibrarySourceEffect({}, sourcePath);
   const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = [];
   const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
   const sourceContentHash = yield* deterministicTreeHashEffect(sourcePath);
-  const ref = collectionRef(preview.identity);
   const existingAcquisitionIds = new Set(
     state.acquisitions
       .filter(
@@ -155,11 +151,15 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
         ),
     ),
   );
-  const markerCollectionRef = existingCollection?.collection_id ?? ref;
+  const existingSkill = state.skills.find(
+    (candidate) =>
+      candidate.collection_id === existingCollection?.collection_id &&
+      candidate.name === previewSkill?.name,
+  );
   const skill = previewSkill
     ? {
         name: previewSkill.name,
-        markerSkillRef: `${markerCollectionRef}#${encodeURIComponent(previewSkill.name)}`,
+        ...(existingSkill === undefined ? {} : { skillId: existingSkill.skill_id }),
         validationDigest: sourceContentHash,
       }
     : undefined;
@@ -188,7 +188,8 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
     const marker = yield* inspectOwnershipMarkerEffect(path);
     const alreadyManaged =
       marker.kind === "valid" &&
-      marker.marker.collection_id === markerCollectionRef &&
+      skill.skillId !== undefined &&
+      marker.marker.skill_id === skill.skillId &&
       marker.marker.expected_digest === observedHash;
     if (!alreadyManaged && lossless.blockers.length > 0) {
       blockers.push(...lossless.blockers);
@@ -213,7 +214,6 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
   const plan: LocalAdoptionPlan = {
     revision,
     sourcePath,
-    sourceIdentityRef: ref,
     snapshotDigest: preview.snapshot_digest,
     ...(skill ? { skill } : {}),
     targets: observedTargets,
@@ -229,7 +229,6 @@ export const localAdoptionPlanIdentity = (plan: LocalAdoptionPlan) =>
       canonicalJson({
         revision: plan.revision,
         sourcePath: plan.sourcePath,
-        sourceIdentityRef: plan.sourceIdentityRef,
         snapshotDigest: plan.snapshotDigest,
         skill: plan.skill,
         targets: plan.targets,

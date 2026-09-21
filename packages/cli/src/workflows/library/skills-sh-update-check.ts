@@ -8,6 +8,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
+import type { LibrarySubject } from "./subject-resolution.js";
 
 export type SkillsShUpdateStatus =
   | "current"
@@ -114,17 +115,20 @@ const ensureMirror = Effect.fn("SkillsSh.ensureMirror")(function* (
   return directory;
 });
 
-const sourceUrl = (collection: LibraryState["collections"][number]) => {
-  const source = collection.upstream?.source_identity;
+const sourceUrl = (
+  subject: LibrarySubject,
+  observations: readonly LibraryState["acquisitions"][number]["observations"][number][],
+) => {
+  const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
+  const source = upstream?.source_identity;
   if (source?.kind === "github")
     return `https://github.com/${source.owner}/${source.repository}.git`;
   if (source?.kind === "git") return source.remote.value;
-  return undefined;
+  return observations.find((observation) => observation.source_url)?.source_url;
 };
 
-export const checkSkillsShCollectionEffect = Effect.fn("SkillsSh.checkCollection")(function* (
-  state: LibraryState,
-  collection: LibraryState["collections"][number],
+export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(function* (
+  subject: LibrarySubject,
   acquisition: LibraryState["acquisitions"][number] | undefined,
   retainedCopy: LibraryState["retained_copies"][number] | undefined,
 ) {
@@ -146,7 +150,7 @@ export const checkSkillsShCollectionEffect = Effect.fn("SkillsSh.checkCollection
     ).values(),
   ];
   if (!observations.length) return undefined;
-  const source = sourceUrl(collection);
+  const source = sourceUrl(subject, observations);
   if (!source)
     return {
       checked_at: checkedAt,

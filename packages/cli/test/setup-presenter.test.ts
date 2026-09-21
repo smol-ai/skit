@@ -107,7 +107,7 @@ it("separates installed, repository-authored, and loose skills", () => {
   const managedSkillId = makeSkillId();
   const managedSkillVersionId = makeSkillVersionId();
   const output = renderContract(
-    "skit.setup.v3",
+    "skit.setup.v4",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -308,7 +308,7 @@ it("rolls up collections with more than five skill names", () => {
     ],
   }));
   const output = renderContract(
-    "skit.setup.v3",
+    "skit.setup.v4",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -335,11 +335,11 @@ it("rolls up collections with more than five skill names", () => {
 });
 
 it("presents authored SKITs without treating their source skills as inferred collections", () => {
-  const collectionRef = "skit:https://registry.test/tim/skills";
+  const skitLocator = "skit:https://registry.test/tim/skills";
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const output = renderContract(
-    "skit.setup.v3",
+    "skit.setup.v4",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -355,7 +355,7 @@ it("presents authored SKITs without treating their source skills as inferred col
           repository: "/work/skills",
           descriptorPath: "/work/skills/skit.json",
           remotePath: "/work/skills/skit.remote.json",
-          collectionRef,
+          skitLocator,
           origin: "https://registry.test",
           namespace: "tim",
           skit: "skills",
@@ -383,7 +383,7 @@ it("presents authored SKITs without treating their source skills as inferred col
           aliases: ["/work/skills/skills/council"],
           scope: "project",
           harnesses: [],
-          owner: { kind: "authored", collectionRef, collectionId },
+          owner: { kind: "authored", skitLocator, collectionId },
           contentIdentity: {
             status: "exact",
             observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

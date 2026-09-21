@@ -9,11 +9,11 @@ export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 
 export { detectInstalledHarnessesEffect } from "./harness/catalog.js";
 export { errorMessage } from "./presentation/command-errors.js";
-export { auditLocalCapabilitiesV1Alpha3Effect } from "./audit/local.js";
+export { auditLocalCapabilitiesV1Alpha4Effect } from "./audit/local.js";
 export type {
-  AuditEntryV1Alpha3,
-  AuditMcpServerV1Alpha3,
-  AuditSkillV1Alpha3,
+  AuditEntryV1Alpha4,
+  AuditMcpServerV1Alpha4,
+  AuditSkillV1Alpha4,
 } from "./audit/schema.js";
 export {
   probeHarnessEffect,

@@ -20,6 +20,22 @@
       }
     },
     {
+      "files": ["packages/skit/test/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "state-schema-v[0-9]+(?:\\.js)?$",
+                "message": "Legacy state schemas belong to the state-file migration boundary. Exercise them through an immutable JSON fixture and the state reader."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["packages/cli/src/**/*.ts"],
       "excludeFiles": ["packages/cli/src/dispatch.ts", "packages/cli/src/presentation/prompter.ts"],
       "rules": {

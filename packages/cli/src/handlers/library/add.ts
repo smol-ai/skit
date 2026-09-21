@@ -9,10 +9,7 @@ import { homePath, localFlags, optionalString } from "../../commands/parameters.
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
-import {
-  addPortableLibrarySourceEffect,
-  previewPortableLibrarySourceEffect,
-} from "../../workflows/library/portable-add.js";
+import { addLibrarySourceEffect, previewLibrarySourceEffect } from "../../workflows/library/add.js";
 import { rejectDedicatedInstallerSourceEffect } from "../../workflows/library/dedicated-installer-catalog.js";
 
 const source = Argument.string("source");
@@ -65,21 +62,20 @@ export const addCliCommand = Command.make(
         if (input.preview) {
           const value = yield* renderer.withStatus(
             `Inspecting ${selectedSource}`,
-            withSelectedRegistry(
-              previewPortableLibrarySourceEffect({}, selectedSource, requestedVersion),
-            ),
+            withSelectedRegistry(previewLibrarySourceEffect({}, selectedSource, requestedVersion)),
           );
           return yield* renderer.result(result("add", outputContracts.addPreview, value));
         }
         const retained = yield* renderer.withStatus(
           "Retaining source",
-          withSelectedRegistry(
-            addPortableLibrarySourceEffect({}, selectedSource, requestedVersion),
-          ),
+          withSelectedRegistry(addLibrarySourceEffect({}, selectedSource, requestedVersion)),
         );
         yield* renderer.result(
           result("add", outputContracts.add, {
-            collection_id: retained.collection.collection_id,
+            ...(retained.collection_id === undefined
+              ? {}
+              : { collection_id: retained.collection_id }),
+            skill_ids: retained.skill_ids,
             retained_version_id: retained.retained_version_id,
             snapshot_digest: retained.snapshot_digest,
             skills: retained.skills.map((skill) => ({

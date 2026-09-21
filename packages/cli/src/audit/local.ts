@@ -110,11 +110,10 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
     if (
       inspection.kind === "valid" &&
       ledger.kind !== "unreadable" &&
-      !(ledger.kind === "readable" && ledger.retained.has(inspection.marker.collection_id))
+      !(ledger.kind === "readable" && ledger.retained.has(inspection.marker.skill_id))
     ) {
       const claim = {
-        collectionRef: inspection.marker.collection_id,
-        skillRef: inspection.marker.skill_id,
+        skillId: inspection.marker.skill_id,
         expectedHash: inspection.marker.expected_digest,
         transactionId: undefined,
       };
@@ -127,7 +126,7 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
         ...(observation.provenance.parentPlugin
           ? { parentPlugin: observation.provenance.parentPlugin }
           : {}),
-        skillRef: claim.skillRef,
+        skillId: claim.skillId,
         expectedHash: claim.expectedHash,
         ...(claim.transactionId === undefined ? {} : { transactionId: claim.transactionId }),
       };
@@ -139,8 +138,7 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
         locations: [observation.path, markerPath],
         details: {
           markerPath,
-          collectionRef: claim.collectionRef,
-          skillRef: claim.skillRef,
+          skillId: claim.skillId,
           destructiveAuthority: false,
         },
       });
@@ -257,7 +255,7 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
  * The filesystem reads stay synchronous on purpose: `audit/io.ts` is the audit's one read
  * chokepoint and the same code serves the synchronous consumer above.
  */
-export const auditLocalCapabilitiesV1Alpha3Effect = Effect.fn("Audit.local")(function* (
+export const auditLocalCapabilitiesV1Alpha4Effect = Effect.fn("Audit.local")(function* (
   options: AuditOptions = {},
 ) {
   const probes = yield* runAuditProbesEffect(options);

@@ -27,7 +27,7 @@ The following rules define the system:
 - Harness projections are derived filesystem effects, not independent sources of truth.
 - Bindings express desired enablement; library entries retain artifacts; projections record materialized copies.
 - Harness Availability is device-local; an unavailable Harness defers its Projection without changing portable Binding intent.
-- Collection Identity is derived by one Collection Identity catalog and excludes revisions, digests, credentials, and display aliases.
+- Sources are canonicalized as structured `SourceIdentity` values; Collections have opaque stable IDs and human labels.
 - Core owns state persistence and serialized Projection mutation.
 - Published versions are immutable. An existing owner, SKIT, and version tuple cannot be replaced.
 - Local Library operations, Library synchronization, and Draft synchronization never constitute Publication; only an explicit, reviewed publish operation may create a distributable Release.
@@ -101,14 +101,15 @@ The supported locators, current check behavior, and candidate version signals ar
 
 A SKIT is an Agent Skills-compatible package extended by its machine-owned `skit.json` Descriptor. An authoritative Registry associates that package with a stable SKIT Identity and Release history. SKIT Identity includes Registry authority, Namespace, and SKIT slug and is rendered canonically as `skit://<registry-authority>/<namespace>/<skit>`; a bare `namespace/skit` is shorthand only within an explicitly selected Registry. The Descriptor can be unbound, in which case it has no `id`: its slug and contained-skill declarations establish local authoring intent without claiming Registry identity. A root `skit.remote.json`, not a Descriptor string sentinel, records the repository's author home. Human documentation such as `README.md` remains ordinary artifact content. README-frontmatter Descriptors use `slug`; namespace-shaped `local/*` provisional IDs are rejected. A Draft or Release is concrete SKIT content, and a standalone Skill or descriptorless Agent Skills package can exist without a SKIT Identity.
 
-Important identifier spaces are deliberately separate. Collection and Skill references are derived only by the Collection Identity catalog; callers do not construct or parse them independently:
+Important identifier spaces are deliberately separate. Persistent entities use branded opaque IDs;
+source locators and labels are not IDs:
 
 | Identifier            | Meaning                                                   |
 | --------------------- | --------------------------------------------------------- |
-| `sourceId`            | Stable acquisition/origin coordinate                      |
+| `collection_id`       | Stable identity of Skills acquired and managed together   |
+| `skill_id`            | Stable identity of one retained Skill                     |
+| `skill_version_id`    | Stable identity of one retained Skill version             |
 | `skitId`              | Declared SKIT identity, present only for declared SKITs   |
-| `collectionRef`       | Canonical readable reference for a Skill Collection       |
-| `skillRef`            | Collection reference extended by one contained Skill name |
 | `release`             | Declared immutable version                                |
 | `releaseContentHash`  | Digest of normalized release content                      |
 | `originalContentHash` | Digest of the losslessly retained source tree             |
@@ -118,7 +119,8 @@ Hashes establish content identity; they do not replace readable source, SKIT, or
 
 ### Binding
 
-A `LocalLibraryBinding` records desired enablement for a Skill Collection, Harness, Scope, and set of Skill names. Its Scope is either global or tied to a canonical repository root.
+A Library Binding records desired enablement for a Harness, Scope, and set of Skill IDs. Its Scope
+is either global or tied to a canonical repository root.
 
 Bindings describe intent. They do not prove that files are currently present or unchanged.
 
@@ -126,7 +128,9 @@ In accordance with [ADR-0008](adr/0008-defer-bindings-for-unavailable-harnesses.
 
 ### Library entry and projection
 
-A `LocalLibraryEntry` retains the acquired artifact, its Collection Identity, Source, provenance evidence, and contained Skills. A `ManagedCollectionInstallation` records the normalized artifact retained in the library and the state of each contained Skill. Each managed Projection records one concrete Skill copy at a Harness target and its observed status:
+A Collection groups Skills acquired and managed together and may record an upstream Source. Each
+Skill retains its versions and Acquisition provenance. Each managed Projection records one concrete
+Skill copy at a Harness target and its observed status:
 
 - `pending`
 - `installed`
@@ -134,7 +138,9 @@ A `LocalLibraryEntry` retains the acquired artifact, its Collection Identity, So
 - `conflicted`
 - `unsupported`
 
-Projection directories include ownership metadata linking materialized content to its Collection and Skill references, expected hash, and Projection. This allows SKIT to distinguish managed content from unmanaged or modified content.
+Projection directories include ownership metadata linking materialized content to its Skill ID,
+Skill Version ID, expected hash, and Projection ID. This allows SKIT to distinguish managed content
+from unmanaged or modified content.
 
 In accordance with [ADR-0006](adr/0006-materialize-independent-writable-projections.md), each writable Projection is an independent directory rather than a symlink to the retained artifact or another Harness's Projection. Harness-side changes therefore produce local drift without mutating Author content, retained content, or sibling Projections.
 
@@ -201,7 +207,19 @@ See [the commit protocol](adr/0018-own-cli-workflows-with-effect.md#author-initi
 
 ### Add and pull
 
-`add` resolves a Source, retains its Original tree, validates and normalizes its content, stores both trees content-addressably, derives Collection Identity through the Collection Identity catalog, and writes a Library Entry. Descriptorless Skill Collections receive source-backed identities such as `github:mattpocock/skills`; they do not receive a synthetic SKIT identity.
+`add` resolves a Source, retains its Original tree, validates and normalizes its content, stores both
+trees content-addressably, canonicalizes the Source, and writes the Collection and its Skills.
+Descriptorless Collections do not receive a synthetic SKIT identity.
+
+A Collection contains one or more Skills acquired and managed together. Every Skill in the Library
+belongs to a Collection, including a single Skill added from a local directory or adopted during
+setup. A Collection's identity names its origin, not the selected members; selected Skill names and
+paths are stored as update policy.
+
+An upstream records refresh intent; an Acquisition records where retained bytes came from. Local
+Collection acquisitions are provenance, not portable refresh intent, so `check` reports their
+source status as not applicable and `update` refuses them. Re-adding the same local path records a
+new Acquisition on the existing Collection.
 
 `pull` reacquires a recorded origin. It updates stored source and release information while preserving binding intent. `check` reports whether changes are available; `update` applies them.
 
@@ -209,7 +227,9 @@ None of these operations enables a skill merely because it was acquired.
 
 ### Enable and disable
 
-Enablement resolves a skill reference, target harnesses, and global or repository scope. The CLI discovers or accepts explicit harness roots, then asks core to update bindings and materialize projections.
+Enablement resolves a Collection or Skill query to stable IDs, plus target harnesses and global or
+repository scope. The CLI discovers or accepts explicit harness roots, then asks core to update
+bindings and materialize projections.
 
 A batch spanning subjects or Harnesses loads one coherent state snapshot and stages Bindings and
 all affected Projections against one private candidate. The candidate is published once after the
@@ -282,7 +302,12 @@ The typed Command Catalog is the CLI's control-plane definition set. Each comman
 
 Dispatch parses against that catalog and centralizes help, successful results, structured failures, stream selection, and exit behavior. Handlers return a `CommandResult`; they do not independently choose envelope shape or write directly to output streams.
 
-Output contracts are Valibot schemas bound to command definitions. The generated command manifest and JSON Schemas in `packages/cli/contracts/` are committed so public contract changes are visible in review. Tests check catalog invariants, generated-artifact drift, and real payload validation without adding production-time schema parsing.
+Output contracts are Effect Schemas bound to command definitions. The generated command manifest
+and JSON Schemas in `packages/cli/contracts/` are committed so public contract changes are visible
+in review. Branch-local generation overwrites and prunes those artifacts freely. Pull-request CI
+freezes stable contract IDs that exist at the base commit and permits at most the next version in a
+contract family. Tests check catalog invariants, generated-artifact drift, and real payload
+validation without adding production-time schema parsing.
 
 ## Harness knowledge and projections
 

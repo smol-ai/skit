@@ -3,27 +3,8 @@ import type { ContractDataForId } from "../commands/output-contracts.js";
 import type { RenderContext } from "./contract-presenters.js";
 import { capabilityLabel, severityHeadline } from "./condition-language.js";
 
-export function renderAudit(
-  report: ContractDataForId<"skit.experimental.audit.v1alpha1">,
-  context: RenderContext,
-): string {
-  const counts = new Map<string, number>();
-  for (const item of report.observations) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
-  const lines = [
-    `SKIT audit — ${report.summary.findings ? `${report.summary.findings} issue(s)` : "clean"}`,
-    `${report.summary.capabilities} discovered capabilities in ${report.cwd}`,
-    ...[...counts].map(([kind, count]) => `${capabilityLabel(kind)}: ${count}`),
-  ];
-  if (context.detail === "full")
-    for (const item of report.observations)
-      lines.push(
-        `${capabilityLabel(item.kind)}\t${item.harnesses.join(",")}\t${item.name}\t${item.path ?? "unresolved"}`,
-      );
-  return lines.join("\n");
-}
-
-export function renderAuditV1Alpha3(
-  report: ContractDataForId<"skit.experimental.audit.v1alpha3">,
+export function renderAuditV1Alpha4(
+  report: ContractDataForId<"skit.experimental.audit.v1alpha4">,
   context: RenderContext,
 ): string {
   const displayPath = (path: string) => {

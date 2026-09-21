@@ -17,7 +17,7 @@ import {
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { authorRef } from "./sync.js";
+import { skitLocator } from "./sync.js";
 import { AuthenticationRequired, CredentialLacksScope } from "../../registry/failures.js";
 import { handleCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
@@ -105,7 +105,7 @@ export const listAuthorSkitsEffect = Effect.fn("listAuthorSkitsEffect")(function
       new AuthenticationRequired({ origin: input.origin, scopes: "authoring:write" }),
     );
   const origin = (yield* parseUrl(configuredOrigin)).origin;
-  // Opaque origins were rejected by the old authorRef probe before making a request.
+  // Opaque origins are rejected before making a request.
   yield* parseUrl(origin);
   const transport = yield* (yield* RegistryHttp).client;
   const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
@@ -135,7 +135,7 @@ export const listAuthorSkitsEffect = Effect.fn("listAuthorSkitsEffect")(function
       if (separator < 1 || separator === skit.skit_id.length - 1)
         return yield* Effect.fail(new AuthorListIdentityError({ identity: skit.skit_id }));
       return {
-        identity: authorRef({
+        identity: skitLocator({
           schema: "skit.remote.v1",
           origin,
           namespace: skit.skit_id.slice(0, separator),

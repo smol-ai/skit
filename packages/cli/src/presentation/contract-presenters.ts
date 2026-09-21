@@ -7,13 +7,13 @@ import { homedir } from "node:os";
 import { basename, dirname, relative, sep } from "node:path";
 import { harnessLabel } from "../harness/catalog.js";
 import { renderInventory } from "./inventory.js";
-import { renderPortableSetEnabled } from "./portable-set-enabled.js";
-import { renderPortablePin } from "./portable-pin.js";
-import { renderPortableRemove, renderPortableRemovePlan } from "./portable-remove.js";
-import { renderPortableCheck } from "./portable-check.js";
-import { renderPortableLibrarySync } from "./portable-library-sync.js";
-import { renderPortableLibraryList } from "./portable-library-list.js";
-import { renderAudit, renderAuditV1Alpha3 } from "./audit.js";
+import { renderSetEnabled } from "./set-enabled.js";
+import { renderPin } from "./pin.js";
+import { renderRemove, renderRemovePlan } from "./remove.js";
+import { renderCheck } from "./check.js";
+import { renderLibrarySync } from "./library-sync.js";
+import { renderLibraryList } from "./library-list.js";
+import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, severityHeadline } from "./condition-language.js";
 
 export interface RenderContext {
@@ -58,7 +58,7 @@ function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
   ].join("\n");
 }
 
-function renderSecurityReview(data: ContractDataForId<"skit.security.review.v1">): string {
+function renderSecurityReview(data: ContractDataForId<"skit.security.review.v2">): string {
   return data.audit.findings.length
     ? data.assessment.findingDecisions
         .map((finding) => `${finding.fingerprint} ${finding.disposition} (${finding.ruleId})`)
@@ -97,7 +97,7 @@ function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): s
   return `Deleted ${data.skit_id}: ${data.draft_revisions} Draft Revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
 }
 
-function renderPortableUpdate(data: ContractDataForId<"skit.update.v3">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v4">): string {
   if (!data.length) return "No device-local Sources to update";
   const updated = data.filter((item) => item.changed).length;
   const current = data.length - updated;
@@ -268,9 +268,9 @@ function renderHarnessProbe(
     .join("\n\n");
 }
 
-function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v2">): string {
+function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v3">): string {
   if (data.status === "first_sync_ready")
-    return `First Draft sync ready for ${data.identity.ref} (${data.visibility}); no Release will be published; rerun with --apply`;
+    return `First Draft sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
   if (data.status === "merge_ready")
     return `Draft merge ready (${data.paths.length} path(s)); rerun with --apply`;
   const headline = {
@@ -407,7 +407,7 @@ export function renderSetupDiscovery(data: SetupDiscoveryInput): string {
   return lines.join("\n");
 }
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v3">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -512,14 +512,12 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v3">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v3">["projections"],
+  projections: ContractDataForId<"skit.setup.v4">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
-    collections.set(projection.collectionId, [
-      ...(collections.get(projection.collectionId) ?? []),
-      projection,
-    ]);
+    const group = projection.collectionId ?? projection.skillId;
+    collections.set(group, [...(collections.get(group) ?? []), projection]);
   }
   return [...collections.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
@@ -541,7 +539,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v3">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -561,7 +559,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v3">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v3">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -603,7 +601,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v3">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v3">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v4">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -638,7 +636,8 @@ function renderSetup(data: ContractDataForId<"skit.setup.v3">): string {
     ),
   );
   const externalProjections = data.projections.filter(
-    (projection) => !authoredCollectionIds.has(projection.collectionId),
+    (projection) =>
+      projection.collectionId === undefined || !authoredCollectionIds.has(projection.collectionId),
   );
   if (externalProjections.length)
     lines.push("", "Existing SKIT projections", ...renderSetupProjections(externalProjections));
@@ -715,30 +714,35 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.publish.id]: (data) =>
     `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,
   [outputContracts.sync.id]: renderAuthorSync,
-  [outputContracts.pin.id]: (data) => renderPortablePin(data, true),
-  [outputContracts.pinPlan.id]: (data) => renderPortablePin(data, false),
-  [outputContracts.librarySync.id]: renderPortableLibrarySync,
+  [outputContracts.pin.id]: (data) => renderPin(data, true),
+  [outputContracts.pinPlan.id]: (data) => renderPin(data, false),
+  [outputContracts.librarySync.id]: renderLibrarySync,
   [outputContracts.libraryHistory.id]: (data) =>
     data.events.length
       ? data.events.map(renderLibraryHistoryEvent).join("\n")
       : "No Library history recorded.",
-  [outputContracts.list.id]: renderPortableLibraryList,
-  [outputContracts.experimentalAudit.id]: renderAudit,
-  [outputContracts.experimentalAuditV1Alpha3.id]: renderAuditV1Alpha3,
+  [outputContracts.list.id]: renderLibraryList,
+  [outputContracts.experimentalAuditV1Alpha4.id]: renderAuditV1Alpha4,
   [outputContracts.authorList.id]: renderAuthorList,
   [outputContracts.pull.id]: (data) =>
-    data
-      .map((item) => `${item.collection_id}: ${item.changed ? "refreshed" : "current"}`)
-      .join("\n"),
-  [outputContracts.add.id]: (data) =>
-    `Retained ${data.skills.map((skill) => skill.name).join(", ")} in ${data.collection_id}`,
-  [outputContracts.addPreview.id]: (data) =>
-    `${data.kind === "authored" ? "Authored" : "Plain"} Skill source: ${data.skills.map((skill) => skill.name).join(", ")}`,
-  [outputContracts.update.id]: renderPortableUpdate,
+    data.map((item) => `${item.subject_id}: ${item.changed ? "refreshed" : "current"}`).join("\n"),
+  [outputContracts.add.id]: (data) => {
+    const count = data.skills.length;
+    return `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`;
+  },
+  [outputContracts.addPreview.id]: (data) => {
+    const count = data.skills.length;
+    return [
+      `${count} ${count === 1 ? "skill" : "skills"}`,
+      "",
+      ...data.skills.map((skill) => `  ${skill.name}`),
+    ].join("\n");
+  },
+  [outputContracts.update.id]: renderUpdate,
   [outputContracts.updatePlan.id]: (data) =>
     data.length
       ? data
-          .map((item) => `${item.collection_id}: ${item.changed ? "update available" : "current"}`)
+          .map((item) => `${item.subject_id}: ${item.changed ? "update available" : "current"}`)
           .join("\n")
       : "No device-local Sources to update",
   [outputContracts.projectionRetentionPlan.id]: (data) =>
@@ -761,12 +765,12 @@ const contractPresenters: ContractPresenters = {
         (projection) => `${projection.harness} · ${projection.path} · ${projection.status}`,
       ),
     ].join("\n"),
-  [outputContracts.remove.id]: renderPortableRemove,
-  [outputContracts.removePlan.id]: renderPortableRemovePlan,
-  [outputContracts.enable.id]: (data) => renderPortableSetEnabled(data, true),
-  [outputContracts.enablePlan.id]: (data) => renderPortableSetEnabled(data, false),
-  [outputContracts.disable.id]: (data) => renderPortableSetEnabled(data, true),
-  [outputContracts.disablePlan.id]: (data) => renderPortableSetEnabled(data, false),
+  [outputContracts.remove.id]: renderRemove,
+  [outputContracts.removePlan.id]: renderRemovePlan,
+  [outputContracts.enable.id]: (data) => renderSetEnabled(data, true),
+  [outputContracts.enablePlan.id]: (data) => renderSetEnabled(data, false),
+  [outputContracts.disable.id]: (data) => renderSetEnabled(data, true),
+  [outputContracts.disablePlan.id]: (data) => renderSetEnabled(data, false),
   [outputContracts.doctor.id]: renderDoctor,
   [outputContracts.inventory.id]: (data) => renderInventory(data, data.machine),
   [outputContracts.setup.id]: renderSetup,
@@ -789,7 +793,7 @@ const contractPresenters: ContractPresenters = {
         ? `Server setup was already complete at ${data.origin}`
         : `Server setup complete at ${data.origin}`
     }\nIf email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.\nNext: skit auth login ${data.origin}`,
-  [outputContracts.check.id]: renderPortableCheck,
+  [outputContracts.check.id]: renderCheck,
   [outputContracts.experimentalHarnessProbe.id]: renderHarnessProbe,
   [outputContracts.validate.id]: renderValidation,
   [outputContracts.securityReview.id]: renderSecurityReview,

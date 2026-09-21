@@ -1,0 +1,111 @@
+{
+  "$id": "skit.list.v3",
+  "type": "object",
+  "properties": {
+    "subjects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string"
+          },
+          "subject_kind": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "skill"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "skill_id": {
+                  "type": "string"
+                },
+                "selected_skill_version_id": {
+                  "type": "string"
+                },
+                "versions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "skill_version_id": {
+                        "type": "string"
+                      },
+                      "artifact_digest": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "skill_version_id",
+                      "artifact_digest"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "skill_id",
+                "versions"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "subject_id",
+          "subject_kind",
+          "label",
+          "skills"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "harness",
+          "skills"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "subjects",
+    "bindings"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

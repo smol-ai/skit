@@ -592,7 +592,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: collectionOne,
+              subjectId: collectionOne,
               skillId: exactSkill,
               skillVersionId: exactVersion,
               name: "library-exact",
@@ -606,7 +606,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: collectionOne,
+              subjectId: collectionOne,
               skillId: renamedSkill,
               skillVersionId: renamedVersion,
               name: "original",
@@ -620,13 +620,13 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: collectionOne,
+              subjectId: collectionOne,
               skillId: sharedSkill,
               skillVersionId: sharedVersion,
               name: "skill",
             },
             {
-              collectionId: collectionTwo,
+              subjectId: collectionTwo,
               skillId: sharedSkill,
               skillVersionId: sharedVersion,
               name: "skill",
@@ -732,7 +732,7 @@ it.effect(
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: upstreamCollectionId,
+              subjectId: upstreamCollectionId,
               skillId: upstreamSkillId,
               skillVersionId: upstreamSkillVersionId,
               name: "upstream",
@@ -752,7 +752,7 @@ it.effect(
           observedHash: hash,
           libraryMatches: [
             {
-              collectionId: localCollectionId,
+              subjectId: localCollectionId,
               skillId: localSkillId,
               skillVersionId: localSkillVersionId,
               name: "local",
@@ -786,11 +786,11 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const retained = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 4,
+      schemaVersion: 5,
       collections: [
         {
           collection_id: collectionId,
-          display_name: "Example skills",
+          label: "Example skills",
           upstream: {
             source_identity: { kind: "well-known", locator: { value: locator } },
             tracking: { kind: "default" },
@@ -798,7 +798,15 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
           },
         },
       ],
-      skills: [],
+      skills: [
+        {
+          skill_id: skillId,
+          collection_id: collectionId,
+          path: ".",
+          name: "Bad_Name",
+          versions: [],
+        },
+      ],
       retained_copies: [],
       acquisitions: [],
       global_bindings: [],
@@ -813,7 +821,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       contentIdentity: {
         status: "exact",
         observedHash: projectHash("Bad_Name"),
-        libraryMatches: [{ collectionId, skillId, skillVersionId, name: "Bad_Name" }],
+        libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "Bad_Name" }],
       },
       locks: [
         {
@@ -950,7 +958,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     yield* git(f.repository, "commit", "-qm", "authored skit");
 
     const contentHash = yield* deterministicTreeHashEffect(projectedSkill);
-    const collectionRef = "skit:https://registry.test/tim/skills";
+    const skitLocator = "skit://registry.test/tim/skills";
     const collectionId = makeCollectionId();
     const versionId = makeRetainedCopyId();
     const skillVersionId = makeSkillVersionId();
@@ -991,11 +999,11 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     yield* f.fs.writeFileString(join(projectedSkill, ".skit-ownership.json"), projectionMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), projectionMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 4,
+      schemaVersion: 5,
       collections: [
         {
           collection_id: collectionId,
-          display_name: "tim/skills",
+          label: "tim/skills",
           upstream: {
             source_identity: {
               kind: "registry",
@@ -1102,7 +1110,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
         repository: f.repository,
         descriptorPath: join(f.repository, "skit.json"),
         remotePath: join(f.repository, "skit.remote.json"),
-        collectionRef,
+        skitLocator,
         origin: "https://registry.test",
         namespace: "tim",
         skit: "skills",
@@ -1112,14 +1120,14 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     ]);
     expect(
       observed.instances.find((instance) => instance.path === authoredSkillRealPath)?.owner,
-    ).toEqual({ kind: "authored", collectionRef, collectionId });
+    ).toEqual({ kind: "authored", skitLocator, collectionId });
     expect(
       observed.instances.find((instance) => instance.path === authoredSkillRealPath)
         ?.contentIdentity,
     ).toEqual({
       status: "exact",
       observedHash: contentHash,
-      libraryMatches: [{ collectionId, skillId, skillVersionId, name: "council" }],
+      libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "council" }],
     });
     expect(
       observed.instances.find((instance) => instance.aliases.includes(projectedSkill))?.owner,
@@ -1145,7 +1153,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       membership: {
         kind: "missing-from-library",
         projectionId: orphanedProjectionId,
-        collectionId: orphanedCollectionId,
         skillId: orphanedSkillId,
         skillVersionId: orphanedSkillVersionId,
       },
@@ -1242,8 +1249,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
     const orphanedCollectionId = makeCollectionId();
     const orphanedSkillId = makeSkillId();
     const orphanedVersionId = makeSkillVersionId();
-    const currentRef = currentSkillId;
-    const missingRef = missingSkillId;
     yield* f.fs.writeFileString(
       join(current, ".skit-ownership.json"),
       JSON.stringify({
@@ -1251,7 +1256,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
         projectionPolicyVersion: 1,
         projection_id: currentProjectionId,
         collection_id: collectionId,
-        skill_id: currentRef,
+        skill_id: currentSkillId,
         skill_version_id: currentVersionId,
         expected_digest: currentHash,
         harness: "codex",
@@ -1271,11 +1276,11 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       }),
     );
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 4,
+      schemaVersion: 5,
       collections: [
         {
           collection_id: collectionId,
-          display_name: "test-collection",
+          label: "test-collection",
         },
       ],
       skills: [
@@ -1397,8 +1402,8 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
 
     expect(observed.projections).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ skillId: currentRef, path: current, status: "current" }),
-        expect.objectContaining({ skillId: missingRef, path: missing, status: "missing" }),
+        expect.objectContaining({ skillId: currentSkillId, path: current, status: "current" }),
+        expect.objectContaining({ skillId: missingSkillId, path: missing, status: "missing" }),
       ]),
     );
     expect(observed.instances.find((instance) => instance.name === "current")?.owner.kind).toBe(

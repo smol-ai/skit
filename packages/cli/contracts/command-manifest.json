@@ -229,7 +229,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.add.v3",
+        "skit.add.v4",
         "skit.add.preview.v3"
       ],
       "exitCodes": [
@@ -342,7 +342,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.check.v6"
+        "skit.check.v7"
       ],
       "exitCodes": [
         0,
@@ -513,8 +513,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.disable.v2",
-        "skit.disable.plan.v2"
+        "skit.disable.v3",
+        "skit.disable.plan.v3"
       ],
       "exitCodes": [
         0,
@@ -627,8 +627,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.enable.v2",
-        "skit.enable.plan.v2"
+        "skit.enable.v3",
+        "skit.enable.plan.v3"
       ],
       "exitCodes": [
         0,
@@ -753,7 +753,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v4"
+        "skit.inventory.v5"
       ],
       "exitCodes": [
         0,
@@ -888,12 +888,12 @@
         "list"
       ],
       "stability": "stable",
-      "summary": "Browse retained Collections and manage Skill enablement.",
+      "summary": "Browse retained Skills and Collections and manage enablement.",
       "effects": {
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.list.v2"
+        "skit.list.v3"
       ],
       "exitCodes": [
         0,
@@ -975,8 +975,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.pin.v4",
-        "skit.pin.plan.v4"
+        "skit.pin.v5",
+        "skit.pin.plan.v5"
       ],
       "exitCodes": [
         0,
@@ -1068,7 +1068,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.pull.v3"
+        "skit.pull.v4"
       ],
       "exitCodes": [
         0,
@@ -1674,8 +1674,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.remove.v3",
-        "skit.remove.plan.v3"
+        "skit.remove.v4",
+        "skit.remove.plan.v4"
       ],
       "exitCodes": [
         0,
@@ -1770,7 +1770,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.security.accept.v1"
+        "skit.security.accept.v2"
       ],
       "exitCodes": [
         0,
@@ -1878,7 +1878,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.security.review.v1"
+        "skit.security.review.v2"
       ],
       "exitCodes": [
         0,
@@ -2062,7 +2062,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v3"
+        "skit.setup.v4"
       ],
       "exitCodes": [
         0,
@@ -2156,7 +2156,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v3"
+        "skit.library.sync.v4"
       ],
       "exitCodes": [
         0,
@@ -2259,8 +2259,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.update.v3",
-        "skit.update.plan.v3",
+        "skit.update.v4",
+        "skit.update.plan.v4",
         "skit.update.projection-retention.v1",
         "skit.update.projection-retention.plan.v1"
       ],

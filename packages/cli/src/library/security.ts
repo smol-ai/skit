@@ -1,14 +1,14 @@
 import {
-  acceptPortableSecurityFindingFromStateEffect,
+  acceptSecurityFindingFromStateEffect,
   LibraryStore,
-  portableSecurityReviewFromStateEffect,
+  securityReviewFromStateEffect,
   type Digest,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 
 export const reviewLibrarySecurity = Effect.fn("Library.reviewSecurity")(function* (query: string) {
-  const portable = yield* (yield* LibraryStore).load;
-  return yield* portableSecurityReviewFromStateEffect(portable, query);
+  const state = yield* (yield* LibraryStore).load;
+  return yield* securityReviewFromStateEffect(state, query);
 });
 
 export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(function* (
@@ -20,6 +20,6 @@ export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(
     readonly expiresAt?: string;
   },
 ) {
-  const portable = yield* (yield* LibraryStore).load;
-  return yield* acceptPortableSecurityFindingFromStateEffect(portable, query, input);
+  const state = yield* (yield* LibraryStore).load;
+  return yield* acceptSecurityFindingFromStateEffect(state, query, input);
 });

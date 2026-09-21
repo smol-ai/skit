@@ -8,7 +8,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import { updatePortableCollectionsEffect } from "../../workflows/library/portable-update.js";
+import { updateSubjectsEffect } from "../../workflows/library/update.js";
 
 const subject = Argument.string("skit-or-skill");
 
@@ -18,9 +18,9 @@ export const pullCliCommand = Command.make("pull", { subject, ...localFlags }, (
       const renderer = yield* Renderer;
       const configuration = yield* libraryCommandConfiguration(input);
       const store = yield* LibraryStore;
-      const portable = yield* store.load;
-      const values = yield* updatePortableCollectionsEffect(
-        portable,
+      const state = yield* store.load;
+      const values = yield* updateSubjectsEffect(
+        state,
         {
           roots: configuration.inventory,
           variantsPath: configuration.pull.bindings.variantsPath,

@@ -1,0 +1,104 @@
+{
+  "$id": "skit.pin.v5",
+  "type": "object",
+  "properties": {
+    "subject_id": {
+      "type": "string"
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill_id": {
+            "type": "string"
+          },
+          "skill": {
+            "type": "string"
+          },
+          "current_version_id": {
+            "type": "string"
+          },
+          "selected_version_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "skill_id",
+          "skill",
+          "selected_version_id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "requested_version": {
+      "type": "string"
+    },
+    "snapshot_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "retained": {
+      "type": "boolean"
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "bindings": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "projected": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "deferred": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "subject_id",
+    "skills",
+    "retained",
+    "changed",
+    "bindings",
+    "projected",
+    "deferred"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

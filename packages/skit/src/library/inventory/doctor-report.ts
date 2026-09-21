@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { SkillId } from "../entity-ids.js";
 import { HarnessName } from "../store/state-schema.js";
-import type { LibraryState } from "../portable-local-state.js";
+import type { LibraryState } from "../library-state.js";
 
 /** One diagnostic report over an observed inventory snapshot. Pure: the caller does the reading. */
 export const LibraryDoctorIssue = Schema.Struct({

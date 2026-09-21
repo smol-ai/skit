@@ -1,5 +1,8 @@
 # Use a Collection Identity catalog
 
+> **Superseded.** Sources are now canonicalized directly as `SourceIdentity` values. Collections
+> carry stable IDs and labels; the profile catalog and derived reference strings were removed.
+
 SKIT derives the identity of every retained Skill Collection through one ordered catalog of versioned identity profiles. Each profile owns recognition, canonical structured fields, canonical collection and Skill references, display, portability, and equality. Descriptorless collections use source-backed identities such as `github:mattpocock/skills`; only a collection with a declared SKIT identity has a `skitId`.
 
 Previously, acquisition wrapped descriptorless content in a synthetic Descriptor whose ID was `local/imported-<hash>`. That implementation convenience escaped into Bindings, Projections, ownership markers, errors, and CLI behavior. The result was opaque, falsely implied SKIT identity, and allowed independent callers to disagree about whether a Skill was named by its source reference, synthetic ID, or bare name.

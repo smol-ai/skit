@@ -8,10 +8,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import {
-  planPortableUpdatesEffect,
-  updatePortableCollectionsEffect,
-} from "../../workflows/library/portable-update.js";
+import { planUpdatesEffect, updateSubjectsEffect } from "../../workflows/library/update.js";
 import {
   applyProjectionRetention,
   planProjectionRetention,
@@ -39,7 +36,7 @@ export const updateCliCommand = Command.make(
         const query = Option.getOrUndefined(input.subject);
         const projectionSelector = Option.getOrUndefined(input.fromProjection);
         const store = yield* LibraryStore;
-        const portable = yield* store.load;
+        const state = yield* store.load;
         const options = {
           roots: configuration.inventory,
           variantsPath: configuration.pull.bindings.variantsPath,
@@ -52,7 +49,7 @@ export const updateCliCommand = Command.make(
           if (input.dryRun) {
             const value = yield* renderer.withStatus(
               "Inspecting changed Projection bytes",
-              planProjectionRetention(portable, options, query, projectionSelector),
+              planProjectionRetention(state, options, query, projectionSelector),
             );
             return yield* renderer.result(
               result("update", outputContracts.projectionRetentionPlan, value),
@@ -60,7 +57,7 @@ export const updateCliCommand = Command.make(
           }
           const value = yield* renderer.withStatus(
             "Retaining changed Projection bytes",
-            applyProjectionRetention(portable, options, query, projectionSelector),
+            applyProjectionRetention(state, options, query, projectionSelector),
           );
           return yield* renderer.result(
             result("update", outputContracts.projectionRetention, value),
@@ -69,11 +66,11 @@ export const updateCliCommand = Command.make(
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
-            planPortableUpdatesEffect(portable, options, query),
+            planUpdatesEffect(state, options, query),
           );
           return yield* renderer.result(result("update", outputContracts.updatePlan, value));
         }
-        const value = yield* updatePortableCollectionsEffect(portable, options, query);
+        const value = yield* updateSubjectsEffect(state, options, query);
         yield* renderer.result(result("update", outputContracts.update, value));
       }),
       homePath(input.home),

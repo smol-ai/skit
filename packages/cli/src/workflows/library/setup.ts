@@ -4,8 +4,6 @@ import { basename, dirname, join, matchesGlob, posix, relative, resolve, sep } f
 import { Effect, FileSystem, Result, Schema } from "effect";
 import {
   canonicalJson,
-  collectionIdentity,
-  collectionRef,
   Digest,
   LinkStat,
   MachineDocumentJson,
@@ -21,15 +19,15 @@ import {
   pathIsWithin,
   readSkitDescriptorEffect,
   resolveHarnessRoot,
+  sourceLocator,
   sourceIdentityEquals,
-  sourceIdentityFromCollectionIdentity,
+  sourceIdentityFromSource,
   SourceProcess,
   writeJsonAtomicEffect,
-  type CollectionIdentity,
-  type CollectionId,
   type HarnessName as Harness,
   type LibraryState,
   type MachineId,
+  type SkitSource,
   type SkillId,
   type SkillVersionId,
   type SourceIdentity,
@@ -816,17 +814,16 @@ const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
 
 export const setupLockCollection = (
   lock: SetupLockMatch,
-): { identity: CollectionIdentity; collectionRef: string } | undefined => {
+): { source: SkitSource; sourceKey: string } | undefined => {
   const source = skillsShLockCoordinate(lock);
   if (!source) return undefined;
-  const identity = collectionIdentity(source);
-  return { identity, collectionRef: collectionRef(identity) };
+  return { source, sourceKey: sourceLocator(source) };
 };
 
 export const setupLockGroupKey = (lock: SetupLockMatch) => {
   const collection = setupLockCollection(lock);
   return collection
-    ? `${lock.lockPath}\0${collection.collectionRef}\0${lock.entry.ref ?? ""}\0${lock.lockContentHash}`
+    ? `${lock.lockPath}\0${collection.sourceKey}\0${lock.entry.ref ?? ""}\0${lock.lockContentHash}`
     : undefined;
 };
 
@@ -850,19 +847,17 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
       Effect.orElseSucceed(() => undefined),
     );
     if (!descriptor || !remote || descriptor.slug !== remote.skit) continue;
-    const identity: CollectionIdentity = {
-      profile: "declared-skit",
-      version: 1,
+    const skitLocator = sourceLocator({
+      type: "registry",
+      locator: `${remote.namespace}/${remote.skit}`,
       authority: remote.origin,
-      skitId: `${remote.namespace}/${remote.skit}`,
+    });
+    const authoredSource: SourceIdentity = {
+      kind: "registry",
+      authority: remote.origin,
+      namespace: remote.namespace,
+      slug: remote.skit,
     };
-    const authoredCollectionRef = collectionRef(identity);
-    const authoredSource = sourceIdentityFromCollectionIdentity(
-      identity,
-      undefined,
-      authoredCollectionRef,
-    );
-    if (authoredSource === undefined) continue;
     const collectionId = library.collections.find(
       (collection) =>
         collection.upstream !== undefined &&
@@ -879,7 +874,7 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
       repository,
       descriptorPath,
       remotePath,
-      collectionRef: authoredCollectionRef,
+      skitLocator,
       origin: remote.origin,
       namespace: remote.namespace,
       skit: remote.skit,
@@ -935,7 +930,7 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
           [
             skill.path,
             {
-              collectionRef: collection.collectionRef,
+              skitLocator: collection.skitLocator,
               ...(collection.collectionId ? { collectionId: collection.collectionId } : {}),
             },
           ] as const,
@@ -1007,30 +1002,26 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
   const librarySkillsByHash = new Map<
     string,
     Array<{
-      collectionId: CollectionId;
+      subjectId: string;
       skillId: SkillId;
       skillVersionId: SkillVersionId;
       name: string;
     }>
   >();
-  for (const collection of library.collections) {
-    for (const skill of library.skills.filter(
-      (candidate) => candidate.collection_id === collection.collection_id,
-    )) {
-      const selected = skill?.versions.find(
-        (version) => version.skill_version_id === skill.selected_skill_version_id,
-      );
-      if (skill === undefined || selected === undefined) continue;
-      librarySkillsByHash.set(selected.validation_identity_digest, [
-        ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
-        {
-          collectionId: collection.collection_id,
-          skillId: skill.skill_id,
-          skillVersionId: selected.skill_version_id,
-          name: skill.name,
-        },
-      ]);
-    }
+  for (const skill of library.skills) {
+    const selected = skill?.versions.find(
+      (version) => version.skill_version_id === skill.selected_skill_version_id,
+    );
+    if (skill === undefined || selected === undefined) continue;
+    librarySkillsByHash.set(selected.validation_identity_digest, [
+      ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
+      {
+        subjectId: skill.collection_id ?? skill.skill_id,
+        skillId: skill.skill_id,
+        skillVersionId: selected.skill_version_id,
+        name: skill.name,
+      },
+    ]);
   }
   const grouped = new Map<string, SkillHit[]>();
   for (const hit of hits) grouped.set(hit.realPath, [...(grouped.get(hit.realPath) ?? []), hit]);
@@ -1082,28 +1073,27 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     const managedMembership = (() => {
       const marker = "marker" in custodyObservation ? custodyObservation.marker : undefined;
       if (!marker) return undefined;
-      const collection = libraryCollectionsById.get(marker.collection_id);
-      const skillBelongsToCollection = library.skills.some(
-        (skill) =>
-          skill.skill_id === marker.skill_id && skill.collection_id === marker.collection_id,
-      );
-      if (!collection || !skillBelongsToCollection)
+      const skill = library.skills.find((candidate) => candidate.skill_id === marker.skill_id);
+      const collection =
+        skill === undefined ? undefined : libraryCollectionsById.get(skill.collection_id);
+      if (skill === undefined)
         return {
           kind: "missing-from-library" as const,
           projectionId: marker.projection_id,
-          collectionId: marker.collection_id,
           skillId: marker.skill_id,
           skillVersionId: marker.skill_version_id,
         };
       return {
         kind: "retained" as const,
         projectionId: marker.projection_id,
-        collectionId: marker.collection_id,
+        collectionId: skill.collection_id,
         skillId: marker.skill_id,
         skillVersionId: marker.skill_version_id,
-        displayName: collection.display_name,
-        ...(collection.upstream
-          ? { source: sourceIdentityLabel(collection.upstream.source_identity) }
+        displayName: collection?.label ?? skill.name,
+        ...(collection?.upstream
+          ? {
+              source: sourceIdentityLabel(collection.upstream.source_identity),
+            }
           : {}),
       };
     })();
@@ -1152,10 +1142,8 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     const path = projection.path;
     const present = yield* fs.exists(path);
     projections.push({
-      collectionId: projection.collection_id,
-      collectionDisplayName:
-        libraryCollectionsById.get(projection.collection_id)?.display_name ??
-        projection.collection_id,
+      collectionId: skill.collection_id,
+      collectionDisplayName: libraryCollectionsById.get(skill.collection_id)?.label ?? skill.name,
       skillId: skill.skill_id,
       name: skill.name,
       path,
@@ -1272,7 +1260,7 @@ export const classifySetupOnboarding = (
   );
   const retainedByLockEvidence = new Map<
     string,
-    Array<{ collectionId: CollectionId; validationIdentityDigest: string }>
+    Array<{ subjectId: string; validationIdentityDigest: string }>
   >();
   if (retained?.library && retained.machineId) {
     const evidenceKeysByAcquisition = new Map<string, string[]>();
@@ -1296,7 +1284,7 @@ export const classifySetupOnboarding = (
             retainedByLockEvidence.set(key, [
               ...(retainedByLockEvidence.get(key) ?? []),
               {
-                collectionId: skill.collection_id,
+                subjectId: skill.collection_id ?? skill.skill_id,
                 validationIdentityDigest: version.validation_identity_digest,
               },
             ]);
@@ -1378,7 +1366,7 @@ export const classifySetupOnboarding = (
           continue;
         }
         const observedPaths = observedInstances.map((instance) => instance.path).sort();
-        let matchingCollections: Set<CollectionId> | undefined;
+        let matchingCollections: Set<string> | undefined;
         for (const instance of observedInstances) {
           const observedHash = instance.contentIdentity.observedHash;
           const matchingLock = instance.locks.find((item) => setupLockGroupKey(item) === groupKey);
@@ -1395,7 +1383,7 @@ export const classifySetupOnboarding = (
           const collections = new Set(
             (retainedByLockEvidence.get(evidenceKey) ?? [])
               .filter((evidence) => evidence.validationIdentityDigest === observedHash)
-              .map((evidence) => evidence.collectionId),
+              .map((evidence) => evidence.subjectId),
           );
           matchingCollections =
             matchingCollections === undefined
@@ -1431,7 +1419,7 @@ export const classifySetupOnboarding = (
     const matches = group.flatMap((instance) => instance.contentIdentity.libraryMatches);
     const uniqueMatches = [
       ...new Map(
-        matches.map((match) => [`${match.collectionId}\0${match.skillVersionId}`, match]),
+        matches.map((match) => [`${match.subjectId}\0${match.skillVersionId}`, match]),
       ).values(),
     ];
     if (
@@ -1458,14 +1446,17 @@ export const classifySetupOnboarding = (
       if (group.some((instance) => instance.git.repository !== undefined)) {
         if (
           importableLocks.some(([, lock]) => {
-            const identity = setupLockCollection(lock)?.identity;
-            const retainedSource = libraryCollectionSourcesById.get(match.collectionId);
-            if (identity === undefined || retainedSource === undefined) return false;
-            const lockSource = sourceIdentityFromCollectionIdentity(
-              identity,
-              retained?.machineId,
-              lock.entry.source,
+            const source = setupLockCollection(lock)?.source;
+            const retainedSkill = retained?.library?.skills.find(
+              (skill) =>
+                skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
             );
+            const retainedSource =
+              retainedSkill === undefined
+                ? undefined
+                : libraryCollectionSourcesById.get(retainedSkill.collection_id);
+            if (source === undefined || retainedSource === undefined) return false;
+            const lockSource = sourceIdentityFromSource(source, retained?.machineId);
             return lockSource !== undefined && sourceIdentityEquals(lockSource, retainedSource);
           })
         )
@@ -1479,11 +1470,19 @@ export const classifySetupOnboarding = (
       candidates.push({
         ...base,
         action: "bind-existing-entry",
-        collectionId: match.collectionId,
+        subjectId: match.subjectId,
         skillVersionId: match.skillVersionId,
-        ...(libraryCollectionsById.get(match.collectionId)?.display_name
-          ? { collectionDisplayName: libraryCollectionsById.get(match.collectionId)!.display_name }
-          : {}),
+        ...(() => {
+          const matchedSkill = retained?.library?.skills.find(
+            (skill) =>
+              skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
+          );
+          const label =
+            matchedSkill === undefined
+              ? undefined
+              : libraryCollectionsById.get(matchedSkill.collection_id)?.label;
+          return label === undefined ? {} : { collectionDisplayName: label };
+        })(),
       });
       continue;
     }

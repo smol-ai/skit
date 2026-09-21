@@ -21,10 +21,10 @@ import type { ProjectionOptions } from "./projection-options.js";
 import {
   applyLibraryBindings,
   libraryStateRevision,
-  PortableSetEnabledStale,
+  SetEnabledStale,
   previewLibraryBindings,
-} from "./portable-set-enabled.js";
-import type { SetEnabledInvocation } from "./set-enabled.js";
+} from "./set-enabled.js";
+import type { SetEnabledInvocation } from "./set-enabled-invocation.js";
 
 export interface LibraryBindingRow {
   readonly harness: Harness;
@@ -80,12 +80,11 @@ export interface LibrarySessionState {
 
 const bindingRows = (
   state: LibraryState,
-  collectionId: string,
   skillId: LibraryState["skills"][number]["skill_id"],
   skillName: string,
 ): LibraryBindingRow[] =>
   [...state.global_bindings, ...state.local_bindings]
-    .filter((binding) => binding.collection_id === collectionId && binding.skills.includes(skillId))
+    .filter((binding) => binding.skills.includes(skillId))
     .map((binding) => {
       const invocation = (binding.invocation_policies?.[skillId] ?? "declared") as InvocationOption;
       const carriesPolicy = (invocationHarnesses as readonly Harness[]).includes(binding.harness);
@@ -111,25 +110,24 @@ const bindingRows = (
     });
 
 const skillRows = (state: LibraryState): LibrarySkillRow[] =>
-  state.collections.flatMap((collection) => {
-    const heading = collection.display_name;
-    return state.skills
-      .filter((candidate) => candidate.collection_id === collection.collection_id)
-      .flatMap((skill) => {
-        const version = skill?.versions.find(
-          (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-        );
-        if (skill === undefined || version === undefined) return [];
-        return [
-          {
-            name: skill.name,
-            skillVersionId: version.skill_version_id,
-            collectionId: collection.collection_id,
-            heading,
-            bindings: bindingRows(state, collection.collection_id, skill.skill_id, skill.name),
-          },
-        ];
-      });
+  state.skills.flatMap((skill) => {
+    const collection = state.collections.find(
+      (candidate) => candidate.collection_id === skill.collection_id,
+    );
+    const heading = collection?.label ?? skill.name;
+    const version = skill?.versions.find(
+      (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
+    );
+    if (skill === undefined || version === undefined) return [];
+    return [
+      {
+        name: skill.name,
+        skillVersionId: version.skill_version_id,
+        collectionId: collection?.collection_id ?? skill.skill_id,
+        heading,
+        bindings: bindingRows(state, skill.skill_id, skill.name),
+      },
+    ];
   });
 
 export const openLibrarySession = Effect.fn("LibrarySession.open")(function* (
@@ -323,7 +321,7 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
       Effect.gen(function* () {
         const store = yield* LibraryStore;
         if (libraryStateRevision(yield* store.load) !== pending.libraryRevision)
-          return yield* new PortableSetEnabledStale({
+          return yield* new SetEnabledStale({
             message: "Library changed after this Binding change was previewed",
           });
         yield* Effect.forEach(pending.operations, ({ query, invocation }) =>

@@ -149,6 +149,15 @@ pnpm verify
 
 Commit the source change and its regenerated artifacts together. Contract tests verify that generated files are current and that real command payloads validate against their declared schemas.
 
+Contract artifacts may be overwritten freely while a branch is in development. Before merge, CI
+compares the final generated contracts with the pull request's base commit. A stable contract ID
+that exists at that base is frozen: changing its shape requires the next version in that contract
+family, and a branch may advance a family by only one version. Run the same check locally with:
+
+```sh
+pnpm --filter @smolai/skit contracts:check --base main
+```
+
 ## Tests
 
 Cloudflare code follows the mandatory policy in [Cloudflare testing](./cloudflare-testing.md). In particular, Worker persistence tests use workerd with real local D1 and R2 bindings; hand-written binding mocks and inline authored-document fixtures are prohibited.

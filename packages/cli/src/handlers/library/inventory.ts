@@ -3,7 +3,7 @@ import { Command } from "effect/unstable/cli";
 import {
   libraryDoctorReport,
   LibraryStore,
-  refreshPortableInventory,
+  refreshLibraryInventory,
   pathIsWithin,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -18,11 +18,11 @@ import { runSetup } from "../../workflows/library/setup.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 
-export const refreshPortableInventoryForCli = Effect.fn("CLI.refreshPortableInventory")(function* (
+export const refreshLibraryInventoryForCli = Effect.fn("CLI.refreshLibraryInventory")(function* (
   options: CliInventoryOptions,
   loaded: LibraryState,
 ) {
-  const { state, roots } = yield* refreshPortableInventory(loaded, (state) =>
+  const { state, roots } = yield* refreshLibraryInventory(loaded, (state) =>
     selectInventoryRoots(state, options),
   );
   return {
@@ -55,7 +55,7 @@ const refreshLibraryInventoryCommand = Effect.fn("CLI.refreshLibraryInventory")(
   const before = yield* store.load;
   const after = yield* renderer.withStatus(
     "Scanning harness installations",
-    refreshPortableInventoryForCli(options, before),
+    refreshLibraryInventoryForCli(options, before),
   );
   return after;
 });

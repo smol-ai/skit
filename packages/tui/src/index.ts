@@ -24,7 +24,7 @@ import {
   skitLayer,
   detectInstalledHarnessesEffect,
   errorMessage,
-  auditLocalCapabilitiesV1Alpha3Effect,
+  auditLocalCapabilitiesV1Alpha4Effect,
   probeHarnessEffect,
   openLibrarySession,
   refreshLibrarySession,
@@ -42,8 +42,8 @@ import {
   invocationEligibleBindings,
   invocationRowSummary,
   scopeChoices,
-  type AuditEntryV1Alpha3,
-  type AuditMcpServerV1Alpha3,
+  type AuditEntryV1Alpha4,
+  type AuditMcpServerV1Alpha4,
   type HarnessProbeResult,
   type ProbeableHarness,
   type LibraryActionOutcome,
@@ -91,10 +91,10 @@ type AuditItem = {
   findingCount?: number;
   findingCodes?: string[];
   riskFlagCount?: number;
-  provenance?: AuditEntryV1Alpha3["provenance"];
+  provenance?: AuditEntryV1Alpha4["provenance"];
   canonicalLocation?: string;
   harnessProbe?: HarnessProbeResult;
-  mcp?: Pick<AuditMcpServerV1Alpha3, "transport" | "command" | "args" | "cwd" | "url">;
+  mcp?: Pick<AuditMcpServerV1Alpha4, "transport" | "command" | "args" | "cwd" | "url">;
 };
 
 type SkillItem = AuditItem & {
@@ -151,7 +151,7 @@ const libraryHost = createLibraryHost(
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
 const report = await libraryHost.run(
-  auditLocalCapabilitiesV1Alpha3Effect({
+  auditLocalCapabilitiesV1Alpha4Effect({
     home: flag("--home"),
     cwd: flag("--cwd") ?? resolve(import.meta.dir, "../../.."),
     probes: [],
@@ -176,7 +176,7 @@ function stringListAt(value: unknown, key: string): string[] {
     : [];
 }
 
-function capabilitySummary(kind: CapabilityKind, capability: AuditEntryV1Alpha3): string {
+function capabilitySummary(kind: CapabilityKind, capability: AuditEntryV1Alpha4): string {
   switch (kind) {
     case "skill": {
       const capabilities =
@@ -197,7 +197,7 @@ function capabilitySummary(kind: CapabilityKind, capability: AuditEntryV1Alpha3)
   }
 }
 
-function itemFromCapability(kind: CapabilityKind, capability: AuditEntryV1Alpha3): AuditItem {
+function itemFromCapability(kind: CapabilityKind, capability: AuditEntryV1Alpha4): AuditItem {
   const related = report.findings.filter((finding) => finding.entryIds.includes(capability.id));
   const staticAudit = "staticAudit" in capability ? capability.staticAudit : undefined;
   const riskFlags = stringListAt(staticAudit, "riskFlags");
@@ -248,7 +248,7 @@ function itemFromCapability(kind: CapabilityKind, capability: AuditEntryV1Alpha3
   };
 }
 
-const capabilityGroups: Array<[CapabilityKind, readonly AuditEntryV1Alpha3[]]> = [
+const capabilityGroups: Array<[CapabilityKind, readonly AuditEntryV1Alpha4[]]> = [
   ["skill", report.skills],
   ["plugin", report.plugins],
   ["mcp-server", report.mcpServers],
@@ -746,10 +746,10 @@ function inventoryView(): BoxRenderable {
           ? [
               kv("source", item.provenance.source ?? "unknown", 14),
               kv("confidence", item.provenance.confidence, 14),
-              ...(item.provenance.collectionRef
-                ? [kv("collection", item.provenance.collectionRef, 14)]
+              ...(item.provenance.collectionId
+                ? [kv("collection", item.provenance.collectionId, 14)]
                 : []),
-              ...(item.provenance.skillRef ? [kv("origin", item.provenance.skillRef, 14)] : []),
+              ...(item.provenance.skillId ? [kv("origin", item.provenance.skillId, 14)] : []),
               ...(item.provenance.expectedHash
                 ? [kv("expected hash", abbreviatedHash(item.provenance.expectedHash), 14)]
                 : []),

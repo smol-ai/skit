@@ -7,7 +7,7 @@ const AuthorIdentity = Schema.Struct({
   authority: Schema.String,
   namespace: Schema.String,
   skit: Schema.String,
-  ref: Schema.String,
+  locator: Schema.String,
 });
 
 const SyncConflict = Schema.Struct({

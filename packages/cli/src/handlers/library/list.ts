@@ -11,6 +11,7 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import { terminalPrompterLayer } from "../../presentation/prompter.js";
 import { browseLibraryEffect } from "../../presentation/interactive-list.js";
 import { openLibrarySession } from "../../workflows/library/session.js";
+import { librarySubjects } from "../../workflows/library/subject-resolution.js";
 
 export const shouldBrowseInteractively = (input: {
   readonly json: boolean;
@@ -21,27 +22,25 @@ export const shouldBrowseInteractively = (input: {
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const store = yield* LibraryStore;
-  const portable = yield* store.load;
+  const state = yield* store.load;
   const value = {
-    collections: portable.collections.map((collection) => ({
-      collection_id: collection.collection_id,
-      display_id: collection.display_name,
-      skills: portable.skills
-        .filter((skill) => skill.collection_id === collection.collection_id)
-        .map((skill) => ({
-          name: skill.name,
-          skill_id: skill.skill_id,
-          ...(skill.selected_skill_version_id === undefined
-            ? {}
-            : { selected_skill_version_id: skill.selected_skill_version_id }),
-          versions: skill.versions.map((version) => ({
-            skill_version_id: version.skill_version_id,
-            artifact_digest: version.artifact_digest,
-          })),
+    subjects: librarySubjects(state).map((subject) => ({
+      subject_id: subject.subjectId,
+      subject_kind: subject.kind,
+      label: subject.label,
+      skills: subject.skills.map((skill) => ({
+        name: skill.name,
+        skill_id: skill.skill_id,
+        ...(skill.selected_skill_version_id === undefined
+          ? {}
+          : { selected_skill_version_id: skill.selected_skill_version_id }),
+        versions: skill.versions.map((version) => ({
+          skill_version_id: version.skill_version_id,
+          artifact_digest: version.artifact_digest,
         })),
+      })),
     })),
-    bindings: portable.global_bindings.map((binding) => ({
-      collection_id: binding.collection_id,
+    bindings: state.global_bindings.map((binding) => ({
       harness: binding.harness,
       skills: [...binding.skills],
     })),
@@ -68,7 +67,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) => {
     homePath(input.home),
   );
 }).pipe(
-  Command.withDescription("Browse retained Collections and manage Skill enablement."),
+  Command.withDescription("Browse retained Skills and Collections and manage enablement."),
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.list],

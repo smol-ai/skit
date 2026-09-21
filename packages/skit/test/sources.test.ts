@@ -157,29 +157,29 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       expect(yield* parseSkitSourceEffect("tim/dad-joke@1.0.0")).toEqual({
         type: "registry",
-        ref: "tim/dad-joke@1.0.0",
+        locator: "tim/dad-joke@1.0.0",
       });
       expect(yield* parseSkitSourceEffect("humanlayer/skills")).toEqual({
         type: "git",
-        ref: "https://github.com/humanlayer/skills",
+        locator: "https://github.com/humanlayer/skills",
       });
       expect(yield* sourceInputWithVersionEffect("humanlayer/skills", "1.2.0")).toBe(
         "skit:humanlayer/skills",
       );
       expect(yield* parseSkitSourceEffect("gh:humanlayer/skills")).toEqual({
         type: "git",
-        ref: "https://github.com/humanlayer/skills",
+        locator: "https://github.com/humanlayer/skills",
       });
       expect(yield* parseSkitSourceEffect("skit:humanlayer/skills")).toEqual({
         type: "registry",
-        ref: "humanlayer/skills",
+        locator: "humanlayer/skills",
       });
       const canonical = yield* parseSkitSourceEffect(
         "skit://registry.example/humanlayer/skills@1.2.0",
       );
       expect(canonical).toEqual({
         type: "registry",
-        ref: "humanlayer/skills@1.2.0",
+        locator: "humanlayer/skills@1.2.0",
         authority: "https://registry.example",
       });
       expect(sourceLocator(canonical)).toBe("skit://registry.example/humanlayer/skills@1.2.0");
@@ -188,7 +188,7 @@ describe("source contracts", () => {
       );
       expect(loopback).toEqual({
         type: "registry",
-        ref: "humanlayer/skills@1.2.0",
+        locator: "humanlayer/skills@1.2.0",
         authority: "http://127.0.0.1:8787",
       });
       expect(sourceLocator(loopback)).toBe("skit+http://127.0.0.1:8787/humanlayer/skills@1.2.0");
@@ -205,7 +205,7 @@ describe("source contracts", () => {
       );
       expect(yield* parseSkitSourceEffect("humanlayer/skills", root)).toEqual({
         type: "local",
-        ref: join(root, "humanlayer", "skills"),
+        locator: join(root, "humanlayer", "skills"),
       });
     }).pipe(provide),
   );
@@ -214,7 +214,7 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       expect(yield* parseSkitSourceEffect("https://github.com/mattpocock/skills")).toEqual({
         type: "git",
-        ref: "https://github.com/mattpocock/skills",
+        locator: "https://github.com/mattpocock/skills",
       });
       expect(
         yield* parseSkitSourceEffect(
@@ -222,7 +222,7 @@ describe("source contracts", () => {
         ),
       ).toEqual({
         type: "git",
-        ref: "https://github.com/mattpocock/skills.git#ref=main&path=skills%2Fcode-review",
+        locator: "https://github.com/mattpocock/skills.git#ref=main&path=skills%2Fcode-review",
       });
     }).pipe(provide),
   );
@@ -259,7 +259,10 @@ describe("source contracts", () => {
         "-qm",
         "first",
       );
-      const source = { type: "git" as const, ref: `${fixture}#skill=skills%2Freview%2FSKILL.md` };
+      const source = {
+        type: "git" as const,
+        locator: `${fixture}#skill=skills%2Freview%2FSKILL.md`,
+      };
       const first = yield* resolveSkitSourceEffect(source);
       const firstHash = yield* releaseHash(first.root, "retain");
       expect(yield* readText(join(first.root, "skills", "review", "SKILL.md"))).toContain(
@@ -336,9 +339,17 @@ describe("source contracts", () => {
         );
       expect(yield* parseSkitSourceEffect(`wellknown:${base}`)).toEqual({
         type: "well-known",
-        ref: base,
+        locator: base,
       });
-      const resolved = yield* resolveSkitSourceEffect(`wellknown:${base}`).pipe(
+      expect(yield* parseSkitSourceEffect(base)).toEqual({
+        type: "well-known",
+        locator: base,
+      });
+      expect(yield* parseSkitSourceEffect(`${base}/`)).toEqual({
+        type: "well-known",
+        locator: base,
+      });
+      const resolved = yield* resolveSkitSourceEffect(base).pipe(
         Effect.provideService(HttpClient.HttpClient, client(skill)),
       );
       expect(resolved.source.type).toBe("well-known");
@@ -351,6 +362,28 @@ describe("source contracts", () => {
       expect(failure._tag).toBe("SourcePolicyViolation");
       if (failure._tag === "SourcePolicyViolation")
         expect(failure.reason).toMatchObject({ _tag: "PinMismatch" });
+    }).pipe(provide),
+  );
+
+  it.effect("keeps HTTPS paths as direct document sources", () =>
+    Effect.gen(function* () {
+      expect(yield* parseSkitSourceEffect("https://skills.example/SKILL.md")).toEqual({
+        type: "url",
+        locator: "https://skills.example/SKILL.md",
+      });
+      expect(yield* parseSkitSourceEffect("https://skills.example/catalog")).toEqual({
+        type: "url",
+        locator: "https://skills.example/catalog",
+      });
+      for (const input of [
+        "https://skills.example#skills=review",
+        "https://skills.example?collection=review",
+        "https://skills.example/#",
+        "https://skills.example/?",
+      ]) {
+        const failure = yield* parseSkitSourceEffect(input).pipe(Effect.flip);
+        expect(failure._tag).toBe("UnsafeSourceUrl");
+      }
     }).pipe(provide),
   );
 
@@ -447,10 +480,12 @@ describe("source contracts", () => {
           ),
         );
       });
-      const locator = `wellknown:${base}#skills=review`;
-      const parsed = yield* parseSkitSourceEffect(locator);
-      expect(parsed).toEqual({ type: "well-known", ref: base, members: ["review"] });
-      expect(sourceLocator(parsed)).toBe(locator);
+      const rejected = yield* parseSkitSourceEffect(`wellknown:${base}#skills=review`).pipe(
+        Effect.flip,
+      );
+      expect(rejected._tag).toBe("UnsafeSourceUrl");
+      const parsed = { type: "well-known" as const, locator: base, members: ["review"] };
+      expect(sourceLocator(parsed)).toBe(`wellknown:${base}`);
       const resolved = yield* resolveSkitSourceEffect(parsed).pipe(
         Effect.provideService(HttpClient.HttpClient, client),
       );
@@ -511,7 +546,8 @@ describe("source contracts", () => {
         ),
       ).toEqual({
         type: "url",
-        ref: "https://raw.githubusercontent.com/cursor/plugins/main/cursor-team-kit/skills/review/SKILL.md",
+        locator:
+          "https://raw.githubusercontent.com/cursor/plugins/main/cursor-team-kit/skills/review/SKILL.md",
       });
       expect(
         yield* parseSkitSourceEffect(
@@ -519,7 +555,8 @@ describe("source contracts", () => {
         ),
       ).toEqual({
         type: "url",
-        ref: "https://raw.githubusercontent.com/cursor/plugins/main/cursor-team-kit/skills/review/SKILL.md",
+        locator:
+          "https://raw.githubusercontent.com/cursor/plugins/main/cursor-team-kit/skills/review/SKILL.md",
       });
     }).pipe(provide),
   );
@@ -638,13 +675,13 @@ describe("source contracts", () => {
         ),
       ).toEqual({
         type: "git",
-        ref: "git@github.com:private/tools.git#ref=main&path=skills/review",
+        locator: "git@github.com:private/tools.git#ref=main&path=skills/review",
       });
       expect(
         yield* parseSkitSourceEffect("https://git.corp.example/agents/tools.git#ref=v1"),
       ).toEqual({
         type: "git",
-        ref: "https://git.corp.example/agents/tools.git#ref=v1",
+        locator: "https://git.corp.example/agents/tools.git#ref=v1",
       });
     }).pipe(provide),
   );

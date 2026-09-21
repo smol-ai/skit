@@ -5,7 +5,7 @@ import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { LibraryAuditLog, libraryAuditLogLayer } from "../src/library/audit/audit-log.js";
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/portable-observed-import.js";
+import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
 import {
   LibraryActor,
   LibraryStore,
@@ -58,7 +58,7 @@ const library = Effect.gen(function* () {
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
   const retain = retainObservedCollectionEffect({
     machineId,
-    identity: { profile: "local-collection", version: 1, path: source },
+    source: { type: "local", locator: source },
     input: source,
     retainedAt: "2026-09-17T00:00:00.000Z",
     skills: [
@@ -83,7 +83,7 @@ it.effect("records one event for one action, however many writers it nests", () 
     yield* inLibrary(
       withLibraryWriter(
         Effect.gen(function* () {
-          const collection = yield* Effect.scoped(withLibraryWriter(retain));
+          yield* Effect.scoped(withLibraryWriter(retain));
           const store = yield* LibraryStore;
           const state = yield* store.load;
           yield* withLibraryWriter(
@@ -91,7 +91,6 @@ it.effect("records one event for one action, however many writers it nests", () 
               ...state,
               global_bindings: [
                 {
-                  collection_id: collection.collection_id,
                   harness: "codex",
                   scope: { kind: "global" },
                   skills: state.skills.map((skill) => skill.skill_id),
@@ -145,8 +144,8 @@ it.effect("keeps a committed mutation successful when its history cannot be writ
     const { inLibrary, retain, home } = yield* library;
     // A directory where the log should be makes every append fail.
     yield* fs.makeDirectory(join(home, "audit.jsonl"), { recursive: true });
-    const collection = yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
+    const retained = yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
     const state = yield* inLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.strictEqual(state.collections[0]?.collection_id, collection.collection_id);
+    assert.strictEqual(state.collections[0]?.collection_id, retained.collection?.collection_id);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

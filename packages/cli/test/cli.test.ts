@@ -165,7 +165,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v2" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v3" });
 
     const add = spawnSync(
       process.execPath,
@@ -255,7 +255,7 @@ describe("CLI contracts", () => {
     );
     expect(reviewed.status).toBe(0);
     const review = JSON.parse(reviewed.stdout);
-    expect(review.schema).toBe("skit.security.review.v1");
+    expect(review.schema).toBe("skit.security.review.v2");
     const fingerprint = review.data.audit.findings[0].fingerprint as string;
     expect(review.data.assessment.outcome).toBe("warn");
 
@@ -267,7 +267,7 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v2",
+        schema: "skit.enable.v3",
         data: expect.objectContaining({ enabled: true }),
       }),
     );
@@ -295,7 +295,7 @@ describe("CLI contracts", () => {
     const acceptedReview = JSON.parse(accepted.stdout);
     expect(acceptedReview).toEqual(
       expect.objectContaining({
-        schema: "skit.security.accept.v1",
+        schema: "skit.security.accept.v2",
         data: expect.objectContaining({
           assessment: expect.objectContaining({ outcome: "warn" }),
           acceptances: expect.arrayContaining([
@@ -328,8 +328,8 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v2",
-      data: { collections: [], bindings: [] },
+      schema: "skit.list.v3",
+      data: { subjects: [], bindings: [] },
     });
     expect(result.stderr).toBe("");
   });
@@ -403,7 +403,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v3",
+        schema: "skit.add.v4",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],
@@ -471,7 +471,7 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v2");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v3");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(StateBindingsDocument)(
       await readFile(join(home, "state.json"), "utf8"),
@@ -519,14 +519,16 @@ describe("CLI contracts", () => {
       expect(readFileSync(join(repo, relative), "utf8")).toContain("# v1");
 
     const stateBefore = readFileSync(join(home, "state.json"));
+    const collectionId = JSON.parse(stateBefore.toString()).collections[0].collection_id as string;
     const codexBefore = readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"));
     await writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v2\n");
     for (const args of [
       ["disable", "review", "--for", "codex", "--repo", repo, "--dry-run", "--json"],
-      ["update", "review", "--dry-run", "--json"],
-      ["remove", "review", "--dry-run", "--json"],
+      ["remove", collectionId, "--dry-run", "--json"],
     ])
       expect(run(...args).status).toBe(0);
+    expect(run("update", "review", "--dry-run", "--json").status).toBe(12);
+    expect(run("remove", "review", "--dry-run", "--json").status).not.toBe(0);
     expect(readFileSync(join(home, "state.json"))).toEqual(stateBefore);
     expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"))).toEqual(
       codexBefore,

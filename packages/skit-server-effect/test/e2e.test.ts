@@ -277,7 +277,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       ]).stdout,
     );
     expect(createdDraft).toMatchObject({
-      schema: "skit.author.sync.v2",
+      schema: "skit.author.sync.v3",
       data: { status: "created", changed: true, revision_id: expect.any(String) },
     });
     skit(["author", "publish", authorSource, "--version", "1.0.0"]);
@@ -346,7 +346,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       skit(["author", "sync", authorSource, "--home", authorHome, "--json"]).stdout,
     );
     expect(preview).toMatchObject({
-      schema: "skit.author.sync.v2",
+      schema: "skit.author.sync.v3",
       data: {
         status: "merge_ready",
         changed: false,
@@ -357,7 +357,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       skit(["author", "sync", authorSource, "--home", authorHome, "--apply", "--json"]).stdout,
     );
     expect(merged).toMatchObject({
-      schema: "skit.author.sync.v2",
+      schema: "skit.author.sync.v3",
       data: { status: "merged", changed: true, revision_id: expect.any(String) },
     });
     expect(await readFile(join(authorSource, "README.md"), "utf8")).toContain("Edited remotely.");
@@ -544,7 +544,6 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
         ),
         global_bindings: Schema.Array(
           Schema.Struct({
-            collection_id: Schema.String,
             harness: Schema.String,
             skills: Schema.Array(Schema.String),
           }),
@@ -643,7 +642,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     const createdToken = await fetch(new URL("/api/tokens", registryUrl), {
       method: "POST",
       headers: { cookie, origin: registryUrl.origin, "content-type": "application/json" },
-      body: JSON.stringify({ name: "Portable E2E", scopes: ["library:sync"] }),
+      body: JSON.stringify({ name: "Library E2E", scopes: ["library:sync"] }),
     });
     expect(createdToken.status, await createdToken.clone().text()).toBe(201);
     token = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(
@@ -653,7 +652,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     first(["add", raw]);
     first(["add", gitRemote]);
     const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(4);
+    expect(retained.schemaVersion).toBe(5);
     expect(retained.collections).toHaveLength(2);
     expect(retained.global_bindings).toEqual([]);
     const collectionId = retained.collections[0].collection_id;
@@ -684,7 +683,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
       }),
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
-      schema: "skit.library.v4",
+      schema: "skit.library.v5",
       snapshot_digests: [selected!.digest],
       bindings: [],
     });
@@ -695,7 +694,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.acquisitions[0].observations).toEqual([]);
     expect(restored.global_bindings).toEqual([]);
@@ -736,7 +735,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect(first(["remove", collectionId])).toMatchObject({
-      data: { collection_id: collectionId },
+      data: { subject_id: collectionId, subject_kind: "collection" },
     });
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect(second(["sync"])).toMatchObject({

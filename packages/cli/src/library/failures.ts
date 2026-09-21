@@ -38,102 +38,20 @@ export class AuthorWorkspaceMetadataInvalid extends Data.TaggedError(
 }
 
 export class DirectoryAlreadyRetained extends Data.TaggedError("DirectoryAlreadyRetained")<{
-  collectionRef: string;
+  collectionId: string;
 }> {
   readonly code = "CONFLICT" as const;
   get message(): string {
-    return `This directory is already retained as ${this.collectionRef}; remove it before registering an Author Workspace`;
+    return `This directory is already retained as ${this.collectionId}; remove it before registering an Author Workspace`;
   }
 }
 
 export class AuthorWorkspaceAlreadyRegistered extends Data.TaggedError(
   "AuthorWorkspaceAlreadyRegistered",
-)<{ collectionRef: string; at: string }> {
+)<{ workspaceId: string; at: string }> {
   readonly code = "CONFLICT" as const;
   get message(): string {
-    return `Author Workspace ${this.collectionRef} is already registered at ${this.at}`;
-  }
-}
-
-/** The directory is already an editable Entry, so retaining a copy of it is the wrong move. */
-export class EditableEntryExists extends Data.TaggedError("EditableEntryExists")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `This directory is registered as ${this.collectionRef}; use that editable Entry instead of \`skit add .\``;
-  }
-}
-
-// -- Retention and identity ----------------------------------------------------------------------
-
-/**
- * An Installation exists for this Collection with Projections, but no Entry refers to it.
- *
- * Add would replace that Installation, and replacing it retires the Projections of any Skill the
- * incoming content drops. Compensation can put a retained release back, but not those Projections:
- * the Installation record that described them is gone once they are retired, and without an Entry
- * there is no Binding recording the Skill selection, invocation override or Scope to reproject
- * from. Rather than mutate and then be unable to restore, add refuses while the state is intact.
- */
-export class ProjectedInstallationWithoutEntry extends Data.TaggedError(
-  "ProjectedInstallationWithoutEntry",
-)<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `${this.collectionRef} has projected Skills but no Library Entry; run \`skit doctor\` and remove or repair it before adding it again`;
-  }
-}
-
-export class SourceAlreadyRetained extends Data.TaggedError("SourceAlreadyRetained")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Source ${this.collectionRef} already exists; use pull to update it`;
-  }
-}
-
-/**
- * A Source now resolves to a different Collection Identity than the one retained.
- *
- * The three places this happens differ only in what the operator should do next, which is why
- * that is a field rather than three conditions.
- */
-export class SourceIdentityChanged extends Data.TaggedError("SourceIdentityChanged")<{
-  from: string;
-  to?: string;
-  context: "update" | "pull" | "pin" | "author-workspace";
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    if (this.context === "author-workspace")
-      return `Author Workspace identity changed for ${this.from}`;
-    if (this.context === "pin")
-      return `Pinned source identity changed from ${this.from} to ${this.to}`;
-    if (this.context === "pull")
-      return `Source identity changed from ${this.from} to ${this.to}; remove and add it explicitly`;
-    return `Source identity changed from ${this.from} to ${this.to}`;
-  }
-}
-
-export class NoPortableLocator extends Data.TaggedError("NoPortableLocator")<{
-  displayId: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Device-local source ${this.displayId} has no portable locator`;
-  }
-}
-
-export class AcquiredEntryMismatch extends Data.TaggedError("AcquiredEntryMismatch")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Acquired Library Entry ${this.collectionRef} does not match its remote identity or digest`;
+    return `Author Workspace ${this.workspaceId} is already registered at ${this.at}`;
   }
 }
 
@@ -191,86 +109,5 @@ export class ExactReleaseUnavailable extends Data.TaggedError("ExactReleaseUnava
   readonly code = "NOT_FOUND" as const;
   get message(): string {
     return `Unable to acquire ${this.locator} at exact release ${this.version}: ${this.detail}`;
-  }
-}
-
-export class PinRequiresRegistry extends Data.TaggedError("PinRequiresRegistry")<{
-  collectionRef: string;
-  sourceType: string;
-}> {
-  readonly code = "INVALID_ARGUMENT" as const;
-  get message(): string {
-    return `Exact release pinning currently requires a Registry Entry; ${this.collectionRef} uses ${this.sourceType}`;
-  }
-}
-
-// -- Portable Library reconciliation ---------------------------------------------------------------
-//
-// Eight sites, every one CONFLICT. Reconciliation is where a portable manifest meets local
-// custody, and an operator resolving it needs to know which of these it hit.
-
-export class BindingEntryMissing extends Data.TaggedError("BindingEntryMissing")<{
-  collectionRef: string;
-  side: "local" | "remote";
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return this.side === "local"
-      ? `Cannot reconcile Binding for missing Library Entry ${this.collectionRef}`
-      : `Remote Binding references missing Library Entry ${this.collectionRef}`;
-  }
-}
-
-export class RepositoryMappingRequired extends Data.TaggedError("RepositoryMappingRequired")<{}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return "Remote repository Bindings require a local repository mapping";
-  }
-}
-
-export class RemoteEntryUsesLocalLocator extends Data.TaggedError("RemoteEntryUsesLocalLocator")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Remote Library Entry ${this.collectionRef} cannot use a local filesystem locator`;
-  }
-}
-
-export class EntryDoesNotMatchAcquired extends Data.TaggedError("EntryDoesNotMatchAcquired")<{
-  collectionRef: string;
-  acquiredRef: string;
-  digest: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Library Entry ${this.collectionRef} does not match acquired ${this.acquiredRef} or digest ${this.digest}`;
-  }
-}
-
-export class BindingSkillUnavailable extends Data.TaggedError("BindingSkillUnavailable")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Remote Binding for ${this.collectionRef} references an unavailable skill`;
-  }
-}
-
-export class NoPortableRepositoryIdentity extends Data.TaggedError("NoPortableRepositoryIdentity")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Repository binding for ${this.collectionRef} has no portable repository identity`;
-  }
-}
-
-export class NoPortableGitRevision extends Data.TaggedError("NoPortableGitRevision")<{
-  collectionRef: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Git Entry ${this.collectionRef} has no recorded commit. Run skit update ${this.collectionRef} explicitly before syncing; the retained historical revision cannot be inferred.`;
   }
 }

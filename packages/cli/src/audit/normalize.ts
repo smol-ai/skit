@@ -1,8 +1,8 @@
 import type { HarnessName } from "@smolai/skit-core";
 import type { AuditObservation, AuditReport } from "./types.js";
-import type { AuditEntryV1Alpha3, AuditReportV1Alpha3 } from "./schema.js";
+import type { AuditEntryV1Alpha4, AuditReportV1Alpha4 } from "./schema.js";
 
-type IndexedEntry = AuditEntryV1Alpha3 & {
+type IndexedEntry = AuditEntryV1Alpha4 & {
   sourceKind: AuditObservation["kind"];
   sourceName: string;
   sourceLocation: string | null;
@@ -21,11 +21,11 @@ function auditEntryBase(observation: AuditObservation, id: string) {
   };
 }
 
-export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha3 {
+export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha4 {
   const indexed: IndexedEntry[] = report.observations.map((observation, index) => {
     const id = `entry:${observation.kind}:${index + 1}`;
     const base = auditEntryBase(observation, id);
-    const entry: AuditEntryV1Alpha3 = (() => {
+    const entry: AuditEntryV1Alpha4 = (() => {
       switch (observation.kind) {
         case "skill":
           return {
@@ -68,7 +68,7 @@ export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha3 {
     };
   });
 
-  const entriesFor = (kind: AuditObservation["kind"]): AuditEntryV1Alpha3[] =>
+  const entriesFor = (kind: AuditObservation["kind"]): AuditEntryV1Alpha4[] =>
     indexed
       .filter((capability) => capability.sourceKind === kind)
       .map(
@@ -88,7 +88,7 @@ export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha3 {
   ]);
 
   return {
-    schemaVersion: "v1alpha3",
+    schemaVersion: "v1alpha4",
     generatedAt: report.generatedAt,
     roots: { home: report.home, cwd: report.cwd },
     harnesses: [...harnessIds].sort().map((id) => {
@@ -104,11 +104,11 @@ export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha3 {
         entryIds: indexed.filter((entry) => entry.harnessIds.includes(id)).map((entry) => entry.id),
       };
     }),
-    skills: entriesFor("skill") as AuditReportV1Alpha3["skills"],
-    plugins: entriesFor("plugin") as AuditReportV1Alpha3["plugins"],
-    mcpServers: entriesFor("mcp-server") as AuditReportV1Alpha3["mcpServers"],
-    rules: entriesFor("rule") as AuditReportV1Alpha3["rules"],
-    marketplaces: entriesFor("marketplace") as AuditReportV1Alpha3["marketplaces"],
+    skills: entriesFor("skill") as AuditReportV1Alpha4["skills"],
+    plugins: entriesFor("plugin") as AuditReportV1Alpha4["plugins"],
+    mcpServers: entriesFor("mcp-server") as AuditReportV1Alpha4["mcpServers"],
+    rules: entriesFor("rule") as AuditReportV1Alpha4["rules"],
+    marketplaces: entriesFor("marketplace") as AuditReportV1Alpha4["marketplaces"],
     findings: report.findings.map((finding, index) => {
       const entryIds = indexed
         .filter(

@@ -13,6 +13,7 @@ import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { classifyFailure } from "../src/failure-classification.js";
+import { AcceptedBaseInvalid } from "../src/workflows/library/library-sync-state.js";
 import {
   Conflict,
   InvalidArgument,
@@ -20,6 +21,7 @@ import {
   OperationFailed,
   TargetCollision,
   ValidationFailed,
+  errorMessage,
 } from "../src/presentation/command-errors.js";
 
 const taxonomy = [
@@ -67,6 +69,15 @@ describe("declared exit codes", () => {
       expect(error.exitCode).toBeGreaterThan(0);
     }
     expect(new Set(taxonomy.map((error) => error.code)).size).toBe(taxonomy.length);
+  });
+
+  test("message-less tagged failures retain their detail", () => {
+    const failure = new AcceptedBaseInvalid({
+      path: "/tmp/library-sync.json",
+      detail: "invalid accepted sync base",
+    });
+    expect(failure.message).toBe("");
+    expect(errorMessage(failure)).toBe("invalid accepted sync base");
   });
 });
 

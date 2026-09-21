@@ -13,7 +13,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
-import { presentPortableSetEnabled } from "../handlers/library/set-enabled.js";
+import { presentSetEnabled } from "../handlers/library/set-enabled.js";
 import type { Prompter } from "../presentation/prompter.js";
 import type { Renderer } from "../presentation/renderer.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
@@ -36,11 +36,11 @@ const skillId = makeSkillId();
 const acquisitionId = makeAcquisitionId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 4,
+  schemaVersion: 5,
   collections: [
     {
       collection_id: collectionId,
-      display_name: "review-tools",
+      label: "review-tools",
     },
   ],
   skills: [
@@ -117,7 +117,7 @@ const previewEnable = Effect.scoped(
     return yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
       yield* store.publish(storyState);
-      yield* presentPortableSetEnabled({
+      yield* presentSetEnabled({
         action: "enable",
         enabled: true,
         requested: "codex",

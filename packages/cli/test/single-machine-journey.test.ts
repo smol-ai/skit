@@ -48,16 +48,17 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     return Schema.decodeUnknownSync(contract.schema)(envelope.data);
   }
 
-  expect(succeed(outputContracts.list, "list")).toMatchObject({ collections: [], bindings: [] });
+  expect(succeed(outputContracts.list, "list")).toMatchObject({ subjects: [], bindings: [] });
 
   const added = succeed(outputContracts.add, "add", source);
   const collectionId = added.collection_id;
+  if (collectionId === undefined) throw new Error("expected source-tree Collection");
   const initialList = succeed(outputContracts.list, "list");
   expect(initialList).toMatchObject({
-    collections: [expect.objectContaining({ collection_id: collectionId })],
+    subjects: [expect.objectContaining({ subject_id: collectionId })],
     bindings: [],
   });
-  const skill = initialList.collections[0]?.skills.find(
+  const skill = initialList.subjects[0]?.skills.find(
     (candidate) => candidate.name === "code-review",
   );
   expect(skill).toBeDefined();
@@ -68,7 +69,6 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
   expect(succeed(outputContracts.list, "list").bindings).toEqual([
     expect.objectContaining({
-      collection_id: collectionId,
       harness: "codex",
       skills: [skill!.skill_id],
     }),
@@ -109,5 +109,5 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
   expect(succeed(outputContracts.list, "list").bindings).toEqual([]);
 
   succeed(outputContracts.remove, "remove", collectionId);
-  expect(succeed(outputContracts.list, "list")).toMatchObject({ collections: [], bindings: [] });
+  expect(succeed(outputContracts.list, "list")).toMatchObject({ subjects: [], bindings: [] });
 }, 30_000);

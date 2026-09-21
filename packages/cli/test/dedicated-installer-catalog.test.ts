@@ -29,11 +29,14 @@ it.effect("rejects known GitHub Sources with their dedicated installer guidance"
 it.effect("does not classify unrelated or local Sources as dedicated-installer Sources", () =>
   Effect.sync(() => {
     assert.strictEqual(
-      dedicatedInstallerForSource({ type: "git", ref: "https://github.com/acme/skills.git" }),
+      dedicatedInstallerForSource({
+        type: "git",
+        locator: "https://github.com/acme/skills.git",
+      }),
       undefined,
     );
     assert.strictEqual(
-      dedicatedInstallerForSource({ type: "local", ref: "/work/pbakaus/impeccable" }),
+      dedicatedInstallerForSource({ type: "local", locator: "/work/pbakaus/impeccable" }),
       undefined,
     );
   }),

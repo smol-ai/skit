@@ -56,7 +56,7 @@ export const serverDiscoverySchema = Schema.Struct({
 });
 export type ServerDiscovery = typeof serverDiscoverySchema.Type;
 
-export const PortableLibraryRevision = Schema.Union([
+export const LegacyLibraryRevisionV2 = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("git"),
     commit: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)),
@@ -65,37 +65,37 @@ export const PortableLibraryRevision = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("release"), version: Schema.NonEmptyString }),
   Schema.Struct({ kind: Schema.Literal("unversioned") }),
 ]);
-export type PortableLibraryRevision = typeof PortableLibraryRevision.Type;
-export const PortableLibraryEntry = Schema.Struct({
+export type LegacyLibraryRevisionV2 = typeof LegacyLibraryRevisionV2.Type;
+export const LegacyLibraryEntryV2 = Schema.Struct({
   collection_ref: Schema.NonEmptyString,
-  revision: PortableLibraryRevision,
+  revision: LegacyLibraryRevisionV2,
   locator: Schema.NonEmptyString,
   content_digest: Digest,
 });
-export type PortableLibraryEntry = typeof PortableLibraryEntry.Type;
-export const PortableLibraryScope = Schema.Union([
+export type LegacyLibraryEntryV2 = typeof LegacyLibraryEntryV2.Type;
+export const LegacyLibraryScopeV2 = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("global") }),
   Schema.Struct({ kind: Schema.Literal("repository"), repository: Schema.NonEmptyString }),
 ]);
-export type PortableLibraryScope = typeof PortableLibraryScope.Type;
-export const PortableLibraryBinding = Schema.Struct({
+export type LegacyLibraryScopeV2 = typeof LegacyLibraryScopeV2.Type;
+export const LegacyLibraryBindingV2 = Schema.Struct({
   collection_ref: Schema.NonEmptyString,
   harness: HarnessName,
-  scope: PortableLibraryScope,
+  scope: LegacyLibraryScopeV2,
   skills: Schema.mutable(Schema.Array(Schema.NonEmptyString)).check(
     Schema.makeFilter((skills) => new Set(skills).size === skills.length, {
       message: "Library Binding skills must be unique",
     }),
   ),
 });
-export type PortableLibraryBinding = typeof PortableLibraryBinding.Type;
-const LibraryEntries = Schema.mutable(Schema.Array(PortableLibraryEntry)).check(
+export type LegacyLibraryBindingV2 = typeof LegacyLibraryBindingV2.Type;
+const LegacyLibraryEntriesV2 = Schema.mutable(Schema.Array(LegacyLibraryEntryV2)).check(
   Schema.makeFilter(
     (entries) => new Set(entries.map((entry) => entry.collection_ref)).size === entries.length,
     { message: "Library Entries must have unique collection_ref values" },
   ),
 );
-const LibraryBindings = Schema.mutable(Schema.Array(PortableLibraryBinding)).check(
+const LegacyLibraryBindingsV2 = Schema.mutable(Schema.Array(LegacyLibraryBindingV2)).check(
   Schema.makeFilter(
     (bindings) =>
       new Set(
@@ -111,13 +111,13 @@ const LibraryBindings = Schema.mutable(Schema.Array(PortableLibraryBinding)).che
     { message: "Library Bindings must have unique SKIT, harness, and scope keys" },
   ),
 );
-export const LibraryManifest = Schema.Struct({
+export const LegacyLibraryManifestV2 = Schema.Struct({
   schema: Schema.Literal("skit.library.v2").annotate({
     message:
       "Unsupported Library Manifest: expected skit.library.v2. Upgrade the CLI and Registry together; old manifests must be recreated.",
   }),
-  entries: LibraryEntries,
-  bindings: LibraryBindings,
+  entries: LegacyLibraryEntriesV2,
+  bindings: LegacyLibraryBindingsV2,
 }).check(
   Schema.makeFilter(
     (manifest) => {
@@ -127,17 +127,17 @@ export const LibraryManifest = Schema.Struct({
     { message: "Library Bindings must reference an Entry in the same manifest" },
   ),
 );
-export type LibraryManifest = typeof LibraryManifest.Type;
+export type LegacyLibraryManifestV2 = typeof LegacyLibraryManifestV2.Type;
 export const libraryWriteRequestSchema = Schema.Struct({
   expected_revision_id: Schema.optional(Schema.NullOr(nonEmpty)),
-  manifest: LibraryManifest,
+  manifest: LegacyLibraryManifestV2,
 });
 export const libraryResponseSchema = Schema.Struct({
   library: Schema.Struct({
     library_id: nonEmpty,
     revision_id: nonEmpty,
-    manifest: LibraryManifest,
+    manifest: LegacyLibraryManifestV2,
   }),
 });
-export type LibraryWriteRequest = typeof libraryWriteRequestSchema.Type;
-export type LibraryResponse = typeof libraryResponseSchema.Type;
+export type LegacyLibraryWriteRequestV2 = typeof libraryWriteRequestSchema.Type;
+export type LegacyLibraryResponseV2 = typeof libraryResponseSchema.Type;

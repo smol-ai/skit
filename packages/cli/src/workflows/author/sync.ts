@@ -233,7 +233,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
   });
 });
 
-export function authorRef(remote: AuthorRemoteHome): string {
+export function skitLocator(remote: AuthorRemoteHome): string {
   const authority = new URL(remote.origin).host;
   return `skit://${authority}/${remote.namespace}/${remote.skit}`;
 }
@@ -377,7 +377,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const configuredBase = options.baseUrl ?? process.env.SKIT_SERVER_URL;
   const storedRemote = yield* readAuthorRemoteEffect(root);
   if (storedRemote && options.to)
-    return yield* new AuthorRemoteAlreadyExists({ ref: authorRef(storedRemote) });
+    return yield* new AuthorRemoteAlreadyExists({ locator: skitLocator(storedRemote) });
   if (storedRemote && options.visibility)
     return yield* new VisibilityNotAccepted({ reason: "already-synced" });
   if (!storedRemote && !options.to)
@@ -434,12 +434,12 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const local = yield* readTree(root);
   const localDescriptor = validation.descriptor;
   const wireDescriptor = { ...localDescriptor, id: `${owner}/${slug}` };
-  const identity = authorRef(remote);
+  const locator = skitLocator(remote);
   const read = yield* client.drafts
     .read({ params: { owner, slug } })
     .pipe((effect) => mapRegistryFailureCause(effect, (error) => error), Effect.result);
   if (Result.isFailure(read) && Schema.is(DraftNotFoundResponse)(read.failure)) {
-    if (storedRemote) return yield* new RemoteDraftUnavailable({ identity });
+    if (storedRemote) return yield* new RemoteDraftUnavailable({ identity: locator });
     if (!storedRemote && !options.apply)
       return {
         status: "first_sync_ready" as const,
@@ -448,7 +448,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
           authority: remote.origin,
           namespace: remote.namespace,
           skit: remote.skit,
-          ref: identity,
+          locator,
         },
         visibility: options.visibility!,
         file_count: Object.keys(local).length,
@@ -473,7 +473,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
         mapRegistryFailureCause(effect, (error) => mapAuthorFailure("draft create", 201, error)),
       );
     const state = yield* readState(options.home);
-    state[identity] = {
+    state[locator] = {
       skitId: `${owner}/${slug}`,
       revisionId: created.draft.revision_id,
       bundleDigest: created.draft.bundle_digest,
@@ -488,7 +488,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
         authority: remote.origin,
         namespace: remote.namespace,
         skit: remote.skit,
-        ref: identity,
+        locator,
       },
       visibility: options.visibility ?? "private",
       revision_id: created.draft.revision_id,
@@ -503,7 +503,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const remoteResponse = read.success;
   if (remoteResponse.draft.descriptor.id !== `${owner}/${slug}`)
     return yield* new RemoteDraftIdentityMismatch();
-  if (!storedRemote) return yield* new DestinationExistsWithoutHistory({ identity });
+  if (!storedRemote) return yield* new DestinationExistsWithoutHistory({ identity: locator });
   const remoteFiles = Object.fromEntries(
     remoteResponse.draft.files.map((file) => [
       file.path,
@@ -511,11 +511,11 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     ]),
   );
   const state = yield* readState(options.home);
-  const binding = state[identity];
+  const binding = state[locator];
   if (!binding) {
     if (!sameFiles(local, remoteFiles))
       return { status: "unbound_conflict" as const, changed: false, conflicts: [] };
-    state[identity] = {
+    state[locator] = {
       skitId: `${owner}/${slug}`,
       revisionId: remoteResponse.draft.revision_id,
       bundleDigest: remoteResponse.draft.bundle_digest,
@@ -596,7 +596,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   }
   for (const path of Object.keys(local))
     if (!plan.files[path]) yield* fs.remove(join(root, ...path.split("/")));
-  state[identity] = {
+  state[locator] = {
     skitId: `${owner}/${slug}`,
     revisionId: updated.draft.revision_id,
     bundleDigest: updated.draft.bundle_digest,

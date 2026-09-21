@@ -2,7 +2,13 @@ import { copyLocalTreeEffect } from "../platform/copy-tree.js";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
-import { HarnessName, OwnershipMarker, type Digest, type InvocationPolicy } from "../contracts.js";
+import {
+  HarnessName,
+  OwnershipMarker,
+  OwnershipMarkerV2,
+  type Digest,
+  type InvocationPolicy,
+} from "../contracts.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { applyInvocationPolicyEffect, type InvocationIntent } from "./policy.js";
 import { deterministicTreeHashEffect } from "../artifact/skit.js";
@@ -19,12 +25,11 @@ import {
   UnsafeProjectionName,
 } from "../failures.js";
 import {
-  type CollectionId as CollectionIdType,
   type ProjectionId as ProjectionIdType,
   type SkillId as SkillIdType,
   type SkillVersionId as SkillVersionIdType,
 } from "../library/entity-ids.js";
-import type { ManagedProjection } from "../library/portable-local-state.js";
+import type { ManagedProjection } from "../library/library-state.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 const ADOPTION_RECOVERY_FILE = ".skit-adoption-recovery.json";
@@ -42,7 +47,7 @@ export type RetireProjectionResult =
 
 export interface MaterializeProjectionRequest {
   /** Projection custody coordinate and retained root, without a publication contract. */
-  installation: { readonly collectionId: CollectionIdType; readonly libraryPath: string };
+  installation: { readonly libraryPath: string };
   skill: {
     readonly skillId: SkillIdType;
     readonly skillVersionId: SkillVersionIdType;
@@ -68,7 +73,6 @@ export interface MaterializeProjectionRequest {
   state: ProjectionState;
   identity: {
     readonly projectionId: ProjectionIdType;
-    readonly collectionId: CollectionIdType;
     readonly skillId: SkillIdType;
     readonly skillVersionId: SkillVersionIdType;
   };
@@ -145,9 +149,13 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
   if (!value || typeof value !== "object" || Array.isArray(value))
     return { kind: "invalid", detail: "Ownership marker must be a JSON object" };
   const decoded = Schema.decodeUnknownOption(OwnershipMarker)(value);
-  return decoded._tag === "Some"
-    ? { kind: "valid", marker: decoded.value }
-    : { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
+  if (decoded._tag === "Some") return { kind: "valid", marker: decoded.value };
+  const legacy = Schema.decodeUnknownOption(OwnershipMarkerV2)(value);
+  if (legacy._tag === "Some") {
+    const { collection_id: _collectionId, ...fields } = legacy.value;
+    return { kind: "valid", marker: { ...fields, schemaVersion: 3 } };
+  }
+  return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
 }
 
 const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_digest;
@@ -157,13 +165,11 @@ const markerMatches = (
   request: Pick<MaterializeProjectionRequest, "identity">,
 ) =>
   marker.projection_id === request.identity.projectionId &&
-  marker.collection_id === request.identity.collectionId &&
   marker.skill_id === request.identity.skillId &&
   marker.skill_version_id === request.identity.skillVersionId;
 
 const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.projection_id === right.projection_id &&
-  left.collection_id === right.collection_id &&
   left.skill_id === right.skill_id &&
   left.skill_version_id === right.skill_version_id &&
   left.expected_digest === right.expected_digest &&
@@ -174,10 +180,9 @@ const ownershipMarker = (
   projectionId: ProjectionIdType,
   expectedHash: Digest,
 ): OwnershipMarker => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   projectionPolicyVersion: 1,
   projection_id: request.identity.projectionId,
-  collection_id: request.identity.collectionId,
   skill_id: request.identity.skillId,
   skill_version_id: request.identity.skillVersionId,
   expected_digest: expectedHash,
@@ -213,7 +218,7 @@ export function expectedProjectionHashResult(
   if (marker && projection.expected_digest !== markerExpectedHash(marker))
     return Result.fail(
       new OwnershipMarkerDisagrees({
-        skillRef: projection.skill_id,
+        skillId: projection.skill_id,
         harness: projection.harness,
       }),
     );
@@ -248,7 +253,6 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
       const desiredHash = yield* deterministicTreeHashEffect(temporary);
       const projection: ManagedProjection = {
         projection_id: projectionId,
-        collection_id: request.identity.collectionId,
         skill_id: request.identity.skillId,
         skill_version_id: request.identity.skillVersionId,
         harness,

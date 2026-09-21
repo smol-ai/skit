@@ -1,0 +1,39 @@
+{
+  "$id": "skit.update.plan.v4",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "subject_id": {
+        "type": "string"
+      },
+      "subject_kind": {
+        "type": "string",
+        "enum": [
+          "collection",
+          "skill"
+        ]
+      },
+      "current_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "available_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "changed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "subject_id",
+      "subject_kind",
+      "current_snapshot_digest",
+      "available_snapshot_digest",
+      "changed"
+    ],
+    "additionalProperties": true
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

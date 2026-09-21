@@ -57,7 +57,6 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   ]);
   expect(enabledCollectionData.bindings).toEqual([
     expect.objectContaining({
-      collection_id: sourceData.collection_id,
       harness: "codex",
       skills: enabledSkillIds,
     }),
@@ -69,13 +68,12 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   const listed = run("list");
   expect(listed.status, listed.stderr).toBe(0);
   const listing = JSON.parse(listed.stdout).data;
-  const collection = listing.collections.find(
-    (entry: { collection_id: string }) => entry.collection_id === sourceData.collection_id,
+  const collection = listing.subjects.find(
+    (entry: { subject_id: string }) => entry.subject_id === sourceData.collection_id,
   );
   expect(collection).toBeDefined();
   expect(listing.bindings).toContainEqual(
     expect.objectContaining({
-      collection_id: collection.collection_id,
       harness: "codex",
       skills: expect.arrayContaining(enabledSkillIds),
     }),
@@ -135,8 +133,8 @@ test("retains GitHub collection identity through add, enable, and list", async (
   const listed = run("list");
   expect(listed.status, listed.stderr).toBe(0);
   const listing = JSON.parse(listed.stdout).data;
-  const collection = listing.collections.find(
-    (entry: { display_id?: string }) => entry.display_id === "mattpocock/skills",
+  const collection = listing.subjects.find(
+    (entry: { label?: string }) => entry.label === "mattpocock/skills",
   );
   expect(collection).toBeDefined();
   const codeReview = collection.skills.find(
@@ -145,7 +143,6 @@ test("retains GitHub collection identity through add, enable, and list", async (
   expect(codeReview).toBeDefined();
   expect(listing.bindings).toContainEqual(
     expect.objectContaining({
-      collection_id: collection!.collection_id,
       harness: "codex",
       skills: [codeReview!.skill_id],
     }),
@@ -155,7 +152,7 @@ test("retains GitHub collection identity through add, enable, and list", async (
   const ownership = await readFile(join(codexRoot, "code-review", ".skit-ownership.json"), "utf8");
   expect(
     JSON.parse(persisted).collections.some(
-      (entry: { display_name?: string }) => entry.display_name === "mattpocock/skills",
+      (entry: { label?: string }) => entry.label === "mattpocock/skills",
     ),
   ).toBe(true);
   expect(ownership).toContain(codeReview!.skill_id);

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename, dirname, sep } from "node:path";
-import type { HarnessName, PortableLibraryInventory } from "@smolai/skit-core";
+import type { HarnessName, LibraryInventory } from "@smolai/skit-core";
 import { harnessLabel } from "../harness/catalog.js";
 import { conditionHeadline, projectionStatusLabel } from "./condition-language.js";
 import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
@@ -26,7 +26,7 @@ const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
     case "repository":
       return ["Installed by: repository"];
     case "authored":
-      return [`Authored Collection: ${owner.collectionRef}`];
+      return [`Authored Collection: ${owner.skitLocator}`];
     case "invalid-marker":
       return ["Installed by: invalid SKIT ownership marker"];
     case "unknown":
@@ -124,7 +124,7 @@ const explicitCollectionKey = (instance: MachineInstance): string | undefined =>
     case "skit":
       return `skit:${instance.owner.membership.collectionId}`;
     case "authored":
-      return `authored:${instance.owner.collectionId ?? instance.owner.collectionRef}`;
+      return `authored:${instance.owner.collectionId ?? instance.owner.skitLocator}`;
     case "skills-sh":
       return `skills-sh:${instance.owner.source}`;
     case "invalid-marker":
@@ -202,7 +202,7 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
         { names: string[]; facts: readonly string[]; patterns: readonly string[] }
       >();
       for (const { name, instances: skillInstances } of bySkill.values()) {
-        const collectionRefs = [
+        const collectionKeys = [
           ...new Set(
             skillInstances
               .map(explicitCollectionKey)
@@ -219,7 +219,7 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
             ),
           ),
         ].sort();
-        const collectionKey = collectionRefs.length === 1 ? collectionRefs[0] : `skill:${name}`;
+        const collectionKey = collectionKeys.length === 1 ? collectionKeys[0] : `skill:${name}`;
         const key = JSON.stringify([collectionKey, facts, patterns]);
         const cohort = cohorts.get(key) ?? { names: [], facts, patterns };
         cohort.names.push(name);
@@ -271,7 +271,7 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
   return lines.join("\n");
 };
 
-const inventoryFindings = (state: PortableLibraryInventory): string[] => {
+const inventoryFindings = (state: LibraryInventory): string[] => {
   const lines: string[] = [];
   if (state.custodyIssues?.length) {
     lines.push(`Custody issues · ${state.custodyIssues.length}`);
@@ -308,7 +308,7 @@ const inventoryFindings = (state: PortableLibraryInventory): string[] => {
 };
 
 export function renderInventory(
-  state: PortableLibraryInventory,
+  state: LibraryInventory,
   machine?: MachineInventoryResult["machine"],
 ): string {
   const groups = new Map<string, string[]>();

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { auditSkill, evaluateSkillAudit, skillFindingFingerprint } from "../src/index.js";
+import { makeSkillVersionId } from "../src/library/entity-ids.js";
 
 describe("static capability evidence", () => {
   const digest = `sha256:${"a".repeat(64)}` as const;
+  const skillVersionId = makeSkillVersionId();
 
   test("uses portable evidence identity only for resolved Skill Artifacts", () => {
     const left = auditSkill('spawn("sh")', {
@@ -56,7 +58,7 @@ describe("static capability evidence", () => {
     const acceptance = {
       fingerprint: audit.findings[0].fingerprint!,
       artifactContentDigest: digest,
-      skillRef: "test/tools:review",
+      skill_version_id: skillVersionId,
       context: "project" as const,
       principal: "principal:test",
       rationale: "Reviewed exact evidence",
@@ -122,7 +124,7 @@ describe("static capability evidence", () => {
     const acceptanceFor = (index: number) => ({
       fingerprint: audit.findings[index].fingerprint!,
       artifactContentDigest: digest,
-      skillRef: "test/tools:review",
+      skill_version_id: skillVersionId,
       context: "project" as const,
       principal: "principal:test",
       rationale: "Reviewed exact evidence",
@@ -264,7 +266,7 @@ describe("static capability evidence", () => {
     const acceptedVisibleFindings = audit.findings.map((finding) => ({
       fingerprint: finding.fingerprint!,
       artifactContentDigest: digest,
-      skillRef: "test/tools:review",
+      skill_version_id: skillVersionId,
       context: "project" as const,
       principal: "principal:test",
       rationale: "Reviewed visible evidence",

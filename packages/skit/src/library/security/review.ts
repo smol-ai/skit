@@ -8,16 +8,16 @@ import {
 } from "../../failures.js";
 import { LibraryStore } from "../store/library-store.js";
 import { auditSkill, evaluateSkillAudit } from "../../auditing/skill-audit.js";
-import type { LibraryState } from "../portable-local-state.js";
+import type { LibraryState } from "../library-state.js";
 import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
 import { retainedTreePath } from "../retention/retain-tree.js";
 
-const portableSecuritySkill = Effect.fn("Library.portableSecuritySkill")(function* (
+const securitySkill = Effect.fn("Library.securitySkill")(function* (
   state: LibraryState,
   query: string,
 ) {
   const matches = state.collections.flatMap((collection) => {
-    const collectionMatch = [collection.collection_id, collection.display_name].includes(query);
+    const collectionMatch = [collection.collection_id, collection.label].includes(query);
     return state.skills
       .filter((candidate) => candidate.collection_id === collection.collection_id)
       .flatMap((skill) => {
@@ -45,15 +45,16 @@ const portableSecuritySkill = Effect.fn("Library.portableSecuritySkill")(functio
         return member === undefined || tree === undefined ? [] : [{ version, skill, member, tree }];
       });
   });
-  if (matches.length !== 1) return yield* new UnknownInstalledSkill({ skillRef: query });
+  if (matches.length !== 1) return yield* new UnknownInstalledSkill({ query });
   return matches[0]!;
 });
 
-export const portableSecurityReviewFromStateEffect = Effect.fn(
-  "Library.portableSecurityReviewSnapshot",
-)(function* (state: LibraryState, query: string) {
+export const securityReviewFromStateEffect = Effect.fn("Library.securityReviewSnapshot")(function* (
+  state: LibraryState,
+  query: string,
+) {
   const store = yield* LibraryStore;
-  const { version, member, tree } = yield* portableSecuritySkill(state, query);
+  const { version, member, tree } = yield* securitySkill(state, query);
   const originalPath = retainedTreePath(store.originalsPath, tree.digest);
   const skillPath =
     member.source_path === "." ? originalPath : join(originalPath, member.source_path);
@@ -73,7 +74,7 @@ export const portableSecurityReviewFromStateEffect = Effect.fn(
   const evaluatedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const acceptances = state.assessmentAcceptances ?? [];
   return {
-    skillRef: version.skill_version_id,
+    skill_version_id: version.skill_version_id,
     artifactContentDigest: version.artifact_digest,
     audit,
     assessment: evaluateSkillAudit(audit, {
@@ -83,7 +84,7 @@ export const portableSecurityReviewFromStateEffect = Effect.fn(
       evaluatedAt,
     }),
     acceptances: acceptances
-      .filter((acceptance) => acceptance.skillRef === version.skill_version_id)
+      .filter((acceptance) => acceptance.skill_version_id === version.skill_version_id)
       .map((acceptance) => ({
         ...acceptance,
         status:
@@ -96,8 +97,8 @@ export const portableSecurityReviewFromStateEffect = Effect.fn(
   } satisfies SkillSecurityReview;
 });
 
-export const acceptPortableSecurityFindingFromStateEffect = Effect.fn(
-  "Library.acceptPortableSecurityFindingSnapshot",
+export const acceptSecurityFindingFromStateEffect = Effect.fn(
+  "Library.acceptSecurityFindingSnapshot",
 )(function* (
   state: LibraryState,
   query: string,
@@ -125,13 +126,13 @@ export const acceptPortableSecurityFindingFromStateEffect = Effect.fn(
       return yield* new AcceptanceIncomplete({ reason: "expiry-in-past" });
     expiresAt = new Date(parsed).toISOString();
   }
-  const review = yield* portableSecurityReviewFromStateEffect(state, query);
+  const review = yield* securityReviewFromStateEffect(state, query);
   if (!review.audit.findings.some((finding) => finding.fingerprint === input.fingerprint))
     return yield* new SecurityFindingAbsent({ fingerprint: input.fingerprint });
   const acceptance: SkillAssessmentAcceptance = {
     fingerprint: input.fingerprint,
     artifactContentDigest: review.artifactContentDigest,
-    skillRef: review.skillRef,
+    skill_version_id: review.skill_version_id,
     context: "project",
     principal: input.principal.trim(),
     rationale: input.rationale.trim(),
@@ -143,5 +144,5 @@ export const acceptPortableSecurityFindingFromStateEffect = Effect.fn(
     assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
   };
   yield* (yield* LibraryStore).publish(next);
-  return yield* portableSecurityReviewFromStateEffect(next, review.skillRef);
+  return yield* securityReviewFromStateEffect(next, review.skill_version_id);
 });

@@ -5,7 +5,7 @@ import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import {
   inspectOwnershipMarkerEffect,
-  portableManifestFromLocalStateEffect,
+  libraryManifestFromLocalStateEffect,
   retainedTreePath,
   skitLayer,
 } from "@smolai/skit-core";
@@ -81,6 +81,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
     });
     expect(state.collections).toHaveLength(2);
     expect(state.collections.every((collection) => collection.upstream === undefined)).toBe(true);
+    expect(state.skills.every((skill) => skill.collection_id !== undefined)).toBe(true);
     expect(state.retained_copies).toHaveLength(2);
     expect(state.projections).toEqual([
       expect.objectContaining({ path: managedSkill, status: "installed" }),
@@ -97,7 +98,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
     expect(yield* fs.readFileString(join(repositorySkill, "SKILL.md"))).toBe(
       skillDocument("repo-only", "Repository skill"),
     );
-    expect((yield* portableManifestFromLocalStateEffect(state)).snapshot_digests).toEqual(
+    expect((yield* libraryManifestFromLocalStateEffect(state)).snapshot_digests).toEqual(
       state.retained_copies.map((copy) => copy.digest).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

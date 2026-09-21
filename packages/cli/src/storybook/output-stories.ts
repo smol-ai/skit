@@ -32,7 +32,6 @@ const failureStory = (name: string, failure: CommandFailure): OutputStory =>
   OutputStory.Failure({ group: "failure", name, failure });
 
 const digest = `sha256:${"0".repeat(64)}`;
-const skillRef = "skill-version-story";
 const collectionId = makeCollectionId();
 const versionId = makeRetainedCopyId();
 const otherVersionId = makeRetainedCopyId();
@@ -40,8 +39,7 @@ const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
 const retainedTreeId = makeRetainedCopyId();
 const projectionId = makeProjectionId();
-const portableBinding = {
-  collection_id: collectionId,
+const binding = {
   harness: "codex" as const,
   scope: { kind: "global" as const },
   skills: [skillId],
@@ -159,6 +157,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   }),
   resultStory("add", "retained", outputContracts.add, {
     collection_id: collectionId,
+    skill_ids: [skillId],
     retained_version_id: versionId,
     snapshot_digest: digest,
     skills: [{ name: "review", verbatim_path: "." }],
@@ -168,12 +167,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     skills: [{ name: "review", verbatim_path: "." }],
   }),
   resultStory("pull", "current", outputContracts.pull, []),
-  resultStory("list", "empty", outputContracts.list, { collections: [], bindings: [] }),
+  resultStory("list", "empty", outputContracts.list, { subjects: [], bindings: [] }),
   resultStory("list", "populated", outputContracts.list, {
-    collections: [
+    subjects: [
       {
-        collection_id: collectionId,
-        display_id: "story/review",
+        subject_id: collectionId,
+        subject_kind: "collection",
+        label: "story/review",
         skills: [
           {
             name: "review",
@@ -184,17 +184,17 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         ],
       },
     ],
-    bindings: [{ collection_id: collectionId, harness: "codex", skills: [skillId] }],
+    bindings: [{ harness: "codex", skills: [skillId] }],
   }),
   resultStory("security-review", "clean", outputContracts.securityReview, {
-    skillRef,
+    skill_version_id: skillVersionId,
     artifactContentDigest: digest,
     audit: emptyAudit,
     assessment: emptyAssessment,
     acceptances: [],
   }),
   resultStory("security-accept", "clean", outputContracts.securityAccept, {
-    skillRef,
+    skill_version_id: skillVersionId,
     artifactContentDigest: digest,
     audit: emptyAudit,
     assessment: emptyAssessment,
@@ -257,11 +257,10 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("inventory", "empty", outputContracts.inventory, {
-    schemaVersion: 4,
+    schemaVersion: 5,
     skills: [],
     projections: [],
     unmanaged: [],
-    adoption_receipts: [],
     machine: {
       repositoryRoots: ["/home/story/dev"],
       repositoryDecisions: [],
@@ -310,8 +309,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   }),
   resultStory("check", "current", outputContracts.check, [
     {
-      collection_id: collectionId,
-      display_name: "review-tools",
+      subject_id: collectionId,
+      subject_kind: "collection",
+      label: "review-tools",
       retained_copies: [{ retained_copy_id: retainedTreeId, digest, retained_bytes_current: true }],
       unresolved_skill_selections: 0,
       source_status: "unverified",
@@ -320,7 +320,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ]),
   resultStory("update", "available", outputContracts.updatePlan, [
     {
-      collection_id: collectionId,
+      subject_id: collectionId,
+      subject_kind: "collection",
       current_snapshot_digest: digest,
       available_snapshot_digest: `sha256:${"1".repeat(64)}`,
       changed: true,
@@ -328,7 +329,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ]),
   resultStory("update", "applied", outputContracts.update, [
     {
-      collection_id: collectionId,
+      subject_id: collectionId,
+      subject_kind: "collection",
       previous_retained_copy_id: versionId,
       selected_retained_copy_id: otherVersionId,
       snapshot_digest: `sha256:${"1".repeat(64)}`,
@@ -375,7 +377,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("pin", "preview", outputContracts.pinPlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: [
       {
         skill_id: skillId,
@@ -389,7 +391,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     bindings: 1,
   }),
   resultStory("pin", "applied", outputContracts.pin, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: [
       {
         skill_id: skillId,
@@ -405,7 +407,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     deferred: 0,
   }),
   resultStory("remove", "preview", outputContracts.removePlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
+    subject_kind: "collection",
     versions: 1,
     skills: 1,
     global_bindings: 1,
@@ -413,7 +416,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     owned_projections: 1,
   }),
   resultStory("remove", "applied", outputContracts.remove, {
-    collection_id: collectionId,
+    subject_id: collectionId,
+    subject_kind: "collection",
     versions: 1,
     skills: 1,
     global_bindings: 1,
@@ -422,26 +426,26 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     retired: 1,
   }),
   resultStory("enable", "preview", outputContracts.enablePlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
     enabled: true,
     changed: true,
-    bindings: [portableBinding],
+    bindings: [binding],
   }),
   resultStory("enable", "applied", outputContracts.enable, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
     enabled: true,
     changed: true,
-    bindings: [portableBinding],
+    bindings: [binding],
     projections: [{ harness: "codex", status: "projected" }],
   }),
   resultStory("disable", "preview", outputContracts.disablePlan, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
@@ -450,7 +454,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     bindings: [],
   }),
   resultStory("disable", "applied", outputContracts.disable, {
-    collection_id: collectionId,
+    subject_id: collectionId,
     skills: ["review"],
     harnesses: ["codex"],
     scope: { kind: "global" },
@@ -475,7 +479,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       authority: "registry.example",
       namespace: "smol-ai",
       skit: "review-tools",
-      ref: "registry.example/smol-ai/review-tools",
+      locator: "registry.example/smol-ai/review-tools",
     },
     visibility: "private",
     file_count: 3,
@@ -532,47 +536,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       },
     ],
   }),
-  resultStory("audit", "empty-v1alpha1", outputContracts.experimentalAudit, {
-    generatedAt: "2026-01-01T00:00:00Z",
-    home: "/home/story",
-    cwd: "/work/review-tools",
-    coverage: { supported: [], deferred: [] },
-    observations: [],
-    findings: [],
-    probes: [],
-    summary: { capabilities: 0, findings: 0 },
-  }),
-  resultStory("audit", "findings-v1alpha1", outputContracts.experimentalAudit, {
-    generatedAt: "2026-01-01T00:00:00Z",
-    home: "/home/story",
-    cwd: "/work/review-tools",
-    coverage: { supported: [], deferred: [] },
-    observations: [
-      {
-        kind: "mcp-server",
-        name: "github",
-        harnesses: ["codex"],
-        scope: "user",
-        path: "/home/story/.codex/config.toml",
-        mcp: { transport: "http", url: "https://mcp.example", args: [] },
-        provenance: { confidence: "exact", source: "codex", evidence: "config" },
-      },
-    ],
-    findings: [
-      {
-        severity: "warning",
-        code: "remote-mcp-server",
-        subject: "github",
-        problem: "Remote MCP server can receive repository context",
-        locations: ["/home/story/.codex/config.toml"],
-        details: { transport: "http" },
-      },
-    ],
-    probes: [{ harness: "codex", status: "ok", observed: { mcpServers: 1 } }],
-    summary: { capabilities: 1, findings: 1 },
-  }),
-  resultStory("audit", "empty-v1alpha3", outputContracts.experimentalAuditV1Alpha3, {
-    schemaVersion: "v1alpha3",
+  resultStory("audit", "empty-v1alpha4", outputContracts.experimentalAuditV1Alpha4, {
+    schemaVersion: "v1alpha4",
     generatedAt: "2026-01-01T00:00:00Z",
     roots: { home: "/home/story", cwd: "/work/review-tools" },
     harnesses: [],
@@ -594,8 +559,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       findings: 0,
     },
   }),
-  resultStory("audit", "findings-v1alpha3", outputContracts.experimentalAuditV1Alpha3, {
-    schemaVersion: "v1alpha3",
+  resultStory("audit", "findings-v1alpha4", outputContracts.experimentalAuditV1Alpha4, {
+    schemaVersion: "v1alpha4",
     generatedAt: "2026-01-01T00:00:00Z",
     roots: { home: "/home/story", cwd: "/work/review-tools" },
     harnesses: [

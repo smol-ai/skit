@@ -72,7 +72,7 @@ export const SetupContentIdentity = Schema.Struct({
   observedHash: Schema.optionalKey(Digest),
   libraryMatches: Schema.Array(
     Schema.Struct({
-      collectionId: CollectionId,
+      subjectId: Schema.String,
       skillId: SkillId,
       skillVersionId: SkillVersionId,
       name: Schema.String,
@@ -85,7 +85,7 @@ export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("retained"),
     projectionId: ProjectionId,
-    collectionId: CollectionId,
+    collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
     displayName: Schema.String,
@@ -94,7 +94,7 @@ export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("missing-from-library"),
     projectionId: ProjectionId,
-    collectionId: CollectionId,
+    collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
   }),
@@ -106,7 +106,7 @@ export const SetupInstanceOwner = Schema.Union([
   Schema.Struct({ kind: Schema.tag("invalid-marker") }),
   Schema.Struct({
     kind: Schema.tag("authored"),
-    collectionRef: Schema.String,
+    skitLocator: Schema.String,
     collectionId: Schema.optionalKey(CollectionId),
   }),
   Schema.Struct({ kind: Schema.tag("skills-sh"), source: Schema.String }),
@@ -176,7 +176,7 @@ export const SetupAuthoredCollection = Schema.Struct({
   repository: Schema.String,
   descriptorPath: Schema.String,
   remotePath: Schema.String,
-  collectionRef: Schema.String,
+  skitLocator: Schema.String,
   origin: Schema.String,
   namespace: Schema.String,
   skit: Schema.String,
@@ -191,7 +191,7 @@ export const SetupAuthoredCollection = Schema.Struct({
 export type SetupAuthoredCollection = typeof SetupAuthoredCollection.Type;
 
 export const SetupProjection = Schema.Struct({
-  collectionId: CollectionId,
+  collectionId: Schema.optionalKey(CollectionId),
   collectionDisplayName: Schema.String,
   skillId: SkillId,
   name: Schema.String,
@@ -220,7 +220,7 @@ export const SetupOnboardingCandidate = Schema.Union([
   Schema.Struct({
     ...SetupOnboardingBase,
     action: Schema.tag("bind-existing-entry"),
-    collectionId: CollectionId,
+    subjectId: Schema.String,
     skillVersionId: SkillVersionId,
     collectionDisplayName: Schema.optionalKey(Schema.String),
   }),

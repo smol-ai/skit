@@ -60,9 +60,16 @@ const byCode = {
 
 /** The message of any failed or thrown value, without assuming its prototype. */
 export function errorMessage(error: unknown): string {
-  return Predicate.hasProperty(error, "message") && typeof error.message === "string"
-    ? error.message
-    : String(error);
+  if (
+    Predicate.hasProperty(error, "message") &&
+    typeof error.message === "string" &&
+    error.message.length > 0
+  )
+    return error.message;
+  if (Predicate.hasProperty(error, "detail") && typeof error.detail === "string")
+    return error.detail;
+  if (Predicate.hasProperty(error, "_tag") && typeof error._tag === "string") return error._tag;
+  return String(error);
 }
 
 /** Lift any thrown value into the taxonomy, preserving the classification the domain gave it. */
