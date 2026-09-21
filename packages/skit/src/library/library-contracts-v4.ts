@@ -150,12 +150,13 @@ export const migrateLibraryEntitiesFromV4 = (input: {
       (collection.upstream?.last_acquisition_id === undefined
         ? undefined
         : selectionByAcquisition.get(collection.upstream.last_acquisition_id));
+    const legacySelection = selected ?? collection.upstream?.selection;
     const selection =
-      selected?.kind === "selected-skills"
+      legacySelection?.kind === "selected-skills"
         ? { kind: "selected-skills" as const, names: skills.map((skill) => skill.name).sort() }
-        : selected?.kind === "selected-paths"
+        : legacySelection?.kind === "selected-paths"
           ? { kind: "selected-paths" as const, paths: skills.map((skill) => skill.path).sort() }
-          : selected;
+          : legacySelection;
     return [
       {
         collection_id: collection.collection_id,

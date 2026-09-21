@@ -126,7 +126,7 @@ const snapshotArchive = SnapshotArchive.make({
   entries: [],
 });
 
-it("decodes a v4 portable subset into the current manifest model", () => {
+it("repairs an unmatched stale v4 selection while decoding the current manifest model", () => {
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
@@ -141,10 +141,9 @@ it("decodes a v4 portable subset into the current manifest model", () => {
         collection_id: collectionId,
         display_name: "review",
         upstream: {
-          source_identity: mutableAcquisition.source_identity,
+          source_identity: { kind: "url", url: { value: "https://unmatched.example" } },
           tracking: mutableAcquisition.tracking,
           selection: { kind: "selected-paths", paths: ["stale/path"] },
-          last_acquisition_id: mutableAcquisition.acquisition_id,
         },
       },
     ],
