@@ -103,3 +103,74 @@ it.effect("adds selected skills and takes custody only of eligible global copies
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect(
+  "retains selected skills without replacing copies that contain empty directories or control files",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-setup-retain-only-");
+      const codexRoot = join(root, "codex-skills");
+      const authoredRoot = join(root, "authored");
+      const emptyDirectorySkill = join(authoredRoot, "ai-readme");
+      const controlFileSkill = join(codexRoot, "review");
+      const cleanSkill = join(codexRoot, "clean");
+      yield* fs.makeDirectory(join(emptyDirectorySkill, "references"), { recursive: true });
+      yield* fs.makeDirectory(controlFileSkill, { recursive: true });
+      yield* fs.makeDirectory(cleanSkill, { recursive: true });
+      yield* fs.writeFileString(
+        join(emptyDirectorySkill, "SKILL.md"),
+        skillDocument("ai-readme", "Write a README"),
+      );
+      yield* fs.writeFileString(
+        join(controlFileSkill, "SKILL.md"),
+        skillDocument("review", "Review code"),
+      );
+      yield* fs.writeFileString(join(controlFileSkill, ".DS_Store"), "keep this control file");
+      yield* fs.writeFileString(
+        join(cleanSkill, "SKILL.md"),
+        skillDocument("clean", "Clean skill"),
+      );
+      yield* fs.symlink(emptyDirectorySkill, join(codexRoot, "ai-readme"));
+      const home = yield* libraryHome({
+        home: join(root, "home"),
+        inventoryHome: root,
+        roots: { codex: codexRoot },
+      });
+      const interaction = yield* makeScriptedInteraction([["ai-readme", "clean", "review"], true]);
+      yield* home.owned(
+        writingTo(
+          home.home,
+          setupCommand({
+            options: {
+              libraryHome: home.home,
+              inventory: home.inventory,
+              probePath: "",
+              skillsStateHome: join(root, "state"),
+            },
+            cwd: root,
+            interactive: true,
+            dryRun: false,
+            localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          }).pipe(Effect.provide(interaction.layer)),
+        ),
+      );
+      expect(yield* interaction.remaining).toBe(0);
+      const state = yield* home.durable;
+      expect(state.collections).toHaveLength(3);
+      expect(state.retained_copies).toHaveLength(3);
+      expect(state.projections).toEqual([
+        expect.objectContaining({ path: cleanSkill, status: "installed" }),
+      ]);
+      expect(state.global_bindings).toHaveLength(1);
+      expect(yield* fs.readDirectory(join(emptyDirectorySkill, "references"))).toEqual([]);
+      expect(yield* fs.realPath(join(codexRoot, "ai-readme"))).toBe(
+        yield* fs.realPath(emptyDirectorySkill),
+      );
+      expect(yield* fs.readFileString(join(controlFileSkill, ".DS_Store"))).toBe(
+        "keep this control file",
+      );
+      expect((yield* inspectOwnershipMarkerEffect(emptyDirectorySkill)).kind).toBe("absent");
+      expect((yield* inspectOwnershipMarkerEffect(controlFileSkill)).kind).toBe("absent");
+    }).pipe(Effect.provide(skitLayer)),
+);
