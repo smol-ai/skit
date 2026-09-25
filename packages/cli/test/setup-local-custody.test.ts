@@ -103,3 +103,82 @@ it.effect("adds selected skills and takes custody only of eligible global copies
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("adopts skills with empty directories and Finder metadata", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* scratch("skit-setup-incidental-files-");
+    const codexRoot = join(root, "codex-skills");
+    const authoredSkill = join(root, "authored", "ai-readme");
+    const emptyDirectorySkill = join(codexRoot, "ai-readme");
+    const finderMetadataSkill = join(codexRoot, "review");
+    yield* fs.makeDirectory(join(authoredSkill, "references"), { recursive: true });
+    yield* fs.makeDirectory(finderMetadataSkill, { recursive: true });
+    const readmeDocument = skillDocument("ai-readme", "Write a README");
+    const reviewDocument = skillDocument("review", "Review code");
+    yield* fs.writeFileString(join(authoredSkill, "SKILL.md"), readmeDocument);
+    yield* fs.writeFileString(join(finderMetadataSkill, "SKILL.md"), reviewDocument);
+    yield* fs.writeFileString(join(finderMetadataSkill, ".DS_Store"), "Finder metadata");
+    yield* fs.symlink(authoredSkill, emptyDirectorySkill);
+
+    const home = yield* libraryHome({
+      home: join(root, "home"),
+      inventoryHome: root,
+      roots: { codex: codexRoot },
+    });
+    const interaction = yield* makeScriptedInteraction([["ai-readme", "review"], true]);
+    yield* home.owned(
+      writingTo(
+        home.home,
+        setupCommand({
+          options: {
+            libraryHome: home.home,
+            inventory: home.inventory,
+            probePath: "",
+            skillsStateHome: join(root, "state"),
+          },
+          cwd: root,
+          interactive: true,
+          dryRun: false,
+          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+
+    expect(yield* interaction.remaining).toBe(0);
+    const state = yield* home.durable;
+    expect(state.collections).toHaveLength(2);
+    expect(state.projections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: emptyDirectorySkill, status: "installed" }),
+        expect.objectContaining({ path: finderMetadataSkill, status: "installed" }),
+      ]),
+    );
+    expect(state.projections).toHaveLength(2);
+    const retained = yield* Effect.forEach(state.retained_copies, (copy) =>
+      Effect.gen(function* () {
+        const path = retainedTreePath(home.originals, copy.digest);
+        return {
+          document: yield* fs.readFileString(join(path, "SKILL.md")),
+          entries: yield* fs.readDirectory(path),
+        };
+      }),
+    );
+    expect(retained).toEqual(
+      expect.arrayContaining([
+        { document: readmeDocument, entries: ["SKILL.md", "references"] },
+        { document: reviewDocument, entries: [".DS_Store", "SKILL.md"] },
+      ]),
+    );
+    expect((yield* inspectOwnershipMarkerEffect(emptyDirectorySkill)).kind).toBe("valid");
+    expect((yield* inspectOwnershipMarkerEffect(finderMetadataSkill)).kind).toBe("valid");
+    expect(yield* fs.readFileString(join(emptyDirectorySkill, "SKILL.md"))).toBe(readmeDocument);
+    expect(yield* fs.readFileString(join(finderMetadataSkill, "SKILL.md"))).toBe(reviewDocument);
+    expect(yield* fs.readDirectory(join(emptyDirectorySkill, "references"))).toEqual([]);
+    expect(yield* fs.readFileString(join(finderMetadataSkill, ".DS_Store"))).toBe(
+      "Finder metadata",
+    );
+    expect(yield* fs.readFileString(join(authoredSkill, "SKILL.md"))).toBe(readmeDocument);
+    expect((yield* inspectOwnershipMarkerEffect(authoredSkill)).kind).toBe("absent");
+  }).pipe(Effect.provide(skitLayer)),
+);

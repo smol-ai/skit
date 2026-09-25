@@ -31,7 +31,6 @@ export const LocalAdoptionBlockerReason = Schema.Literals([
   "invalid-marker",
   "managed-by-another-entry",
   "would-discard-control-entry",
-  "would-discard-empty-directory",
   "would-normalize-path",
 ]);
 export type LocalAdoptionBlockerReason = typeof LocalAdoptionBlockerReason.Type;
@@ -84,7 +83,11 @@ const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(fu
   const normalized = yield* inspectNormalizedTreeEffect(root);
   const verbatim = yield* walkTreeEffect(root, "verbatim");
   const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = normalized.excluded
-    .filter((entry) => entry.reason === "normalized-control-exclusion")
+    .filter(
+      (entry) =>
+        entry.reason === "normalized-control-exclusion" &&
+        entry.path.split("/").at(-1) !== ".DS_Store",
+    )
     .map((entry) => ({
       path: join(root, entry.path),
       reason: "would-discard-control-entry" as const,
@@ -93,14 +96,6 @@ const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(fu
   for (const entry of verbatim) {
     if (entry.path !== entry.path.normalize("NFC"))
       blockers.push({ path: join(root, entry.path), reason: "would-normalize-path" });
-    if (
-      entry.kind === "directory" &&
-      !verbatim.some((candidate) => candidate.path.startsWith(`${entry.path}/`))
-    )
-      blockers.push({
-        path: join(root, entry.path),
-        reason: "would-discard-empty-directory",
-      });
   }
 
   return { blockers, contentHash: yield* deterministicTreeHashEffect(root) };
