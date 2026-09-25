@@ -15,7 +15,6 @@ import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 export const SetupLocalCustodySelection = Schema.Struct({
   name: Schema.String,
   sourcePath: Schema.optionalKey(Schema.String),
-  takeCustody: Schema.optionalKey(Schema.Boolean),
 });
 export interface SetupLocalCustodySelection extends Schema.Schema.Type<
   typeof SetupLocalCustodySelection
@@ -101,7 +100,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
         name: selection.name,
         reason: "source-not-candidate",
       });
-    if (candidate.action === "repository-owned" || selection.takeCustody === false) {
+    if (candidate.action === "repository-owned") {
       const retained = yield* addLibrarySourceEffect({}, sourcePath);
       if (retained.collection_id === undefined)
         return yield* new SetupLocalCustodySelectionInvalid({

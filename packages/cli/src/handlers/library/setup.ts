@@ -22,9 +22,7 @@ import {
 import {
   applySetupLocalCustody,
   type SetupLocalCustodyOptions,
-  type SetupLocalCustodySelection,
 } from "../../workflows/library/setup-local-custody.js";
-import { planLocalAdoption } from "../../workflows/library/local-adoption.js";
 import type { SetupInstanceOwner, SetupResult } from "../../workflows/library/setup-contract.js";
 import { applySetupExistingBindings } from "../../workflows/library/setup-existing-binding.js";
 import { applySetupObservedCollections } from "../../workflows/library/setup-observed-collections.js";
@@ -98,7 +96,6 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     renderer.withStatus("Observing local skills", runSetup(options));
   let observed = yield* observe(setupOptions);
   if (!input.interactive || !input.localCustody) return observed;
-  const localCustody = input.localCustody;
   yield* renderer.note(renderSetupDiscovery(observed), "Local discovery");
   const discoveredRepositories = observed.repositories;
   let repositoryDecisions: ReadonlyArray<{
@@ -141,58 +138,14 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     groupKey: string;
   }> = [];
   let existingBindingSelections: readonly string[] = [];
-  let localCustodySelections: readonly SetupLocalCustodySelection[] = [];
+  let localCustodySelections: ReadonlyArray<{
+    name: string;
+    sourcePath?: string;
+  }> = [];
   const knownSourceSelections = yield* chooseKnownSources(observed);
   if (knownSourceSelections.length) retainedSourceSelections = knownSourceSelections;
   existingBindingSelections = yield* chooseExistingBindings(observed);
   localCustodySelections = yield* chooseUnmanagedSkills(observed);
-  const retainedOnlyNotes: string[] = [];
-  localCustodySelections = yield* Effect.forEach(
-    localCustodySelections,
-    Effect.fn(function* (selection: SetupLocalCustodySelection) {
-      const candidate = observed.onboarding.candidates.find(
-        (item) => item.name === selection.name && item.paths.includes(selection.sourcePath ?? ""),
-      );
-      if (!candidate || candidate.action === "repository-owned") return selection;
-      const targets = observed.instances
-        .filter(
-          (instance) => candidate.paths.includes(instance.path) && instance.scope === "global",
-        )
-        .flatMap((instance) =>
-          instance.harnesses.map((harness) => ({
-            path: instance.path,
-            harness,
-            scope: { kind: "global" as const },
-          })),
-        );
-      const plan = yield* planLocalAdoption(localCustody, targets, selection.sourcePath);
-      if (
-        !plan.blockers.length ||
-        plan.blockers.some(
-          (blocker) =>
-            blocker.reason !== "would-discard-empty-directory" &&
-            blocker.reason !== "would-discard-control-entry" &&
-            blocker.reason !== "would-normalize-path",
-        )
-      )
-        return selection;
-      const reasons = [
-        ...new Set(
-          plan.blockers.map((blocker) =>
-            blocker.reason === "would-discard-empty-directory"
-              ? "contains empty directories"
-              : blocker.reason === "would-discard-control-entry"
-                ? "contains excluded control files"
-                : "filenames would change",
-          ),
-        ),
-      ];
-      retainedOnlyNotes.push(
-        `  ${selection.name}: add to Library; leave installed copies untouched (${reasons.join(", ")}).`,
-      );
-      return { ...selection, takeCustody: false };
-    }),
-  );
   const prompter = yield* Prompter;
   const hasChanges =
     persistRoots ||
@@ -244,7 +197,6 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     observed.onboarding.candidates.some(
       (candidate) =>
         candidate.name === selection.name &&
-        selection.takeCustody !== false &&
         candidate.action !== "repository-owned" &&
         (selection.sourcePath === undefined || candidate.paths.includes(selection.sourcePath)),
     ),
@@ -290,7 +242,6 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
         ]
       : []),
     ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
-    ...retainedOnlyNotes,
     ...(repositorySelections.length
       ? [
           "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
@@ -342,8 +293,9 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   }
   if (localCustodySelections.length) {
     observed = yield* observe(setupOptions);
+    const names = localCustodySelections.map((selection) => selection.name).join(", ");
     yield* renderer.withStatus(
-      `Adding ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"} to the Library`,
+      `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}: ${names}`,
       applySetupLocalCustody(
         { setup: setupOptions, adoption: input.localCustody },
         observed.onboarding.planId,
