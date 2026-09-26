@@ -1,11 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { handleCommand } from "../../application.js";
-import { loginEffect, resolveLoginTargetEffect } from "../../registry/auth.js";
+import { loginEffect, resolveLoginTargetEffect, reuseLoginEffect } from "../../registry/auth.js";
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
+import { homeFlag, homePath, jsonFlag, jsonRequested } from "../../commands/parameters.js";
 import { InteractiveLoginUnavailable, ScopesInvalid } from "../../registry/failures.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -22,8 +22,8 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
     readonly scopes: readonly string[];
     readonly home?: string;
     readonly interactive: boolean;
+    readonly relogin?: boolean;
   }) {
-    if (!options.interactive) return yield* new InteractiveLoginUnavailable();
     const scopes = yield* Schema.decodeUnknownEffect(AuthScopes)(options.scopes).pipe(
       Effect.mapError(
         () =>
@@ -37,6 +37,18 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
         allowed: ["library:sync", "authoring:write", "publication:write"],
       });
     const origin = yield* resolveLoginTargetEffect(options.registry, options.home);
+    if (!options.relogin) {
+      const existing = yield* Effect.scoped(
+        reuseLoginEffect({
+          origin,
+          scopes,
+          alias: options.alias,
+          home: options.home,
+        }),
+      );
+      if (existing) return existing;
+    }
+    if (!options.interactive) return yield* new InteractiveLoginUnavailable();
     const prompter = yield* Prompter;
     const email = yield* prompter.text("Email");
     const password = yield* prompter.password("Password");
@@ -59,6 +71,10 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
 );
 
 const registry = Argument.string("registry").pipe(Argument.optional);
+const relogin = Flag.boolean("relogin").pipe(
+  Flag.withDescription("Replace the saved credential even if it is still valid."),
+  Flag.withDefault(false),
+);
 const alias = Flag.string("as").pipe(
   Flag.withDescription("Name this Registry for device-local routing."),
   Flag.optional,
@@ -71,8 +87,8 @@ const scopes = Flag.string("scopes").pipe(
 
 export const authLoginCliCommand = Command.make(
   "login",
-  { registry, alias, scopes, home: homeFlag, json: jsonFlag },
-  ({ registry, alias, scopes, home }) => {
+  { registry, alias, scopes, relogin, home: homeFlag, json: jsonFlag },
+  ({ registry, alias, scopes, relogin, home }) => {
     const selectedHome = homePath(home);
     return handleCommand(
       Effect.gen(function* () {
@@ -82,7 +98,8 @@ export const authLoginCliCommand = Command.make(
           alias: Option.getOrUndefined(alias),
           scopes: Option.getOrElse(scopes, () => ["library:sync"]),
           home: selectedHome,
-          interactive: Boolean(process.stdin.isTTY && process.stderr.isTTY),
+          relogin,
+          interactive: !jsonRequested() && Boolean(process.stdin.isTTY && process.stderr.isTTY),
         });
         yield* renderer.result(result("authLogin", outputContracts.authLogin, value));
       }).pipe(Effect.provide(terminalPrompterLayer)),
@@ -90,7 +107,9 @@ export const authLoginCliCommand = Command.make(
     );
   },
 ).pipe(
-  Command.withDescription("Sign in and store an expiring CLI credential."),
+  Command.withDescription(
+    "Reuse saved authentication or sign in and store a CLI credential in ~/.skit/auth.json.",
+  ),
   Command.withExamples([
     { command: "skit auth login" },
     { command: "skit auth login private" },

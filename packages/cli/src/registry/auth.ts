@@ -124,7 +124,7 @@ type AuthStatusCredential = {
   source: "stored" | "environment";
 };
 
-function authPath(home?: string) {
+export function authPath(home?: string) {
   return join(resolve(home ?? process.env.SKIT_HOME ?? join(homedir(), ".skit")), "auth.json");
 }
 
@@ -455,6 +455,61 @@ export function resolveAuthForOriginEffect(
   });
 }
 
+/** Check the saved bearer before collecting new credentials. No Library data is changed. */
+export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
+  origin: string;
+  scopes: readonly string[];
+  alias?: string;
+  home?: string;
+}) {
+  const auth = yield* resolveAuthForOriginEffect(input.origin, input.home);
+  if (!auth.token || !auth.scopes || !input.scopes.every((scope) => auth.scopes?.includes(scope)))
+    return undefined;
+  if (auth.expiresAt) {
+    const expiry = Date.parse(auth.expiresAt);
+    if (!Number.isFinite(expiry) || expiry <= (yield* Clock.currentTimeMillis)) return undefined;
+  }
+  const config = yield* readConfigEffect(input.home);
+  if (input.alias && config.registryAliases?.[input.alias] !== input.origin) return undefined;
+  const http = yield* (yield* RegistryHttp).client;
+  const response = yield* http
+    .execute(
+      HttpClientRequest.get(new URL("/api/library/portable", input.origin).href).pipe(
+        HttpClientRequest.bearerToken(auth.token),
+      ),
+    )
+    .pipe(Effect.mapError((cause) => new SignInUnreachable({ origin: input.origin, cause })));
+  if (response.status === 401) return undefined;
+  if (response.status !== 200) {
+    const body = yield* response.json.pipe(
+      Effect.flatMap(decodeRegistryErrorResponse),
+      Effect.mapError(
+        () => new SignInFailed({ message: `Credential check failed (${response.status})` }),
+      ),
+    );
+    if (
+      !(
+        (response.status === 404 && body.error === "library_not_found") ||
+        (response.status === 403 && body.error === "insufficient_scope")
+      )
+    )
+      return yield* new SignInFailed({ message: `Credential check failed (${response.status})` });
+  }
+  const alias =
+    input.alias ??
+    Object.entries(config.registryAliases ?? {}).find(([, origin]) => origin === input.origin)?.[0];
+  return {
+    origin: input.origin,
+    tokenPrefix: auth.tokenPrefix ?? "",
+    scopes: auth.scopes,
+    ...(auth.expiresAt ? { expiresAt: auth.expiresAt } : {}),
+    ...(alias ? { alias } : {}),
+    ...(config.defaultRegistry ? { defaultRegistry: config.defaultRegistry } : {}),
+    alreadyAuthenticated: true,
+    credentialPath: authPath(input.home),
+  };
+});
+
 export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
   home?: string,
   selectedRegistry?: string,
@@ -751,6 +806,8 @@ export const loginEffect = Effect.fn("Auth.login")(function* (input: {
     ...(warning ? { warning } : {}),
     ...(configuredAlias ? { alias: configuredAlias } : {}),
     ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
+    alreadyAuthenticated: false,
+    credentialPath: authPath(input.home),
   };
 });
 

@@ -14,6 +14,9 @@ import {
 } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
+import { authLoginCommand } from "../src/handlers/auth/login.js";
+import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { RegistryAuth, registryAuthLayer } from "../src/registry/auth-service.js";
 
 /**
  * The native login with an injected Registry transport.
@@ -41,6 +44,162 @@ const logout = (handler: TestHttpHandler, home: string, selectedOrigin?: string)
 const authHome = Effect.flatMap(FileSystem.FileSystem, (fs) =>
   fs.makeTempDirectoryScoped({ prefix: "skit-auth-" }),
 );
+
+describe("saved login reuse", () => {
+  const seed = (home: string, expiresAt = "2999-01-01T00:00:00Z") =>
+    Effect.flatMap(FileSystem.FileSystem, (fs) =>
+      fs.writeFileString(
+        join(home, "auth.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          defaultRegistry: "default",
+          registryAliases: { default: "https://skit.example" },
+          servers: {
+            "https://skit.example": {
+              token: "saved-test-token",
+              tokenId: "saved-id",
+              tokenPrefix: "saved-prefix",
+              scopes: ["library:sync"],
+              expiresAt,
+            },
+          },
+        }),
+        { mode: 0o600 },
+      ),
+    );
+
+  it.effect("reuses a server-validated credential without prompts or replacement", () =>
+    Effect.gen(function* () {
+      const home = yield* authHome;
+      yield* seed(home);
+      const interaction = yield* makeScriptedInteraction([]);
+      const observed: string[] = [];
+      const handler: TestHttpHandler = (request) => {
+        observed.push(request.method);
+        expect(request.headers.authorization).toBe("Bearer saved-test-token");
+        return Response.json({ error: "library_not_found" }, { status: 404 });
+      };
+      const value = yield* authLoginCommand({
+        registry: "https://skit.example",
+        home,
+        scopes: ["library:sync"],
+        interactive: false,
+      }).pipe(
+        Effect.provide(interaction.layer),
+        Effect.provide(registryHttpLayer(testHttpClientLayer(handler))),
+      );
+      expect(value).toMatchObject({
+        alreadyAuthenticated: true,
+        credentialPath: join(home, "auth.json"),
+      });
+      expect(yield* interaction.prompts).toEqual([]);
+      expect(observed).toEqual(["GET"]);
+      const access = yield* Effect.flatMap(RegistryAuth, (auth) =>
+        auth.resolve(undefined, "skit sync"),
+      ).pipe(Effect.provide(registryAuthLayer(home)));
+      expect(access.token).toBe("saved-test-token");
+    }).pipe(Effect.provide(skitLayer)),
+  );
+
+  for (const status of [200, 403]) {
+    it.effect(`accepts an authenticated credential check with status ${status}`, () =>
+      Effect.gen(function* () {
+        const home = yield* authHome;
+        yield* seed(home);
+        const interaction = yield* makeScriptedInteraction([]);
+        const value = yield* authLoginCommand({
+          home,
+          scopes: ["library:sync"],
+          interactive: false,
+        }).pipe(
+          Effect.provide(interaction.layer),
+          Effect.provide(
+            registryHttpLayer(
+              testHttpClientLayer(() =>
+                Response.json(
+                  status === 200 ? { library: null } : { error: "insufficient_scope" },
+                  { status },
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(value.alreadyAuthenticated).toBe(true);
+        expect(yield* interaction.prompts).toEqual([]);
+      }).pipe(Effect.provide(skitLayer)),
+    );
+  }
+
+  it.effect("expired credentials need a new interactive login without sending the bearer", () =>
+    Effect.gen(function* () {
+      const home = yield* authHome;
+      yield* seed(home, "1969-01-01T00:00:00Z");
+      const interaction = yield* makeScriptedInteraction([]);
+      const failure = yield* Effect.flip(
+        authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
+          Effect.provide(interaction.layer),
+          Effect.provide(
+            registryHttpLayer(
+              testHttpClientLayer(() => {
+                expect.fail("Expired bearer was sent");
+              }),
+            ),
+          ),
+        ),
+      );
+      expect(failure._tag).toBe("InteractiveLoginUnavailable");
+    }).pipe(Effect.provide(skitLayer)),
+  );
+
+  it.effect("revoked credentials require login and server failures do not collect a password", () =>
+    Effect.gen(function* () {
+      const home = yield* authHome;
+      yield* seed(home);
+      const interaction = yield* makeScriptedInteraction([]);
+      for (const status of [401, 503]) {
+        const failure = yield* Effect.flip(
+          authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
+            Effect.provide(interaction.layer),
+            Effect.provide(
+              registryHttpLayer(
+                testHttpClientLayer(() => Response.json({ error: "unavailable" }, { status })),
+              ),
+            ),
+          ),
+        );
+        expect(failure._tag).toBe(status === 401 ? "InteractiveLoginUnavailable" : "SignInFailed");
+      }
+      expect(yield* interaction.prompts).toEqual([]);
+    }).pipe(Effect.provide(skitLayer)),
+  );
+
+  it.effect("explicit relogin prompts and persists a replacement for later commands", () =>
+    Effect.gen(function* () {
+      const home = yield* authHome;
+      yield* seed(home);
+      const interaction = yield* makeScriptedInteraction(["user@example.test", "not-stored"]);
+      const observed: Array<{ url: string; init?: RequestInit }> = [];
+      const value = yield* authLoginCommand({
+        home,
+        scopes: ["library:sync"],
+        interactive: true,
+        relogin: true,
+      }).pipe(
+        Effect.provide(interaction.layer),
+        Effect.provide(registryHttpLayer(testHttpClientLayer(successfulServer(observed)))),
+      );
+      expect(value).toMatchObject({
+        alreadyAuthenticated: false,
+        credentialPath: join(home, "auth.json"),
+      });
+      expect((yield* interaction.prompts).map((prompt) => prompt.kind)).toEqual([
+        "text",
+        "password",
+      ]);
+      expect((yield* resolveAuthEffect(home)).token).toBe("skit_pat_secret_one");
+    }).pipe(Effect.provide(skitLayer)),
+  );
+});
 const readText = (path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path));
 

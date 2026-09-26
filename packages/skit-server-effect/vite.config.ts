@@ -18,11 +18,13 @@ export default defineConfig(({ command }) => {
     root: fileURLToPath(new URL("./web", import.meta.url)),
     plugins: [
       tailwindcss(),
-      foldkit({
-        ...(buildId === undefined ? {} : { buildId }),
-        ssr: { serverEntry: "/src/entry.server.ts" },
+      foldkit(buildId === undefined ? {} : { buildId }),
+      cloudflare({
+        configPath: wranglerConfigPath,
+        persistState: {
+          path: fileURLToPath(new URL("./.wrangler/state", import.meta.url)),
+        },
       }),
-      cloudflare({ configPath: wranglerConfigPath }),
     ],
     resolve: {
       alias: { "@": fileURLToPath(new URL("./web/src", import.meta.url)) },

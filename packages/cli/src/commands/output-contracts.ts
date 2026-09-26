@@ -141,7 +141,7 @@ export const outputContracts = {
     }),
   ),
   authLogin: effectOutput(
-    "skit.auth.login.v1",
+    "skit.auth.login.v2",
     Schema.Struct({
       origin: Schema.String,
       tokenPrefix: Schema.String,
@@ -150,6 +150,8 @@ export const outputContracts = {
       warning: Schema.optionalKey(Schema.String),
       alias: Schema.optionalKey(Schema.String),
       defaultRegistry: Schema.optionalKey(Schema.String),
+      alreadyAuthenticated: Schema.optionalKey(Schema.Boolean),
+      credentialPath: Schema.optionalKey(Schema.String),
     }),
   ),
   authStatus: effectOutput(
