@@ -237,15 +237,17 @@ function renderAuthStatus(
 }
 
 function renderAuthLogin(
-  data: ContractDataForId<"skit.auth.login.v1">,
+  data: ContractDataForId<"skit.auth.login.v2">,
   context: RenderContext,
 ): string {
   const name = data.alias ?? data.origin;
   return [
-    `Authenticated to ${name}${data.defaultRegistry ? " (default)" : ""}`,
+    `${data.alreadyAuthenticated ? "Already authenticated" : "Authenticated"} to ${name}${data.defaultRegistry && data.defaultRegistry === data.alias ? " (default)" : ""}`,
     ...(data.alias ? [`Registry: ${data.origin}`] : []),
     `Access: ${renderAuthAccess(data.scopes)}`,
     `Expires: ${renderAuthExpiry(data.expiresAt)}`,
+    ...(data.credentialPath ? [`Saved credential: ${data.credentialPath}`] : []),
+    "Next: skit sync to preview; skit sync --apply to apply. No login needed for future commands.",
     ...(context.detail === "full" ? [`Credential: ${data.tokenPrefix}`] : []),
     ...(data.warning ? [`Warning: ${data.warning}`] : []),
   ].join("\n");

@@ -5,6 +5,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { button } from "./components/ui/button.js";
 import { Card } from "./components/ui/card.js";
 import { input } from "./components/ui/input.js";
+import { landingView, sourceUrl } from "./landing.js";
 
 export const Model = S.Struct({
   page: S.Literals(["home", "setup"]),
@@ -27,6 +28,12 @@ export const Model = S.Struct({
   setupUsername: S.String,
   setupEmail: S.String,
   setupPassword: S.String,
+  passwordVisibility: S.Struct({
+    token: S.Boolean,
+    setup: S.Boolean,
+    signIn: S.Boolean,
+    signUp: S.Boolean,
+  }),
   pending: S.Boolean,
   message: S.String,
 });
@@ -58,6 +65,7 @@ export const Message = defineMessageUnion({
   SetupUsernameChanged: { value: S.String },
   SetupEmailChanged: { value: S.String },
   SetupPasswordChanged: { value: S.String },
+  PasswordVisibilityToggled: { field: S.Literals(["token", "setup", "signIn", "signUp"]) },
   GitHubSignIn: {},
   EmailSignIn: {},
   EmailSignUp: {},
@@ -163,6 +171,15 @@ export const update = (model: Model, message: Message): Update =>
       SetupUsernameChanged: ({ value }) => ({ model: { ...model, setupUsername: value } }),
       SetupEmailChanged: ({ value }) => ({ model: { ...model, setupEmail: value } }),
       SetupPasswordChanged: ({ value }) => ({ model: { ...model, setupPassword: value } }),
+      PasswordVisibilityToggled: ({ field }) => ({
+        model: {
+          ...model,
+          passwordVisibility: {
+            ...model.passwordVisibility,
+            [field]: !model.passwordVisibility[field],
+          },
+        },
+      }),
       GitHubSignIn: () => ({
         model: { ...model, pending: true, message: "" },
         commands: [
@@ -259,11 +276,14 @@ export const update = (model: Model, message: Message): Update =>
               ...model,
               pending: false,
               setupNeeded: false,
+              setupPassword: "",
+              bootstrapToken: "",
+              passwordVisibility: { ...model.passwordVisibility, setup: false, token: false },
               message: model.emailEnabled
                 ? message === "verification_sent"
                   ? "Setup complete. Check your email to verify the operator account."
                   : "Setup complete, but verification email was not sent. Use Resend on the sign-in page."
-                : "Setup complete. This Registry is ready.",
+                : "Your operator account has been created. This Registry is ready.",
             },
           };
         if (ok && action === "signup")
@@ -315,6 +335,7 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = (flags) => {
     setupUsername: "",
     setupEmail: "",
     setupPassword: "",
+    passwordVisibility: { token: false, setup: false, signIn: false, signUp: false },
     pending: false,
     message: "",
   };
@@ -346,7 +367,13 @@ const field = (
   value: string,
   onInput: (value: string) => Message,
   h: HtmlBuilder<Message>,
-  options: { type?: string; autocomplete?: string; minlength?: number; placeholder?: string } = {},
+  options: {
+    type?: string;
+    autocomplete?: string;
+    minlength?: number;
+    maxlength?: number;
+    placeholder?: string;
+  } = {},
 ): Html =>
   input<Message>(
     {
@@ -360,21 +387,102 @@ const field = (
       attributes: [
         h.Autocomplete(options.autocomplete ?? "off"),
         h.Minlength(options.minlength ?? 1),
-        h.Maxlength(options.type === "password" ? 128 : 64),
+        h.Maxlength(options.maxlength ?? 64),
         h.Required(true),
       ],
     },
     h,
   );
 
+const passwordField = (
+  label: string,
+  id: string,
+  value: string,
+  onInput: (value: string) => Message,
+  h: HtmlBuilder<Message>,
+  model: Model,
+  visibilityField: keyof Model["passwordVisibility"],
+  options: { autocomplete?: string; minlength?: number } = {},
+): Html => {
+  const visible = model.passwordVisibility[visibilityField];
+  return h.div(
+    [h.Class("grid gap-1")],
+    [
+      field(label, id, value, onInput, h, {
+        ...options,
+        maxlength: 128,
+        type: visible ? "text" : "password",
+      }),
+      button<Message>(
+        {
+          type: "button",
+          variant: "ghost",
+          size: "sm",
+          className: "justify-self-end",
+          onClick: Message.PasswordVisibilityToggled({ field: visibilityField }),
+          attributes: [h.AriaLabel(`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`)],
+        },
+        `${visible ? "Hide" : "Show"} ${label.toLowerCase()}`,
+        h,
+      ),
+    ],
+  );
+};
+
 const setupView = (model: Model, h: HtmlBuilder<Message>): Html => {
   if (!model.setupNeeded)
     return card(
-      "Set up SKIT Server",
-      "Create the first server operator.",
-      h.p(
-        [h.Class("text-sm text-muted-foreground")],
-        [model.message || "This Registry has already been set up."],
+      "Your Registry is ready",
+      "Server setup is complete. Here's what to do next.",
+      h.div(
+        [h.Class("grid gap-4")],
+        [
+          ...(model.message
+            ? [h.p([h.Class("text-sm text-muted-foreground"), h.Role("status")], [model.message])]
+            : []),
+          h.p(
+            [h.Class("text-sm leading-6 text-muted-foreground")],
+            [
+              model.signedIn
+                ? "You're signed in. Open your account to continue."
+                : "Setup creates your operator account but does not sign you in. Sign in with the email and password you just chose. You don't need to create another account.",
+            ],
+          ),
+          h.a(
+            [
+              h.Href(model.signedIn ? "/" : "/#sign-in"),
+              h.Class(
+                "inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2",
+              ),
+            ],
+            [model.signedIn ? "Open your account" : "Sign in to your account"],
+          ),
+          h.p(
+            [h.Class("text-sm leading-6 text-muted-foreground")],
+            [
+              model.emailEnabled && !model.signedIn
+                ? "Verify your email before signing in. If the email didn't arrive, use Resend verification email on the sign-in form."
+                : "Next, connect the CLI from your terminal. Browser and CLI sign-in are separate; the CLI saves its own credential so you only need to log in once per machine.",
+            ],
+          ),
+          h.pre(
+            [h.Class("overflow-x-auto rounded-md border bg-muted px-4 py-3 font-mono text-sm")],
+            [
+              h.code(
+                [],
+                [
+                  `npm install -g @smolai/skit\nskit setup\nskit auth login ${model.origin}\nskit sync\nskit sync --apply`,
+                ],
+              ),
+            ],
+          ),
+          h.p(
+            [h.Class("text-xs leading-5 text-muted-foreground")],
+            [
+              "Already installed and set up the CLI? Start at skit auth login. Run skit sync to preview the changes, then skit sync --apply to sync your library. If you already logged in from the CLI, skip login.",
+            ],
+          ),
+        ],
       ),
       h,
     );
@@ -387,13 +495,14 @@ const setupView = (model: Model, h: HtmlBuilder<Message>): Html => {
         ...(model.bootstrapToken
           ? []
           : [
-              field(
+              passwordField(
                 "Bootstrap secret",
                 "token",
                 model.bootstrapToken,
                 (value) => Message.SetupTokenChanged({ value }),
                 h,
-                { type: "password" },
+                model,
+                "token",
               ),
             ]),
         field(
@@ -412,13 +521,15 @@ const setupView = (model: Model, h: HtmlBuilder<Message>): Html => {
           h,
           { type: "email", autocomplete: "email" },
         ),
-        field(
+        passwordField(
           "Password",
           "password",
           model.setupPassword,
           (value) => Message.SetupPasswordChanged({ value }),
           h,
-          { type: "password", autocomplete: "new-password", minlength: 8 },
+          model,
+          "setup",
+          { autocomplete: "new-password", minlength: 8 },
         ),
         messageView(model, h),
         button<Message>(
@@ -475,11 +586,13 @@ const homeCard = (model: Model, h: HtmlBuilder<Message>): Html => {
                 "overflow-x-auto rounded-md border bg-muted px-4 py-3 font-mono text-sm text-foreground",
               ),
             ],
-            [h.code([], [`skit auth login ${model.origin}`])],
+            [h.code([], [`skit auth login ${model.origin}\nskit sync\nskit sync --apply`])],
           ),
           h.p(
             [h.Class("text-xs leading-5 text-muted-foreground")],
-            ["The CLI will ask for your email and password and store a scoped credential locally."],
+            [
+              "The CLI reuses saved authentication. If a new login is needed, it asks for your email and password and saves a scoped credential in ~/.skit/auth.json (or your configured SKIT home). Already logged in from the CLI? Start at skit sync to preview, then skit sync --apply to apply.",
+            ],
           ),
         ],
       ),
@@ -511,13 +624,15 @@ const homeCard = (model: Model, h: HtmlBuilder<Message>): Html => {
             h,
             { type: "email", autocomplete: "email", placeholder: "m@example.com" },
           ),
-          field(
+          passwordField(
             "Password",
             "sign-up-password",
             model.signUpPassword,
             (value) => Message.SignUpPasswordChanged({ value }),
             h,
-            { type: "password", autocomplete: "new-password", minlength: 8 },
+            model,
+            "signUp",
+            { autocomplete: "new-password", minlength: 8 },
           ),
           messageView(model, h),
           button<Message>(
@@ -546,13 +661,15 @@ const homeCard = (model: Model, h: HtmlBuilder<Message>): Html => {
             h,
             { type: "email", autocomplete: "email", placeholder: "m@example.com" },
           ),
-          field(
+          passwordField(
             "Password",
             "sign-in-password",
             model.signInPassword,
             (value) => Message.SignInPasswordChanged({ value }),
             h,
-            { type: "password", autocomplete: "current-password", minlength: 8 },
+            model,
+            "signIn",
+            { autocomplete: "current-password", minlength: 8 },
           ),
           messageView(model, h),
           button<Message>(
@@ -670,7 +787,22 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
         [
           h.div(
             [h.Class("mx-auto flex h-14 max-w-6xl items-center px-5")],
-            [h.a([h.Href("/"), h.Class("font-semibold tracking-tight")], ["SKIT"])],
+            [
+              h.a([h.Href("/"), h.Class("font-semibold tracking-tight")], ["SKIT"]),
+              h.nav(
+                [h.Class("ml-auto flex items-center gap-5 text-sm")],
+                [
+                  h.a(
+                    [h.Href(sourceUrl), h.Class("text-muted-foreground hover:text-foreground")],
+                    ["Source"],
+                  ),
+                  h.a(
+                    [h.Href(model.signedIn ? "/" : "/#sign-in"), h.Class("font-medium")],
+                    [model.signedIn ? "Open app" : "Sign in"],
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
@@ -683,14 +815,16 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             ],
             [setupView(model, h)],
           )
-        : h.main(
-            [
-              h.Class(
-                "flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-muted/40 px-5 py-16",
-              ),
-            ],
-            [homeCard(model, h)],
-          ),
+        : !model.signedIn
+          ? landingView(model.origin, homeCard(model, h), h)
+          : h.main(
+              [
+                h.Class(
+                  "flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-muted/40 px-5 py-16",
+                ),
+              ],
+              [homeCard(model, h)],
+            ),
     ],
   ),
 });

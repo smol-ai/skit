@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { describe, expect } from "vitest";
 import { Server } from "foldkit/experimental";
 import { renderPageEffect } from "../web/src/entry.server.js";
+import { Flags, init, Message, update, view } from "../web/src/main.js";
 
 const template = `<!doctype html><html><head><title>SKIT</title></head><body><div id="root"></div><script type="module" src="/src/entry.ts"></script></body></html>`;
 
@@ -60,6 +61,9 @@ describe("Foldkit server rendering", () => {
 
       expect(html).toContain("Create the first server operator");
       expect(html).toContain("Complete setup");
+      expect(html).toContain("Show password");
+      expect(html).toContain("Show bootstrap secret");
+      expect(html).not.toContain("Your library. Your rules.");
     }),
   );
 
@@ -75,9 +79,79 @@ describe("Foldkit server rendering", () => {
       expect(html).toContain("Welcome back");
       expect(html).toContain('name="sign-in-email"');
       expect(html).toContain('name="sign-in-password"');
+      expect(html).toContain("Show password");
       expect(html).toContain("Sign up");
       expect(html).toContain("Or continue with");
       expect(html).toContain("GitHub");
+      expect(html).toContain("Your library. Your rules.");
+      expect(html).toContain('href="https://github.com/smol-ai/skit"');
+      expect(html).toContain(
+        'href="https://github.com/smol-ai/skit/blob/main/docs/self-hosting.md"',
+      );
+      expect(html).toContain('id="sign-in"');
+      expect(html).toContain("skit sync --apply");
+      expect(html).not.toContain("skit library sync");
+    }),
+  );
+
+  it.effect("guides signed-out users after setup, including when the page is reloaded", () =>
+    Effect.gen(function* () {
+      const result = yield* renderPageEffect(
+        new Request("https://registry.example/setup"),
+        (request) =>
+          new URL(request.url).pathname === "/api/bootstrap/status"
+            ? Promise.resolve(Response.json({ needed: false }))
+            : signedOutHandler(request),
+        "test",
+      );
+      const html = yield* responseText(Server.toResponse(template, result));
+      expect(html).toContain("Your Registry is ready");
+      expect(html).toContain("does not sign you in");
+      expect(html).toContain("Sign in to your account");
+      expect(html).toContain("Verify your email before signing in");
+      expect(html).toContain("skit auth login https://registry.example");
+      expect(html).toContain("skit sync --apply");
+      expect(html).toContain("preview the changes");
+      expect(html).not.toContain("skit library sync");
+      expect(html).not.toContain("Complete setup");
+    }),
+  );
+
+  it.effect("clears setup secrets and offers an immediate sign-in step after success", () =>
+    Effect.gen(function* () {
+      const flags: Flags = {
+        page: "setup",
+        origin: "https://registry.example",
+        github: false,
+        emailEnabled: false,
+        registrationEnabled: true,
+        signedIn: false,
+        username: "",
+        suggestedUsername: "",
+        setupNeeded: true,
+      };
+      const initial = init(flags).model;
+      const completed = update(
+        { ...initial, setupPassword: "private-password", bootstrapToken: "private-token" },
+        Message.ActionFinished({
+          action: "setup",
+          ok: true,
+          message: "verification_not_sent",
+          redirect: "",
+        }),
+      ).model;
+      expect(completed.setupPassword).toBe("");
+      expect(completed.bootstrapToken).toBe("");
+      const rendered = yield* Server.renderToString(
+        { Flags, init: () => ({ model: completed }), view },
+        { flags, buildId: "test" },
+      );
+      const html = yield* responseText(Server.toResponse(template, Server.Rendered(rendered)));
+      expect(html).toContain("Sign in to your account");
+      expect(html).toContain("Your operator account has been created");
+      expect(html).not.toContain("Verify your email before signing in");
+      expect(html).not.toContain("private-password");
+      expect(html).not.toContain("private-token");
     }),
   );
 

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.auth.login.v1",
+  "$id": "skit.auth.login.v2",
   "type": "object",
   "properties": {
     "origin": {
@@ -24,6 +24,12 @@
       "type": "string"
     },
     "defaultRegistry": {
+      "type": "string"
+    },
+    "alreadyAuthenticated": {
+      "type": "boolean"
+    },
+    "credentialPath": {
       "type": "string"
     }
   },

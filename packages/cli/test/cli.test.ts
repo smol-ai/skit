@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +8,87 @@ import { Schema } from "effect";
 import { copySkitFixture } from "./helpers/skit-fixture.js";
 
 const bin = join(process.cwd(), "bin", "skit.js");
+
+test("saved login survives separate CLI processes and avoids credential prompts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "skit-auth-process-"));
+  const requests = join(root, "requests.jsonl");
+  const server = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+    import { createServer } from "node:http";
+    import { appendFileSync } from "node:fs";
+    const server = createServer((req, res) => {
+      appendFileSync(process.argv[1], JSON.stringify({ method: req.method, path: req.url }) + "\\n");
+      res.writeHead(req.headers.authorization === "Bearer process-test-token" ? 404 : 401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "library_not_found" }));
+    });
+    server.listen(0, "127.0.0.1", () => console.log(server.address().port));
+  `,
+      requests,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  try {
+    const port = await new Promise<string>((resolve, reject) => {
+      server.stdout!.once("data", (data) => resolve(String(data).trim()));
+      server.once("error", reject);
+      server.once("exit", (code) => reject(new Error(`Test server exited ${code}`)));
+    });
+    const origin = `http://127.0.0.1:${port}`;
+    const document = JSON.stringify({
+      schemaVersion: 1,
+      defaultRegistry: "default",
+      registryAliases: { default: origin },
+      servers: {
+        [origin]: {
+          token: "process-test-token",
+          tokenId: "process-test-id",
+          tokenPrefix: "process-test-prefix",
+          scopes: ["library:sync"],
+          expiresAt: "2999-01-01T00:00:00Z",
+        },
+      },
+    });
+    await writeFile(join(root, "auth.json"), document, { mode: 0o600 });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const login = spawnSync(
+        process.execPath,
+        [bin, "auth", "login", origin, "--home", root, "--json"],
+        { encoding: "utf8", timeout: 10_000, cwd: attempt === 0 ? root : tmpdir() },
+      );
+      expect(login.status).toBe(0);
+      expect(JSON.parse(login.stdout).data).toMatchObject({
+        alreadyAuthenticated: true,
+        credentialPath: join(root, "auth.json"),
+        origin,
+      });
+    }
+    const status = spawnSync(process.execPath, [bin, "auth", "status", "--home", root, "--json"], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    expect(status.status).toBe(0);
+    expect(JSON.parse(status.stdout).data.credentials).toMatchObject([
+      { origin, source: "stored", isDefault: true },
+    ]);
+    expect(await readFile(join(root, "auth.json"), "utf8")).toBe(document);
+    expect(
+      (await readFile(requests, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      { method: "GET", path: "/api/library/portable" },
+      { method: "GET", path: "/api/library/portable" },
+    ]);
+  } finally {
+    server.kill();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 const PackageDocument = Schema.fromJsonString(Schema.Struct({ version: Schema.String }));
 const StateBindingsDocument = Schema.fromJsonString(
   Schema.Struct({ global_bindings: Schema.Array(Schema.Unknown) }),

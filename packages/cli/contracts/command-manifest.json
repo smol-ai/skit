@@ -6,7 +6,7 @@
         "login"
       ],
       "stability": "stable",
-      "summary": "Sign in and store an expiring CLI credential.",
+      "summary": "Reuse saved authentication or sign in and store a CLI credential in ~/.skit/auth.json.",
       "effects": {
         "capabilities": [
           "network.write",
@@ -14,7 +14,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.auth.login.v1"
+        "skit.auth.login.v2"
       ],
       "exitCodes": [
         0,
@@ -45,6 +45,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Request comma-separated credential scopes."
+        },
+        "relogin": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Replace the saved credential even if it is still valid."
         },
         "home": {
           "type": "string",
