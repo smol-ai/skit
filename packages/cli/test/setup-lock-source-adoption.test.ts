@@ -5,14 +5,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import {
-  parseSkitSourceEffect,
   LibraryActor,
   LibraryAuditLog,
   LibraryStore,
   libraryStoreLayer,
   retainedTreePath,
   skitLayer,
-  sourceLocator,
 } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -349,15 +347,15 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
       _tag: "Resolved",
       source: {
         type: "well-known",
-        locator: "https://skills.example",
-        members: ["review"],
+        origin: "https://skills.example",
+        skillNames: ["review"],
       },
     });
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("turns selected GitHub lock paths into a reparsable Git Source", () =>
-  Effect.gen(function* () {
+it.effect("turns selected GitHub lock paths into a structured GitHub Source", () =>
+  Effect.sync(() => {
     const lock = Schema.decodeUnknownSync(SetupLockMatch)({
       scope: "project",
       lockPath: "/project/skills-lock.json",
@@ -374,14 +372,16 @@ it.effect("turns selected GitHub lock paths into a reparsable Git Source", () =>
         originalEntry: { source: "acme/skills", sourceType: "github" },
       },
     });
-    const resolution = resolveSkillsShSelectedSource([{ lock, name: "review" }]);
-    const source = resolution._tag === "Resolved" ? resolution.source : undefined;
-    expect(source?.type).toBe("git");
-    if (!source) return;
-    const locator = sourceLocator(source);
-    expect(locator).toContain("ref=main");
-    expect(locator).toContain("skill=skills%2Freview%2FSKILL.md");
-    expect(yield* parseSkitSourceEffect(locator)).toEqual(source);
+    expect(resolveSkillsShSelectedSource([{ lock, name: "review" }])).toEqual({
+      _tag: "Resolved",
+      source: {
+        type: "github",
+        owner: "acme",
+        repository: "skills",
+        ref: "main",
+        skillDirectories: ["skills/review"],
+      },
+    });
   }).pipe(Effect.provide(skitLayer)),
 );
 

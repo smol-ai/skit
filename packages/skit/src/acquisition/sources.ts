@@ -6,7 +6,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
-import type { SkitSource } from "../contracts.js";
+import { SkitSource } from "../library/library-contracts.js";
 import { Data } from "effect";
 import {
   ArchiveEntryLimitExceeded,
@@ -17,6 +17,7 @@ import {
   SourceNotFound,
   SourceRequired,
   UnsafeArchivePath,
+  GitSourceFragment,
   UnsafeGitSubpath,
   UnsafeSourceUrl,
 } from "../failures.js";
@@ -27,8 +28,7 @@ import { readSkitDescriptorEffect } from "../artifact/skit.js";
 import { SourceProcess, type SourceProcessFailure } from "../platform/source-process.js";
 
 export const AGENT_SKILLS_NORMALIZATION_PROFILE = "agent-skills/v1" as const;
-const ownerRepository = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/;
-const versionedRegistryId = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*@[a-zA-Z0-9._-]+$/;
+const ownerRepository = /^([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)$/;
 const MAX_ARCHIVE_FILES = 1_000;
 const MAX_EXTRACTED_BYTES = 25 * 1024 * 1024;
 const DISCOVERY_SCHEMA_V2 = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
@@ -54,9 +54,9 @@ const discoveryV1Index = Schema.Struct({ skills: Schema.Array(discoveryV1Entry) 
 const discoverySchemaMarker = Schema.Struct({ $schema: Schema.optional(Schema.String) });
 const discoveryJson = Schema.fromJsonString(Schema.Unknown);
 
-function wellKnownLocator(value: string): SkitSource | undefined {
+function wellKnownSource(value: string): SkitSource | undefined {
   if (!value || value.includes("#")) return undefined;
-  return { type: "well-known", locator: value.replace(/\/$/, "") };
+  return { type: "well-known", origin: value.replace(/\/$/, "") };
 }
 
 /** A version flag promotes ambiguous shorthand only after an existing local path gets priority. */
@@ -92,17 +92,27 @@ export interface SourceLocatorProfile {
   readonly recognize: (value: string) => SkitSource | undefined;
 }
 
+const registryName = "([a-z0-9][a-z0-9._-]*)\\/([a-z0-9][a-z0-9._-]*)(?:@([a-zA-Z0-9._-]+))?";
+const insecureRegistryLocator = new RegExp(`^skit\\+http:\\/\\/([^/]+)\\/${registryName}$`);
+const registryLocator = new RegExp(`^skit:\\/\\/([^/]+)\\/${registryName}$`);
+const registryAlias = new RegExp(`^(?:skit|reg|registry):${registryName}$`);
+const bareRegistryName = new RegExp(`^${registryName}$`);
+
 const locatorProfiles: readonly SourceLocatorProfile[] = [
   {
     id: "canonical-insecure-registry",
     priority: -1,
     aliases: ["skit+http://"],
     recognize: (value) => {
-      const match = value.match(
-        /^skit\+http:\/\/([^/]+)\/([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9._-]+)?)$/,
-      );
-      return match
-        ? { type: "registry", locator: match[2], authority: `http://${match[1]}` }
+      const match = value.match(insecureRegistryLocator);
+      return match?.[1] && match[2] && match[3]
+        ? {
+            type: "registry",
+            namespace: match[2],
+            slug: match[3],
+            ...(match[4] === undefined ? {} : { version: match[4] }),
+            authority: `http://${match[1]}`,
+          }
         : undefined;
     },
   },
@@ -111,11 +121,15 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     priority: 0,
     aliases: ["skit://"],
     recognize: (value) => {
-      const match = value.match(
-        /^skit:\/\/([^/]+)\/([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9._-]+)?)$/,
-      );
-      return match
-        ? { type: "registry", locator: match[2], authority: `https://${match[1]}` }
+      const match = value.match(registryLocator);
+      return match?.[1] && match[2] && match[3]
+        ? {
+            type: "registry",
+            namespace: match[2],
+            slug: match[3],
+            ...(match[4] === undefined ? {} : { version: match[4] }),
+            authority: `https://${match[1]}`,
+          }
         : undefined;
     },
   },
@@ -124,10 +138,15 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     priority: 10,
     aliases: ["skit:", "reg:", "registry:"],
     recognize: (value) => {
-      const match = value.match(
-        /^(?:skit|reg|registry):([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*(?:@[a-zA-Z0-9._-]+)?)$/,
-      );
-      return match ? { type: "registry", locator: match[1] } : undefined;
+      const match = value.match(registryAlias);
+      return match?.[1] && match[2]
+        ? {
+            type: "registry",
+            namespace: match[1],
+            slug: match[2],
+            ...(match[3] === undefined ? {} : { version: match[3] }),
+          }
+        : undefined;
     },
   },
   {
@@ -135,16 +154,24 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     priority: 20,
     aliases: ["gh:", "github:"],
     recognize: (value) => {
-      const match = value.match(/^(?:gh|github):([a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*)$/);
-      return match ? { type: "git", locator: `https://github.com/${match[1]}` } : undefined;
+      const match = /^(?:gh|github):/.test(value)
+        ? value.replace(/^(?:gh|github):/, "").match(ownerRepository)
+        : null;
+      return match?.[1] && match[2]
+        ? { type: "github", owner: match[1], repository: match[2] }
+        : undefined;
     },
   },
   {
     id: "versioned-registry",
     priority: 30,
     aliases: [],
-    recognize: (value) =>
-      versionedRegistryId.test(value) ? { type: "registry", locator: value } : undefined,
+    recognize: (value) => {
+      const match = value.match(bareRegistryName);
+      return match?.[1] && match[2] && match[3]
+        ? { type: "registry", namespace: match[1], slug: match[2], version: match[3] }
+        : undefined;
+    },
   },
   {
     id: "github-tree",
@@ -152,15 +179,15 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     aliases: [],
     recognize: (value) => {
       const match = value.match(
-        /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(?:\/(.*))?$/,
+        /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(?:\/(.*?))?\/?$/,
       );
-      if (!match) return undefined;
-      const [, owner, repository, ref, subpath] = match;
-      const fragment = new URLSearchParams({ ref: decodeURIComponent(ref) });
-      if (subpath) fragment.set("path", decodeURIComponent(subpath));
+      if (!match?.[1] || !match[2] || !match[3]) return undefined;
       return {
-        type: "git",
-        locator: `https://github.com/${owner}/${repository.replace(/\.git$/, "")}.git#${fragment}`,
+        type: "github",
+        owner: match[1],
+        repository: match[2].replace(/\.git$/, ""),
+        ref: decodeURIComponent(match[3]),
+        ...(match[4] ? { subpath: decodeURIComponent(match[4]) } : {}),
       };
     },
   },
@@ -168,18 +195,20 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     id: "github-url",
     priority: 50,
     aliases: [],
-    recognize: (value) =>
-      /^https:\/\/github\.com\/[^/]+\/[^/?#]+\/?(?:#.*)?$/.test(value)
-        ? { type: "git", locator: value }
-        : undefined,
+    recognize: (value) => {
+      const match = value.match(/^https:\/\/github\.com\/([^/]+)\/([^/?#]+?)(?:\.git)?\/?$/);
+      return match?.[1] && match[2]
+        ? { type: "github", owner: match[1], repository: match[2] }
+        : undefined;
+    },
   },
   {
     id: "git-url",
     priority: 60,
     aliases: [],
     recognize: (value) =>
-      /^(?:git@|ssh:\/\/|https:\/\/).+\.git(?:#.+)?$/.test(value)
-        ? { type: "git", locator: value }
+      /^(?:git@|ssh:\/\/|https:\/\/)[^#]+\.git$/.test(value)
+        ? { type: "git", remote: value }
         : undefined,
   },
   {
@@ -188,7 +217,7 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     aliases: ["wellknown:"],
     recognize: (value) =>
       /^wellknown:https:\/\/[^\s]+$/.test(value)
-        ? wellKnownLocator(value.slice("wellknown:".length))
+        ? wellKnownSource(value.slice("wellknown:".length))
         : undefined,
   },
   {
@@ -199,7 +228,7 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
       /^https:\/\/.+\/\.well-known\/(?:agent-skills|skills)\/index\.json$/.test(value)
         ? {
             type: "well-known",
-            locator: value.replace(/\/\.well-known\/(?:agent-skills|skills)\/index\.json$/, ""),
+            origin: value.replace(/\/\.well-known\/(?:agent-skills|skills)\/index\.json$/, ""),
           }
         : undefined,
   },
@@ -210,7 +239,7 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     recognize: (value) => {
       const url = URL.parse(value);
       return url?.protocol === "https:" && url.pathname === "/" && !url.search && !url.hash
-        ? { type: "well-known", locator: url.origin }
+        ? { type: "well-known", origin: url.origin }
         : undefined;
     },
   },
@@ -220,7 +249,7 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     aliases: [],
     recognize: (value) =>
       value.startsWith("https://") && /\.(?:zip|tar|tar\.gz|tgz)(?:\?.*)?$/.test(value)
-        ? { type: "archive", locator: value }
+        ? { type: "archive", url: value }
         : undefined,
   },
   {
@@ -229,17 +258,19 @@ const locatorProfiles: readonly SourceLocatorProfile[] = [
     aliases: [],
     recognize: (value) =>
       value.startsWith("https://")
-        ? { type: "url", locator: canonicalizeDirectGithubUrl(value) }
+        ? { type: "url", url: canonicalizeDirectGithubUrl(value) }
         : undefined,
   },
   {
     id: "github-shorthand",
     priority: 90,
     aliases: [],
-    recognize: (value) =>
-      ownerRepository.test(value)
-        ? { type: "git", locator: `https://github.com/${value}` }
-        : undefined,
+    recognize: (value) => {
+      const match = value.match(ownerRepository);
+      return match?.[1] && match[2]
+        ? { type: "github", owner: match[1], repository: match[2] }
+        : undefined;
+    },
   },
 ];
 
@@ -266,6 +297,7 @@ function assertDirectSkillDocument(
 
 /** Everything classifying a source string can reject. */
 export type ParseSourceFailure =
+  | GitSourceFragment
   | SourceRequired
   | SourceNotFound
   | UnsafeSourceUrl
@@ -284,11 +316,11 @@ export function parseSkitSourceEffect(
     if (ownerRepository.test(value)) {
       const local = resolve(cwd, value);
       const observed = yield* Effect.option(probe.identity.stat(local));
-      if (observed._tag === "Some") return { type: "local", locator: local };
+      if (observed._tag === "Some") return { type: "local", path: local };
     }
     const source = yield* classifySource(input, cwd);
     if (source.type !== "local") return source;
-    const observed = yield* Effect.option(probe.identity.stat(source.locator));
+    const observed = yield* Effect.option(probe.identity.stat(source.path));
     if (observed._tag === "None") return yield* new SourceNotFound({ source: input.trim() });
     return source;
   });
@@ -332,12 +364,30 @@ function classifySource(input: string, cwd: string): Effect.Effect<SkitSource, P
       if (url.pathname === "/" && (value.includes("?") || value.includes("#")))
         return yield* new UnsafeSourceUrl();
     }
+    // A Git remote is acquired from its default branch and root, so a fragment cannot select a
+    // ref or directory. Other URLs keep theirs (for example a line anchor on a SKILL.md page).
+    if (value.includes("#")) {
+      const withoutFragment = value.slice(0, value.indexOf("#"));
+      const recognized = sourceLocatorProfiles
+        .map((profile) => profile.recognize(withoutFragment))
+        .find((candidate) => candidate !== undefined);
+      if (recognized?.type === "git" || recognized?.type === "github")
+        return yield* new GitSourceFragment({ source: value });
+    }
     for (const profile of sourceLocatorProfiles) {
-      const source = profile.recognize(value);
-      if (source) return source;
+      const recognized = profile.recognize(value);
+      if (recognized === undefined) continue;
+      // Recognizers only split syntax; the schema decides whether the parts are safe.
+      return yield* Schema.decodeUnknownEffect(SkitSource)(recognized).pipe(
+        Effect.mapError(() =>
+          recognized.type === "git" || recognized.type === "github"
+            ? new UnsafeGitSubpath()
+            : new UnsafeSourceUrl(),
+        ),
+      );
     }
     if (value.startsWith("wellknown:")) return yield* new UnsafeSourceUrl();
-    return { type: "local", locator: resolve(cwd, value) };
+    return { type: "local", path: resolve(cwd, value) };
   });
 }
 
@@ -356,16 +406,36 @@ export interface ResolvedSkitSource {
   observedSkillPaths?: readonly string[];
 }
 
-/** Canonical, reparsable locator for a resolved Source. Shorthand never crosses this boundary. */
+/**
+ * A user-facing locator for a Source, recorded as Acquisition history and shown in messages.
+ * It is never parsed back: structured Sources travel as values.
+ */
 export function sourceLocator(source: SkitSource): string {
-  if (source.type === "well-known") return `wellknown:${source.locator}`;
-  if (source.type !== "registry") return source.locator;
-  if (!source.authority) return `skit:${source.locator}`;
-  const authority = URL.parse(source.authority);
-  if (!authority) return `skit:${source.locator}`;
-  return authority.protocol === "http:"
-    ? `skit+http://${authority.host}/${source.locator}`
-    : `skit://${authority.host}/${source.locator}`;
+  switch (source.type) {
+    case "github": {
+      const repository = `https://github.com/${source.owner}/${source.repository}`;
+      if (source.ref === undefined && source.subpath === undefined) return repository;
+      const subpath = source.subpath === undefined ? "" : `/${source.subpath}`;
+      return `${repository}/tree/${encodeURIComponent(source.ref ?? "HEAD")}${subpath}`;
+    }
+    case "git":
+      return source.remote;
+    case "well-known":
+      return `wellknown:${source.origin}`;
+    case "url":
+    case "archive":
+      return source.url;
+    case "local":
+      return source.path;
+    case "registry": {
+      const name = `${source.namespace}/${source.slug}${source.version === undefined ? "" : `@${source.version}`}`;
+      const authority = source.authority === undefined ? null : URL.parse(source.authority);
+      if (!authority) return `skit:${name}`;
+      return authority.protocol === "http:"
+        ? `skit+http://${authority.host}/${name}`
+        : `skit://${authority.host}/${name}`;
+    }
+  }
 }
 
 /** A source subprocess exited non-zero. Carries the command and its captured stderr. */
@@ -449,41 +519,6 @@ function runEffect(
         exitCode: result.exitCode,
         stderr: result.stderr,
       });
-  });
-}
-
-const gitSkillSelectionKey = "skill";
-
-/** The selected Agent Skill paths encoded in a saved Git Source locator. */
-export const selectedGitSkillPaths = (ref: string): readonly string[] =>
-  new URLSearchParams(ref.split("#", 2)[1] ?? "").getAll(gitSkillSelectionKey);
-
-function parseGitRef(
-  input: string,
-): Effect.Effect<
-  { cloneUrl: string; ref?: string; subpath?: string; skillPaths: readonly string[] },
-  UnsafeGitSubpath
-> {
-  return Effect.gen(function* () {
-    const [cloneUrl, fragment = ""] = input.split("#", 2);
-    const values = new URLSearchParams(fragment);
-    const ref = values.get("ref") ?? undefined;
-    const subpath = values.get("path") ?? undefined;
-    const skillPaths = values.getAll(gitSkillSelectionKey);
-    if (subpath && (subpath.startsWith("/") || subpath.split("/").includes("..")))
-      return yield* new UnsafeGitSubpath();
-    if (
-      skillPaths.some(
-        (path) =>
-          !path ||
-          path.startsWith("/") ||
-          path.includes("\\") ||
-          path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
-          !path.endsWith("/SKILL.md"),
-      )
-    )
-      return yield* new UnsafeGitSubpath();
-    return { cloneUrl, ref, subpath, skillPaths };
   });
 }
 
@@ -943,7 +978,7 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
   verbatimOnly = false,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const baseUrl = source.locator.replace(/\/$/, "");
+  const baseUrl = source.origin.replace(/\/$/, "");
   const parsedBase = URL.parse(baseUrl);
   if (
     !parsedBase ||
@@ -954,7 +989,7 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
     parsedBase.search
   )
     return yield* invalidSource("Discovery Source requires a safe HTTPS base URL");
-  if (source.members?.some((name) => !discoveryName.test(name)))
+  if (source.skillNames?.some((name) => !discoveryName.test(name)))
     return yield* invalidSource("Discovery member selection contains an invalid Skill name");
   const candidates = [".well-known/agent-skills", ".well-known/skills"];
   let selected: { indexUrl: string; path: string; document: unknown } | undefined;
@@ -991,7 +1026,7 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
   }
   if (!entries.length || entries.length > MAX_ARCHIVE_FILES)
     return yield* sourceLimitExceeded("Discovery index has no Skills or exceeds Skill limit");
-  const selectedMembers = source.members ? new Set(source.members) : undefined;
+  const selectedMembers = source.skillNames ? new Set(source.skillNames) : undefined;
   if (selectedMembers) {
     const found = new Set(entries.map((item) => item.entry.name));
     for (const name of selectedMembers)
@@ -1142,7 +1177,7 @@ export function resolveSkitSourceEffect(
     registryBaseUrl?: string;
     registryToken?: string;
     version?: string;
-    /** Library pin; the Source locator continues to own update tracking and subpath. */
+    /** Exact commit to acquire when restoring; `tracking_ref` must match the Source's `ref`. */
     git?: { commit: string; tracking_ref: string | null };
     requireGitRevision?: boolean;
     /** Exact Agent Skills documents supplied by verified external provenance. */
@@ -1171,11 +1206,12 @@ export function resolveSkitSourceEffect(
     const probe = yield* LinkStat;
     const source =
       typeof input === "string" ? yield* parseSkitSourceEffect(input, options.cwd) : input;
-    if (options.git && source.type !== "git")
+    const gitSource = source.type === "git" || source.type === "github";
+    if (options.git && !gitSource)
       return yield* invalidSource("Git revision requires a Git locator");
-    if (source.type === "git" && options.requireGitRevision && !options.git)
+    if (gitSource && options.requireGitRevision && !options.git)
       return yield* sourcePinMismatch(
-        `Git Entry ${source.locator} has no recorded commit. Run skit update on the retaining device and sync it before acquiring on another device.`,
+        `Git Entry ${sourceLocator(source)} has no recorded commit. Run skit update on the retaining device and sync it before acquiring on another device.`,
       );
     const workspace = yield* Effect.acquireRelease(
       fs.makeTempDirectory({ prefix: "skit-source-" }),
@@ -1185,11 +1221,11 @@ export function resolveSkitSourceEffect(
 
     const resolved = yield* Effect.gen(function* () {
       if (source.type === "local") {
-        const info = yield* probe.identity.stat(source.locator);
+        const info = yield* probe.identity.stat(source.path);
         const start =
-          info.type === "File" && basename(source.locator) === "SKILL.md"
-            ? dirname(source.locator)
-            : source.locator;
+          info.type === "File" && basename(source.path) === "SKILL.md"
+            ? dirname(source.path)
+            : source.path;
         const discovered = yield* discoverRootEffect(
           start,
           workspace,
@@ -1209,8 +1245,15 @@ export function resolveSkitSourceEffect(
           sourceRevision: revision._tag === "Some" ? revision.value.trim() : undefined,
         };
       }
-      if (source.type === "git") {
-        const { cloneUrl, ref, subpath, skillPaths } = yield* parseGitRef(source.locator);
+      if (source.type === "git" || source.type === "github") {
+        const cloneUrl =
+          source.type === "github"
+            ? `https://github.com/${source.owner}/${source.repository}`
+            : source.remote;
+        const { ref, subpath } = source;
+        const skillPaths = (source.skillDirectories ?? []).map((directory) =>
+          join(directory, "SKILL.md"),
+        );
         const checkout = join(workspace, "checkout");
         if (
           options.git &&
@@ -1302,7 +1345,7 @@ export function resolveSkitSourceEffect(
         source.type === "registry"
           ? { ...source, authority: registryBaseUrl!.replace(/\/$/, "") }
           : source;
-      const locatorVersion = source.type === "registry" ? source.locator.split("@")[1] : undefined;
+      const locatorVersion = source.type === "registry" ? source.version : undefined;
       if (
         source.type === "registry" &&
         locatorVersion &&
@@ -1320,8 +1363,8 @@ export function resolveSkitSourceEffect(
           : (options.version ?? "latest");
       const registryReference =
         source.type === "registry"
-          ? `${registryBaseUrl!.replace(/\/$/, "")}/api/skits/${source.locator.split("@")[0]}/releases/${selectedVersion}/download`
-          : source.locator;
+          ? `${registryBaseUrl!.replace(/\/$/, "")}/api/skits/${source.namespace}/${source.slug}/releases/${selectedVersion}/download`
+          : source.url;
       // The scoped client owns the response body alongside the temporary workspace.
       let request = HttpClientRequest.get(registryReference);
       const registryCredentialMatches =
@@ -1452,9 +1495,12 @@ export function resolveSkitSourceEffect(
 export const resolveUnpinnedGitHeadEffect = Effect.fn("Source.resolveGitHead")(function* (
   source: SkitSource,
 ) {
-  if (source.type !== "git") return undefined;
-  const { cloneUrl, ref } = yield* parseGitRef(source.locator);
-  if (ref !== undefined) return undefined;
+  if (source.type !== "git" && source.type !== "github") return undefined;
+  if (source.ref !== undefined) return undefined;
+  const cloneUrl =
+    source.type === "github"
+      ? `https://github.com/${source.owner}/${source.repository}`
+      : source.remote;
   const output = yield* commandOutputEffect("git", [
     "ls-remote",
     "--exit-code",

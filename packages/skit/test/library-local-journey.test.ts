@@ -31,7 +31,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
         firstHome,
         retainObservedCollectionEffect({
           machineId,
-          source: { type: "local", locator: installed },
+          source: { type: "local", path: installed },
           input: installed,
           retainedAt: "2026-09-16T00:00:00.000Z",
           skills: [
@@ -105,7 +105,7 @@ it.effect("reuses an unchanged Skill Version while retaining a changed sibling V
           home,
           retainObservedCollectionEffect({
             machineId,
-            source: { type: "git", locator: "https://github.com/fixture/skills" },
+            source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
             retainedAt,
             skills: [

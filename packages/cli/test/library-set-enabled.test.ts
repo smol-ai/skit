@@ -37,7 +37,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       writingTo(
         home,
         retainObservedIn(home)({
-          source: { type: "local", locator: observed },
+          source: { type: "local", path: observed },
           input: observed,
           retainedAt: "2026-09-16T00:00:00.000Z",
           skills: [

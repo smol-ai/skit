@@ -58,7 +58,7 @@ const library = Effect.gen(function* () {
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
   const retain = retainObservedCollectionEffect({
     machineId,
-    source: { type: "local", locator: source },
+    source: { type: "local", path: source },
     input: source,
     retainedAt: "2026-09-17T00:00:00.000Z",
     skills: [

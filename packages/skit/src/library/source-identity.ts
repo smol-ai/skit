@@ -1,33 +1,25 @@
 import { basename } from "node:path";
-import type { SkitSource } from "./store/state-schema.js";
 import type { MachineId } from "./entity-ids.js";
 import { sanitizeSourceClaim } from "./acquisition-evidence.js";
-import type { SourceIdentity } from "./library-contracts.js";
-
-const registryParts = (value: string) => {
-  const [namespace = "local", slug = value] = value.split("/", 2);
-  return { namespace, slug };
-};
+import type { SkitSource, SourceIdentity } from "./library-contracts.js";
 
 export interface SourceDeclaration {
-  readonly skitId: string;
+  readonly namespace: string;
+  readonly slug: string;
   readonly authority?: string;
 }
 
-const gitParts = (locator: string) => {
-  const [remote, fragment = ""] = locator.split("#", 2);
-  const values = new URLSearchParams(fragment);
-  return {
-    remote: remote.replace(/\/$/, ""),
-    collectionRoot: values.get("path") ?? ".",
-  };
-};
-
-const githubParts = (remote: string): { owner: string; repository: string } | undefined => {
+/**
+ * GitHub owner and repository of an arbitrary Git remote (for example an SSH remote), so it gets
+ * the same identity as the same repository added by URL.
+ */
+const githubRemote = (remote: string): { owner: string; repository: string } | undefined => {
   const match = remote.match(
     /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/]+)\/([^/]+?)(?:\.git)?$/i,
   );
-  return match ? { owner: match[1].toLowerCase(), repository: match[2].toLowerCase() } : undefined;
+  return match?.[1] && match[2]
+    ? { owner: match[1].toLowerCase(), repository: match[2].toLowerCase() }
+    : undefined;
 };
 
 export function sourceIdentityFromSource(
@@ -54,43 +46,45 @@ export function sourceIdentityFromSource(
     return {
       kind: "registry",
       authority: declaration.authority ?? "default",
-      ...registryParts(declaration.skitId),
+      namespace: declaration.namespace,
+      slug: declaration.slug,
     };
   switch (source.type) {
     case "registry":
       return {
         kind: "registry",
         authority: source.authority ?? "default",
-        ...registryParts(source.locator.split("@")[0]),
+        namespace: source.namespace,
+        slug: source.slug,
+      };
+    case "github":
+      return {
+        kind: "github",
+        owner: source.owner.toLowerCase(),
+        repository: source.repository.toLowerCase(),
+        collection_root: source.subpath ?? ".",
       };
     case "git": {
-      const parts = gitParts(source.locator);
-      const github = githubParts(parts.remote);
+      const remote = source.remote.replace(/\/$/, "");
+      const github = githubRemote(remote);
       return github === undefined
         ? {
             kind: "git",
-            remote: { value: sanitizeSourceClaim(parts.remote) },
-            collection_root: parts.collectionRoot,
+            remote: { value: sanitizeSourceClaim(remote) },
+            collection_root: source.subpath ?? ".",
           }
-        : {
-            kind: "github",
-            ...github,
-            collection_root: parts.collectionRoot,
-          };
+        : { kind: "github", ...github, collection_root: source.subpath ?? "." };
     }
     case "local":
       return machineId === undefined
         ? undefined
-        : { kind: "local", machine_id: machineId, path: { value: source.locator } };
+        : { kind: "local", machine_id: machineId, path: { value: source.path } };
     case "archive":
-      return { kind: "archive", url: { value: sanitizeSourceClaim(source.locator) } };
+      return { kind: "archive", url: { value: sanitizeSourceClaim(source.url) } };
     case "url":
-      return { kind: "url", url: { value: sanitizeSourceClaim(source.locator) } };
+      return { kind: "url", url: { value: sanitizeSourceClaim(source.url) } };
     case "well-known":
-      return {
-        kind: "well-known",
-        locator: { value: sanitizeSourceClaim(source.locator) },
-      };
+      return { kind: "well-known", locator: { value: sanitizeSourceClaim(source.origin) } };
   }
 }
 
@@ -98,67 +92,31 @@ export const collectionLabelFromSource = (
   source: SkitSource,
   declaration?: SourceDeclaration,
 ): string => {
-  if (declaration !== undefined) return declaration.skitId;
+  if (declaration !== undefined) return `${declaration.namespace}/${declaration.slug}`;
   switch (source.type) {
     case "registry":
-      return source.locator.split("@")[0];
+      return `${source.namespace}/${source.slug}`;
+    case "github":
+      return `${source.owner.toLowerCase()}/${source.repository.toLowerCase()}${source.subpath === undefined ? "" : `/${source.subpath}`}`;
     case "git": {
-      const parts = gitParts(source.locator);
-      const github = githubParts(parts.remote);
-      const root = parts.collectionRoot === "." ? "" : `/${parts.collectionRoot}`;
-      return github === undefined
-        ? `${parts.remote.replace(/\.git$/, "")}${root}`
-        : `${github.owner}/${github.repository}${root}`;
+      const remote = source.remote.replace(/\/$/, "");
+      const github = githubRemote(remote);
+      const name =
+        github === undefined
+          ? remote.replace(/\.git$/, "")
+          : `${github.owner}/${github.repository}`;
+      return `${name}${source.subpath === undefined ? "" : `/${source.subpath}`}`;
     }
     case "local":
-      return basename(source.locator);
+      return basename(source.path);
     case "archive":
     case "url": {
-      const rawGithub = source.locator.match(
+      const rawGithub = source.url.match(
         /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\//i,
       );
-      return rawGithub ? `${rawGithub[1]}/${rawGithub[2]}` : source.locator;
+      return rawGithub ? `${rawGithub[1]}/${rawGithub[2]}` : source.url;
     }
     case "well-known":
-      return source.locator;
-  }
-};
-
-export const sourceIdentityEquals = (left: SourceIdentity, right: SourceIdentity): boolean => {
-  if (left.kind === "url" && right.kind === "well-known")
-    return left.url.value === right.locator.value;
-  if (left.kind === "well-known" && right.kind === "url")
-    return left.locator.value === right.url.value;
-  if (left.kind !== right.kind) return false;
-  switch (left.kind) {
-    case "github":
-      return (
-        right.kind === "github" &&
-        left.owner === right.owner &&
-        left.repository === right.repository &&
-        left.collection_root === right.collection_root
-      );
-    case "git":
-      return (
-        right.kind === "git" &&
-        left.remote.value === right.remote.value &&
-        left.collection_root === right.collection_root
-      );
-    case "registry":
-      return (
-        right.kind === "registry" &&
-        left.authority === right.authority &&
-        left.namespace === right.namespace &&
-        left.slug === right.slug
-      );
-    case "url":
-    case "archive":
-      return right.kind === left.kind && left.url.value === right.url.value;
-    case "local":
-      return right.kind === "local" && left.path.value === right.path.value;
-    case "authored-workspace":
-      return right.kind === "authored-workspace" && left.workspace_id === right.workspace_id;
-    case "well-known":
-      return right.kind === "well-known" && left.locator.value === right.locator.value;
+      return source.origin;
   }
 };

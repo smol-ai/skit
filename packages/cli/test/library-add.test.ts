@@ -153,7 +153,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         ),
       );
     });
-    const source = { type: "well-known" as const, locator: base, members: ["review"] };
+    const source = { type: "well-known" as const, origin: base, skillNames: ["review"] };
     const options = {
       roots: {
         home: root,
@@ -343,7 +343,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
         writingTo(
           home,
           retainObservedIn(home)({
-            source: { type: "git", locator: "https://github.com/acme/skills.git" },
+            source: { type: "github", owner: "acme", repository: "skills" },
             input: "https://github.com/acme/skills.git",
             sourceRevision,
             retainedAt,

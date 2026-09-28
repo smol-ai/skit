@@ -143,7 +143,7 @@ async function repository(root: string, outsideSymlink = false) {
 }
 
 /** A `git` that rewrites one clone URL to a local path and is otherwise the real git. */
-async function gitShim(root: string, repo: string) {
+async function gitShim(root: string, repo: string, remote = REMOTE) {
   const directory = join(root, "bin");
   const log = join(root, "git-invocations.jsonl");
   await mkdir(directory, { recursive: true });
@@ -152,7 +152,7 @@ async function gitShim(root: string, repo: string) {
     shim,
     `#!${process.execPath}
 const { spawnSync } = require("node:child_process");
-const remote = ${JSON.stringify(REMOTE)};
+const remote = ${JSON.stringify(remote)};
 const repo = ${JSON.stringify(repo)};
 const log = ${JSON.stringify(log)};
 // Only the clone target is rewritten; every other argument and subcommand is passed through.
@@ -289,9 +289,9 @@ test.runIf(realGit)(
     const root = await mkdtemp(join(tmpdir(), "skit-git-subpath-"));
     try {
       const fixture = await repository(root, true);
-      const shim = await gitShim(root, fixture.repo);
+      const shim = await gitShim(root, fixture.repo, "https://github.com/fixtures/tools");
       const roots = isolatedRoots(root);
-      const source = `${REMOTE}#ref=main&path=imported`;
+      const source = "https://github.com/fixtures/tools/tree/main/imported";
 
       const run = (...args: string[]) =>
         new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
@@ -359,6 +359,14 @@ test.runIf(realGit)(
         },
         source_revision: fixture.head,
       });
+
+      // Refreshing a Collection with selected Skill directories reacquires those directories.
+      const planned = await run("update", "--dry-run");
+      expect(planned.code, planned.stderr).toBe(0);
+      expect(JSON.parse(planned.stdout).data).toMatchObject([{ changed: false }]);
+      const updated = await run("update");
+      expect(updated.code, updated.stderr).toBe(0);
+      expect(JSON.parse(updated.stdout).data).toMatchObject([{ changed: false }]);
 
       // A new checkout of the same bytes reuses the verbatim Version and records nothing new.
       const again = await run("add", source);

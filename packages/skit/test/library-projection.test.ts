@@ -33,7 +33,7 @@ const boundCollection = Effect.gen(function* () {
       home,
       retainObservedCollectionEffect({
         machineId,
-        source: { type: "local", locator: source },
+        source: { type: "local", path: source },
         input: source,
         retainedAt: "2026-09-16T00:00:00.000Z",
         skills: [

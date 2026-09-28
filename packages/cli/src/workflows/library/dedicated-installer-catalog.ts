@@ -35,27 +35,12 @@ export class DedicatedInstallerRequired extends Data.TaggedError(
   }
 }
 
-function githubCoordinate(source: SkitSource): string | undefined {
-  if (source.type !== "git") return undefined;
-  const reference = source.locator.split("#", 1)[0];
-  if (!reference) return undefined;
-  const url = URL.parse(reference);
-  if (!url || url.hostname.toLowerCase() !== "github.com") return undefined;
-  const segments = url.pathname
-    .replace(/^\/+|\/+$/g, "")
-    .split("/")
-    .filter(Boolean);
-  if (segments.length !== 2) return undefined;
-  const [owner, repository] = segments;
-  if (!owner || !repository) return undefined;
-  return `github:${owner.toLowerCase()}/${repository.replace(/\.git$/i, "").toLowerCase()}`;
-}
-
 export function dedicatedInstallerForSource(
   source: SkitSource,
 ): DedicatedInstallerGuidance | undefined {
-  const coordinate = githubCoordinate(source);
-  return coordinate ? catalog.get(coordinate) : undefined;
+  return source.type === "github"
+    ? catalog.get(`github:${source.owner.toLowerCase()}/${source.repository.toLowerCase()}`)
+    : undefined;
 }
 
 /** Stop before acquisition when the Source explicitly requires its own installer. */

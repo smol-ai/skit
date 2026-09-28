@@ -137,7 +137,7 @@ const registerOwnedWorkspaceEffect = Effect.fn("Author.registerOwnedWorkspace")(
     );
   const collection = yield* retainAuthoredCollectionUnderLockEffect({
     root,
-    source: { type: "local", locator: root },
+    source: { type: "local", path: root },
     sourceIdentity: {
       kind: "authored-workspace",
       workspace_id: plan.workspace.workspace_id,

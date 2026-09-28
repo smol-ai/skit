@@ -32,7 +32,7 @@ it.effect(
         writingTo(
           home,
           retainObservedIn(home)({
-            source: { type: "local", locator: source },
+            source: { type: "local", path: source },
             input: source,
             retainedAt: now(),
             skills: [
@@ -156,7 +156,7 @@ it.effect(
         writingTo(
           home,
           retainObservedIn(home)({
-            source: { type: "local", locator: source },
+            source: { type: "local", path: source },
             input: source,
             retainedAt: "2026-09-18T00:00:00.000Z",
             skills: [

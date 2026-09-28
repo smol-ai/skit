@@ -10,9 +10,12 @@ const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "sou
 describe("source identity", () => {
   test("derives GitHub identity from the repository and collection root, not selection", () => {
     const source = {
-      type: "git" as const,
-      locator:
-        "https://github.com/acme/skills.git#ref=main&path=public&skill=public%2Freview%2FSKILL.md",
+      type: "github" as const,
+      owner: "Acme",
+      repository: "Skills",
+      ref: "main",
+      subpath: "public",
+      skillDirectories: ["review"],
     };
     expect(sourceIdentityFromSource(source, machineId)).toEqual({
       kind: "github",
@@ -26,7 +29,9 @@ describe("source identity", () => {
   test("derives registry identity and label from a declared source", () => {
     const source = {
       type: "registry" as const,
-      locator: "tim/tools@1.2.3",
+      namespace: "tim",
+      slug: "tools",
+      version: "1.2.3",
       authority: "https://skills.example.com",
     };
     expect(sourceIdentityFromSource(source, machineId)).toEqual({
@@ -39,7 +44,7 @@ describe("source identity", () => {
   });
 
   test("requires a machine identity for local source identity", () => {
-    const source = { type: "local" as const, locator: "/tmp/private-skills" };
+    const source = { type: "local" as const, path: "/tmp/private-skills" };
     expect(sourceIdentityFromSource(source, undefined)).toBeUndefined();
     expect(sourceIdentityFromSource(source, machineId)).toEqual({
       kind: "local",
@@ -49,10 +54,19 @@ describe("source identity", () => {
     expect(collectionLabelFromSource(source)).toBe("private-skills");
   });
 
+  test("gives a GitHub SSH remote the same identity as the repository URL", () => {
+    expect(
+      sourceIdentityFromSource(
+        { type: "git", remote: "git@github.com:Acme/Skills.git", subpath: "public" },
+        machineId,
+      ),
+    ).toEqual({ kind: "github", owner: "acme", repository: "skills", collection_root: "public" });
+  });
+
   test("keeps well-known discovery distinct from direct URLs", () => {
     expect(
       sourceIdentityFromSource(
-        { type: "well-known", locator: "https://skills.example.com" },
+        { type: "well-known", origin: "https://skills.example.com" },
         machineId,
       ),
     ).toEqual({

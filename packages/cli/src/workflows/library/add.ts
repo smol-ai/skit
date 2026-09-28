@@ -10,7 +10,6 @@ import {
   retainAuthoredCollectionUnderLockEffect,
   retainObservedCollectionEffect,
   LibraryStore,
-  type Acquisition,
   type SkitSource,
 } from "@smolai/skit-core";
 import { Clock, Effect, FileSystem, Schema } from "effect";
@@ -24,23 +23,6 @@ export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVer
   "Library.AddRetainedVersionMissing",
   { source: Schema.String },
 ) {}
-
-const registrySourceDeclaration = (source: SkitSource, authority?: string) =>
-  source.type === "registry"
-    ? {
-        skitId: source.locator.split("@")[0],
-        ...((source.authority ?? authority) ? { authority: source.authority ?? authority } : {}),
-      }
-    : undefined;
-
-export const acquisitionSourceEffect = Effect.fn("Library.acquisitionSource")(function* (
-  acquisition: Acquisition,
-) {
-  const source = yield* parseSkitSourceEffect(acquisition.input.value);
-  return source.type === "well-known" && acquisition.selection.kind === "selected-skills"
-    ? { ...source, members: acquisition.selection.names }
-    : source;
-});
 
 export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(function* (
   input: string | SkitSource,
@@ -133,9 +115,17 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         ...(version === undefined ? {} : { version }),
         verbatimOnly: true,
       });
+      const authority =
+        resolved.source.type === "registry"
+          ? (resolved.source.authority ?? registry.origin)
+          : undefined;
       const declaration =
-        resolved.descriptorKind === "declared"
-          ? registrySourceDeclaration(resolved.source, registry.origin)
+        resolved.descriptorKind === "declared" && resolved.source.type === "registry"
+          ? {
+              namespace: resolved.source.namespace,
+              slug: resolved.source.slug,
+              ...(authority === undefined ? {} : { authority }),
+            }
           : undefined;
       if (resolved.descriptorKind === "declared") {
         const snapshot = yield* originalTreeHashEffect(resolved.root);

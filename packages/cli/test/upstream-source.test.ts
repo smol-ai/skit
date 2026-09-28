@@ -18,9 +18,33 @@ it("reconstructs Git refresh input from upstream tracking and selection", () => 
       },
     }),
     {
-      type: "git",
-      locator:
-        "https://github.com/smol-ai/skills.git#ref=main&path=packages&skill=review%2FSKILL.md&skill=test%2FSKILL.md",
+      type: "github",
+      owner: "smol-ai",
+      repository: "skills",
+      ref: "main",
+      subpath: "packages",
+      skillDirectories: ["review", "test"],
+    },
+  );
+});
+
+it("passes selected Skill directories through as directories", () => {
+  assert.deepStrictEqual(
+    sourceFromUpstream({
+      source_identity: {
+        kind: "github",
+        owner: "mattpocock",
+        repository: "skills",
+        collection_root: ".",
+      },
+      tracking: { kind: "default" },
+      selection: { kind: "selected-paths", paths: ["skills/engineering/tdd"] },
+    }),
+    {
+      type: "github",
+      owner: "mattpocock",
+      repository: "skills",
+      skillDirectories: ["skills/engineering/tdd"],
     },
   );
 });

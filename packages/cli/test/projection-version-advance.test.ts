@@ -27,7 +27,7 @@ const boundRawReview = Effect.gen(function* () {
         writingTo(
           home,
           retainObservedIn(home)({
-            source: { type: "local", locator: source },
+            source: { type: "local", path: source },
             input: source,
             retainedAt: "2026-09-16T00:00:00.000Z",
             skills: [

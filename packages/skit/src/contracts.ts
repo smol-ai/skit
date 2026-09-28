@@ -26,11 +26,7 @@ export {
   SkillAssessmentAcceptance,
   SkitValidationDiagnostic,
 };
-export type {
-  HarnessInstallStatus,
-  CustodyIssue,
-  SkitSource,
-} from "./library/store/state-schema.js";
+export type { HarnessInstallStatus, CustodyIssue } from "./library/store/state-schema.js";
 export {
   SKILL_EXAMPLE_SCHEMA_VERSION,
   SKIT_DESCRIPTOR_VERSION,
