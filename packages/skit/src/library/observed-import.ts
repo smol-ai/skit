@@ -17,15 +17,16 @@ import { MachineDocumentJson, MachineDocumentV4 } from "./machine-document.js";
 import { acquisitionObservations } from "./acquisition-evidence.js";
 import {
   Acquisition,
-  type AcquisitionSelection,
   type MaterializationProfile,
   type SkitSource,
+  sourceAcquisitions,
   SourceIdentity,
   SourceTracking,
 } from "./library-contracts.js";
 import {
   LibraryState,
   decodeLibraryState,
+  pruneLibraryState,
   libraryManifestFromLocalStateEffect,
 } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
@@ -93,7 +94,10 @@ export interface ObservedImport {
   readonly input: string;
   readonly source: SkitSource;
   readonly declaration?: SourceDeclaration;
+  /** Exact Git commit the bytes came from, when the Source is Git. */
   readonly sourceRevision?: string;
+  /** Immutable Registry Release the bytes came from, when the Source is a Registry. */
+  readonly releaseVersion?: string;
   readonly retainedAt: string;
   readonly skills: readonly ObservedSkill[];
   readonly observations: readonly SkillsShProvenanceObservation[];
@@ -106,40 +110,6 @@ const safeRelative = (path: string) =>
   !path.includes("\\") &&
   !path.includes("\0") &&
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
-
-const selection = (source: SkitSource, skills: ObservedImport["skills"]): AcquisitionSelection => {
-  if (source.type === "well-known" && source.skillNames?.length)
-    return { kind: "selected-skills", names: [...new Set(source.skillNames)].sort() };
-  if (source.type !== "git" && source.type !== "github") return { kind: "full-tree" };
-  const paths = [
-    ...new Set(
-      source.skillDirectories?.length
-        ? source.skillDirectories
-        : skills.map((skill) => skill.relativePath),
-    ),
-  ].sort();
-  return paths.length === 0 || (paths.length === 1 && paths[0] === ".")
-    ? { kind: "full-tree" }
-    : { kind: "selected-paths", paths: paths.filter((path) => path !== ".") };
-};
-
-const mergeSelections = (
-  previous: AcquisitionSelection,
-  acquired: AcquisitionSelection,
-): AcquisitionSelection | undefined => {
-  if (previous.kind === "full-tree" || acquired.kind === "full-tree") return { kind: "full-tree" };
-  if (previous.kind === "selected-paths" && acquired.kind === "selected-paths")
-    return {
-      kind: "selected-paths",
-      paths: [...new Set([...previous.paths, ...acquired.paths])].sort(),
-    };
-  if (previous.kind === "selected-skills" && acquired.kind === "selected-skills")
-    return {
-      kind: "selected-skills",
-      names: [...new Set([...previous.names, ...acquired.names])].sort(),
-    };
-  return undefined;
-};
 
 interface PreparedFact {
   readonly name: string;
@@ -228,15 +198,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const source =
     request.sourceIdentity ??
     sourceIdentityFromSource(request.source, machineId, request.declaration);
-  const acquiredSelection = selection(request.source, request.skills);
-  const pinnedRevision =
-    (source.kind === "github" || source.kind === "git") && request.sourceRevision !== undefined
+  const revision =
+    source.kind === "github" || source.kind === "git"
       ? request.sourceRevision
-      : undefined;
-  const acquisitionTracking =
-    pinnedRevision === undefined
-      ? ({ kind: "default" } as const)
-      : ({ kind: "commit", ref: pinnedRevision } as const);
+      : source.kind === "registry"
+        ? request.releaseVersion
+        : undefined;
   const requestedGitRef =
     request.source.type === "git" || request.source.type === "github"
       ? request.source.ref
@@ -247,91 +214,48 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       : /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(requestedGitRef)
         ? ({ kind: "commit", ref: requestedGitRef } as const)
         : ({ kind: "branch", ref: requestedGitRef } as const);
-  let collection = state.collections.find((candidate) => {
-    if (
-      candidate.upstream !== undefined &&
-      Schema.toEquivalence(SourceIdentity)(candidate.upstream.source_identity, source) &&
-      Schema.toEquivalence(SourceTracking)(candidate.upstream.tracking, refreshTracking)
-    )
-      return true;
-    if (source.kind !== "local") return false;
-    const acquisitionIds = new Set(
-      state.skills
-        .filter((skill) => skill.collection_id === candidate.collection_id)
-        .flatMap((skill) =>
-          skill.versions.flatMap((version) =>
-            version.origins.map((origin) => origin.acquisition_id),
-          ),
-        ),
-    );
-    return state.acquisitions.some(
-      (acquisition) =>
-        acquisitionIds.has(acquisition.acquisition_id) &&
-        Schema.toEquivalence(SourceIdentity)(acquisition.source_identity, source),
-    );
-  });
-  const mergedCollectionSelection =
-    collection?.upstream === undefined
-      ? undefined
-      : mergeSelections(collection.upstream.selection, acquiredSelection);
-  if (collection?.upstream !== undefined && mergedCollectionSelection === undefined)
-    return yield* new ObservedImportInvalid({
-      reason: `source selection changed from ${collection.upstream.selection.kind} to ${acquiredSelection.kind}`,
-    });
+  let collection = state.collections.find(
+    (candidate) =>
+      (candidate.upstream !== undefined &&
+        Schema.toEquivalence(SourceIdentity)(candidate.upstream.source_identity, source) &&
+        Schema.toEquivalence(SourceTracking)(candidate.upstream.tracking, refreshTracking)) ||
+      (candidate.upstream === undefined &&
+        sourceAcquisitions(state, candidate.collection_id).some((acquisition) =>
+          Schema.toEquivalence(SourceIdentity)(acquisition.source_identity, source),
+        )),
+  );
   if (collection === undefined) {
     collection = {
       collection_id: makeCollectionId(),
       label: request.label ?? collectionLabelFromSource(request.source, request.declaration),
       ...(source.kind === "local"
         ? {}
-        : {
-            upstream: {
-              source_identity: source,
-              tracking: refreshTracking,
-              selection: acquiredSelection,
-            },
-          }),
+        : { upstream: { source_identity: source, tracking: refreshTracking } }),
     };
     state.collections.push(collection);
   }
+  const collectionId = collection.collection_id;
   const retainedCopy = state.retained_copies.find(
     (candidate) => candidate.digest === request.retainedDigest,
   );
   const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
   const acquisition: Acquisition = {
     acquisition_id: makeAcquisitionId(),
+    collection_id: collectionId,
+    kind: "source",
     retained_copy_id: retainedCopyId,
     source_identity: source,
-    tracking: acquisitionTracking,
-    selection: acquiredSelection,
     input: { value: request.input },
-    ...(pinnedRevision === undefined ? {} : { source_revision: pinnedRevision }),
+    ...(revision === undefined ? {} : { revision }),
     acquired_at: request.retainedAt,
     machine_id: machineId,
     observations: acquisitionObservations(request.observations, machineId),
   };
+  const skillAt = (path: string) =>
+    state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
   // Seeing exactly what was last acquired from this Source changes nothing, so record nothing.
-  // A retained local edit is acquired from its Projection path, not this Source, so it is skipped.
-  const collectionOrigins = new Set(
-    state.skills
-      .filter((skill) => skill.collection_id === collection.collection_id)
-      .flatMap((skill) =>
-        skill.versions.flatMap((version) => version.origins.map((origin) => origin.acquisition_id)),
-      ),
-  );
-  const previous = state.acquisitions
-    .filter(
-      (candidate) =>
-        collectionOrigins.has(candidate.acquisition_id) &&
-        Schema.toEquivalence(SourceIdentity)(candidate.source_identity, source),
-    )
-    .toSorted((left, right) => right.acquired_at.localeCompare(left.acquired_at))[0];
-  // A Skill removed from the Collection but observed again goes through the full path below.
-  const unchangedSkills = request.facts.map((fact) =>
-    state.skills.find(
-      (skill) => skill.collection_id === collection.collection_id && skill.path === fact.sourcePath,
-    ),
-  );
+  const previous = sourceAcquisitions(state, collectionId)[0];
+  const unchangedSkills = request.facts.map((fact) => skillAt(fact.sourcePath));
   if (
     previous !== undefined &&
     Schema.toEquivalence(Acquisition)(previous, {
@@ -342,16 +266,16 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     unchangedSkills.every((skill) => skill !== undefined)
   )
     return { collection, skills: unchangedSkills };
+  const previousCopy = state.retained_copies.find(
+    (copy) => copy.retained_copy_id === previous?.retained_copy_id,
+  );
   const persistedSkills = [];
   for (const fact of request.facts) {
-    let skill = state.skills.find(
-      (candidate) =>
-        candidate.collection_id === collection.collection_id && candidate.path === fact.sourcePath,
-    );
+    let skill = skillAt(fact.sourcePath);
     if (skill === undefined) {
       skill = {
         skill_id: makeSkillId(),
-        collection_id: collection.collection_id,
+        collection_id: collectionId,
         path: fact.sourcePath,
         name: fact.name,
         versions: [],
@@ -359,26 +283,19 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       state.skills.push(skill);
     }
     persistedSkills.push(skill);
-    let version = skill.versions.find(
-      (candidate) => candidate.artifact_digest === fact.artifactDigest,
-    );
-    const origin = { acquisition_id: acquisition.acquisition_id, source_path: fact.sourcePath };
-    if (version === undefined) {
-      version = {
+    if (!skill.versions.some((candidate) => candidate.artifact_digest === fact.artifactDigest))
+      skill.versions.push({
         skill_version_id: makeSkillVersionId(),
         source_digest: fact.sourceDigest,
         artifact_digest: fact.artifactDigest,
         validation_identity_digest: fact.validationDigest,
         materialization_profile: fact.materializationProfile,
-        origins: [origin],
-      };
-      skill.versions.push(version);
-    } else {
-      const next = { ...version, origins: [...version.origins, origin] };
-      skill.versions.splice(skill.versions.indexOf(version), 1, next);
-      version = next;
-    }
-    skill.selected_skill_version_id = version.skill_version_id;
+      });
+    // A retained local edit is used until the Source changes this Skill.
+    const previousMember = previousCopy?.members.find(
+      (member) => member.source_path === fact.sourcePath,
+    );
+    if (previousMember?.artifact_digest !== fact.artifactDigest) delete skill.local_version_id;
   }
   if (retainedCopy === undefined)
     state.retained_copies.push({
@@ -393,18 +310,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       })),
     });
   state.acquisitions.push(acquisition);
-  if (collection?.upstream !== undefined) {
-    const revised = {
-      ...collection,
-      upstream: {
-        ...collection.upstream,
-        selection: mergedCollectionSelection ?? acquiredSelection,
-        last_acquisition_id: acquisition.acquisition_id,
-      },
-    };
-    state.collections[state.collections.indexOf(collection)] = revised;
-  }
-  const successor = yield* decodeLibraryState(state).pipe(
+  const successor = yield* decodeLibraryState(pruneLibraryState(state)).pipe(
     Effect.mapError(
       (error) =>
         new InvalidLibraryState({
@@ -423,7 +329,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     ),
   );
   yield* store.publish(successor);
-  return { collection, skills: persistedSkills };
+  return {
+    collection,
+    skills: persistedSkills.map((skill) =>
+      successor.skills.find((candidate) => candidate.skill_id === skill.skill_id)!,
+    ),
+  };
 });
 
 /** Retain observed bytes while the caller holds Library write authority. */
@@ -504,14 +415,14 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
       (candidate) => candidate.digest === prepared.digest,
     );
     const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
-    const acquisitionId = makeAcquisitionId();
-    const version = {
+    const version = skill.versions.find(
+      (candidate) => candidate.artifact_digest === fact.artifactDigest,
+    ) ?? {
       skill_version_id: makeSkillVersionId(),
       source_digest: fact.sourceDigest,
       artifact_digest: fact.artifactDigest,
       validation_identity_digest: fact.validationDigest,
       materialization_profile: fact.materializationProfile,
-      origins: [{ acquisition_id: acquisitionId, source_path: "." as const }],
     };
     if (retainedCopy === undefined)
       state.retained_copies.push({
@@ -528,23 +439,23 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
         ],
       });
     state.acquisitions.push({
-      acquisition_id: acquisitionId,
+      acquisition_id: makeAcquisitionId(),
+      collection_id: skill.collection_id,
+      kind: "retained-edit",
       retained_copy_id: retainedCopyId,
       source_identity: {
         kind: "local",
         machine_id: machineId,
         path: { value: request.path },
       },
-      tracking: { kind: "default" },
-      selection: { kind: "full-tree" },
       input: { value: request.path },
       acquired_at: request.retainedAt,
       machine_id: machineId,
       observations: [],
     });
-    skill.versions.push(version);
-    skill.selected_skill_version_id = version.skill_version_id;
-    const successor = yield* decodeLibraryState(state).pipe(
+    if (!skill.versions.includes(version)) skill.versions.push(version);
+    skill.local_version_id = version.skill_version_id;
+    const successor = yield* decodeLibraryState(pruneLibraryState(state)).pipe(
       Effect.mapError(
         (error) =>
           new InvalidLibraryState({

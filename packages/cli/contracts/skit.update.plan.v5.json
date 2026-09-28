@@ -1,0 +1,87 @@
+{
+  "$id": "skit.update.plan.v5",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "subject_id": {
+        "type": "string"
+      },
+      "subject_kind": {
+        "type": "string",
+        "enum": [
+          "collection",
+          "skill"
+        ]
+      },
+      "current_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "available_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "changed": {
+        "type": "boolean"
+      },
+      "label": {
+        "type": "string"
+      },
+      "installed": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "new_available": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Infinity",
+              "-Infinity",
+              "NaN"
+            ]
+          }
+        ]
+      },
+      "updated": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "removed": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "kept": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "subject_id",
+      "subject_kind",
+      "current_snapshot_digest",
+      "available_snapshot_digest",
+      "changed",
+      "label",
+      "installed",
+      "new_available",
+      "updated",
+      "removed",
+      "kept"
+    ],
+    "additionalProperties": true
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

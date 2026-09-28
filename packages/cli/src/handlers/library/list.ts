@@ -1,4 +1,4 @@
-import { LibraryStore } from "@smolai/skit-core";
+import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { Command } from "effect/unstable/cli";
 import { handleCommand } from "../../application.js";
@@ -28,21 +28,40 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
       subject_id: subject.subjectId,
       subject_kind: subject.kind,
       label: subject.label,
-      skills: subject.skills.map((skill) => ({
-        name: skill.name,
-        skill_id: skill.skill_id,
-        ...(skill.selected_skill_version_id === undefined
-          ? {}
-          : { selected_skill_version_id: skill.selected_skill_version_id }),
-        versions: skill.versions.map((version) => ({
-          skill_version_id: version.skill_version_id,
-          artifact_digest: version.artifact_digest,
-        })),
-      })),
+      skills: subject.skills.map((skill) => {
+        const selected = currentSkillVersion(state, skill);
+        return {
+          name: skill.name,
+          skill_id: skill.skill_id,
+          ...(selected === undefined
+            ? {}
+            : { selected_skill_version_id: selected.skill_version_id }),
+          versions: skill.versions.map((version) => ({
+            skill_version_id: version.skill_version_id,
+            artifact_digest: version.artifact_digest,
+          })),
+        };
+      }),
     })),
     bindings: state.global_bindings.map((binding) => ({
       harness: binding.harness,
-      skills: [...binding.skills],
+      entries: binding.entries.map((entry) =>
+        entry.kind === "collection"
+          ? {
+              ...entry,
+              label:
+                state.collections.find(
+                  (collection) => collection.collection_id === entry.collection_id,
+                )?.label ?? entry.collection_id,
+            }
+          : {
+              ...entry,
+              name:
+                state.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
+                entry.skill_id,
+            },
+      ),
+      skills: bindingSkillIds(state, binding),
     })),
   };
   const renderer = yield* Renderer;

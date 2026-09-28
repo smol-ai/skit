@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.v4",
+  "$id": "skit.pull.v5",
   "type": "array",
   "items": {
     "type": "object",
@@ -56,6 +56,48 @@
             ]
           }
         ]
+      },
+      "label": {
+        "type": "string"
+      },
+      "installed": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "new_available": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Infinity",
+              "-Infinity",
+              "NaN"
+            ]
+          }
+        ]
+      },
+      "updated": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "removed": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "kept": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       }
     },
     "required": [
@@ -66,7 +108,13 @@
       "snapshot_digest",
       "changed",
       "projected",
-      "deferred"
+      "deferred",
+      "label",
+      "installed",
+      "new_available",
+      "updated",
+      "removed",
+      "kept"
     ],
     "additionalProperties": true
   },

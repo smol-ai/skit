@@ -2,6 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
+  currentSkillVersion,
   deterministicTreeHashEffect,
   LibraryStore,
   libraryStoreLayer,
@@ -55,9 +56,9 @@ const boundRawReview = Effect.gen(function* () {
           {
             harness: "codex",
             scope: { kind: "global" },
-            skills: bound.skills
+            entries: bound.skills
               .filter((skill) => skill.collection_id === first.collection?.collection_id)
-              .map((skill) => skill.skill_id),
+              .map((skill) => ({ kind: "skill" as const, skill_id: skill.skill_id })),
           },
         ],
       }),
@@ -79,7 +80,12 @@ const boundRawReview = Effect.gen(function* () {
     assert.ok(state);
     const row = state.projections.find((item) => item.harness === "codex");
     assert.ok(row);
-    return { row, selected: state.skills[0]?.selected_skill_version_id };
+    const skill = state.skills[0];
+    return {
+      row,
+      selected:
+        skill === undefined ? undefined : currentSkillVersion(state, skill)?.skill_version_id,
+    };
   });
   return { fs, home, layer, observe, project, projected, projection };
 });
@@ -123,7 +129,10 @@ it.effect("heals an untouched Projection already recorded as conflicted", () =>
     yield* observe("second verbatim Skill\n");
     const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(state);
-    const selected = state.skills[0]?.selected_skill_version_id;
+    const selected =
+      state.skills[0] === undefined
+        ? undefined
+        : currentSkillVersion(state, state.skills[0])?.skill_version_id;
     assert.ok(selected);
     yield* writingTo(
       home,

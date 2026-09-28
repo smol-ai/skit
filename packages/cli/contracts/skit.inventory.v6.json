@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v5",
+  "$id": "skit.inventory.v6",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -296,7 +296,7 @@
     "schemaVersion": {
       "type": "number",
       "enum": [
-        5
+        6
       ]
     },
     "skills": {
@@ -327,7 +327,7 @@
             "type": "string",
             "minLength": 1
           },
-          "selected_skill_version_id": {
+          "local_version_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -363,35 +363,6 @@
                     "plain-skill/v1",
                     "declared-skit-skill/v1"
                   ]
-                },
-                "origins": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "acquisition_id": {
-                        "type": "string"
-                      },
-                      "source_path": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "enum": [
-                              "."
-                            ]
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "acquisition_id",
-                      "source_path"
-                    ],
-                    "additionalProperties": true
-                  }
                 }
               },
               "required": [
@@ -399,8 +370,7 @@
                 "source_digest",
                 "artifact_digest",
                 "validation_identity_digest",
-                "materialization_profile",
-                "origins"
+                "materialization_profile"
               ],
               "additionalProperties": true
             }

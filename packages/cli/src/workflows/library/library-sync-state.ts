@@ -86,4 +86,6 @@ export const publishAcceptedBaseEffect = Effect.fn("Library.publishAcceptedBase"
     Effect.mapError(() => new AcceptedBaseInvalid({ path, detail: "invalid accepted sync base" })),
   );
   yield* writeJsonAtomicEffect(path, verified);
+  // The older base file is only a fallback for reading; once a current base exists it is stale.
+  yield* (yield* FileSystem.FileSystem).remove(preRenamePathFor(home), { force: true });
 });

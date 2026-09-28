@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import {
+  bindingSkillIds,
   canonicalJson,
   blendRestoredStateEffect,
   captureSnapshotArchiveEffect,
@@ -14,7 +15,9 @@ import {
   acquisitionIsSourceRestorable,
   resolveSkitSourceEffect,
   retainedTreePath,
+  type Acquisition,
   type LibraryManifest,
+  type SkitSource,
   type SnapshotArchive,
 } from "@smolai/skit-core";
 import { join } from "node:path";
@@ -40,7 +43,7 @@ export const deferredLibraryBindings = (
 ) =>
   manifest.bindings.flatMap((binding) => {
     if (rootFor(binding.harness) !== undefined) return [];
-    const skills = binding.skills.flatMap((skillId) => {
+    const skills = bindingSkillIds(manifest, binding).flatMap((skillId) => {
       const skill = manifest.skills.find((candidate) => candidate.skill_id === skillId);
       return skill === undefined ? [] : [skill.name];
     });
@@ -71,6 +74,41 @@ export class SyncSourceRestoreInvalid extends Schema.TaggedError<SyncSourceResto
   { digest: Schema.String, detail: Schema.String },
 ) {}
 
+/**
+ * The Source to reacquire an Acquisition's exact bytes from: its recorded identity at its
+ * revision. Git restores pin the commit separately; a Registry restore names the Release.
+ */
+export const restorableSource = (acquisition: Acquisition): SkitSource | undefined => {
+  const identity = acquisition.source_identity;
+  const subpath =
+    (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
+      ? { subpath: identity.collection_root }
+      : {};
+  switch (identity.kind) {
+    case "github":
+      return {
+        type: "github",
+        owner: identity.owner,
+        repository: identity.repository,
+        ...subpath,
+      };
+    case "git":
+      return { type: "git", remote: identity.remote.value, ...subpath };
+    case "registry":
+      return acquisition.revision === undefined
+        ? undefined
+        : {
+            type: "registry",
+            namespace: identity.namespace,
+            slug: identity.slug,
+            version: acquisition.revision,
+            ...(identity.authority === "default" ? {} : { authority: identity.authority }),
+          };
+    default:
+      return undefined;
+  }
+};
+
 const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(function* (
   manifest: LibraryManifest,
   digest: string,
@@ -91,14 +129,14 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(f
     Effect.gen(function* () {
       const gitSource =
         acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git";
-      if (gitSource && acquisition.source_revision === undefined)
+      if (gitSource && acquisition.revision === undefined)
         return yield* new SyncSourceRestoreInvalid({
           digest,
           detail: "pinned Git acquisition has no commit",
         });
       let git: { commit: string; tracking_ref: string | null } | undefined;
       if (gitSource) {
-        const commit = acquisition.source_revision;
+        const commit = acquisition.revision;
         if (commit === undefined)
           return yield* new SyncSourceRestoreInvalid({
             digest,
@@ -106,24 +144,12 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(f
           });
         git = { commit, tracking_ref: null };
       }
-      const identity = acquisition.source_identity;
-      const subpath =
-        (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
-          ? { subpath: identity.collection_root }
-          : {};
-      // Git is restored from its recorded identity and commit. A Registry Release version is only
-      // recorded in the Acquisition input, so that input is still read here.
-      const source =
-        identity.kind === "github"
-          ? {
-              type: "github" as const,
-              owner: identity.owner,
-              repository: identity.repository,
-              ...subpath,
-            }
-          : identity.kind === "git"
-            ? { type: "git" as const, remote: identity.remote.value, ...subpath }
-            : acquisition.input.value;
+      const source = restorableSource(acquisition);
+      if (source === undefined)
+        return yield* new SyncSourceRestoreInvalid({
+          digest,
+          detail: "acquisition has no restorable source identity",
+        });
       const resolved = yield* resolveSkitSourceEffect(source, {
         registryBaseUrl: options.origin,
         ...(options.token === undefined ? {} : { registryToken: options.token }),

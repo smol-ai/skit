@@ -1,4 +1,4 @@
-import type { LibraryState } from "@smolai/skit-core";
+import { sourceAcquisitions, type LibraryState } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 
 type Collection = LibraryState["collections"][number];
@@ -105,11 +105,18 @@ export const resolveLibrarySubject = Effect.fn("Library.resolveSubject")(functio
   return subject;
 });
 
-export const subjectAcquisitionIds = (subject: LibrarySubject): ReadonlySet<string> =>
+/** The Collection a subject belongs to. */
+const subjectCollectionId = (subject: LibrarySubject) =>
+  subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
+
+export const subjectAcquisitionIds = (
+  state: LibraryState,
+  subject: LibrarySubject,
+): ReadonlySet<string> =>
   new Set(
-    subject.skills.flatMap((skill) =>
-      skill.versions.flatMap((version) => version.origins.map((origin) => origin.acquisition_id)),
-    ),
+    state.acquisitions
+      .filter((acquisition) => acquisition.collection_id === subjectCollectionId(subject))
+      .map((acquisition) => acquisition.acquisition_id),
   );
 
 export const owningCollectionSubject = (
@@ -139,21 +146,6 @@ export const resolveOwningLibrarySubjects = Effect.fn("Library.resolveOwningSubj
   ]);
 });
 
-export const latestSubjectAcquisition = (state: LibraryState, subject: LibrarySubject) => {
-  const preferred =
-    subject.kind === "collection"
-      ? subject.collection.upstream?.last_acquisition_id
-      : state.collections.find(
-          (collection) => collection.collection_id === subject.skill.collection_id,
-        )?.upstream?.last_acquisition_id;
-  if (preferred !== undefined) {
-    const acquisition = state.acquisitions.find(
-      (candidate) => candidate.acquisition_id === preferred,
-    );
-    if (acquisition !== undefined) return acquisition;
-  }
-  const acquisitionIds = subjectAcquisitionIds(subject);
-  return [...state.acquisitions]
-    .filter((acquisition) => acquisitionIds.has(acquisition.acquisition_id))
-    .sort((a, b) => b.acquired_at.localeCompare(a.acquired_at))[0];
-};
+/** The subject's Collection's latest Source Acquisition. */
+export const latestSubjectAcquisition = (state: LibraryState, subject: LibrarySubject) =>
+  sourceAcquisitions(state, subjectCollectionId(subject))[0];

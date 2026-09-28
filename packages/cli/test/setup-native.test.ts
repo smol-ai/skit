@@ -786,7 +786,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const retained = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 5,
+      schemaVersion: 6,
       collections: [
         {
           collection_id: collectionId,
@@ -794,7 +794,6 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
           upstream: {
             source_identity: { kind: "well-known", locator: { value: locator } },
             tracking: { kind: "default" },
-            selection: { kind: "full-tree" },
           },
         },
       ],
@@ -999,7 +998,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     yield* f.fs.writeFileString(join(projectedSkill, ".skit-ownership.json"), projectionMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), projectionMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 5,
+      schemaVersion: 6,
       collections: [
         {
           collection_id: collectionId,
@@ -1012,8 +1011,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
               slug: "skills",
             },
             tracking: { kind: "default" },
-            selection: { kind: "full-tree" },
-            last_acquisition_id: acquisitionId,
           },
         },
       ],
@@ -1023,7 +1020,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
           collection_id: collectionId,
           path: "skills/council",
           name: "council",
-          selected_skill_version_id: skillVersionId,
           versions: [
             {
               skill_version_id: skillVersionId,
@@ -1031,7 +1027,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
               artifact_digest: contentHash,
               validation_identity_digest: contentHash,
               materialization_profile: "declared-skit-skill/v1",
-              origins: [{ acquisition_id: acquisitionId, source_path: "skills/council" }],
             },
           ],
         },
@@ -1054,6 +1049,8 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       acquisitions: [
         {
           acquisition_id: acquisitionId,
+          collection_id: collectionId,
+          kind: "source",
           retained_copy_id: versionId,
           input: { value: "skit://registry.test/tim/skills" },
           source_identity: {
@@ -1062,8 +1059,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
             namespace: "tim",
             slug: "skills",
           },
-          tracking: { kind: "default" },
-          selection: { kind: "full-tree" },
           acquired_at: "2026-01-01T00:00:00.000Z",
           machine_id: machineId,
           observations: [],
@@ -1071,10 +1066,9 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       ],
       global_bindings: [
         {
-          collection_id: collectionId,
           harness: "codex",
           scope: { kind: "global" },
-          skills: [skillId],
+          entries: [{ kind: "skill", skill_id: skillId }],
         },
       ],
       local_bindings: [],
@@ -1276,7 +1270,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       }),
     );
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 5,
+      schemaVersion: 6,
       collections: [
         {
           collection_id: collectionId,
@@ -1289,7 +1283,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
           collection_id: collectionId,
           path: "current",
           name: "current",
-          selected_skill_version_id: currentVersionId,
           versions: [
             {
               skill_version_id: currentVersionId,
@@ -1297,7 +1290,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
               artifact_digest: currentHash,
               validation_identity_digest: currentHash,
               materialization_profile: "plain-skill/v1",
-              origins: [{ acquisition_id: acquisitionId, source_path: "current" }],
             },
           ],
         },
@@ -1306,7 +1298,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
           collection_id: collectionId,
           path: "missing",
           name: "missing",
-          selected_skill_version_id: missingVersionId,
           versions: [
             {
               skill_version_id: missingVersionId,
@@ -1314,7 +1305,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
               artifact_digest: currentHash,
               validation_identity_digest: currentHash,
               materialization_profile: "plain-skill/v1",
-              origins: [{ acquisition_id: acquisitionId, source_path: "missing" }],
             },
           ],
         },
@@ -1343,11 +1333,11 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       acquisitions: [
         {
           acquisition_id: acquisitionId,
+          collection_id: collectionId,
+          kind: "source",
           retained_copy_id: versionId,
           input: { value: "/source" },
           source_identity: { kind: "local", machine_id: machineId, path: { value: "/source" } },
-          tracking: { kind: "default" },
-          selection: { kind: "full-tree" },
           acquired_at: "2026-01-01T00:00:00.000Z",
           machine_id: machineId,
           observations: [],
@@ -1355,10 +1345,12 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       ],
       global_bindings: [
         {
-          collection_id: collectionId,
           harness: "codex",
           scope: { kind: "global" },
-          skills: [currentSkillId, missingSkillId],
+          entries: [
+            { kind: "skill", skill_id: currentSkillId },
+            { kind: "skill", skill_id: missingSkillId },
+          ],
         },
       ],
       local_bindings: [],

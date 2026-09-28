@@ -1,6 +1,7 @@
 import {
   LibraryStore,
   projectBindingEffect,
+  pruneLibraryState,
   retireUnboundGlobalProjectionsEffect,
   withLibraryWriter,
   type Binding,
@@ -79,6 +80,20 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
     projected++;
     outcomes.push({ harness: binding.harness, status: "projected" });
   }
+  // Retiring a Projection can release a Skill deleted upstream; drop history it no longer needs.
+  const store = yield* LibraryStore;
+  const settled = yield* store.load;
+  const pruned = pruneLibraryState(settled);
+  if (
+    pruned.skills.length !== settled.skills.length ||
+    pruned.acquisitions.length !== settled.acquisitions.length ||
+    pruned.skills.some(
+      (skill) =>
+        skill.versions.length !==
+        settled.skills.find((candidate) => candidate.skill_id === skill.skill_id)?.versions.length,
+    )
+  )
+    yield* store.publish(pruned);
   return { projected, deferred, retired, outcomes };
 });
 

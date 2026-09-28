@@ -1,4 +1,9 @@
-import { canonicalJson, type LibraryManifest } from "@smolai/skit-core";
+import {
+  bindingSkillIds,
+  canonicalJson,
+  currentSkillVersion,
+  type LibraryManifest,
+} from "@smolai/skit-core";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
 export interface SyncChange {
@@ -38,23 +43,14 @@ const collectionVersions = (manifest: LibraryManifest, collectionId: string): re
   manifest.skills
     .filter((skill) => skill.collection_id === collectionId)
     .flatMap((skill) => {
-      const version = skill.versions.find(
-        (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-      );
+      const version = currentSkillVersion(manifest, skill);
       return version === undefined ? [] : [`${skill.name} @ ${version.source_digest}`];
     })
     .sort();
 
 const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
   const skills = manifest.skills.filter((skill) => skill.collection_id === collectionId);
-  const acquisitionIds = new Set(
-    skills.flatMap((skill) =>
-      skill.versions.flatMap((version) => version.origins.map((origin) => origin.acquisition_id)),
-    ),
-  );
-  const acquisitions = manifest.acquisitions.filter((item) =>
-    acquisitionIds.has(item.acquisition_id),
-  );
+  const acquisitions = manifest.acquisitions.filter((item) => item.collection_id === collectionId);
   const retainedCopyIds = new Set(acquisitions.map((item) => item.retained_copy_id));
   return {
     collection: manifest.collections.find((item) => item.collection_id === collectionId),
@@ -131,8 +127,14 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
           kind: "binding",
           action: action(previous, desired),
           harness: binding.harness,
-          skills_before: names(before, previous?.skills),
-          skills_after: names(after, desired?.skills),
+          skills_before: names(
+            before,
+            previous === undefined ? undefined : bindingSkillIds(before, previous),
+          ),
+          skills_after: names(
+            after,
+            desired === undefined ? undefined : bindingSkillIds(after, desired),
+          ),
           versions_before: [],
           versions_after: [],
           evidence_changed: false,

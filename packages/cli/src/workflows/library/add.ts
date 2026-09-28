@@ -84,6 +84,11 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
           name: skill.name,
           verbatim_path: skill.sourcePath,
         })),
+        /** Per-Skill bytes, so a refresh preview can tell which Skills changed. */
+        members: prepared.facts.map((skill) => ({
+          source_path: skill.sourcePath,
+          artifact_digest: skill.artifactDigest,
+        })),
       };
     }),
   );

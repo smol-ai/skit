@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { isAbsolute, relative, resolve } from "node:path";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { Binding } from "../library-contracts.js";
+import { bindingSkillIds, type Binding } from "../library-contracts.js";
 
 /** Retire owned global Projections whose portable Binding has disappeared. Caller owns the writer lock. */
 export const retireUnboundGlobalProjectionsEffect = Effect.fn(
@@ -17,14 +17,15 @@ export const retireUnboundGlobalProjectionsEffect = Effect.fn(
         binding.harness === harness &&
         !offset.startsWith("..") &&
         !isAbsolute(offset) &&
-        binding.skills.includes(skillId as never)
+        bindingSkillIds(loaded, binding).includes(skillId as never)
       );
     });
   const targets = loaded.projections.filter(
     (projection) =>
       !(options.desiredBindings ?? loaded.global_bindings).some(
         (binding) =>
-          binding.harness === projection.harness && binding.skills.includes(projection.skill_id),
+          binding.harness === projection.harness &&
+          bindingSkillIds(loaded, binding).includes(projection.skill_id),
       ) && !repoSelects(projection.harness, projection.root, projection.skill_id),
   );
   if (targets.length === 0) return 0;

@@ -69,7 +69,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v3");
+    assert.strictEqual(rendered[0]?.schema, "skit.list.v4");
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
@@ -121,46 +121,6 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
     assert.strictEqual(yield* interaction.remaining, 0);
-
-    const unresolved = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          store.publish({
-            ...unresolved,
-            skills: unresolved.skills.map((skill, index) =>
-              index === 0
-                ? {
-                    skill_id: skill.skill_id,
-                    collection_id: skill.collection_id,
-                    path: skill.path,
-                    name: skill.name,
-                    versions: skill.versions,
-                  }
-                : skill,
-            ),
-          }),
-        ),
-      ),
-    );
-    yield* home.owned(
-      presentListCommand().pipe(
-        Effect.provide(
-          rendererTestLayer({
-            result: (value) =>
-              Effect.sync(() => {
-                rendered.push(value);
-              }),
-          }),
-        ),
-      ),
-    );
-    const unresolvedListing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[1]?.data);
-    assert.strictEqual(
-      Object.hasOwn(unresolvedListing.subjects[0]?.skills[0] ?? {}, "selected_skill_version_id"),
-      false,
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -225,12 +185,12 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
               {
                 harness: "codex",
                 scope: { kind: "global" },
-                skills: [reviewId],
+                entries: [{ kind: "skill", skill_id: reviewId }],
               },
               {
                 harness: "claude-code",
                 scope: { kind: "global" },
-                skills: [reviewId],
+                entries: [{ kind: "skill", skill_id: reviewId }],
               },
             ],
           }),

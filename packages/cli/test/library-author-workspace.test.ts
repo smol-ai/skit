@@ -50,7 +50,9 @@ it.effect(
       );
       const state = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.strictEqual(state.collections.length, 1);
-      assert.strictEqual(state.retained_copies.length, 2);
-      assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
+      // The refreshed tree replaces the first; nothing installs the superseded Version.
+      assert.strictEqual(state.retained_copies.length, 1);
+      assert.notStrictEqual(state.retained_copies[0]?.digest, firstTree.digest);
+      assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 1);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

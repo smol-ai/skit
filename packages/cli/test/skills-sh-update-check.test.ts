@@ -145,6 +145,7 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
         publish: (next) => Ref.set(published, next),
         snapshot: Effect.succeed(undefined),
         recordChangesSince: () => Effect.void,
+        collectRetainedTrees: Effect.void,
         home: home.home,
         originalsPath: home.originals,
       }),

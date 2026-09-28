@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.v3",
+  "$id": "skit.disable.v4",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -101,10 +101,49 @@
                 ],
                 "additionalProperties": true
               },
-              "skills": {
+              "entries": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection"
+                          ]
+                        },
+                        "collection_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "collection_id"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "skill"
+                          ]
+                        },
+                        "skill_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "skill_id"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
                 }
               },
               "invocation_policies": {
@@ -122,7 +161,7 @@
             "required": [
               "harness",
               "scope",
-              "skills"
+              "entries"
             ],
             "additionalProperties": true
           },
@@ -157,10 +196,49 @@
                 ],
                 "additionalProperties": true
               },
-              "skills": {
+              "entries": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection"
+                          ]
+                        },
+                        "collection_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "collection_id"
+                      ],
+                      "additionalProperties": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "skill"
+                          ]
+                        },
+                        "skill_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "skill_id"
+                      ],
+                      "additionalProperties": true
+                    }
+                  ]
                 }
               },
               "invocation_policies": {
@@ -178,7 +256,7 @@
             "required": [
               "harness",
               "scope",
-              "skills"
+              "entries"
             ],
             "additionalProperties": true
           }

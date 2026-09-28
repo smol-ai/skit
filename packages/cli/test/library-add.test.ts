@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import {
+  currentSkillVersion,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
   deterministicTreeHashEffect,
@@ -19,7 +20,7 @@ import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/librar
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
-import { executeRemoveEffect } from "../src/workflows/library/remove.js";
+import { executeRemoveEffect, planRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
@@ -66,8 +67,9 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     );
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
     assert.strictEqual(refreshed.collections.length, 1);
-    assert.strictEqual(refreshed.acquisitions.length, 2);
-    assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
+    // The superseded snapshot backs nothing still in use, so it is pruned.
+    assert.strictEqual(refreshed.acquisitions.length, 1);
+    assert.strictEqual(refreshed.skills[0]?.versions.length, 1);
     const failure = yield* planUpdatesEffect(
       refreshed,
       {
@@ -172,7 +174,6 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
-    assert.strictEqual(before.collections[0]?.upstream?.selection.kind, "selected-skills");
     assert.deepStrictEqual(
       librarySubjects(before).map((subject) => [subject.kind, subject.subjectId, subject.label]),
       [["collection", before.collections[0]?.collection_id, base]],
@@ -192,7 +193,9 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     });
     yield* writingTo(home, run(applyLibraryBindings(before, bindingInput(true))));
     const enabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.deepStrictEqual(enabled.global_bindings[0]?.skills, [skill.skill_id]);
+    assert.deepStrictEqual(enabled.global_bindings[0]?.entries, [
+      { kind: "skill", skill_id: skill.skill_id },
+    ]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
       (yield* run(checkSubjectsEffect(enabled, skill.skill_id)))[0]?.source_status,
@@ -212,7 +215,8 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
-    assert.strictEqual(after.skills[0]?.versions.length, 2);
+    // The Projection moved to the new Version, so the superseded one is pruned.
+    assert.strictEqual(after.skills[0]?.versions.length, 1);
     const desired = yield* libraryManifestFromLocalStateEffect(after);
     const empty = {
       ...desired,
@@ -227,11 +231,16 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     yield* writingTo(home, run(applyLibraryBindings(after, bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.global_bindings, []);
+    // A Source is its whole repository, so one of its Skills cannot be removed on its own.
+    assert.strictEqual(
+      (yield* planRemoveEffect(disabled, skill.skill_id).pipe(Effect.flip))._tag,
+      "Library.SkillRemovalRequiresCollection",
+    );
     yield* writingTo(
       home,
       run(
         executeRemoveEffect(disabled, {
-          query: skill.skill_id,
+          query: skill.collection_id,
           dryRun: false,
           variantsPath: options.variantsPath,
         }),
@@ -242,7 +251,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("re-adding a changed local source retains a second Skill Version", () =>
+it.effect("re-adding a changed local source replaces its unused Skill Version", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-update-" });
@@ -261,16 +270,25 @@ it.effect("re-adding a changed local source retains a second Skill Version", () 
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
-    const addedAgain = yield* addLibrarySourceEffect(source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const addedAgain = yield* writingTo(home, addLibrarySourceEffect(source));
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
-    assert.strictEqual(after.skills[0]?.versions.length, 2);
-    assert.ok(after.skills[0]?.selected_skill_version_id);
-    assert.strictEqual(after.retained_copies.length, 2);
+    // Nothing installs the first Version, so only the current one is kept.
+    assert.strictEqual(after.skills[0]?.versions.length, 1);
+    assert.strictEqual(
+      currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
+      after.skills[0]?.versions[0]?.skill_version_id,
+    );
+    assert.strictEqual(after.retained_copies.length, 1);
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
+    // The write transaction deletes the retained tree nothing references any more.
+    const originals = join(home, "originals");
+    assert.strictEqual(yield* fs.exists(retainedTreePath(originals, added.snapshot_digest)), false);
+    assert.strictEqual(
+      yield* fs.exists(retainedTreePath(originals, addedAgain.snapshot_digest)),
+      true,
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -306,7 +324,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
     assert.strictEqual(second.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(after.retained_copies.length, 1);
     assert.strictEqual(after.acquisitions.length, 1);
-    assert.strictEqual(after.skills[0]?.versions[0]?.origins.length, 1);
+    assert.strictEqual(after.skills[0]?.versions.length, 1);
     assert.strictEqual(
       yield* fs.exists(
         join(
@@ -358,13 +376,16 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
 
     yield* retainAt("a".repeat(40), "2026-09-16T01:00:00.000Z");
     yield* retainAt("b".repeat(40), "2026-09-16T02:00:00.000Z");
+    const recorded = yield* load;
     yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
-    const after = yield* load;
+    const repeated = yield* load;
 
-    assert.strictEqual(after.retained_copies.length, 1);
+    // The new commit is recorded; the superseded Acquisition backs nothing and is pruned.
+    assert.strictEqual(recorded.retained_copies.length, 1);
     assert.deepStrictEqual(
-      after.acquisitions.map((acquisition) => acquisition.source_revision),
-      ["a".repeat(40), "b".repeat(40)],
+      recorded.acquisitions.map((acquisition) => acquisition.revision),
+      ["b".repeat(40)],
     );
+    assert.deepStrictEqual(repeated.acquisitions, recorded.acquisitions);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

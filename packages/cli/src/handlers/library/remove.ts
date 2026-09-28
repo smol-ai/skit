@@ -49,18 +49,9 @@ export const removeCliCommand = Command.make(
               )
             : undefined;
         if (removed?.upstream?.source_identity.kind === "authored-workspace") {
-          const acquisitionIds = new Set(
-            state.skills
-              .filter((skill) => skill.collection_id === removed.collection_id)
-              .flatMap((skill) =>
-                skill.versions.flatMap((version) =>
-                  version.origins.map((origin) => origin.acquisition_id),
-                ),
-              ),
-          );
           const workspacePath = state.acquisitions.find(
             (acquisition) =>
-              acquisitionIds.has(acquisition.acquisition_id) &&
+              acquisition.collection_id === removed.collection_id &&
               acquisition.source_identity.kind === "authored-workspace",
           )?.input.value;
           const workspace =

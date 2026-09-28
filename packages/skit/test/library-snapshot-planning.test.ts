@@ -35,8 +35,11 @@ const copy: RetainedCopy = {
     },
   ],
 };
+const collectionId = makeCollectionId();
 const acquisition = (overrides: Partial<Acquisition>): Acquisition => ({
   acquisition_id: makeAcquisitionId(),
+  collection_id: collectionId,
+  kind: "source",
   retained_copy_id: retainedCopyId,
   source_identity: {
     kind: "github",
@@ -44,17 +47,15 @@ const acquisition = (overrides: Partial<Acquisition>): Acquisition => ({
     repository: "skills",
     collection_root: ".",
   },
-  tracking: { kind: "commit", ref: "e0219e96214ac420bdb8d15141340625fda63bbb" },
-  selection: { kind: "selected-paths", paths: ["skills/review"] },
   input: { value: "https://github.com/example-org/skills" },
-  source_revision: "e0219e96214ac420bdb8d15141340625fda63bbb",
+  revision: "e0219e96214ac420bdb8d15141340625fda63bbb",
   acquired_at: "2026-09-16T00:00:00.000Z",
   machine_id: machineId,
   observations: [],
   ...overrides,
 });
 
-it("omits pinned selected GitHub bytes from private snapshot planning", () => {
+it("omits GitHub bytes pinned to a commit from private snapshot planning", () => {
   const pinned = acquisition({});
   assert.strictEqual(acquisitionIsSourceRestorable(pinned), true);
   assert.deepStrictEqual(
@@ -63,35 +64,47 @@ it("omits pinned selected GitHub bytes from private snapshot planning", () => {
   );
 });
 
-it("keeps mutable and local acquisitions snapshot-backed", () => {
-  const mutable = acquisition({
-    tracking: { kind: "default" },
-    source_revision: undefined,
-  });
+it("restores by revision whatever the collection root or input text", () => {
+  for (const restorable of [
+    acquisition({
+      source_identity: {
+        kind: "github",
+        owner: "example-org",
+        repository: "skills",
+        collection_root: "skills",
+      },
+      input: { value: "https://github.com/example-org/skills/tree/main/skills" },
+    }),
+    acquisition({
+      source_identity: {
+        kind: "registry",
+        authority: "default",
+        namespace: "tim",
+        slug: "tools",
+      },
+      input: { value: "skit:tim/tools" },
+      revision: "1.2.0",
+    }),
+  ])
+    assert.strictEqual(acquisitionIsSourceRestorable(restorable), true);
+});
+
+it("keeps unpinned, local, and retained-edit acquisitions snapshot-backed", () => {
+  const { revision: _revision, ...unpinned } = acquisition({});
   const local = acquisition({
     source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/skill" } },
-    tracking: { kind: "default" },
     input: { value: "/tmp/skill" },
-    source_revision: undefined,
   });
-  assert.strictEqual(acquisitionIsSourceRestorable(mutable), false);
-  assert.strictEqual(acquisitionIsSourceRestorable(local), false);
+  const edit = acquisition({ kind: "retained-edit" });
+  for (const item of [unpinned, local, edit])
+    assert.strictEqual(acquisitionIsSourceRestorable(item), false);
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [mutable] }),
+    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [unpinned] }),
     [digest],
   );
   assert.deepStrictEqual(
     librarySnapshotDigests({ retained_copies: [copy, { ...copy }], acquisitions: [local] }),
     [digest],
-  );
-});
-
-it("continues to accept legacy pinned whole-repository acquisitions during repair", () => {
-  const wholeRepository = acquisition({ selection: { kind: "full-tree" } });
-  assert.strictEqual(acquisitionIsSourceRestorable(wholeRepository), true);
-  assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [wholeRepository] }),
-    [],
   );
 });
 
@@ -102,21 +115,13 @@ const sourceCopy: RetainedCopy = {
   retained_copy_id: sourceCopyId,
   digest: sourceDigest,
 };
-const sourceAcquisition = acquisition({
-  retained_copy_id: sourceCopyId,
-});
+const { revision: _unpinnedRevision, ...unpinnedAcquisition } = acquisition({});
 const mixedManifest: LibraryManifest = {
-  schema: "skit.library.v5",
-  collections: [],
+  schema: "skit.library.v6",
+  collections: [{ collection_id: collectionId, label: "skills" }],
   skills: [],
   retained_copies: [copy, sourceCopy],
-  acquisitions: [
-    acquisition({
-      tracking: { kind: "default" },
-      source_revision: undefined,
-    }),
-    sourceAcquisition,
-  ],
+  acquisitions: [unpinnedAcquisition, acquisition({ retained_copy_id: sourceCopyId })],
   snapshot_digests: [digest],
   bindings: [],
 };
@@ -126,27 +131,23 @@ const snapshotArchive = SnapshotArchive.make({
   entries: [],
 });
 
-it("repairs an unmatched stale v4 selection while decoding the current manifest model", () => {
-  const collectionId = makeCollectionId();
+it("decodes a v4 manifest into the current model without selections", () => {
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
-  const { source_revision: _mutableRevision, ...mutableAcquisition } =
-    mixedManifest.acquisitions[0]!;
-  const { source_revision: _sourceRevision, ...legacySourceAcquisition } = sourceAcquisition;
+  const legacyAcquisition = {
+    acquisition_id: makeAcquisitionId(),
+    retained_copy_id: retainedCopyId,
+    source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
+    tracking: { kind: "default" },
+    selection: { kind: "full-tree" },
+    input: { value: "wellknown:https://skills.example#skills=review" },
+    acquired_at: "2026-09-16T00:00:00.000Z",
+    machine_id: machineId,
+    observations: [],
+  };
   const decoded = Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
-    ...mixedManifest,
     schema: "skit.library.v4",
-    collections: [
-      {
-        collection_id: collectionId,
-        display_name: "review",
-        upstream: {
-          source_identity: { kind: "url", url: { value: "https://unmatched.example" } },
-          tracking: mutableAcquisition.tracking,
-          selection: { kind: "selected-paths", paths: ["stale/path"] },
-        },
-      },
-    ],
+    collections: [{ collection_id: collectionId, display_name: "review" }],
     skills: [
       {
         skill_id: skillId,
@@ -161,7 +162,7 @@ it("repairs an unmatched stale v4 selection while decoding the current manifest 
             artifact_digest: digest,
             validation_identity_digest: digest,
             materialization_profile: "plain-skill/v1",
-            origins: [{ acquisition_id: mutableAcquisition.acquisition_id, source_path: "review" }],
+            origins: [{ acquisition_id: legacyAcquisition.acquisition_id, source_path: "review" }],
           },
         ],
       },
@@ -176,92 +177,45 @@ it("repairs an unmatched stale v4 selection while decoding the current manifest 
           source_updated_at: "2026-01-01T00:00:00.000Z",
         },
       },
-      sourceCopy,
     ],
-    acquisitions: [
-      mutableAcquisition,
-      {
-        ...legacySourceAcquisition,
-        source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
-        tracking: { kind: "default" },
-        selection: { kind: "full-tree" },
-        input: { value: "wellknown:https://skills.example#skills=review" },
-      },
-    ],
-    snapshot_digests: [digest, sourceDigest].sort(),
+    acquisitions: [legacyAcquisition],
+    snapshot_digests: [digest],
+    bindings: [],
   });
-  assert.strictEqual(decoded.schema, "skit.library.v5");
-  assert.deepStrictEqual(decoded.collections[0]?.upstream?.selection, {
-    kind: "selected-paths",
-    paths: ["review"],
-  });
+  assert.strictEqual(decoded.schema, "skit.library.v6");
   assert.strictEqual("v3_normalized_tree" in decoded.retained_copies[0]!, false);
-  assert.deepStrictEqual(decoded.acquisitions[1]?.selection, {
-    kind: "selected-skills",
-    names: ["review"],
+  assert.deepStrictEqual(decoded.acquisitions[0]?.source_identity, {
+    kind: "well-known",
+    locator: { value: "https://skills.example" },
   });
-  assert.strictEqual(
-    decoded.acquisitions[1]?.input.value,
-    "wellknown:https://skills.example#skills=review",
-  );
+  assert.strictEqual(decoded.acquisitions[0]?.kind, "source");
+  assert.strictEqual(decoded.acquisitions[0]?.collection_id, collectionId);
+  assert.deepStrictEqual(decoded.skills[0]?.versions[0]?.skill_version_id, versionId);
 });
 
-it("requires an upstream last Acquisition to govern a Collection member", () => {
-  const origin = acquisition({
-    source_identity: { kind: "well-known", locator: { value: "https://skills.example" } },
-    tracking: { kind: "default" },
-    selection: { kind: "selected-skills", names: ["review"] },
-    input: { value: "wellknown:https://skills.example" },
-    source_revision: undefined,
-  });
-  const unrelated = acquisition({
-    source_identity: { kind: "well-known", locator: { value: "https://skills.example" } },
-    tracking: { kind: "default" },
-    selection: { kind: "selected-skills", names: ["review"] },
-    input: { value: "wellknown:https://skills.example" },
-    source_revision: undefined,
-  });
-  const skillId = makeSkillId();
-  const collectionId = makeCollectionId();
+it("rejects a Skill Version that no Acquisition of its Collection backs", () => {
   const versionId = makeSkillVersionId();
+  const otherDigest = `sha256:${"c".repeat(64)}`;
   assert.throws(() =>
     Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
-      schema: "skit.library.v5",
-      collections: [
-        {
-          collection_id: collectionId,
-          label: "review",
-          upstream: {
-            source_identity: origin.source_identity,
-            tracking: origin.tracking,
-            selection: origin.selection,
-            last_acquisition_id: unrelated.acquisition_id,
-          },
-        },
-      ],
+      ...mixedManifest,
       skills: [
         {
-          skill_id: skillId,
+          skill_id: makeSkillId(),
           collection_id: collectionId,
           path: ".",
           name: "review",
-          selected_skill_version_id: versionId,
           versions: [
             {
               skill_version_id: versionId,
-              source_digest: digest,
-              artifact_digest: digest,
-              validation_identity_digest: digest,
+              source_digest: otherDigest,
+              artifact_digest: otherDigest,
+              validation_identity_digest: otherDigest,
               materialization_profile: "plain-skill/v1",
-              origins: [{ acquisition_id: origin.acquisition_id, source_path: "." }],
             },
           ],
         },
       ],
-      retained_copies: [copy],
-      acquisitions: [origin, unrelated],
-      snapshot_digests: [digest],
-      bindings: [],
     }),
   );
 });

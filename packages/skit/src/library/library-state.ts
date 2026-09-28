@@ -4,12 +4,14 @@ import { ProjectionId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
   Acquisition,
   Binding,
+  BindingEntry,
   Collection,
   currentLibraryManifest,
   LibraryManifest,
   RetainedCopy,
   Skill,
   librarySnapshotDigests,
+  pruneLibraryHistory,
 } from "./library-contracts.js";
 import {
   Digest,
@@ -33,7 +35,7 @@ export interface DeviceBinding extends Schema.Schema.Type<typeof DeviceBinding> 
 export const RepositoryBinding = Schema.Struct({
   harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
-  skills: Schema.Array(SkillId),
+  entries: Schema.Array(BindingEntry),
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
 export interface RepositoryBinding extends Schema.Schema.Type<typeof RepositoryBinding> {}
@@ -54,7 +56,7 @@ export const ManagedProjection = Schema.Struct({
 });
 export interface ManagedProjection extends Schema.Schema.Type<typeof ManagedProjection> {}
 
-export const CURRENT_LIBRARY_STATE_VERSION = 5 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 6 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
@@ -70,6 +72,7 @@ export const LibraryState = Schema.Struct({
   Schema.makeFilter(
     (state) => {
       const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
+      const collections = new Set(state.collections.map((collection) => collection.collection_id));
       const localCoordinates = state.local_bindings.map(
         (binding) => `${binding.harness}\0${resolve(binding.scope.root)}`,
       );
@@ -82,7 +85,11 @@ export const LibraryState = Schema.Struct({
         new Set(state.projections.map((projection) => projection.projection_id)).size ===
           state.projections.length &&
         state.local_bindings.every((binding) =>
-          binding.skills.every((skillId) => skills.has(skillId)),
+          binding.entries.every((entry) =>
+            entry.kind === "skill"
+              ? skills.has(entry.skill_id)
+              : collections.has(entry.collection_id),
+          ),
         ) &&
         state.projections.every((projection) => {
           const skill = skills.get(projection.skill_id);
@@ -139,12 +146,23 @@ export const libraryManifestFromLocalStateEffect = Effect.fn(
   );
 });
 
-export const selectedSkillVersion = (skill: Skill) =>
-  skill.selected_skill_version_id === undefined
-    ? undefined
-    : skill.versions.find(
-        (version) => version.skill_version_id === skill.selected_skill_version_id,
-      );
+/** Prune history against what this device's Bindings and Projections still use. */
+export const pruneLibraryState = (state: LibraryState): LibraryState => {
+  const pruned = pruneLibraryHistory(state, {
+    boundSkillIds: new Set(
+      [...state.global_bindings, ...state.local_bindings].flatMap((binding) =>
+        binding.entries.flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
+      ),
+    ),
+    projectedVersions: state.projections,
+  });
+  return {
+    ...pruned,
+    skills: [...pruned.skills],
+    acquisitions: [...pruned.acquisitions],
+    retained_copies: [...pruned.retained_copies],
+  };
+};
 
 export const collectionSkills = (state: Pick<LibraryState, "skills">, collection: Collection) =>
   state.skills.filter((skill) => skill.collection_id === collection.collection_id);

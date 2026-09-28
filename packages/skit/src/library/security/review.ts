@@ -9,6 +9,7 @@ import {
 import { LibraryStore } from "../store/library-store.js";
 import { auditSkill, evaluateSkillAudit } from "../../auditing/skill-audit.js";
 import type { LibraryState } from "../library-state.js";
+import { currentSkillVersion, versionBacking } from "../library-contracts.js";
 import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
 import { retainedTreePath } from "../retention/retain-tree.js";
 
@@ -21,10 +22,8 @@ const securitySkill = Effect.fn("Library.securitySkill")(function* (
     return state.skills
       .filter((candidate) => candidate.collection_id === collection.collection_id)
       .flatMap((skill) => {
-        const version = skill?.versions.find(
-          (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-        );
-        if (skill === undefined || version === undefined) return [];
+        const version = currentSkillVersion(state, skill);
+        if (version === undefined) return [];
         if (
           !collectionMatch &&
           skill.name !== query &&
@@ -32,17 +31,10 @@ const securitySkill = Effect.fn("Library.securitySkill")(function* (
           version.skill_version_id !== query
         )
           return [];
-        const origin = version.origins[0];
-        const acquisition = state.acquisitions.find(
-          (candidate) => candidate.acquisition_id === origin?.acquisition_id,
-        );
-        const tree = state.retained_copies.find(
-          (candidate) => candidate.retained_copy_id === acquisition?.retained_copy_id,
-        );
-        const member = tree?.members.find(
-          (candidate) => candidate.source_path === origin?.source_path,
-        );
-        return member === undefined || tree === undefined ? [] : [{ version, skill, member, tree }];
+        const backing = versionBacking(state, skill, version);
+        return backing === undefined
+          ? []
+          : [{ version, skill, member: backing.member, tree: backing.copy }];
       });
   });
   if (matches.length !== 1) return yield* new UnknownInstalledSkill({ query });

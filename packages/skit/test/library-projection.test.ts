@@ -63,7 +63,7 @@ const boundCollection = Effect.gen(function* () {
           {
             harness: "codex",
             scope: { kind: "global" },
-            skills: [skillId],
+            entries: [{ kind: "skill", skill_id: skillId }],
           },
         ],
       }),

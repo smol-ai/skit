@@ -64,7 +64,7 @@ it.effect(
             global_bindings: harnesses.map((harness) => ({
               harness,
               scope: { kind: "global" as const },
-              skills: [skill.skill_id],
+              entries: [{ kind: "skill" as const, skill_id: skill.skill_id }],
             })),
           }),
         ).pipe(Effect.provide(storeLayer)),
@@ -136,7 +136,7 @@ it.effect(
       const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
       const retained = after.skills.find((candidate) => candidate.skill_id === skill.skill_id)!;
       assert.strictEqual(retained.versions.length, 2);
-      assert.strictEqual(retained.selected_skill_version_id, result.retained_skill_version_id);
+      assert.strictEqual(retained.local_version_id, result.retained_skill_version_id);
       assert.strictEqual(after.acquisitions.at(-1)?.source_identity.kind, "local");
       assert.strictEqual(
         yield* fs.readFileString(join(roots.codexRoot, "review", "SKILL.md")),
@@ -177,7 +177,7 @@ it.effect(
       assert.deepStrictEqual(refreshed.acquisitions, after.acquisitions);
       assert.strictEqual(
         refreshed.skills.find((candidate) => candidate.skill_id === skill.skill_id)
-          ?.selected_skill_version_id,
+          ?.local_version_id,
         result.retained_skill_version_id,
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { makeMachineId } from "@smolai/skit-core";
 import { sourceFromUpstream } from "../src/workflows/library/upstream-source.js";
 
-it("reconstructs Git refresh input from upstream tracking and selection", () => {
+it("refreshes the whole Git Source from its tracking and collection root", () => {
   assert.deepStrictEqual(
     sourceFromUpstream({
       source_identity: {
@@ -12,10 +12,6 @@ it("reconstructs Git refresh input from upstream tracking and selection", () => 
         collection_root: "packages",
       },
       tracking: { kind: "branch", ref: "main" },
-      selection: {
-        kind: "selected-paths",
-        paths: ["review/SKILL.md", "test/SKILL.md"],
-      },
     }),
     {
       type: "github",
@@ -23,12 +19,11 @@ it("reconstructs Git refresh input from upstream tracking and selection", () => 
       repository: "skills",
       ref: "main",
       subpath: "packages",
-      skillDirectories: ["review", "test"],
     },
   );
 });
 
-it("passes selected Skill directories through as directories", () => {
+it("refreshes a whole-repository Source without selecting Skills", () => {
   assert.deepStrictEqual(
     sourceFromUpstream({
       source_identity: {
@@ -38,14 +33,8 @@ it("passes selected Skill directories through as directories", () => {
         collection_root: ".",
       },
       tracking: { kind: "default" },
-      selection: { kind: "selected-paths", paths: ["skills/engineering/tdd"] },
     }),
-    {
-      type: "github",
-      owner: "mattpocock",
-      repository: "skills",
-      skillDirectories: ["skills/engineering/tdd"],
-    },
+    { type: "github", owner: "mattpocock", repository: "skills" },
   );
 });
 
@@ -58,7 +47,6 @@ it("does not turn local provenance into refresh intent", () => {
         path: { value: "/tmp/skills" },
       },
       tracking: { kind: "default" },
-      selection: { kind: "full-tree" },
     }),
     undefined,
   );

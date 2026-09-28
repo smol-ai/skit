@@ -1,6 +1,6 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-export function renderLibraryList(data: ContractDataForId<"skit.list.v3">): string {
+export function renderLibraryList(data: ContractDataForId<"skit.list.v4">): string {
   if (data.subjects.length === 0) return "No retained Skills in this Library.";
   const lines: string[] = [];
   for (const subject of data.subjects) {
@@ -15,6 +15,14 @@ export function renderLibraryList(data: ContractDataForId<"skit.list.v3">): stri
     for (const skill of subject.skills) lines.push(`    ${skill.name}`);
   }
   for (const binding of data.bindings)
-    lines.push(`${binding.harness}: ${binding.skills.join(", ") || "no Skills"}`);
+    lines.push(
+      `${binding.harness}: ${
+        binding.entries
+          .map((entry) =>
+            entry.kind === "collection" ? `${entry.label} (whole Collection)` : entry.name,
+          )
+          .join(", ") || "no Skills"
+      }`,
+    );
   return lines.join("\n");
 }

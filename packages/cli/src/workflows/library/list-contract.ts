@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Digest, HarnessName, SkillId, SkillVersionId } from "@smolai/skit-core";
+import { CollectionId, Digest, HarnessName, SkillId, SkillVersionId } from "@smolai/skit-core";
 
 export const ListResult = Schema.Struct({
   subjects: Schema.Array(
@@ -25,6 +25,18 @@ export const ListResult = Schema.Struct({
   bindings: Schema.Array(
     Schema.Struct({
       harness: HarnessName,
+      /** What was enabled: a whole Collection that follows its Source, or one Skill. */
+      entries: Schema.Array(
+        Schema.Union([
+          Schema.Struct({
+            kind: Schema.Literal("collection"),
+            collection_id: CollectionId,
+            label: Schema.String,
+          }),
+          Schema.Struct({ kind: Schema.Literal("skill"), skill_id: SkillId, name: Schema.String }),
+        ]),
+      ),
+      /** The Skills those entries enable now. */
       skills: Schema.Array(Schema.String),
     }),
   ),

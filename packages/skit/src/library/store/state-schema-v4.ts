@@ -7,7 +7,8 @@ import {
   SkillV4,
   migrateLibraryEntitiesFromV4,
 } from "../library-contracts-v4.js";
-import { AbsoluteDevicePath, currentLibraryState, type LibraryState } from "../library-state.js";
+import { AbsoluteDevicePath } from "../library-state.js";
+import type { LibraryStateV5 } from "./state-schema-v5.js";
 import {
   AdoptionReceiptId,
   CollectionId,
@@ -88,7 +89,7 @@ export const LibraryStateV4 = Schema.Struct({
 });
 export type LibraryStateV4 = typeof LibraryStateV4.Type;
 
-export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState => {
+export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryStateV5 => {
   const migrated = migrateLibraryEntitiesFromV4({
     collections: state.collections,
     skills: state.skills,
@@ -107,7 +108,7 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState =
     assessmentAcceptances,
     ...fields
   } = state;
-  const localByCoordinate = new Map<string, LibraryState["local_bindings"][number]>();
+  const localByCoordinate = new Map<string, LibraryStateV5["local_bindings"][number]>();
   for (const binding of local_bindings) {
     const key = `${binding.harness}\0${binding.scope.root}`;
     const prior = localByCoordinate.get(key);
@@ -125,8 +126,9 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState =
           }),
     });
   }
-  return currentLibraryState({
+  return {
     ...fields,
+    schemaVersion: 5,
     ...(assessmentAcceptances === undefined
       ? {}
       : {
@@ -157,5 +159,5 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryState =
     }),
     local_bindings: [...localByCoordinate.values()],
     projections: projections.map(({ collection_id: _collectionId, ...projection }) => projection),
-  });
+  };
 };

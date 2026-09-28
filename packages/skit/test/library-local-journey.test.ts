@@ -6,7 +6,6 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
 import { libraryManifestFromLocalStateEffect } from "../src/library/library-state.js";
 import { prepareRestoreEffect } from "../src/library/library-restore.js";
-import { removeSkillEffect } from "../src/library/installation/remove.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
@@ -53,13 +52,6 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     assert.strictEqual(retained.collection?.upstream, undefined);
     assert.strictEqual(saved.state.acquisitions[0]?.machine_id, machineId);
     assert.strictEqual(saved.state.acquisitions[0]?.input.value, installed);
-    const memberSkill = saved.state.skills[0];
-    assert.ok(memberSkill);
-    const removalFailure = yield* removeSkillEffect({
-      skillId: memberSkill.skill_id,
-      variantsPath: join(firstHome, "variants"),
-    }).pipe(inLibrary(firstHome), Effect.flip);
-    assert.strictEqual(removalFailure._tag, "Library.SkillRemovalRequiresCollection");
     const tree = saved.state.retained_copies[0];
     assert.ok(tree);
     const firstOriginal = retainedTreePath(join(firstHome, "originals"), tree.digest);
@@ -88,7 +80,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("reuses an unchanged Skill Version while retaining a changed sibling Version", () =>
+it.effect("reuses an unchanged Skill Version and keeps only history still in use", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-reuse-" });
@@ -128,41 +120,25 @@ it.effect("reuses an unchanged Skill Version while retaining a changed sibling V
       );
     });
     yield* retain("2026-09-16T01:00:00.000Z");
+    const first = yield* inspectLibrary(home);
+    assert.strictEqual(first.present, true);
+    if (!first.present) return;
+    const stableVersion = first.state.skills.find((skill) => skill.name === "stable")?.versions[0];
     yield* fs.writeFileString(join(review, "SKILL.md"), "second\n");
     yield* retain("2026-09-16T02:00:00.000Z");
 
     const saved = yield* inspectLibrary(home);
     assert.strictEqual(saved.present, true);
     if (!saved.present) return;
+    // Nothing installs the first `review` Version, so only the latest Acquisition remains.
     assert.strictEqual(
       saved.state.skills.find((skill) => skill.name === "review")?.versions.length,
-      2,
-    );
-    assert.strictEqual(
-      saved.state.skills.find((skill) => skill.name === "stable")?.versions.length,
       1,
     );
-    assert.strictEqual(saved.state.retained_copies.length, 2);
-    assert.strictEqual(saved.state.acquisitions.length, 2);
-
-    const stableSkill = saved.state.skills.find((skill) => skill.name === "stable");
-    assert.ok(stableSkill);
-    yield* removeSkillEffect({
-      skillId: stableSkill.skill_id,
-      variantsPath: join(home, "variants"),
-    }).pipe(inLibrary(home));
-
-    const afterRemoval = yield* inspectLibrary(home);
-    assert.strictEqual(afterRemoval.present, true);
-    if (!afterRemoval.present) return;
-    assert.deepStrictEqual(
-      afterRemoval.state.skills.map((skill) => skill.name),
-      ["review"],
-    );
-    assert.deepStrictEqual(afterRemoval.state.collections[0]?.upstream?.selection, {
-      kind: "selected-paths",
-      paths: ["review"],
-    });
-    assert.strictEqual(afterRemoval.state.collections.length, 1);
+    assert.deepStrictEqual(saved.state.skills.find((skill) => skill.name === "stable")?.versions, [
+      stableVersion,
+    ]);
+    assert.strictEqual(saved.state.retained_copies.length, 1);
+    assert.strictEqual(saved.state.acquisitions.length, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

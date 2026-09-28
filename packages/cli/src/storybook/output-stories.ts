@@ -42,7 +42,7 @@ const projectionId = makeProjectionId();
 const binding = {
   harness: "codex" as const,
   scope: { kind: "global" as const },
-  skills: [skillId],
+  entries: [{ kind: "skill" as const, skill_id: skillId }],
 };
 const emptyAudit = {
   ruleset: { id: "skit/skill-static-audit" as const, version: "1" },
@@ -184,7 +184,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         ],
       },
     ],
-    bindings: [{ harness: "codex", skills: [skillId] }],
+    bindings: [
+      {
+        harness: "codex",
+        entries: [{ kind: "collection", collection_id: collectionId, label: "review-tools" }],
+        skills: [skillId],
+      },
+    ],
   }),
   resultStory("security-review", "clean", outputContracts.securityReview, {
     skill_version_id: skillVersionId,
@@ -257,7 +263,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("inventory", "empty", outputContracts.inventory, {
-    schemaVersion: 5,
+    schemaVersion: 6,
     skills: [],
     projections: [],
     unmanaged: [],
@@ -325,6 +331,12 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       current_snapshot_digest: digest,
       available_snapshot_digest: `sha256:${"1".repeat(64)}`,
       changed: true,
+      label: "review-tools",
+      installed: ["release-notes"],
+      new_available: 0,
+      updated: ["review"],
+      removed: [],
+      kept: ["triage"],
     },
   ]),
   resultStory("update", "applied", outputContracts.update, [
@@ -337,6 +349,12 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       changed: true,
       projected: 1,
       deferred: 0,
+      label: "review-tools",
+      installed: ["release-notes"],
+      new_available: 12,
+      updated: ["review"],
+      removed: ["legacy-review"],
+      kept: [],
     },
   ]),
   resultStory("update-projection", "preview", outputContracts.projectionRetentionPlan, {

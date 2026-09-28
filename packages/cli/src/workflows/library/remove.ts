@@ -1,6 +1,6 @@
 import {
+  bindingSkillIds,
   removeCollectionEffect,
-  removeSkillEffect,
   SkillRemovalRequiresCollection,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -18,17 +18,12 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
   query: string,
 ) {
   const subject = yield* resolveLibrarySubject(state, query);
-  if (subject.kind === "skill") {
-    const collectionId = subject.skill.collection_id;
-    const collection = state.collections.find(
-      (candidate) => candidate.collection_id === collectionId,
-    );
-    if (collection?.upstream?.selection.kind === "full-tree" || collection?.upstream === undefined)
-      return yield* new SkillRemovalRequiresCollection({
-        skill_id: subject.skill.skill_id,
-        collection_id: collectionId,
-      });
-  }
+  // A Source is its whole repository: one of its Skills cannot be removed, only disabled.
+  if (subject.kind === "skill")
+    return yield* new SkillRemovalRequiresCollection({
+      skill_id: subject.skill.skill_id,
+      collection_id: subject.skill.collection_id,
+    });
   const skills = subject.skills;
   return {
     subject_id: subject.subjectId,
@@ -36,10 +31,14 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
     versions: skills.reduce((count, skill) => count + skill.versions.length, 0),
     skills: skills.length,
     global_bindings: state.global_bindings.filter((binding) =>
-      binding.skills.some((skillId) => skills.some((skill) => skill.skill_id === skillId)),
+      bindingSkillIds(state, binding).some((skillId) =>
+        skills.some((skill) => skill.skill_id === skillId),
+      ),
     ).length,
     repository_bindings: state.local_bindings.filter((binding) =>
-      binding.skills.some((skillId) => skills.some((skill) => skill.skill_id === skillId)),
+      bindingSkillIds(state, binding).some((skillId) =>
+        skills.some((skill) => skill.skill_id === skillId),
+      ),
     ).length,
     owned_projections: state.projections.filter((projection) =>
       skills.some((skill) => skill.skill_id === projection.skill_id),
@@ -53,14 +52,10 @@ export const executeRemoveEffect = Effect.fn("Library.executeRemove")(function* 
 ) {
   const plan = yield* planRemoveEffect(state, options.query);
   if (options.dryRun) return { kind: "plan" as const, value: plan };
-  const removed = yield* plan.subject_kind === "collection"
-    ? removeCollectionEffect({
-        collectionId: plan.subject_id,
-        variantsPath: options.variantsPath,
-      })
-    : removeSkillEffect({
-        skillId: plan.subject_id,
-        variantsPath: options.variantsPath,
-      });
+  // Planning refuses a single Skill, so only a Collection reaches removal.
+  const removed = yield* removeCollectionEffect({
+    collectionId: plan.subject_id,
+    variantsPath: options.variantsPath,
+  });
   return { kind: "removed" as const, value: { ...plan, retired: removed.retired } };
 });

@@ -21,6 +21,7 @@ import {
   resolveHarnessRoot,
   sourceLocator,
   sourceIdentityFromSource,
+  currentSkillVersion,
   SourceProcess,
   writeJsonAtomicEffect,
   type HarnessName as Harness,
@@ -1009,10 +1010,8 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     }>
   >();
   for (const skill of library.skills) {
-    const selected = skill?.versions.find(
-      (version) => version.skill_version_id === skill.selected_skill_version_id,
-    );
-    if (skill === undefined || selected === undefined) continue;
+    const selected = currentSkillVersion(library, skill);
+    if (selected === undefined) continue;
     librarySkillsByHash.set(selected.validation_identity_digest, [
       ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
       {
@@ -1277,10 +1276,22 @@ export const classifySetupOnboarding = (
         );
       if (keys.length) evidenceKeysByAcquisition.set(acquisition.acquisition_id, keys);
     }
-    for (const skill of retained.library.skills)
+    const library = retained.library;
+    for (const skill of library.skills)
       for (const version of skill.versions)
-        for (const origin of version.origins)
-          for (const key of evidenceKeysByAcquisition.get(origin.acquisition_id) ?? [])
+        for (const acquisition of library.acquisitions.filter((candidate) => {
+          if (candidate.collection_id !== skill.collection_id) return false;
+          const path = candidate.kind === "source" ? skill.path : ".";
+          return library.retained_copies.some(
+            (copy) =>
+              copy.retained_copy_id === candidate.retained_copy_id &&
+              copy.members.some(
+                (member) =>
+                  member.source_path === path && member.artifact_digest === version.artifact_digest,
+              ),
+          );
+        }))
+          for (const key of evidenceKeysByAcquisition.get(acquisition.acquisition_id) ?? [])
             retainedByLockEvidence.set(key, [
               ...(retainedByLockEvidence.get(key) ?? []),
               {
