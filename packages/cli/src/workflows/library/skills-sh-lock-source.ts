@@ -1,5 +1,5 @@
-import { Data } from "effect";
-import type { SkitSource } from "@smolai/skit-core";
+import { Data, Schema } from "effect";
+import { SkitSource } from "@smolai/skit-core";
 import type { SetupLockMatch } from "./setup-contract.js";
 
 const namePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -12,7 +12,7 @@ const safeSkillPath = (path: string | undefined): path is string =>
   !path.includes("\0") &&
   path.split("/").every((segment) => segment && segment !== "." && segment !== "..");
 
-function githubRepository(lock: SetupLockMatch): string | undefined {
+function githubRepository(lock: SetupLockMatch): { owner: string; repository: string } | undefined {
   if (lock.entry.sourceType !== "github") return undefined;
   for (const claim of [lock.entry.source, lock.entry.sourceUrl]) {
     if (!claim) continue;
@@ -22,7 +22,7 @@ function githubRepository(lock: SetupLockMatch): string | undefined {
         /^https:\/\/github\.com\/([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*?)(?:\.git)?(?:\/|\?|#|$)/i,
       );
     if (match?.[1] && match[2])
-      return `https://github.com/${match[1].toLowerCase()}/${match[2].toLowerCase()}.git`;
+      return { owner: match[1].toLowerCase(), repository: match[2].toLowerCase() };
   }
   return undefined;
 }
@@ -40,9 +40,9 @@ function wellKnownBase(lock: SetupLockMatch): string | undefined {
 /** Lock fields identify a candidate coordinate; this performs no upstream observation. */
 export function skillsShLockCoordinate(lock: SetupLockMatch): SkitSource | undefined {
   const github = githubRepository(lock);
-  if (github && safeSkillPath(lock.entry.skillPath)) return { type: "git", locator: github };
+  if (github && safeSkillPath(lock.entry.skillPath)) return { type: "github", ...github };
   const wellKnown = wellKnownBase(lock);
-  if (wellKnown) return { type: "well-known", locator: wellKnown };
+  if (wellKnown) return { type: "well-known", origin: wellKnown };
   return undefined;
 }
 
@@ -66,8 +66,7 @@ export function resolveSkillsShSelectedSource(
     const candidate = skillsShLockCoordinate(lock);
     if (!candidate) return SkillsShSourceResolution.Unresolvable();
     if (
-      candidate.type !== coordinate.type ||
-      candidate.locator !== coordinate.locator ||
+      !Schema.toEquivalence(SkitSource)(candidate, coordinate) ||
       lock.entry.ref !== first.lock.entry.ref ||
       lock.lockPath !== first.lock.lockPath
     )
@@ -77,10 +76,10 @@ export function resolveSkillsShSelectedSource(
     if (locks.some(({ name }) => !namePattern.test(name) || name.length > 64))
       return SkillsShSourceResolution.Unresolvable();
     return SkillsShSourceResolution.Resolved({
-      source: { ...coordinate, members: [...new Set(locks.map(({ name }) => name))].sort() },
+      source: { ...coordinate, skillNames: [...new Set(locks.map(({ name }) => name))].sort() },
     });
   }
-  if (coordinate.type !== "git") return SkillsShSourceResolution.Unresolvable();
+  if (coordinate.type !== "github") return SkillsShSourceResolution.Unresolvable();
   const paths = locks.flatMap(({ lock }) =>
     safeSkillPath(lock.entry.skillPath) ? [lock.entry.skillPath] : [],
   );
@@ -97,10 +96,13 @@ export function resolveSkillsShSelectedSource(
     pathNames.set(path, name);
     namePaths.set(name, path);
   }
-  const fragment = new URLSearchParams();
-  if (first.lock.entry.ref) fragment.set("ref", first.lock.entry.ref);
-  for (const path of [...new Set(paths)].sort()) fragment.append("skill", path);
   return SkillsShSourceResolution.Resolved({
-    source: { ...coordinate, locator: `${coordinate.locator}#${fragment}` },
+    source: {
+      ...coordinate,
+      ...(first.lock.entry.ref ? { ref: first.lock.entry.ref } : {}),
+      skillDirectories: [...new Set(paths)]
+        .sort()
+        .map((path) => path.slice(0, -"/SKILL.md".length)),
+    },
   });
 }

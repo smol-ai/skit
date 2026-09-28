@@ -14,7 +14,8 @@ it.effect("rejects known GitHub Sources with their dedicated installer guidance"
       "gh:pbakaus/impeccable",
       "github:pbakaus/impeccable",
       "https://github.com/pbakaus/impeccable",
-      "https://github.com/PBAKAUS/IMPECCABLE.git#ref=main",
+      "https://github.com/PBAKAUS/IMPECCABLE.git",
+      "https://github.com/PBAKAUS/IMPECCABLE/tree/main",
     ]) {
       const failure = yield* rejectDedicatedInstallerSourceEffect(input).pipe(Effect.flip);
       assert.instanceOf(failure, DedicatedInstallerRequired);
@@ -29,14 +30,11 @@ it.effect("rejects known GitHub Sources with their dedicated installer guidance"
 it.effect("does not classify unrelated or local Sources as dedicated-installer Sources", () =>
   Effect.sync(() => {
     assert.strictEqual(
-      dedicatedInstallerForSource({
-        type: "git",
-        locator: "https://github.com/acme/skills.git",
-      }),
+      dedicatedInstallerForSource({ type: "github", owner: "acme", repository: "skills" }),
       undefined,
     );
     assert.strictEqual(
-      dedicatedInstallerForSource({ type: "local", locator: "/work/pbakaus/impeccable" }),
+      dedicatedInstallerForSource({ type: "local", path: "/work/pbakaus/impeccable" }),
       undefined,
     );
   }),

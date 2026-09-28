@@ -140,6 +140,13 @@ export class UnsafeGitSubpath extends Data.TaggedError("UnsafeGitSubpath")<{}> {
   }
 }
 
+export class GitSourceFragment extends Data.TaggedError("GitSourceFragment")<{ source: string }> {
+  readonly code = "INVALID_ARGUMENT" as const;
+  get message(): string {
+    return `Git source ${this.source} has a # fragment. A Git remote is acquired from its default branch and root; on GitHub, use a tree URL (https://github.com/<owner>/<repository>/tree/<ref>/<path>) to select a ref or directory`;
+  }
+}
+
 export class DirectSkillDocumentInvalid extends Data.TaggedError("DirectSkillDocumentInvalid")<{}> {
   readonly code = "VALIDATION_FAILED" as const;
   get message(): string {

@@ -20,7 +20,6 @@ import {
   readSkitDescriptorEffect,
   resolveHarnessRoot,
   sourceLocator,
-  sourceIdentityEquals,
   sourceIdentityFromSource,
   SourceProcess,
   writeJsonAtomicEffect,
@@ -30,7 +29,7 @@ import {
   type SkitSource,
   type SkillId,
   type SkillVersionId,
-  type SourceIdentity,
+  SourceIdentity,
   type CurrentMachineDocument,
 } from "@smolai/skit-core";
 import { probeHarnessesEffect } from "../../harness/probe.js";
@@ -849,7 +848,8 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
     if (!descriptor || !remote || descriptor.slug !== remote.skit) continue;
     const skitLocator = sourceLocator({
       type: "registry",
-      locator: `${remote.namespace}/${remote.skit}`,
+      namespace: remote.namespace,
+      slug: remote.skit,
       authority: remote.origin,
     });
     const authoredSource: SourceIdentity = {
@@ -861,7 +861,7 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
     const collectionId = library.collections.find(
       (collection) =>
         collection.upstream !== undefined &&
-        sourceIdentityEquals(collection.upstream.source_identity, authoredSource),
+        Schema.toEquivalence(SourceIdentity)(collection.upstream.source_identity, authoredSource),
     )?.collection_id;
     const skills = yield* Effect.forEach(descriptor.skills, (skill) => {
       const path = resolve(repository, skill.path);
@@ -1457,7 +1457,16 @@ export const classifySetupOnboarding = (
                 : libraryCollectionSourcesById.get(retainedSkill.collection_id);
             if (source === undefined || retainedSource === undefined) return false;
             const lockSource = sourceIdentityFromSource(source, retained?.machineId);
-            return lockSource !== undefined && sourceIdentityEquals(lockSource, retainedSource);
+            if (lockSource === undefined) return false;
+            // Pre-v5 state recorded a well-known Source without a member selection as `url`.
+            const legacyUrl =
+              (lockSource.kind === "well-known" &&
+                retainedSource.kind === "url" &&
+                lockSource.locator.value === retainedSource.url.value) ||
+              (lockSource.kind === "url" &&
+                retainedSource.kind === "well-known" &&
+                lockSource.url.value === retainedSource.locator.value);
+            return legacyUrl || Schema.toEquivalence(SourceIdentity)(lockSource, retainedSource);
           })
         )
           continue;

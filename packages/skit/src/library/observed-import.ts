@@ -4,7 +4,6 @@ import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../art
 import { InvalidLibraryState } from "../failures.js";
 import { copyLocalTreeEffect } from "../platform/copy-tree.js";
 import { writeJsonAtomicEffect } from "../platform/atomic-write.js";
-import { canonicalJson } from "../shared/json.js";
 import {
   makeAcquisitionId,
   makeCollectionId,
@@ -20,7 +19,9 @@ import {
   Acquisition,
   type AcquisitionSelection,
   type MaterializationProfile,
+  type SkitSource,
   SourceIdentity,
+  SourceTracking,
 } from "./library-contracts.js";
 import {
   LibraryState,
@@ -35,7 +36,7 @@ import {
   sourceIdentityFromSource,
   type SourceDeclaration,
 } from "./source-identity.js";
-import type { Digest, SkitSource, SkillsShProvenanceObservation } from "./store/state-schema.js";
+import type { Digest, SkillsShProvenanceObservation } from "./store/state-schema.js";
 
 const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(function* (
   libraryHome: string,
@@ -107,14 +108,15 @@ const safeRelative = (path: string) =>
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
 
 const selection = (source: SkitSource, skills: ObservedImport["skills"]): AcquisitionSelection => {
-  if (source?.type === "well-known" && source.members?.length)
-    return { kind: "selected-skills", names: [...new Set(source.members)].sort() };
-  if (source.type !== "git") return { kind: "full-tree" };
-  const selectedPaths = new URLSearchParams(source.locator.split("#", 2)[1] ?? "")
-    .getAll("skill")
-    .map((path) => path.replace(/\/SKILL\.md$/, ""));
+  if (source.type === "well-known" && source.skillNames?.length)
+    return { kind: "selected-skills", names: [...new Set(source.skillNames)].sort() };
+  if (source.type !== "git" && source.type !== "github") return { kind: "full-tree" };
   const paths = [
-    ...new Set(selectedPaths.length ? selectedPaths : skills.map((skill) => skill.relativePath)),
+    ...new Set(
+      source.skillDirectories?.length
+        ? source.skillDirectories
+        : skills.map((skill) => skill.relativePath),
+    ),
   ].sort();
   return paths.length === 0 || (paths.length === 1 && paths[0] === ".")
     ? { kind: "full-tree" }
@@ -236,8 +238,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ? ({ kind: "default" } as const)
       : ({ kind: "commit", ref: pinnedRevision } as const);
   const requestedGitRef =
-    request.source.type === "git"
-      ? (new URLSearchParams(request.source.locator.split("#", 2)[1] ?? "").get("ref") ?? undefined)
+    request.source.type === "git" || request.source.type === "github"
+      ? request.source.ref
       : undefined;
   const refreshTracking =
     requestedGitRef === undefined
@@ -245,12 +247,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       : /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(requestedGitRef)
         ? ({ kind: "commit", ref: requestedGitRef } as const)
         : ({ kind: "branch", ref: requestedGitRef } as const);
-  const sourceKey = canonicalJson(source);
   let collection = state.collections.find((candidate) => {
     if (
       candidate.upstream !== undefined &&
-      canonicalJson(candidate.upstream.source_identity) === sourceKey &&
-      canonicalJson(candidate.upstream.tracking) === canonicalJson(refreshTracking)
+      Schema.toEquivalence(SourceIdentity)(candidate.upstream.source_identity, source) &&
+      Schema.toEquivalence(SourceTracking)(candidate.upstream.tracking, refreshTracking)
     )
       return true;
     if (source.kind !== "local") return false;
@@ -266,7 +267,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     return state.acquisitions.some(
       (acquisition) =>
         acquisitionIds.has(acquisition.acquisition_id) &&
-        canonicalJson(acquisition.source_identity) === sourceKey,
+        Schema.toEquivalence(SourceIdentity)(acquisition.source_identity, source),
     );
   });
   const mergedCollectionSelection =

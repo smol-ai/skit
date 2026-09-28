@@ -34,7 +34,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
       writingTo(
         home.home,
         retainObservedIn(home.home)({
-          source: { type: "local", locator: installed },
+          source: { type: "local", path: installed },
           input: installed,
           retainedAt: "2026-09-17T00:00:00.000Z",
           skills: [

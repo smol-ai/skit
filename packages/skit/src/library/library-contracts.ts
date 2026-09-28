@@ -72,6 +72,40 @@ export const SourceIdentity = Schema.Union([
 ]);
 export type SourceIdentity = typeof SourceIdentity.Type;
 
+const GitSourceFields = {
+  ref: Schema.optionalKey(Schema.NonEmptyString),
+  subpath: Schema.optionalKey(SourceRelativePath),
+  /** Skill directories relative to `subpath`; absent means every Skill found. */
+  skillDirectories: Schema.optionalKey(Schema.Array(SourceRelativePath)),
+};
+
+/** Where to acquire Skills from. Parsed once from user input; never re-encoded into a string. */
+export const SkitSource = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("github"),
+    owner: Schema.NonEmptyString,
+    repository: Schema.NonEmptyString,
+    ...GitSourceFields,
+  }),
+  Schema.Struct({ type: Schema.Literal("git"), remote: Schema.NonEmptyString, ...GitSourceFields }),
+  Schema.Struct({
+    type: Schema.Literal("registry"),
+    namespace: Schema.NonEmptyString,
+    slug: Schema.NonEmptyString,
+    version: Schema.optionalKey(Schema.NonEmptyString),
+    authority: Schema.optionalKey(Schema.NonEmptyString),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("well-known"),
+    origin: Schema.NonEmptyString,
+    skillNames: Schema.optionalKey(Schema.Array(Schema.NonEmptyString)),
+  }),
+  Schema.Struct({ type: Schema.Literal("url"), url: Schema.NonEmptyString }),
+  Schema.Struct({ type: Schema.Literal("archive"), url: Schema.NonEmptyString }),
+  Schema.Struct({ type: Schema.Literal("local"), path: Schema.NonEmptyString }),
+]);
+export type SkitSource = typeof SkitSource.Type;
+
 export const SourceTracking = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("default") }),
   Schema.Struct({ kind: Schema.Literal("branch"), ref: Schema.NonEmptyString }),

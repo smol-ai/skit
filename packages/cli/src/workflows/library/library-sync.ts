@@ -106,7 +106,25 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(f
           });
         git = { commit, tracking_ref: null };
       }
-      const resolved = yield* resolveSkitSourceEffect(acquisition.input.value, {
+      const identity = acquisition.source_identity;
+      const subpath =
+        (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
+          ? { subpath: identity.collection_root }
+          : {};
+      // Git is restored from its recorded identity and commit. A Registry Release version is only
+      // recorded in the Acquisition input, so that input is still read here.
+      const source =
+        identity.kind === "github"
+          ? {
+              type: "github" as const,
+              owner: identity.owner,
+              repository: identity.repository,
+              ...subpath,
+            }
+          : identity.kind === "git"
+            ? { type: "git" as const, remote: identity.remote.value, ...subpath }
+            : acquisition.input.value;
+      const resolved = yield* resolveSkitSourceEffect(source, {
         registryBaseUrl: options.origin,
         ...(options.token === undefined ? {} : { registryToken: options.token }),
         ...(git === undefined ? {} : { git, requireGitRevision: true }),

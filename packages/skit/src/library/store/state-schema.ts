@@ -18,7 +18,6 @@ export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", 
 export type HarnessName = typeof HarnessName.Type;
 export const InvocationPolicy = Schema.Literals(["explicit", "implicit", "host-policy"]);
 export type InvocationPolicy = typeof InvocationPolicy.Type;
-const ExtensionFields = { extension: Schema.optionalKey(Schema.Unknown) };
 export const InventoryScanIssue = Schema.Union([
   Schema.Struct({
     path: Schema.String,
@@ -38,25 +37,6 @@ export const InventoryScanIssue = Schema.Union([
   }),
 ]);
 export type InventoryScanIssue = typeof InventoryScanIssue.Type;
-export const SkitSource = Schema.Union([
-  Schema.Struct({
-    ...ExtensionFields,
-    type: Schema.Literal("registry"),
-    locator: Schema.String,
-    authority: Schema.optional(Schema.String),
-  }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("git"), locator: Schema.String }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("local"), locator: Schema.String }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("archive"), locator: Schema.String }),
-  Schema.Struct({ ...ExtensionFields, type: Schema.Literal("url"), locator: Schema.String }),
-  Schema.Struct({
-    ...ExtensionFields,
-    type: Schema.Literal("well-known"),
-    locator: Schema.String,
-    members: Schema.optional(Schema.Array(Schema.String)),
-  }),
-]);
-export type SkitSource = typeof SkitSource.Type;
 export const SkillsShProvenanceObservation = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machineId: Schema.Union([LegacyMachineId, MachineId]),
