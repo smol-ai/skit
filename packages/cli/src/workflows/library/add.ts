@@ -24,9 +24,7 @@ export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVer
   "Library.AddRetainedVersionMissing",
   { source: Schema.String },
 ) {}
-export interface AddOptions {
-  readonly selectVersions?: boolean;
-}
+export interface AddOptions {}
 
 const registrySourceDeclaration = (source: SkitSource, authority?: string) =>
   source.type === "registry"
@@ -151,7 +149,6 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
           ...(declaration === undefined ? {} : { declaration }),
           input: historicalInput,
           retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-          selectVersions: options.selectVersions,
         });
         const state = yield* (yield* LibraryStore).load;
         const retained = state.retained_copies.find((copy) => copy.digest === snapshot);
@@ -206,7 +203,6 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         skills,
         observations: [],
-        selectVersions: options.selectVersions,
       });
       const state = yield* (yield* LibraryStore).load;
       const retained = state.retained_copies.find((copy) => copy.digest === prepared.digest);

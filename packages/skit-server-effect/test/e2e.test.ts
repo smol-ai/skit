@@ -26,7 +26,6 @@ const commandsWithHarnessRoots = new Set([
   "doctor",
   "check",
   "update",
-  "pin",
   "remove",
   "enable",
   "disable",

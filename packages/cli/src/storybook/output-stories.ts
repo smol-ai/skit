@@ -376,36 +376,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       },
     ],
   }),
-  resultStory("pin", "preview", outputContracts.pinPlan, {
-    subject_id: collectionId,
-    skills: [
-      {
-        skill_id: skillId,
-        skill: "review",
-        current_version_id: skillVersionId,
-        selected_version_id: skillVersionId,
-      },
-    ],
-    retained: true,
-    changed: true,
-    bindings: 1,
-  }),
-  resultStory("pin", "applied", outputContracts.pin, {
-    subject_id: collectionId,
-    skills: [
-      {
-        skill_id: skillId,
-        skill: "review",
-        current_version_id: skillVersionId,
-        selected_version_id: skillVersionId,
-      },
-    ],
-    retained: true,
-    changed: true,
-    bindings: 1,
-    projected: 1,
-    deferred: 0,
-  }),
   resultStory("remove", "preview", outputContracts.removePlan, {
     subject_id: collectionId,
     subject_kind: "collection",

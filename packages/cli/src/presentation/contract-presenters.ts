@@ -8,7 +8,6 @@ import { basename, dirname, relative, sep } from "node:path";
 import { harnessLabel } from "../harness/catalog.js";
 import { renderInventory } from "./inventory.js";
 import { renderSetEnabled } from "./set-enabled.js";
-import { renderPin } from "./pin.js";
 import { renderRemove, renderRemovePlan } from "./remove.js";
 import { renderCheck } from "./check.js";
 import { renderLibrarySync } from "./library-sync.js";
@@ -716,8 +715,6 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.publish.id]: (data) =>
     `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,
   [outputContracts.sync.id]: renderAuthorSync,
-  [outputContracts.pin.id]: (data) => renderPin(data, true),
-  [outputContracts.pinPlan.id]: (data) => renderPin(data, false),
   [outputContracts.librarySync.id]: renderLibrarySync,
   [outputContracts.libraryHistory.id]: (data) =>
     data.events.length

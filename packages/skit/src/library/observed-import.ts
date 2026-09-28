@@ -96,8 +96,6 @@ export interface ObservedImport {
   readonly skills: readonly ObservedSkill[];
   readonly observations: readonly SkillsShProvenanceObservation[];
   readonly retainLocalEntry?: boolean;
-  /** Retention may be separated from selection when another workflow owns the selection commit. */
-  readonly selectVersions?: boolean;
 }
 
 const safeRelative = (path: string) =>
@@ -335,8 +333,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       skill.versions.splice(skill.versions.indexOf(version), 1, next);
       version = next;
     }
-    if (request.selectVersions !== false)
-      skill.selected_skill_version_id = version.skill_version_id;
+    skill.selected_skill_version_id = version.skill_version_id;
   }
   if (retainedCopy === undefined)
     state.retained_copies.push({
@@ -550,8 +547,6 @@ export interface AuthoredImport {
   readonly declaration?: SourceDeclaration;
   readonly input: string;
   readonly retainedAt: string;
-  /** Retention may be separated from selection when another workflow owns the selection commit. */
-  readonly selectVersions?: boolean;
 }
 export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
   "Library.retainAuthoredCollectionUnderLock",

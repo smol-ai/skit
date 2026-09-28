@@ -17,7 +17,6 @@ import {
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/library/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
-import { executePinEffect } from "../src/workflows/library/pin.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
@@ -214,22 +213,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
-    const originalVersion = after.skills[0]?.versions[0]?.skill_version_id;
-    assert.ok(originalVersion);
-    yield* writingTo(
-      home,
-      run(
-        executePinEffect(after, {
-          ...options,
-          query: skill.skill_id,
-          version: originalVersion,
-          dryRun: false,
-        }),
-      ),
-    );
-    const pinned = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.strictEqual(pinned.skills[0]?.selected_skill_version_id, originalVersion);
-    const desired = yield* libraryManifestFromLocalStateEffect(pinned);
+    const desired = yield* libraryManifestFromLocalStateEffect(after);
     const empty = {
       ...desired,
       collections: [],
@@ -240,7 +224,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       bindings: [],
     };
     assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
-    yield* writingTo(home, run(applyLibraryBindings(pinned, bindingInput(false))));
+    yield* writingTo(home, run(applyLibraryBindings(after, bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.global_bindings, []);
     yield* writingTo(

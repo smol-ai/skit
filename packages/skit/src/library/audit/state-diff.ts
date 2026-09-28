@@ -27,7 +27,6 @@ export const classifyLibraryAuditEvent = (
     return hasChange(changes, "binding", "enabled") ? "custody.adopted" : "collection.retained";
   if (workflow === "add") return "collection.retained";
   if (workflow === "pull" || workflow === "update") return "collection.updated";
-  if (workflow === "pin") return "skill.version-selected";
   if (workflow === "remove") return "collection.removed";
   if (workflow === "inventory" && hasChange(changes, "projection", "suppressed"))
     return "projection.native-deletion-observed";
