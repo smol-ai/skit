@@ -101,7 +101,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
         reason: "source-not-candidate",
       });
     if (candidate.action === "repository-owned") {
-      const retained = yield* addLibrarySourceEffect({}, sourcePath);
+      const retained = yield* addLibrarySourceEffect(sourcePath);
       if (retained.collection_id === undefined)
         return yield* new SetupLocalCustodySelectionInvalid({
           name: selection.name,
@@ -157,7 +157,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     );
     if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(adoptionPlan))
       return yield* new PlanIsStale();
-    const retained = yield* addLibrarySourceEffect({}, adoptionPlan.sourcePath);
+    const retained = yield* addLibrarySourceEffect(adoptionPlan.sourcePath);
     const subjectId = retained.collection_id;
     if (subjectId === undefined)
       return yield* new SetupLocalCustodySelectionInvalid({

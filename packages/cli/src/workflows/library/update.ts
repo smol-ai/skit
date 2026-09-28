@@ -1,7 +1,7 @@
 import { LibraryStore, type LibraryState } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import type { InventoryRootOptions } from "../../projection/roots.js";
-import { addLibrarySourceEffect, inspectLibrarySourceEffect, type AddOptions } from "./add.js";
+import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "./add.js";
 import type { UpdateResult } from "./update-contract.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -32,7 +32,7 @@ export class UpdateNotRefreshable extends Schema.TaggedError<UpdateNotRefreshabl
   }
 }
 
-export interface UpdateOptions extends AddOptions {
+export interface UpdateOptions {
   readonly roots: InventoryRootOptions;
   readonly variantsPath: string;
 }
@@ -90,7 +90,6 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
           label: subject.label,
         });
       const inspected = yield* inspectLibrarySourceEffect(
-        options,
         yield* subjectSourceEffect(subject, acquisition.input.value),
       );
       return {
@@ -135,7 +134,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
             ? `${before.label} · Source is current`
             : `${before.label} · New snapshot retained`,
       },
-      addLibrarySourceEffect(options, yield* subjectSourceEffect(before, acquisition.input.value)),
+      addLibrarySourceEffect(yield* subjectSourceEffect(before, acquisition.input.value)),
     );
     const changed = retained.snapshot_digest !== priorTree.digest;
     let projected = 0;

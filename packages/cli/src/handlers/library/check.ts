@@ -20,7 +20,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       const state = yield* store.load;
       const value = yield* renderer.withStatus(
         "Checking retained Collection custody",
-        checkSubjectsEffect(state, {}, Option.getOrUndefined(input.subject), (collection) =>
+        checkSubjectsEffect(state, Option.getOrUndefined(input.subject), (collection) =>
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );

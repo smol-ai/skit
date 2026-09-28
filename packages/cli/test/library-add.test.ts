@@ -33,14 +33,13 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     yield* initializeLibraryMachine(home);
     const bytes = "---\nname: review\ndescription: Review carefully\n---\n\nDo the review.\n";
     yield* fs.writeFileString(join(source, "SKILL.md"), bytes);
-    const options = {};
-    assert.deepStrictEqual(yield* previewLibrarySourceEffect(options, source), {
+    assert.deepStrictEqual(yield* previewLibrarySourceEffect(source), {
       kind: "plain",
       skills: [{ name: "review", verbatim_path: "." }],
     });
     assert.strictEqual(yield* fs.exists(join(home, "state.json")), false);
 
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -58,7 +57,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(state.collections[0]?.upstream, undefined);
 
     yield* fs.writeFileString(join(source, "SKILL.md"), `${bytes}\nSecond snapshot.\n`);
-    const addedAgain = yield* addLibrarySourceEffect({}, source).pipe(
+    const addedAgain = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const refreshed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -98,7 +97,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
         `---\nname: ${name}\ndescription: ${name}\n---\n`,
       );
     }
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -167,7 +166,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provideService(HttpClient.HttpClient, client),
       );
-    const added = yield* run(addLibrarySourceEffect({}, source));
+    const added = yield* run(addLibrarySourceEffect(source));
     const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
@@ -195,7 +194,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.deepStrictEqual(enabled.global_bindings[0]?.skills, [skill.skill_id]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
-      (yield* run(checkSubjectsEffect(enabled, {}, skill.skill_id)))[0]?.source_status,
+      (yield* run(checkSubjectsEffect(enabled, skill.skill_id)))[0]?.source_status,
       "current",
     );
     artifact = updated;
@@ -254,14 +253,14 @@ it.effect("re-adding a changed local source retains a second Skill Version", () 
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nfirst\n",
     );
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     yield* fs.writeFileString(
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
-    const addedAgain = yield* addLibrarySourceEffect({}, source).pipe(
+    const addedAgain = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -286,16 +285,14 @@ it.effect("repeated local re-adds record acquisitions without inventing snapshot
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\ncurrent\n",
     );
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     yield* fs.writeFileString(
       join(source, ".skit-ownership.json"),
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
-    const reAdd = addLibrarySourceEffect({}, source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const reAdd = addLibrarySourceEffect(source).pipe(Effect.provide(libraryStoreLayer({ home })));
     const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );

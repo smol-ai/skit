@@ -128,7 +128,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* checkSubjectsEffect(ambiguous, {}, "review").pipe(Effect.provide(layer), Effect.flip))
+      (yield* checkSubjectsEffect(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))
         ._tag,
       "Library.SubjectAmbiguous",
     );
