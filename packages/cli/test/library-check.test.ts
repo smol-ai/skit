@@ -15,7 +15,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const retained = yield* addLibrarySourceEffect({}, source).pipe(
+    const retained = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
@@ -24,12 +24,8 @@ it.effect("checks retained custody without treating an observed local copy as an
     assert.strictEqual(loaded.present, true);
     if (!loaded.present) return;
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkSubjectsEffect(
-      loaded.state,
-      {},
-      retained.collection_id,
-      (collection) =>
-        Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
+    const current = yield* checkSubjectsEffect(loaded.state, retained.collection_id, (collection) =>
+      Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
@@ -48,7 +44,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
     const path = retainedTreePath(join(home, "originals"), loaded.state.retained_copies[0]!.digest);
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkSubjectsEffect(loaded.state, {}, retained.collection_id).pipe(
+    const changed = yield* checkSubjectsEffect(loaded.state, retained.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
@@ -65,7 +61,6 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.remove(source, { recursive: true });
     const withoutObservedCopy = yield* checkSubjectsEffect(
       loaded.state,
-      {},
       retained.collection_id,
     ).pipe(
       Effect.provideService(LibraryStore, {

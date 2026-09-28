@@ -16,9 +16,10 @@ import {
 } from "./entity-ids.js";
 import { MachineDocumentJson, MachineDocumentV4 } from "./machine-document.js";
 import { acquisitionObservations } from "./acquisition-evidence.js";
-import type {
-  AcquisitionSelection,
-  MaterializationProfile,
+import {
+  Acquisition,
+  type AcquisitionSelection,
+  type MaterializationProfile,
   SourceIdentity,
 } from "./library-contracts.js";
 import {
@@ -96,8 +97,6 @@ export interface ObservedImport {
   readonly skills: readonly ObservedSkill[];
   readonly observations: readonly SkillsShProvenanceObservation[];
   readonly retainLocalEntry?: boolean;
-  /** Retention may be separated from selection when another workflow owns the selection commit. */
-  readonly selectVersions?: boolean;
 }
 
 const safeRelative = (path: string) =>
@@ -298,7 +297,50 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     (candidate) => candidate.digest === request.retainedDigest,
   );
   const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
-  const acquisitionId = makeAcquisitionId();
+  const acquisition: Acquisition = {
+    acquisition_id: makeAcquisitionId(),
+    retained_copy_id: retainedCopyId,
+    source_identity: source,
+    tracking: acquisitionTracking,
+    selection: acquiredSelection,
+    input: { value: request.input },
+    ...(pinnedRevision === undefined ? {} : { source_revision: pinnedRevision }),
+    acquired_at: request.retainedAt,
+    machine_id: machineId,
+    observations: acquisitionObservations(request.observations, machineId),
+  };
+  // Seeing exactly what was last acquired from this Source changes nothing, so record nothing.
+  // A retained local edit is acquired from its Projection path, not this Source, so it is skipped.
+  const collectionOrigins = new Set(
+    state.skills
+      .filter((skill) => skill.collection_id === collection.collection_id)
+      .flatMap((skill) =>
+        skill.versions.flatMap((version) => version.origins.map((origin) => origin.acquisition_id)),
+      ),
+  );
+  const previous = state.acquisitions
+    .filter(
+      (candidate) =>
+        collectionOrigins.has(candidate.acquisition_id) &&
+        Schema.toEquivalence(SourceIdentity)(candidate.source_identity, source),
+    )
+    .toSorted((left, right) => right.acquired_at.localeCompare(left.acquired_at))[0];
+  // A Skill removed from the Collection but observed again goes through the full path below.
+  const unchangedSkills = request.facts.map((fact) =>
+    state.skills.find(
+      (skill) => skill.collection_id === collection.collection_id && skill.path === fact.sourcePath,
+    ),
+  );
+  if (
+    previous !== undefined &&
+    Schema.toEquivalence(Acquisition)(previous, {
+      ...acquisition,
+      acquisition_id: previous.acquisition_id,
+      acquired_at: previous.acquired_at,
+    }) &&
+    unchangedSkills.every((skill) => skill !== undefined)
+  )
+    return { collection, skills: unchangedSkills };
   const persistedSkills = [];
   for (const fact of request.facts) {
     let skill = state.skills.find(
@@ -319,7 +361,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     let version = skill.versions.find(
       (candidate) => candidate.artifact_digest === fact.artifactDigest,
     );
-    const origin = { acquisition_id: acquisitionId, source_path: fact.sourcePath };
+    const origin = { acquisition_id: acquisition.acquisition_id, source_path: fact.sourcePath };
     if (version === undefined) {
       version = {
         skill_version_id: makeSkillVersionId(),
@@ -335,8 +377,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       skill.versions.splice(skill.versions.indexOf(version), 1, next);
       version = next;
     }
-    if (request.selectVersions !== false)
-      skill.selected_skill_version_id = version.skill_version_id;
+    skill.selected_skill_version_id = version.skill_version_id;
   }
   if (retainedCopy === undefined)
     state.retained_copies.push({
@@ -350,25 +391,14 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         materialization_profile: fact.materializationProfile,
       })),
     });
-  state.acquisitions.push({
-    acquisition_id: acquisitionId,
-    retained_copy_id: retainedCopyId,
-    source_identity: source,
-    tracking: acquisitionTracking,
-    selection: acquiredSelection,
-    input: { value: request.input },
-    ...(pinnedRevision === undefined ? {} : { source_revision: pinnedRevision }),
-    acquired_at: request.retainedAt,
-    machine_id: machineId,
-    observations: acquisitionObservations(request.observations, machineId),
-  });
+  state.acquisitions.push(acquisition);
   if (collection?.upstream !== undefined) {
     const revised = {
       ...collection,
       upstream: {
         ...collection.upstream,
         selection: mergedCollectionSelection ?? acquiredSelection,
-        last_acquisition_id: acquisitionId,
+        last_acquisition_id: acquisition.acquisition_id,
       },
     };
     state.collections[state.collections.indexOf(collection)] = revised;
@@ -550,8 +580,6 @@ export interface AuthoredImport {
   readonly declaration?: SourceDeclaration;
   readonly input: string;
   readonly retainedAt: string;
-  /** Retention may be separated from selection when another workflow owns the selection commit. */
-  readonly selectVersions?: boolean;
 }
 export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
   "Library.retainAuthoredCollectionUnderLock",

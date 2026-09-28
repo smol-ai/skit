@@ -5,7 +5,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { inspectLibrarySourceEffect, type AddOptions } from "./add.js";
+import { inspectLibrarySourceEffect } from "./add.js";
 import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
 import {
   latestSubjectAcquisition,
@@ -16,7 +16,6 @@ import { sourceFromUpstream } from "./upstream-source.js";
 
 export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* (
   state: LibraryState,
-  options: AddOptions,
   query?: string,
   onCollection?: (collection: {
     readonly collection_id: string;
@@ -65,7 +64,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
       const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
       const inspected =
-        source === undefined ? undefined : yield* inspectLibrarySourceEffect(options, source);
+        source === undefined ? undefined : yield* inspectLibrarySourceEffect(source);
       const retained_copies = [];
       for (const copy of copies) {
         retained_copies.push({

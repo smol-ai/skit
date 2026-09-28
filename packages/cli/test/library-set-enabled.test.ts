@@ -16,7 +16,6 @@ import {
 } from "../src/workflows/library/set-enabled.js";
 import { planRemoveEffect } from "../src/workflows/library/remove.js";
 import { planUpdatesEffect } from "../src/workflows/library/update.js";
-import { planPinEffect } from "../src/workflows/library/pin.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
@@ -89,8 +88,6 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     };
     const member = state.skills.find((skill) => skill.name === "review");
     assert.ok(member);
-    const memberVersion = member.selected_skill_version_id;
-    assert.ok(memberVersion);
     assert.deepStrictEqual(
       matchingLibrarySubjects(state, member.skill_id).map((subject) => subject.kind),
       ["skill"],
@@ -131,18 +128,9 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* checkSubjectsEffect(ambiguous, {}, "review").pipe(Effect.provide(layer), Effect.flip))
+      (yield* checkSubjectsEffect(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))
         ._tag,
       "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* planPinEffect(ambiguous, {
-        ...base,
-        query: "review",
-        version: memberVersion,
-        dryRun: true,
-      }).pipe(Effect.flip))._tag,
-      "Library.PinAmbiguous",
     );
     assert.strictEqual(
       (yield* previewLibraryBindings(ambiguous, {

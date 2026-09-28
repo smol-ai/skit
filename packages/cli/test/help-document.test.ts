@@ -68,7 +68,6 @@ it.effect("derives the public manifest from executable leaves", () =>
       "inventory",
       "library history",
       "list",
-      "pin",
       "pull",
       "registry add",
       "registry default",

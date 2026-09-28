@@ -24,9 +24,6 @@ export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVer
   "Library.AddRetainedVersionMissing",
   { source: Schema.String },
 ) {}
-export interface AddOptions {
-  readonly selectVersions?: boolean;
-}
 
 const registrySourceDeclaration = (source: SkitSource, authority?: string) =>
   source.type === "registry"
@@ -46,7 +43,6 @@ export const acquisitionSourceEffect = Effect.fn("Library.acquisitionSource")(fu
 });
 
 export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(function* (
-  options: AddOptions,
   input: string | SkitSource,
   version?: string,
 ) {
@@ -112,17 +108,15 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
 });
 
 export const previewLibrarySourceEffect = Effect.fn("Library.previewSource")(function* (
-  options: AddOptions,
   input: string | SkitSource,
   version?: string,
 ) {
-  const inspected = yield* inspectLibrarySourceEffect(options, input, version);
+  const inspected = yield* inspectLibrarySourceEffect(input, version);
   return { kind: inspected.kind, skills: inspected.skills };
 });
 
 /** Retain acquired bytes while the command composition root owns the Library writer lock. */
 export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
-  options: AddOptions,
   input: string | SkitSource,
   version?: string,
 ) {
@@ -151,7 +145,6 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
           ...(declaration === undefined ? {} : { declaration }),
           input: historicalInput,
           retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-          selectVersions: options.selectVersions,
         });
         const state = yield* (yield* LibraryStore).load;
         const retained = state.retained_copies.find((copy) => copy.digest === snapshot);
@@ -206,7 +199,6 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         skills,
         observations: [],
-        selectVersions: options.selectVersions,
       });
       const state = yield* (yield* LibraryStore).load;
       const retained = state.retained_copies.find((copy) => copy.digest === prepared.digest);

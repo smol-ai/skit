@@ -16,7 +16,6 @@ import { AuditReportV1Alpha4 } from "../audit/schema.js";
 import { HarnessProbeReport } from "../harness/probe.js";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
-import { PinPlan, PinResult } from "../workflows/library/pin-contract.js";
 import { RemovePlan, RemoveResult } from "../workflows/library/remove-contract.js";
 import { CheckResult } from "../workflows/library/check-contract.js";
 import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
@@ -116,8 +115,6 @@ export const outputContracts = {
     "skit.update.projection-retention.plan.v1",
     ProjectionRetentionPlan,
   ),
-  pin: effectOutput("skit.pin.v5", PinResult),
-  pinPlan: effectOutput("skit.pin.plan.v5", PinPlan),
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),
   enable: effectOutput("skit.enable.v3", SetEnabledResult),

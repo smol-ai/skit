@@ -38,6 +38,21 @@ describe("contract compatibility", () => {
     ]);
   });
 
+  test("allows a named stable contract to be retired without a successor", () => {
+    const result = checkContractCompatibility({
+      baseArtifacts: {
+        "skit.pin.v5.json": artifact("skit.pin.v5", "before"),
+        "skit.pull.v4.json": artifact("skit.pull.v4", "before"),
+      },
+      headArtifacts: {},
+      baseManifest: manifest("stable", ["skit.pin.v5", "skit.pull.v4"]),
+    });
+    expect(result).toEqual({
+      errors: ["skit.pull.v4 was removed without a one-version successor"],
+      warnings: ["skit.pin.v5 was retired"],
+    });
+  });
+
   test("warns when an experimental contract changes in place", () => {
     const result = checkContractCompatibility({
       baseArtifacts: { "skit.audit.v1.json": artifact("skit.audit.v1", "before") },

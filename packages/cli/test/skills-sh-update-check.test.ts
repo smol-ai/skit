@@ -138,7 +138,7 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
         ),
       );
     });
-    const checked = yield* checkSubjectsEffect(localState, {}, member.skill_id).pipe(
+    const checked = yield* checkSubjectsEffect(localState, member.skill_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(localState),
         inspect: Effect.succeed({ present: true as const, state: localState }),

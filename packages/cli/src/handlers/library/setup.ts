@@ -357,7 +357,7 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const checks = yield* renderer.withStatus(
     "Checking retained skills.sh Sources",
     Effect.flatMap(
-      Effect.forEach(collectionIds, (collectionId) => checkSubjectsEffect(state, {}, collectionId)),
+      Effect.forEach(collectionIds, (collectionId) => checkSubjectsEffect(state, collectionId)),
       (results) => Effect.succeed(results.flat()),
     ),
   );

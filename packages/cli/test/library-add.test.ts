@@ -6,6 +6,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import {
   LibraryStore,
   libraryManifestFromLocalStateEffect,
+  deterministicTreeHashEffect,
   libraryStoreLayer,
   retainedTreePath,
   skitLayer,
@@ -17,11 +18,10 @@ import {
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/library/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
-import { executePinEffect } from "../src/workflows/library/pin.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, writingTo } from "./helpers/library-home.js";
+import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
 it.effect("previews without mutation, then retains exact root Skill bytes", () =>
@@ -34,14 +34,13 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     yield* initializeLibraryMachine(home);
     const bytes = "---\nname: review\ndescription: Review carefully\n---\n\nDo the review.\n";
     yield* fs.writeFileString(join(source, "SKILL.md"), bytes);
-    const options = {};
-    assert.deepStrictEqual(yield* previewLibrarySourceEffect(options, source), {
+    assert.deepStrictEqual(yield* previewLibrarySourceEffect(source), {
       kind: "plain",
       skills: [{ name: "review", verbatim_path: "." }],
     });
     assert.strictEqual(yield* fs.exists(join(home, "state.json")), false);
 
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -59,7 +58,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(state.collections[0]?.upstream, undefined);
 
     yield* fs.writeFileString(join(source, "SKILL.md"), `${bytes}\nSecond snapshot.\n`);
-    const addedAgain = yield* addLibrarySourceEffect({}, source).pipe(
+    const addedAgain = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const refreshed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -99,7 +98,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
         `---\nname: ${name}\ndescription: ${name}\n---\n`,
       );
     }
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -168,7 +167,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provideService(HttpClient.HttpClient, client),
       );
-    const added = yield* run(addLibrarySourceEffect({}, source));
+    const added = yield* run(addLibrarySourceEffect(source));
     const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
@@ -196,7 +195,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.deepStrictEqual(enabled.global_bindings[0]?.skills, [skill.skill_id]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
-      (yield* run(checkSubjectsEffect(enabled, {}, skill.skill_id)))[0]?.source_status,
+      (yield* run(checkSubjectsEffect(enabled, skill.skill_id)))[0]?.source_status,
       "current",
     );
     artifact = updated;
@@ -214,22 +213,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
-    const originalVersion = after.skills[0]?.versions[0]?.skill_version_id;
-    assert.ok(originalVersion);
-    yield* writingTo(
-      home,
-      run(
-        executePinEffect(after, {
-          ...options,
-          query: skill.skill_id,
-          version: originalVersion,
-          dryRun: false,
-        }),
-      ),
-    );
-    const pinned = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.strictEqual(pinned.skills[0]?.selected_skill_version_id, originalVersion);
-    const desired = yield* libraryManifestFromLocalStateEffect(pinned);
+    const desired = yield* libraryManifestFromLocalStateEffect(after);
     const empty = {
       ...desired,
       collections: [],
@@ -240,7 +224,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       bindings: [],
     };
     assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
-    yield* writingTo(home, run(applyLibraryBindings(pinned, bindingInput(false))));
+    yield* writingTo(home, run(applyLibraryBindings(after, bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.global_bindings, []);
     yield* writingTo(
@@ -270,14 +254,14 @@ it.effect("re-adding a changed local source retains a second Skill Version", () 
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nfirst\n",
     );
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     yield* fs.writeFileString(
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
-    const addedAgain = yield* addLibrarySourceEffect({}, source).pipe(
+    const addedAgain = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -290,7 +274,7 @@ it.effect("re-adding a changed local source retains a second Skill Version", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("repeated local re-adds record acquisitions without inventing snapshots", () =>
+it.effect("repeated identical local re-adds record nothing new", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-current-" });
@@ -302,16 +286,14 @@ it.effect("repeated local re-adds record acquisitions without inventing snapshot
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\ncurrent\n",
     );
-    const added = yield* addLibrarySourceEffect({}, source).pipe(
+    const added = yield* addLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     yield* fs.writeFileString(
       join(source, ".skit-ownership.json"),
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
-    const reAdd = addLibrarySourceEffect({}, source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const reAdd = addLibrarySourceEffect(source).pipe(Effect.provide(libraryStoreLayer({ home })));
     const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -323,7 +305,8 @@ it.effect("repeated local re-adds record acquisitions without inventing snapshot
     assert.strictEqual(first.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(second.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(after.retained_copies.length, 1);
-    assert.strictEqual(after.acquisitions.length, 3);
+    assert.strictEqual(after.acquisitions.length, 1);
+    assert.strictEqual(after.skills[0]?.versions[0]?.origins.length, 1);
     assert.strictEqual(
       yield* fs.exists(
         join(
@@ -337,6 +320,51 @@ it.effect("repeated local re-adds record acquisitions without inventing snapshot
       after.acquisitions.every(
         (acquisition) => acquisition.retained_copy_id === added.retained_version_id,
       ),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("records a new upstream commit even when its Skill bytes are unchanged", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-same-bytes-" });
+    const checkout = join(root, "checkout");
+    const skill = join(checkout, "review");
+    const home = join(root, "home");
+    yield* initializeLibraryMachine(home);
+    yield* fs.makeDirectory(skill, { recursive: true });
+    yield* fs.writeFileString(
+      join(skill, "SKILL.md"),
+      "---\nname: review\ndescription: Review\n---\nunchanged\n",
+    );
+    const observedHash = yield* deterministicTreeHashEffect(skill);
+    const retainAt = (sourceRevision: string, retainedAt: string) =>
+      Effect.scoped(
+        writingTo(
+          home,
+          retainObservedIn(home)({
+            source: { type: "git", locator: "https://github.com/acme/skills.git" },
+            input: "https://github.com/acme/skills.git",
+            sourceRevision,
+            retainedAt,
+            skills: [{ name: "review", sourcePath: skill, relativePath: "review", observedHash }],
+            observations: [],
+          }),
+        ),
+      );
+    const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+
+    yield* retainAt("a".repeat(40), "2026-09-16T01:00:00.000Z");
+    yield* retainAt("b".repeat(40), "2026-09-16T02:00:00.000Z");
+    yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
+    const after = yield* load;
+
+    assert.strictEqual(after.retained_copies.length, 1);
+    assert.deepStrictEqual(
+      after.acquisitions.map((acquisition) => acquisition.source_revision),
+      ["a".repeat(40), "b".repeat(40)],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

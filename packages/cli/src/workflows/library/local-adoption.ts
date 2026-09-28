@@ -124,7 +124,7 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
     resolve(left.path).localeCompare(resolve(right.path)),
   );
   const sourcePath = resolve(nominatedSourcePath ?? selected[0]!.path);
-  const preview = yield* inspectLibrarySourceEffect({}, sourcePath);
+  const preview = yield* inspectLibrarySourceEffect(sourcePath);
   const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = [];
   const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
   const sourceContentHash = yield* deterministicTreeHashEffect(sourcePath);

@@ -73,7 +73,7 @@ describe("declared exit codes match the binary", () => {
     expect(declaredFor("auth", "logout")).toContain(12);
   });
 
-  test("pin reports VALIDATION_FAILED for a malformed Library state", async () => {
+  test("update reports VALIDATION_FAILED for a malformed Library state", async () => {
     const directory = await home();
     await writeFile(
       join(directory, "state.json"),
@@ -87,11 +87,11 @@ describe("declared exit codes match the binary", () => {
       }),
     );
 
-    const result = run(["pin", "nope", "--version", "1.0.0", "--json"], { home: directory });
+    const result = run(["update", "nope", "--json"], { home: directory });
 
     expect(result.status).toBe(65);
     expect(failure(result).code).toBe("VALIDATION_FAILED");
-    expect(declaredFor("pin")).toContain(65);
+    expect(declaredFor("update")).toContain(65);
   });
 
   // Naming these moved them off the shared exit 1. An unsafe source string is a rejected

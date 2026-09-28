@@ -251,7 +251,7 @@ test.runIf(realGit)(
       expect(state.local_bindings).toEqual([]);
       expect(existsSync(join(roots.claudeRoot, "review"))).toBe(false);
 
-      // A fresh clone of unchanged history reuses the exact retained Version.
+      // A fresh clone of unchanged history reuses the exact retained Version and records nothing new.
       const beforeRepeat = (await gitInvocations(shim.log)).length;
       const again = await run("add", REMOTE);
       expect(again.code, again.stderr).toBe(0);
@@ -268,8 +268,7 @@ test.runIf(realGit)(
       );
       expect(after.collections).toHaveLength(1);
       expect(after.retained_copies).toHaveLength(1);
-      expect(after.acquisitions).toHaveLength(2);
-      expect(after.acquisitions[0]?.retained_copy_id).toBe(after.acquisitions[1]?.retained_copy_id);
+      expect(after.acquisitions).toHaveLength(1);
       expect(after.projections).toEqual([]);
 
       // Preview after add still agrees and still writes nothing of its own.
@@ -361,7 +360,7 @@ test.runIf(realGit)(
         source_revision: fixture.head,
       });
 
-      // A new checkout of the same bytes reuses the verbatim Version without timestamp evidence.
+      // A new checkout of the same bytes reuses the verbatim Version and records nothing new.
       const again = await run("add", source);
       expect(again.code, again.stderr).toBe(0);
       const repeated = addResult(again.stdout);
@@ -372,8 +371,7 @@ test.runIf(realGit)(
       );
       expect(state.collections).toHaveLength(1);
       expect(state.retained_copies).toHaveLength(1);
-      expect(state.acquisitions).toHaveLength(2);
-      expect(state.acquisitions[0]?.retained_copy_id).toBe(state.acquisitions[1]?.retained_copy_id);
+      expect(state.acquisitions).toHaveLength(1);
       expect(state.projections).toEqual([]);
       expect(state.global_bindings).toEqual([]);
       expect(state.local_bindings).toEqual([]);
