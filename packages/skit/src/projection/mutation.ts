@@ -160,13 +160,14 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
 
 const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_digest;
 
+// Custody is the Projection and Skill; a new selected Version is an ordinary rewrite, and the
+// expected-digest check below is what detects local edits.
 const markerMatches = (
   marker: OwnershipMarker,
   request: Pick<MaterializeProjectionRequest, "identity">,
 ) =>
   marker.projection_id === request.identity.projectionId &&
-  marker.skill_id === request.identity.skillId &&
-  marker.skill_version_id === request.identity.skillVersionId;
+  marker.skill_id === request.identity.skillId;
 
 const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.projection_id === right.projection_id &&
