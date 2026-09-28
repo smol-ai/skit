@@ -6,6 +6,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import {
   LibraryStore,
   libraryManifestFromLocalStateEffect,
+  deterministicTreeHashEffect,
   libraryStoreLayer,
   retainedTreePath,
   skitLayer,
@@ -20,7 +21,7 @@ import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, writingTo } from "./helpers/library-home.js";
+import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
 it.effect("previews without mutation, then retains exact root Skill bytes", () =>
@@ -273,7 +274,7 @@ it.effect("re-adding a changed local source retains a second Skill Version", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("repeated local re-adds record acquisitions without inventing snapshots", () =>
+it.effect("repeated identical local re-adds record nothing new", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-current-" });
@@ -304,7 +305,8 @@ it.effect("repeated local re-adds record acquisitions without inventing snapshot
     assert.strictEqual(first.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(second.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(after.retained_copies.length, 1);
-    assert.strictEqual(after.acquisitions.length, 3);
+    assert.strictEqual(after.acquisitions.length, 1);
+    assert.strictEqual(after.skills[0]?.versions[0]?.origins.length, 1);
     assert.strictEqual(
       yield* fs.exists(
         join(
@@ -318,6 +320,51 @@ it.effect("repeated local re-adds record acquisitions without inventing snapshot
       after.acquisitions.every(
         (acquisition) => acquisition.retained_copy_id === added.retained_version_id,
       ),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("records a new upstream commit even when its Skill bytes are unchanged", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-same-bytes-" });
+    const checkout = join(root, "checkout");
+    const skill = join(checkout, "review");
+    const home = join(root, "home");
+    yield* initializeLibraryMachine(home);
+    yield* fs.makeDirectory(skill, { recursive: true });
+    yield* fs.writeFileString(
+      join(skill, "SKILL.md"),
+      "---\nname: review\ndescription: Review\n---\nunchanged\n",
+    );
+    const observedHash = yield* deterministicTreeHashEffect(skill);
+    const retainAt = (sourceRevision: string, retainedAt: string) =>
+      Effect.scoped(
+        writingTo(
+          home,
+          retainObservedIn(home)({
+            source: { type: "git", locator: "https://github.com/acme/skills.git" },
+            input: "https://github.com/acme/skills.git",
+            sourceRevision,
+            retainedAt,
+            skills: [{ name: "review", sourcePath: skill, relativePath: "review", observedHash }],
+            observations: [],
+          }),
+        ),
+      );
+    const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+
+    yield* retainAt("a".repeat(40), "2026-09-16T01:00:00.000Z");
+    yield* retainAt("b".repeat(40), "2026-09-16T02:00:00.000Z");
+    yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
+    const after = yield* load;
+
+    assert.strictEqual(after.retained_copies.length, 1);
+    assert.deepStrictEqual(
+      after.acquisitions.map((acquisition) => acquisition.source_revision),
+      ["a".repeat(40), "b".repeat(40)],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

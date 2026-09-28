@@ -150,5 +150,35 @@ it.effect(
         yield* fs.readFileString(join(roots.claudeRoot, "review", "SKILL.md")),
         "different change\n",
       );
+
+      // Refreshing the unchanged Source records nothing, so the retained edit stays selected.
+      yield* Effect.scoped(
+        writingTo(
+          home,
+          retainObservedIn(home)({
+            source: { type: "local", locator: source },
+            input: source,
+            retainedAt: "2026-09-18T00:00:00.000Z",
+            skills: [
+              {
+                name: "review",
+                sourcePath: source,
+                relativePath: ".",
+                observedHash: yield* deterministicTreeHashEffect(source),
+              },
+            ],
+            observations: [],
+          }),
+        ),
+      );
+      const refreshed = yield* LibraryStore.use((store) => store.load).pipe(
+        Effect.provide(storeLayer),
+      );
+      assert.deepStrictEqual(refreshed.acquisitions, after.acquisitions);
+      assert.strictEqual(
+        refreshed.skills.find((candidate) => candidate.skill_id === skill.skill_id)
+          ?.selected_skill_version_id,
+        result.retained_skill_version_id,
+      );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
