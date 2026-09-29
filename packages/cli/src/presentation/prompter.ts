@@ -93,6 +93,14 @@ const filterableMultiSelect = <Value extends string>(
   message: string,
   items: readonly Choice<Value>[],
 ): Prompt.Prompt<Value[]> => {
+  const hasPreview = items.some((item) => item.preview !== undefined);
+  const hasRemoval = items.some((item) => item.removeValue !== undefined);
+  const shortcuts = [
+    ...(hasPreview ? ["Ctrl+P preview"] : []),
+    ...(hasRemoval ? ["Ctrl+R remove/undo"] : []),
+    "Space toggle",
+    "Ctrl+A all/none",
+  ].join(" · ");
   const initialSelected = new Set(
     items.flatMap((item, index) => (item.selected && !item.disabled ? [index] : [])),
   );
@@ -137,17 +145,10 @@ const filterableMultiSelect = <Value extends string>(
     }
     const filter = state.query.length === 0 ? "type to filter" : `filter: ${state.query}`;
     const color = terminalColors();
-    const lines = [
-      `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}  (Space toggle, Ctrl+A all/none${items.some((item) => item.removeValue !== undefined) ? ", Ctrl+R remove/undo" : ""}${items.some((item) => item.preview !== undefined) ? ", Ctrl+P preview" : ""})`)}`,
-    ];
-    if (items.some((item) => item.preview !== undefined)) {
-      lines[0] = `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}`)}`;
-      lines.push(
-        color.dim(
-          `Ctrl+P preview${items.some((item) => item.removeValue !== undefined) ? " · Ctrl+R remove/undo" : ""} · Space toggle · Ctrl+A all/none`,
-        ),
-      );
-    }
+    const title = `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}`)}`;
+    const lines = hasPreview
+      ? [title, color.dim(shortcuts)]
+      : [`${title}  ${color.dim(`(${shortcuts})`)}`];
     if (page.length === 0) lines.push("  No matches");
     let previousGroup: string | undefined;
     for (const itemIndex of page) {
@@ -245,7 +246,7 @@ const filterableMultiSelect = <Value extends string>(
           }),
         );
       if (input.key.ctrl && input.key.name === "p")
-        return items.some((item) => item.preview)
+        return hasPreview
           ? next({ ...state, preview: !state.preview, previewOffset: 0 })
           : Effect.succeed(PromptAction.Beep());
       if (state.preview && (input.key.name === "pageup" || input.key.name === "pagedown"))

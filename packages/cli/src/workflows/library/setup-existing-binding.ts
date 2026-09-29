@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect";
 import { LibraryStore, type Digest } from "@smolai/skit-core";
-import { resolve } from "node:path";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 import { applyLibraryBindings } from "./set-enabled.js";
@@ -57,10 +56,8 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
     const observedHash = instance?.contentIdentity.observedHash;
     if (!observedHash)
       return yield* new SetupExistingBindingInvalid({ name, reason: "content-identity-missing" });
-    const targets = (instance.harnesses ?? []).flatMap((harness) =>
-      instance.scope === "global" ? [{ path: resolve(selectedPath), harness }] : [],
-    );
-    if (!targets.length)
+    const harnesses = instance.scope === "global" ? instance.harnesses : [];
+    if (!harnesses.length)
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
     results.push(
@@ -70,7 +67,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
         selectedSkills: [name],
         invocation: {
           subjects: [candidate.subjectId],
-          harnesses: [...new Set(targets.map((target) => target.harness))],
+          harnesses,
           scope: { kind: "global" },
           enabled: true,
           dryRun: false,

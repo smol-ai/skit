@@ -102,18 +102,15 @@ describe("the terminal prompter", () => {
       );
     }).pipe(Effect.provide(promptedWith(["ctrl+r", "ctrl+a", "enter"]))),
   );
-  it.effect("can undo removal or change it back to selection", () =>
-    Effect.gen(function* () {
-      const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
-      expect(chosen).toEqual(["keep"]);
-    }).pipe(Effect.provide(promptedWith(["ctrl+r", "ctrl+r", "space", "enter"]))),
-  );
-  it.effect("Space changes a removal mark back to selection", () =>
-    Effect.gen(function* () {
-      const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
-      expect(chosen).toEqual(["keep"]);
-    }).pipe(Effect.provide(promptedWith(["ctrl+r", "space", "enter"]))),
-  );
+  for (const keys of [
+    ["ctrl+r", "ctrl+r", "space", "enter"],
+    ["ctrl+r", "space", "enter"],
+  ] satisfies Key[][])
+    it.effect(`removal can return to selection: ${keys.join(" ")}`, () =>
+      Effect.gen(function* () {
+        expect(yield* (yield* Prompter).multiselect("Manage skills", removable)).toEqual(["keep"]);
+      }).pipe(Effect.provide(promptedWith(keys))),
+    );
   it.effect("ordinary pickers do not accept removal actions", () =>
     Effect.gen(function* () {
       const chosen = yield* (yield* Prompter).multiselect("Pick harnesses", harnesses);

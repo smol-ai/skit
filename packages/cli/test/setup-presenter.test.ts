@@ -1,8 +1,5 @@
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Effect, FileSystem } from "effect";
-import { NodeServices } from "@effect/platform-node";
-import { join } from "node:path";
 import {
   makeCollectionId,
   makeProjectionId,
@@ -10,47 +7,9 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract, setupDiscoverySummary } from "../src/presentation/contract-presenters.js";
-import { setupSkillModificationHint } from "../src/handlers/library/setup.js";
+import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
-import type {
-  SetupOnboardingCandidate,
-  SetupSkillInstance,
-} from "../src/workflows/library/setup-contract.js";
-
-it.effect("shows SKILL.md dates from symlink targets and the newest installed copy", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-setup-dates-" });
-    const original = join(root, "original");
-    const copy = join(root, "copy");
-    const link = join(root, "linked");
-    yield* fs.makeDirectory(original);
-    yield* fs.makeDirectory(copy);
-    yield* fs.writeFileString(join(original, "SKILL.md"), "Original");
-    yield* fs.writeFileString(join(copy, "SKILL.md"), "Copy");
-    yield* fs.utimes(
-      join(original, "SKILL.md"),
-      new Date("2026-01-03T12:00:00Z"),
-      new Date("2026-01-03T12:00:00Z"),
-    );
-    yield* fs.utimes(
-      join(copy, "SKILL.md"),
-      new Date("2026-09-20T12:00:00Z"),
-      new Date("2026-09-20T12:00:00Z"),
-    );
-    yield* fs.symlink(original, link);
-    expect(yield* setupSkillModificationHint([link])).toBe("SKILL.md modified 2026-01-03");
-    expect(yield* setupSkillModificationHint([link, copy])).toBe(
-      "SKILL.md modified 2026-09-20 (latest copy)",
-    );
-    expect(yield* setupSkillModificationHint([join(root, "missing")])).toBe(
-      "SKILL.md modified: unavailable",
-    );
-    expect(yield* setupSkillModificationHint([link, join(root, "missing")])).toBe(
-      "SKILL.md modified 2026-01-03 (latest readable copy)",
-    );
-  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
-);
+import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
 
 it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
   const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({
@@ -97,27 +56,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
       } as const,
     },
   ];
-  const candidates: SetupOnboardingCandidate[] = instances
-    .filter((item) => item.name !== "different")
-    .map((item) => ({
-      name: item.name,
-      paths: [item.path],
-      owner: item.owner,
-      ...(item.name === "invalid"
-        ? { action: "blocked" as const, reason: "invalid-ownership-marker" as const }
-        : {
-            action: "manage-locally" as const,
-            sourceSelection: "automatic" as const,
-            sourcePath: item.path,
-          }),
-    }));
-  candidates.push({
-    name: "different",
-    paths: instances.filter((item) => item.name === "different").map((item) => item.path),
-    owner: { kind: "unknown" },
-    action: "blocked",
-    reason: "divergent-copies",
-  });
+  const candidates = classifySetupOnboarding(instances);
   const rows = setupDiscoveredSkillChoices(instances, candidates, home);
   expect(rows).toHaveLength(instances.length);
   const choices = rows.map((row) => row.choice);

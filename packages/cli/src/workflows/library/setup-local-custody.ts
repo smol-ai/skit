@@ -30,9 +30,7 @@ export class SetupLocalCustodySelectionInvalid extends Schema.TaggedError<SetupL
       "duplicate-selection",
       "candidate-not-found",
       "candidate-not-manageable",
-      "source-required",
       "source-not-candidate",
-      "path-not-projection-target",
       "machine-identity-required",
     ]),
   },
@@ -87,16 +85,6 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
         reason: "candidate-not-manageable",
       });
     const sourcePath = selection.sourcePath;
-    if (!sourcePath)
-      return yield* new SetupLocalCustodySelectionInvalid({
-        name: selection.name,
-        reason: "source-required",
-      });
-    if (!candidate.paths.includes(sourcePath))
-      return yield* new SetupLocalCustodySelectionInvalid({
-        name: selection.name,
-        reason: "source-not-candidate",
-      });
     const selectedInstance = current.instances.find((instance) => instance.path === sourcePath);
     if (
       candidate.action === "repository-owned" ||
@@ -117,34 +105,17 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       continue;
     }
     // An explicit row selects only that physical copy. Differing siblings remain untouched.
-    const targetsByObservedPath = [sourcePath].map((path) => {
-      const instance = current.instances.find((item) => item.path === path);
-      const targets = (instance?.harnesses ?? []).flatMap((harness) => {
-        return instance?.scope === "global"
-          ? [{ path, harness, scope: { kind: "global" as const } }]
-          : [];
-      });
-      return { observedPath: path, targets };
-    });
-    if (targetsByObservedPath.some((entry) => entry.targets.length === 0))
-      return yield* new SetupLocalCustodySelectionInvalid({
-        name: selection.name,
-        reason: "path-not-projection-target",
-      });
-    const targets: LocalAdoptionTarget[] = targetsByObservedPath.flatMap((entry) => entry.targets);
+    const targets: LocalAdoptionTarget[] = selectedInstance.harnesses.map((harness) => ({
+      path: sourcePath,
+      harness,
+      scope: { kind: "global" },
+    }));
     const adoptionPlan = yield* planLocalAdoption(options.adoption, targets, sourcePath);
     plans.push({ name: selection.name, plan: adoptionPlan });
-    const changes = adoptionPlan.targets
-      .filter((target) => target.status === "adoptable")
-      .map((target) => ({
-        path: target.path,
-        harness: target.harness,
-        scope: target.scope,
-        before: "unmanaged" as const,
-        after: "managed" as const,
-        contentHash: target.observedHash,
-      }));
-    if (changes.length > 0 && !current.machineConfig.machineId)
+    if (
+      adoptionPlan.targets.some((target) => target.status === "adoptable") &&
+      !current.machineConfig.machineId
+    )
       return yield* new SetupLocalCustodySelectionInvalid({
         name: selection.name,
         reason: "machine-identity-required",

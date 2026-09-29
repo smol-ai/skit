@@ -22,7 +22,6 @@ import {
 import {
   classifySetupOnboarding,
   classifyObservedOwner,
-  isSetupCandidateSelectedByDefault,
   computeSkillsLockCompatibleHash,
   readSetupMachineConfig,
   revalidateSetupPlan,
@@ -880,52 +879,6 @@ it.effect(
           harnesses: ["codex"],
         }),
       ).toEqual({ kind: "unknown" });
-      expect(
-        isSetupCandidateSelectedByDefault({ kind: "unknown" }, ["/work/skills/review"], home),
-      ).toBe(true);
-      expect(
-        isSetupCandidateSelectedByDefault(
-          { kind: "unknown" },
-          ["/home/test/.codex/skills/review"],
-          home,
-        ),
-      ).toBe(false);
-      expect(
-        isSetupCandidateSelectedByDefault(
-          { kind: "unknown" },
-          ["/home/test/.codex/plugins/cache/vendor/review"],
-          home,
-        ),
-      ).toBe(false);
-      expect(
-        isSetupCandidateSelectedByDefault(
-          { kind: "unknown" },
-          ["/home/test/.codex-other/review"],
-          home,
-        ),
-      ).toBe(true);
-      expect(
-        isSetupCandidateSelectedByDefault(
-          {
-            kind: "harness",
-            harness: "codex",
-            source: "Codex curated",
-            bundled: false,
-          },
-          [],
-          home,
-        ),
-      ).toBe(false);
-      expect(
-        isSetupCandidateSelectedByDefault(
-          {
-            kind: "repository",
-            repository: "/work/repository",
-          },
-          [],
-          home,
-        ),
-      ).toBe(false);
     }),
 );
 

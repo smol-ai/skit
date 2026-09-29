@@ -4,7 +4,10 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LinkStat, skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import {
+  makeScriptedInteraction,
+  type ScriptedAnswer,
+} from "../src/presentation/interaction-recorder.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import {
   applySetupRemovals,
@@ -43,7 +46,24 @@ const fixture = Effect.gen(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  return { root, fs, agentRoot, source, copy, link, home, options };
+  const setup = (answers: readonly ScriptedAnswer[], dryRun = false) =>
+    Effect.gen(function* () {
+      const interaction = yield* makeScriptedInteraction(answers);
+      const result = yield* home.owned(
+        writingTo(
+          home.home,
+          setupCommand({
+            options,
+            cwd: root,
+            interactive: true,
+            dryRun,
+            localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          }).pipe(Effect.provide(interaction.layer)),
+        ),
+      );
+      return { interaction, result };
+    });
+  return { root, fs, agentRoot, source, copy, link, home, options, setup };
 });
 
 it.effect(
@@ -51,22 +71,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const interaction = yield* makeScriptedInteraction([
-        ["remove\0copied", "remove\0linked"],
-        true,
-      ]);
-      const result = yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          setupCommand({
-            options: f.options,
-            cwd: f.root,
-            interactive: true,
-            dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-          }).pipe(Effect.provide(interaction.layer)),
-        ),
-      );
+      const { interaction, result } = yield* f.setup([["remove\0copied", "remove\0linked"], true]);
       const plan = (yield* interaction.notes).find((note) => note.title === "Setup plan")!.body;
       expect(plan).toContain(`copied · ${f.copy}`);
       expect(plan).toContain(`linked · ${f.link} (symlink only; source stays)`);
@@ -109,36 +114,12 @@ it.effect("declining removal or using dry run leaves copies and Library unchange
   Effect.gen(function* () {
     const f = yield* fixture;
     for (const dryRun of [false, true]) {
-      const interaction = yield* makeScriptedInteraction(dryRun ? [] : [["remove\0copied"], false]);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          setupCommand({
-            options: f.options,
-            cwd: f.root,
-            interactive: true,
-            dryRun,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-          }).pipe(Effect.provide(interaction.layer)),
-        ),
-      );
+      yield* f.setup(dryRun ? [] : [["remove\0copied"], false], dryRun);
       expect(yield* f.fs.exists(f.copy)).toBe(true);
       expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
       expect((yield* f.home.durable).collections).toHaveLength(0);
     }
-    const unchecked = yield* makeScriptedInteraction([[]]);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        setupCommand({
-          options: f.options,
-          cwd: f.root,
-          interactive: true,
-          dryRun: false,
-          localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-        }).pipe(Effect.provide(unchecked.layer)),
-      ),
-    );
+    yield* f.setup([[]]);
     expect(yield* f.fs.exists(f.copy)).toBe(true);
     expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
   }).pipe(Effect.provide(skitLayer)),
@@ -147,19 +128,7 @@ it.effect("declining removal or using dry run leaves copies and Library unchange
 it.effect("can add one skill and remove another in the same approved setup plan", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const interaction = yield* makeScriptedInteraction([["remove\0copied", "linked"], true]);
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        setupCommand({
-          options: f.options,
-          cwd: f.root,
-          interactive: true,
-          dryRun: false,
-          localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-        }).pipe(Effect.provide(interaction.layer)),
-      ),
-    );
+    yield* f.setup([["remove\0copied", "linked"], true]);
     expect(yield* f.fs.exists(f.copy)).toBe(false);
     expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
     expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["linked"]);

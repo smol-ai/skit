@@ -227,12 +227,6 @@ export const classifyObservedOwner = (input: {
 export const isSetupCandidateFromCodex = (paths: readonly string[], home = homedir()): boolean =>
   paths.some((path) => pathIsWithin(join(resolve(home), ".codex"), resolve(path)));
 
-export const isSetupCandidateSelectedByDefault = (
-  owner: SetupSkillInstance["owner"],
-  paths: readonly string[],
-  home = homedir(),
-): boolean => owner.kind === "unknown" && !isSetupCandidateFromCodex(paths, home);
-
 export const readSetupMachineConfig = Effect.fn("Setup.readMachineConfig")(function* (
   libraryHome: string,
 ) {

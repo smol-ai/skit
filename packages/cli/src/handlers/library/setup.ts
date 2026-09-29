@@ -45,24 +45,6 @@ const dryRun = Flag.boolean("dry-run").pipe(
   Flag.withDefault(false),
 );
 
-/** Show the newest SKILL.md modification time when a row represents multiple copies. */
-export const setupSkillModificationHint = Effect.fn("CLI.setup.skillModificationHint")(function* (
-  paths: readonly string[],
-) {
-  const dates = yield* Effect.forEach(paths, skillModificationTime);
-  const available = dates.filter((date): date is string => date !== null).sort();
-  const latest = available.at(-1);
-  const copies =
-    paths.length <= 1
-      ? ""
-      : available.length === paths.length
-        ? " (latest copy)"
-        : " (latest readable copy)";
-  return latest === undefined
-    ? "SKILL.md modified: unavailable"
-    : `SKILL.md modified ${latest.slice(0, 10)}${copies}`;
-});
-
 export const shouldSetupInteractively = (input: {
   readonly json: boolean;
   readonly dryRun: boolean;
@@ -128,26 +110,14 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots = !input.dryRun && (persistRoots || decisionsChanged);
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
-  let retainedSourceSelections: ReadonlyArray<{
-    name: string;
-    paths: readonly string[];
-    groupKey: string;
-  }> = [];
-  let existingBindingSelections: readonly { name: string; path: string }[] = [];
-  let localCustodySelections: ReadonlyArray<{
-    name: string;
-    sourcePath: string;
-  }> = [];
-  const installedSelections = yield* chooseDiscoveredSkills(setupOptions, observed);
-  retainedSourceSelections = installedSelections.import;
-  existingBindingSelections = installedSelections.bind;
-  localCustodySelections = installedSelections.add;
-  const removalPlan = yield* planSetupRemovals(
-    setupOptions,
-    observed,
-    installedSelections.remove,
-    installedSelections.removablePaths,
-  );
+  const {
+    import: retainedSourceSelections,
+    bind: existingBindingSelections,
+    add: localCustodySelections,
+    remove,
+    removablePaths,
+  } = yield* chooseDiscoveredSkills(setupOptions, observed);
+  const removalPlan = yield* planSetupRemovals(setupOptions, observed, remove, removablePaths);
   const prompter = yield* Prompter;
   const hasChanges =
     persistRoots ||
@@ -163,37 +133,18 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     yield* offerSkillsShUpdateCheck();
     return observed;
   }
+  const imports = observed.onboarding.candidates.filter(
+    (candidate) => candidate.action === "import-observed-collection",
+  );
   const retainedBySource = [
-    ...new Map(
-      observed.onboarding.candidates.flatMap((candidate) =>
-        candidate.action === "import-observed-collection" &&
-        retainedSourceSelections.some(
-          (selection) =>
-            selection.groupKey === candidate.groupKey &&
-            selection.name === candidate.name &&
-            selection.paths.every((path) => candidate.paths.includes(path)),
-        )
-          ? [[candidate.groupKey, candidate] as const]
-          : [],
-      ),
-    ).values(),
-  ].map((source) => {
-    const names = observed.onboarding.candidates
-      .filter(
-        (candidate) =>
-          candidate.action === "import-observed-collection" &&
-          candidate.groupKey === source.groupKey &&
-          retainedSourceSelections.some(
-            (selection) =>
-              selection.groupKey === candidate.groupKey &&
-              selection.name === candidate.name &&
-              selection.paths.every((path) => candidate.paths.includes(path)),
-          ),
-      )
-      .map((candidate) => candidate.name)
-      .sort();
-    return { source, names };
-  });
+    ...new Set(retainedSourceSelections.map((selection) => selection.groupKey)),
+  ].map((groupKey) => ({
+    source: imports.find((candidate) => candidate.groupKey === groupKey)!,
+    names: retainedSourceSelections
+      .filter((selection) => selection.groupKey === groupKey)
+      .map((selection) => selection.name)
+      .sort(),
+  }));
   const repositorySelections = localCustodySelections.filter((selection) =>
     observed.instances.some(
       (instance) =>
@@ -234,14 +185,14 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       ? [
           `Add to Library: ${localCustodySelections.length}`,
           ...localCustodySelections.map(
-            (selection) => `  ${selection.name} · ${selection.sourcePath ?? "observed copy"}`,
+            (selection) => `  ${selection.name} · ${selection.sourcePath}`,
           ),
         ]
       : []),
     ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
     ...localCustodySelections.flatMap((selection) => {
       const candidate = observed.onboarding.candidates.find((item) =>
-        item.paths.includes(selection.sourcePath ?? ""),
+        item.paths.includes(selection.sourcePath),
       );
       return candidate?.action === "blocked" && candidate.reason === "divergent-copies"
         ? [
@@ -399,14 +350,14 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
   );
   const choices = yield* Effect.forEach(rows, (row) =>
     Effect.gen(function* () {
-      const modified = yield* setupSkillModificationHint([row.instance.path]);
+      const modified = yield* skillModificationTime(row.instance.path);
       const path = join(row.instance.path, "SKILL.md");
       return {
         ...row.choice,
         ...((removablePaths.get(row.instance.path)?.length ?? 0) > 0
           ? { removeValue: `remove\0${row.choice.value}` }
           : {}),
-        hint: `${row.choice.hint} · ${modified}`,
+        hint: `${row.choice.hint} · SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
         preview: () =>
           fs.readFileString(path).pipe(
             Effect.map(
