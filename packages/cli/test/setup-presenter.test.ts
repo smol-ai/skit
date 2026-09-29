@@ -1,5 +1,8 @@
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
+import { Effect, FileSystem } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { join } from "node:path";
 import {
   makeCollectionId,
   makeProjectionId,
@@ -7,8 +10,46 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract, setupDiscoverySummary } from "../src/presentation/contract-presenters.js";
-import { setupInstalledSkillChoices } from "../src/handlers/library/setup.js";
+import {
+  setupInstalledSkillChoices,
+  setupSkillModificationHint,
+} from "../src/handlers/library/setup.js";
 import type { SetupOnboardingCandidate } from "../src/workflows/library/setup-contract.js";
+
+it.effect("shows SKILL.md dates from symlink targets and the newest installed copy", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-setup-dates-" });
+    const original = join(root, "original");
+    const copy = join(root, "copy");
+    const link = join(root, "linked");
+    yield* fs.makeDirectory(original);
+    yield* fs.makeDirectory(copy);
+    yield* fs.writeFileString(join(original, "SKILL.md"), "Original");
+    yield* fs.writeFileString(join(copy, "SKILL.md"), "Copy");
+    yield* fs.utimes(
+      join(original, "SKILL.md"),
+      new Date("2026-01-03T12:00:00Z"),
+      new Date("2026-01-03T12:00:00Z"),
+    );
+    yield* fs.utimes(
+      join(copy, "SKILL.md"),
+      new Date("2026-09-20T12:00:00Z"),
+      new Date("2026-09-20T12:00:00Z"),
+    );
+    yield* fs.symlink(original, link);
+    expect(yield* setupSkillModificationHint([link])).toBe("SKILL.md modified 2026-01-03");
+    expect(yield* setupSkillModificationHint([link, copy])).toBe(
+      "SKILL.md modified 2026-09-20 (latest copy)",
+    );
+    expect(yield* setupSkillModificationHint([join(root, "missing")])).toBe(
+      "SKILL.md modified: unavailable",
+    );
+    expect(yield* setupSkillModificationHint([link, join(root, "missing")])).toBe(
+      "SKILL.md modified 2026-01-03 (latest readable copy)",
+    );
+  }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+);
 
 it("groups installed skills by source and leaves Codex paths deselected", () => {
   const candidate = (name: string, path: string): SetupOnboardingCandidate => ({

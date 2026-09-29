@@ -1,7 +1,7 @@
-import { Effect, Option } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { homedir } from "node:os";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -97,6 +97,30 @@ export const setupInstalledSkillChoices = (
       (left, right) =>
         left.group.localeCompare(right.group) || left.label.localeCompare(right.label),
     );
+
+/** Show the newest SKILL.md modification time when a row represents multiple copies. */
+export const setupSkillModificationHint = Effect.fn("CLI.setup.skillModificationHint")(function* (
+  paths: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const dates = yield* Effect.forEach(paths, (path) =>
+    fs.stat(join(path, "SKILL.md")).pipe(
+      Effect.map((info) => Option.map(info.mtime, (date) => date.toISOString())),
+      Effect.orElseSucceed(() => Option.none<string>()),
+    ),
+  );
+  const available = dates.flatMap((date) => Option.toArray(date)).sort();
+  const latest = available.at(-1);
+  const copies =
+    paths.length <= 1
+      ? ""
+      : available.length === paths.length
+        ? " (latest copy)"
+        : " (latest readable copy)";
+  return latest === undefined
+    ? "SKILL.md modified: unavailable"
+    : `SKILL.md modified ${latest.slice(0, 10)}${copies}`;
+});
 
 export const shouldSetupInteractively = (input: {
   readonly json: boolean;
@@ -472,11 +496,17 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
   );
   if (!candidates.length) return [];
   const prompter = yield* Prompter;
+  const choices = yield* Effect.forEach(setupInstalledSkillChoices(candidates), (choice) =>
+    Effect.gen(function* () {
+      const candidate = candidates.find(
+        (item) => setupChoiceValue(item, candidates) === choice.value,
+      )!;
+      const modified = yield* setupSkillModificationHint(candidate.paths);
+      return { ...choice, hint: `${modified} · ${choice.hint}` };
+    }),
+  );
   const selectedValues = yield* prompter
-    .multiselect(
-      "Select installed skills to add to your SKIT Library",
-      setupInstalledSkillChoices(candidates),
-    )
+    .multiselect("Select installed skills to add to your SKIT Library", choices)
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
   return yield* Effect.forEach(selectedValues, (value) => {
     const candidate = candidates.find((item) => setupChoiceValue(item, candidates) === value);
