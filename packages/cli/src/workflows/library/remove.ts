@@ -18,8 +18,17 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
   query: string,
 ) {
   const subject = yield* resolveLibrarySubject(state, query);
-  // A Source is its whole repository: one of its Skills cannot be removed, only disabled.
-  if (subject.kind === "skill")
+  // A Source is its whole repository: a Skill cannot be removed from a Collection with other
+  // Skills (it would return on the next refresh), only disabled. A Collection of one Skill is
+  // removed with it.
+  if (
+    subject.kind === "skill" &&
+    state.skills.some(
+      (candidate) =>
+        candidate.collection_id === subject.skill.collection_id &&
+        candidate.skill_id !== subject.skill.skill_id,
+    )
+  )
     return yield* new SkillRemovalRequiresCollection({
       skill_id: subject.skill.skill_id,
       collection_id: subject.skill.collection_id,
@@ -52,9 +61,13 @@ export const executeRemoveEffect = Effect.fn("Library.executeRemove")(function* 
 ) {
   const plan = yield* planRemoveEffect(state, options.query);
   if (options.dryRun) return { kind: "plan" as const, value: plan };
-  // Planning refuses a single Skill, so only a Collection reaches removal.
+  // Planning only admits a Skill that is its Collection's only Skill, so removal is of a Collection.
   const removed = yield* removeCollectionEffect({
-    collectionId: plan.subject_id,
+    collectionId:
+      plan.subject_kind === "collection"
+        ? plan.subject_id
+        : (state.skills.find((skill) => skill.skill_id === plan.subject_id)?.collection_id ??
+          plan.subject_id),
     variantsPath: options.variantsPath,
   });
   return { kind: "removed" as const, value: { ...plan, retired: removed.retired } };

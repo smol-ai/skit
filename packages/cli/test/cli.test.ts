@@ -562,7 +562,8 @@ describe("CLI contracts", () => {
     ])
       expect(run(...args).status).toBe(0);
     expect(run("update", "review", "--dry-run", "--json").status).toBe(12);
-    expect(run("remove", "review", "--dry-run", "--json").status).not.toBe(0);
+    // `review` is its Collection's only Skill, so it can be removed; the dry run changes nothing.
+    expect(run("remove", "review", "--dry-run", "--json").status).toBe(0);
     expect(readFileSync(join(home, "state.json"))).toEqual(stateBefore);
     expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"))).toEqual(
       codexBefore,

@@ -20,7 +20,7 @@ import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/librar
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
-import { executeRemoveEffect, planRemoveEffect } from "../src/workflows/library/remove.js";
+import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
@@ -231,16 +231,12 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     yield* writingTo(home, run(applyLibraryBindings(after, bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.global_bindings, []);
-    // A Source is its whole repository, so one of its Skills cannot be removed on its own.
-    assert.strictEqual(
-      (yield* planRemoveEffect(disabled, skill.skill_id).pipe(Effect.flip))._tag,
-      "Library.SkillRemovalRequiresCollection",
-    );
     yield* writingTo(
       home,
       run(
+        // The Collection's only Skill can be removed, taking its Collection with it.
         executeRemoveEffect(disabled, {
-          query: skill.collection_id,
+          query: skill.skill_id,
           dryRun: false,
           variantsPath: options.variantsPath,
         }),
@@ -248,6 +244,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     );
     const removed = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(removed.skills, []);
+    assert.deepStrictEqual(removed.collections, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
