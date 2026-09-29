@@ -787,7 +787,8 @@ describe("Better Auth adapter", () => {
       const retainedCopyId = makeRetainedCopyId();
       const acquisitionId = makeAcquisitionId();
       const machineId = makeMachineId();
-      const portable = {
+      // A v5 manifest as an older CLI would write it, then the current model of the same Library.
+      const portableV5 = {
         schema: "skit.library.v5",
         collections: [
           {
@@ -861,6 +862,46 @@ describe("Better Auth adapter", () => {
         snapshot_digests: [archive.digest],
         bindings: [],
       };
+      const portable = {
+        schema: "skit.library.v6",
+        collections: [
+          {
+            collection_id: collectionId,
+            label: "test/library",
+            upstream: {
+              source_identity: portableV5.collections[0]!.upstream.source_identity,
+              tracking: { kind: "default" },
+            },
+          },
+        ],
+        skills: [
+          {
+            skill_id: skillId,
+            collection_id: collectionId,
+            path: ".",
+            name: "library",
+            versions: portableV5.skills[0]!.versions.map(
+              ({ origins: _origins, ...version }) => version,
+            ),
+          },
+        ],
+        retained_copies: portableV5.retained_copies,
+        acquisitions: [
+          {
+            acquisition_id: acquisitionId,
+            collection_id: collectionId,
+            kind: "source",
+            retained_copy_id: retainedCopyId,
+            input: { value: "private:test/library" },
+            source_identity: portableV5.acquisitions[0]!.source_identity,
+            acquired_at: "2026-01-01T00:00:00.000Z",
+            machine_id: machineId,
+            observations: [],
+          },
+        ],
+        snapshot_digests: [archive.digest],
+        bindings: [],
+      };
       const writeLibrarySync = (expected: string | null, manifest: unknown) =>
         request("/api/library/portable", {
           method: "PUT",
@@ -871,6 +912,10 @@ describe("Better Auth adapter", () => {
           },
           body: JSON.stringify({ expected_revision_id: expected, manifest }),
         });
+      // An older CLI cannot write a manifest the current model does not decode.
+      expect((yield* writeLibrarySync(libraryBody.library.revision_id, portableV5)).status).toBe(
+        400,
+      );
       const committed = yield* writeLibrarySync(libraryBody.library.revision_id, portable);
       expect(committed.status).toBe(200);
       const syncedBody = Schema.decodeUnknownSync(
@@ -927,9 +972,8 @@ describe("Better Auth adapter", () => {
               repository: "skills",
               collection_root: ".",
             },
-            tracking: { kind: "commit", ref: "e0219e96214ac420bdb8d15141340625fda63bbb" },
             input: { value: "https://github.com/example-org/skills" },
-            source_revision: "e0219e96214ac420bdb8d15141340625fda63bbb",
+            revision: "e0219e96214ac420bdb8d15141340625fda63bbb",
           },
         ],
         snapshot_digests: [],
@@ -954,13 +998,13 @@ describe("Better Auth adapter", () => {
 
       const legacyRevisionId = "library_revision_v4_fixture";
       const legacyManifest = {
-        ...portable,
+        ...portableV5,
         schema: "skit.library.v4",
-        collections: portable.collections.map(({ label, ...collection }) => ({
+        collections: portableV5.collections.map(({ label, ...collection }) => ({
           ...collection,
           display_name: label,
         })),
-        skills: portable.skills.map((skill) => ({ ...skill, upstream_path: skill.path })),
+        skills: portableV5.skills.map((skill) => ({ ...skill, upstream_path: skill.path })),
       };
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
@@ -976,7 +1020,24 @@ describe("Better Auth adapter", () => {
       });
       expect(legacyRead.status).toBe(200);
       expect(yield* webPromise(() => legacyRead.json())).toMatchObject({
-        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v5" } },
+        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v6" } },
+      });
+      const v5RevisionId = "library_revision_v5_fixture";
+      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+        sql.batch([
+          sql`INSERT INTO library_revisions
+                (revision_id, library_id, parent_revision_id, manifest_json, created_at)
+              VALUES (${v5RevisionId}, ${libraryBody.library.library_id}, ${legacyRevisionId}, ${JSON.stringify(portableV5)}, '2026-01-03T00:00:00.000Z')`,
+          sql`UPDATE libraries SET current_revision_id = ${v5RevisionId}
+              WHERE library_id = ${libraryBody.library.library_id}`,
+        ]),
+      );
+      const v5Read = yield* request("/api/library/portable", {
+        headers: { cookie: sessionCookie },
+      });
+      expect(v5Read.status).toBe(200);
+      expect(yield* webPromise(() => v5Read.json())).toMatchObject({
+        library: { revision_id: v5RevisionId, manifest: { schema: "skit.library.v6" } },
       });
 
       yield* Effect.flatMap(

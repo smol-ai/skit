@@ -1,4 +1,4 @@
-import { LibraryStore, type LibraryState } from "@smolai/skit-core";
+import { bindingSkillIds, LibraryStore, type LibraryState } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "./add.js";
@@ -67,6 +67,66 @@ const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
   return resolved;
 });
 
+/**
+ * What a refresh of one Collection means for this device: Skills a followed Collection enables
+ * or retires, enabled Skills that changed, individually enabled Skills kept after upstream
+ * deleted them, and how many new Skills nothing enables. Unenabled Skills are only counted, so a
+ * Source with thousands of Skills stays readable.
+ */
+const skillChanges = (
+  state: LibraryState,
+  collectionId: string,
+  previous: ReadonlyArray<{ readonly source_path: string; readonly artifact_digest: string }>,
+  observed: ReadonlyArray<{
+    readonly source_path: string;
+    readonly name: string;
+    readonly artifact_digest?: string;
+  }>,
+) => {
+  const bindings = [...state.global_bindings, ...state.local_bindings];
+  const followed = bindings.some((binding) =>
+    binding.entries.some(
+      (entry) => entry.kind === "collection" && entry.collection_id === collectionId,
+    ),
+  );
+  const individual = new Set<string>(
+    bindings.flatMap((binding) =>
+      binding.entries.flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
+    ),
+  );
+  const enabled = new Set<string>(bindings.flatMap((binding) => bindingSkillIds(state, binding)));
+  const skillAt = (path: string) =>
+    state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
+  const added = observed.filter(
+    (member) => !previous.some((item) => item.source_path === member.source_path),
+  );
+  const deleted = previous.flatMap((member) => {
+    const skill = skillAt(member.source_path);
+    return skill === undefined || observed.some((item) => item.source_path === member.source_path)
+      ? []
+      : [skill];
+  });
+  return {
+    enabled: followed ? added.map((member) => member.name) : [],
+    new_available: followed ? 0 : added.length,
+    updated: observed.flatMap((member) => {
+      const before = previous.find((item) => item.source_path === member.source_path);
+      const skill = skillAt(member.source_path);
+      return before !== undefined &&
+        member.artifact_digest !== undefined &&
+        member.artifact_digest !== before.artifact_digest &&
+        skill !== undefined &&
+        enabled.has(skill.skill_id)
+        ? [skill.name]
+        : [];
+    }),
+    removed: deleted
+      .filter((skill) => enabled.has(skill.skill_id) && !individual.has(skill.skill_id))
+      .map((skill) => skill.name),
+    kept: deleted.filter((skill) => individual.has(skill.skill_id)).map((skill) => skill.name),
+  };
+};
+
 export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
   state: LibraryState,
   options: UpdateOptions,
@@ -92,12 +152,24 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
       const inspected = yield* inspectLibrarySourceEffect(
         yield* subjectSourceEffect(subject, acquisition.input.value),
       );
+      const members = ("members" in inspected ? inspected.members : undefined) ?? [];
       return {
         subject_id: subject.subjectId,
         subject_kind: subject.kind,
         current_snapshot_digest: tree.digest,
         available_snapshot_digest: inspected.snapshot_digest,
         changed: tree.digest !== inspected.snapshot_digest,
+        label: subject.label,
+        ...skillChanges(
+          state,
+          acquisition.collection_id,
+          tree.members,
+          inspected.skills.map((skill) => ({
+            source_path: skill.verbatim_path,
+            name: skill.name,
+            ...(members.find((member) => member.source_path === skill.verbatim_path) ?? {}),
+          })),
+        ),
       };
     }),
   );
@@ -139,6 +211,8 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
     const changed = retained.snapshot_digest !== priorTree.digest;
     let projected = 0;
     let deferred = 0;
+    const collectionId =
+      before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
     if (changed) {
       const current = yield* (yield* LibraryStore).load;
       const reconciled = yield* renderer.withStatus(
@@ -155,8 +229,13 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
           roots: options.roots,
           variantsPath: options.variantsPath,
           onlyBindings: [...current.global_bindings, ...current.local_bindings].filter((binding) =>
-            binding.skills.some((skillId) =>
-              before.skills.some((skill) => skill.skill_id === skillId),
+            binding.entries.some((entry) =>
+              entry.kind === "collection"
+                ? entry.collection_id === collectionId
+                : current.skills.some(
+                    (skill) =>
+                      skill.skill_id === entry.skill_id && skill.collection_id === collectionId,
+                  ),
             ),
           ),
         }),
@@ -164,6 +243,10 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
       projected = reconciled.projected;
       deferred = reconciled.deferred;
     }
+    const after = yield* (yield* LibraryStore).load;
+    const retainedTree = after.retained_copies.find(
+      (tree) => tree.retained_copy_id === retained.retained_version_id,
+    );
     results.push({
       subject_id: before.subjectId,
       subject_kind: before.kind,
@@ -173,6 +256,20 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
       changed,
       projected,
       deferred,
+      label: before.label,
+      ...skillChanges(
+        state,
+        collectionId,
+        priorTree.members,
+        (retainedTree?.members ?? []).map((member) => ({
+          source_path: member.source_path,
+          artifact_digest: member.artifact_digest,
+          name:
+            after.skills.find(
+              (skill) => skill.collection_id === collectionId && skill.path === member.source_path,
+            )?.name ?? member.source_path,
+        })),
+      ),
     });
   }
   return results;

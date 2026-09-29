@@ -11,11 +11,13 @@
 
 import { spawnSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { Schema } from "effect";
+import { LibraryState } from "@smolai/skit-core";
+import { outputContracts } from "../src/commands/output-contracts.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 
 const bin = join(process.cwd(), "bin", "skit.js");
@@ -24,67 +26,14 @@ const REMOTE = "https://example.invalid/fixtures/tools.git";
 /** The real git, resolved before anything is put in front of it on PATH. */
 const realGit = spawnSync("git", ["--exec-path"], { encoding: "utf8" }).status === 0 ? "git" : "";
 
-interface AddResult {
-  collection_id: string;
-  retained_version_id: string;
-  snapshot_digest: string;
-  skills: ReadonlyArray<{ name: string; verbatim_path: string }>;
-}
-
 const AddResultDocument = Schema.fromJsonString(
-  Schema.Struct({
-    data: Schema.Struct({
-      collection_id: Schema.String,
-      retained_version_id: Schema.String,
-      snapshot_digest: Schema.String,
-      skills: Schema.Array(Schema.Struct({ name: Schema.String, verbatim_path: Schema.String })),
-    }),
-  }),
+  Schema.Struct({ data: outputContracts.add.schema }),
 );
 const AddPreviewDocument = Schema.fromJsonString(
-  Schema.Struct({
-    data: Schema.Struct({
-      kind: Schema.Literals(["plain", "authored"]),
-      skills: Schema.Array(Schema.Struct({ name: Schema.String, verbatim_path: Schema.String })),
-    }),
-  }),
+  Schema.Struct({ data: outputContracts.addPreview.schema }),
 );
-const LibraryCountsDocument = Schema.fromJsonString(
-  Schema.Struct({
-    schemaVersion: Schema.Literal(5),
-    collections: Schema.Array(
-      Schema.Struct({
-        collection_id: Schema.String,
-      }),
-    ),
-    skills: Schema.Array(Schema.Unknown),
-    retained_copies: Schema.Array(
-      Schema.Struct({ retained_copy_id: Schema.String, digest: Schema.String }),
-    ),
-    acquisitions: Schema.Array(
-      Schema.Struct({
-        retained_copy_id: Schema.String,
-        tracking: Schema.Union([
-          Schema.Struct({ kind: Schema.Literal("default") }),
-          Schema.Struct({ kind: Schema.Literal("commit"), ref: Schema.String }),
-        ]),
-        selection: Schema.Union([
-          Schema.Struct({ kind: Schema.Literal("full-tree") }),
-          Schema.Struct({
-            kind: Schema.Literal("selected-paths"),
-            paths: Schema.Array(Schema.String),
-          }),
-        ]),
-        source_revision: Schema.optionalKey(Schema.String),
-      }),
-    ),
-    projections: Schema.Array(Schema.Unknown),
-    global_bindings: Schema.Array(Schema.Unknown),
-    local_bindings: Schema.Array(Schema.Unknown),
-  }),
-);
-const addResult = (text: string): AddResult =>
-  Schema.decodeUnknownSync(AddResultDocument)(text).data;
+const LibraryStateDocument = Schema.fromJsonString(LibraryState);
+const addResult = (text: string) => Schema.decodeUnknownSync(AddResultDocument)(text).data;
 
 /** A disposable local repository with a declared Descriptor and two Skills. */
 async function repository(root: string, outsideSymlink = false) {
@@ -238,10 +187,10 @@ test.runIf(realGit)(
       expect(entry.skills).toEqual(previewed.skills);
       expect(entry.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
 
-      const state = Schema.decodeUnknownSync(LibraryCountsDocument)(
+      const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      expect(state.schemaVersion).toBe(5);
+      expect(state.schemaVersion).toBe(6);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
       expect(state.retained_copies).toHaveLength(1);
       expect(state.retained_copies[0].digest).toBe(entry.snapshot_digest);
@@ -263,7 +212,7 @@ test.runIf(realGit)(
         "checkout",
         "rev-parse",
       ]);
-      const after = Schema.decodeUnknownSync(LibraryCountsDocument)(
+      const after = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(after.collections).toHaveLength(1);
@@ -343,7 +292,7 @@ test.runIf(realGit)(
         "code-review",
         "security-review",
       ]);
-      const firstState = Schema.decodeUnknownSync(LibraryCountsDocument)(
+      const firstState = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       const hex = firstState.retained_copies[0].digest.slice("sha256:".length);
@@ -351,16 +300,9 @@ test.runIf(realGit)(
       expect(existsSync(join(originalPath, "README.md"))).toBe(false);
       expect(existsSync(join(originalPath, "skit.json"))).toBe(false);
       expect(existsSync(join(originalPath, "outside-skill"))).toBe(false);
-      expect(firstState.acquisitions[0]).toMatchObject({
-        tracking: { kind: "commit", ref: fixture.head },
-        selection: {
-          kind: "selected-paths",
-          paths: ["code-review", "security-review"],
-        },
-        source_revision: fixture.head,
-      });
+      expect(firstState.acquisitions[0]).toMatchObject({ kind: "source", revision: fixture.head });
 
-      // Refreshing a Collection with selected Skill directories reacquires those directories.
+      // Refreshing reacquires the whole Source at its subpath and finds nothing new.
       const planned = await run("update", "--dry-run");
       expect(planned.code, planned.stderr).toBe(0);
       expect(JSON.parse(planned.stdout).data).toMatchObject([{ changed: false }]);
@@ -374,7 +316,7 @@ test.runIf(realGit)(
       const repeated = addResult(again.stdout);
       expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
       expect(repeated.retained_version_id).toBe(entry.retained_version_id);
-      const state = Schema.decodeUnknownSync(LibraryCountsDocument)(
+      const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(state.collections).toHaveLength(1);
@@ -383,6 +325,70 @@ test.runIf(realGit)(
       expect(state.projections).toEqual([]);
       expect(state.global_bindings).toEqual([]);
       expect(state.local_bindings).toEqual([]);
+
+      // Following the whole Collection, an upstream change installs and retires Skills.
+      const collectionId = entry.collection_id;
+      if (collectionId === undefined) throw new Error("add reported no Collection");
+      const enabled = await run("enable", collectionId, "--all", "--for", "codex");
+      expect(enabled.code, enabled.stderr).toBe(0);
+      await rm(join(fixture.repo, "imported", "security-review"), { recursive: true });
+      await mkdir(join(fixture.repo, "imported", "release-notes"), { recursive: true });
+      await writeFile(
+        join(fixture.repo, "imported", "release-notes", "SKILL.md"),
+        "---\nname: release-notes\ndescription: Draft release notes.\n---\n\n# Release Notes\n",
+      );
+      await writeFile(
+        join(fixture.repo, "imported", "code-review", "SKILL.md"),
+        "---\nname: code-review\ndescription: Describe exactly when this skill should be used.\n---\n\n# Code Review v2\n",
+      );
+      for (const args of [
+        ["add", "-A"],
+        ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "change"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: fixture.repo, encoding: "utf8" });
+        expect(result.status, result.stderr).toBe(0);
+      }
+      const expectedChanges = {
+        enabled: ["release-notes"],
+        updated: ["code-review"],
+        removed: ["security-review"],
+        kept: [],
+        new_available: 0,
+      };
+      const updatePlan = await run("update", "--dry-run");
+      expect(updatePlan.code, updatePlan.stderr).toBe(0);
+      expect(JSON.parse(updatePlan.stdout).data).toMatchObject([
+        { changed: true, ...expectedChanges },
+      ]);
+      const applied = await run("update");
+      expect(applied.code, applied.stderr).toBe(0);
+      expect(JSON.parse(applied.stdout).data).toMatchObject([
+        { changed: true, ...expectedChanges },
+      ]);
+      expect((await readdir(roots.codexRoot)).sort()).toEqual(["code-review", "release-notes"]);
+
+      // With one Skill enabled on its own, its deletion upstream keeps it; new Skills are counted.
+      expect((await run("disable", collectionId, "--all", "--for", "codex")).code).toBe(0);
+      expect((await run("enable", "release-notes", "--for", "codex")).code).toBe(0);
+      await rm(join(fixture.repo, "imported", "release-notes"), { recursive: true });
+      await mkdir(join(fixture.repo, "imported", "triage"), { recursive: true });
+      await writeFile(
+        join(fixture.repo, "imported", "triage", "SKILL.md"),
+        "---\nname: triage\ndescription: Triage incoming issues.\n---\n\n# Triage\n",
+      );
+      for (const args of [
+        ["add", "-A"],
+        ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "again"],
+      ]) {
+        const result = spawnSync("git", args, { cwd: fixture.repo, encoding: "utf8" });
+        expect(result.status, result.stderr).toBe(0);
+      }
+      const individual = await run("update");
+      expect(individual.code, individual.stderr).toBe(0);
+      expect(JSON.parse(individual.stdout).data).toMatchObject([
+        { enabled: [], removed: [], kept: ["release-notes"], new_available: 1 },
+      ]);
+      expect(await readdir(roots.codexRoot)).toEqual(["release-notes"]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

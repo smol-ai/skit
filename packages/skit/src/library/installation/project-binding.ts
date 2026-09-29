@@ -9,6 +9,7 @@ import { LibraryStore } from "../store/library-store.js";
 import type { Digest, HarnessName } from "../store/state-schema.js";
 import type { ManagedProjection } from "../library-state.js";
 import { makeProjectionId } from "../entity-ids.js";
+import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
 
 export class ProjectionInvalid extends Schema.TaggedError<ProjectionInvalid>()(
   "Library.ProjectionInvalid",
@@ -39,27 +40,17 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         );
   if (binding === undefined) return yield* new ProjectionInvalid({ detail: "Binding is missing" });
 
+  const boundSkillIds = bindingSkillIds(state, binding);
   const selected = state.skills
-    .filter((candidate) => binding.skills.includes(candidate.skill_id))
+    .filter((candidate) => boundSkillIds.includes(candidate.skill_id))
     .flatMap((skill) => {
-      const version = skill?.versions.find(
-        (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-      );
-      if (skill === undefined || version === undefined || !binding.skills.includes(skill.skill_id))
-        return [];
-      const origin = version.origins[0];
-      const acquisition = state.acquisitions.find(
-        (candidate) => candidate.acquisition_id === origin?.acquisition_id,
-      );
-      const tree = state.retained_copies.find(
-        (candidate) => candidate.retained_copy_id === acquisition?.retained_copy_id,
-      );
-      const member = tree?.members.find(
-        (candidate) => candidate.source_path === origin?.source_path,
-      );
-      return tree === undefined || member === undefined ? [] : [{ skill, version, tree, member }];
+      const version = currentSkillVersion(state, skill);
+      const backing = version === undefined ? undefined : versionBacking(state, skill, version);
+      return version === undefined || backing === undefined
+        ? []
+        : [{ skill, version, tree: backing.copy, member: backing.member }];
     });
-  if (selected.length !== binding.skills.length)
+  if (selected.length !== boundSkillIds.length)
     return yield* new ProjectionInvalid({
       detail: "Binding selects a Skill without a selected retained Version",
     });
@@ -76,7 +67,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     (mutation) =>
       Effect.gen(function* () {
         for (const existing of mutation.state.projections.filter(
-          (item) => atTarget(item) && !binding.skills.includes(item.skill_id),
+          (item) => atTarget(item) && !boundSkillIds.includes(item.skill_id),
         )) {
           const skill = mutation.state.skills.find((item) => item.skill_id === existing.skill_id);
           if (skill === undefined) continue;

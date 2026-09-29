@@ -1,6 +1,9 @@
 import {
+  BindingEntry,
   canonicalJson,
+  currentCollectionSkills,
   LibraryStore,
+  type SkillId,
   withLibraryWriter,
   type LibraryState,
   type DeviceBinding,
@@ -101,10 +104,53 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
             (binding) =>
               binding.harness === harness && resolve(binding.scope.root) === resolve(scope.root),
           );
-    const names = new Set(existing?.skills ?? []);
-    for (const skillId of skillIds)
-      if (options.invocation.enabled) names.add(skillId);
-      else names.delete(skillId);
+    // A Skill subject still belongs to a Collection whose entry may enable it.
+    const ownerId = collection?.collection_id ?? skill?.collection_id;
+    const collectionMembers = new Set<string>(
+      ownerId === undefined
+        ? []
+        : currentCollectionSkills(state, ownerId).map((member) => member.skill_id),
+    );
+    const followsCollection = (existing?.entries ?? []).some(
+      (entry) => entry.kind === "collection" && entry.collection_id === ownerId,
+    );
+    let entries: BindingEntry[] = [...(existing?.entries ?? [])];
+    const withoutCollection = (items: BindingEntry[]) =>
+      items.filter(
+        (entry) =>
+          !(entry.kind === "collection" && entry.collection_id === ownerId) &&
+          !(entry.kind === "skill" && collectionMembers.has(entry.skill_id)),
+      );
+    const skillEntry = (skillId: SkillId): BindingEntry => ({ kind: "skill", skill_id: skillId });
+    const hasSkill = (skillId: string) =>
+      entries.some((entry) => entry.kind === "skill" && entry.skill_id === skillId);
+    if (options.all && collection !== undefined) {
+      // A whole Collection follows its Source, so it replaces any of its individual entries.
+      entries = withoutCollection(entries);
+      if (options.invocation.enabled)
+        entries.push({ kind: "collection", collection_id: collection.collection_id });
+      // A Skill gone from the Source is enabled only by its own entry, which disabling ends too.
+      else
+        entries = entries.filter(
+          (entry) => !(entry.kind === "skill" && skillIds.includes(entry.skill_id)),
+        );
+    } else if (options.invocation.enabled) {
+      for (const skillId of skillIds)
+        if (!(followsCollection && collectionMembers.has(skillId)) && !hasSkill(skillId))
+          entries.push(skillEntry(skillId));
+    } else {
+      // Disabling one Skill of a followed Collection keeps its other current Skills individually.
+      if (followsCollection && skillIds.some((skillId) => collectionMembers.has(skillId)))
+        entries = [
+          ...withoutCollection(entries),
+          ...[...collectionMembers]
+            .filter((skillId) => !skillIds.includes(skillId as SkillId))
+            .map((skillId) => skillEntry(skillId as SkillId)),
+        ];
+      entries = entries.filter(
+        (entry) => !(entry.kind === "skill" && skillIds.includes(entry.skill_id)),
+      );
+    }
     const policies = { ...existing?.invocation_policies };
     for (const skillId of skillIds) {
       if (!options.invocation.enabled || options.invocation.invocation === "declared")
@@ -112,10 +158,10 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
       else if (options.invocation.invocation !== undefined)
         policies[skillId] = options.invocation.invocation;
     }
-    if (existing === undefined && names.size === 0) continue;
+    if (existing === undefined && entries.length === 0) continue;
     const common = {
       harness,
-      skills: [...names].sort(),
+      entries,
       ...(Object.keys(policies).length ? { invocation_policies: policies } : {}),
     };
     const binding: DeviceBinding | RepositoryBinding =
@@ -132,7 +178,14 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
             item.harness === binding.harness &&
             resolve(item.scope.root) === resolve(binding.scope.root),
         );
-    return canonicalJson(existing ?? null) !== canonicalJson(binding);
+    return (
+      existing === undefined ||
+      !Schema.toEquivalence(Schema.Array(BindingEntry))(existing.entries, binding.entries) ||
+      !Schema.toEquivalence(Schema.UndefinedOr(Schema.Record(Schema.String, Schema.String)))(
+        existing.invocation_policies,
+        binding.invocation_policies,
+      )
+    );
   });
   return {
     subject_id: subject.subjectId,
@@ -196,10 +249,10 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
       if (!options.invocation.enabled) {
         const settled = yield* store.load;
         const global_bindings = settled.global_bindings.filter(
-          (binding) => binding.skills.length > 0,
+          (binding) => binding.entries.length > 0,
         );
         const local_bindings = settled.local_bindings.filter(
-          (binding) => binding.skills.length > 0,
+          (binding) => binding.entries.length > 0,
         );
         if (
           global_bindings.length !== settled.global_bindings.length ||
@@ -208,7 +261,7 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
           yield* store.publish({ ...settled, global_bindings, local_bindings });
         result = {
           ...plan,
-          bindings: plan.bindings.filter((binding) => binding.skills.length > 0),
+          bindings: plan.bindings.filter((binding) => binding.entries.length > 0),
         };
       }
       return {

@@ -25,14 +25,9 @@ export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryMani
     skills: manifest.skills
       .map((skill) => ({
         ...skill,
-        versions: skill.versions
-          .map((version) => ({
-            ...version,
-            origins: [...version.origins].sort((a, b) =>
-              canonicalJson(a).localeCompare(canonicalJson(b)),
-            ),
-          }))
-          .sort((a, b) => a.skill_version_id.localeCompare(b.skill_version_id)),
+        versions: [...skill.versions].sort((a, b) =>
+          a.skill_version_id.localeCompare(b.skill_version_id),
+        ),
       }))
       .sort((a, b) => a.skill_id.localeCompare(b.skill_id)),
     retained_copies: [...manifest.retained_copies].sort((a, b) =>
@@ -43,7 +38,16 @@ export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryMani
     ),
     snapshot_digests: [...manifest.snapshot_digests].sort(),
     bindings: manifest.bindings
-      .map((binding) => ({ ...binding, skills: [...binding.skills].sort() }))
+      .map((binding) => ({
+        ...binding,
+        entries: [...binding.entries].sort(
+          (a, b) =>
+            a.kind.localeCompare(b.kind) ||
+            (a.kind === "collection" ? a.collection_id : a.skill_id).localeCompare(
+              b.kind === "collection" ? b.collection_id : b.skill_id,
+            ),
+        ),
+      }))
       .sort((a, b) => bindingKey(a).localeCompare(bindingKey(b))),
   });
 }

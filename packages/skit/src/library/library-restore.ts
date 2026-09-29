@@ -5,6 +5,7 @@ import { materializeVerifiedSnapshotEffect } from "./snapshot-archive.js";
 import { verifySnapshotArchiveEffect } from "./snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "./library-state.js";
 import {
+  bindingSkillIds,
   currentLibraryManifest,
   librarySnapshotDigests,
   type LibraryManifest,
@@ -93,15 +94,20 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
     ...current.projections.flatMap((projection) =>
       !manifest.bindings.some(
         (binding) =>
-          binding.harness === projection.harness && binding.skills.includes(projection.skill_id),
+          binding.harness === projection.harness &&
+          bindingSkillIds(manifest, binding).includes(projection.skill_id),
       ) ||
       (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
         ? []
         : [`device:${projection.projection_id}:managed-projection`],
     ),
     ...current.local_bindings.flatMap((binding) => {
-      return binding.skills.every((skillId) =>
-        manifest.skills.some((skill) => skill.skill_id === skillId),
+      return binding.entries.every((entry) =>
+        entry.kind === "skill"
+          ? manifest.skills.some((skill) => skill.skill_id === entry.skill_id)
+          : manifest.collections.some(
+              (collection) => collection.collection_id === entry.collection_id,
+            ),
       )
         ? []
         : [`device:${binding.harness}/${binding.scope.root}:repository-binding`];

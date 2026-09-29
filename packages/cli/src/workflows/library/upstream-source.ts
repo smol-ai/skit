@@ -2,21 +2,13 @@ import type { LibraryState, SkitSource } from "@smolai/skit-core";
 
 type Upstream = NonNullable<LibraryState["collections"][number]["upstream"]>;
 
-/** Translate persisted refresh intent into the source resolver's input model. */
+/** Translate persisted refresh intent into the source resolver's input model: the whole Source. */
 export const sourceFromUpstream = (upstream: Upstream): SkitSource | undefined => {
   const source = upstream.source_identity;
   const git = {
     ...(upstream.tracking.kind === "default" ? {} : { ref: upstream.tracking.ref }),
     ...((source.kind === "github" || source.kind === "git") && source.collection_root !== "."
       ? { subpath: source.collection_root }
-      : {}),
-    ...(upstream.selection.kind === "selected-paths"
-      ? {
-          // Older state saved some selected paths as `<directory>/SKILL.md`.
-          skillDirectories: upstream.selection.paths.map((path) =>
-            path.replace(/\/SKILL\.md$/, ""),
-          ),
-        }
       : {}),
   };
   switch (source.kind) {
@@ -36,13 +28,7 @@ export const sourceFromUpstream = (upstream: Upstream): SkitSource | undefined =
     case "archive":
       return { type: "archive", url: source.url.value };
     case "well-known":
-      return {
-        type: "well-known",
-        origin: source.locator.value,
-        ...(upstream.selection.kind === "selected-skills"
-          ? { skillNames: upstream.selection.names }
-          : {}),
-      };
+      return { type: "well-known", origin: source.locator.value };
     case "local":
     case "authored-workspace":
       return undefined;

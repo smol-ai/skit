@@ -3,7 +3,10 @@ import { currentLibraryManifest } from "@smolai/skit-core";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { readAcceptedBaseEffect } from "../src/workflows/library/library-sync-state.js";
+import {
+  publishAcceptedBaseEffect,
+  readAcceptedBaseEffect,
+} from "../src/workflows/library/library-sync-state.js";
 
 const acceptedBase = {
   schemaVersion: 1,
@@ -80,5 +83,25 @@ it.effect("attributes an invalid portable base to its own path", () =>
     const failure = yield* readAcceptedBaseEffect(home).pipe(Effect.flip);
     assert.strictEqual(failure._tag, "Library.AcceptedBaseInvalid");
     if (failure._tag === "Library.AcceptedBaseInvalid") assert.strictEqual(failure.path, path);
+  }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect("publishing a current base removes the older base files' fallback", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-base-" });
+    yield* fs.writeFileString(join(home, "library-sync.json"), JSON.stringify(obsoleteBase));
+    yield* fs.writeFileString(
+      join(home, "portable-library-sync.json"),
+      JSON.stringify(acceptedBase),
+    );
+
+    yield* publishAcceptedBaseEffect(home, {
+      ...acceptedBase,
+      schemaVersion: 1,
+      revision_id: "next-revision",
+    });
+    assert.strictEqual(yield* fs.exists(join(home, "portable-library-sync.json")), false);
+    assert.strictEqual((yield* readAcceptedBaseEffect(home))?.revision_id, "next-revision");
   }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
 );

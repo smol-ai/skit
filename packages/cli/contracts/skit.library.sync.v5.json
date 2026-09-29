@@ -1,0 +1,471 @@
+{
+  "$id": "skit.library.sync.v5",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "clean",
+        "push_ready",
+        "pushed",
+        "pull_ready",
+        "pulled",
+        "upgrade_ready",
+        "upgraded",
+        "legacy_remote_conflict",
+        "local_migration_required",
+        "local_bytes_changed",
+        "adoption_required",
+        "adoption_ready",
+        "merge_ready",
+        "merged",
+        "conflicted",
+        "base_mismatch",
+        "resolution_invalid"
+      ]
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "revision_id": {
+      "type": "string"
+    },
+    "snapshots": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "digest": {
+      "type": "string"
+    },
+    "projection_drift": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "projected": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "deferred": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "deferred_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "harness",
+          "skills"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "retired": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "collections_to_remove": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "local": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "collection"
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "update",
+                      "remove"
+                    ]
+                  },
+                  "subject_id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "label_before": {
+                    "type": "string"
+                  },
+                  "label_after": {
+                    "type": "string"
+                  },
+                  "skills_added": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "skills_removed": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "skills_changed": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "evidence_only": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "action",
+                  "subject_id",
+                  "label",
+                  "skills_added",
+                  "skills_removed",
+                  "skills_changed",
+                  "evidence_only"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "binding"
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "update",
+                      "remove"
+                    ]
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "entries_added": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "entries_removed": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "action",
+                  "harness",
+                  "entries_added",
+                  "entries_removed"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        "remote": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "collection"
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "update",
+                      "remove"
+                    ]
+                  },
+                  "subject_id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "label_before": {
+                    "type": "string"
+                  },
+                  "label_after": {
+                    "type": "string"
+                  },
+                  "skills_added": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "skills_removed": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "skills_changed": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "evidence_only": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "action",
+                  "subject_id",
+                  "label",
+                  "skills_added",
+                  "skills_removed",
+                  "skills_changed",
+                  "evidence_only"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "binding"
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "add",
+                      "update",
+                      "remove"
+                    ]
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "entries_added": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "entries_removed": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "action",
+                  "harness",
+                  "entries_added",
+                  "entries_removed"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "local",
+        "remote"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

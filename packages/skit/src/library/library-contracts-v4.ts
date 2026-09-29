@@ -3,18 +3,23 @@ import { LegacyLibraryManifestV2 } from "../distribution/api-contracts.js";
 import { canonicalJson } from "../shared/json.js";
 import { CollectionId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
-  Acquisition,
-  Binding,
-  Collection,
   CollectionRelativePath,
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
   LibraryManifest,
+  librarySnapshotDigests,
   RetainedCopy,
-  Skill,
-  SkillVersion,
   SourceRelativePath,
-  Upstream,
 } from "./library-contracts.js";
+import {
+  AcquisitionV5,
+  BindingV5,
+  type CollectionV5,
+  LibraryManifestFromV5,
+  migrateLibraryEntitiesFromV5,
+  type SkillV5,
+  SkillVersionV5,
+  UpstreamV5,
+} from "./library-contracts-v5.js";
 import { Digest, HarnessName } from "./store/state-schema.js";
 
 export const RetainedCopyV4 = Schema.Struct({
@@ -38,11 +43,11 @@ const AcquisitionSelectionV4 = Schema.Union([
   }),
 ]);
 export const AcquisitionV4 = Schema.Struct({
-  ...Acquisition.fields,
+  ...AcquisitionV5.fields,
   selection: AcquisitionSelectionV4,
 });
 const UpstreamV4 = Schema.Struct({
-  ...Upstream.fields,
+  ...UpstreamV5.fields,
   selection: AcquisitionSelectionV4,
 });
 export const CollectionV4 = Schema.Struct({
@@ -57,7 +62,7 @@ export const SkillV4 = Schema.Struct({
   name: Schema.NonEmptyString,
   upstream_path: Schema.optionalKey(CollectionRelativePath),
   selected_skill_version_id: Schema.mutableKey(Schema.optional(SkillVersionId)),
-  versions: Schema.mutable(Schema.Array(SkillVersion)),
+  versions: Schema.mutable(Schema.Array(SkillVersionV5)),
 });
 export const BindingV4 = Schema.Struct({
   collection_id: CollectionId,
@@ -91,12 +96,12 @@ export const migrateLibraryEntitiesFromV4 = (input: {
   readonly acquisitions: readonly (typeof AcquisitionV4.Type)[];
   readonly bindings: readonly (typeof BindingV4.Type)[];
 }): {
-  readonly collections: Collection[];
-  readonly skills: Skill[];
-  readonly acquisitions: Acquisition[];
-  readonly bindings: Binding[];
+  readonly collections: CollectionV5[];
+  readonly skills: SkillV5[];
+  readonly acquisitions: AcquisitionV5[];
+  readonly bindings: (typeof BindingV5.Type)[];
 } => {
-  const acquisitions = input.acquisitions.map((acquisition): Acquisition => {
+  const acquisitions = input.acquisitions.map((acquisition): AcquisitionV5 => {
     const legacy =
       acquisition.selection.kind === "full-tree"
         ? legacyWellKnownSelection(acquisition.input.value)
@@ -129,7 +134,7 @@ export const migrateLibraryEntitiesFromV4 = (input: {
     );
     return acquisitions.filter((acquisition) => ids.has(acquisition.acquisition_id));
   };
-  const rawCollections = input.collections.flatMap((collection): Collection[] => {
+  const rawCollections = input.collections.flatMap((collection): CollectionV5[] => {
     const skills = input.skills.filter((skill) => skill.collection_id === collection.collection_id);
     if (skills.length === 0) return [];
     const matchingAcquisition =
@@ -181,13 +186,13 @@ export const migrateLibraryEntitiesFromV4 = (input: {
       },
     ];
   });
-  const rawSkills = input.skills.map((skill): Skill => {
+  const rawSkills = input.skills.map((skill): SkillV5 => {
     const { upstream_path: _legacyPath, ...fields } = skill;
     return fields;
   });
   const collectionRemap = new Map<CollectionId, CollectionId>();
-  const collectionsByUpstream = new Map<string, Collection>();
-  const collections: Collection[] = [];
+  const collectionsByUpstream = new Map<string, CollectionV5>();
+  const collections: CollectionV5[] = [];
   for (const collection of rawCollections.toSorted((left, right) =>
     left.collection_id.localeCompare(right.collection_id),
   )) {
@@ -226,11 +231,11 @@ export const migrateLibraryEntitiesFromV4 = (input: {
     collectionsByUpstream.set(key, revised);
     collectionRemap.set(collection.collection_id, prior.collection_id);
   }
-  const skills = rawSkills.map((skill): Skill => ({
+  const skills = rawSkills.map((skill): SkillV5 => ({
     ...skill,
     collection_id: collectionRemap.get(skill.collection_id) ?? skill.collection_id,
   }));
-  const bindingsByHarness = new Map<string, Binding>();
+  const bindingsByHarness = new Map<string, typeof BindingV5.Type>();
   for (const binding of input.bindings) {
     const prior = bindingsByHarness.get(binding.harness);
     bindingsByHarness.set(binding.harness, {
@@ -245,17 +250,25 @@ export const migrateLibraryEntitiesFromV4 = (input: {
 const LibraryManifestFromV4 = LibraryManifestV4.pipe(
   Schema.decodeTo(LibraryManifest, {
     decode: SchemaGetter.transform((manifest) => {
-      const migrated = migrateLibraryEntitiesFromV4(manifest);
-      return {
-        ...manifest,
-        schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
-        collections: migrated.collections,
-        skills: migrated.skills,
+      const v5 = migrateLibraryEntitiesFromV4(manifest);
+      const migrated = migrateLibraryEntitiesFromV5({
+        ...v5,
         retained_copies: manifest.retained_copies.map(
           ({ v3_normalized_tree: _legacyNormalizedTree, ...copy }) => copy,
         ),
+      });
+      return {
+        schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
+        collections: migrated.collections,
+        skills: migrated.skills,
+        retained_copies: migrated.retained_copies,
         acquisitions: migrated.acquisitions,
-        bindings: migrated.bindings,
+        snapshot_digests: librarySnapshotDigests(migrated),
+        bindings: v5.bindings.map((binding) => ({
+          harness: binding.harness,
+          scope: binding.scope,
+          entries: migrated.entries(binding.skills),
+        })),
       };
     }),
     encode: SchemaGetter.forbidden(() => "v4 portable Library manifests are decode-only"),
@@ -265,7 +278,11 @@ const LibraryManifestFromV4 = LibraryManifestV4.pipe(
 /** Accept every supported wire version and expose only the current manifest model. */
 // Decode the legacy discriminator before the structurally overlapping current manifest so the
 // v4 transformation and its post-migration checks run as one branch.
-export const LibraryManifestAnyVersion = Schema.Union([LibraryManifestFromV4, LibraryManifest]);
+export const LibraryManifestAnyVersion = Schema.Union([
+  LibraryManifestFromV4,
+  LibraryManifestFromV5,
+  LibraryManifest,
+]);
 
 export const LibraryHead = Schema.Struct({
   library_id: Schema.String,

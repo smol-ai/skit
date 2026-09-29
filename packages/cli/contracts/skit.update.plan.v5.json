@@ -1,5 +1,5 @@
 {
-  "$id": "skit.pull.v4",
+  "$id": "skit.update.plan.v5",
   "type": "array",
   "items": {
     "type": "object",
@@ -14,20 +14,27 @@
           "skill"
         ]
       },
-      "previous_retained_copy_id": {
-        "type": "string"
+      "current_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
       },
-      "selected_retained_copy_id": {
-        "type": "string"
-      },
-      "snapshot_digest": {
+      "available_snapshot_digest": {
         "type": "string",
         "pattern": "^sha256:[a-f0-9]{64}$"
       },
       "changed": {
         "type": "boolean"
       },
-      "projected": {
+      "label": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "new_available": {
         "anyOf": [
           {
             "type": "number"
@@ -42,31 +49,37 @@
           }
         ]
       },
-      "deferred": {
-        "anyOf": [
-          {
-            "type": "number"
-          },
-          {
-            "type": "string",
-            "enum": [
-              "Infinity",
-              "-Infinity",
-              "NaN"
-            ]
-          }
-        ]
+      "updated": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "removed": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "kept": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       }
     },
     "required": [
       "subject_id",
       "subject_kind",
-      "previous_retained_copy_id",
-      "selected_retained_copy_id",
-      "snapshot_digest",
+      "current_snapshot_digest",
+      "available_snapshot_digest",
       "changed",
-      "projected",
-      "deferred"
+      "label",
+      "enabled",
+      "new_available",
+      "updated",
+      "removed",
+      "kept"
     ],
     "additionalProperties": true
   },

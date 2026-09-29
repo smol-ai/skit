@@ -96,24 +96,60 @@ function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): s
   return `Deleted ${data.skit_id}: ${data.draft_revisions} Draft Revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
 }
 
-function renderUpdate(data: ContractDataForId<"skit.update.v4">): string {
-  if (!data.length) return "No device-local Sources to update";
-  const updated = data.filter((item) => item.changed).length;
-  const current = data.length - updated;
-  if (updated === 0)
-    return `Everything is current\n${current} Source${current === 1 ? "" : "s"} checked; no retained snapshots or projected Skills changed.`;
-  const projected = data.reduce((total, item) => total + item.projected, 0);
-  const deferred = data.reduce((total, item) => total + item.deferred, 0);
-  const lines = [
-    "Update complete",
-    `${updated} Source${updated === 1 ? "" : "s"} updated${current ? `; ${current} already current` : ""}.`,
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** One Source's effect on this device: enabled, changed, retired, kept, and available Skills. */
+function skillChangeLines(
+  item: Pick<
+    ContractDataForId<"skit.update.plan.v5">[number],
+    "enabled" | "updated" | "removed" | "kept" | "new_available"
+  >,
+): string[] {
+  return [
+    ...item.enabled.map((name) => `  + ${name}`),
+    ...item.updated.map((name) => `  ~ ${name}`),
+    ...item.removed.map((name) => `  - ${name}`),
+    ...item.kept.map(
+      (name) => `  ! ${name} was deleted upstream; kept because it is enabled on its own`,
+    ),
+    ...(item.new_available
+      ? [`  ${plural(item.new_available, "new Skill")} available to enable`]
+      : []),
   ];
-  if (projected)
+}
+
+function renderUpdate(data: ContractDataForId<"skit.update.v5">): string {
+  if (!data.length) return "No device-local Sources to update";
+  const updated = data.filter((item) => item.changed);
+  const current = data.length - updated.length;
+  if (updated.length === 0)
+    return `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`;
+  const deferred = data.reduce((total, item) => total + item.deferred, 0);
+  const lines = ["Update complete"];
+  for (const item of updated) lines.push(item.label, ...skillChangeLines(item));
+  lines.push(
+    "",
+    `${plural(updated.length, "Source")} updated${current ? `; ${current} already current` : ""}.`,
+  );
+  if (deferred) lines.push(`${plural(deferred, "Binding")} deferred on this device.`);
+  return lines.join("\n");
+}
+
+function renderUpdatePlan(data: ContractDataForId<"skit.update.plan.v5">): string {
+  if (!data.length) return "No device-local Sources to update";
+  const lines = ["Update plan"];
+  for (const item of data)
     lines.push(
-      `${projected} projected Skill${projected === 1 ? "" : "s"} updated${deferred ? `; ${deferred} deferred` : ""}.`,
+      `${item.label} · ${item.changed ? "update available" : "current"}`,
+      ...skillChangeLines(item),
     );
-  else if (deferred)
-    lines.push(`${deferred} projected Skill${deferred === 1 ? "" : "s"} deferred.`);
+  const updates = data.filter((item) => item.changed).length;
+  lines.push(
+    "",
+    updates
+      ? `${plural(updates, "Source")} can be updated. No changes applied; run \`skit update\` to apply.`
+      : "Everything is current.",
+  );
   return lines.join("\n");
 }
 
@@ -738,12 +774,7 @@ const contractPresenters: ContractPresenters = {
     ].join("\n");
   },
   [outputContracts.update.id]: renderUpdate,
-  [outputContracts.updatePlan.id]: (data) =>
-    data.length
-      ? data
-          .map((item) => `${item.subject_id}: ${item.changed ? "update available" : "current"}`)
-          .join("\n")
-      : "No device-local Sources to update",
+  [outputContracts.updatePlan.id]: renderUpdatePlan,
   [outputContracts.projectionRetentionPlan.id]: (data) =>
     [
       `Would retain changed ${data.skill_name} bytes from ${data.selected_projection_id}`,

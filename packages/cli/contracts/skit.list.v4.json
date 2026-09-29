@@ -1,5 +1,5 @@
 {
-  "$id": "skit.list.v3",
+  "$id": "skit.list.v4",
   "type": "object",
   "properties": {
     "subjects": {
@@ -87,6 +87,59 @@
               "devin"
             ]
           },
+          "entries": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "collection"
+                      ]
+                    },
+                    "collection_id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "collection_id",
+                    "label"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "skill"
+                      ]
+                    },
+                    "skill_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "skill_id",
+                    "name"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
           "skills": {
             "type": "array",
             "items": {
@@ -96,6 +149,7 @@
         },
         "required": [
           "harness",
+          "entries",
           "skills"
         ],
         "additionalProperties": true

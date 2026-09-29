@@ -1,4 +1,5 @@
 import {
+  bindingSkillIds,
   LibraryStore,
   type HarnessName as Harness,
   type SkitBindingScope as Scope,
@@ -162,7 +163,8 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
                   resolve(binding.scope.root) === resolve(input.scope.root))))),
       )
       .flatMap((binding, index) => {
-        const skills = binding.skills.flatMap((skillId) => {
+        const skillIds = bindingSkillIds(state, binding);
+        const skills = skillIds.flatMap((skillId) => {
           const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
           return skill === undefined ? [] : [skill];
         });
@@ -184,7 +186,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
               collectionId: subjectId,
               harness: binding.harness,
               scope: binding.scope,
-              skillIds: binding.skills,
+              skillIds,
               location,
             },
           },

@@ -3,10 +3,13 @@ import {
   deterministicTreeHashEffect,
   inspectOwnershipMarkerEffect,
   LibraryStore,
+  bindingSkillIds,
+  currentSkillVersion,
   prepareObservedCollectionEffect,
   projectBindingEffect,
   retainChangedProjectionEffect,
   retainedTreePath,
+  versionBacking,
   withLibraryWriter,
   type LibraryState,
   type ManagedProjection,
@@ -107,9 +110,7 @@ export const planProjectionRetention = Effect.fn("Library.planProjectionRetentio
   selector: string,
 ) {
   const skill = yield* matchingSkill(state, query);
-  const previousVersion = skill.versions.find(
-    (version) => version.skill_version_id === skill.selected_skill_version_id,
-  );
+  const previousVersion = currentSkillVersion(state, skill);
   if (previousVersion === undefined)
     return yield* new ProjectionRetentionMissing({
       message: `${skill.name} has no selected retained Version`,
@@ -170,7 +171,7 @@ const bindingForProjection = (
   [...state.global_bindings, ...state.local_bindings].find(
     (binding) =>
       binding.harness === projection.harness &&
-      binding.skills.includes(projection.skill_id) &&
+      bindingSkillIds(state, binding).includes(projection.skill_id) &&
       (binding.scope.kind === "global" || resolve(binding.scope.root) === resolve(projection.root)),
   );
 
@@ -211,13 +212,11 @@ export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetent
             const skill = current.skills.find(
               (candidate) => candidate.skill_id === preview.skill_id,
             );
-            const version = skill?.versions.find(
-              (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-            );
-            const origin = version?.origins[0];
-            const acquisition = current.acquisitions.find(
-              (candidate) => candidate.acquisition_id === origin?.acquisition_id,
-            );
+            const version = skill === undefined ? undefined : currentSkillVersion(current, skill);
+            const acquisition =
+              skill === undefined || version === undefined
+                ? undefined
+                : versionBacking(current, skill, version)?.acquisition;
             if (version === undefined || acquisition === undefined)
               return yield* new ProjectionRetentionStale({
                 message: "Selected retained Version is incomplete",

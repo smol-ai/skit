@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { Schema } from "effect";
+// This Node test reads the CLI's device state file; it never runs in the Worker.
+// oxlint-disable-next-line no-restricted-imports
+import { LibraryState } from "@smolai/skit-core";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
@@ -516,40 +519,9 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
       expectedStatus,
     );
   const state = async (home: string) =>
-    Schema.decodeUnknownSync(
-      Schema.Struct({
-        schemaVersion: Schema.Number,
-        collections: Schema.Array(
-          Schema.Struct({
-            collection_id: Schema.String,
-          }),
-        ),
-        retained_copies: Schema.Array(
-          Schema.Struct({ retained_copy_id: Schema.String, digest: Schema.String }),
-        ),
-        acquisitions: Schema.Array(
-          Schema.Struct({
-            retained_copy_id: Schema.String,
-            observations: Schema.Array(Schema.Unknown),
-            selection: Schema.Union([
-              Schema.Struct({ kind: Schema.Literal("full-tree") }),
-              Schema.Struct({
-                kind: Schema.Literal("selected-paths"),
-                paths: Schema.Array(Schema.String),
-              }),
-            ]),
-            source_revision: Schema.optionalKey(Schema.String),
-          }),
-        ),
-        global_bindings: Schema.Array(
-          Schema.Struct({
-            harness: Schema.String,
-            skills: Schema.Array(Schema.String),
-          }),
-        ),
-        local_bindings: Schema.Array(Schema.Unknown),
-      }),
-    )(JSON.parse(await readFile(join(home, "state.json"), "utf8")));
+    Schema.decodeUnknownSync(Schema.fromJsonString(LibraryState))(
+      await readFile(join(home, "state.json"), "utf8"),
+    );
   try {
     await mkdir(raw, { recursive: true });
     await writeFile(join(raw, "SKILL.md"), rawText);
@@ -651,7 +623,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     first(["add", raw]);
     first(["add", gitRemote]);
     const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(5);
+    expect(retained.schemaVersion).toBe(6);
     expect(retained.collections).toHaveLength(2);
     expect(retained.global_bindings).toEqual([]);
     const collectionId = retained.collections[0].collection_id;
@@ -682,7 +654,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
       }),
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
-      schema: "skit.library.v5",
+      schema: "skit.library.v6",
       snapshot_digests: [selected!.digest],
       bindings: [],
     });
@@ -693,7 +665,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(5);
+    expect(restored.schemaVersion).toBe(6);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.acquisitions[0].observations).toEqual([]);
     expect(restored.global_bindings).toEqual([]);
@@ -701,13 +673,8 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     const restoredPath = join(secondHome, "originals", restoredHex.slice(0, 2), restoredHex);
     expect(await readFile(join(restoredPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(restoredPath, "README.md"))).toBe(false);
-    const gitAcquisition = restored.acquisitions.find(
-      (item) => item.selection.kind === "selected-paths",
-    );
-    expect(gitAcquisition).toMatchObject({
-      selection: { kind: "selected-paths", paths: ["skills/git-review"] },
-      source_revision: gitRevision,
-    });
+    const gitAcquisition = restored.acquisitions.find((item) => item.revision === gitRevision);
+    expect(gitAcquisition).toMatchObject({ kind: "source", revision: gitRevision });
     const gitCopy = restored.retained_copies.find(
       (item) => item.retained_copy_id === gitAcquisition?.retained_copy_id,
     );

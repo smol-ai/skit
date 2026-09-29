@@ -106,6 +106,11 @@ export const SkitSource = Schema.Union([
 ]);
 export type SkitSource = typeof SkitSource.Type;
 
+/** Exactly what an acquisition fetched, where its Source protocol names it. */
+export type SourceRevision =
+  | { readonly kind: "commit"; readonly commit: string }
+  | { readonly kind: "release"; readonly version: string };
+
 export const SourceTracking = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("default") }),
   Schema.Struct({ kind: Schema.Literal("branch"), ref: Schema.NonEmptyString }),
@@ -114,28 +119,10 @@ export const SourceTracking = Schema.Union([
 ]);
 export type SourceTracking = typeof SourceTracking.Type;
 
-export const AcquisitionSelection = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("full-tree") }),
-  Schema.Struct({
-    kind: Schema.Literal("selected-skills"),
-    names: Schema.Array(Schema.NonEmptyString).check(
-      Schema.makeFilter((names) => names.length > 0 && new Set(names).size === names.length),
-    ),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("selected-paths"),
-    paths: Schema.Array(SourceRelativePath).check(
-      Schema.makeFilter((paths) => paths.length > 0 && new Set(paths).size === paths.length),
-    ),
-  }),
-]);
-export type AcquisitionSelection = typeof AcquisitionSelection.Type;
-
+/** Refresh intent for a Collection: where it comes from and what to follow. */
 export const Upstream = Schema.Struct({
   source_identity: SourceIdentity,
   tracking: SourceTracking,
-  selection: AcquisitionSelection,
-  last_acquisition_id: Schema.optionalKey(AcquisitionId),
 });
 export type Upstream = typeof Upstream.Type;
 
@@ -179,27 +166,12 @@ export interface SkillsShObservation extends Schema.Schema.Type<typeof SkillsShO
 export const MaterializationProfile = Schema.Literals(["plain-skill/v1", "declared-skit-skill/v1"]);
 export type MaterializationProfile = typeof MaterializationProfile.Type;
 
-export const AcquiredOrigin = Schema.Struct({
-  acquisition_id: AcquisitionId,
-  source_path: CollectionRelativePath,
-});
-export type AcquiredOrigin = typeof AcquiredOrigin.Type;
-
 export const SkillVersion = Schema.Struct({
   skill_version_id: SkillVersionId,
   source_digest: Digest,
   artifact_digest: Digest,
   validation_identity_digest: Digest,
   materialization_profile: MaterializationProfile,
-  origins: Schema.Array(AcquiredOrigin).check(
-    Schema.makeFilter(
-      (origins) =>
-        origins.length > 0 &&
-        new Set(origins.map((origin) => `${origin.acquisition_id}\0${origin.source_path}`)).size ===
-          origins.length,
-      { message: "Skill Version origins must be non-empty and unique" },
-    ),
-  ),
 });
 export interface SkillVersion extends Schema.Schema.Type<typeof SkillVersion> {}
 
@@ -208,7 +180,8 @@ export const Skill = Schema.Struct({
   collection_id: CollectionId,
   path: CollectionRelativePath,
   name: Schema.NonEmptyString,
-  selected_skill_version_id: Schema.mutableKey(Schema.optional(SkillVersionId)),
+  /** A local edit the user retained; it is used until the Source changes this Skill. */
+  local_version_id: Schema.mutableKey(Schema.optional(SkillVersionId)),
   versions: Schema.mutable(Schema.Array(SkillVersion)),
 });
 export interface Skill extends Schema.Schema.Type<typeof Skill> {}
@@ -236,14 +209,19 @@ export const RetainedCopy = Schema.Struct({
 });
 export interface RetainedCopy extends Schema.Schema.Type<typeof RetainedCopy> {}
 
+/**
+ * One observation of bytes for a Collection: either its Source, or a local edit the user retained
+ * from a Projection. `revision` is the exact Git commit or Registry Release when there is one.
+ */
 export const Acquisition = Schema.Struct({
   acquisition_id: AcquisitionId,
+  collection_id: CollectionId,
+  kind: Schema.Literals(["source", "retained-edit"]),
   retained_copy_id: RetainedCopyId,
   source_identity: SourceIdentity,
-  tracking: SourceTracking,
-  selection: AcquisitionSelection,
+  /** Where the bytes were read from, for provenance and display. Never parsed back. */
   input: HistoricalLocator,
-  source_revision: Schema.optionalKey(Schema.String),
+  revision: Schema.optionalKey(Schema.NonEmptyString),
   acquired_at: Schema.String,
   machine_id: MachineId,
   observations: Schema.Array(SkillsShObservation),
@@ -252,37 +230,18 @@ export interface Acquisition extends Schema.Schema.Type<typeof Acquisition> {}
 
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
-const canonicalPinnedGitInput = (acquisition: Acquisition): boolean => {
-  if (acquisition.source_identity.kind === "github") {
-    const parsed = URL.parse(acquisition.input.value);
-    if (parsed === null || parsed.hash || parsed.search) return false;
-    const path = parsed.pathname
-      .replace(/^\//, "")
-      .replace(/\.git$/, "")
-      .replace(/\/$/, "");
-    return (
-      parsed.hostname === "github.com" &&
-      path === `${acquisition.source_identity.owner}/${acquisition.source_identity.repository}`
-    );
-  }
-  if (acquisition.source_identity.kind === "git")
-    return acquisition.input.value === acquisition.source_identity.remote.value;
-  return false;
-};
-
 /** True only when the acquisition names exact bytes another device can retrieve and verify. */
 export const acquisitionIsSourceRestorable = (acquisition: Acquisition): boolean => {
-  if (acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git")
-    return (
-      acquisition.source_revision !== undefined &&
-      gitObjectId.test(acquisition.source_revision) &&
-      acquisition.tracking.kind === "commit" &&
-      acquisition.tracking.ref === acquisition.source_revision &&
-      canonicalPinnedGitInput(acquisition)
-    );
-  if (acquisition.source_identity.kind !== "registry") return false;
-  const version = acquisition.input.value.match(/@([^/@]+)$/)?.[1];
-  return version !== undefined && version !== "latest";
+  if (acquisition.kind !== "source" || acquisition.revision === undefined) return false;
+  switch (acquisition.source_identity.kind) {
+    case "github":
+    case "git":
+      return gitObjectId.test(acquisition.revision);
+    case "registry":
+      return acquisition.revision !== "latest";
+    default:
+      return false;
+  }
 };
 
 export const librarySnapshotDigests = (input: {
@@ -304,17 +263,132 @@ export const librarySnapshotDigests = (input: {
     ),
   ].sort();
 
+/** What a Binding enables: a whole Collection, which follows its Source, or one Skill. */
+export const BindingEntry = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("collection"), collection_id: CollectionId }),
+  Schema.Struct({ kind: Schema.Literal("skill"), skill_id: SkillId }),
+]);
+export type BindingEntry = typeof BindingEntry.Type;
+
 export const Binding = Schema.Struct({
   harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("global") }),
-  skills: Schema.Array(SkillId),
+  entries: Schema.Array(BindingEntry),
 });
 export interface Binding extends Schema.Schema.Type<typeof Binding> {}
+
+interface LibraryEntities {
+  readonly skills: readonly Skill[];
+  readonly retained_copies: readonly RetainedCopy[];
+  readonly acquisitions: readonly Acquisition[];
+}
+
+/**
+ * A Collection's Acquisitions, newest first. Acquisitions are appended as they happen, so of two
+ * with the same timestamp the later one is newer.
+ */
+const collectionAcquisitions = (
+  library: Pick<LibraryEntities, "acquisitions">,
+  collectionId: CollectionId,
+): Acquisition[] =>
+  library.acquisitions
+    .filter((acquisition) => acquisition.collection_id === collectionId)
+    .toReversed()
+    .toSorted((left, right) => right.acquired_at.localeCompare(left.acquired_at));
+
+/** A Collection's Source Acquisitions, newest first. */
+export const sourceAcquisitions = (
+  library: Pick<LibraryEntities, "acquisitions">,
+  collectionId: CollectionId,
+): Acquisition[] =>
+  collectionAcquisitions(library, collectionId).filter(
+    (acquisition) => acquisition.kind === "source",
+  );
+
+/** The Skills present in a Collection's latest Source Acquisition. */
+export const currentCollectionSkills = (library: LibraryEntities, collectionId: CollectionId) => {
+  const latest = sourceAcquisitions(library, collectionId)[0];
+  const copy = library.retained_copies.find(
+    (candidate) => candidate.retained_copy_id === latest?.retained_copy_id,
+  );
+  return library.skills.filter(
+    (skill) =>
+      skill.collection_id === collectionId &&
+      copy?.members.some((member) => member.source_path === skill.path) === true,
+  );
+};
+
+/**
+ * The Acquisition and retained bytes behind one Skill Version, newest first. A Source Acquisition
+ * holds the Skill at its path; a retained edit holds the one edited Skill at its root.
+ */
+export const versionBacking = (library: LibraryEntities, skill: Skill, version: SkillVersion) => {
+  for (const acquisition of collectionAcquisitions(library, skill.collection_id)) {
+    const copy = library.retained_copies.find(
+      (candidate) => candidate.retained_copy_id === acquisition.retained_copy_id,
+    );
+    const path = acquisition.kind === "source" ? skill.path : ".";
+    const member = copy?.members.find((candidate) => candidate.source_path === path);
+    if (
+      copy !== undefined &&
+      member !== undefined &&
+      member.source_digest === version.source_digest &&
+      member.artifact_digest === version.artifact_digest &&
+      member.materialization_profile === version.materialization_profile
+    )
+      return { acquisition, copy, member };
+  }
+  return undefined;
+};
+
+/**
+ * The Version the newest Source Acquisition that still contains a Skill observed. An Acquisition
+ * whose bytes this Skill holds no Version for (for example after a merge kept another device's
+ * Versions) is skipped rather than leaving the Skill without one.
+ */
+const lastObservedVersion = (library: LibraryEntities, skill: Skill) => {
+  for (const acquisition of sourceAcquisitions(library, skill.collection_id)) {
+    const member = library.retained_copies
+      .find((copy) => copy.retained_copy_id === acquisition.retained_copy_id)
+      ?.members.find((candidate) => candidate.source_path === skill.path);
+    const version = skill.versions.find(
+      (candidate) => candidate.artifact_digest === member?.artifact_digest,
+    );
+    if (version !== undefined) return version;
+  }
+  return undefined;
+};
+
+/**
+ * The Version a Skill uses: its retained local edit, else what the newest Source Acquisition that
+ * still contains it observed. A Skill deleted upstream keeps its last observed Version.
+ */
+export const currentSkillVersion = (
+  library: LibraryEntities,
+  skill: Skill,
+): SkillVersion | undefined =>
+  skill.local_version_id === undefined
+    ? lastObservedVersion(library, skill)
+    : skill.versions.find((version) => version.skill_version_id === skill.local_version_id);
+
+/** The Skill IDs a Binding enables, expanding whole-Collection entries to their current Skills. */
+export const bindingSkillIds = (
+  library: LibraryEntities,
+  binding: { readonly entries: readonly BindingEntry[] },
+): SkillId[] => [
+  ...new Set(
+    binding.entries.flatMap((entry) =>
+      entry.kind === "skill"
+        ? [entry.skill_id]
+        : currentCollectionSkills(library, entry.collection_id).map((skill) => skill.skill_id),
+    ),
+  ),
+];
 
 const isNested = (left: string, right: string) =>
   left !== "." && right !== "." && (left.startsWith(`${right}/`) || right.startsWith(`${left}/`));
 
-export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v5" as const;
+export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v6" as const;
 
 export const LibraryManifest = Schema.Struct({
   schema: Schema.Literal(CURRENT_PORTABLE_LIBRARY_SCHEMA),
@@ -327,23 +401,18 @@ export const LibraryManifest = Schema.Struct({
 }).check(
   Schema.makeFilter(
     (manifest) => {
-      const collections = new Map(
-        manifest.collections.map((collection) => [collection.collection_id, collection]),
+      const collections = new Set(manifest.collections.map((item) => item.collection_id));
+      const skills = new Set(manifest.skills.map((skill) => skill.skill_id));
+      const versionIds = manifest.skills.flatMap((skill) =>
+        skill.versions.map((version) => version.skill_version_id),
       );
-      const skills = new Map(manifest.skills.map((skill) => [skill.skill_id, skill]));
-      const versions = manifest.skills.flatMap((skill) =>
-        skill.versions.map((version) => ({ skill, version })),
-      );
-      const versionIds = versions.map(({ version }) => version.skill_version_id);
       const copies = new Map(manifest.retained_copies.map((copy) => [copy.retained_copy_id, copy]));
-      const acquisitions = new Map(
-        manifest.acquisitions.map((acquisition) => [acquisition.acquisition_id, acquisition]),
-      );
       if (
         collections.size !== manifest.collections.length ||
         skills.size !== manifest.skills.length ||
         copies.size !== manifest.retained_copies.length ||
-        acquisitions.size !== manifest.acquisitions.length ||
+        new Set(manifest.acquisitions.map((item) => item.acquisition_id)).size !==
+          manifest.acquisitions.length ||
         new Set(versionIds).size !== versionIds.length
       )
         return false;
@@ -352,14 +421,6 @@ export const LibraryManifest = Schema.Struct({
         const owned = manifest.skills.filter(
           (skill) => skill.collection_id === collection.collection_id,
         );
-        const governedAcquisitionIds = new Set(
-          owned.flatMap((skill) =>
-            skill.versions.flatMap((version) =>
-              version.origins.map((origin) => origin.acquisition_id),
-            ),
-          ),
-        );
-        if (owned.length === 0) return false;
         const paths = owned.map((skill) => skill.path);
         const names = owned.map((skill) => skill.name);
         if (new Set(paths).size !== paths.length || new Set(names).size !== names.length)
@@ -369,74 +430,26 @@ export const LibraryManifest = Schema.Struct({
         )
           return false;
         if (paths.includes(".") && paths.length !== 1) return false;
-        if (
-          collection.upstream?.last_acquisition_id !== undefined &&
-          (!acquisitions.has(collection.upstream.last_acquisition_id) ||
-            !governedAcquisitionIds.has(collection.upstream.last_acquisition_id))
-        )
-          return false;
-        if (
-          collection.upstream?.selection.kind === "selected-skills" &&
-          canonicalJson(collection.upstream.selection.names.toSorted()) !==
-            canonicalJson(names.toSorted())
-        )
-          return false;
-        if (
-          collection.upstream?.selection.kind === "selected-paths" &&
-          canonicalJson(
-            collection.upstream.selection.paths
-              .map((path) =>
-                path.endsWith("/SKILL.md") ? path.slice(0, -"/SKILL.md".length) : path,
-              )
-              .toSorted(),
-          ) !== canonicalJson(paths.toSorted())
-        )
-          return false;
       }
-      const upstreamKeys = manifest.collections.flatMap((collection) =>
-        collection.upstream === undefined
-          ? []
-          : [
-              canonicalJson({
-                source_identity: collection.upstream.source_identity,
-                tracking: collection.upstream.tracking,
-              }),
-            ],
+      const upstreams = manifest.collections.flatMap((collection) =>
+        collection.upstream === undefined ? [] : [collection.upstream],
       );
-      if (new Set(upstreamKeys).size !== upstreamKeys.length) return false;
-      if (manifest.skills.some((skill) => !collections.has(skill.collection_id))) return false;
+      if (
+        upstreams.some((upstream, index) =>
+          upstreams
+            .slice(index + 1)
+            .some((other) => Schema.toEquivalence(Upstream)(upstream, other)),
+        )
+      )
+        return false;
 
-      for (const { skill, version } of versions) {
+      for (const acquisition of manifest.acquisitions)
         if (
-          skill.selected_skill_version_id !== undefined &&
-          !skill.versions.some(
-            (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-          )
+          !collections.has(acquisition.collection_id) ||
+          !copies.has(acquisition.retained_copy_id)
         )
           return false;
-        if (
-          skill.versions.filter(
-            (candidate) => candidate.artifact_digest === version.artifact_digest,
-          ).length !== 1
-        )
-          return false;
-        for (const origin of version.origins) {
-          const acquisition = acquisitions.get(origin.acquisition_id);
-          const copy =
-            acquisition === undefined ? undefined : copies.get(acquisition.retained_copy_id);
-          const member = copy?.members.find(
-            (candidate) => candidate.source_path === origin.source_path,
-          );
-          if (
-            member === undefined ||
-            member.source_digest !== version.source_digest ||
-            member.artifact_digest !== version.artifact_digest ||
-            member.materialization_profile !== version.materialization_profile
-          )
-            return false;
-        }
-      }
-      for (const copy of manifest.retained_copies) {
+      for (const copy of manifest.retained_copies)
         if (
           copy.members.length === 0 ||
           new Set(copy.members.map((member) => member.source_path)).size !== copy.members.length ||
@@ -445,19 +458,49 @@ export const LibraryManifest = Schema.Struct({
           )
         )
           return false;
+
+      for (const skill of manifest.skills) {
+        if (!collections.has(skill.collection_id)) return false;
+        if (
+          skill.local_version_id !== undefined &&
+          !skill.versions.some((version) => version.skill_version_id === skill.local_version_id)
+        )
+          return false;
+        for (const version of skill.versions) {
+          if (
+            skill.versions.filter((other) => other.artifact_digest === version.artifact_digest)
+              .length !== 1
+          )
+            return false;
+          // Every retained Version is backed by bytes one of its Collection's Acquisitions holds.
+          const backed = versionBacking(manifest, skill, version) !== undefined;
+          if (!backed) return false;
+        }
       }
-      if (manifest.acquisitions.some((acquisition) => !copies.has(acquisition.retained_copy_id)))
-        return false;
+
       if (
         new Set(manifest.snapshot_digests).size !== manifest.snapshot_digests.length ||
-        canonicalJson([...manifest.snapshot_digests].sort()) !==
-          canonicalJson(librarySnapshotDigests(manifest))
+        !Schema.toEquivalence(Schema.Array(Schema.String))(
+          [...manifest.snapshot_digests].sort(),
+          librarySnapshotDigests(manifest),
+        )
       )
         return false;
       for (const binding of manifest.bindings) {
         if (
-          new Set(binding.skills).size !== binding.skills.length ||
-          binding.skills.some((skillId) => !skills.has(skillId))
+          binding.entries.some((entry, index) =>
+            binding.entries
+              .slice(index + 1)
+              .some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
+          )
+        )
+          return false;
+        if (
+          binding.entries.some((entry) =>
+            entry.kind === "collection"
+              ? !collections.has(entry.collection_id)
+              : !skills.has(entry.skill_id),
+          )
         )
           return false;
       }

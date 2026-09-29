@@ -327,22 +327,13 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
   const store = yield* LibraryStore;
   const state = yield* store.load;
-  const acquisitionIds = new Set(
-    state.acquisitions
-      .filter((acquisition) =>
-        acquisition.observations.some((observation) => observation.type === "skills.sh-lock"),
-      )
-      .map((acquisition) => acquisition.acquisition_id),
-  );
   const collectionIds = [
     ...new Set(
-      state.skills.flatMap((skill) =>
-        skill.versions.some((version) =>
-          version.origins.some((origin) => acquisitionIds.has(origin.acquisition_id)),
+      state.acquisitions
+        .filter((acquisition) =>
+          acquisition.observations.some((observation) => observation.type === "skills.sh-lock"),
         )
-          ? [skill.collection_id]
-          : [],
-      ),
+        .map((acquisition) => acquisition.collection_id),
     ),
   ];
   if (!collectionIds.length) return;

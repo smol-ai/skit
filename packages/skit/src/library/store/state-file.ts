@@ -1,7 +1,7 @@
 // The only code that addresses `state.json` by path. Deliberately absent from the package barrel:
 // workflows reach Library state through `LibraryStore`.
 
-import { Effect, FileSystem, Schema } from "effect";
+import { Clock, Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
@@ -13,6 +13,7 @@ import {
   libraryManifestFromLocalStateEffect,
 } from "../library-state.js";
 import { LibraryStateV4, migrateLibraryStateFromV4 } from "./state-schema-v4.js";
+import { LibraryStateV5, migrateLibraryStateFromV5 } from "./state-schema-v5.js";
 import { withLibraryWriterLock } from "./writer-lock.js";
 
 export type InspectedLibraryState =
@@ -66,7 +67,7 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
       path,
       detail: "Library state was written by a newer SKIT",
     });
-  if (version.schemaVersion !== 4)
+  if (version.schemaVersion !== 4 && version.schemaVersion !== 5)
     return yield* new InvalidLibraryState({ path, detail: "unsupported Library state schema" });
   return yield* withLibraryWriterLock(
     home,
@@ -81,19 +82,35 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
       );
       if (lockedVersion.schemaVersion === CURRENT_LIBRARY_STATE_VERSION)
         return yield* decodeCurrentState(path, lockedValue);
-      if (lockedVersion.schemaVersion !== 4)
+      if (lockedVersion.schemaVersion !== 4 && lockedVersion.schemaVersion !== 5)
         return yield* new InvalidLibraryState({
           path,
           detail: "Library state changed while opening",
         });
-      const legacy = yield* Schema.decodeUnknownEffect(LibraryStateV4, {
-        onExcessProperty: "preserve",
-      })(lockedValue).pipe(
-        Effect.mapError(
-          () => new InvalidLibraryState({ path, detail: "invalid v4 Library state" }),
-        ),
+      const v5 =
+        lockedVersion.schemaVersion === 5
+          ? yield* Schema.decodeUnknownEffect(LibraryStateV5, { onExcessProperty: "preserve" })(
+              lockedValue,
+            ).pipe(
+              Effect.mapError(
+                () => new InvalidLibraryState({ path, detail: "invalid v5 Library state" }),
+              ),
+            )
+          : migrateLibraryStateFromV4(
+              yield* Schema.decodeUnknownEffect(LibraryStateV4, { onExcessProperty: "preserve" })(
+                lockedValue,
+              ).pipe(
+                Effect.mapError(
+                  () => new InvalidLibraryState({ path, detail: "invalid v4 Library state" }),
+                ),
+              ),
+            );
+      const migrated = yield* decodeCurrentState(path, migrateLibraryStateFromV5(v5));
+      // Keep the pre-migration file: migration drops history it can no longer represent.
+      yield* writeJsonAtomicEffect(
+        `${path}.v${lockedVersion.schemaVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
+        lockedValue,
       );
-      const migrated = yield* decodeCurrentState(path, migrateLibraryStateFromV4(legacy));
       yield* writeJsonAtomicEffect(path, migrated);
       return migrated;
     }),

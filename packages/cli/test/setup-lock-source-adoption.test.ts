@@ -227,7 +227,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     if (!persisted.present) return;
     const acquisition = persisted.state.acquisitions[0]!;
     expect(acquisition.input.value).toBe(`wellknown:${base}`);
-    expect(acquisition.selection).toEqual({ kind: "selected-skills", names: ["review"] });
+    expect(acquisition.kind).toBe("source");
     expect(acquisition.observations).toEqual([
       expect.objectContaining({
         source_url: base,
@@ -238,9 +238,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const skill = persisted.state.skills.find(
       (item) => item.skill_id === retained.skills[0]?.skill_id,
     );
-    expect(skill?.versions[0]?.origins).toEqual([
-      expect.objectContaining({ acquisition_id: acquisition.acquisition_id }),
-    ]);
+    expect(acquisition.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.retained_copies[0]!;
     const original = retainedTreePath(home.originals, tree.digest);
     expect(yield* fs.readFileString(join(original, "review", "SKILL.md"))).toBe(installedText);
@@ -465,10 +463,7 @@ it.effect("adopts a selected member from a two-Skill GitHub lock collection", ()
         .filter((skill) => skill.collection_id === retained.collection?.collection_id)
         .map((skill) => skill.name),
     ).toEqual(["review"]);
-    expect(saved.state.acquisitions[0]?.selection).toEqual({
-      kind: "selected-paths",
-      paths: ["skills/review"],
-    });
+    expect(saved.state.acquisitions[0]?.collection_id).toBe(retained.collection?.collection_id);
     expect(saved.state.acquisitions[0]?.observations).toHaveLength(1);
     expect(saved.state.acquisitions[0]?.observations[0]?.source).toBe("acme/skills");
     const secondSetup = yield* home.owned(runSetup(setup));

@@ -1,9 +1,10 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import {
+  currentSkillVersion,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
   deterministicTreeHashEffect,
@@ -21,7 +22,14 @@ import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
+import {
+  archiveBytes,
+  boundSkit,
+  initializeLibraryMachine,
+  retainObservedIn,
+  writingTo,
+} from "./helpers/library-home.js";
+import { registryAuthAccessLayer } from "../src/registry/auth-service.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
 it.effect("previews without mutation, then retains exact root Skill bytes", () =>
@@ -172,7 +180,6 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
-    assert.strictEqual(before.collections[0]?.upstream?.selection.kind, "selected-skills");
     assert.deepStrictEqual(
       librarySubjects(before).map((subject) => [subject.kind, subject.subjectId, subject.label]),
       [["collection", before.collections[0]?.collection_id, base]],
@@ -192,7 +199,9 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     });
     yield* writingTo(home, run(applyLibraryBindings(before, bindingInput(true))));
     const enabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.deepStrictEqual(enabled.global_bindings[0]?.skills, [skill.skill_id]);
+    assert.deepStrictEqual(enabled.global_bindings[0]?.entries, [
+      { kind: "skill", skill_id: skill.skill_id },
+    ]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
       (yield* run(checkSubjectsEffect(enabled, skill.skill_id)))[0]?.source_status,
@@ -230,6 +239,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     yield* writingTo(
       home,
       run(
+        // The Collection's only Skill can be removed, taking its Collection with it.
         executeRemoveEffect(disabled, {
           query: skill.skill_id,
           dryRun: false,
@@ -239,10 +249,11 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     );
     const removed = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(removed.skills, []);
+    assert.deepStrictEqual(removed.collections, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("re-adding a changed local source retains a second Skill Version", () =>
+it.effect("re-adding a changed local source adds a Skill Version and uses it", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-update-" });
@@ -261,14 +272,15 @@ it.effect("re-adding a changed local source retains a second Skill Version", () 
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
-    const addedAgain = yield* addLibrarySourceEffect(source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const addedAgain = yield* writingTo(home, addLibrarySourceEffect(source));
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.strictEqual(after.skills[0]?.versions.length, 2);
-    assert.ok(after.skills[0]?.selected_skill_version_id);
+    assert.strictEqual(
+      currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
+      after.skills[0]?.versions[1]?.skill_version_id,
+    );
     assert.strictEqual(after.retained_copies.length, 2);
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -306,7 +318,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
     assert.strictEqual(second.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(after.retained_copies.length, 1);
     assert.strictEqual(after.acquisitions.length, 1);
-    assert.strictEqual(after.skills[0]?.versions[0]?.origins.length, 1);
+    assert.strictEqual(after.skills[0]?.versions.length, 1);
     assert.strictEqual(
       yield* fs.exists(
         join(
@@ -338,14 +350,14 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       "---\nname: review\ndescription: Review\n---\nunchanged\n",
     );
     const observedHash = yield* deterministicTreeHashEffect(skill);
-    const retainAt = (sourceRevision: string, retainedAt: string) =>
+    const retainAt = (commit: string, retainedAt: string) =>
       Effect.scoped(
         writingTo(
           home,
           retainObservedIn(home)({
             source: { type: "github", owner: "acme", repository: "skills" },
             input: "https://github.com/acme/skills.git",
-            sourceRevision,
+            revision: { kind: "commit", commit },
             retainedAt,
             skills: [{ name: "review", sourcePath: skill, relativePath: "review", observedHash }],
             observations: [],
@@ -358,13 +370,62 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
 
     yield* retainAt("a".repeat(40), "2026-09-16T01:00:00.000Z");
     yield* retainAt("b".repeat(40), "2026-09-16T02:00:00.000Z");
+    const recorded = yield* load;
     yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
-    const after = yield* load;
+    const repeated = yield* load;
 
-    assert.strictEqual(after.retained_copies.length, 1);
+    // The new commit is recorded as its own Acquisition of the same bytes.
+    assert.strictEqual(recorded.retained_copies.length, 1);
     assert.deepStrictEqual(
-      after.acquisitions.map((acquisition) => acquisition.source_revision),
+      recorded.acquisitions.map((acquisition) => acquisition.revision),
       ["a".repeat(40), "b".repeat(40)],
+    );
+    assert.deepStrictEqual(repeated.acquisitions, recorded.acquisitions);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("records the Registry Release a Collection is added from, so sync can refetch it", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-registry-add-" });
+    const home = join(root, "home");
+    yield* initializeLibraryMachine(home);
+    const tools = yield* boundSkit(join(root, "tools"), "alice");
+    const bytes = yield* archiveBytes(tools, join(root, "tools.zip"));
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(new Uint8Array(bytes), {
+            headers: { "content-type": "application/zip", "skit-release-version": "1.2.3" },
+          }),
+        ),
+      ),
+    );
+    yield* addLibrarySourceEffect(
+      { type: "registry", namespace: "alice", slug: "tools" },
+      "1.2.3",
+    ).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(
+        registryAuthAccessLayer({
+          authState: Result.succeed({ source: "none" }),
+          origin: "https://registry.example",
+        }),
+      ),
+      Effect.provideService(HttpClient.HttpClient, client),
+    );
+    const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+    assert.deepStrictEqual(
+      state.acquisitions.map((acquisition) => acquisition.revision),
+      ["1.2.3"],
+    );
+    // A Release the Registry can serve again needs no snapshot of its own.
+    assert.deepStrictEqual(
+      (yield* libraryManifestFromLocalStateEffect(state)).snapshot_digests,
+      [],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

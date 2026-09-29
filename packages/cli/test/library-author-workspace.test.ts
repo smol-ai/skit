@@ -50,7 +50,11 @@ it.effect(
       );
       const state = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.strictEqual(state.collections.length, 1);
-      assert.strictEqual(state.retained_copies.length, 2);
+      // The refreshed tree is retained alongside the first.
+      assert.deepStrictEqual(
+        state.retained_copies.map((copy) => copy.digest === firstTree.digest),
+        [true, false],
+      );
       assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

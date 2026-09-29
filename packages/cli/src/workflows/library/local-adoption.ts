@@ -138,12 +138,10 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
       .map((acquisition) => acquisition.acquisition_id),
   );
   const existingCollection = state.collections.find((collection) =>
-    state.skills.some(
-      (candidate) =>
-        candidate.collection_id === collection.collection_id &&
-        candidate.versions.some((version) =>
-          version.origins.some((origin) => existingAcquisitionIds.has(origin.acquisition_id)),
-        ),
+    state.acquisitions.some(
+      (acquisition) =>
+        acquisition.collection_id === collection.collection_id &&
+        existingAcquisitionIds.has(acquisition.acquisition_id),
     ),
   );
   const existingSkill = state.skills.find(

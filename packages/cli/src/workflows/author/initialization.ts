@@ -44,20 +44,10 @@ const planWorkspaceEffect = Effect.fn("Author.planWorkspace")(function* (
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* readAuthorWorkspaceEffect(root);
   const physical = (yield* fs.exists(root)) ? yield* fs.realPath(root) : root;
-  const acquisitionsFor = (collection: Collection) => {
-    const acquisitionIds = new Set(
-      state.skills
-        .filter((skill) => skill.collection_id === collection.collection_id)
-        .flatMap((skill) =>
-          skill.versions.flatMap((version) =>
-            version.origins.map((origin) => origin.acquisition_id),
-          ),
-        ),
+  const acquisitionsFor = (collection: Collection) =>
+    state.acquisitions.filter(
+      (acquisition) => acquisition.collection_id === collection.collection_id,
     );
-    return state.acquisitions.filter((acquisition) =>
-      acquisitionIds.has(acquisition.acquisition_id),
-    );
-  };
   const sameRoot: Collection[] = [];
   for (const collection of state.collections) {
     const inputs = acquisitionsFor(collection).map((acquisition) => acquisition.input.value);

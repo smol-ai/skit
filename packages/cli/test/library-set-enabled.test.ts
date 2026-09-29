@@ -7,6 +7,7 @@ import {
   libraryStoreLayer,
   makeCollectionId,
   makeSkillId,
+  type ObservedSkill,
   skitLayer,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
@@ -186,7 +187,9 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const retained = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     const reviewSkillId = retained?.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewSkillId);
-    assert.deepEqual(retained?.global_bindings[0]?.skills, [reviewSkillId]);
+    assert.deepEqual(retained?.global_bindings[0]?.entries, [
+      { kind: "skill", skill_id: reviewSkillId },
+    ]);
     const repeated = yield* writingTo(home, apply(true));
     assert.strictEqual(repeated.value.changed, false);
     const disabled = yield* writingTo(home, apply(false));
@@ -195,5 +198,96 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const final = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.deepEqual(final?.global_bindings, []);
     assert.strictEqual(final?.skills.find((skill) => skill.name === "review")?.versions.length, 1);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("enables a whole Collection and converts it to Skills when one is disabled", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-collection-entry-" });
+    const roots = isolatedRoots(workspace);
+    const home = roots.home;
+    const observed = join(workspace, "observed");
+    yield* initializeLibraryMachine(home);
+    const skills: ObservedSkill[] = [];
+    for (const name of ["review", "test", "docs"]) {
+      const path = join(observed, name);
+      yield* fs.makeDirectory(path, { recursive: true });
+      yield* fs.writeFileString(join(path, "SKILL.md"), `${name} raw bytes\n`);
+      skills.push({
+        name,
+        sourcePath: path,
+        relativePath: name,
+        observedHash: yield* deterministicTreeHashEffect(path),
+      });
+    }
+    const retain = (members: readonly ObservedSkill[], retainedAt: string) =>
+      Effect.scoped(
+        writingTo(
+          home,
+          retainObservedIn(home)({
+            source: { type: "local", path: observed },
+            input: observed,
+            retainedAt,
+            skills: members,
+            observations: [],
+          }),
+        ),
+      );
+    const retained = yield* retain(skills, "2026-09-16T00:00:00.000Z");
+    const collectionId = retained.collection!.collection_id;
+    const skillId = (name: string) =>
+      retained.skills.find((skill) => skill.name === name)!.skill_id;
+    const layer = libraryStoreLayer({ home });
+    const set = (query: string, enabled: boolean, all: boolean) =>
+      Effect.gen(function* () {
+        const current = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+        yield* writingTo(
+          home,
+          applyLibraryBindings(current, {
+            query,
+            all,
+            roots: {
+              home: workspace,
+              configHome: join(workspace, "config"),
+              overrides: { codex: roots.codexRoot },
+            },
+            variantsPath: join(home, "variants"),
+            invocation: {
+              subjects: [query],
+              harnesses: ["codex" as const],
+              scope: { kind: "global" as const },
+              enabled,
+              dryRun: false,
+            },
+          }).pipe(Effect.provide(layer)),
+        );
+        const settled = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+        return settled.global_bindings[0]?.entries ?? [];
+      });
+
+    assert.deepStrictEqual(yield* set(skillId("review"), true, false), [
+      { kind: "skill", skill_id: skillId("review") },
+    ]);
+    // `--all` follows the Collection and replaces its individual entries.
+    assert.deepStrictEqual(yield* set(collectionId, true, true), [
+      { kind: "collection", collection_id: collectionId },
+    ]);
+    // Disabling one Skill keeps the Collection's other current Skills individually.
+    assert.deepStrictEqual(yield* set(skillId("test"), false, false), [
+      { kind: "skill", skill_id: skillId("review") },
+      { kind: "skill", skill_id: skillId("docs") },
+    ]);
+    assert.deepStrictEqual((yield* fs.readDirectory(roots.codexRoot)).sort(), ["docs", "review"]);
+    // Disabling the whole Collection removes every entry for it.
+    assert.deepStrictEqual(yield* set(collectionId, false, true), []);
+    // A Skill gone from the Source stays while its own entry enables it, and `--all` ends that too.
+    yield* set(skillId("review"), true, false);
+    yield* retain(
+      skills.filter((skill) => skill.name !== "review"),
+      "2026-09-16T01:00:00.000Z",
+    );
+    assert.deepStrictEqual(yield* set(collectionId, false, true), []);
+    assert.deepStrictEqual(yield* fs.readDirectory(roots.codexRoot), []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -93,7 +93,10 @@ it.effect("records one event for one action, however many writers it nests", () 
                 {
                   harness: "codex",
                   scope: { kind: "global" },
-                  skills: state.skills.map((skill) => skill.skill_id),
+                  entries: state.skills.map((skill) => ({
+                    kind: "skill" as const,
+                    skill_id: skill.skill_id,
+                  })),
                 },
               ],
             }),

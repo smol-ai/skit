@@ -84,6 +84,11 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
           name: skill.name,
           verbatim_path: skill.sourcePath,
         })),
+        /** Per-Skill bytes, so a refresh preview can tell which Skills changed. */
+        members: prepared.facts.map((skill) => ({
+          source_path: skill.sourcePath,
+          artifact_digest: skill.artifactDigest,
+        })),
       };
     }),
   );
@@ -134,6 +139,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
           source: resolved.source,
           ...(declaration === undefined ? {} : { declaration }),
           input: historicalInput,
+          revision: resolved.revision,
           retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         });
         const state = yield* (yield* LibraryStore).load;
@@ -185,7 +191,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         input: historicalInput,
         source: resolved.source,
         ...(declaration === undefined ? {} : { declaration }),
-        sourceRevision: resolved.sourceRevision,
+        revision: resolved.revision,
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         skills,
         observations: [],

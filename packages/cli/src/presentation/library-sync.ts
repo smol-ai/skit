@@ -1,119 +1,127 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 import { harnessLabel } from "../harness/catalog.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v4">;
+type SyncData = ContractDataForId<"skit.library.sync.v5">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
-const skillChange = (before: readonly string[], after: readonly string[]): string => {
-  const previous = before.join(", ") || "none";
-  const desired = after.join(", ") || "none";
-  return previous === desired ? previous : `${previous} → ${desired}`;
-};
+/** Name a few Skills; past that, count them so a large Collection stays readable. */
+const skillLine = (marker: string, names: readonly string[]) =>
+  names.length === 0
+    ? []
+    : [
+        names.length <= 5
+          ? `        ${marker} ${names.join(", ")}`
+          : `        ${marker} ${names.length} Skills`,
+      ];
 
 export function renderLibrarySyncPlan(plan: SyncPlan): string {
+  // Collections that differ only in fetch records change nothing a person chose or uses.
+  const shown = (changes: SyncPlan["local"]) =>
+    changes.filter((change) => change.kind !== "collection" || !change.evidence_only);
   const lines = ["Library sync plan"];
   for (const [title, changes] of [
-    ["This device", plan.local],
-    ["Remote Library", plan.remote],
+    ["This device", shown(plan.local)],
+    ["Remote Library", shown(plan.remote)],
   ] as const) {
     lines.push("", title);
-    if (changes.length === 0) {
-      lines.push("  No changes.");
-      continue;
-    }
-    for (const change of changes) {
+    if (changes.length === 0) lines.push("  No changes.");
+    const collections = changes.filter((change) => change.kind === "collection");
+    const bindings = changes.filter((change) => change.kind === "binding");
+    if (collections.length) lines.push("  Collections");
+    for (const change of collections) {
       const marker = { add: "+", update: "~", remove: "-" }[change.action];
-      if (change.kind === "collection" || change.kind === "skill") {
-        const identity =
-          change.label_before && change.label_after && change.label_before !== change.label_after
-            ? `${change.label_before} → ${change.label_after}`
-            : change.label;
+      const identity =
+        change.label_before && change.label_after && change.label_before !== change.label_after
+          ? `${change.label_before} → ${change.label_after}`
+          : change.label;
+      lines.push(`    ${marker} ${identity}`);
+      if (change.action === "update")
         lines.push(
-          `  ${marker} ${change.action} ${change.kind === "collection" ? "Collection" : "Skill"} ${identity}`,
+          ...skillLine("+", change.skills_added),
+          ...skillLine("~", change.skills_changed),
+          ...skillLine("-", change.skills_removed),
         );
-        lines.push(`    Skills: ${skillChange(change.skills_before, change.skills_after)}`);
-        if (change.versions_before.join("\0") !== change.versions_after.join("\0"))
-          lines.push(`    Versions: ${skillChange(change.versions_before, change.versions_after)}`);
-        if (change.evidence_changed)
-          lines.push("    Retention or acquisition evidence will be updated.");
-      } else {
+      else if (change.action === "add")
         lines.push(
-          `  ${marker} ${change.action} Binding → ${change.harness ? harnessLabel(change.harness) : "unknown harness"} (global)`,
+          `        ${change.skills_added.length} Skill${change.skills_added.length === 1 ? "" : "s"}`,
         );
-        lines.push(`    Skills: ${skillChange(change.skills_before, change.skills_after)}`);
-      }
+    }
+    if (bindings.length) lines.push("  Bindings");
+    for (const change of bindings) {
+      const marker = { add: "+", update: "~", remove: "-" }[change.action];
+      lines.push(`    ${marker} ${harnessLabel(change.harness)}`);
+      for (const entry of change.entries_added) lines.push(`        + ${entry.label}`);
+      for (const entry of change.entries_removed) lines.push(`        - ${entry.label}`);
     }
   }
-  const changes = [...plan.local, ...plan.remote];
+  const changes = [...shown(plan.local), ...shown(plan.remote)];
   const summary = (["add", "update", "remove"] as const).flatMap((action) => {
     const count = changes.filter((change) => change.action === action).length;
     return count === 0 ? [] : [`${count} to ${action}`];
   });
-  lines.push("", `Plan: ${summary.join(", ") || "no Library changes"}.`);
-  lines.push("Local files and custody are checked during application.");
+  lines.push("", `Plan: ${summary.join(", ") || "no changes"}.`);
   return lines.join("\n");
 }
 
 export function renderLibrarySync(data: SyncData): string {
-  const count =
-    data.snapshots === undefined
-      ? ""
-      : ` · ${data.snapshots} private snapshot${data.snapshots === 1 ? "" : "s"}`;
-  const revision = data.revision_id === undefined ? "" : ` · revision ${data.revision_id}`;
-  const drift = data.projection_drift?.length
-    ? `\nProjection recipe differs for ${data.projection_drift.length} Version${data.projection_drift.length === 1 ? "" : "s"}: ${data.projection_drift.join(", ")}`
-    : "";
-  const deferred = data.deferred_bindings?.length
-    ? `\n\nDeferred on this device\n${data.deferred_bindings
-        .map(
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+  // What syncing did to this device, when it did anything worth knowing.
+  const notes = [
+    ...(data.retired
+      ? [`Removed ${plural(data.retired, "Skill")} no longer enabled from this device.`]
+      : []),
+    ...(data.projection_drift?.length
+      ? [
+          `${plural(data.projection_drift.length, "enabled Skill")} differ from the synced Version: ${data.projection_drift.join(", ")}`,
+        ]
+      : []),
+    ...(data.deferred_bindings?.length
+      ? data.deferred_bindings.map(
           (binding) =>
-            `  ${harnessLabel(binding.harness)} (global)\n    Skills: ${binding.skills.join(", ") || "none"}\n    Harness unavailable here. Binding kept; local files unchanged.`,
+            `${harnessLabel(binding.harness)} isn't available on this device, so these Skills aren't enabled here: ${binding.skills.join(", ") || "none"}`,
         )
-        .join("\n")}`
-    : data.deferred
-      ? `\n${data.deferred} Binding${data.deferred === 1 ? "" : "s"} deferred on this device.`
-      : "";
-  const retired = data.retired
-    ? `\nRetired ${data.retired} obsolete owned Projection${data.retired === 1 ? "" : "s"}.`
-    : "";
-  const removing = data.collections_to_remove
-    ? `\n${data.collections_to_remove} removed Collection${data.collections_to_remove === 1 ? "" : "s"} will retire owned Projections on this device.`
-    : "";
+      : data.deferred
+        ? [
+            data.deferred === 1
+              ? "An agent isn't available on this device, so its Skills aren't enabled here."
+              : `${data.deferred} agents aren't available on this device, so their Skills aren't enabled here.`,
+          ]
+        : []),
+  ];
+  const withNotes = (message: string) =>
+    notes.length ? `${message}\n\n${notes.join("\n")}` : message;
   const plan = data.plan ? `${renderLibrarySyncPlan(data.plan)}\n\n` : "";
+  const unapplied = (command: string) =>
+    `${plan}${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
   switch (data.status) {
     case "clean":
-      return `Library snapshots are current${revision}${retired}${deferred}`;
+      return withNotes("Library is already in sync.");
     case "push_ready":
-      return `${plan}Ready to save retained Library bytes${count}\n\nNo changes applied. Run skit sync --apply to apply.`;
-    case "pushed":
-      return `Saved retained Library bytes${count}${revision}`;
     case "pull_ready":
-      return `${plan}Ready to restore retained Library bytes${count}${deferred}\n\nNo changes applied. Run skit sync --apply to apply.`;
-    case "pulled":
-      return `Restored retained Library bytes${count}${revision}${drift}${retired}${deferred}`;
-    case "upgrade_ready":
-      return `Ready to upgrade the Library's older sync revision${count}\nRun skit sync --apply to apply.`;
-    case "upgraded":
-      return `Upgraded the Library sync revision${count}${revision}`;
-    case "legacy_remote_conflict":
-      return `The older remote Library has intent not accounted for locally${revision}`;
-    case "local_migration_required":
-      return "Migrate the local Library before syncing retained bytes.";
-    case "local_bytes_changed":
-      return `Retained local bytes changed for ${data.digest ?? "a Version"}; sync stopped.`;
-    case "adoption_required":
-      return `This device has no accepted base for the remote Library${revision}. Review adoption with skit sync --adopt.`;
-    case "adoption_ready":
-      return `${plan}Ready to adopt independent local and remote Collections${count}${revision}${deferred}\n\nNo changes applied. Run skit sync --adopt --apply to apply.`;
     case "merge_ready":
-      return `${plan}Ready to reconcile local and remote Collections${count}${revision}${removing}${deferred}\n\nNo changes applied. Run skit sync --apply to apply.`;
+      return unapplied("skit sync --apply");
+    case "adoption_ready":
+      return unapplied("skit sync --adopt --apply");
+    case "pushed":
+    case "pulled":
     case "merged":
-      return `Reconciled Library Collections${count}${revision}${drift}${retired}${deferred}`;
+    case "upgraded":
+      return withNotes("Library synced.");
+    case "upgrade_ready":
+      return "The remote Library uses an older sync format. Run skit sync --apply to upgrade it.";
+    case "legacy_remote_conflict":
+      return "The remote Library has changes from an older skit that this device doesn't have; sync stopped.";
+    case "local_migration_required":
+      return "Update this device's Library before syncing.";
+    case "local_bytes_changed":
+      return "A stored Skill copy on this device changed unexpectedly; sync stopped.";
+    case "adoption_required":
+      return "This device hasn't synced with this Library before. Review what would change with skit sync --adopt.";
     case "conflicted":
-      return `Library changes conflict${revision}:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}`;
+      return `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`;
     case "base_mismatch":
-      return `The accepted Library base belongs to another Registry or Library${revision}.`;
+      return "This device last synced with a different Library; sync stopped.";
     case "resolution_invalid":
-      return `A --take-remote key does not name a current Collection or Binding conflict${revision}.`;
+      return "--take-remote named something that isn't a current conflict.";
   }
 }

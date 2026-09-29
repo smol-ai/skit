@@ -1,4 +1,6 @@
 import {
+  bindingSkillIds,
+  currentSkillVersion,
   LibraryStore,
   withLibraryWriter,
   type HarnessName as Harness,
@@ -84,7 +86,7 @@ const bindingRows = (
   skillName: string,
 ): LibraryBindingRow[] =>
   [...state.global_bindings, ...state.local_bindings]
-    .filter((binding) => binding.skills.includes(skillId))
+    .filter((binding) => bindingSkillIds(state, binding).includes(skillId))
     .map((binding) => {
       const invocation = (binding.invocation_policies?.[skillId] ?? "declared") as InvocationOption;
       const carriesPolicy = (invocationHarnesses as readonly Harness[]).includes(binding.harness);
@@ -115,10 +117,8 @@ const skillRows = (state: LibraryState): LibrarySkillRow[] =>
       (candidate) => candidate.collection_id === skill.collection_id,
     );
     const heading = collection?.label ?? skill.name;
-    const version = skill?.versions.find(
-      (candidate) => candidate.skill_version_id === skill.selected_skill_version_id,
-    );
-    if (skill === undefined || version === undefined) return [];
+    const version = currentSkillVersion(state, skill);
+    if (version === undefined) return [];
     return [
       {
         name: skill.name,

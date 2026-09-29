@@ -1,4 +1,5 @@
 import {
+  currentSkillVersion,
   LibraryStore,
   originalTreeHashEffect,
   retainedTreePath,
@@ -47,7 +48,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
           display_name: subject.collection.label,
         });
       const skills = subject.skills;
-      const acquisitionIds = subjectAcquisitionIds(subject);
+      const acquisitionIds = subjectAcquisitionIds(state, subject);
       const copyIds = new Set(
         state.acquisitions
           .filter((acquisition) => acquisitionIds.has(acquisition.acquisition_id))
@@ -114,7 +115,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
         label: subject.label,
         retained_copies,
         unresolved_skill_selections: skills.filter(
-          (skill) => skill.selected_skill_version_id === undefined,
+          (skill) => currentSkillVersion(state, skill) === undefined,
         ).length,
         source_status:
           upstream === undefined

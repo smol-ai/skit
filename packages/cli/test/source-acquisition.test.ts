@@ -50,15 +50,11 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   expect(enabledCollection.status, enabledCollection.stderr).toBe(0);
   const enabledCollectionData = JSON.parse(enabledCollection.stdout).data;
   expect(enabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
-  const enabledSkillIds = enabledCollectionData.bindings[0].skills;
-  expect(enabledSkillIds).toEqual([
-    expect.stringMatching(/^skill_[0-9a-z]{26}$/),
-    expect.stringMatching(/^skill_[0-9a-z]{26}$/),
-  ]);
+  // `--all` follows the whole Collection rather than freezing today's Skills.
   expect(enabledCollectionData.bindings).toEqual([
     expect.objectContaining({
       harness: "codex",
-      skills: enabledSkillIds,
+      entries: [{ kind: "collection", collection_id: sourceData.collection_id }],
     }),
   ]);
   expect(await readFile(join(codexRoot, "release-notes", "SKILL.md"), "utf8")).toContain(
@@ -72,12 +68,13 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
     (entry: { subject_id: string }) => entry.subject_id === sourceData.collection_id,
   );
   expect(collection).toBeDefined();
-  expect(listing.bindings).toContainEqual(
-    expect.objectContaining({
-      harness: "codex",
-      skills: expect.arrayContaining(enabledSkillIds),
-    }),
-  );
+  expect(listing.bindings).toContainEqual({
+    harness: "codex",
+    entries: [
+      { kind: "collection", collection_id: sourceData.collection_id, label: collection.label },
+    ],
+    skills: collection.skills.map((skill: { skill_id: string }) => skill.skill_id),
+  });
 
   const disabledCollection = run("disable", sourceData.collection_id, "--all", "--for", "codex");
   expect(disabledCollection.status, disabledCollection.stderr).toBe(0);

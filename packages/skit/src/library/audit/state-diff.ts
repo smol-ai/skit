@@ -1,5 +1,6 @@
 import type { LibraryState } from "../library-state.js";
 import type { LibraryAuditChange } from "./audit-log.js";
+import { bindingSkillIds, currentSkillVersion } from "../library-contracts.js";
 
 type Binding = LibraryState["global_bindings"][number] | LibraryState["local_bindings"][number];
 
@@ -82,16 +83,18 @@ export const diffLibraryState = (
   for (const item of collections.removed)
     changes.push({ entity: "collection", id: item.collection_id, action: "removed" });
 
+  const selected = (state: LibraryState, skill: LibraryState["skills"][number]) =>
+    currentSkillVersion(state, skill)?.skill_version_id;
   const skills = compare(before.skills, after.skills, (item) => item.skill_id);
-  for (const item of skills.added)
+  for (const item of skills.added) {
+    const version = selected(after, item);
     changes.push({
       entity: "skill",
       id: item.skill_id,
       action: "added",
-      ...(item.selected_skill_version_id === undefined
-        ? {}
-        : { after: item.selected_skill_version_id }),
+      ...(version === undefined ? {} : { after: version }),
     });
+  }
   for (const item of skills.removed)
     changes.push({ entity: "skill", id: item.skill_id, action: "removed" });
   for (const { previous, current } of skills.kept) {
@@ -105,17 +108,15 @@ export const diffLibraryState = (
       });
     for (const version of versions.removed)
       changes.push({ entity: "version", id: version.skill_version_id, action: "removed" });
-    if (previous.selected_skill_version_id !== current.selected_skill_version_id)
+    const was = selected(before, previous);
+    const now = selected(after, current);
+    if (was !== now)
       changes.push({
         entity: "skill",
         id: current.skill_id,
         action: "version-selected",
-        ...(previous.selected_skill_version_id === undefined
-          ? {}
-          : { before: previous.selected_skill_version_id }),
-        ...(current.selected_skill_version_id === undefined
-          ? {}
-          : { after: current.selected_skill_version_id }),
+        ...(was === undefined ? {} : { before: was }),
+        ...(now === undefined ? {} : { after: now }),
       });
   }
 
@@ -129,18 +130,18 @@ export const diffLibraryState = (
       entity: "binding",
       id: bindingId(item),
       action: "enabled",
-      after: item.skills.join(","),
+      after: bindingSkillIds(after, item).join(","),
     });
   for (const item of bindings.removed)
     changes.push({
       entity: "binding",
       id: bindingId(item),
       action: "disabled",
-      before: item.skills.join(","),
+      before: bindingSkillIds(before, item).join(","),
     });
   for (const { previous, current } of bindings.kept) {
-    const was = [...previous.skills].sort().join(",");
-    const now = [...current.skills].sort().join(",");
+    const was = bindingSkillIds(before, previous).sort().join(",");
+    const now = bindingSkillIds(after, current).sort().join(",");
     const policyChanged =
       JSON.stringify(previous.invocation_policies ?? {}) !==
       JSON.stringify(current.invocation_policies ?? {});

@@ -36,7 +36,7 @@ const skillId = makeSkillId();
 const acquisitionId = makeAcquisitionId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 5,
+  schemaVersion: 6,
   collections: [
     {
       collection_id: collectionId,
@@ -49,7 +49,6 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       collection_id: collectionId,
       path: ".",
       name: "review",
-      selected_skill_version_id: skillVersionId,
       versions: [
         {
           skill_version_id: skillVersionId,
@@ -57,7 +56,6 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
           artifact_digest: digest,
           validation_identity_digest: digest,
           materialization_profile: "plain-skill/v1",
-          origins: [{ acquisition_id: acquisitionId, source_path: "." }],
         },
       ],
     },
@@ -80,6 +78,8 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
   acquisitions: [
     {
       acquisition_id: acquisitionId,
+      collection_id: collectionId,
+      kind: "source",
       retained_copy_id: retainedTreeId,
       input: { value: "/fixtures/review" },
       source_identity: {
@@ -87,8 +87,6 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
         machine_id: machineId,
         path: { value: "/fixtures/review" },
       },
-      tracking: { kind: "default" },
-      selection: { kind: "full-tree" },
       acquired_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
       observations: [],

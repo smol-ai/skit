@@ -38,7 +38,6 @@ const skill = {
   collection_id: collectionId,
   path: "." as const,
   name: "review",
-  selected_skill_version_id: versionId,
   versions: [
     {
       skill_version_id: versionId,
@@ -46,7 +45,6 @@ const skill = {
       artifact_digest: digest,
       validation_identity_digest: digest,
       materialization_profile: "plain-skill/v1" as const,
-      origins: [{ acquisition_id: acquisitionId, source_path: "." as const }],
     },
     {
       skill_version_id: second,
@@ -54,7 +52,6 @@ const skill = {
       artifact_digest: digestB,
       validation_identity_digest: digestB,
       materialization_profile: "plain-skill/v1" as const,
-      origins: [{ acquisition_id: acquisitionB, source_path: "." as const }],
     },
     {
       skill_version_id: third,
@@ -62,12 +59,11 @@ const skill = {
       artifact_digest: digestC,
       validation_identity_digest: digestC,
       materialization_profile: "plain-skill/v1" as const,
-      origins: [{ acquisition_id: acquisitionC, source_path: "." as const }],
     },
   ],
 };
 const manifest = (bindings: unknown[] = []) => ({
-  schema: "skit.library.v5",
+  schema: "skit.library.v6",
   collections: [collection],
   skills: [skill],
   retained_copies: [
@@ -104,14 +100,14 @@ const manifest = (bindings: unknown[] = []) => ({
   acquisitions: [
     {
       acquisition_id: acquisitionId,
+      collection_id: collectionId,
+      kind: "source" as const,
       retained_copy_id: retainedCopyId,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
         path: { value: "/tmp/fixture" },
       },
-      tracking: { kind: "default" as const },
-      selection: { kind: "full-tree" as const },
       input: { value: "/tmp/fixture" },
       acquired_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
@@ -122,14 +118,15 @@ const manifest = (bindings: unknown[] = []) => ({
       [acquisitionC, copyC],
     ].map(([acquisition_id, retained_copy_id]) => ({
       acquisition_id,
+      collection_id: collectionId,
+      // Later Versions are retained local edits, so the Source keeps observing the first.
+      kind: "retained-edit" as const,
       retained_copy_id,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
         path: { value: "/tmp/fixture" },
       },
-      tracking: { kind: "default" as const },
-      selection: { kind: "full-tree" as const },
       input: { value: "/tmp/fixture" },
       acquired_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
@@ -146,10 +143,9 @@ it.effect("merges an independently added global Binding", () =>
     const local = yield* decode(
       manifest([
         {
-          collection_id: collection.collection_id,
           harness: "codex",
           scope: { kind: "global" },
-          skills: [skillId],
+          entries: [{ kind: "skill", skill_id: skillId }],
         },
       ]),
     );
@@ -159,12 +155,12 @@ it.effect("merges an independently added global Binding", () =>
   }),
 );
 
-it.effect("reports concurrent Skill selection changes without choosing a winner", () =>
+it.effect("reports concurrent retained-edit selections without choosing a winner", () =>
   Effect.gen(function* () {
     const base = yield* decode(manifest());
     const select = (id: typeof versionId) => ({
       ...manifest(),
-      skills: [{ ...skill, selected_skill_version_id: id }],
+      skills: [{ ...skill, local_version_id: id }],
     });
     const local = yield* decode(select(second));
     const remote = yield* decode(select(third));
@@ -172,7 +168,7 @@ it.effect("reports concurrent Skill selection changes without choosing a winner"
     assert.deepEqual(conflicted.conflicts, [`skill:${skillId}`]);
     const accepted = mergeLibraryManifests(base, local, remote, new Set([`skill:${skillId}`]));
     assert.deepEqual(accepted.conflicts, []);
-    assert.strictEqual(accepted.manifest.skills[0]?.selected_skill_version_id, third);
+    assert.strictEqual(accepted.manifest.skills[0]?.local_version_id, third);
   }),
 );
 
@@ -182,13 +178,12 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
     const desired = yield* decode({
       ...manifest([
         {
-          collection_id: collection.collection_id,
           harness: "codex",
           scope: { kind: "global" },
-          skills: [skillId],
+          entries: [{ kind: "skill", skill_id: skillId }],
         },
       ]),
-      skills: [{ ...skill, selected_skill_version_id: second }],
+      skills: [{ ...skill, local_version_id: second }],
     });
     const plan = planLibrarySync(desired, remote, desired);
     assert.deepEqual(plan.local, []);
@@ -200,21 +195,17 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         label: "fixture/skills",
         label_before: "fixture/skills",
         label_after: "fixture/skills",
-        skills_before: ["review"],
-        skills_after: ["review"],
-        versions_before: [`review @ ${digest}`],
-        versions_after: [`review @ ${digestB}`],
-        evidence_changed: false,
+        skills_added: [],
+        skills_removed: [],
+        skills_changed: ["review"],
+        evidence_only: false,
       },
       {
         kind: "binding",
         action: "add",
         harness: "codex",
-        skills_before: [],
-        skills_after: ["review"],
-        versions_before: [],
-        versions_after: [],
-        evidence_changed: false,
+        entries_added: [{ kind: "skill", label: "review" }],
+        entries_removed: [],
       },
     ]);
   }),
@@ -225,16 +216,14 @@ it.effect("names every deferred Binding and its affected Skills", () =>
     const portable = yield* decode(
       manifest([
         {
-          collection_id: collection.collection_id,
           harness: "codex",
           scope: { kind: "global" },
-          skills: [skillId],
+          entries: [{ kind: "skill", skill_id: skillId }],
         },
         {
-          collection_id: collection.collection_id,
           harness: "claude-code",
           scope: { kind: "global" },
-          skills: [skillId],
+          entries: [{ kind: "skill", skill_id: skillId }],
         },
       ]),
     );
@@ -244,5 +233,32 @@ it.effect("names every deferred Binding and its affected Skills", () =>
       ),
       [{ harness: "claude-code", skills: ["review"] }],
     );
+  }),
+);
+
+it.effect("marks a Collection whose only difference is fetch records as evidence-only", () =>
+  Effect.gen(function* () {
+    const remote = yield* decode(manifest());
+    const refetched = manifest();
+    const desired = yield* decode({
+      ...refetched,
+      acquisitions: refetched.acquisitions.map((acquisition, index) =>
+        index === 0 ? { ...acquisition, acquired_at: "2026-02-01T00:00:00.000Z" } : acquisition,
+      ),
+    });
+    assert.deepEqual(planLibrarySync(desired, remote, desired).remote, [
+      {
+        kind: "collection",
+        action: "update",
+        subject_id: collectionId,
+        label: "fixture/skills",
+        label_before: "fixture/skills",
+        label_after: "fixture/skills",
+        skills_added: [],
+        skills_removed: [],
+        skills_changed: [],
+        evidence_only: true,
+      },
+    ]);
   }),
 );

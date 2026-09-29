@@ -355,7 +355,7 @@ describe("source contracts", () => {
       );
       const second = yield* resolveSkitSourceEffect(source);
       expect(yield* releaseHash(second.root, "retain")).toBe(firstHash);
-      expect(second.sourceRevision).not.toBe(first.sourceRevision);
+      expect(second.revision).not.toEqual(first.revision);
     }).pipe(provide),
   );
 
@@ -789,7 +789,7 @@ describe("source contracts", () => {
       );
       const expected = yield* git(root, "rev-parse", "HEAD");
       const resolved = yield* resolve(root);
-      expect(resolved.sourceRevision).toBe(expected);
+      expect(resolved.revision).toEqual({ kind: "commit", commit: expected });
     }).pipe(provide),
   );
 
