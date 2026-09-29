@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, join, matchesGlob, posix, relative, resolve, sep } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import {
@@ -243,8 +243,14 @@ export const classifyObservedOwner = (input: {
   return { kind: "unknown" };
 };
 
-export const isSetupCandidateSelectedByDefault = (owner: SetupSkillInstance["owner"]): boolean =>
-  owner.kind === "unknown";
+export const isSetupCandidateFromCodex = (paths: readonly string[], home = homedir()): boolean =>
+  paths.some((path) => pathIsWithin(join(resolve(home), ".codex"), resolve(path)));
+
+export const isSetupCandidateSelectedByDefault = (
+  owner: SetupSkillInstance["owner"],
+  paths: readonly string[],
+  home = homedir(),
+): boolean => owner.kind === "unknown" && !isSetupCandidateFromCodex(paths, home);
 
 export const readSetupMachineConfig = Effect.fn("Setup.readMachineConfig")(function* (
   libraryHome: string,

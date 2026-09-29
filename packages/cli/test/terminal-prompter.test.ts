@@ -149,6 +149,38 @@ describe("the terminal prompter", () => {
     }).pipe(Effect.provide(promptedWith(["enter"]))),
   );
 
+  it.effect("multiselect filters by source group and skips nonselectable headings", () =>
+    Effect.gen(function* () {
+      const prompter = yield* Prompter;
+      const chosen = yield* prompter.multiselect("Pick skills", [
+        { value: "review", label: "Review", group: "Codex" },
+        { value: "lint", label: "Lint", group: "Local" },
+      ]);
+      assert.deepStrictEqual(chosen, ["review"]);
+      expect(stderr.mock.calls.some(([frame]) => String(frame).includes("─ Codex"))).toBe(true);
+    }).pipe(Effect.provide(promptedWith(["c", "o", "d", "e", "x", "space", "enter"]))),
+  );
+
+  it.effect("group headings fit the page while the highlighted choice stays visible", () =>
+    Effect.gen(function* () {
+      const prompter = yield* Prompter;
+      const chosen = yield* prompter.multiselect(
+        "Pick skills",
+        Array.from({ length: 25 }, (_, index) => ({
+          value: String(index),
+          label: `Skill ${index}`,
+          group: `Source ${index}`,
+        })),
+      );
+      assert.deepStrictEqual(chosen, ["24"]);
+      const frames = stderr.mock.calls
+        .map(([frame]) => String(frame))
+        .filter((frame) => frame.startsWith("\u001b[?25l"));
+      expect(frames.every((frame) => frame.split("\n").length <= 21)).toBe(true);
+      expect(frames.some((frame) => frame.includes("❯ ☐ Skill 24"))).toBe(true);
+    }).pipe(Effect.provide(promptedWith(["up", "space", "enter"]))),
+  );
+
   it.effect("Escape identifies back-navigation and ends the abandoned line", () =>
     Effect.gen(function* () {
       const prompter = yield* Prompter;

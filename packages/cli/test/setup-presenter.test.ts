@@ -7,6 +7,55 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract, setupDiscoverySummary } from "../src/presentation/contract-presenters.js";
+import { setupInstalledSkillChoices } from "../src/handlers/library/setup.js";
+import type { SetupOnboardingCandidate } from "../src/workflows/library/setup-contract.js";
+
+it("groups installed skills by source and leaves Codex paths deselected", () => {
+  const candidate = (name: string, path: string): SetupOnboardingCandidate => ({
+    name,
+    paths: [path],
+    owner: { kind: "unknown" },
+    action: "manage-locally",
+    sourceSelection: "automatic",
+    sourcePath: path,
+  });
+  const choices = setupInstalledSkillChoices(
+    [
+      candidate("zeta", "/home/test/Work/skills/zeta"),
+      candidate("alpha", "/home/test/.codex/skills/alpha"),
+      candidate("beta", "/home/test/Work/skills/beta"),
+      candidate("shared", "/home/test/Work/skills/shared"),
+      candidate("shared", "/home/test/.codex/skills/shared"),
+      {
+        name: "plugin",
+        paths: ["/home/test/.codex/plugins/cache/vendor/plugin"],
+        owner: { kind: "harness", harness: "codex", source: "Codex curated", bundled: false },
+        action: "harness-owned",
+      },
+    ],
+    "/home/test",
+  );
+  expect(
+    choices.filter((choice) => choice.group === "~/Work/skills").map((choice) => choice.label),
+  ).toEqual(["beta", "shared", "zeta"]);
+  expect(
+    choices
+      .filter((choice) => choice.group === "~/.codex/skills")
+      .every((choice) => !choice.selected),
+  ).toBe(true);
+  expect(choices.find((choice) => choice.label === "plugin")).toMatchObject({
+    group: "Codex curated",
+    selected: false,
+  });
+  expect(choices.filter((choice) => choice.selected).map((choice) => choice.label)).toEqual([
+    "beta",
+    "shared",
+    "zeta",
+  ]);
+  expect(new Set(choices.map((choice) => choice.value)).size).toBe(choices.length);
+  const groups = choices.map((choice) => choice.group);
+  expect(groups).toEqual([...groups].sort((left, right) => left!.localeCompare(right!)));
+});
 
 it("models large discovery results as collapsed while retaining their Collections", () => {
   const names = Array.from({ length: 6 }, (_, index) => `skill-${index + 1}`);

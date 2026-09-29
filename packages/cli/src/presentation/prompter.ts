@@ -24,6 +24,7 @@ export interface Choice<Value> {
   value: Value;
   label: string;
   hint?: string;
+  group?: string;
   selected?: boolean;
 }
 
@@ -86,7 +87,9 @@ const filterableMultiSelect = <Value extends string>(
     const query = state.query.toLocaleLowerCase();
     if (query.length === 0) return items.map((_, index) => index);
     return items.flatMap((item, index) =>
-      `${item.label} ${item.hint ?? ""}`.toLocaleLowerCase().includes(query) ? [index] : [],
+      `${item.group ?? ""} ${item.label} ${item.hint ?? ""}`.toLocaleLowerCase().includes(query)
+        ? [index]
+        : [],
     );
   };
   const renderedLines = (state: typeof initial): string[] => {
@@ -100,11 +103,24 @@ const filterableMultiSelect = <Value extends string>(
       ),
     );
     const page = visible.slice(start, start + AUTOCOMPLETE_MAX_ITEMS);
+    const pageLineCount = () =>
+      page.length +
+      page.filter((itemIndex, index) => {
+        const group = items[itemIndex].group;
+        return group !== undefined && (index === 0 || group !== items[page[index - 1]].group);
+      }).length;
+    while (pageLineCount() > AUTOCOMPLETE_MAX_ITEMS) {
+      if (page.at(-1) === visible[cursor]) page.shift();
+      else page.pop();
+    }
     const filter = state.query.length === 0 ? "type to filter" : `filter: ${state.query}`;
     const lines = [`? ${message} › ${filter}  (Space toggle, Ctrl+A all/none)`];
     if (page.length === 0) lines.push("  No matches");
+    let previousGroup: string | undefined;
     for (const itemIndex of page) {
       const item = items[itemIndex];
+      if (item.group !== undefined && item.group !== previousGroup) lines.push(`  ─ ${item.group}`);
+      previousGroup = item.group;
       const active = visible[cursor] === itemIndex ? "❯" : " ";
       const checked = state.selected.has(itemIndex) ? "☒" : "☐";
       lines.push(`${active} ${checked} ${item.label}${item.hint ? ` - ${item.hint}` : ""}`);

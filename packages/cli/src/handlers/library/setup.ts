@@ -1,14 +1,13 @@
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { homedir } from "node:os";
-import { resolve, sep } from "node:path";
-import pc from "picocolors";
+import { dirname, resolve, sep } from "node:path";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
-import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
+import { Prompter, terminalPrompterLayer, type Choice } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { renderSetupDiscovery } from "../../presentation/contract-presenters.js";
 import {
@@ -17,13 +16,18 @@ import {
   revalidateSetupPlan,
   runSetup,
   isSetupCandidateSelectedByDefault,
+  isSetupCandidateFromCodex,
   type SetupOptions,
 } from "../../workflows/library/setup.js";
 import {
   applySetupLocalCustody,
   type SetupLocalCustodyOptions,
 } from "../../workflows/library/setup-local-custody.js";
-import type { SetupInstanceOwner, SetupResult } from "../../workflows/library/setup-contract.js";
+import type {
+  SetupInstanceOwner,
+  SetupOnboardingCandidate,
+  SetupResult,
+} from "../../workflows/library/setup-contract.js";
 import { applySetupExistingBindings } from "../../workflows/library/setup-existing-binding.js";
 import { applySetupObservedCollections } from "../../workflows/library/setup-observed-collections.js";
 import { result } from "../contracts.js";
@@ -40,15 +44,10 @@ const dryRun = Flag.boolean("dry-run").pipe(
   Flag.withDefault(false),
 );
 
+const compactPath = (path: string, home = homedir()): string =>
+  path === home ? "~" : path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
+
 export const setupOwnerHint = (owner: SetupInstanceOwner, paths: readonly string[]): string => {
-  const compactPath = (path: string): string => {
-    const home = homedir();
-    return path === home
-      ? "~"
-      : path.startsWith(`${home}${sep}`)
-        ? `~${path.slice(home.length)}`
-        : path;
-  };
   switch (owner.kind) {
     case "harness":
       return owner.source;
@@ -66,6 +65,38 @@ export const setupOwnerHint = (owner: SetupInstanceOwner, paths: readonly string
       return paths[0] ? compactPath(paths[0]) : "unknown path";
   }
 };
+
+const setupChoiceValue = (
+  candidate: SetupOnboardingCandidate,
+  candidates: readonly SetupOnboardingCandidate[],
+): string =>
+  candidates.filter((item) => item.name === candidate.name).length === 1
+    ? candidate.name
+    : `${candidate.name}\0${candidate.paths.join("\0")}`;
+
+export const setupInstalledSkillChoices = (
+  candidates: readonly SetupOnboardingCandidate[],
+  home = homedir(),
+): Choice<string>[] =>
+  candidates
+    .map((candidate) => ({
+      value: setupChoiceValue(candidate, candidates),
+      label: candidate.name,
+      hint: setupOwnerHint(candidate.owner, candidate.paths),
+      group:
+        candidate.owner.kind === "harness"
+          ? candidate.owner.source
+          : candidate.owner.kind === "repository"
+            ? compactPath(candidate.owner.repository, home)
+            : candidate.owner.kind === "skills-sh"
+              ? `skills.sh · ${candidate.owner.source}`
+              : compactPath(dirname(candidate.paths[0] ?? "."), home),
+      selected: isSetupCandidateSelectedByDefault(candidate.owner, candidate.paths, home),
+    }))
+    .sort(
+      (left, right) =>
+        left.group.localeCompare(right.group) || left.label.localeCompare(right.label),
+    );
 
 export const shouldSetupInteractively = (input: {
   readonly json: boolean;
@@ -382,14 +413,16 @@ const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
   const prompter = yield* Prompter;
   const selectedSources = yield* prompter
     .multiselect(
-      "Select skills.sh Collections to add to the SKIT Library",
+      "Select skills.sh sources to add to your SKIT Library",
       [...bySource]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([locator, group]) => ({
           value: locator,
           label: group.label,
           hint: `${group.candidates.length} installed ${group.candidates.length === 1 ? "skill" : "skills"}`,
-          selected: true,
+          selected: group.candidates.every(
+            (candidate) => !isSetupCandidateFromCodex(candidate.paths),
+          ),
         })),
     )
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
@@ -422,7 +455,7 @@ const chooseExistingBindings = Effect.fn("CLI.setup.chooseExistingBindings")(fun
         value: candidate.name,
         label: candidate.name,
         hint: candidate.collectionDisplayName ?? "existing Library Collection",
-        selected: true,
+        selected: !isSetupCandidateFromCodex(candidate.paths),
       })),
     )
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
@@ -439,22 +472,14 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
   );
   if (!candidates.length) return [];
   const prompter = yield* Prompter;
-  const choiceValue = (candidate: (typeof candidates)[number]) =>
-    candidates.filter((item) => item.name === candidate.name).length === 1
-      ? candidate.name
-      : `${candidate.name}\0${candidate.paths.join("\0")}`;
   const selectedValues = yield* prompter
     .multiselect(
       "Select installed skills to add to your SKIT Library",
-      candidates.map((candidate) => ({
-        value: choiceValue(candidate),
-        label: `${candidate.name} ${pc.dim(setupOwnerHint(candidate.owner, candidate.paths))}`,
-        selected: isSetupCandidateSelectedByDefault(candidate.owner),
-      })),
+      setupInstalledSkillChoices(candidates),
     )
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
   return yield* Effect.forEach(selectedValues, (value) => {
-    const candidate = candidates.find((item) => choiceValue(item) === value);
+    const candidate = candidates.find((item) => setupChoiceValue(item, candidates) === value);
     if (!candidate) return Effect.succeed({ name: value });
     const name = candidate.name;
     if (candidate.action === "manage-locally" && candidate.sourceSelection === "automatic")
