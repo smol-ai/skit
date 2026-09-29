@@ -98,6 +98,16 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
     const firstAcquisition = fixture.acquisitions[0];
     const secondCollectionId = makeCollectionId();
     const secondAcquisitionId = makeAcquisitionId();
+    const secondCopyId = makeRetainedCopyId();
+    fixture.retained_copies.push({
+      ...fixture.retained_copies[0],
+      retained_copy_id: secondCopyId,
+      digest: `sha256:${"c".repeat(64)}`,
+      members: fixture.retained_copies[0].members.map((member: object) => ({
+        ...member,
+        source_path: "tdd",
+      })),
+    });
     fixture.collections.push({
       ...firstCollection,
       collection_id: secondCollectionId,
@@ -115,7 +125,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
         return {
           ...version,
           skill_version_id: skillVersionId,
-          origins: [{ acquisition_id: secondAcquisitionId, source_path: "review" }],
+          origins: [{ acquisition_id: secondAcquisitionId, source_path: "tdd" }],
         };
       }),
     });
@@ -123,6 +133,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
     fixture.acquisitions.push({
       ...firstAcquisition,
       acquisition_id: secondAcquisitionId,
+      retained_copy_id: secondCopyId,
       input: { value: "wellknown:https://skills.example#skills=tdd" },
       acquired_at: "2026-09-20T00:01:00.000Z",
     });
@@ -140,7 +151,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("migrates v5 state: whole Sources, entries, retained edits, pruned history", () =>
+it.effect("migrates v5 state: whole Sources, entries, retained edits, all history kept", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v5-migration-" });
@@ -335,8 +346,8 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, pruned his
       tracking: { kind: "default" },
     });
 
-    // The latest Source Acquisition, the one backing alpha's installed Version and gone's last
-    // Version, and the retained edit survive. `dropped` is deleted upstream and unused.
+    // Migration keeps every Acquisition and Skill, even `dropped`, which upstream deleted and
+    // nothing uses.
     assert.deepStrictEqual(
       state.acquisitions.map((item) => [item.acquisition_id, item.kind, item.revision]),
       [
@@ -347,7 +358,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, pruned his
     );
     assert.deepStrictEqual(
       state.skills.map((skill) => skill.name),
-      ["alpha", "beta", "gone"],
+      ["alpha", "beta", "gone", "dropped"],
     );
     const skill = (id: string) => state.skills.find((candidate) => candidate.skill_id === id)!;
     assert.strictEqual(currentSkillVersion(state, skill(ids.alpha))?.skill_version_id, ids.alpha2);

@@ -18,7 +18,6 @@ import {
   LibraryManifest,
   librarySnapshotDigests,
   MaterializationProfile,
-  pruneLibraryHistory,
   RetainedCopy,
   type Skill,
   SkillsShObservation,
@@ -120,19 +119,10 @@ export interface LibraryEntitiesV5 {
  *   Source is the whole repository.
  * - Each Acquisition names its Collection and whether it observed the Source or retained a local
  *   edit. A selected retained edit becomes the Skill's `local_version_id`.
- * - History nothing uses is pruned (see `pruneLibraryHistory`).
  * - Bindings become entries: when every Skill of a Collection's latest Acquisition is bound, the
  *   Collection is bound; otherwise each Skill is bound individually.
  */
-export const migrateLibraryEntitiesFromV5 = (
-  input: LibraryEntitiesV5 & {
-    readonly boundSkillIds: ReadonlySet<string>;
-    readonly projectedVersions: ReadonlyArray<{
-      readonly skill_id: string;
-      readonly skill_version_id: string;
-    }>;
-  },
-) => {
+export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
   const collectionOf = new Map<string, CollectionId>();
   for (const skill of input.skills)
     for (const version of skill.versions)
@@ -211,17 +201,13 @@ export const migrateLibraryEntitiesFromV5 = (
           },
         }),
   }));
-  const pruned = pruneLibraryHistory(
-    { collections, skills, acquisitions, retained_copies: input.retained_copies },
-    input,
-  );
-  const keptSkills = new Set<string>(pruned.skills.map((skill) => skill.skill_id));
+  const migrated = { collections, skills, acquisitions, retained_copies: input.retained_copies };
 
   const entries = (skillIds: readonly string[]): BindingEntry[] => {
-    const bound = new Set(skillIds.filter((skillId) => keptSkills.has(skillId)));
+    const bound = new Set(skillIds);
     const result: BindingEntry[] = [];
     for (const collection of collections) {
-      const current = currentCollectionSkills(pruned, collection.collection_id).map(
+      const current = currentCollectionSkills(migrated, collection.collection_id).map(
         (skill) => skill.skill_id,
       );
       if (current.length > 0 && current.every((skillId) => bound.has(skillId))) {
@@ -229,22 +215,18 @@ export const migrateLibraryEntitiesFromV5 = (
         for (const skillId of current) bound.delete(skillId);
       }
     }
-    for (const skill of pruned.skills)
+    for (const skill of skills)
       if (bound.has(skill.skill_id)) result.push({ kind: "skill", skill_id: skill.skill_id });
     return result;
   };
 
-  return { ...pruned, entries };
+  return { ...migrated, entries };
 };
 
 export const LibraryManifestFromV5 = LibraryManifestV5.pipe(
   Schema.decodeTo(LibraryManifest, {
     decode: SchemaGetter.transform((manifest) => {
-      const migrated = migrateLibraryEntitiesFromV5({
-        ...manifest,
-        boundSkillIds: new Set(manifest.bindings.flatMap((binding) => binding.skills)),
-        projectedVersions: [],
-      });
+      const migrated = migrateLibraryEntitiesFromV5(manifest);
       return {
         schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
         collections: migrated.collections,

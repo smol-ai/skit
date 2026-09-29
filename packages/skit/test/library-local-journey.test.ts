@@ -80,7 +80,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("reuses an unchanged Skill Version and keeps only history still in use", () =>
+it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-reuse-" });
@@ -130,15 +130,14 @@ it.effect("reuses an unchanged Skill Version and keeps only history still in use
     const saved = yield* inspectLibrary(home);
     assert.strictEqual(saved.present, true);
     if (!saved.present) return;
-    // Nothing installs the first `review` Version, so only the latest Acquisition remains.
     assert.strictEqual(
       saved.state.skills.find((skill) => skill.name === "review")?.versions.length,
-      1,
+      2,
     );
     assert.deepStrictEqual(saved.state.skills.find((skill) => skill.name === "stable")?.versions, [
       stableVersion,
     ]);
-    assert.strictEqual(saved.state.retained_copies.length, 1);
-    assert.strictEqual(saved.state.acquisitions.length, 1);
+    assert.strictEqual(saved.state.retained_copies.length, 2);
+    assert.strictEqual(saved.state.acquisitions.length, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

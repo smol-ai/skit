@@ -52,13 +52,7 @@ export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryState =
     projections,
     ...fields
   } = state;
-  const migrated = migrateLibraryEntitiesFromV5({
-    ...state,
-    boundSkillIds: new Set(
-      [...global_bindings, ...local_bindings].flatMap((binding) => binding.skills),
-    ),
-    projectedVersions: projections,
-  });
+  const migrated = migrateLibraryEntitiesFromV5(state);
   return currentLibraryState({
     ...fields,
     collections: [...migrated.collections],
@@ -73,8 +67,6 @@ export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryState =
       ...binding,
       entries: migrated.entries(skills),
     })),
-    projections: projections.filter((projection) =>
-      migrated.skills.some((skill) => skill.skill_id === projection.skill_id),
-    ),
+    projections: [...projections],
   });
 };

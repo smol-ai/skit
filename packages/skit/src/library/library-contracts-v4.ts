@@ -256,8 +256,6 @@ const LibraryManifestFromV4 = LibraryManifestV4.pipe(
         retained_copies: manifest.retained_copies.map(
           ({ v3_normalized_tree: _legacyNormalizedTree, ...copy }) => copy,
         ),
-        boundSkillIds: new Set(v5.bindings.flatMap((binding) => binding.skills)),
-        projectedVersions: [],
       });
       return {
         schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,

@@ -27,7 +27,6 @@ import {
 import {
   LibraryState,
   decodeLibraryState,
-  pruneLibraryState,
   libraryManifestFromLocalStateEffect,
 } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
@@ -310,7 +309,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       })),
     });
   state.acquisitions.push(acquisition);
-  const successor = yield* decodeLibraryState(pruneLibraryState(state)).pipe(
+  const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
       (error) =>
         new InvalidLibraryState({
@@ -455,7 +454,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
     });
     if (!skill.versions.includes(version)) skill.versions.push(version);
     skill.local_version_id = version.skill_version_id;
-    const successor = yield* decodeLibraryState(pruneLibraryState(state)).pipe(
+    const successor = yield* decodeLibraryState(state).pipe(
       Effect.mapError(
         (error) =>
           new InvalidLibraryState({

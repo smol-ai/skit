@@ -74,9 +74,8 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     );
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
     assert.strictEqual(refreshed.collections.length, 1);
-    // The superseded snapshot backs nothing still in use, so it is pruned.
-    assert.strictEqual(refreshed.acquisitions.length, 1);
-    assert.strictEqual(refreshed.skills[0]?.versions.length, 1);
+    assert.strictEqual(refreshed.acquisitions.length, 2);
+    assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
     const failure = yield* planUpdatesEffect(
       refreshed,
       {
@@ -222,8 +221,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
-    // The Projection moved to the new Version, so the superseded one is pruned.
-    assert.strictEqual(after.skills[0]?.versions.length, 1);
+    assert.strictEqual(after.skills[0]?.versions.length, 2);
     const desired = yield* libraryManifestFromLocalStateEffect(after);
     const empty = {
       ...desired,
@@ -255,7 +253,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("re-adding a changed local source replaces its unused Skill Version", () =>
+it.effect("re-adding a changed local source adds a Skill Version and uses it", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-update-" });
@@ -278,13 +276,12 @@ it.effect("re-adding a changed local source replaces its unused Skill Version", 
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
-    // Nothing installs the first Version, so only the current one is kept.
-    assert.strictEqual(after.skills[0]?.versions.length, 1);
+    assert.strictEqual(after.skills[0]?.versions.length, 2);
     assert.strictEqual(
       currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
-      after.skills[0]?.versions[0]?.skill_version_id,
+      after.skills[0]?.versions[1]?.skill_version_id,
     );
-    assert.strictEqual(after.retained_copies.length, 1);
+    assert.strictEqual(after.retained_copies.length, 2);
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -377,11 +374,11 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
     yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
     const repeated = yield* load;
 
-    // The new commit is recorded; the superseded Acquisition backs nothing and is pruned.
+    // The new commit is recorded as its own Acquisition of the same bytes.
     assert.strictEqual(recorded.retained_copies.length, 1);
     assert.deepStrictEqual(
       recorded.acquisitions.map((acquisition) => acquisition.revision),
-      ["b".repeat(40)],
+      ["a".repeat(40), "b".repeat(40)],
     );
     assert.deepStrictEqual(repeated.acquisitions, recorded.acquisitions);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

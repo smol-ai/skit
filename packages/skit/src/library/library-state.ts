@@ -11,7 +11,6 @@ import {
   RetainedCopy,
   Skill,
   librarySnapshotDigests,
-  pruneLibraryHistory,
 } from "./library-contracts.js";
 import {
   Digest,
@@ -145,24 +144,6 @@ export const libraryManifestFromLocalStateEffect = Effect.fn(
     }),
   );
 });
-
-/** Prune history against what this device's Bindings and Projections still use. */
-export const pruneLibraryState = (state: LibraryState): LibraryState => {
-  const pruned = pruneLibraryHistory(state, {
-    boundSkillIds: new Set(
-      [...state.global_bindings, ...state.local_bindings].flatMap((binding) =>
-        binding.entries.flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
-      ),
-    ),
-    projectedVersions: state.projections,
-  });
-  return {
-    ...pruned,
-    skills: [...pruned.skills],
-    acquisitions: [...pruned.acquisitions],
-    retained_copies: [...pruned.retained_copies],
-  };
-};
 
 export const collectionSkills = (state: Pick<LibraryState, "skills">, collection: Collection) =>
   state.skills.filter((skill) => skill.collection_id === collection.collection_id);
