@@ -20,6 +20,7 @@ import {
 } from "effect";
 import { Prompt } from "effect/unstable/cli";
 import { terminalColors } from "./terminal-style.js";
+import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
 
 export interface Choice<Value> {
   value: Value;
@@ -29,6 +30,10 @@ export interface Choice<Value> {
   detail?: string;
   group?: string;
   selected?: boolean;
+  /** Opt in to an explicit removal action, toggled with Ctrl+R. */
+  removeValue?: Value;
+  /** Read only when content preview is opened for this choice. */
+  preview?: () => Effect.Effect<string>;
 }
 
 /** The person answering went back with Escape or interrupted the prompt with Ctrl+C/Ctrl+D. */
@@ -85,6 +90,9 @@ const filterableMultiSelect = <Value extends string>(
     query: "",
     cursor: 0,
     selected: initialSelected,
+    removed: new Set<number>(),
+    preview: false,
+    previewOffset: 0,
   };
   const visibleChoices = (state: typeof initial): number[] => {
     const query = state.query.toLocaleLowerCase();
@@ -97,17 +105,14 @@ const filterableMultiSelect = <Value extends string>(
         : [],
     );
   };
-  const renderedLines = (state: typeof initial): string[] => {
+  const renderedLines = (state: typeof initial, maxItems = AUTOCOMPLETE_MAX_ITEMS): string[] => {
     const visible = visibleChoices(state);
     const cursor = Math.min(state.cursor, Math.max(visible.length - 1, 0));
     const start = Math.max(
       0,
-      Math.min(
-        cursor - Math.floor(AUTOCOMPLETE_MAX_ITEMS / 2),
-        visible.length - AUTOCOMPLETE_MAX_ITEMS,
-      ),
+      Math.min(cursor - Math.floor(maxItems / 2), visible.length - maxItems),
     );
-    const page = visible.slice(start, start + AUTOCOMPLETE_MAX_ITEMS);
+    const page = visible.slice(start, start + maxItems);
     const pageLineCount = () =>
       page.length +
       (items[visible[cursor]]?.detail ? 1 : 0) +
@@ -115,15 +120,23 @@ const filterableMultiSelect = <Value extends string>(
         const group = items[itemIndex].group;
         return group !== undefined && (index === 0 || group !== items[page[index - 1]].group);
       }).length;
-    while (pageLineCount() > AUTOCOMPLETE_MAX_ITEMS) {
+    while (pageLineCount() > maxItems && page.length > 1) {
       if (page.at(-1) === visible[cursor]) page.shift();
       else page.pop();
     }
     const filter = state.query.length === 0 ? "type to filter" : `filter: ${state.query}`;
     const color = terminalColors();
     const lines = [
-      `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}  (Space toggle, Ctrl+A all/none)`)}`,
+      `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}  (Space toggle, Ctrl+A all/none${items.some((item) => item.removeValue !== undefined) ? ", Ctrl+R remove/undo" : ""}${items.some((item) => item.preview !== undefined) ? ", Ctrl+P preview" : ""})`)}`,
     ];
+    if (items.some((item) => item.preview !== undefined)) {
+      lines[0] = `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}`)}`;
+      lines.push(
+        color.dim(
+          `Ctrl+P preview${items.some((item) => item.removeValue !== undefined) ? " · Ctrl+R remove/undo" : ""} · Space toggle · Ctrl+A all/none`,
+        ),
+      );
+    }
     if (page.length === 0) lines.push("  No matches");
     let previousGroup: string | undefined;
     for (const itemIndex of page) {
@@ -133,37 +146,122 @@ const filterableMultiSelect = <Value extends string>(
       previousGroup = item.group;
       const highlighted = visible[cursor] === itemIndex;
       const active = highlighted ? color.cyan("❯") : " ";
-      const checked = state.selected.has(itemIndex) ? color.green("☒") : color.dim("☐");
+      const removed = state.removed.has(itemIndex);
+      const checked = removed
+        ? color.red("✕")
+        : state.selected.has(itemIndex)
+          ? color.green("☒")
+          : color.dim("☐");
       const label = highlighted ? color.bold(item.label) : item.label;
       const indent = item.group === undefined ? "" : "    ";
       lines.push(
-        `${indent}${active} ${checked} ${label}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
+        `${indent}${active} ${checked} ${label}${removed ? color.red("  · Remove") : ""}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
       );
       if (highlighted && item.detail) lines.push(`${indent}    ${color.dim(item.detail)}`);
     }
     return lines;
   };
+  const previews = new Map<number, string>();
+  let renderedCount = 1;
+  let previewPageSize = 10;
+  let previewOffset = 0;
   return Prompt.custom(initial, {
     render: (state, action) => {
       if (action._tag === "Beep") return Effect.succeed("\u0007");
       if (action._tag === "Submit") {
         const selected = [...state.selected].sort((left, right) => left - right);
         return Effect.succeed(
-          `${terminalColors().green("✔")} ${message} … ${selected.map((index) => items[index].label).join(", ")}\n`,
+          `${terminalColors().green("✔")} ${message} … ${[...selected.map((index) => items[index].label), ...[...state.removed].map((index) => `Remove: ${items[index].label}`)].join(", ")}\n`,
         );
       }
-      return Effect.succeed(`\u001b[?25l${renderedLines(state).join("\n")}`);
+      return Effect.gen(function* () {
+        const terminal = yield* Terminal.Terminal;
+        const columns = yield* terminal.columns;
+        const rows = yield* terminal.rows;
+        let lines: string[];
+        if (state.preview) {
+          const visible = visibleChoices(state);
+          const index = visible[Math.min(state.cursor, Math.max(0, visible.length - 1))];
+          const item = items[index];
+          let content = "No content preview available.";
+          if (item?.preview) {
+            if (!previews.has(index)) previews.set(index, yield* item.preview());
+            content = previews.get(index)!;
+          }
+          const height = Math.max(6, Math.min(22, (rows || 24) - 2));
+          const pickerHeight =
+            columns >= 110 ? height : Math.max(2, Math.floor((height - 1) * 0.4));
+          const frame = renderSkillPreview({
+            picker: renderedLines(state, Math.max(1, pickerHeight - 2)),
+            title: item?.label ?? "No matches",
+            content,
+            columns,
+            rows,
+            offset: state.previewOffset,
+          });
+          lines = frame.lines;
+          previewOffset = frame.offset;
+          previewPageSize = frame.pageSize;
+        } else {
+          lines = renderedLines(
+            state,
+            Math.max(1, Math.min(AUTOCOMPLETE_MAX_ITEMS, (rows || 24) - 3)),
+          );
+          if (columns > 0) lines = lines.map((line) => fitTerminalLine(line, columns));
+        }
+        renderedCount = lines.length;
+        return `\u001b[?25l${lines.join("\n")}`;
+      });
     },
     process: (input, state) => {
       const visible = visibleChoices(state);
       const cursor = Math.min(state.cursor, Math.max(visible.length - 1, 0));
-      const next = (state: typeof initial) => Effect.succeed(PromptAction.NextFrame({ state }));
-      if (input.key.ctrl && input.key.name === "u") return next({ ...state, query: "", cursor: 0 });
-      if (input.key.ctrl && input.key.name === "a") {
-        const allSelected = items.every((_, index) => state.selected.has(index));
+      const next = (updated: typeof initial) =>
+        Effect.succeed(
+          PromptAction.NextFrame({
+            state: {
+              ...updated,
+              previewOffset:
+                updated.cursor !== state.cursor || updated.query !== state.query
+                  ? 0
+                  : updated.previewOffset,
+            },
+          }),
+        );
+      if (input.key.ctrl && input.key.name === "p")
+        return items.some((item) => item.preview)
+          ? next({ ...state, preview: !state.preview, previewOffset: 0 })
+          : Effect.succeed(PromptAction.Beep());
+      if (state.preview && (input.key.name === "pageup" || input.key.name === "pagedown"))
         return next({
           ...state,
-          selected: allSelected ? new Set<number>() : new Set(items.map((_, index) => index)),
+          previewOffset: Math.max(
+            0,
+            previewOffset + (input.key.name === "pageup" ? -previewPageSize : previewPageSize),
+          ),
+        });
+      if (input.key.ctrl && input.key.name === "r") {
+        const index = visible[cursor];
+        if (index === undefined || items[index].removeValue === undefined)
+          return Effect.succeed(PromptAction.Beep());
+        const removed = new Set(state.removed);
+        const selected = new Set(state.selected);
+        if (removed.has(index)) removed.delete(index);
+        else {
+          removed.add(index);
+          selected.delete(index);
+        }
+        return next({ ...state, selected, removed });
+      }
+      if (input.key.ctrl && input.key.name === "u") return next({ ...state, query: "", cursor: 0 });
+      if (input.key.ctrl && input.key.name === "a") {
+        const eligible = items
+          .map((_, index) => index)
+          .filter((index) => !state.removed.has(index));
+        const allSelected = eligible.every((index) => state.selected.has(index));
+        return next({
+          ...state,
+          selected: allSelected ? new Set<number>() : new Set(eligible),
         });
       }
       switch (input.key.name) {
@@ -185,7 +283,9 @@ const filterableMultiSelect = <Value extends string>(
           const itemIndex = visible[cursor];
           if (selected.has(itemIndex)) selected.delete(itemIndex);
           else selected.add(itemIndex);
-          return next({ ...state, selected });
+          const removed = new Set(state.removed);
+          removed.delete(itemIndex);
+          return next({ ...state, selected, removed });
         }
         case "backspace": {
           if (state.query.length === 0) return Effect.succeed(PromptAction.Beep());
@@ -199,9 +299,11 @@ const filterableMultiSelect = <Value extends string>(
         case "return":
           return Effect.succeed(
             PromptAction.Submit({
-              value: [...state.selected]
+              value: [...state.selected, ...state.removed]
                 .sort((left, right) => left - right)
-                .map((index) => items[index].value),
+                .map((index) =>
+                  state.removed.has(index) ? items[index].removeValue! : items[index].value,
+                ),
             }),
           );
         default: {
@@ -212,7 +314,7 @@ const filterableMultiSelect = <Value extends string>(
         }
       }
     },
-    clear: (state) => Effect.succeed(eraseRenderedLines(renderedLines(state).length)),
+    clear: () => Effect.succeed(eraseRenderedLines(renderedCount)),
   });
 };
 

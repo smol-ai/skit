@@ -79,6 +79,12 @@ it.effect("adds selected skills and takes custody only of eligible global copies
         .map((choice) => choice.value),
     );
     expect(yield* interaction.remaining).toBe(0);
+    const preview = prompts[1]?.choices.find((choice) => choice.value === "review")?.preview;
+    expect(preview).toBeDefined();
+    expect(yield* preview!()).toContain(`${join(managedSkill, "SKILL.md")}\n\n${managedText}`);
+    yield* fs.remove(join(managedSkill, "SKILL.md"));
+    expect(yield* preview!()).toContain("Content unavailable");
+    yield* fs.writeFileString(join(managedSkill, "SKILL.md"), managedText);
 
     const state = yield* home.durable;
     expect(state.global_bindings).toHaveLength(1);

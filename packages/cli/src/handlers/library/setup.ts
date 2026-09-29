@@ -1,8 +1,8 @@
 import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
-import { Effect, Option } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { homedir } from "node:os";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -492,13 +492,29 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
   );
   if (!candidates.length) return [];
   const prompter = yield* Prompter;
+  const fs = yield* FileSystem.FileSystem;
   const choices = yield* Effect.forEach(setupInstalledSkillChoices(candidates), (choice) =>
     Effect.gen(function* () {
       const candidate = candidates.find(
         (item) => setupChoiceValue(item, candidates) === choice.value,
       )!;
       const modified = yield* setupSkillModificationHint(candidate.paths);
-      return { ...choice, hint: modified, detail: choice.hint };
+      const path = join(candidate.paths[0], "SKILL.md");
+      return {
+        ...choice,
+        hint: modified,
+        detail: choice.hint,
+        preview: () =>
+          fs.readFileString(path).pipe(
+            Effect.map(
+              (content) =>
+                `${path}\n\n${content.length > 65_536 ? `${content.slice(0, 65_536)}\n\n[Preview truncated at 65,536 characters]` : content}`,
+            ),
+            Effect.orElseSucceed(
+              () => `${path}\n\nContent unavailable: the file could not be read.`,
+            ),
+          ),
+      };
     }),
   );
   const selectedValues = yield* prompter

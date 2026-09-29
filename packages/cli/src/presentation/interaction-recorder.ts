@@ -123,10 +123,19 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
           });
         if (!Array.isArray(answer))
           return yield* Effect.die(new Error(`Prompt "${message}" requires several choices`));
-        const selected = answer.map((value) => choices.find((choice) => choice.value === value));
-        if (selected.some((item) => item === undefined))
+        if (
+          answer.some(
+            (value) =>
+              !choices.some((choice) => choice.value === value || choice.removeValue === value),
+          )
+        )
           return yield* Effect.die(new Error(`Prompt "${message}" received an unavailable choice`));
-        return selected.flatMap((item) => (item === undefined ? [] : [item.value]));
+        return answer.map((value) => {
+          const choice = choices.find(
+            (item) => item.value === value || item.removeValue === value,
+          )!;
+          return choice.value === value ? choice.value : choice.removeValue!;
+        });
       }),
     confirm: (message) =>
       Effect.gen(function* () {

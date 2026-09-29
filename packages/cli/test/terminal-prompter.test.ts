@@ -17,6 +17,10 @@ type Key =
   | "space"
   | "escape"
   | "ctrl+a"
+  | "ctrl+r"
+  | "ctrl+p"
+  | "pageup"
+  | "pagedown"
   | "a"
   | "c"
   | "o"
@@ -25,8 +29,8 @@ type Key =
   | "x";
 
 const press = (key: Key): Terminal.UserInput => {
-  const ctrl = key === "ctrl+a";
-  const name = ctrl ? "a" : key;
+  const ctrl = key.startsWith("ctrl+");
+  const name = ctrl ? key.slice(5) : key;
   return {
     input: ctrl ? Option.none() : Option.some(name),
     key: { name, ctrl, meta: false, shift: false },
@@ -85,6 +89,78 @@ afterEach(() => {
 });
 
 describe("the terminal prompter", () => {
+  const removable = [
+    { value: "keep", label: "Keep", selected: true, removeValue: "remove-keep" },
+    { value: "other", label: "Other", removeValue: "remove-other" },
+  ];
+  it.effect("marks removal explicitly and bulk selection preserves it", () =>
+    Effect.gen(function* () {
+      const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
+      expect(chosen).toEqual(["remove-keep", "other"]);
+      expect(stderr.mock.calls.map(([frame]) => String(frame)).join("\n")).toContain(
+        "✕ Keep  · Remove",
+      );
+    }).pipe(Effect.provide(promptedWith(["ctrl+r", "ctrl+a", "enter"]))),
+  );
+  it.effect("can undo removal or change it back to selection", () =>
+    Effect.gen(function* () {
+      const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
+      expect(chosen).toEqual(["keep"]);
+    }).pipe(Effect.provide(promptedWith(["ctrl+r", "ctrl+r", "space", "enter"]))),
+  );
+  it.effect("Space changes a removal mark back to selection", () =>
+    Effect.gen(function* () {
+      const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
+      expect(chosen).toEqual(["keep"]);
+    }).pipe(Effect.provide(promptedWith(["ctrl+r", "space", "enter"]))),
+  );
+  it.effect("ordinary pickers do not accept removal actions", () =>
+    Effect.gen(function* () {
+      const chosen = yield* (yield* Prompter).multiselect("Pick harnesses", harnesses);
+      expect(chosen).toEqual([]);
+    }).pipe(Effect.provide(promptedWith(["ctrl+r", "enter"]))),
+  );
+  it.effect("loads content lazily and caches it while preserving selection", () =>
+    Effect.gen(function* () {
+      const load = vi.fn(() => Effect.succeed("# Review code\nRead carefully."));
+      const other = vi.fn(() => Effect.succeed("# Lint code"));
+      const chosen = yield* (yield* Prompter).multiselect("Pick skills", [
+        { value: "review", label: "Review", selected: true, preview: load },
+        { value: "lint", label: "Lint", preview: other },
+      ]);
+      expect(chosen).toEqual(["review"]);
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+      expect(frames).toContain("# Review code");
+      expect(frames).toContain("# Lint code");
+      expect(frames).toContain("Ctrl+P preview");
+    }).pipe(
+      Effect.provide(promptedWith(["ctrl+p", "ctrl+p", "ctrl+p", "down", "ctrl+p", "enter"])),
+    ),
+  );
+  it.effect("does not read preview content when the pane stays closed", () =>
+    Effect.gen(function* () {
+      const load = vi.fn(() => Effect.succeed("Secret fixture content"));
+      yield* (yield* Prompter).multiselect("Pick skills", [
+        { value: "review", label: "Review", preview: load },
+      ]);
+      expect(load).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(promptedWith(["enter"]))),
+  );
+  it.effect("scrolls preview pages without changing the highlighted choice", () =>
+    Effect.gen(function* () {
+      const load = () =>
+        Effect.succeed(Array.from({ length: 60 }, (_, index) => `Line ${index + 1}`).join("\n"));
+      const chosen = yield* (yield* Prompter).multiselect("Pick skills", [
+        { value: "review", label: "Review", selected: true, preview: load },
+      ]);
+      expect(chosen).toEqual(["review"]);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+      expect(frames).toContain("Line 15");
+      expect(frames).toContain("Lines 1–");
+    }).pipe(Effect.provide(promptedWith(["ctrl+p", "pagedown", "pageup", "enter"]))),
+  );
   it.effect("colors grouped choices and nests context beneath only the highlighted skill", () =>
     Effect.gen(function* () {
       vi.stubEnv("FORCE_COLOR", "1");
