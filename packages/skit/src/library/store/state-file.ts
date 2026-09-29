@@ -65,10 +65,13 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
   if (version.schemaVersion > CURRENT_LIBRARY_STATE_VERSION)
     return yield* new InvalidLibraryState({
       path,
-      detail: "Library state was written by a newer SKIT",
+      detail: `Library state schema v${version.schemaVersion} was written by a newer SKIT; this CLI supports v4–v${CURRENT_LIBRARY_STATE_VERSION}`,
     });
   if (version.schemaVersion !== 4 && version.schemaVersion !== 5)
-    return yield* new InvalidLibraryState({ path, detail: "unsupported Library state schema" });
+    return yield* new InvalidLibraryState({
+      path,
+      detail: `unsupported Library state schema v${version.schemaVersion}; this CLI supports v4–v${CURRENT_LIBRARY_STATE_VERSION}`,
+    });
   return yield* withLibraryWriterLock(
     home,
     Effect.gen(function* () {
