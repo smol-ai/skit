@@ -1,20 +1,29 @@
 import { Schema } from "effect";
 import { HarnessName } from "@smolai/skit-core";
 
-const SyncChange = Schema.Struct({
-  kind: Schema.Literals(["collection", "skill", "binding"]),
-  action: Schema.Literals(["add", "update", "remove"]),
-  subject_id: Schema.optionalKey(Schema.String),
-  label: Schema.optionalKey(Schema.String),
-  label_before: Schema.optionalKey(Schema.String),
-  label_after: Schema.optionalKey(Schema.String),
-  harness: Schema.optionalKey(HarnessName),
-  skills_before: Schema.Array(Schema.String),
-  skills_after: Schema.Array(Schema.String),
-  versions_before: Schema.Array(Schema.String),
-  versions_after: Schema.Array(Schema.String),
-  evidence_changed: Schema.Boolean,
-});
+const SyncChange = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("collection"),
+    action: Schema.Literals(["add", "update", "remove"]),
+    subject_id: Schema.String,
+    label: Schema.String,
+    label_before: Schema.optionalKey(Schema.String),
+    label_after: Schema.optionalKey(Schema.String),
+    skills_added: Schema.Array(Schema.String),
+    skills_removed: Schema.Array(Schema.String),
+    skills_changed: Schema.Array(Schema.String),
+    /** Only fetch records or retained evidence differ; no Skill changes. */
+    evidence_only: Schema.Boolean,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("binding"),
+    action: Schema.Literals(["add", "update", "remove"]),
+    harness: HarnessName,
+    /** Enabled entries as labels: a whole Collection or a Skill name. */
+    entries_before: Schema.Array(Schema.String),
+    entries_after: Schema.Array(Schema.String),
+  }),
+]);
 
 const SyncPlan = Schema.Struct({
   local: Schema.Array(SyncChange),

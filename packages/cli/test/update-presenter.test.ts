@@ -112,3 +112,69 @@ it("lists whole-Collection and individual enables distinctly", () => {
   );
   assert.match(output ?? "", /\ncodex: tim\/skills \(whole Collection\), effect$/);
 });
+
+it("summarises a sync plan by Skill names and folds fetch-record-only Collections", () => {
+  const collection = (
+    label: string,
+    fields: {
+      readonly skills_added?: readonly string[];
+      readonly skills_changed?: readonly string[];
+      readonly evidence_only?: boolean;
+    },
+  ) => ({
+    kind: "collection",
+    action: "update",
+    subject_id: makeCollectionId(),
+    label,
+    skills_added: [],
+    skills_removed: [],
+    skills_changed: [],
+    evidence_only: false,
+    ...fields,
+  });
+  const output = renderContract(
+    "skit.library.sync.v5",
+    {
+      status: "merge_ready",
+      plan: {
+        local: [],
+        remote: [
+          collection("asmartbear/asb-skills", {
+            skills_added: Array.from({ length: 21 }, (_, index) => `asb-${index}`),
+          }),
+          collection("humanlayer/skills", { skills_changed: ["show-me"] }),
+          collection("kitlangton/skills", { evidence_only: true }),
+          collection("tim/skills", { evidence_only: true }),
+          {
+            kind: "binding",
+            action: "add",
+            harness: "devin",
+            entries_before: [],
+            entries_after: ["tim/skills (whole Collection)"],
+          },
+        ],
+      },
+    },
+    context,
+  );
+  assert.strictEqual(
+    output?.split("\n\nReady to reconcile")[0],
+    [
+      "Library sync plan",
+      "",
+      "This device",
+      "  No changes.",
+      "",
+      "Remote Library",
+      "  ~ asmartbear/asb-skills",
+      "      + 21 Skills",
+      "  ~ humanlayer/skills",
+      "      ~ show-me",
+      "  + Devin (global): tim/skills (whole Collection)",
+      "  2 Collections have newer fetch records only: kitlangton/skills, tim/skills",
+      "",
+      "Plan: 1 to add, 2 to update.",
+      "Local files and custody are checked during application.",
+    ].join("\n"),
+  );
+});

@@ -2068,7 +2068,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v4"
+        "skit.library.sync.v5"
       ],
       "exitCodes": [
         0,

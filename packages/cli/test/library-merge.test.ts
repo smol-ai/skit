@@ -195,21 +195,17 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         label: "fixture/skills",
         label_before: "fixture/skills",
         label_after: "fixture/skills",
-        skills_before: ["review"],
-        skills_after: ["review"],
-        versions_before: [`review @ ${digest}`],
-        versions_after: [`review @ ${digestB}`],
-        evidence_changed: false,
+        skills_added: [],
+        skills_removed: [],
+        skills_changed: ["review"],
+        evidence_only: false,
       },
       {
         kind: "binding",
         action: "add",
         harness: "codex",
-        skills_before: [],
-        skills_after: ["review"],
-        versions_before: [],
-        versions_after: [],
-        evidence_changed: false,
+        entries_before: [],
+        entries_after: ["review"],
       },
     ]);
   }),
@@ -237,5 +233,32 @@ it.effect("names every deferred Binding and its affected Skills", () =>
       ),
       [{ harness: "claude-code", skills: ["review"] }],
     );
+  }),
+);
+
+it.effect("marks a Collection whose only difference is fetch records as evidence-only", () =>
+  Effect.gen(function* () {
+    const remote = yield* decode(manifest());
+    const refetched = manifest();
+    const desired = yield* decode({
+      ...refetched,
+      acquisitions: refetched.acquisitions.map((acquisition, index) =>
+        index === 0 ? { ...acquisition, acquired_at: "2026-02-01T00:00:00.000Z" } : acquisition,
+      ),
+    });
+    assert.deepEqual(planLibrarySync(desired, remote, desired).remote, [
+      {
+        kind: "collection",
+        action: "update",
+        subject_id: collectionId,
+        label: "fixture/skills",
+        label_before: "fixture/skills",
+        label_after: "fixture/skills",
+        skills_added: [],
+        skills_removed: [],
+        skills_changed: [],
+        evidence_only: true,
+      },
+    ]);
   }),
 );

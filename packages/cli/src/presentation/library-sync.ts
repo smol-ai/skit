@@ -1,14 +1,18 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 import { harnessLabel } from "../harness/catalog.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v4">;
+type SyncData = ContractDataForId<"skit.library.sync.v5">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
-const skillChange = (before: readonly string[], after: readonly string[]): string => {
-  const previous = before.join(", ") || "none";
-  const desired = after.join(", ") || "none";
-  return previous === desired ? previous : `${previous} → ${desired}`;
-};
+/** Name a few Skills; past that, count them so a large Collection stays readable. */
+const skillLine = (marker: string, names: readonly string[]) =>
+  names.length === 0
+    ? []
+    : [
+        names.length <= 5
+          ? `      ${marker} ${names.join(", ")}`
+          : `      ${marker} ${names.length} Skills`,
+      ];
 
 export function renderLibrarySyncPlan(plan: SyncPlan): string {
   const lines = ["Library sync plan"];
@@ -17,39 +21,62 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
     ["Remote Library", plan.remote],
   ] as const) {
     lines.push("", title);
-    if (changes.length === 0) {
-      lines.push("  No changes.");
-      continue;
-    }
+    const evidenceOnly: string[] = [];
+    let shown = 0;
     for (const change of changes) {
       const marker = { add: "+", update: "~", remove: "-" }[change.action];
-      if (change.kind === "collection" || change.kind === "skill") {
+      if (change.kind === "collection") {
+        if (change.evidence_only) {
+          evidenceOnly.push(change.label);
+          continue;
+        }
+        shown++;
         const identity =
           change.label_before && change.label_after && change.label_before !== change.label_after
             ? `${change.label_before} → ${change.label_after}`
             : change.label;
-        lines.push(
-          `  ${marker} ${change.action} ${change.kind === "collection" ? "Collection" : "Skill"} ${identity}`,
-        );
-        lines.push(`    Skills: ${skillChange(change.skills_before, change.skills_after)}`);
-        if (change.versions_before.join("\0") !== change.versions_after.join("\0"))
-          lines.push(`    Versions: ${skillChange(change.versions_before, change.versions_after)}`);
-        if (change.evidence_changed)
-          lines.push("    Retention or acquisition evidence will be updated.");
+        lines.push(`  ${marker} ${identity}`);
+        if (change.action === "update")
+          lines.push(
+            ...skillLine("+", change.skills_added),
+            ...skillLine("~", change.skills_changed),
+            ...skillLine("-", change.skills_removed),
+          );
+        else if (change.action === "add")
+          lines.push(
+            `      ${change.skills_added.length} Skill${change.skills_added.length === 1 ? "" : "s"}`,
+          );
       } else {
+        shown++;
+        const entries =
+          change.action === "remove"
+            ? change.entries_before
+            : change.action === "add"
+              ? change.entries_after
+              : undefined;
         lines.push(
-          `  ${marker} ${change.action} Binding → ${change.harness ? harnessLabel(change.harness) : "unknown harness"} (global)`,
+          `  ${marker} ${harnessLabel(change.harness)} (global): ${
+            entries === undefined
+              ? `${change.entries_before.join(", ") || "none"} → ${change.entries_after.join(", ") || "none"}`
+              : entries.join(", ") || "none"
+          }`,
         );
-        lines.push(`    Skills: ${skillChange(change.skills_before, change.skills_after)}`);
       }
     }
+    if (evidenceOnly.length)
+      lines.push(
+        `  ${evidenceOnly.length} Collection${evidenceOnly.length === 1 ? " has" : "s have"} newer fetch records only: ${evidenceOnly.join(", ")}`,
+      );
+    else if (shown === 0) lines.push("  No changes.");
   }
-  const changes = [...plan.local, ...plan.remote];
+  const changes = [...plan.local, ...plan.remote].filter(
+    (change) => change.kind !== "collection" || !change.evidence_only,
+  );
   const summary = (["add", "update", "remove"] as const).flatMap((action) => {
     const count = changes.filter((change) => change.action === action).length;
     return count === 0 ? [] : [`${count} to ${action}`];
   });
-  lines.push("", `Plan: ${summary.join(", ") || "no Library changes"}.`);
+  lines.push("", `Plan: ${summary.join(", ") || "no Skill or Binding changes"}.`);
   lines.push("Local files and custody are checked during application.");
   return lines.join("\n");
 }

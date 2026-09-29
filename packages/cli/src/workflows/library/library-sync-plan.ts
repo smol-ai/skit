@@ -1,25 +1,26 @@
-import {
-  bindingSkillIds,
-  canonicalJson,
-  currentSkillVersion,
-  type LibraryManifest,
-} from "@smolai/skit-core";
+import { canonicalJson, currentSkillVersion, type LibraryManifest } from "@smolai/skit-core";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
-export interface SyncChange {
-  readonly kind: "collection" | "skill" | "binding";
-  readonly action: "add" | "update" | "remove";
-  readonly subject_id?: string;
-  readonly label?: string;
-  readonly label_before?: string;
-  readonly label_after?: string;
-  readonly harness?: LibraryManifest["bindings"][number]["harness"];
-  readonly skills_before: readonly string[];
-  readonly skills_after: readonly string[];
-  readonly versions_before: readonly string[];
-  readonly versions_after: readonly string[];
-  readonly evidence_changed: boolean;
-}
+export type SyncChange =
+  | {
+      readonly kind: "collection";
+      readonly action: "add" | "update" | "remove";
+      readonly subject_id: string;
+      readonly label: string;
+      readonly label_before?: string;
+      readonly label_after?: string;
+      readonly skills_added: readonly string[];
+      readonly skills_removed: readonly string[];
+      readonly skills_changed: readonly string[];
+      readonly evidence_only: boolean;
+    }
+  | {
+      readonly kind: "binding";
+      readonly action: "add" | "update" | "remove";
+      readonly harness: LibraryManifest["bindings"][number]["harness"];
+      readonly entries_before: readonly string[];
+      readonly entries_after: readonly string[];
+    };
 
 export interface SyncPlan {
   readonly local: readonly SyncChange[];
@@ -29,24 +30,13 @@ export interface SyncPlan {
 const action = (before: unknown, after: unknown): SyncChange["action"] =>
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 
-const collectionName = (manifest: LibraryManifest, collectionId: string): string =>
-  manifest.collections.find((collection) => collection.collection_id === collectionId)?.label ??
-  collectionId;
-
-const collectionSkills = (manifest: LibraryManifest, collectionId: string): readonly string[] =>
-  manifest.skills
-    .filter((skill) => skill.collection_id === collectionId)
-    .map((skill) => skill.name)
-    .sort();
-
-const collectionVersions = (manifest: LibraryManifest, collectionId: string): readonly string[] =>
-  manifest.skills
-    .filter((skill) => skill.collection_id === collectionId)
-    .flatMap((skill) => {
-      const version = currentSkillVersion(manifest, skill);
-      return version === undefined ? [] : [`${skill.name} @ ${version.source_digest}`];
-    })
-    .sort();
+/** Each Skill of a Collection by name, with the source digest of its current Version. */
+const collectionSkills = (manifest: LibraryManifest, collectionId: string) =>
+  new Map(
+    manifest.skills
+      .filter((skill) => skill.collection_id === collectionId)
+      .map((skill) => [skill.name, currentSkillVersion(manifest, skill)?.source_digest]),
+  );
 
 const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
   const skills = manifest.skills.filter((skill) => skill.collection_id === collectionId);
@@ -61,6 +51,21 @@ const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
     ),
   };
 };
+
+/** A Binding's entries as labels: a whole Collection or a Skill name. */
+const entryLabels = (
+  manifest: LibraryManifest,
+  binding: LibraryManifest["bindings"][number] | undefined,
+): readonly string[] =>
+  (binding?.entries ?? []).map((entry) =>
+    entry.kind === "collection"
+      ? `${
+          manifest.collections.find((item) => item.collection_id === entry.collection_id)?.label ??
+          entry.collection_id
+        } (whole Collection)`
+      : (manifest.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
+        entry.skill_id),
+  );
 
 const changes = (before: LibraryManifest, after: LibraryManifest): readonly SyncChange[] => {
   const collectionIds = [
@@ -81,63 +86,46 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       return [];
     const skillsBefore = collectionSkills(before, collectionId);
     const skillsAfter = collectionSkills(after, collectionId);
-    const versionsBefore = collectionVersions(before, collectionId);
-    const versionsAfter = collectionVersions(after, collectionId);
+    const skills_added = [...skillsAfter.keys()].filter((name) => !skillsBefore.has(name)).sort();
+    const skills_removed = [...skillsBefore.keys()].filter((name) => !skillsAfter.has(name)).sort();
+    const skills_changed = [...skillsAfter.entries()]
+      .filter(([name, digest]) => skillsBefore.has(name) && skillsBefore.get(name) !== digest)
+      .map(([name]) => name)
+      .sort();
     return [
       {
         kind: "collection",
         action: action(previous, desired),
         subject_id: collectionId,
-        label: desired?.label ?? previous?.label ?? collectionName(after, collectionId),
+        label: desired?.label ?? previous?.label ?? collectionId,
         ...(previous === undefined ? {} : { label_before: previous.label }),
         ...(desired === undefined ? {} : { label_after: desired.label }),
-        skills_before: skillsBefore,
-        skills_after: skillsAfter,
-        versions_before: versionsBefore,
-        versions_after: versionsAfter,
-        evidence_changed:
+        skills_added,
+        skills_removed,
+        skills_changed,
+        evidence_only:
           previous !== undefined &&
           desired !== undefined &&
           previous.label === desired.label &&
-          canonicalJson(skillsBefore) === canonicalJson(skillsAfter) &&
-          canonicalJson(versionsBefore) === canonicalJson(versionsAfter),
+          skills_added.length + skills_removed.length + skills_changed.length === 0,
       },
     ];
   });
-  const key = (binding: LibraryManifest["bindings"][number]) => binding.harness;
-  const previousBindings = new Map(before.bindings.map((binding) => [key(binding), binding]));
-  const desiredBindings = new Map(after.bindings.map((binding) => [key(binding), binding]));
+  const previousBindings = new Map(before.bindings.map((binding) => [binding.harness, binding]));
+  const desiredBindings = new Map(after.bindings.map((binding) => [binding.harness, binding]));
   const bindingChanges = [...new Set([...previousBindings.keys(), ...desiredBindings.keys()])]
     .sort()
-    .flatMap((bindingKey): SyncChange[] => {
-      const previous = previousBindings.get(bindingKey);
-      const desired = desiredBindings.get(bindingKey);
+    .flatMap((harness): SyncChange[] => {
+      const previous = previousBindings.get(harness);
+      const desired = desiredBindings.get(harness);
       if (canonicalJson(previous ?? null) === canonicalJson(desired ?? null)) return [];
-      const binding = desired ?? previous;
-      if (binding === undefined) return [];
-      const names = (manifest: LibraryManifest, ids: readonly string[] | undefined) =>
-        (ids ?? [])
-          .flatMap((id) => {
-            const skill = manifest.skills.find((candidate) => candidate.skill_id === id);
-            return skill === undefined ? [] : [skill.name];
-          })
-          .sort();
       return [
         {
           kind: "binding",
           action: action(previous, desired),
-          harness: binding.harness,
-          skills_before: names(
-            before,
-            previous === undefined ? undefined : bindingSkillIds(before, previous),
-          ),
-          skills_after: names(
-            after,
-            desired === undefined ? undefined : bindingSkillIds(after, desired),
-          ),
-          versions_before: [],
-          versions_after: [],
-          evidence_changed: false,
+          harness,
+          entries_before: entryLabels(before, previous),
+          entries_after: entryLabels(after, desired),
         },
       ];
     });
