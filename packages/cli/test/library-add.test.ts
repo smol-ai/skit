@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -22,7 +22,14 @@ import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
+import {
+  archiveBytes,
+  boundSkit,
+  initializeLibraryMachine,
+  retainObservedIn,
+  writingTo,
+} from "./helpers/library-home.js";
+import { registryAuthAccessLayer } from "../src/registry/auth-service.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
 it.effect("previews without mutation, then retains exact root Skill bytes", () =>
@@ -346,14 +353,14 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       "---\nname: review\ndescription: Review\n---\nunchanged\n",
     );
     const observedHash = yield* deterministicTreeHashEffect(skill);
-    const retainAt = (sourceRevision: string, retainedAt: string) =>
+    const retainAt = (commit: string, retainedAt: string) =>
       Effect.scoped(
         writingTo(
           home,
           retainObservedIn(home)({
             source: { type: "github", owner: "acme", repository: "skills" },
             input: "https://github.com/acme/skills.git",
-            sourceRevision,
+            revision: { kind: "commit", commit },
             retainedAt,
             skills: [{ name: "review", sourcePath: skill, relativePath: "review", observedHash }],
             observations: [],
@@ -377,5 +384,51 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       ["b".repeat(40)],
     );
     assert.deepStrictEqual(repeated.acquisitions, recorded.acquisitions);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("records the Registry Release a Collection is added from, so sync can refetch it", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-registry-add-" });
+    const home = join(root, "home");
+    yield* initializeLibraryMachine(home);
+    const tools = yield* boundSkit(join(root, "tools"), "alice");
+    const bytes = yield* archiveBytes(tools, join(root, "tools.zip"));
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(new Uint8Array(bytes), {
+            headers: { "content-type": "application/zip", "skit-release-version": "1.2.3" },
+          }),
+        ),
+      ),
+    );
+    yield* addLibrarySourceEffect(
+      { type: "registry", namespace: "alice", slug: "tools" },
+      "1.2.3",
+    ).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(
+        registryAuthAccessLayer({
+          authState: Result.succeed({ source: "none" }),
+          origin: "https://registry.example",
+        }),
+      ),
+      Effect.provideService(HttpClient.HttpClient, client),
+    );
+    const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+    assert.deepStrictEqual(
+      state.acquisitions.map((acquisition) => acquisition.revision),
+      ["1.2.3"],
+    );
+    // A Release the Registry can serve again needs no snapshot of its own.
+    assert.deepStrictEqual(
+      (yield* libraryManifestFromLocalStateEffect(state)).snapshot_digests,
+      [],
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -6,7 +6,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
-import { SkitSource } from "../library/library-contracts.js";
+import { SkitSource, type SourceRevision } from "../library/library-contracts.js";
 import { Data } from "effect";
 import {
   ArchiveEntryLimitExceeded,
@@ -396,10 +396,8 @@ export interface ResolvedSkitSource {
   root: string;
   /** Unmodified acquired source tree, retained separately from normalization. */
   originalRoot: string;
-  /** Exact upstream revision where the source protocol exposes one. */
-  sourceRevision?: string;
-  /** Immutable Registry Release served by this acquisition, independent of tracking policy. */
-  releaseVersion?: string;
+  /** Exact upstream revision, independent of tracking policy, where the protocol names one. */
+  revision?: SourceRevision;
   descriptorKind: "declared" | "generated";
   missingAgentSkillPaths?: readonly string[];
   /** Directories observed in the verbatim tree; present only for a non-publishing acquisition. */
@@ -1235,14 +1233,15 @@ export function resolveSkitSourceEffect(
           options.verbatimOnly ?? false,
         );
         // Plain local directories have no upstream revision to pin.
-        const revision = yield* Effect.option(
-          commandOutputEffect("git", ["rev-parse", "HEAD"], start),
-        );
+        const head = yield* Effect.option(commandOutputEffect("git", ["rev-parse", "HEAD"], start));
         return {
           source,
           ...discovered,
           originalRoot: start,
-          sourceRevision: revision._tag === "Some" ? revision.value.trim() : undefined,
+          revision:
+            head._tag === "Some"
+              ? { kind: "commit" as const, commit: head.value.trim() }
+              : undefined,
         };
       }
       if (source.type === "git" || source.type === "github") {
@@ -1333,7 +1332,12 @@ export function resolveSkitSourceEffect(
             yield* copyLocalTreeEffect(join(root, directory), destination, undefined, true);
           }
         }
-        return { source, ...discovered, originalRoot, sourceRevision };
+        return {
+          source,
+          ...discovered,
+          originalRoot,
+          revision: { kind: "commit" as const, commit: sourceRevision },
+        };
       }
       if (source.type === "well-known")
         return yield* acquireDiscoveryEffect(source, workspace, options.verbatimOnly ?? false);
@@ -1385,10 +1389,10 @@ export function resolveSkitSourceEffect(
           response.status,
         );
       }
-      let releaseVersion: string | undefined;
+      let revision: SourceRevision | undefined;
       if (source.type === "registry") {
         const reportedVersion = response.headers["skit-release-version"]?.trim();
-        releaseVersion =
+        const releaseVersion =
           reportedVersion ?? (selectedVersion === "latest" ? undefined : selectedVersion);
         if (!releaseVersion || !Schema.is(semver)(releaseVersion))
           return yield* sourceVersionDisagreement(
@@ -1398,6 +1402,7 @@ export function resolveSkitSourceEffect(
           return yield* sourceVersionDisagreement(
             `Registry served Release ${releaseVersion} when ${selectedVersion} was requested.`,
           );
+        revision = { kind: "release", version: releaseVersion };
       }
       const contentLength = Number(response.headers["content-length"] ?? "0");
       if (contentLength > 256 * 1024 * 1024) {
@@ -1431,7 +1436,7 @@ export function resolveSkitSourceEffect(
         );
         return {
           source: acquiredSource,
-          releaseVersion,
+          revision,
           root,
           originalRoot: directory,
           descriptorKind: "generated" as const,
@@ -1484,7 +1489,7 @@ export function resolveSkitSourceEffect(
         undefined,
         options.verbatimOnly ?? false,
       );
-      return { source: acquiredSource, ...discovered, originalRoot: extracted, releaseVersion };
+      return { source: acquiredSource, ...discovered, originalRoot: extracted, revision };
     });
     return resolved;
   });

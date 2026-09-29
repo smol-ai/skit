@@ -47,7 +47,7 @@ const upstream = Effect.gen(function* () {
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
-            sourceRevision: String(refreshes).repeat(40),
+            revision: { kind: "commit", commit: String(refreshes).repeat(40) },
             retainedAt: `2026-09-16T0${refreshes}:00:00.000Z`,
             skills,
             observations: [],

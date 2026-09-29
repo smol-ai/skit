@@ -20,6 +20,7 @@ import {
   type MaterializationProfile,
   type SkitSource,
   sourceAcquisitions,
+  type SourceRevision,
   SourceIdentity,
   SourceTracking,
 } from "./library-contracts.js";
@@ -94,10 +95,8 @@ export interface ObservedImport {
   readonly input: string;
   readonly source: SkitSource;
   readonly declaration?: SourceDeclaration;
-  /** Exact Git commit the bytes came from, when the Source is Git. */
-  readonly sourceRevision?: string;
-  /** Immutable Registry Release the bytes came from, when the Source is a Registry. */
-  readonly releaseVersion?: string;
+  /** Exactly what the bytes came from, where the Source protocol names it. */
+  readonly revision?: SourceRevision;
   readonly retainedAt: string;
   readonly skills: readonly ObservedSkill[];
   readonly observations: readonly SkillsShProvenanceObservation[];
@@ -198,11 +197,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const source =
     request.sourceIdentity ??
     sourceIdentityFromSource(request.source, machineId, request.declaration);
+  // A local checkout's commit says nothing about where its bytes can be fetched again.
   const revision =
-    source.kind === "github" || source.kind === "git"
-      ? request.sourceRevision
-      : source.kind === "registry"
-        ? request.releaseVersion
+    request.revision?.kind === "commit" && (source.kind === "github" || source.kind === "git")
+      ? request.revision.commit
+      : request.revision?.kind === "release" && source.kind === "registry"
+        ? request.revision.version
         : undefined;
   const requestedGitRef =
     request.source.type === "git" || request.source.type === "github"
@@ -491,6 +491,8 @@ export interface AuthoredImport {
   readonly label?: string;
   readonly declaration?: SourceDeclaration;
   readonly input: string;
+  /** Exactly what the bytes came from, where the Source protocol names it. */
+  readonly revision?: SourceRevision;
   readonly retainedAt: string;
 }
 export const retainAuthoredCollectionUnderLockEffect = Effect.fn(

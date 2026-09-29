@@ -106,6 +106,11 @@ export const SkitSource = Schema.Union([
 ]);
 export type SkitSource = typeof SkitSource.Type;
 
+/** Exactly what an acquisition fetched, where its Source protocol names it. */
+export type SourceRevision =
+  | { readonly kind: "commit"; readonly commit: string }
+  | { readonly kind: "release"; readonly version: string };
+
 export const SourceTracking = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("default") }),
   Schema.Struct({ kind: Schema.Literal("branch"), ref: Schema.NonEmptyString }),

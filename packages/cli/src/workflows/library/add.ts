@@ -139,6 +139,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
           source: resolved.source,
           ...(declaration === undefined ? {} : { declaration }),
           input: historicalInput,
+          revision: resolved.revision,
           retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         });
         const state = yield* (yield* LibraryStore).load;
@@ -190,7 +191,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         input: historicalInput,
         source: resolved.source,
         ...(declaration === undefined ? {} : { declaration }),
-        sourceRevision: resolved.sourceRevision,
+        revision: resolved.revision,
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         skills,
         observations: [],
