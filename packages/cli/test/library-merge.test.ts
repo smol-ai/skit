@@ -204,8 +204,8 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         kind: "binding",
         action: "add",
         harness: "codex",
-        entries_before: [],
-        entries_after: ["review"],
+        entries_added: [{ kind: "skill", label: "review" }],
+        entries_removed: [],
       },
     ]);
   }),

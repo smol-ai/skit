@@ -1,4 +1,10 @@
-import { canonicalJson, currentSkillVersion, type LibraryManifest } from "@smolai/skit-core";
+import {
+  BindingEntry,
+  canonicalJson,
+  currentSkillVersion,
+  type LibraryManifest,
+} from "@smolai/skit-core";
+import { Schema } from "effect";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
 export type SyncChange =
@@ -18,9 +24,14 @@ export type SyncChange =
       readonly kind: "binding";
       readonly action: "add" | "update" | "remove";
       readonly harness: LibraryManifest["bindings"][number]["harness"];
-      readonly entries_before: readonly string[];
-      readonly entries_after: readonly string[];
+      readonly entries_added: readonly SyncBindingEntry[];
+      readonly entries_removed: readonly SyncBindingEntry[];
     };
+
+export interface SyncBindingEntry {
+  readonly kind: "collection" | "skill";
+  readonly label: string;
+}
 
 export interface SyncPlan {
   readonly local: readonly SyncChange[];
@@ -52,20 +63,32 @@ const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
   };
 };
 
-/** A Binding's entries as labels: a whole Collection or a Skill name. */
-const entryLabels = (
+/** The entries of `from` that `to` lacks, labelled with Collection or Skill names. */
+const entriesMissing = (
   manifest: LibraryManifest,
-  binding: LibraryManifest["bindings"][number] | undefined,
-): readonly string[] =>
-  (binding?.entries ?? []).map((entry) =>
-    entry.kind === "collection"
-      ? `${
-          manifest.collections.find((item) => item.collection_id === entry.collection_id)?.label ??
-          entry.collection_id
-        } (whole Collection)`
-      : (manifest.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
-        entry.skill_id),
-  );
+  from: LibraryManifest["bindings"][number] | undefined,
+  to: LibraryManifest["bindings"][number] | undefined,
+): readonly SyncBindingEntry[] =>
+  (from?.entries ?? [])
+    .filter(
+      (entry) =>
+        !(to?.entries ?? []).some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
+    )
+    .map((entry) =>
+      entry.kind === "collection"
+        ? {
+            kind: "collection" as const,
+            label:
+              manifest.collections.find((item) => item.collection_id === entry.collection_id)
+                ?.label ?? entry.collection_id,
+          }
+        : {
+            kind: "skill" as const,
+            label:
+              manifest.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
+              entry.skill_id,
+          },
+    );
 
 const changes = (before: LibraryManifest, after: LibraryManifest): readonly SyncChange[] => {
   const collectionIds = [
@@ -124,8 +147,8 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
           kind: "binding",
           action: action(previous, desired),
           harness,
-          entries_before: entryLabels(before, previous),
-          entries_after: entryLabels(after, desired),
+          entries_added: entriesMissing(after, desired, previous),
+          entries_removed: entriesMissing(before, previous, desired),
         },
       ];
     });

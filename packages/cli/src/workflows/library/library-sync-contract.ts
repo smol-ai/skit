@@ -1,6 +1,11 @@
 import { Schema } from "effect";
 import { HarnessName } from "@smolai/skit-core";
 
+const SyncBindingEntry = Schema.Struct({
+  kind: Schema.Literals(["collection", "skill"]),
+  label: Schema.String,
+});
+
 const SyncChange = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("collection"),
@@ -19,9 +24,9 @@ const SyncChange = Schema.Union([
     kind: Schema.Literal("binding"),
     action: Schema.Literals(["add", "update", "remove"]),
     harness: HarnessName,
-    /** Enabled entries as labels: a whole Collection or a Skill name. */
-    entries_before: Schema.Array(Schema.String),
-    entries_after: Schema.Array(Schema.String),
+    /** Entries this change enables and disables: a whole Collection or one Skill. */
+    entries_added: Schema.Array(SyncBindingEntry),
+    entries_removed: Schema.Array(SyncBindingEntry),
   }),
 ]);
 

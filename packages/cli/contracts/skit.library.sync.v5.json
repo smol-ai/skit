@@ -244,16 +244,50 @@
                       "devin"
                     ]
                   },
-                  "entries_before": {
+                  "entries_added": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
                     }
                   },
-                  "entries_after": {
+                  "entries_removed": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
                     }
                   }
                 },
@@ -261,8 +295,8 @@
                   "kind",
                   "action",
                   "harness",
-                  "entries_before",
-                  "entries_after"
+                  "entries_added",
+                  "entries_removed"
                 ],
                 "additionalProperties": true
               }
@@ -362,16 +396,50 @@
                       "devin"
                     ]
                   },
-                  "entries_before": {
+                  "entries_added": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
                     }
                   },
-                  "entries_after": {
+                  "entries_removed": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "collection",
+                            "skill"
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "label"
+                      ],
+                      "additionalProperties": true
                     }
                   }
                 },
@@ -379,8 +447,8 @@
                   "kind",
                   "action",
                   "harness",
-                  "entries_before",
-                  "entries_after"
+                  "entries_added",
+                  "entries_removed"
                 ],
                 "additionalProperties": true
               }

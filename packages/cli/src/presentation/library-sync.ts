@@ -48,19 +48,9 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
           );
       } else {
         shown++;
-        const entries =
-          change.action === "remove"
-            ? change.entries_before
-            : change.action === "add"
-              ? change.entries_after
-              : undefined;
-        lines.push(
-          `  ${marker} ${harnessLabel(change.harness)} (global): ${
-            entries === undefined
-              ? `${change.entries_before.join(", ") || "none"} → ${change.entries_after.join(", ") || "none"}`
-              : entries.join(", ") || "none"
-          }`,
-        );
+        lines.push(`  ${marker} ${harnessLabel(change.harness)}`);
+        for (const entry of change.entries_added) lines.push(`      + ${entry.label}`);
+        for (const entry of change.entries_removed) lines.push(`      - ${entry.label}`);
       }
     }
     if (evidenceOnly.length)
