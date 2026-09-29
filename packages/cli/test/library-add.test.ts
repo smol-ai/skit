@@ -279,13 +279,6 @@ it.effect("re-adding a changed local source replaces its unused Skill Version", 
     );
     assert.strictEqual(after.retained_copies.length, 1);
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
-    // The write transaction deletes the retained tree nothing references any more.
-    const originals = join(home, "originals");
-    assert.strictEqual(yield* fs.exists(retainedTreePath(originals, added.snapshot_digest)), false);
-    assert.strictEqual(
-      yield* fs.exists(retainedTreePath(originals, addedAgain.snapshot_digest)),
-      true,
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

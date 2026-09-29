@@ -29,8 +29,6 @@ export class LibraryStore extends Context.Service<
     readonly snapshot: Effect.Effect<LibraryState | undefined>;
     /** Append what changed since `before` to this Library's history. Reported, never raised. */
     readonly recordChangesSince: (before: LibraryState | undefined) => Effect.Effect<void>;
-    /** Delete retained trees no retained copy references. Reported, never raised. */
-    readonly collectRetainedTrees: Effect.Effect<void>;
     readonly home: string;
     readonly originalsPath: string;
   }
@@ -97,38 +95,14 @@ export function libraryStoreLayer(options: { home: string }) {
           ),
         );
       });
-      const originalsPath = join(home, "originals");
-      const collectRetainedTrees = Effect.gen(function* () {
-        const state = yield* snapshot;
-        if (state === undefined) return;
-        const referenced = new Set(state.retained_copies.map((copy) => copy.digest.slice(7)));
-        const entries = (path: string) =>
-          fs
-            .readDirectory(path)
-            .pipe(
-              Effect.catchTag("PlatformError", (error) =>
-                error.reason._tag === "NotFound" ? Effect.succeed([]) : Effect.fail(error),
-              ),
-            );
-        for (const prefix of yield* entries(originalsPath))
-          for (const name of yield* entries(join(originalsPath, prefix)))
-            // Only whole objects are collected; in-flight `retain.tmp-*` staging is left alone.
-            if (/^[0-9a-f]{64}$/.test(name) && !referenced.has(name))
-              yield* fs.remove(join(originalsPath, prefix, name), { recursive: true });
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("Library changed, but unused retained trees were not removed", cause),
-        ),
-      );
       return {
         load,
         inspect,
         publish,
         snapshot,
         recordChangesSince,
-        collectRetainedTrees,
         home,
-        originalsPath,
+        originalsPath: join(home, "originals"),
       };
     }),
   );
@@ -160,11 +134,7 @@ export const withLibraryWriter = <A, E, R>(program: Effect.Effect<A, E, R>) =>
       store.home,
       Effect.gen(function* () {
         const before = yield* store.snapshot;
-        return yield* program.pipe(
-          // Every tree a successful transaction retained is referenced by now.
-          Effect.tap(() => store.collectRetainedTrees),
-          Effect.onExit(() => store.recordChangesSince(before)),
-        );
+        return yield* program.pipe(Effect.onExit(() => store.recordChangesSince(before)));
       }),
     );
   });

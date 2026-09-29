@@ -23,7 +23,6 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         publish: () => Effect.die("unreachable"),
         snapshot: Effect.succeed(undefined),
         recordChangesSince: () => Effect.void,
-        collectRetainedTrees: Effect.void,
         home: "/unreachable",
         originalsPath: "/unreachable/originals",
       }),
