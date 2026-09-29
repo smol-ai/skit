@@ -272,6 +272,25 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
   });
 
+  test.each(["-v", "--version"])("prints the package version with %s", (flag) => {
+    const expected = Schema.decodeUnknownSync(PackageDocument)(
+      readFileSync(join(process.cwd(), "package.json"), "utf8"),
+    ).version;
+    const human = spawnSync(process.execPath, [bin, flag], { encoding: "utf8" });
+    expect(human.status).toBe(0);
+    // oxlint-disable-next-line skit/no-cli-output-text-assertions -- Regression coverage for version flags silently producing no human output.
+    expect(human.stdout).toBe(`${expected}\n`);
+    expect(human.stderr).toBe("");
+
+    const machine = spawnSync(process.execPath, [bin, flag, "--json"], { encoding: "utf8" });
+    expect(machine.status).toBe(0);
+    expect(JSON.parse(machine.stdout)).toEqual({
+      schema: "skit.version.v1",
+      data: { version: expected },
+    });
+    expect(machine.stderr).toBe("");
+  });
+
   test("reviews and optionally accepts a retained finding without blocking Projection", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-security-cli-"));
     const source = join(root, "source");

@@ -4,6 +4,8 @@ import type { HelpDoc } from "effect/unstable/cli";
 import { InvalidArgument } from "../presentation/command-errors.js";
 import { renderCommandFailures } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";
+import { result } from "../handlers/contracts.js";
+import { outputContracts } from "./output-contracts.js";
 
 const quietConsole: Console.Console = Object.assign(Object.create(console), {
   log: () => undefined,
@@ -37,10 +39,15 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
   version: string,
 ) {
   let help: HelpDoc.HelpDoc | undefined;
+  let requestedVersion: string | undefined;
   const formatter: CliOutput.Formatter = {
     ...CliOutput.defaultFormatter({ colors: false }),
     formatHelpDoc: (document) => {
       help = document;
+      return "";
+    },
+    formatVersion: (_name, value) => {
+      requestedVersion = value;
       return "";
     },
   };
@@ -64,5 +71,9 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
       ),
     );
     if (help) yield* renderer.help(formatHelpDocument(help));
+    if (requestedVersion !== undefined)
+      yield* renderer.result(
+        result("version", outputContracts.version, { version: requestedVersion }),
+      );
   }).pipe(renderCommandFailures);
 }
