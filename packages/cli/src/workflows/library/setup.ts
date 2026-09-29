@@ -756,7 +756,10 @@ const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
     : { custody: "invalid-marker" as const };
 });
 
-const collectHarnessRoots = (inventory: InventoryRootOptions, repositories: readonly string[]) => {
+export const collectHarnessRoots = (
+  inventory: InventoryRootOptions,
+  repositories: readonly string[],
+) => {
   const roots: Array<{ harness: Harness; scope: "global" | "project"; root: string }> = [];
   for (const harness of HARNESSES) {
     const global =

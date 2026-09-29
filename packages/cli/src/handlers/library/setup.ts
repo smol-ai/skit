@@ -36,6 +36,11 @@ import { LibraryStore } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { terminalColors } from "../../presentation/terminal-style.js";
+import {
+  applySetupRemovals,
+  planSetupRemovals,
+  setupRemovablePaths,
+} from "../../workflows/library/setup-removal.js";
 
 const workDirFlag = optionalString(
   "work-dir",
@@ -146,7 +151,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const observe = (options: SetupOptions) =>
     renderer.withStatus("Observing local skills", runSetup(options));
   let observed = yield* observe(setupOptions);
-  if (!input.interactive || !input.localCustody) return observed;
+  if (!input.interactive || input.dryRun || !input.localCustody) return observed;
   yield* renderer.note(renderSetupDiscovery(observed, terminalColors()), "Local discovery");
   const discoveredRepositories = observed.repositories;
   let repositoryDecisions: ReadonlyArray<{
@@ -196,13 +201,21 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const knownSourceSelections = yield* chooseKnownSources(observed);
   if (knownSourceSelections.length) retainedSourceSelections = knownSourceSelections;
   existingBindingSelections = yield* chooseExistingBindings(observed);
-  localCustodySelections = yield* chooseUnmanagedSkills(observed);
+  const installedSelections = yield* chooseUnmanagedSkills(setupOptions, observed);
+  localCustodySelections = installedSelections.add;
+  const removalPlan = yield* planSetupRemovals(
+    setupOptions,
+    observed,
+    installedSelections.remove,
+    installedSelections.removablePaths,
+  );
   const prompter = yield* Prompter;
   const hasChanges =
     persistRoots ||
     retainedSourceSelections.length > 0 ||
     existingBindingSelections.length > 0 ||
-    localCustodySelections.length > 0;
+    localCustodySelections.length > 0 ||
+    removalPlan.entries.length > 0;
   if (!hasChanges) {
     yield* renderer.note(
       "Nothing was selected and the repository roots are unchanged.",
@@ -293,6 +306,17 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
         ]
       : []),
     ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
+    ...(removalPlan.entries.length
+      ? [
+          `Remove installed copies: ${removalPlan.entries.length}`,
+          ...removalPlan.entries.map(
+            (entry) =>
+              `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
+          ),
+          `Recovery folder: ${removalPlan.recoveryDirectory}`,
+          "Library entries and source files outside these locations stay in place.",
+        ]
+      : []),
     ...(repositorySelections.length
       ? [
           "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
@@ -309,6 +333,16 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     "Revalidating the approved setup plan",
     revalidateSetupPlan(setupOptions, observed.onboarding.planId),
   );
+  if (removalPlan.entries.length) {
+    yield* renderer.withStatus(
+      `Removing ${removalPlan.entries.length} installed cop${removalPlan.entries.length === 1 ? "y" : "ies"}`,
+      applySetupRemovals(removalPlan),
+    );
+    yield* renderer.note(
+      `Removed installed locations are saved at ${removalPlan.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
+      "Removed copies saved",
+    );
+  }
   if (
     (retainedSourceSelections.length || localCustodySelections.length) &&
     !observed.machineConfig.machineId
@@ -358,7 +392,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     retainedSourceSelections.length &&
     !persistRoots &&
     !existingBindingSelections.length &&
-    !localCustodySelections.length
+    !localCustodySelections.length &&
+    !removalPlan.entries.length
   ) {
     // The import checked the staged bytes and the saved Library Versions. Interactive setup does
     // not render this pre-apply observation, so a global rescan adds no user-visible result.
@@ -482,6 +517,7 @@ const chooseExistingBindings = Effect.fn("CLI.setup.chooseExistingBindings")(fun
 });
 
 const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(function* (
+  options: SetupOptions,
   observed: SetupResult,
 ) {
   const candidates = observed.onboarding.candidates.filter(
@@ -490,7 +526,8 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
       candidate.action === "harness-owned" ||
       candidate.action === "repository-owned",
   );
-  if (!candidates.length) return [];
+  const removablePaths = yield* setupRemovablePaths(options, observed);
+  if (!candidates.length) return { add: [], remove: [], removablePaths };
   const prompter = yield* Prompter;
   const fs = yield* FileSystem.FileSystem;
   const choices = yield* Effect.forEach(setupInstalledSkillChoices(candidates), (choice) =>
@@ -502,6 +539,13 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
       const path = join(candidate.paths[0], "SKILL.md");
       return {
         ...choice,
+        ...(observed.instances.some(
+          (instance) =>
+            candidate.paths.includes(instance.path) &&
+            (removablePaths.get(instance.path)?.length ?? 0) > 0,
+        )
+          ? { removeValue: `remove\0${choice.value}` }
+          : {}),
         hint: modified,
         detail: choice.hint,
         preview: () =>
@@ -518,31 +562,40 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
     }),
   );
   const selectedValues = yield* prompter
-    .multiselect("Select installed skills to add to your SKIT Library", choices)
+    .multiselect("Manage installed skills: add to Library or mark Remove", choices)
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
-  return yield* Effect.forEach(selectedValues, (value) => {
-    const candidate = candidates.find((item) => setupChoiceValue(item, candidates) === value);
-    if (!candidate) return Effect.succeed({ name: value });
-    const name = candidate.name;
-    if (candidate.action === "manage-locally" && candidate.sourceSelection === "automatic")
-      return Effect.succeed({ name, sourcePath: candidate.sourcePath });
-    if (candidate.paths.length === 1)
-      return Effect.succeed({
-        name,
-        sourcePath: candidate.paths[0],
-      });
-    return prompter
-      .select(
-        `Choose the authoritative copy of ${name}`,
-        candidate.paths.map((path) => ({ value: path, label: path })),
-      )
-      .pipe(
-        Effect.map((sourcePath) => ({
+  const remove = selectedValues
+    .filter((value) => value.startsWith("remove\0"))
+    .flatMap((value) =>
+      candidates.filter((candidate) => setupChoiceValue(candidate, candidates) === value.slice(7)),
+    );
+  const add = yield* Effect.forEach(
+    selectedValues.filter((value) => !value.startsWith("remove\0")),
+    (value) => {
+      const candidate = candidates.find((item) => setupChoiceValue(item, candidates) === value);
+      if (!candidate) return Effect.succeed({ name: value });
+      const name = candidate.name;
+      if (candidate.action === "manage-locally" && candidate.sourceSelection === "automatic")
+        return Effect.succeed({ name, sourcePath: candidate.sourcePath });
+      if (candidate.paths.length === 1)
+        return Effect.succeed({
           name,
-          sourcePath,
-        })),
-      );
-  });
+          sourcePath: candidate.paths[0],
+        });
+      return prompter
+        .select(
+          `Choose the authoritative copy of ${name}`,
+          candidate.paths.map((path) => ({ value: path, label: path })),
+        )
+        .pipe(
+          Effect.map((sourcePath) => ({
+            name,
+            sourcePath,
+          })),
+        );
+    },
+  );
+  return { add, remove, removablePaths };
 });
 
 export const setupCliCommand = Command.make(
