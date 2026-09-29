@@ -337,3 +337,49 @@ describe("the terminal prompter", () => {
     }).pipe(Effect.provide(promptedWith(["enter"]))),
   );
 });
+
+it.effect("keeps blocked skills previewable and bulk selection leaves conflicts unresolved", () =>
+  Effect.gen(function* () {
+    const chosen = yield* (yield* Prompter).multiselect("Choose copies", [
+      {
+        value: "blocked",
+        label: "Invalid marker",
+        disabled: true,
+        selected: true,
+        description: "Used by Claude · blocked",
+        preview: () => Effect.succeed("Blocked content"),
+      },
+      {
+        value: "claude",
+        label: "Different Claude copy",
+        exclusiveGroup: "different",
+        selectExplicitly: true,
+      },
+      {
+        value: "codex",
+        label: "Different Codex copy",
+        exclusiveGroup: "different",
+        selectExplicitly: true,
+      },
+      { value: "normal", label: "Normal" },
+    ]);
+    expect(chosen).toEqual(["codex", "normal"]);
+    const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+    expect(frames).toContain("Used by Claude · blocked");
+    expect(frames).toContain("Blocked content");
+  }).pipe(
+    Effect.provide(
+      promptedWith([
+        "space",
+        "ctrl+p",
+        "ctrl+p",
+        "ctrl+a",
+        "down",
+        "space",
+        "down",
+        "space",
+        "enter",
+      ]),
+    ),
+  ),
+);

@@ -105,12 +105,7 @@ it.effect("imports an approved skills.sh Collection without repeated broad obser
     );
     expect(candidate?.action).toBe("import-observed-collection");
     if (!candidate || candidate.action !== "import-observed-collection") return;
-    const interaction = yield* makeScriptedInteraction([
-      [repository],
-      [candidate.groupKey],
-      true,
-      false,
-    ]);
+    const interaction = yield* makeScriptedInteraction([[repository], ["review"], true, false]);
     yield* home.owned(
       writingTo(
         home.home,

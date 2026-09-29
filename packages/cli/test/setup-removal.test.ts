@@ -219,3 +219,38 @@ it.effect("does not offer source trees reached through a linked skills root for 
     );
   }).pipe(Effect.provide(skitLayer)),
 );
+
+it.effect("removing one duplicate row preserves the independent copy in another agent", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const claude = join(f.root, ".claude", "skills");
+    const otherCopy = join(claude, "copied");
+    yield* f.fs.makeDirectory(otherCopy, { recursive: true });
+    yield* f.fs.copy(f.copy, otherCopy);
+    const home = yield* libraryHome({
+      home: f.home.home,
+      inventoryHome: f.root,
+      roots: { codex: f.agentRoot, claude },
+    });
+    const path = yield* f.fs.realPath(f.copy);
+    const interaction = yield* makeScriptedInteraction([[`remove\0copied\0${path}`], true]);
+    yield* home.owned(
+      writingTo(
+        home.home,
+        setupCommand({
+          options: { ...f.options, inventory: home.inventory },
+          cwd: f.root,
+          interactive: true,
+          dryRun: false,
+          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+    expect(yield* f.fs.exists(f.copy)).toBe(false);
+    expect(yield* f.fs.readFileString(join(otherCopy, ".DS_Store"))).toBe("incidental bytes");
+    expect(yield* f.fs.readLink(f.link)).toBe(f.source);
+    const plan = (yield* interaction.notes).find((note) => note.title === "Setup plan")!.body;
+    expect(plan).toContain("Remove installed copies: 1");
+    expect(plan).not.toContain(`copied · ${otherCopy}`);
+  }).pipe(Effect.provide(skitLayer)),
+);

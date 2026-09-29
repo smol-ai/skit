@@ -10,11 +10,12 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract, setupDiscoverySummary } from "../src/presentation/contract-presenters.js";
-import {
-  setupInstalledSkillChoices,
-  setupSkillModificationHint,
-} from "../src/handlers/library/setup.js";
-import type { SetupOnboardingCandidate } from "../src/workflows/library/setup-contract.js";
+import { setupSkillModificationHint } from "../src/handlers/library/setup.js";
+import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
+import type {
+  SetupOnboardingCandidate,
+  SetupSkillInstance,
+} from "../src/workflows/library/setup-contract.js";
 
 it.effect("shows SKILL.md dates from symlink targets and the newest installed copy", () =>
   Effect.gen(function* () {
@@ -51,51 +52,107 @@ it.effect("shows SKILL.md dates from symlink targets and the newest installed co
   }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
 );
 
-it("groups installed skills by source and leaves Codex paths deselected", () => {
-  const candidate = (name: string, path: string): SetupOnboardingCandidate => ({
+it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
+  const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({
     name,
-    paths: [path],
+    path,
+    aliases: [path],
+    scope: "global",
+    harnesses: ["codex"],
     owner: { kind: "unknown" },
-    action: "manage-locally",
-    sourceSelection: "automatic",
-    sourcePath: path,
+    git: { status: "outside-git" },
+    locks: [],
+    contentIdentity: {
+      status: "none",
+      observedHash: `sha256:${hash.repeat(64)}`,
+      libraryMatches: [],
+    },
   });
-  const choices = setupInstalledSkillChoices(
-    [
-      candidate("zeta", "/home/test/Work/skills/zeta"),
-      candidate("alpha", "/home/test/.codex/skills/alpha"),
-      candidate("beta", "/home/test/Work/skills/beta"),
-      candidate("shared", "/home/test/Work/skills/shared"),
-      candidate("shared", "/home/test/.codex/skills/shared"),
-      {
-        name: "plugin",
-        paths: ["/home/test/.codex/plugins/cache/vendor/plugin"],
-        owner: { kind: "harness", harness: "codex", source: "Codex curated", bundled: false },
-        action: "harness-owned",
-      },
-    ],
-    "/home/test",
-  );
-  expect(
-    choices.filter((choice) => choice.group === "~/Work/skills").map((choice) => choice.label),
-  ).toEqual(["beta", "shared", "zeta"]);
+  const home = "/home/test";
+  const shared = {
+    ...instance("align-me", `${home}/Work/skills/align-me`),
+    harnesses: ["claude-code", "codex", "devin"] as const,
+    aliases: [`${home}/.claude/skills/align-me`, `${home}/.codex/skills/align-me`],
+  };
+  const instances = [
+    shared,
+    instance("same", `${home}/.claude/skills/same`),
+    instance("same", `${home}/.codex/skills/same`),
+    {
+      ...instance("different", `${home}/.claude/skills/different`),
+      harnesses: ["claude-code"] as const,
+    },
+    instance("different", `${home}/.codex/skills/different`, "b"),
+    {
+      ...instance("invalid", `${home}/.claude/skills/invalid`),
+      owner: { kind: "invalid-marker" } as const,
+    },
+    {
+      ...instance("plugin", `${home}/.codex/plugins/cache/vendor/plugin`),
+      owner: {
+        kind: "harness",
+        harness: "codex",
+        source: "Codex curated",
+        bundled: false,
+      } as const,
+    },
+  ];
+  const candidates: SetupOnboardingCandidate[] = instances
+    .filter((item) => item.name !== "different")
+    .map((item) => ({
+      name: item.name,
+      paths: [item.path],
+      owner: item.owner,
+      ...(item.name === "invalid"
+        ? { action: "blocked" as const, reason: "invalid-ownership-marker" as const }
+        : {
+            action: "manage-locally" as const,
+            sourceSelection: "automatic" as const,
+            sourcePath: item.path,
+          }),
+    }));
+  candidates.push({
+    name: "different",
+    paths: instances.filter((item) => item.name === "different").map((item) => item.path),
+    owner: { kind: "unknown" },
+    action: "blocked",
+    reason: "divergent-copies",
+  });
+  const rows = setupDiscoveredSkillChoices(instances, candidates, home);
+  expect(rows).toHaveLength(instances.length);
+  const choices = rows.map((row) => row.choice);
+  expect(choices.find((item) => item.label === "align-me")).toMatchObject({
+    group: "Local source · ~/Work/skills",
+    selected: true,
+    description: "Used by Claude, Codex, Devin · symlinked",
+  });
   expect(
     choices
-      .filter((choice) => choice.group === "~/.codex/skills")
-      .every((choice) => !choice.selected),
+      .filter((item) => item.group === "Codex local skills · ~/.codex/skills")
+      .every((item) => !item.selected),
   ).toBe(true);
-  expect(choices.find((choice) => choice.label === "plugin")).toMatchObject({
-    group: "Codex curated",
+  expect(
+    choices
+      .filter((item) => item.label === "different")
+      .every((item) => !item.selected && item.selectExplicitly && !item.disabled),
+  ).toBe(true);
+  expect(choices.find((item) => item.label === "different")?.description).toContain(
+    "choose a copy with Space",
+  );
+  expect(
+    choices
+      .filter((item) => item.label === "same")
+      .every((item) => item.description?.includes("Duplicate content")),
+  ).toBe(true);
+  expect(choices.find((item) => item.label === "invalid")).toMatchObject({
+    selected: false,
+    disabled: true,
+  });
+  expect(choices.find((item) => item.label === "plugin")).toMatchObject({
+    group: "Plugins · Codex curated",
     selected: false,
   });
-  expect(choices.filter((choice) => choice.selected).map((choice) => choice.label)).toEqual([
-    "beta",
-    "shared",
-    "zeta",
-  ]);
-  expect(new Set(choices.map((choice) => choice.value)).size).toBe(choices.length);
-  const groups = choices.map((choice) => choice.group);
-  expect(groups).toEqual([...groups].sort((left, right) => left!.localeCompare(right!)));
+  expect(new Set(choices.map((item) => item.value)).size).toBe(instances.length);
 });
 
 it("models large discovery results as collapsed while retaining their Collections", () => {

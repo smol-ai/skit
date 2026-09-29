@@ -9,6 +9,7 @@ import {
   retainedTreePath,
   skitLayer,
 } from "@smolai/skit-core";
+import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
@@ -72,8 +73,8 @@ it.effect("adds selected skills and takes custody only of eligible global copies
     expect(prompts.map((prompt) => prompt.kind)).toEqual(["multiselect", "multiselect", "confirm"]);
     expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(
       [
-        { value: "review", group: codexRoot },
-        { value: "repo-only", group: repository },
+        { value: "review", group: `Local source · ${codexRoot}` },
+        { value: "repo-only", group: `Local source · ${join(repository, ".agents", "skills")}` },
       ]
         .sort((left, right) => left.group.localeCompare(right.group))
         .map((choice) => choice.value),
@@ -193,5 +194,128 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
     );
     expect(yield* fs.readFileString(join(authoredSkill, "SKILL.md"))).toBe(readmeDocument);
     expect((yield* inspectOwnershipMarkerEffect(authoredSkill)).kind).toBe("absent");
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("keeps every conflicting Claude copy visible and adopts only the chosen copy", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* scratch("skit-setup-conflicting-copies-");
+    const claude = join(root, ".claude", "skills");
+    const codex = join(root, ".codex", "skills");
+    const names = Array.from({ length: 5 }, (_, index) => `conflict-${index + 1}`);
+    for (const name of names)
+      for (const agent of [claude, codex]) {
+        yield* fs.makeDirectory(join(agent, name), { recursive: true });
+        yield* fs.writeFileString(
+          join(agent, name, "SKILL.md"),
+          skillDocument(name, agent === claude ? "Claude contents" : "Codex contents"),
+        );
+      }
+    const source = join(root, "sources", "shared");
+    yield* fs.makeDirectory(source, { recursive: true });
+    yield* fs.writeFileString(join(source, "SKILL.md"), skillDocument("shared", "Shared source"));
+    for (const agent of [claude, codex]) yield* fs.symlink(source, join(agent, "shared"));
+    const home = yield* libraryHome({
+      home: join(root, "library"),
+      inventoryHome: root,
+      roots: { claude, codex },
+    });
+    const chosenPath = yield* fs.realPath(join(claude, names[0]));
+    const interaction = yield* makeScriptedInteraction([[`${names[0]}\0${chosenPath}`], true]);
+    yield* home.owned(
+      writingTo(
+        home.home,
+        setupCommand({
+          options: {
+            libraryHome: home.home,
+            inventory: home.inventory,
+            probePath: "",
+            skillsStateHome: join(root, "state"),
+          },
+          cwd: root,
+          interactive: true,
+          dryRun: false,
+          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+    const picker = (yield* interaction.prompts)[0];
+    expect(picker.choices).toHaveLength(11);
+    const conflicts = picker.choices.filter((choice) => choice.label.startsWith("conflict-"));
+    expect(conflicts).toHaveLength(10);
+    expect(
+      conflicts.every((choice) => !choice.selected && !choice.disabled && choice.selectExplicitly),
+    ).toBe(true);
+    expect(conflicts.filter((choice) => choice.hint?.includes("/.claude/skills/"))).toHaveLength(5);
+    const sharedRows = picker.choices.filter((choice) => choice.label === "shared");
+    expect(sharedRows).toHaveLength(1);
+    expect(sharedRows[0].description).toContain("Used by Claude, Codex · symlinked");
+    const codexPath = yield* fs.realPath(join(codex, names[0]));
+    const codexPreview = conflicts.find(
+      (choice) => choice.value === `${names[0]}\0${codexPath}`,
+    )?.preview;
+    expect(yield* codexPreview!()).toContain("Codex contents");
+    expect((yield* home.durable).skills.map((skill) => skill.name)).toEqual([names[0]]);
+    expect((yield* inspectOwnershipMarkerEffect(chosenPath)).kind).toBe("valid");
+    for (const name of names) {
+      expect(yield* fs.readFileString(join(codex, name, "SKILL.md"))).toBe(
+        skillDocument(name, "Codex contents"),
+      );
+      expect((yield* inspectOwnershipMarkerEffect(join(codex, name))).kind).toBe("absent");
+      if (name !== names[0])
+        expect((yield* inspectOwnershipMarkerEffect(join(claude, name))).kind).toBe("absent");
+    }
+    expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(
+      skillDocument("shared", "Shared source"),
+    );
+    expect((yield* interaction.notes).find((note) => note.title === "Setup plan")?.body).toContain(
+      `Authoritative copy: ${names[0]} · ${chosenPath}`,
+    );
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("reconnects only the selected exact Library copy", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* scratch("skit-setup-exact-copy-");
+    const source = join(root, "source", "review");
+    const claude = join(root, ".claude", "skills");
+    const codex = join(root, ".codex", "skills");
+    for (const path of [source, join(claude, "review"), join(codex, "review")]) {
+      yield* fs.makeDirectory(path, { recursive: true });
+      yield* fs.writeFileString(join(path, "SKILL.md"), skillDocument("review", "Same content"));
+    }
+    const home = yield* libraryHome({
+      home: join(root, "library"),
+      inventoryHome: root,
+      roots: { claude, codex },
+    });
+    const selected = yield* fs.realPath(join(claude, "review"));
+    const interaction = yield* makeScriptedInteraction([[`review\0${selected}`], true]);
+    yield* home.owned(
+      writingTo(
+        home.home,
+        Effect.gen(function* () {
+          yield* addLibrarySourceEffect(source);
+          yield* setupCommand({
+            options: {
+              libraryHome: home.home,
+              inventory: home.inventory,
+              probePath: "",
+              skillsStateHome: join(root, "state"),
+            },
+            cwd: root,
+            interactive: true,
+            dryRun: false,
+            localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          }).pipe(Effect.provide(interaction.layer));
+        }),
+      ),
+    );
+    expect((yield* inspectOwnershipMarkerEffect(join(claude, "review"))).kind).toBe("valid");
+    expect((yield* inspectOwnershipMarkerEffect(join(codex, "review"))).kind).toBe("absent");
+    expect((yield* home.durable).collections).toHaveLength(1);
+    expect((yield* interaction.prompts)[0].choices).toHaveLength(2);
   }).pipe(Effect.provide(skitLayer)),
 );

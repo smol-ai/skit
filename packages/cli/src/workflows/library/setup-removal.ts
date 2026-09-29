@@ -4,7 +4,7 @@ import { Effect, FileSystem } from "effect";
 import { LinkStat, pathIsWithin, writeJsonAtomicEffect } from "@smolai/skit-core";
 import { PlanIsStale } from "../../library/failures.js";
 import { collectHarnessRoots, type SetupOptions } from "./setup.js";
-import type { SetupOnboardingCandidate, SetupResult } from "./setup-contract.js";
+import type { SetupResult } from "./setup-contract.js";
 
 export interface SetupRemoval {
   name: string;
@@ -63,7 +63,7 @@ export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
 export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
   options: SetupOptions,
   observed: SetupResult,
-  selections: readonly SetupOnboardingCandidate[],
+  selections: readonly { readonly name: string; readonly paths: readonly string[] }[],
   removablePaths: ReadonlyMap<string, readonly string[]>,
 ) {
   const fs = yield* FileSystem.FileSystem;

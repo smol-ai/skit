@@ -14,7 +14,7 @@ import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 
 export const SetupLocalCustodySelection = Schema.Struct({
   name: Schema.String,
-  sourcePath: Schema.optionalKey(Schema.String),
+  sourcePath: Schema.String,
 });
 export interface SetupLocalCustodySelection extends Schema.Schema.Type<
   typeof SetupLocalCustodySelection
@@ -60,7 +60,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
   const adopted: Array<{ readonly subject_id: string; readonly retained_version_id: string }> = [];
   const plans: Array<{ name: string; plan: LocalAdoptionPlan }> = [];
   for (const selection of selections) {
-    const selectionKey = `${selection.name}\0${selection.sourcePath ?? ""}`;
+    const selectionKey = `${selection.name}\0${selection.sourcePath}`;
     if (selectedCandidates.has(selectionKey))
       return yield* new SetupLocalCustodySelectionInvalid({
         name: selection.name,
@@ -68,9 +68,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       });
     selectedCandidates.add(selectionKey);
     const candidate = current.onboarding.candidates.find(
-      (item) =>
-        item.name === selection.name &&
-        (selection.sourcePath === undefined || item.paths.includes(selection.sourcePath)),
+      (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
     );
     if (!candidate)
       return yield* new SetupLocalCustodySelectionInvalid({
@@ -80,16 +78,15 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     if (
       candidate.action !== "manage-locally" &&
       candidate.action !== "harness-owned" &&
-      candidate.action !== "repository-owned"
+      candidate.action !== "repository-owned" &&
+      candidate.action !== "leave-alone" &&
+      !(candidate.action === "blocked" && candidate.reason === "divergent-copies")
     )
       return yield* new SetupLocalCustodySelectionInvalid({
         name: selection.name,
         reason: "candidate-not-manageable",
       });
-    const sourcePath =
-      candidate.action === "manage-locally" && candidate.sourceSelection === "automatic"
-        ? candidate.sourcePath
-        : (selection.sourcePath ?? (candidate.paths.length === 1 ? candidate.paths[0] : undefined));
+    const sourcePath = selection.sourcePath;
     if (!sourcePath)
       return yield* new SetupLocalCustodySelectionInvalid({
         name: selection.name,
@@ -100,7 +97,13 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
         name: selection.name,
         reason: "source-not-candidate",
       });
-    if (candidate.action === "repository-owned") {
+    const selectedInstance = current.instances.find((instance) => instance.path === sourcePath);
+    if (
+      candidate.action === "repository-owned" ||
+      selectedInstance?.git.repository ||
+      selectedInstance?.scope !== "global" ||
+      selectedInstance.harnesses.length === 0
+    ) {
       const retained = yield* addLibrarySourceEffect(sourcePath);
       if (retained.collection_id === undefined)
         return yield* new SetupLocalCustodySelectionInvalid({
@@ -113,7 +116,8 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       });
       continue;
     }
-    const targetsByObservedPath = candidate.paths.map((path) => {
+    // An explicit row selects only that physical copy. Differing siblings remain untouched.
+    const targetsByObservedPath = [sourcePath].map((path) => {
       const instance = current.instances.find((item) => item.path === path);
       const targets = (instance?.harnesses ?? []).flatMap((harness) => {
         return instance?.scope === "global"

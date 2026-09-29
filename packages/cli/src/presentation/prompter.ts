@@ -28,7 +28,15 @@ export interface Choice<Value> {
   hint?: string;
   /** Extra context shown only for the highlighted choice. */
   detail?: string;
+  /** Context displayed below every row, even while another row is highlighted. */
+  description?: string;
   group?: string;
+  /** Visible and previewable, but cannot be selected for addition. */
+  disabled?: boolean;
+  /** Selecting this row deselects the other copies in the same group. */
+  exclusiveGroup?: string;
+  /** Bulk selection must not resolve a conflict on the user's behalf. */
+  selectExplicitly?: boolean;
   selected?: boolean;
   /** Opt in to an explicit removal action, toggled with Ctrl+R. */
   removeValue?: Value;
@@ -85,7 +93,9 @@ const filterableMultiSelect = <Value extends string>(
   message: string,
   items: readonly Choice<Value>[],
 ): Prompt.Prompt<Value[]> => {
-  const initialSelected = new Set(items.flatMap((item, index) => (item.selected ? [index] : [])));
+  const initialSelected = new Set(
+    items.flatMap((item, index) => (item.selected && !item.disabled ? [index] : [])),
+  );
   const initial = {
     query: "",
     cursor: 0,
@@ -98,7 +108,7 @@ const filterableMultiSelect = <Value extends string>(
     const query = state.query.toLocaleLowerCase();
     if (query.length === 0) return items.map((_, index) => index);
     return items.flatMap((item, index) =>
-      `${item.group ?? ""} ${item.label} ${item.hint ?? ""} ${item.detail ?? ""}`
+      `${item.group ?? ""} ${item.label} ${item.hint ?? ""} ${item.detail ?? ""} ${item.description ?? ""}`
         .toLocaleLowerCase()
         .includes(query)
         ? [index]
@@ -115,6 +125,7 @@ const filterableMultiSelect = <Value extends string>(
     const page = visible.slice(start, start + maxItems);
     const pageLineCount = () =>
       page.length +
+      page.filter((index) => items[index].description).length +
       (items[visible[cursor]]?.detail ? 1 : 0) +
       page.filter((itemIndex, index) => {
         const group = items[itemIndex].group;
@@ -152,11 +163,16 @@ const filterableMultiSelect = <Value extends string>(
         : state.selected.has(itemIndex)
           ? color.green("☒")
           : color.dim("☐");
-      const label = highlighted ? color.bold(item.label) : item.label;
+      const label = item.disabled
+        ? color.dim(item.label)
+        : highlighted
+          ? color.bold(item.label)
+          : item.label;
       const indent = item.group === undefined ? "" : "    ";
       lines.push(
         `${indent}${active} ${checked} ${label}${removed ? color.red("  · Remove") : ""}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
       );
+      if (item.description) lines.push(`${indent}    ${color.dim(item.description)}`);
       if (highlighted && item.detail) lines.push(`${indent}    ${color.dim(item.detail)}`);
     }
     return lines;
@@ -255,9 +271,13 @@ const filterableMultiSelect = <Value extends string>(
       }
       if (input.key.ctrl && input.key.name === "u") return next({ ...state, query: "", cursor: 0 });
       if (input.key.ctrl && input.key.name === "a") {
-        const eligible = items
-          .map((_, index) => index)
-          .filter((index) => !state.removed.has(index));
+        const groups = new Set<string>();
+        const eligible = items.flatMap((item, index) => {
+          if (item.disabled || item.selectExplicitly || state.removed.has(index)) return [];
+          if (item.exclusiveGroup && groups.has(item.exclusiveGroup)) return [];
+          if (item.exclusiveGroup) groups.add(item.exclusiveGroup);
+          return [index];
+        });
         const allSelected = eligible.every((index) => state.selected.has(index));
         return next({
           ...state,
@@ -281,8 +301,16 @@ const filterableMultiSelect = <Value extends string>(
           if (visible.length === 0) return Effect.succeed(PromptAction.Beep());
           const selected = new Set(state.selected);
           const itemIndex = visible[cursor];
+          const item = items[itemIndex];
+          if (item.disabled) return Effect.succeed(PromptAction.Beep());
           if (selected.has(itemIndex)) selected.delete(itemIndex);
-          else selected.add(itemIndex);
+          else {
+            if (item.exclusiveGroup)
+              for (const index of selected) {
+                if (items[index].exclusiveGroup === item.exclusiveGroup) selected.delete(index);
+              }
+            selected.add(itemIndex);
+          }
           const removed = new Set(state.removed);
           removed.delete(itemIndex);
           return next({ ...state, selected, removed });
