@@ -7,6 +7,7 @@ import {
   libraryStoreLayer,
   makeCollectionId,
   makeSkillId,
+  type ObservedSkill,
   skitLayer,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
@@ -208,7 +209,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     const home = roots.home;
     const observed = join(workspace, "observed");
     yield* initializeLibraryMachine(home);
-    const skills = [];
+    const skills: ObservedSkill[] = [];
     for (const name of ["review", "test", "docs"]) {
       const path = join(observed, name);
       yield* fs.makeDirectory(path, { recursive: true });
@@ -220,18 +221,20 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
         observedHash: yield* deterministicTreeHashEffect(path),
       });
     }
-    const retained = yield* Effect.scoped(
-      writingTo(
-        home,
-        retainObservedIn(home)({
-          source: { type: "local", path: observed },
-          input: observed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
-          skills,
-          observations: [],
-        }),
-      ),
-    );
+    const retain = (members: readonly ObservedSkill[], retainedAt: string) =>
+      Effect.scoped(
+        writingTo(
+          home,
+          retainObservedIn(home)({
+            source: { type: "local", path: observed },
+            input: observed,
+            retainedAt,
+            skills: members,
+            observations: [],
+          }),
+        ),
+      );
+    const retained = yield* retain(skills, "2026-09-16T00:00:00.000Z");
     const collectionId = retained.collection!.collection_id;
     const skillId = (name: string) =>
       retained.skills.find((skill) => skill.name === name)!.skill_id;
@@ -278,5 +281,13 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     assert.deepStrictEqual((yield* fs.readDirectory(roots.codexRoot)).sort(), ["docs", "review"]);
     // Disabling the whole Collection removes every entry for it.
     assert.deepStrictEqual(yield* set(collectionId, false, true), []);
+    // A Skill gone from the Source stays while its own entry enables it, and `--all` ends that too.
+    yield* set(skillId("review"), true, false);
+    yield* retain(
+      skills.filter((skill) => skill.name !== "review"),
+      "2026-09-16T01:00:00.000Z",
+    );
+    assert.deepStrictEqual(yield* set(collectionId, false, true), []);
+    assert.deepStrictEqual(yield* fs.readDirectory(roots.codexRoot), []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

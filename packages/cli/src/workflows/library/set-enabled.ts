@@ -129,6 +129,11 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
       entries = withoutCollection(entries);
       if (options.invocation.enabled)
         entries.push({ kind: "collection", collection_id: collection.collection_id });
+      // A Skill gone from the Source is enabled only by its own entry, which disabling ends too.
+      else
+        entries = entries.filter(
+          (entry) => !(entry.kind === "skill" && skillIds.includes(entry.skill_id)),
+        );
     } else if (options.invocation.enabled) {
       for (const skillId of skillIds)
         if (!(followsCollection && collectionMembers.has(skillId)) && !hasSkill(skillId))
