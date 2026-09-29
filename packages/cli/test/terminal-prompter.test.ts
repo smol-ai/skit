@@ -76,11 +76,61 @@ const harnesses: Choice<"claude" | "codex" | "opencode">[] = [
 // Prompts draw real escape sequences; keep them out of the reporter's output.
 let stderr: MockInstance<typeof process.stderr.write>;
 beforeEach(() => {
+  vi.stubEnv("FORCE_COLOR", "0");
   stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("the terminal prompter", () => {
+  it.effect("colors grouped choices and nests context beneath only the highlighted skill", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("FORCE_COLOR", "1");
+      vi.stubEnv("TERM", "xterm-256color");
+      vi.stubEnv("NO_COLOR", undefined);
+      const prompter = yield* Prompter;
+      yield* prompter.multiselect("Pick skills", [
+        {
+          value: "review",
+          label: "Review",
+          group: "Local",
+          hint: "modified today",
+          detail: "/skills/review",
+          selected: true,
+        },
+        { value: "lint", label: "Lint", group: "Local", detail: "/skills/lint" },
+      ]);
+      const frame = stderr.mock.calls
+        .map(([frame]) => String(frame))
+        .find((frame) => frame.includes("modified today"))!;
+      expect(frame).toContain("\u001b[36m");
+      expect(frame).toContain("\u001b[32m");
+      expect(frame).toContain("\u001b[2m");
+      // oxlint-disable-next-line no-control-regex -- Strip terminal ANSI styling before asserting layout.
+      const plain = frame.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
+      expect(plain).toContain(
+        "  ─ Local\n    ❯ ☒ Review  · modified today\n        /skills/review",
+      );
+      expect(plain).not.toContain("/skills/lint");
+    }).pipe(Effect.provide(promptedWith(["enter"]))),
+  );
+
+  it.effect("NO_COLOR suppresses styling even when color is forced", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("FORCE_COLOR", "1");
+      vi.stubEnv("TERM", "xterm-256color");
+      vi.stubEnv("NO_COLOR", "1");
+      const prompter = yield* Prompter;
+      yield* prompter.multiselect("Pick skills", [
+        { value: "review", label: "Review", group: "Local" },
+      ]);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("");
+      // oxlint-disable-next-line no-control-regex -- Ensure terminal ANSI styling is suppressed.
+      expect(frames).not.toMatch(/\u001b\[(?:1|2|32|36)m/);
+    }).pipe(Effect.provide(promptedWith(["enter"]))),
+  );
   it.effect("select returns the highlighted choice", () =>
     Effect.gen(function* () {
       const prompter = yield* Prompter;
@@ -170,6 +220,7 @@ describe("the terminal prompter", () => {
           value: String(index),
           label: `Skill ${index}`,
           group: `Source ${index}`,
+          detail: `/skills/${index}`,
         })),
       );
       assert.deepStrictEqual(chosen, ["24"]);

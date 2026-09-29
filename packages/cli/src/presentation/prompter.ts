@@ -19,11 +19,14 @@ import {
   Terminal,
 } from "effect";
 import { Prompt } from "effect/unstable/cli";
+import { terminalColors } from "./terminal-style.js";
 
 export interface Choice<Value> {
   value: Value;
   label: string;
   hint?: string;
+  /** Extra context shown only for the highlighted choice. */
+  detail?: string;
   group?: string;
   selected?: boolean;
 }
@@ -87,7 +90,9 @@ const filterableMultiSelect = <Value extends string>(
     const query = state.query.toLocaleLowerCase();
     if (query.length === 0) return items.map((_, index) => index);
     return items.flatMap((item, index) =>
-      `${item.group ?? ""} ${item.label} ${item.hint ?? ""}`.toLocaleLowerCase().includes(query)
+      `${item.group ?? ""} ${item.label} ${item.hint ?? ""} ${item.detail ?? ""}`
+        .toLocaleLowerCase()
+        .includes(query)
         ? [index]
         : [],
     );
@@ -105,6 +110,7 @@ const filterableMultiSelect = <Value extends string>(
     const page = visible.slice(start, start + AUTOCOMPLETE_MAX_ITEMS);
     const pageLineCount = () =>
       page.length +
+      (items[visible[cursor]]?.detail ? 1 : 0) +
       page.filter((itemIndex, index) => {
         const group = items[itemIndex].group;
         return group !== undefined && (index === 0 || group !== items[page[index - 1]].group);
@@ -114,16 +120,26 @@ const filterableMultiSelect = <Value extends string>(
       else page.pop();
     }
     const filter = state.query.length === 0 ? "type to filter" : `filter: ${state.query}`;
-    const lines = [`? ${message} › ${filter}  (Space toggle, Ctrl+A all/none)`];
+    const color = terminalColors();
+    const lines = [
+      `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}  (Space toggle, Ctrl+A all/none)`)}`,
+    ];
     if (page.length === 0) lines.push("  No matches");
     let previousGroup: string | undefined;
     for (const itemIndex of page) {
       const item = items[itemIndex];
-      if (item.group !== undefined && item.group !== previousGroup) lines.push(`  ─ ${item.group}`);
+      if (item.group !== undefined && item.group !== previousGroup)
+        lines.push(`  ${color.cyan(color.bold(`─ ${item.group}`))}`);
       previousGroup = item.group;
-      const active = visible[cursor] === itemIndex ? "❯" : " ";
-      const checked = state.selected.has(itemIndex) ? "☒" : "☐";
-      lines.push(`${active} ${checked} ${item.label}${item.hint ? ` - ${item.hint}` : ""}`);
+      const highlighted = visible[cursor] === itemIndex;
+      const active = highlighted ? color.cyan("❯") : " ";
+      const checked = state.selected.has(itemIndex) ? color.green("☒") : color.dim("☐");
+      const label = highlighted ? color.bold(item.label) : item.label;
+      const indent = item.group === undefined ? "" : "    ";
+      lines.push(
+        `${indent}${active} ${checked} ${label}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
+      );
+      if (highlighted && item.detail) lines.push(`${indent}    ${color.dim(item.detail)}`);
     }
     return lines;
   };
@@ -133,7 +149,7 @@ const filterableMultiSelect = <Value extends string>(
       if (action._tag === "Submit") {
         const selected = [...state.selected].sort((left, right) => left - right);
         return Effect.succeed(
-          `✔ ${message} … ${selected.map((index) => items[index].label).join(", ")}\n`,
+          `${terminalColors().green("✔")} ${message} … ${selected.map((index) => items[index].label).join(", ")}\n`,
         );
       }
       return Effect.succeed(`\u001b[?25l${renderedLines(state).join("\n")}`);

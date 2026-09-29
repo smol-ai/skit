@@ -70,7 +70,14 @@ it.effect("adds selected skills and takes custody only of eligible global copies
 
     const prompts = yield* interaction.prompts;
     expect(prompts.map((prompt) => prompt.kind)).toEqual(["multiselect", "multiselect", "confirm"]);
-    expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(["repo-only", "review"]);
+    expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(
+      [
+        { value: "review", group: codexRoot },
+        { value: "repo-only", group: repository },
+      ]
+        .sort((left, right) => left.group.localeCompare(right.group))
+        .map((choice) => choice.value),
+    );
     expect(yield* interaction.remaining).toBe(0);
 
     const state = yield* home.durable;

@@ -34,6 +34,7 @@ import { result } from "../contracts.js";
 import { LibraryStore } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
+import { terminalColors } from "../../presentation/terminal-style.js";
 
 const workDirFlag = optionalString(
   "work-dir",
@@ -151,7 +152,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     renderer.withStatus("Observing local skills", runSetup(options));
   let observed = yield* observe(setupOptions);
   if (!input.interactive || !input.localCustody) return observed;
-  yield* renderer.note(renderSetupDiscovery(observed), "Local discovery");
+  yield* renderer.note(renderSetupDiscovery(observed, terminalColors()), "Local discovery");
   const discoveredRepositories = observed.repositories;
   let repositoryDecisions: ReadonlyArray<{
     path: string;
@@ -502,7 +503,7 @@ const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(funct
         (item) => setupChoiceValue(item, candidates) === choice.value,
       )!;
       const modified = yield* setupSkillModificationHint(candidate.paths);
-      return { ...choice, hint: `${modified} · ${choice.hint}` };
+      return { ...choice, hint: modified, detail: choice.hint };
     }),
   );
   const selectedValues = yield* prompter

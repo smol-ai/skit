@@ -9,6 +9,7 @@ import {
   renderNoteFrame,
   renderResultFrame,
 } from "./output-frame.js";
+import { terminalColors } from "./terminal-style.js";
 
 export interface RendererShape {
   /** A command's successful payload: JSON or rendered text, plus any declared exit code. */
@@ -75,7 +76,7 @@ export function consoleRenderer(json: boolean): RendererShape {
       }),
     help: (text) => write(process.stdout, renderHelpFrame(text, format).stdout),
     note: (body, title) => {
-      const frame = renderNoteFrame(body, title, format);
+      const frame = renderNoteFrame(body, terminalColors().bold(title), format);
       return frame.stderr
         ? clearStatus.pipe(Effect.andThen(write(process.stderr, frame.stderr)))
         : Effect.void;

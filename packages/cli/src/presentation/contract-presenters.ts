@@ -14,6 +14,7 @@ import { renderLibrarySync } from "./library-sync.js";
 import { renderLibraryList } from "./library-list.js";
 import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, severityHeadline } from "./condition-language.js";
+import { createColors } from "picocolors";
 
 export interface RenderContext {
   readonly color: boolean;
@@ -404,11 +405,14 @@ export function setupDiscoverySummary(data: SetupDiscoveryInput) {
   };
 }
 
-export function renderSetupDiscovery(data: SetupDiscoveryInput): string {
+export function renderSetupDiscovery(
+  data: SetupDiscoveryInput,
+  color = createColors(false),
+): string {
   const summary = setupDiscoverySummary(data);
 
   const lines = [
-    `Found ${summary.skills.count} skill${summary.skills.count === 1 ? "" : "s"}${summary.skills.locations === summary.skills.count ? "" : ` across ${summary.skills.locations} locations`}`,
+    `${color.bold(String(summary.skills.count))} skill${summary.skills.count === 1 ? "" : "s"}${summary.skills.locations === summary.skills.count ? "" : color.dim(` across ${summary.skills.locations} locations`)}`,
   ];
   if (summary.skills.expanded)
     for (const { name, paths } of summary.skills.items)
@@ -420,14 +424,14 @@ export function renderSetupDiscovery(data: SetupDiscoveryInput): string {
 
   lines.push(
     "",
-    `Found ${summary.lockFiles.length} skills.sh lock file${summary.lockFiles.length === 1 ? "" : "s"}`,
+    `${color.bold(String(summary.lockFiles.length))} skills.sh lock file${summary.lockFiles.length === 1 ? "" : "s"}`,
   );
   for (const lock of summary.lockFiles) {
-    lines.push(`  ${compactSetupPath(lock.directory)}`);
+    lines.push(`  ${color.dim(compactSetupPath(lock.directory))}`);
     if (!lock.collections.length) lines.push(`    ${lock.status}`);
     for (const collection of lock.collections) {
       lines.push(
-        `    ${collection.source} · ${collection.skills.length} skill${collection.skills.length === 1 ? "" : "s"}`,
+        `    ${color.cyan(collection.source)} ${color.dim(`· ${collection.skills.length} skill${collection.skills.length === 1 ? "" : "s"}`)}`,
       );
       if (collection.expanded)
         lines.push(
