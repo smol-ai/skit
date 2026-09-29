@@ -69,7 +69,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v4");
+    assert.strictEqual(rendered[0]?.schema, "skit.list.v5");
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");

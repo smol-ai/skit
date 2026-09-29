@@ -760,7 +760,8 @@ const contractPresenters: ContractPresenters = {
     data.events.length
       ? data.events.map(renderLibraryHistoryEvent).join("\n")
       : "No Library history recorded.",
-  [outputContracts.list.id]: renderLibraryList,
+  [outputContracts.list.id]: (data, context) =>
+    renderLibraryList(data, createColors(context.color)),
   [outputContracts.experimentalAuditV1Alpha4.id]: renderAuditV1Alpha4,
   [outputContracts.authorList.id]: renderAuthorList,
   [outputContracts.pull.id]: (data) =>
@@ -806,7 +807,8 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.disable.id]: (data) => renderSetEnabled(data, true),
   [outputContracts.disablePlan.id]: (data) => renderSetEnabled(data, false),
   [outputContracts.doctor.id]: renderDoctor,
-  [outputContracts.inventory.id]: (data) => renderInventory(data, data.machine),
+  [outputContracts.inventory.id]: (data, context) =>
+    renderInventory(data, data.machine, createColors(context.color)),
   [outputContracts.setup.id]: renderSetup,
   [outputContracts.repositoryPolicy.id]: (data) =>
     data.action === "list"

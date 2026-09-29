@@ -9,7 +9,7 @@ import {
   renderNoteFrame,
   renderResultFrame,
 } from "./output-frame.js";
-import { terminalColors } from "./terminal-style.js";
+import { terminalColors, terminalColorEnabled } from "./terminal-style.js";
 
 export interface RendererShape {
   /** A command's successful payload: JSON or rendered text, plus any declared exit code. */
@@ -59,7 +59,7 @@ export function consoleRenderer(json: boolean): RendererShape {
     result: (result, options) =>
       Effect.gen(function* () {
         const frame = renderResultFrame(result, {
-          color: process.stdout.isTTY,
+          color: terminalColorEnabled(process.stdout),
           detail: options?.detail ?? "summary",
           format,
         });

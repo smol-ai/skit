@@ -758,7 +758,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v6"
+        "skit.inventory.v7"
       ],
       "exitCodes": [
         0,
@@ -898,7 +898,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.list.v4"
+        "skit.list.v5"
       ],
       "exitCodes": [
         0,

@@ -1,3 +1,5 @@
+import { createColors } from "picocolors";
+import { metadataDate } from "./skill-metadata.js";
 import { homedir } from "node:os";
 import { basename, dirname, sep } from "node:path";
 import type { HarnessName, LibraryInventory } from "@smolai/skit-core";
@@ -138,22 +140,10 @@ const explicitCollectionKey = (instance: MachineInstance): string | undefined =>
 const pathPattern = (path: string, skillName: string): string =>
   basename(path) === skillName ? `${dirname(path)}${sep}<skill>` : path;
 
-const wrappedNames = (names: readonly string[], indent: string): readonly string[] => {
-  const width = 96;
-  const lines: string[] = [];
-  let line = indent;
-  for (const name of names) {
-    const addition = line === indent ? name : `, ${name}`;
-    if (line !== indent && line.length + addition.length > width) {
-      lines.push(line);
-      line = `${indent}${name}`;
-    } else line += addition;
-  }
-  if (line !== indent) lines.push(line);
-  return lines;
-};
-
-export function renderMachineSkills(machine: MachineInventoryResult["machine"]): string {
+export function renderMachineSkills(
+  machine: MachineInventoryResult["machine"],
+  color = createColors(false),
+): string {
   const names = new Set(machine.instances.map((instance) => instance.name));
   const lines = [
     `Inventory · ${names.size} Skill${names.size === 1 ? "" : "s"} · ${machine.instances.length} instance${machine.instances.length === 1 ? "" : "s"}`,
@@ -177,7 +167,7 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
             : location;
     lines.push(
       "",
-      `${locationLabel} · ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` · ${instances.length} instances`}`,
+      `${color.cyan(color.bold(locationLabel))} · ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` · ${instances.length} instances`}`,
     );
     const custodyGroups = new Map<string, typeof instances>();
     for (const instance of instances) {
@@ -199,7 +189,12 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
       );
       const cohorts = new Map<
         string,
-        { names: string[]; facts: readonly string[]; patterns: readonly string[] }
+        {
+          names: string[];
+          facts: readonly string[];
+          patterns: readonly string[];
+          instances: MachineInstance[];
+        }
       >();
       for (const { name, instances: skillInstances } of bySkill.values()) {
         const collectionKeys = [
@@ -221,8 +216,9 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
         ].sort();
         const collectionKey = collectionKeys.length === 1 ? collectionKeys[0] : `skill:${name}`;
         const key = JSON.stringify([collectionKey, facts, patterns]);
-        const cohort = cohorts.get(key) ?? { names: [], facts, patterns };
+        const cohort = cohorts.get(key) ?? { names: [], facts, patterns, instances: [] };
         cohort.names.push(name);
+        cohort.instances.push(...skillInstances);
         cohorts.set(key, cohort);
       }
       for (const cohort of [...cohorts.values()].sort((left, right) =>
@@ -230,13 +226,15 @@ export function renderMachineSkills(machine: MachineInventoryResult["machine"]):
       )) {
         cohort.names.sort();
         lines.push("", `    ${skillCountLabel(cohort.names.length)}`);
-        if (cohort.patterns.length)
-          lines.push("      Locations:", ...cohort.patterns.map((pattern) => `        ${pattern}`));
-        lines.push(
-          ...cohort.facts.map((fact) => `      ${fact}`),
-          "",
-          ...wrappedNames(cohort.names, "      "),
-        );
+        lines.push(...cohort.facts.map((fact) => `      ${color.dim(fact)}`));
+        for (const name of cohort.names) {
+          lines.push("", `      ${color.bold(name)}`);
+          for (const instance of cohort.instances.filter((instance) => instance.name === name))
+            for (const path of instancePaths(instance, repository))
+              lines.push(
+                `        ${path}${path === displayPath(instance.path, repository) ? "" : " (alias)"} ${color.dim(`· SKILL.md modified ${metadataDate(instance.skill_md_modified_at)}`)}`,
+              );
+        }
       }
     }
   }
@@ -310,6 +308,7 @@ const inventoryFindings = (state: LibraryInventory): string[] => {
 export function renderInventory(
   state: LibraryInventory,
   machine?: MachineInventoryResult["machine"],
+  color = createColors(false),
 ): string {
   const groups = new Map<string, string[]>();
   const add = (harnesses: readonly HarnessName[], path: string, row: string) => {
@@ -358,7 +357,7 @@ export function renderInventory(
   if (!machine) return library;
   const summary = `Library projections · ${managed.size} managed · ${state.unmanaged.length} unmanaged`;
   return [
-    renderMachineSkills(machine),
+    renderMachineSkills(machine, color),
     summary,
     ...(findings.length ? [findings.join("\n")] : []),
     renderScanScope(machine),

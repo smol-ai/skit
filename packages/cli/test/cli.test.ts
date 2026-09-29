@@ -199,7 +199,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v4" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v5" });
 
     const add = spawnSync(
       process.execPath,
@@ -412,7 +412,7 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v4",
+      schema: "skit.list.v5",
       data: { subjects: [], bindings: [] },
     });
     expect(result.stderr).toBe("");

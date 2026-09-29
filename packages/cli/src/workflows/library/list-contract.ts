@@ -1,3 +1,4 @@
+import { SkillMetadata } from "./skill-metadata.js";
 import { Schema } from "effect";
 import { CollectionId, Digest, HarnessName, SkillId, SkillVersionId } from "@smolai/skit-core";
 
@@ -9,6 +10,7 @@ export const ListResult = Schema.Struct({
       label: Schema.String,
       skills: Schema.Array(
         Schema.Struct({
+          ...SkillMetadata.fields,
           name: Schema.String,
           skill_id: SkillId,
           selected_skill_version_id: Schema.optionalKey(SkillVersionId),

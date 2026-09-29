@@ -1,7 +1,8 @@
-import { Effect, FileSystem, Option } from "effect";
+import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
+import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -103,14 +104,8 @@ export const setupInstalledSkillChoices = (
 export const setupSkillModificationHint = Effect.fn("CLI.setup.skillModificationHint")(function* (
   paths: readonly string[],
 ) {
-  const fs = yield* FileSystem.FileSystem;
-  const dates = yield* Effect.forEach(paths, (path) =>
-    fs.stat(join(path, "SKILL.md")).pipe(
-      Effect.map((info) => Option.map(info.mtime, (date) => date.toISOString())),
-      Effect.orElseSucceed(() => Option.none<string>()),
-    ),
-  );
-  const available = dates.flatMap((date) => Option.toArray(date)).sort();
+  const dates = yield* Effect.forEach(paths, skillModificationTime);
+  const available = dates.filter((date): date is string => date !== null).sort();
   const latest = available.at(-1);
   const copies =
     paths.length <= 1
