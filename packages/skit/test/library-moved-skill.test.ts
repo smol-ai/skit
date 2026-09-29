@@ -58,6 +58,9 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
       ["engineering/spec"],
     );
     // The retired row keeps the Version its own path observed.
-    assert.strictEqual(currentSkillVersion(state, state.skills[0]!)?.skill_version_id !== undefined, true);
+    assert.strictEqual(
+      currentSkillVersion(state, state.skills[0]!)?.skill_version_id !== undefined,
+      true,
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
