@@ -28,7 +28,7 @@
       "label": {
         "type": "string"
       },
-      "installed": {
+      "enabled": {
         "type": "array",
         "items": {
           "type": "string"
@@ -75,7 +75,7 @@
       "available_snapshot_digest",
       "changed",
       "label",
-      "installed",
+      "enabled",
       "new_available",
       "updated",
       "removed",

@@ -4,8 +4,8 @@ import { Schema } from "effect";
 /** What a refresh means for the Skills this device enables. */
 const SkillChanges = {
   label: Schema.String,
-  /** New upstream Skills installed because the Collection is followed. */
-  installed: Schema.Array(Schema.String),
+  /** New upstream Skills enabled because the Collection is followed. */
+  enabled: Schema.Array(Schema.String),
   /** New upstream Skills nothing enables. */
   new_available: Schema.Number,
   /** Enabled Skills whose bytes changed. */

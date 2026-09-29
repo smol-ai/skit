@@ -64,64 +64,64 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
 }
 
 export function renderLibrarySync(data: SyncData): string {
-  const count =
-    data.snapshots === undefined
-      ? ""
-      : ` · ${data.snapshots} private snapshot${data.snapshots === 1 ? "" : "s"}`;
-  const revision = data.revision_id === undefined ? "" : ` · revision ${data.revision_id}`;
-  const drift = data.projection_drift?.length
-    ? `\nProjection recipe differs for ${data.projection_drift.length} Version${data.projection_drift.length === 1 ? "" : "s"}: ${data.projection_drift.join(", ")}`
-    : "";
-  const deferred = data.deferred_bindings?.length
-    ? `\n\nDeferred on this device\n${data.deferred_bindings
-        .map(
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+  // What syncing did to this device, when it did anything worth knowing.
+  const notes = [
+    ...(data.retired
+      ? [`Removed ${plural(data.retired, "Skill")} no longer enabled from this device.`]
+      : []),
+    ...(data.projection_drift?.length
+      ? [
+          `${plural(data.projection_drift.length, "enabled Skill")} differ from the synced Version: ${data.projection_drift.join(", ")}`,
+        ]
+      : []),
+    ...(data.deferred_bindings?.length
+      ? data.deferred_bindings.map(
           (binding) =>
-            `  ${harnessLabel(binding.harness)} (global)\n    Skills: ${binding.skills.join(", ") || "none"}\n    Harness unavailable here. Binding kept; local files unchanged.`,
+            `${harnessLabel(binding.harness)} isn't available on this device, so these Skills aren't enabled here: ${binding.skills.join(", ") || "none"}`,
         )
-        .join("\n")}`
-    : data.deferred
-      ? `\n${data.deferred} Binding${data.deferred === 1 ? "" : "s"} deferred on this device.`
-      : "";
-  const retired = data.retired
-    ? `\nRetired ${data.retired} obsolete owned Projection${data.retired === 1 ? "" : "s"}.`
-    : "";
+      : data.deferred
+        ? [
+            data.deferred === 1
+              ? "An agent isn't available on this device, so its Skills aren't enabled here."
+              : `${data.deferred} agents aren't available on this device, so their Skills aren't enabled here.`,
+          ]
+        : []),
+  ];
+  const withNotes = (message: string) =>
+    notes.length ? `${message}\n\n${notes.join("\n")}` : message;
   const plan = data.plan ? `${renderLibrarySyncPlan(data.plan)}\n\n` : "";
   const unapplied = (command: string) =>
-    `${plan}${deferred.replace(/^\n+/, "")}${deferred ? "\n\n" : ""}No changes applied. Run ${command} to apply.`;
+    `${plan}${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
   switch (data.status) {
     case "clean":
-      return `Library snapshots are current${revision}${retired}${deferred}`;
+      return withNotes("Library is already in sync.");
     case "push_ready":
-      return unapplied("skit sync --apply");
-    case "pushed":
-      return `Saved retained Library bytes${count}${revision}`;
     case "pull_ready":
-      return unapplied("skit sync --apply");
-    case "pulled":
-      return `Restored retained Library bytes${count}${revision}${drift}${retired}${deferred}`;
-    case "upgrade_ready":
-      return `Ready to upgrade the Library's older sync revision${count}\nRun skit sync --apply to apply.`;
-    case "upgraded":
-      return `Upgraded the Library sync revision${count}${revision}`;
-    case "legacy_remote_conflict":
-      return `The older remote Library has intent not accounted for locally${revision}`;
-    case "local_migration_required":
-      return "Migrate the local Library before syncing retained bytes.";
-    case "local_bytes_changed":
-      return `Retained local bytes changed for ${data.digest ?? "a Version"}; sync stopped.`;
-    case "adoption_required":
-      return `This device has no accepted base for the remote Library${revision}. Review adoption with skit sync --adopt.`;
-    case "adoption_ready":
-      return unapplied("skit sync --adopt --apply");
     case "merge_ready":
       return unapplied("skit sync --apply");
+    case "adoption_ready":
+      return unapplied("skit sync --adopt --apply");
+    case "pushed":
+    case "pulled":
     case "merged":
-      return `Reconciled Library Collections${count}${revision}${drift}${retired}${deferred}`;
+    case "upgraded":
+      return withNotes("Library synced.");
+    case "upgrade_ready":
+      return "The remote Library uses an older sync format. Run skit sync --apply to upgrade it.";
+    case "legacy_remote_conflict":
+      return "The remote Library has changes from an older skit that this device doesn't have; sync stopped.";
+    case "local_migration_required":
+      return "Update this device's Library before syncing.";
+    case "local_bytes_changed":
+      return "A stored Skill copy on this device changed unexpectedly; sync stopped.";
+    case "adoption_required":
+      return "This device hasn't synced with this Library before. Review what would change with skit sync --adopt.";
     case "conflicted":
-      return `Library changes conflict${revision}:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}`;
+      return `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`;
     case "base_mismatch":
-      return `The accepted Library base belongs to another Registry or Library${revision}.`;
+      return "This device last synced with a different Library; sync stopped.";
     case "resolution_invalid":
-      return `A --take-remote key does not name a current Collection or Binding conflict${revision}.`;
+      return "--take-remote named something that isn't a current conflict.";
   }
 }

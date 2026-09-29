@@ -60,7 +60,7 @@
       "label": {
         "type": "string"
       },
-      "installed": {
+      "enabled": {
         "type": "array",
         "items": {
           "type": "string"
@@ -110,7 +110,7 @@
       "projected",
       "deferred",
       "label",
-      "installed",
+      "enabled",
       "new_available",
       "updated",
       "removed",

@@ -68,7 +68,7 @@ const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
 });
 
 /**
- * What a refresh of one Collection means for this device: Skills a followed Collection installs
+ * What a refresh of one Collection means for this device: Skills a followed Collection enables
  * or retires, enabled Skills that changed, individually enabled Skills kept after upstream
  * deleted them, and how many new Skills nothing enables. Unenabled Skills are only counted, so a
  * Source with thousands of Skills stays readable.
@@ -107,7 +107,7 @@ const skillChanges = (
       : [skill];
   });
   return {
-    installed: followed ? added.map((member) => member.name) : [],
+    enabled: followed ? added.map((member) => member.name) : [],
     new_available: followed ? 0 : added.length,
     updated: observed.flatMap((member) => {
       const before = previous.find((item) => item.source_path === member.source_path);

@@ -98,15 +98,15 @@ function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): s
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-/** One Source's effect on this device: installed, changed, retired, kept, and available Skills. */
+/** One Source's effect on this device: enabled, changed, retired, kept, and available Skills. */
 function skillChangeLines(
   item: Pick<
     ContractDataForId<"skit.update.plan.v5">[number],
-    "installed" | "updated" | "removed" | "kept" | "new_available"
+    "enabled" | "updated" | "removed" | "kept" | "new_available"
   >,
 ): string[] {
   return [
-    ...item.installed.map((name) => `  + ${name}`),
+    ...item.enabled.map((name) => `  + ${name}`),
     ...item.updated.map((name) => `  ~ ${name}`),
     ...item.removed.map((name) => `  - ${name}`),
     ...item.kept.map(

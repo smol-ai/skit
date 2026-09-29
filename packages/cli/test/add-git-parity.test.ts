@@ -349,7 +349,7 @@ test.runIf(realGit)(
         expect(result.status, result.stderr).toBe(0);
       }
       const expectedChanges = {
-        installed: ["release-notes"],
+        enabled: ["release-notes"],
         updated: ["code-review"],
         removed: ["security-review"],
         kept: [],
@@ -386,7 +386,7 @@ test.runIf(realGit)(
       const individual = await run("update");
       expect(individual.code, individual.stderr).toBe(0);
       expect(JSON.parse(individual.stdout).data).toMatchObject([
-        { installed: [], removed: [], kept: ["release-notes"], new_available: 1 },
+        { enabled: [], removed: [], kept: ["release-notes"], new_available: 1 },
       ]);
       expect(await readdir(roots.codexRoot)).toEqual(["release-notes"]);
     } finally {
