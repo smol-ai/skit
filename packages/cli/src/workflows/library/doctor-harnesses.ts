@@ -4,6 +4,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { LibraryDoctorReport, SourceProcess } from "@smolai/skit-core";
 import { probeHarnessEffect, type ProbeableHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck } from "./doctor-codex.js";
+import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
 
 export class HarnessDiscoveryFailure extends Schema.TaggedError<HarnessDiscoveryFailure>()(
   "HarnessDiscoveryFailure",
@@ -11,6 +12,7 @@ export class HarnessDiscoveryFailure extends Schema.TaggedError<HarnessDiscovery
 ) {}
 
 export const HarnessDoctorSkill = Schema.Struct({
+  id: Schema.optionalKey(Schema.String),
   name: Schema.String,
   description: Schema.optionalKey(Schema.String),
   path: Schema.optionalKey(Schema.String),
@@ -192,7 +194,10 @@ export const readNativeSkills = Effect.fn("Doctor.readNativeSkills")(function* (
   harness: "opencode" | "devin",
   executable: string,
   cwd: string,
+  version?: string,
 ) {
+  if (harness === "opencode" && version?.startsWith("2."))
+    return yield* readOpenCodeV2Skills(executable, cwd);
   const sourceProcess = yield* SourceProcess;
   const options = { cwd, timeoutMs: 15_000, maxOutputBytes: 4_000_000, maxErrorBytes: 32_000 };
   const output =
@@ -277,21 +282,30 @@ export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       detail: probe.error ?? "Harness unavailable",
     };
   const executable = probe.executablePath;
+  const native = {
+    ...empty,
+    ...version,
+    limitations:
+      harness === "opencode" && probe.version?.startsWith("2.")
+        ? [
+            "Registered skills after discovery plugin activation and three stable metadata snapshots. Duplicate filesystem IDs are resolved by native precedence without warnings; equal display names can coexist. Skill bodies are omitted.",
+          ]
+        : limitations,
+  };
   return yield* Effect.gen(function* () {
     if (harness === "claude-code") {
       const commands = yield* readClaudeCommands(executable, cwd);
       return {
-        ...empty,
-        ...version,
+        ...native,
         status: "checked" as const,
         skills: commands.map((command) => ({ ...command, warnings: [], errors: [] })),
       };
     }
-    const result = yield* readNativeSkills(harness, executable, cwd);
-    return { ...empty, ...version, ...result, status: "checked" as const };
+    const result = yield* readNativeSkills(harness, executable, cwd, probe.version ?? undefined);
+    return { ...native, ...result, status: "checked" as const };
   }).pipe(
     Effect.catch((error) =>
-      Effect.succeed({ ...empty, ...version, status: "failed" as const, detail: String(error) }),
+      Effect.succeed({ ...native, status: "failed" as const, detail: String(error) }),
     ),
   );
 });

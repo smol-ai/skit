@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Result } from "effect";
+import { Effect, Fiber, FileSystem, Layer, Result, Schedule } from "effect";
 import { SourceProcess } from "@smolai/skit-core";
 import { join } from "node:path";
 import { expect } from "vitest";
@@ -167,4 +167,79 @@ process.exit(0);
       { name: "large", description: "Large", path: "/large/SKILL.md", warnings: [], errors: [] },
     ]);
   }).pipe(Effect.provide(nativeLibraryLayer)),
+);
+
+it.live.each([
+  "success",
+  "wrong-directory",
+  "plugin-failure",
+  "oversized",
+  "malformed",
+  "cancelled",
+])(
+  "OpenCode v2 %s uses authenticated inventory after activation and closes its stdin lease",
+  (kind) =>
+    Effect.gen(function* () {
+      const f = yield* NativeLibraryFixture;
+      const fs = yield* FileSystem.FileSystem;
+      const executable = join(f.root, "fake-opencode-v2");
+      const closed = join(f.root, "closed");
+      const polling = join(f.root, "polling");
+      yield* fs.writeFileString(
+        executable,
+        `#!${process.execPath}
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+assert.deepEqual(process.argv.slice(2), ['serve','--stdio','--hostname','127.0.0.1','--port','0','--log-level','warn','--print-logs']);
+assert.equal(process.env.OPENCODE_DISABLE_MODELS_FETCH, '1');
+assert.notEqual(process.env.OPENCODE_PASSWORD, '');
+let polls = 0;
+let inventoryReads = 0;
+const server = require('node:http').createServer((req,res) => {
+ assert.equal(req.headers.authorization, 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_PASSWORD).toString('base64'));
+ if (${JSON.stringify(kind)} === 'plugin-failure') { res.writeHead(500); res.end(); return; }
+ const plugins = ['opencode.skill','opencode.config.compatibility','opencode.config.skill'];
+ if (req.url === '/api/plugin') { polls++; fs.writeFileSync(${JSON.stringify(polling)}, 'polling'); }
+ else { assert(polls >= 2, 'inventory read before plugin activation'); assert.equal(req.url, '/api/skill'); inventoryReads++; }
+ const data = req.url === '/api/plugin'
+   ? plugins.map(id => ({id,state:{status:polls < 2 || ${JSON.stringify(kind)} === 'cancelled' ? 'loading' : 'active'}}))
+   : inventoryReads === 1 && ${JSON.stringify(kind)} === 'success' ? [] : [{id:'review-a',name:'Review',path:'/a/SKILL.md',content:'PRIVATE BODY'}, {id:'review-b',name:'Review',path:'/b/SKILL.md',content:'PRIVATE BODY'}];
+ const body = JSON.stringify({location:{directory:${kind === "wrong-directory" ? "'/wrong'" : "process.cwd()"}},data});
+ res.end(${JSON.stringify(kind)} === 'oversized' ? 'x'.repeat(4000001) : ${JSON.stringify(kind)} === 'malformed' ? '{invalid' : body);
+});
+server.listen(0, '127.0.0.1', () => console.log(JSON.stringify({url:'http://127.0.0.1:' + server.address().port})));
+process.stdin.resume();
+process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') assert.equal(inventoryReads, 4); fs.writeFileSync(${JSON.stringify(closed)}, 'closed'); server.close(); });
+`,
+      );
+      yield* fs.chmod(executable, 0o755);
+      if (kind === "cancelled") {
+        const fiber = yield* readNativeSkills("opencode", executable, f.root, "2.0.20").pipe(
+          Effect.forkScoped,
+        );
+        yield* fs
+          .exists(polling)
+          .pipe(
+            Effect.repeat({ schedule: Schedule.spaced("10 millis"), while: (exists) => !exists }),
+            Effect.timeout("3 seconds"),
+          );
+        yield* Fiber.interrupt(fiber);
+        expect(yield* fs.readFileString(closed)).toBe("closed");
+        return;
+      }
+      const result = yield* Effect.result(
+        readNativeSkills("opencode", executable, f.root, "2.0.20"),
+      );
+      if (kind === "success") {
+        expect(Result.isSuccess(result), String(result)).toBe(true);
+        if (Result.isSuccess(result)) {
+          expect(result.success.skills.map((skill) => [skill.id, skill.name])).toEqual([
+            ["review-a", "Review"],
+            ["review-b", "Review"],
+          ]);
+          expect(JSON.stringify(result.success)).not.toContain("PRIVATE BODY");
+        }
+      } else expect(Result.isFailure(result)).toBe(true);
+      expect(yield* fs.readFileString(closed)).toBe("closed");
+    }).pipe(Effect.provide(nativeLibraryLayer)),
 );

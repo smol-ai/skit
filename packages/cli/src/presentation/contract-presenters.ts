@@ -337,7 +337,8 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v3">, context: Render
       if (context.detail === "full")
         lines.push(
           ...check.skills.map(
-            (skill) => `      ${skill.name}${skill.path ? ` · ${path(skill.path)}` : ""}`,
+            (skill) =>
+              `      ${skill.name}${skill.id && skill.id !== skill.name ? ` · ID: ${skill.id}` : ""}${skill.path ? ` · ${path(skill.path)}` : ""}`,
           ),
         );
     } else if (check.status !== "missing")
