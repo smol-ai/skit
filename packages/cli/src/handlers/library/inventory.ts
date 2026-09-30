@@ -16,6 +16,8 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
+import { doctorHarnessCheck } from "../../workflows/library/doctor-harnesses.js";
+import { doctorCodexCheck } from "../../workflows/library/doctor-codex.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 
@@ -101,7 +103,24 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
 /** Diagnose the same freshly persisted observation; report construction is pure. */
 export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInventoryOptions) {
   const inventory = yield* refreshLibraryInventoryCommand(options);
-  return libraryDoctorReport(inventory);
+  const report = libraryDoctorReport(inventory);
+  const renderer = yield* Renderer;
+  const { codex, harnesses } = yield* renderer.withStatus(
+    "Checking native harness skill discovery",
+    Effect.gen(function* () {
+      const codex = yield* doctorCodexCheck(inventory, process.cwd(), options.overrides.codex);
+      const harnesses = yield* Effect.all(
+        [
+          doctorHarnessCheck("claude-code", process.cwd(), options.overrides.claude),
+          doctorHarnessCheck("opencode", process.cwd(), options.overrides.opencode),
+          doctorHarnessCheck("devin", process.cwd(), options.overrides.devin),
+        ],
+        { concurrency: 3 },
+      );
+      return { codex, harnesses };
+    }),
+  );
+  return { ...report, codex, harnesses };
 });
 
 const localInventoryMetadata = {
@@ -173,6 +192,20 @@ export const doctorCliCommand = Command.make("doctor", localFlags, (input) => {
   Command.withExamples([{ command: "skit doctor" }]),
   Command.annotate(CommandMetadata, {
     ...localInventoryMetadata,
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
+      subprocesses: [
+        "codex --version",
+        "codex app-server",
+        "claude --version",
+        "claude --print --input-format stream-json --output-format stream-json",
+        "opencode --version",
+        "node (bounded OpenCode capture)",
+        "opencode debug skill",
+        "devin --version",
+        "devin skills list --json",
+      ],
+    },
     outputSchemas: [outputContracts.doctor],
     exitCodes: [0, 12, 65],
   }),

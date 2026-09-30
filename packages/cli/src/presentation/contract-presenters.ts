@@ -195,16 +195,170 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v2">): string {
-  if (!data.issues.length) return "Local library is healthy";
-  return [
-    `${data.issues.length} ${data.issues.length === 1 ? "issue" : "issues"}`,
-    "",
-    ...data.issues.flatMap((issue) => [
-      `${conditionHeadline(issue.code, "Local library issue")}${issue.skillId ? ` · ${issue.skillId}` : ""}${issue.harness ? ` · ${harnessLabel(issue.harness)}` : issue.harnesses?.length ? ` · ${issue.harnesses.map(harnessLabel).join(", ")}` : ""}`,
-      ...(issue.path ? [`  ${issue.path}`] : []),
-    ]),
-  ].join("\n");
+function renderDoctor(data: ContractDataForId<"skit.doctor.v3">, context: RenderContext): string {
+  const color = createColors(context.color);
+  const section = (title: string) => color.cyan(color.bold(title));
+  const path = (value: string) => color.cyan(compactSetupPath(value));
+  const lines = [section("SKIT doctor"), color.dim(compactSetupPath(data.codex.cwd)), ""];
+  lines.push(
+    data.ok
+      ? `${color.green("✓")} ${color.bold("Local library is healthy")}`
+      : `${color.red("✕")} ${color.bold(`${data.issues.length} library issue${data.issues.length === 1 ? "" : "s"}`)}`,
+  );
+
+  const findings: string[] = [];
+  let hasCollisions = data.codex.findings.length > 0;
+  for (const issue of data.issues) {
+    findings.push(
+      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.harness ? color.dim(` · ${harnessLabel(issue.harness)}`) : ""}`,
+    );
+    if (issue.path) findings.push(`      ${path(issue.path)}`);
+    else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
+  }
+  for (const finding of data.codex.findings) {
+    findings.push(
+      `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
+      `      ${finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
+      ...finding.instances.map(
+        (instance) =>
+          `      ${path(instance.path)} ${color.dim(`· ${instance.scope}${instance.pluginId ? ` · plugin ${instance.pluginId}` : ""} · ${instance.skitManaged ? "SKIT projection" : "not tracked by SKIT"}`)}`,
+      ),
+    );
+  }
+  for (const error of data.codex.errors)
+    findings.push(
+      `  ${color.yellow("!")} Codex could not inspect ${path(error.path)}`,
+      `      ${error.message}`,
+    );
+
+  for (const check of data.harnesses) {
+    for (const skill of check.skills) {
+      for (const error of skill.errors)
+        findings.push(
+          `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${color.bold(skill.name)}`,
+          `      ${error}`,
+          ...(skill.path ? [`      ${path(skill.path)}`] : []),
+        );
+      for (const warning of skill.warnings)
+        findings.push(
+          `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${color.bold(skill.name)}`,
+          `      ${warning}`,
+          ...(skill.path ? [`      ${path(skill.path)}`] : []),
+        );
+    }
+    // Group OpenCode's repeated collision log lines into one useful finding per skill.
+    // Unknown warning formats remain visible; the exact native logs remain in JSON.
+    const collisions = new Map<string, Set<string>>();
+    const otherWarnings: string[] = [];
+    for (const warning of check.warnings.flatMap((warning) =>
+      warning.split("\n").filter(Boolean),
+    )) {
+      const field = (key: string) => {
+        const value = warning.match(
+          new RegExp(`(?:^|\\s)${key}=("(?:\\\\.|[^"\\\\])*"|\\S+)`),
+        )?.[1];
+        if (!value) return undefined;
+        if (!value.startsWith('"')) return value;
+        try {
+          return String(JSON.parse(value));
+        } catch {
+          return undefined;
+        }
+      };
+      const name = field("name");
+      const existing = field("existing");
+      const duplicate = field("duplicate");
+      if (
+        check.harness === "opencode" &&
+        warning.includes("duplicate skill name") &&
+        name &&
+        existing &&
+        duplicate
+      ) {
+        const paths = collisions.get(name) ?? new Set<string>();
+        paths.add(existing);
+        paths.add(duplicate);
+        collisions.set(name, paths);
+      } else otherWarnings.push(warning);
+    }
+    if (collisions.size) hasCollisions = true;
+    for (const [name, paths] of collisions) {
+      findings.push(
+        `  ${color.yellow("!")} ${color.bold(name)} ${color.dim(`· OpenCode · ${paths.size} locations`)}`,
+        "      Same skill name · OpenCode selects one copy",
+      );
+      const selected = check.skills.find((skill) => skill.name === name)?.path;
+      findings.push(
+        ...[...paths]
+          .sort()
+          .map(
+            (value) => `      ${path(value)}${value === selected ? color.dim(" · selected") : ""}`,
+          ),
+      );
+    }
+    findings.push(
+      ...otherWarnings.map(
+        (warning) => `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${warning}`,
+      ),
+    );
+  }
+  if (findings.length) lines.push("", section("Needs attention"), ...findings);
+
+  lines.push("", section("Harness discovery"));
+  const status = (state: string, warning: boolean) =>
+    state === "checked"
+      ? warning
+        ? color.yellow("!")
+        : color.green("✓")
+      : state === "missing"
+        ? color.dim("–")
+        : color.yellow("!");
+  const codex = data.codex;
+  lines.push(
+    `  ${status(codex.status, Boolean(codex.findings.length || codex.errors.length))} ${"Codex".padEnd(14)} ${codex.status === "checked" ? `${codex.instances.length} enabled skill${codex.instances.length === 1 ? "" : "s"}` : codex.status === "missing" ? "not installed" : "not checked"}${codex.version ? color.dim(` · ${codex.version}`) : ""}`,
+  );
+  if (codex.status !== "checked" && codex.status !== "missing")
+    lines.push(`      ${color.dim(codex.detail ?? codex.status)}`);
+  if (codex.status === "checked" && !codex.findings.length && !codex.errors.length)
+    lines.push(`      ${color.dim("No duplicate names or display names found")}`);
+  if (context.detail === "full")
+    lines.push(
+      ...codex.instances.map((instance) => `      ${instance.name} · ${path(instance.path)}`),
+    );
+  for (const check of data.harnesses) {
+    const warning = Boolean(
+      check.warnings.length ||
+      check.skills.some((skill) => skill.warnings.length || skill.errors.length),
+    );
+    lines.push(
+      `  ${status(check.status, warning)} ${harnessLabel(check.harness).padEnd(14)} ${check.status === "checked" ? `${check.skills.length} ${check.coverage === "callable-commands" ? `callable command${check.skills.length === 1 ? "" : "s"}` : `skill${check.skills.length === 1 ? "" : "s"}`}` : check.status === "missing" ? "not installed" : "not checked"}${check.version ? color.dim(` · ${check.version}`) : ""}`,
+    );
+    if (check.status === "checked") {
+      if (context.detail === "full")
+        lines.push(
+          ...check.skills.map(
+            (skill) =>
+              `      ${skill.name}${skill.id && skill.id !== skill.name ? ` · ID: ${skill.id}` : ""}${skill.path ? ` · ${path(skill.path)}` : ""}`,
+          ),
+        );
+    } else if (check.status !== "missing")
+      lines.push(`      ${color.dim(check.detail ?? check.status)}`);
+  }
+
+  lines.push("", section("Next steps"));
+  if (hasCollisions)
+    lines.push(
+      "  Inspect the listed copies and their ownership before disabling or removing one.",
+      `  ${color.cyan("skit inventory")} ${color.dim("· inspect discovered copies and custody")}`,
+    );
+  else if (data.issues.length)
+    lines.push(
+      `  ${color.cyan("skit inventory")} ${color.dim("· inspect affected paths and custody")}`,
+    );
+  lines.push(
+    `  ${color.cyan("skit doctor --json")} ${color.dim("· full lists, paths and native diagnostics")}`,
+  );
+  return lines.join("\n");
 }
 
 function renderRegistryChange(data: ContractDataForId<"skit.registry.remote.v1">): string {

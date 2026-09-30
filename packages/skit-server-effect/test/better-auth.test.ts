@@ -434,8 +434,15 @@ describe("Better Auth adapter", () => {
   it.effect("rate limits unauthenticated verification resends", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
+      // Miniflare's limiter resets at wall-clock minute boundaries. Control the
+      // binding decisions here so this tests HTTP enforcement, not bucket timing.
+      const limit = vi.fn<RateLimit["limit"]>();
+      for (let attempt = 0; attempt < 5; attempt += 1)
+        limit.mockResolvedValueOnce({ success: true });
+      limit.mockResolvedValueOnce({ success: false });
       const emailWeb = makeWebHandler({
         ...env,
+        AUTH_RATE_LIMITER: { limit },
         EMAIL_FROM: "noreply@registry.test",
         EMAIL: { send: () => Promise.resolve({ messageId: "unused" }) },
       });
@@ -462,6 +469,9 @@ describe("Better Auth adapter", () => {
       expect(responses.slice(0, 5).map(({ status }) => status)).toEqual([200, 200, 200, 200, 200]);
       expect(responses[5]?.status).toBe(429);
       expect(responses[5]?.headers.get("retry-after")).toBe("60");
+      expect(limit.mock.calls).toEqual(
+        Array.from({ length: 6 }, () => [{ key: "/api/auth/send-verification-email:192.0.2.200" }]),
+      );
       yield* webPromise(() => emailWeb.dispose());
     }).pipe(Effect.provide(bindingsLayer)),
   );
