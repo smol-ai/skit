@@ -1,0 +1,209 @@
+{
+  "$id": "skit.doctor.v3",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "skillId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "codex",
+                  "claude-code",
+                  "opencode",
+                  "devin"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "harnesses": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "codex",
+                    "claude-code",
+                    "opencode",
+                    "devin"
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "codex": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "checked",
+            "missing",
+            "failed",
+            "skipped"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "duplicate-name",
+                  "display-name-collision"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "documents": {
+                "type": "string",
+                "enum": [
+                  "identical",
+                  "different",
+                  "unknown"
+                ]
+              },
+              "instances": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "canonicalPath": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "pluginId": {
+                      "type": "string"
+                    },
+                    "skitManaged": {
+                      "type": "boolean"
+                    },
+                    "documentDigest": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "displayName",
+                    "path",
+                    "canonicalPath",
+                    "scope",
+                    "skitManaged"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "documents",
+              "instances"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "message"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "status",
+        "cwd",
+        "findings",
+        "errors"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "ok",
+    "issues",
+    "codex"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

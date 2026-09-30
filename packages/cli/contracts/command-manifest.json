@@ -434,11 +434,16 @@
       "effects": {
         "capabilities": [
           "filesystem.read",
-          "filesystem.write"
+          "filesystem.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "codex --version",
+          "codex app-server"
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v2"
+        "skit.doctor.v3"
       ],
       "exitCodes": [
         0,

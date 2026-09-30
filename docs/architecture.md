@@ -248,6 +248,14 @@ Disablement removes the selected binding intent and safely removes projections s
 
 `inventory` refreshes authoritative state against selected Harness roots, including unmanaged content, then publishes one complete observation after all roots succeed. The standalone observer clones its input and performs no writes; presentation filtering follows persistence. `doctor` reports inconsistencies requiring attention. Observation is distinct from adoption: finding a directory does not make SKIT its owner.
 
+Plain `skit doctor` also asks an installed Codex CLI for its enabled skills in the current working directory using App Server `skills/list` with `forceReload`. It starts no thread or model turn. This uses native configured discovery, including project, user and plugin skills, instead of predicting visibility from SKIT's projection roots. Codex may populate its own caches and bundled skills during startup. The child is bounded by a ten-second timeout and a 4 MB output limit, and is stopped when the check finishes.
+
+The `skit.doctor.v3` report includes the CLI version, working directory, duplicate skill names, different skill names sharing a display label, canonical paths, scopes, plugin IDs, and whether an instance matches a tracked SKIT projection. Content comparisons cover exact `SKILL.md` bytes only, not supporting files. Symlink aliases resolving to the same document are collapsed. Duplicate findings are informational and do not change the existing Library health verdict or exit code. Missing CLI, failed discovery, unreadable documents, and native parser errors remain explicit. A custom `--codex-root` skips native discovery because that override does not change Codex's configuration.
+
+These observations establish CLI discovery, not what Codex Desktop displayed or what a model loaded. Desktop may use a different version, configuration, or cache. To reproduce several candidate layouts without touching personal installations, build SKIT and run `python3 scripts/repro-codex-duplicates.py`. It covers aliases, identical and different copies, a real SKIT projection alongside an existing source symlink, project/user overlap, and display-label collisions.
+
+Reference source: harness-guide's local Codex checkout at `1983c48fd186614529e4fad418ac38a1ae00c6b6`, App Server `protocol/v2/plugin.rs` and `ext/skills/src/loader/host_merge.rs`. Native reproduction verified with Codex CLI `0.159.2`.
+
 ### Publish and download
 
 The CLI validates a local SKIT, creates a deterministic archive, discovers registry routes, and submits a versioned publish request. Core owns the request and response schemas used by both client and server.

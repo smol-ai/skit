@@ -3,7 +3,6 @@ import {
   AuthorSkitSummary,
   Digest,
   InvocationMetadataGeneration,
-  LibraryDoctorReport,
   LibraryAuditEvent,
   releasePublishResponseSchema,
   SkillAssessmentDecision,
@@ -29,6 +28,7 @@ import {
   ProjectionRetentionResult,
 } from "../workflows/library/projection-retention-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
+import { DoctorReport } from "../workflows/library/doctor-codex.js";
 
 function effectOutput<
   const TId extends string,
@@ -103,7 +103,7 @@ export const outputContracts = {
   securityReview: effectOutput("skit.security.review.v2", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v2", SkillSecurityReview),
   inventory: effectOutput("skit.inventory.v7", MachineInventoryResult),
-  doctor: effectOutput("skit.doctor.v2", LibraryDoctorReport),
+  doctor: effectOutput("skit.doctor.v3", DoctorReport),
   check: effectOutput("skit.check.v7", CheckResult),
   update: effectOutput("skit.update.v5", UpdateResult),
   updatePlan: effectOutput("skit.update.plan.v5", UpdatePlan),

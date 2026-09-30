@@ -195,15 +195,33 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v2">): string {
-  if (!data.issues.length) return "Local library is healthy";
+function renderDoctor(data: ContractDataForId<"skit.doctor.v3">): string {
   return [
-    `${data.issues.length} ${data.issues.length === 1 ? "issue" : "issues"}`,
+    data.issues.length
+      ? `${data.issues.length} ${data.issues.length === 1 ? "issue" : "issues"}`
+      : "Local library is healthy",
     "",
     ...data.issues.flatMap((issue) => [
       `${conditionHeadline(issue.code, "Local library issue")}${issue.skillId ? ` · ${issue.skillId}` : ""}${issue.harness ? ` · ${harnessLabel(issue.harness)}` : issue.harnesses?.length ? ` · ${issue.harnesses.map(harnessLabel).join(", ")}` : ""}`,
       ...(issue.path ? [`  ${issue.path}`] : []),
     ]),
+    "",
+    `Codex CLI skill discovery${data.codex.version ? ` · ${data.codex.version}` : ""} · ${data.codex.cwd}`,
+    ...(data.codex.status === "checked"
+      ? [
+          ...(data.codex.findings.length
+            ? data.codex.findings.flatMap((finding) => [
+                `${finding.kind === "duplicate-name" ? "Duplicate skill name" : "Shared display name"}: ${finding.name} · ${finding.instances.length} entries · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
+                ...finding.instances.map(
+                  (instance) =>
+                    `  ${instance.path} · ${instance.scope} · ${instance.name}${instance.pluginId ? ` · plugin ${instance.pluginId}` : ""} · ${instance.skitManaged ? "SKIT projection" : "not a tracked SKIT projection"}`,
+                ),
+              ])
+            : ["No duplicate enabled skill names or display names found."]),
+          ...data.codex.errors.map((error) => `  Discovery gap: ${error.path} · ${error.message}`),
+          "This checks CLI discovery; Desktop behavior may differ. Findings do not change the exit code.",
+        ]
+      : [`Not checked: ${data.codex.detail ?? data.codex.status}`]),
   ].join("\n");
 }
 

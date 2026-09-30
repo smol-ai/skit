@@ -16,6 +16,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
+import { doctorCodexCheck } from "../../workflows/library/doctor-codex.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 
@@ -101,7 +102,9 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
 /** Diagnose the same freshly persisted observation; report construction is pure. */
 export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInventoryOptions) {
   const inventory = yield* refreshLibraryInventoryCommand(options);
-  return libraryDoctorReport(inventory);
+  const report = libraryDoctorReport(inventory);
+  const codex = yield* doctorCodexCheck(inventory, process.cwd(), options.overrides.codex);
+  return { ...report, codex };
 });
 
 const localInventoryMetadata = {
@@ -173,6 +176,10 @@ export const doctorCliCommand = Command.make("doctor", localFlags, (input) => {
   Command.withExamples([{ command: "skit doctor" }]),
   Command.annotate(CommandMetadata, {
     ...localInventoryMetadata,
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
+      subprocesses: ["codex --version", "codex app-server"],
+    },
     outputSchemas: [outputContracts.doctor],
     exitCodes: [0, 12, 65],
   }),

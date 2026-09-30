@@ -319,9 +319,26 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       suppressed: [],
     },
   }),
-  resultStory("doctor", "healthy", outputContracts.doctor, { ok: true, issues: [] }),
+  resultStory("doctor", "healthy", outputContracts.doctor, {
+    ok: true,
+    issues: [],
+    codex: {
+      status: "checked",
+      cwd: "/home/story/project",
+      version: "0.159.2",
+      findings: [],
+      errors: [],
+    },
+  }),
   resultStory("doctor", "projection-conflict", outputContracts.doctor, {
     ok: false,
+    codex: {
+      status: "missing",
+      cwd: "/home/story/project",
+      detail: "Codex CLI is unavailable",
+      findings: [],
+      errors: [],
+    },
     issues: [
       {
         code: "PROJECTION_CONFLICT",
