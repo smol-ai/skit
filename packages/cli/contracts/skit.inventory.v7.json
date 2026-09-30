@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v6",
+  "$id": "skit.inventory.v7",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -971,6 +971,16 @@
                   ],
                   "additionalProperties": true
                 }
+              },
+              "skill_md_modified_at": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -982,7 +992,8 @@
               "owner",
               "contentIdentity",
               "git",
-              "locks"
+              "locks",
+              "skill_md_modified_at"
             ],
             "additionalProperties": true
           }

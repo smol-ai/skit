@@ -7,6 +7,148 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract, setupDiscoverySummary } from "../src/presentation/contract-presenters.js";
+import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
+import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
+import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
+
+it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
+  const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({
+    name,
+    path,
+    aliases: [path],
+    scope: "global",
+    harnesses: ["codex"],
+    owner: { kind: "unknown" },
+    git: { status: "outside-git" },
+    locks: [],
+    contentIdentity: {
+      status: "none",
+      observedHash: `sha256:${hash.repeat(64)}`,
+      libraryMatches: [],
+    },
+  });
+  const home = "/home/test";
+  const shared = {
+    ...instance("align-me", `${home}/Work/skills/align-me`),
+    harnesses: ["claude-code", "codex", "devin"] as const,
+    aliases: [`${home}/.claude/skills/align-me`, `${home}/.codex/skills/align-me`],
+  };
+  const instances = [
+    shared,
+    instance("same", `${home}/.claude/skills/same`),
+    instance("same", `${home}/.codex/skills/same`),
+    {
+      ...instance("different", `${home}/.claude/skills/different`),
+      harnesses: ["claude-code"] as const,
+    },
+    instance("different", `${home}/.codex/skills/different`, "b"),
+    {
+      ...instance("invalid", `${home}/.claude/skills/invalid`),
+      owner: { kind: "invalid-marker" } as const,
+    },
+    {
+      ...instance("plugin", `${home}/.codex/plugins/cache/vendor/plugin`),
+      owner: {
+        kind: "harness",
+        harness: "codex",
+        source: "Codex curated",
+        bundled: false,
+      } as const,
+    },
+  ];
+  const candidates = classifySetupOnboarding(instances);
+  const rows = setupDiscoveredSkillChoices(instances, candidates, home);
+  expect(rows).toHaveLength(instances.length);
+  const choices = rows.map((row) => row.choice);
+  expect(choices.find((item) => item.label === "align-me")).toMatchObject({
+    group: "Local source · ~/Work/skills",
+    selected: true,
+  });
+  expect(rows.find((row) => row.instance.name === "align-me")?.details).toContain(
+    "Link: ~/.claude/skills/align-me → ~/Work/skills/align-me",
+  );
+  expect(
+    choices.every((choice) => choice.description === undefined && choice.detail === undefined),
+  ).toBe(true);
+  const conflicting = choices.filter((item) => item.label === "different");
+  expect(conflicting.map((item) => item.group)).toEqual([
+    "Copies · different · global · choose one",
+    "Copies · different · global · choose one",
+  ]);
+  expect(choices.slice(0, 2)).toEqual(conflicting);
+  expect(
+    choices
+      .filter((item) => item.group === "Codex local skills · ~/.codex/skills")
+      .every((item) => !item.selected),
+  ).toBe(true);
+  expect(
+    choices
+      .filter((item) => item.label === "different")
+      .every((item) => !item.selected && item.selectExplicitly && !item.disabled),
+  ).toBe(true);
+  expect(rows.find((row) => row.instance.name === "different")?.details).toContain(
+    "Space selects this copy",
+  );
+  expect(
+    choices
+      .filter((item) => item.label === "same")
+      .every((item) => item.searchText?.includes("Duplicate content")),
+  ).toBe(true);
+  expect(choices.find((item) => item.label === "invalid")).toMatchObject({
+    selected: false,
+    disabled: true,
+  });
+  expect(choices.find((item) => item.label === "plugin")).toMatchObject({
+    group: "Plugins · Codex curated",
+    selected: false,
+  });
+  expect(new Set(choices.map((item) => item.value)).size).toBe(instances.length);
+});
+
+it("omits managed Library projections while preserving unmanaged copies and orphaned markers", () => {
+  const unmanaged: SetupSkillInstance = {
+    name: "review",
+    path: "/home/.claude/skills/review",
+    aliases: ["/home/.claude/skills/review"],
+    scope: "global",
+    harnesses: ["claude-code"],
+    owner: { kind: "unknown" },
+    git: { status: "outside-git" },
+    locks: [],
+    contentIdentity: { status: "none", libraryMatches: [] },
+  };
+  const membership = {
+    projectionId: makeProjectionId(),
+    skillId: makeSkillId(),
+    skillVersionId: makeSkillVersionId(),
+  };
+  const managed: SetupSkillInstance = {
+    ...unmanaged,
+    path: "/home/.codex/skills/review",
+    aliases: ["/home/.codex/skills/review"],
+    owner: {
+      kind: "skit",
+      membership: {
+        ...membership,
+        kind: "retained",
+        collectionId: makeCollectionId(),
+        displayName: "review",
+      },
+    },
+  };
+  const orphaned: SetupSkillInstance = {
+    ...unmanaged,
+    name: "orphaned",
+    path: "/home/.codex/skills/orphaned",
+    owner: { kind: "skit", membership: { ...membership, kind: "missing-from-library" } },
+  };
+  const instances = [managed, unmanaged, orphaned];
+  const rows = setupDiscoveredSkillChoices(instances, classifySetupOnboarding(instances));
+  expect(rows.map((row) => row.instance.path)).toEqual([unmanaged.path, orphaned.path]);
+  expect(rows.find((row) => row.instance === unmanaged)?.choice.selectExplicitly).toBe(true);
+  expect(rows.find((row) => row.instance === orphaned)?.choice.disabled).toBe(true);
+  expect(setupDiscoveredSkillChoices([managed], [])).toEqual([]);
+});
 
 it("models large discovery results as collapsed while retaining their Collections", () => {
   const names = Array.from({ length: 6 }, (_, index) => `skill-${index + 1}`);

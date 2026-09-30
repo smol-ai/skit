@@ -1,3 +1,4 @@
+import { readLibrarySkillMetadata, type SkillMetadata } from "./skill-metadata.js";
 import {
   bindingSkillIds,
   currentSkillVersion,
@@ -36,7 +37,7 @@ export interface LibraryBindingRow {
   readonly label: string;
 }
 
-export interface LibrarySkillRow {
+export interface LibrarySkillRow extends SkillMetadata {
   readonly name: string;
   readonly skillVersionId: string;
   readonly collectionId: string;
@@ -111,7 +112,10 @@ const bindingRows = (
       };
     });
 
-const skillRows = (state: LibraryState): LibrarySkillRow[] =>
+const skillRows = (
+  state: LibraryState,
+  metadata: ReadonlyMap<string, SkillMetadata>,
+): LibrarySkillRow[] =>
   state.skills.flatMap((skill) => {
     const collection = state.collections.find(
       (candidate) => candidate.collection_id === skill.collection_id,
@@ -121,6 +125,7 @@ const skillRows = (state: LibraryState): LibrarySkillRow[] =>
     if (version === undefined) return [];
     return [
       {
+        ...metadata.get(skill.skill_id)!,
         name: skill.name,
         skillVersionId: version.skill_version_id,
         collectionId: collection?.collection_id ?? skill.skill_id,
@@ -133,8 +138,10 @@ const skillRows = (state: LibraryState): LibrarySkillRow[] =>
 export const openLibrarySession = Effect.fn("LibrarySession.open")(function* (
   harnesses: readonly Harness[],
 ) {
-  const state = yield* (yield* LibraryStore).load;
-  return { harnesses, skills: skillRows(state) } satisfies LibrarySessionState;
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  const metadata = yield* readLibrarySkillMetadata(state, store.originalsPath);
+  return { harnesses, skills: skillRows(state, metadata) } satisfies LibrarySessionState;
 });
 
 export const refreshLibrarySession = Effect.fn("LibrarySession.refresh")(function* (

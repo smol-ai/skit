@@ -1,4 +1,5 @@
 import type { SkitErrorCode } from "@smolai/skit-core";
+import { Predicate } from "effect";
 import { toCommandError } from "./presentation/command-errors.js";
 
 export interface ClassifiedFailure {
@@ -15,6 +16,8 @@ export function classifyFailure(error: unknown): ClassifiedFailure {
     code: classified.code,
     exitCode: classified.exitCode,
     message: classified.message,
-    remediation: classified.remediation,
+    remediation: Predicate.isTagged(error, "InvalidLibraryState")
+      ? "Back up the state file before recovery. To reset an alpha Library, move it aside and run `skit setup`; keep installed Skill files."
+      : classified.remediation,
   };
 }

@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect";
-import { LibraryStore, type Digest, type HarnessName } from "@smolai/skit-core";
-import { resolve } from "node:path";
+import { LibraryStore, type Digest } from "@smolai/skit-core";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 import { applyLibraryBindings } from "./set-enabled.js";
@@ -32,17 +31,19 @@ export interface SetupExistingBindingOptions {
 export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings")(function* (
   options: SetupExistingBindingOptions,
   approvedPlanId: Digest,
-  selectedNames: readonly string[],
+  selectedCopies: readonly { readonly name: string; readonly path: string }[],
 ) {
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   const state = yield* (yield* LibraryStore).load;
   const selected = new Set<string>();
   const results = [];
-  for (const name of selectedNames) {
+  for (const { name, path: selectedPath } of selectedCopies) {
     if (selected.has(name))
       return yield* new SetupExistingBindingInvalid({ name, reason: "duplicate-selection" });
     selected.add(name);
-    const candidate = current.onboarding.candidates.find((item) => item.name === name);
+    const candidate = current.onboarding.candidates.find(
+      (item) => item.name === name && item.paths.includes(selectedPath),
+    );
     if (!candidate)
       return yield* new SetupExistingBindingInvalid({ name, reason: "candidate-not-found" });
     if (candidate.action !== "bind-existing-entry")
@@ -51,25 +52,13 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
         reason: "candidate-not-bindable",
       });
 
-    const targets: Array<{ path: string; harness: HarnessName }> = [];
-    for (const path of candidate.paths) {
-      const instance = current.instances.find((item) => item.path === path);
-      const observedHash = instance?.contentIdentity.observedHash;
-      if (!observedHash)
-        return yield* new SetupExistingBindingInvalid({
-          name,
-          reason: "content-identity-missing",
-        });
-      const matching = (instance?.harnesses ?? []).flatMap((harness) => {
-        return instance?.scope === "global" ? [{ path: resolve(path), harness }] : [];
-      });
-      if (!matching.length)
-        return yield* new SetupExistingBindingInvalid({
-          name,
-          reason: "path-not-projection-target",
-        });
-      targets.push(...matching);
-    }
+    const instance = current.instances.find((item) => item.path === selectedPath);
+    const observedHash = instance?.contentIdentity.observedHash;
+    if (!observedHash)
+      return yield* new SetupExistingBindingInvalid({ name, reason: "content-identity-missing" });
+    const harnesses = instance.scope === "global" ? instance.harnesses : [];
+    if (!harnesses.length)
+      return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
     results.push(
       yield* applyLibraryBindings(state, {
@@ -78,13 +67,14 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
         selectedSkills: [name],
         invocation: {
           subjects: [candidate.subjectId],
-          harnesses: [...new Set(targets.map((target) => target.harness))],
+          harnesses,
           scope: { kind: "global" },
           enabled: true,
           dryRun: false,
         },
         roots: options.bindings,
         variantsPath: options.bindings.variantsPath,
+        adoptionObservedHash: observedHash,
       }),
     );
   }

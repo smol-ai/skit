@@ -62,97 +62,126 @@ it.effect("skips repository discovery unless --work-dir supplies a directory", (
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("imports an approved skills.sh Collection without repeated broad observations", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* scratch("skit-interactive-lock-import-");
-    const repository = join(root, "project");
-    const installed = join(repository, ".agents", "skills", "review");
-    yield* fs.makeDirectory(installed, { recursive: true });
-    expect(
-      yield* (yield* ChildProcessSpawner.ChildProcessSpawner).exitCode(
-        ChildProcess.make("git", ["init", "-q"], { cwd: repository }),
-      ),
-    ).toBe(0);
-    const text = skillDocument("Approved bytes");
-    yield* fs.writeFileString(join(installed, "SKILL.md"), text);
-    yield* fs.writeFileString(
-      join(repository, "skills-lock.json"),
-      JSON.stringify({
-        version: 1,
-        skills: {
-          review: {
+for (const skillCount of [1, 12]) {
+  it.effect(
+    `imports an approved ${skillCount}-member skills.sh Collection without per-skill prompts`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* scratch("skit-interactive-lock-import-");
+        const repository = join(root, "project");
+        const installed = join(repository, ".agents", "skills", "review");
+        yield* fs.makeDirectory(installed, { recursive: true });
+        expect(
+          yield* (yield* ChildProcessSpawner.ChildProcessSpawner).exitCode(
+            ChildProcess.make("git", ["init", "-q"], { cwd: repository }),
+          ),
+        ).toBe(0);
+        const text = skillDocument("Approved bytes");
+        yield* fs.writeFileString(join(installed, "SKILL.md"), text);
+        const members = Array.from({ length: skillCount }, (_, index) =>
+          index === 0 ? "review" : `skill-${index}`,
+        );
+        const lockEntries: Record<
+          string,
+          { source: string; sourceType: string; sourceUrl: string; computedHash: string }
+        > = {};
+        for (const name of members) {
+          const path = join(repository, ".agents", "skills", name);
+          const document = text.replace("name: review", `name: ${name}`);
+          yield* fs.makeDirectory(path, { recursive: true });
+          yield* fs.writeFileString(join(path, "SKILL.md"), document);
+          lockEntries[name] = {
             source: "wellknown/skills.example",
             sourceType: "well-known",
             sourceUrl: "https://skills.example",
-            computedHash: projectHash(text),
-          },
-        },
-      }),
-    );
-    const home = yield* libraryHome({ home: join(root, "home"), inventoryHome: root });
-    const setup = {
-      libraryHome: home.home,
-      repositoryRoots: [root],
-      persistRoots: true,
-      probePath: "",
-      skillsStateHome: join(root, "state"),
-      inventory: home.inventory,
-    };
-    const preview = yield* home.owned(runSetup(setup));
-    const candidate = preview.onboarding.candidates.find(
-      (item) => item.name === "review" && item.action === "import-observed-collection",
-    );
-    expect(candidate?.action).toBe("import-observed-collection");
-    if (!candidate || candidate.action !== "import-observed-collection") return;
-    const interaction = yield* makeScriptedInteraction([
-      [repository],
-      [candidate.groupKey],
-      true,
-      false,
-    ]);
-    yield* home.owned(
-      writingTo(
-        home.home,
-        setupCommand({
-          options: {
-            libraryHome: home.home,
-            inventory: home.inventory,
-            probePath: "",
-            skillsStateHome: join(root, "state"),
-          },
-          cwd: root,
-          interactive: true,
-          dryRun: false,
-          workDirFlag: root,
-          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
-        }).pipe(Effect.provide(interaction.layer)),
-      ),
-    );
-    expect(
-      (yield* interaction.events).flatMap((event) =>
-        event._tag === "StatusStarted" ? [event.message] : [],
-      ),
-    ).toEqual([
-      "Observing local skills",
-      "Observing local skills",
-      "Revalidating the approved setup plan",
-      "Importing 1 installed Collection (1 Skill)",
-      "Verifying the completed setup",
-    ]);
-    const state = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home: home.home })),
-    );
-    expect(state.present).toBe(true);
-    if (!state.present) return;
-    const saved = state.state.collections[0];
-    expect(
-      state.state.skills
-        .filter((skill) => skill.collection_id === saved?.collection_id)
-        .map((skill) => skill.name),
-    ).toEqual(["review"]);
-  }).pipe(Effect.provide(skitLayer)),
-);
+            computedHash: projectHash(document),
+          };
+        }
+        yield* fs.writeFileString(
+          join(repository, "skills-lock.json"),
+          JSON.stringify({ version: 1, skills: lockEntries }),
+        );
+        const home = yield* libraryHome({ home: join(root, "home"), inventoryHome: root });
+        const setup = {
+          libraryHome: home.home,
+          repositoryRoots: [root],
+          persistRoots: true,
+          probePath: "",
+          skillsStateHome: join(root, "state"),
+          inventory: home.inventory,
+        };
+        const preview = yield* home.owned(runSetup(setup));
+        const candidate = preview.onboarding.candidates.find(
+          (item) => item.name === "review" && item.action === "import-observed-collection",
+        );
+        expect(candidate?.action).toBe("import-observed-collection");
+        if (!candidate || candidate.action !== "import-observed-collection") return;
+        const interaction = yield* makeScriptedInteraction([
+          [repository],
+          [candidate.groupKey],
+          true,
+          false,
+        ]);
+        yield* home.owned(
+          writingTo(
+            home.home,
+            setupCommand({
+              options: {
+                libraryHome: home.home,
+                inventory: home.inventory,
+                probePath: "",
+                skillsStateHome: join(root, "state"),
+              },
+              cwd: root,
+              interactive: true,
+              dryRun: false,
+              workDirFlag: root,
+              localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+            }).pipe(Effect.provide(interaction.layer)),
+          ),
+        );
+        expect(
+          (yield* interaction.events).flatMap((event) =>
+            event._tag === "StatusStarted" ? [event.message] : [],
+          ),
+        ).toEqual([
+          "Observing local skills",
+          "Observing local skills",
+          "Revalidating the approved setup plan",
+          `Importing 1 installed Collection (${skillCount} Skill${skillCount === 1 ? "" : "s"})`,
+          "Verifying the completed setup",
+        ]);
+        const sourcePicker = (yield* interaction.prompts).find(
+          (prompt) => prompt.message === "Select skills.sh Collections to add to the SKIT Library",
+        );
+        expect(sourcePicker?.choices).toEqual([
+          expect.objectContaining({
+            label: "wellknown/skills.example",
+            hint: `${skillCount} installed skill${skillCount === 1 ? "" : "s"}`,
+            selected: true,
+          }),
+        ]);
+        expect(
+          (yield* interaction.prompts).some((prompt) =>
+            prompt.message.startsWith("Manage discovered skills:"),
+          ),
+        ).toBe(false);
+        const state = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
+          Effect.provide(libraryStoreLayer({ home: home.home })),
+        );
+        expect(state.present).toBe(true);
+        if (!state.present) return;
+        const saved = state.state.collections[0];
+        expect(
+          state.state.skills
+            .filter((skill) => skill.collection_id === saved?.collection_id)
+            .map((skill) => skill.name)
+            .sort(),
+        ).toEqual([...members].sort());
+      }).pipe(Effect.provide(skitLayer)),
+  );
+}
 
 it.effect("retains a project lock claim beside raw Skill bytes without inferring a Source", () =>
   Effect.gen(function* () {

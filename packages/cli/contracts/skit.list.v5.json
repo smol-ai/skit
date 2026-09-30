@@ -1,5 +1,5 @@
 {
-  "$id": "skit.list.v4",
+  "$id": "skit.list.v5",
   "type": "object",
   "properties": {
     "subjects": {
@@ -25,6 +25,46 @@
             "items": {
               "type": "object",
               "properties": {
+                "source": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source_updated_at": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "acquired_at": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "name": {
                   "type": "string"
                 },
@@ -56,6 +96,10 @@
                 }
               },
               "required": [
+                "source",
+                "revision",
+                "source_updated_at",
+                "acquired_at",
                 "name",
                 "skill_id",
                 "versions"

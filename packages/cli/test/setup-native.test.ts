@@ -22,7 +22,6 @@ import {
 import {
   classifySetupOnboarding,
   classifyObservedOwner,
-  isSetupCandidateSelectedByDefault,
   computeSkillsLockCompatibleHash,
   readSetupMachineConfig,
   revalidateSetupPlan,
@@ -880,21 +879,6 @@ it.effect(
           harnesses: ["codex"],
         }),
       ).toEqual({ kind: "unknown" });
-      expect(isSetupCandidateSelectedByDefault({ kind: "unknown" })).toBe(true);
-      expect(
-        isSetupCandidateSelectedByDefault({
-          kind: "harness",
-          harness: "codex",
-          source: "Codex curated",
-          bundled: false,
-        }),
-      ).toBe(false);
-      expect(
-        isSetupCandidateSelectedByDefault({
-          kind: "repository",
-          repository: "/work/repository",
-        }),
-      ).toBe(false);
     }),
 );
 

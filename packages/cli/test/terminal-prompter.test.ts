@@ -10,6 +10,10 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { afterEach, beforeEach, expect, vi, type MockInstance } from "vitest";
 import { Prompter, terminalPrompterLayer, type Choice } from "../src/presentation/prompter.js";
 
+import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
+import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
+import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
+
 type Key =
   | "up"
   | "down"
@@ -17,6 +21,10 @@ type Key =
   | "space"
   | "escape"
   | "ctrl+a"
+  | "ctrl+r"
+  | "ctrl+p"
+  | "pageup"
+  | "pagedown"
   | "a"
   | "c"
   | "o"
@@ -25,8 +33,8 @@ type Key =
   | "x";
 
 const press = (key: Key): Terminal.UserInput => {
-  const ctrl = key === "ctrl+a";
-  const name = ctrl ? "a" : key;
+  const ctrl = key.startsWith("ctrl+");
+  const name = ctrl ? key.slice(5) : key;
   return {
     input: ctrl ? Option.none() : Option.some(name),
     key: { name, ctrl, meta: false, shift: false },
@@ -76,11 +84,130 @@ const harnesses: Choice<"claude" | "codex" | "opencode">[] = [
 // Prompts draw real escape sequences; keep them out of the reporter's output.
 let stderr: MockInstance<typeof process.stderr.write>;
 beforeEach(() => {
+  vi.stubEnv("FORCE_COLOR", "0");
   stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("the terminal prompter", () => {
+  const removable = [
+    { value: "keep", label: "Keep", selected: true, removeValue: "remove-keep" },
+    { value: "other", label: "Other", removeValue: "remove-other" },
+  ];
+  it.effect("marks removal explicitly and bulk selection preserves it", () =>
+    Effect.gen(function* () {
+      const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);
+      expect(chosen).toEqual(["remove-keep", "other"]);
+      expect(stderr.mock.calls.map(([frame]) => String(frame)).join("\n")).toContain(
+        "✕ Keep  · Remove",
+      );
+    }).pipe(Effect.provide(promptedWith(["ctrl+r", "ctrl+a", "enter"]))),
+  );
+  for (const keys of [
+    ["ctrl+r", "ctrl+r", "space", "enter"],
+    ["ctrl+r", "space", "enter"],
+  ] satisfies Key[][])
+    it.effect(`removal can return to selection: ${keys.join(" ")}`, () =>
+      Effect.gen(function* () {
+        expect(yield* (yield* Prompter).multiselect("Manage skills", removable)).toEqual(["keep"]);
+      }).pipe(Effect.provide(promptedWith(keys))),
+    );
+  it.effect("ordinary pickers do not accept removal actions", () =>
+    Effect.gen(function* () {
+      const chosen = yield* (yield* Prompter).multiselect("Pick harnesses", harnesses);
+      expect(chosen).toEqual([]);
+    }).pipe(Effect.provide(promptedWith(["ctrl+r", "enter"]))),
+  );
+  it.effect("loads content lazily and caches it while preserving selection", () =>
+    Effect.gen(function* () {
+      const load = vi.fn(() => Effect.succeed("# Review code\nRead carefully."));
+      const other = vi.fn(() => Effect.succeed("# Lint code"));
+      const chosen = yield* (yield* Prompter).multiselect("Pick skills", [
+        { value: "review", label: "Review", selected: true, preview: load },
+        { value: "lint", label: "Lint", preview: other },
+      ]);
+      expect(chosen).toEqual(["review"]);
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+      expect(frames).toContain("# Review code");
+      expect(frames).toContain("# Lint code");
+      expect(frames).toContain("Ctrl+P preview");
+    }).pipe(
+      Effect.provide(promptedWith(["ctrl+p", "ctrl+p", "ctrl+p", "down", "ctrl+p", "enter"])),
+    ),
+  );
+  it.effect("does not read preview content when the pane stays closed", () =>
+    Effect.gen(function* () {
+      const load = vi.fn(() => Effect.succeed("Secret fixture content"));
+      yield* (yield* Prompter).multiselect("Pick skills", [
+        { value: "review", label: "Review", preview: load },
+      ]);
+      expect(load).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(promptedWith(["enter"]))),
+  );
+  it.effect("scrolls preview pages without changing the highlighted choice", () =>
+    Effect.gen(function* () {
+      const load = () =>
+        Effect.succeed(Array.from({ length: 60 }, (_, index) => `Line ${index + 1}`).join("\n"));
+      const chosen = yield* (yield* Prompter).multiselect("Pick skills", [
+        { value: "review", label: "Review", selected: true, preview: load },
+      ]);
+      expect(chosen).toEqual(["review"]);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+      expect(frames).toContain("Line 15");
+      expect(frames).toContain("Lines 1–");
+    }).pipe(Effect.provide(promptedWith(["ctrl+p", "pagedown", "pageup", "enter"]))),
+  );
+  it.effect("colors grouped choices and nests context beneath only the highlighted skill", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("FORCE_COLOR", "1");
+      vi.stubEnv("TERM", "xterm-256color");
+      vi.stubEnv("NO_COLOR", undefined);
+      const prompter = yield* Prompter;
+      yield* prompter.multiselect("Pick skills", [
+        {
+          value: "review",
+          label: "Review",
+          group: "Local",
+          hint: "modified today",
+          detail: "/skills/review",
+          selected: true,
+        },
+        { value: "lint", label: "Lint", group: "Local", detail: "/skills/lint" },
+      ]);
+      const frame = stderr.mock.calls
+        .map(([frame]) => String(frame))
+        .find((frame) => frame.includes("modified today"))!;
+      expect(frame).toContain("\u001b[36m");
+      expect(frame).toContain("\u001b[32m");
+      expect(frame).toContain("\u001b[2m");
+      // oxlint-disable-next-line no-control-regex -- Strip terminal ANSI styling before asserting layout.
+      const plain = frame.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
+      expect(plain).toContain(
+        "  ─ Local\n    ❯ ☒ Review  · modified today\n        /skills/review",
+      );
+      expect(plain).not.toContain("/skills/lint");
+    }).pipe(Effect.provide(promptedWith(["enter"]))),
+  );
+
+  it.effect("NO_COLOR suppresses styling even when color is forced", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("FORCE_COLOR", "1");
+      vi.stubEnv("TERM", "xterm-256color");
+      vi.stubEnv("NO_COLOR", "1");
+      const prompter = yield* Prompter;
+      yield* prompter.multiselect("Pick skills", [
+        { value: "review", label: "Review", group: "Local" },
+      ]);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("");
+      // oxlint-disable-next-line no-control-regex -- Ensure terminal ANSI styling is suppressed.
+      expect(frames).not.toMatch(/\u001b\[(?:1|2|32|36)m/);
+    }).pipe(Effect.provide(promptedWith(["enter"]))),
+  );
   it.effect("select returns the highlighted choice", () =>
     Effect.gen(function* () {
       const prompter = yield* Prompter;
@@ -149,6 +276,39 @@ describe("the terminal prompter", () => {
     }).pipe(Effect.provide(promptedWith(["enter"]))),
   );
 
+  it.effect("multiselect filters by source group and skips nonselectable headings", () =>
+    Effect.gen(function* () {
+      const prompter = yield* Prompter;
+      const chosen = yield* prompter.multiselect("Pick skills", [
+        { value: "review", label: "Review", group: "Codex" },
+        { value: "lint", label: "Lint", group: "Local" },
+      ]);
+      assert.deepStrictEqual(chosen, ["review"]);
+      expect(stderr.mock.calls.some(([frame]) => String(frame).includes("─ Codex"))).toBe(true);
+    }).pipe(Effect.provide(promptedWith(["c", "o", "d", "e", "x", "space", "enter"]))),
+  );
+
+  it.effect("group headings fit the page while the highlighted choice stays visible", () =>
+    Effect.gen(function* () {
+      const prompter = yield* Prompter;
+      const chosen = yield* prompter.multiselect(
+        "Pick skills",
+        Array.from({ length: 25 }, (_, index) => ({
+          value: String(index),
+          label: `Skill ${index}`,
+          group: `Source ${index}`,
+          detail: `/skills/${index}`,
+        })),
+      );
+      assert.deepStrictEqual(chosen, ["24"]);
+      const frames = stderr.mock.calls
+        .map(([frame]) => String(frame))
+        .filter((frame) => frame.startsWith("\u001b[?25l"));
+      expect(frames.every((frame) => frame.split("\n").length <= 22)).toBe(true);
+      expect(frames.some((frame) => frame.includes("❯ ☐ Skill 24"))).toBe(true);
+    }).pipe(Effect.provide(promptedWith(["up", "space", "enter"]))),
+  );
+
   it.effect("Escape identifies back-navigation and ends the abandoned line", () =>
     Effect.gen(function* () {
       const prompter = yield* Prompter;
@@ -178,3 +338,78 @@ describe("the terminal prompter", () => {
     }).pipe(Effect.provide(promptedWith(["enter"]))),
   );
 });
+
+it.effect("keeps blocked skills previewable and bulk selection leaves conflicts unresolved", () =>
+  Effect.gen(function* () {
+    const chosen = yield* (yield* Prompter).multiselect("Choose copies", [
+      {
+        value: "blocked",
+        label: "Invalid marker",
+        disabled: true,
+        selected: true,
+        description: "Used by Claude · blocked",
+        preview: () => Effect.succeed("Blocked content"),
+      },
+      {
+        value: "claude",
+        label: "Different Claude copy",
+        exclusiveGroup: "different",
+        selectExplicitly: true,
+      },
+      {
+        value: "codex",
+        label: "Different Codex copy",
+        exclusiveGroup: "different",
+        selectExplicitly: true,
+      },
+      { value: "normal", label: "Normal" },
+    ]);
+    expect(chosen).toEqual(["codex", "normal"]);
+    const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+    expect(frames).toContain("Used by Claude · blocked");
+    expect(frames).toContain("Blocked content");
+  }).pipe(
+    Effect.provide(
+      promptedWith([
+        "space",
+        "ctrl+p",
+        "ctrl+p",
+        "ctrl+a",
+        "down",
+        "space",
+        "down",
+        "space",
+        "enter",
+      ]),
+    ),
+  ),
+);
+
+it.effect("Space keeps same-name skills from separate repositories selected together", () =>
+  Effect.gen(function* () {
+    const instances: SetupSkillInstance[] = ["fullres", "stackseer"].map((repository, index) => ({
+      name: "tdd",
+      path: `/work/${repository}/.agents/skills/tdd`,
+      aliases: [`/work/${repository}/.agents/skills/tdd`],
+      scope: "project",
+      harnesses: ["claude-code"],
+      owner: { kind: "repository", repository: `/work/${repository}` },
+      git: { status: index === 0 ? "committed" : "untracked", repository: `/work/${repository}` },
+      locks: [],
+      contentIdentity: {
+        status: "none",
+        observedHash: `sha256:${String(index).repeat(64)}`,
+        libraryMatches: [],
+      },
+    }));
+    const rows = setupDiscoveredSkillChoices(instances, classifySetupOnboarding(instances));
+    const selected = yield* (yield* Prompter).multiselect(
+      "Choose project skills",
+      rows.map((row) => row.choice),
+    );
+    expect(selected).toEqual(instances.map((instance) => `tdd\0${instance.path}`));
+    const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+    expect(frames).toContain("tdd  · /work/fullres/.agents/skills/tdd · committed");
+    expect(frames).toContain("tdd  · /work/stackseer/.agents/skills/tdd · untracked");
+  }).pipe(Effect.provide(promptedWith(["space", "down", "space", "enter"]))),
+);

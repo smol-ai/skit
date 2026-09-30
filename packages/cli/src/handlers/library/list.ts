@@ -1,3 +1,4 @@
+import { readLibrarySkillMetadata } from "../../workflows/library/skill-metadata.js";
 import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { Command } from "effect/unstable/cli";
@@ -23,6 +24,7 @@ export const shouldBrowseInteractively = (input: {
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const store = yield* LibraryStore;
   const state = yield* store.load;
+  const metadata = yield* readLibrarySkillMetadata(state, store.originalsPath);
   const value = {
     subjects: librarySubjects(state).map((subject) => ({
       subject_id: subject.subjectId,
@@ -31,6 +33,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
       skills: subject.skills.map((skill) => {
         const selected = currentSkillVersion(state, skill);
         return {
+          ...metadata.get(skill.skill_id)!,
           name: skill.name,
           skill_id: skill.skill_id,
           ...(selected === undefined

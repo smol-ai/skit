@@ -199,7 +199,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v4" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v5" });
 
     const add = spawnSync(
       process.execPath,
@@ -271,6 +271,56 @@ describe("CLI contracts", () => {
     });
     expect(result.stderr).toBe("");
   });
+
+  test.each(["-v", "--version"])("prints the package version with %s", (flag) => {
+    const expected = Schema.decodeUnknownSync(PackageDocument)(
+      readFileSync(join(process.cwd(), "package.json"), "utf8"),
+    ).version;
+    const human = spawnSync(process.execPath, [bin, flag], { encoding: "utf8" });
+    expect(human.status).toBe(0);
+    // oxlint-disable-next-line skit/no-cli-output-text-assertions -- Regression coverage for version flags silently producing no human output.
+    expect(human.stdout).toBe(`${expected}\n`);
+    expect(human.stderr).toBe("");
+
+    const machine = spawnSync(process.execPath, [bin, flag, "--json"], { encoding: "utf8" });
+    expect(machine.status).toBe(0);
+    expect(JSON.parse(machine.stdout)).toEqual({
+      schema: "skit.version.v1",
+      data: { version: expected },
+    });
+    expect(machine.stderr).toBe("");
+  });
+
+  test.each(["list", "check", "setup"])(
+    "%s reports unsupported alpha state with safe recovery guidance without rewriting it",
+    async (command) => {
+      const home = await mkdtemp(join(tmpdir(), "skit-unsupported-state-"));
+      const path = join(home, "state.json");
+      const original = JSON.stringify({ schemaVersion: 2, entries: [] });
+      try {
+        await writeFile(path, original);
+        const processResult = spawnSync(
+          process.execPath,
+          [bin, command, "--home", home, "--json"],
+          {
+            encoding: "utf8",
+          },
+        );
+        expect(processResult.status).toBe(65);
+        expect(processResult.stdout).toBe("");
+        const failure = JSON.parse(processResult.stderr).error;
+        expect(failure.code).toBe("VALIDATION_FAILED");
+        expect(failure.message).toContain("schema v2");
+        expect(failure.message).toContain("supports v4–v6");
+        expect(failure.remediation).toContain("Back up the state file");
+        expect(failure.remediation).toContain("skit setup");
+        expect(failure.remediation).not.toContain("author validate");
+        expect(await readFile(path, "utf8")).toBe(original);
+      } finally {
+        await rm(home, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("reviews and optionally accepts a retained finding without blocking Projection", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-security-cli-"));
@@ -362,7 +412,7 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v4",
+      schema: "skit.list.v5",
       data: { subjects: [], bindings: [] },
     });
     expect(result.stderr).toBe("");

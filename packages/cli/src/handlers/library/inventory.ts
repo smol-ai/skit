@@ -1,3 +1,4 @@
+import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
 import { Effect } from "effect";
 import { Command } from "effect/unstable/cli";
 import {
@@ -80,7 +81,17 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
       repositoryRoots: observed.machineConfig.repositoryRoots,
       repositoryDecisions: observed.machineConfig.repositoryDecisions,
       scan: observed.scan,
-      instances: observed.instances,
+      instances: yield* Effect.forEach(
+        observed.instances,
+        (instance) =>
+          skillModificationTime(instance.path).pipe(
+            Effect.map((modified) => ({
+              ...instance,
+              skill_md_modified_at: modified,
+            })),
+          ),
+        { concurrency: 8 },
+      ),
       brokenLinks: observed.brokenLinks,
       suppressed: observed.suppressed,
     },

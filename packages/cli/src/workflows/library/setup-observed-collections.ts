@@ -39,9 +39,6 @@ export interface SetupObservedCollectionOptions {
   readonly retention: Pick<RetentionOptions, "originalsPath">;
 }
 
-const samePaths = (left: readonly string[], right: readonly string[]) =>
-  left.length === right.length && left.every((path) => right.includes(path));
-
 const retainedSkillPath = (lockPath: string | undefined, name: string) => {
   if (!lockPath) return name;
   const normalized = lockPath.replaceAll("\\", "/").replace(/^\.\//, "");
@@ -119,14 +116,18 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
         item.action === "import-observed-collection" &&
         item.groupKey === selection.groupKey &&
         item.name === selection.name &&
-        samePaths(item.paths, selection.paths),
+        selection.paths.length > 0 &&
+        selection.paths.every((path) => item.paths.includes(path)),
     );
     if (!candidate)
       return yield* new SetupObservedCollectionInvalid({
         name: selection.name,
         reason: "candidate-not-found",
       });
-    groups.set(candidate.groupKey, [...(groups.get(candidate.groupKey) ?? []), candidate]);
+    groups.set(candidate.groupKey, [
+      ...(groups.get(candidate.groupKey) ?? []),
+      { ...candidate, paths: selection.paths },
+    ]);
   }
 
   const observedAt = new Date(

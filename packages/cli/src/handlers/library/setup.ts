@@ -1,8 +1,7 @@
-import { Effect, Option } from "effect";
+import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
+import { Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
-import { homedir } from "node:os";
-import { resolve, sep } from "node:path";
-import pc from "picocolors";
+import { join, resolve } from "node:path";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -16,20 +15,26 @@ import {
   setupRepositoryDecisions,
   revalidateSetupPlan,
   runSetup,
-  isSetupCandidateSelectedByDefault,
   type SetupOptions,
 } from "../../workflows/library/setup.js";
 import {
   applySetupLocalCustody,
   type SetupLocalCustodyOptions,
 } from "../../workflows/library/setup-local-custody.js";
-import type { SetupInstanceOwner, SetupResult } from "../../workflows/library/setup-contract.js";
+import type { SetupResult } from "../../workflows/library/setup-contract.js";
 import { applySetupExistingBindings } from "../../workflows/library/setup-existing-binding.js";
 import { applySetupObservedCollections } from "../../workflows/library/setup-observed-collections.js";
 import { result } from "../contracts.js";
 import { LibraryStore } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
+import { setupDiscoveredSkillChoices } from "../../presentation/setup-skills.js";
+import { terminalColors } from "../../presentation/terminal-style.js";
+import {
+  applySetupRemovals,
+  planSetupRemovals,
+  setupRemovablePaths,
+} from "../../workflows/library/setup-removal.js";
 
 const workDirFlag = optionalString(
   "work-dir",
@@ -39,33 +44,6 @@ const dryRun = Flag.boolean("dry-run").pipe(
   Flag.withDescription("Observe without updating machine configuration."),
   Flag.withDefault(false),
 );
-
-export const setupOwnerHint = (owner: SetupInstanceOwner, paths: readonly string[]): string => {
-  const compactPath = (path: string): string => {
-    const home = homedir();
-    return path === home
-      ? "~"
-      : path.startsWith(`${home}${sep}`)
-        ? `~${path.slice(home.length)}`
-        : path;
-  };
-  switch (owner.kind) {
-    case "harness":
-      return owner.source;
-    case "repository":
-      return compactPath(paths[0] ?? owner.repository);
-    case "skills-sh":
-      return `${paths[0] ? compactPath(paths[0]) : "unknown path"} · skills.sh: ${owner.source}`;
-    case "skit":
-      return "SKIT";
-    case "authored":
-      return "Authored here";
-    case "invalid-marker":
-      return "Invalid SKIT marker";
-    case "unknown":
-      return paths[0] ? compactPath(paths[0]) : "unknown path";
-  }
-};
 
 export const shouldSetupInteractively = (input: {
   readonly json: boolean;
@@ -95,8 +73,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const observe = (options: SetupOptions) =>
     renderer.withStatus("Observing local skills", runSetup(options));
   let observed = yield* observe(setupOptions);
-  if (!input.interactive || !input.localCustody) return observed;
-  yield* renderer.note(renderSetupDiscovery(observed), "Local discovery");
+  if (!input.interactive || input.dryRun || !input.localCustody) return observed;
+  yield* renderer.note(renderSetupDiscovery(observed, terminalColors()), "Local discovery");
   const discoveredRepositories = observed.repositories;
   let repositoryDecisions: ReadonlyArray<{
     path: string;
@@ -132,26 +110,21 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots = !input.dryRun && (persistRoots || decisionsChanged);
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
-  let retainedSourceSelections: ReadonlyArray<{
-    name: string;
-    paths: readonly string[];
-    groupKey: string;
-  }> = [];
-  let existingBindingSelections: readonly string[] = [];
-  let localCustodySelections: ReadonlyArray<{
-    name: string;
-    sourcePath?: string;
-  }> = [];
-  const knownSourceSelections = yield* chooseKnownSources(observed);
-  if (knownSourceSelections.length) retainedSourceSelections = knownSourceSelections;
-  existingBindingSelections = yield* chooseExistingBindings(observed);
-  localCustodySelections = yield* chooseUnmanagedSkills(observed);
+  const retainedSourceSelections = yield* chooseKnownSources(observed);
+  const {
+    bind: existingBindingSelections,
+    add: localCustodySelections,
+    remove,
+    removablePaths,
+  } = yield* chooseDiscoveredSkills(setupOptions, observed);
+  const removalPlan = yield* planSetupRemovals(setupOptions, observed, remove, removablePaths);
   const prompter = yield* Prompter;
   const hasChanges =
     persistRoots ||
     retainedSourceSelections.length > 0 ||
     existingBindingSelections.length > 0 ||
-    localCustodySelections.length > 0;
+    localCustodySelections.length > 0 ||
+    removalPlan.entries.length > 0;
   if (!hasChanges) {
     yield* renderer.note(
       "Nothing was selected and the repository roots are unchanged.",
@@ -160,54 +133,29 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     yield* offerSkillsShUpdateCheck();
     return observed;
   }
+  const imports = observed.onboarding.candidates.filter(
+    (candidate) => candidate.action === "import-observed-collection",
+  );
   const retainedBySource = [
-    ...new Map(
-      observed.onboarding.candidates.flatMap((candidate) =>
-        candidate.action === "import-observed-collection" &&
-        retainedSourceSelections.some(
-          (selection) =>
-            selection.groupKey === candidate.groupKey &&
-            selection.name === candidate.name &&
-            selection.paths.length === candidate.paths.length &&
-            selection.paths.every((path) => candidate.paths.includes(path)),
-        )
-          ? [[candidate.groupKey, candidate] as const]
-          : [],
-      ),
-    ).values(),
-  ].map((source) => {
-    const names = observed.onboarding.candidates
-      .filter(
-        (candidate) =>
-          candidate.action === "import-observed-collection" &&
-          candidate.groupKey === source.groupKey &&
-          retainedSourceSelections.some(
-            (selection) =>
-              selection.groupKey === candidate.groupKey &&
-              selection.name === candidate.name &&
-              selection.paths.length === candidate.paths.length &&
-              selection.paths.every((path) => candidate.paths.includes(path)),
-          ),
-      )
-      .map((candidate) => candidate.name)
-      .sort();
-    return { source, names };
-  });
-  const custodySelections = localCustodySelections.filter((selection) =>
-    observed.onboarding.candidates.some(
-      (candidate) =>
-        candidate.name === selection.name &&
-        candidate.action !== "repository-owned" &&
-        (selection.sourcePath === undefined || candidate.paths.includes(selection.sourcePath)),
+    ...new Set(retainedSourceSelections.map((selection) => selection.groupKey)),
+  ].map((groupKey) => ({
+    source: imports.find((candidate) => candidate.groupKey === groupKey)!,
+    names: retainedSourceSelections
+      .filter((selection) => selection.groupKey === groupKey)
+      .map((selection) => selection.name)
+      .sort(),
+  }));
+  const repositorySelections = localCustodySelections.filter((selection) =>
+    observed.instances.some(
+      (instance) =>
+        instance.path === selection.sourcePath &&
+        (instance.git.repository !== undefined ||
+          instance.scope !== "global" ||
+          instance.harnesses.length === 0),
     ),
   );
-  const repositorySelections = localCustodySelections.filter((selection) =>
-    observed.onboarding.candidates.some(
-      (candidate) =>
-        candidate.name === selection.name &&
-        candidate.action === "repository-owned" &&
-        (selection.sourcePath === undefined || candidate.paths.includes(selection.sourcePath)),
-    ),
+  const custodySelections = localCustodySelections.filter(
+    (selection) => !repositorySelections.includes(selection),
   );
   const planLines = [
     ...(persistRoots ? [`Save discovery roots: ${roots.join(", ")}`] : []),
@@ -230,18 +178,40 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     ...(existingBindingSelections.length
       ? [
           `Reconnect existing Library matches: ${existingBindingSelections.length}`,
-          ...existingBindingSelections.map((name) => `  ${name}`),
+          ...existingBindingSelections.map(({ name, path }) => `  ${name} · ${path}`),
         ]
       : []),
     ...(localCustodySelections.length
       ? [
           `Add to Library: ${localCustodySelections.length}`,
           ...localCustodySelections.map(
-            (selection) => `  ${selection.name} · ${selection.sourcePath ?? "observed copy"}`,
+            (selection) => `  ${selection.name} · ${selection.sourcePath}`,
           ),
         ]
       : []),
     ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
+    ...localCustodySelections.flatMap((selection) => {
+      const candidate = observed.onboarding.candidates.find((item) =>
+        item.paths.includes(selection.sourcePath),
+      );
+      return candidate?.action === "blocked" && candidate.reason === "divergent-copies"
+        ? [
+            `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
+            "  Other copies stay in place unless explicitly marked Remove.",
+          ]
+        : [];
+    }),
+    ...(removalPlan.entries.length
+      ? [
+          `Remove installed copies: ${removalPlan.entries.length}`,
+          ...removalPlan.entries.map(
+            (entry) =>
+              `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
+          ),
+          `Recovery folder: ${removalPlan.recoveryDirectory}`,
+          "Library entries and source files outside these locations stay in place.",
+        ]
+      : []),
     ...(repositorySelections.length
       ? [
           "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
@@ -258,6 +228,16 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     "Revalidating the approved setup plan",
     revalidateSetupPlan(setupOptions, observed.onboarding.planId),
   );
+  if (removalPlan.entries.length) {
+    yield* renderer.withStatus(
+      `Removing ${removalPlan.entries.length} installed cop${removalPlan.entries.length === 1 ? "y" : "ies"}`,
+      applySetupRemovals(removalPlan),
+    );
+    yield* renderer.note(
+      `Removed installed locations are saved at ${removalPlan.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
+      "Removed copies saved",
+    );
+  }
   if (
     (retainedSourceSelections.length || localCustodySelections.length) &&
     !observed.machineConfig.machineId
@@ -307,7 +287,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     retainedSourceSelections.length &&
     !persistRoots &&
     !existingBindingSelections.length &&
-    !localCustodySelections.length
+    !localCustodySelections.length &&
+    !removalPlan.entries.length
   ) {
     // The import checked the staged bytes and the saved Library Versions. Interactive setup does
     // not render this pre-apply observation, so a global rescan adds no user-visible result.
@@ -407,75 +388,66 @@ const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
     );
 });
 
-const chooseExistingBindings = Effect.fn("CLI.setup.chooseExistingBindings")(function* (
+const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(function* (
+  options: SetupOptions,
   observed: SetupResult,
 ) {
-  const matches = observed.onboarding.candidates.filter(
-    (candidate) => candidate.action === "bind-existing-entry",
-  );
-  if (!matches.length) return [];
+  const removablePaths = yield* setupRemovablePaths(options, observed);
   const prompter = yield* Prompter;
-  return yield* prompter
-    .multiselect(
-      "Select exact matches to reconnect to existing Library content",
-      matches.map((candidate) => ({
-        value: candidate.name,
-        label: candidate.name,
-        hint: candidate.collectionDisplayName ?? "existing Library Collection",
-        selected: true,
-      })),
-    )
-    .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
-});
+  const fs = yield* FileSystem.FileSystem;
+  const rows = setupDiscoveredSkillChoices(
+    observed.instances,
+    observed.onboarding.candidates,
+    options.inventory.home,
+  );
+  const choices = yield* Effect.forEach(rows, (row) =>
+    Effect.gen(function* () {
+      const modified = yield* skillModificationTime(row.instance.path);
+      const path = join(row.instance.path, "SKILL.md");
+      return {
+        ...row.choice,
+        ...((removablePaths.get(row.instance.path)?.length ?? 0) > 0
+          ? { removeValue: `remove\0${row.choice.value}` }
+          : {}),
+        searchText: `${row.details} · SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
+        preview: () =>
+          fs.readFileString(path).pipe(
+            Effect.map(
+              (content) =>
+                `${path}\n${row.details}\nSKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}\n\n${content.length > 65_536 ? `${content.slice(0, 65_536)}\n\n[Preview truncated at 65,536 characters]` : content}`,
+            ),
+            Effect.orElseSucceed(
+              () =>
+                `${path}\n${row.details}\nSKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}\n\nContent unavailable: the file could not be read.`,
+            ),
+          ),
+      };
+    }),
+  );
+  const selectedValues = choices.length
+    ? yield* prompter
+        .multiselect("Manage discovered skills: choose a copy to add, or mark Remove", choices)
+        .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])))
+    : [];
+  const selectedRows = rows.filter((row) => selectedValues.includes(row.choice.value));
+  const add = selectedRows.flatMap(({ instance, candidate, choice }) =>
+    !choice.disabled &&
+    candidate &&
+    candidate.action !== "import-observed-collection" &&
+    candidate.action !== "bind-existing-entry"
+      ? [{ name: instance.name, sourcePath: instance.path }]
+      : [],
+  );
 
-const chooseUnmanagedSkills = Effect.fn("CLI.setup.chooseUnmanagedSkills")(function* (
-  observed: SetupResult,
-) {
-  const candidates = observed.onboarding.candidates.filter(
-    (candidate) =>
-      candidate.action === "manage-locally" ||
-      candidate.action === "harness-owned" ||
-      candidate.action === "repository-owned",
+  const bind = selectedRows.flatMap(({ instance, candidate }) =>
+    candidate?.action === "bind-existing-entry"
+      ? [{ name: candidate.name, path: instance.path }]
+      : [],
   );
-  if (!candidates.length) return [];
-  const prompter = yield* Prompter;
-  const choiceValue = (candidate: (typeof candidates)[number]) =>
-    candidates.filter((item) => item.name === candidate.name).length === 1
-      ? candidate.name
-      : `${candidate.name}\0${candidate.paths.join("\0")}`;
-  const selectedValues = yield* prompter
-    .multiselect(
-      "Select installed skills to add to your SKIT Library",
-      candidates.map((candidate) => ({
-        value: choiceValue(candidate),
-        label: `${candidate.name} ${pc.dim(setupOwnerHint(candidate.owner, candidate.paths))}`,
-        selected: isSetupCandidateSelectedByDefault(candidate.owner),
-      })),
-    )
-    .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
-  return yield* Effect.forEach(selectedValues, (value) => {
-    const candidate = candidates.find((item) => choiceValue(item) === value);
-    if (!candidate) return Effect.succeed({ name: value });
-    const name = candidate.name;
-    if (candidate.action === "manage-locally" && candidate.sourceSelection === "automatic")
-      return Effect.succeed({ name, sourcePath: candidate.sourcePath });
-    if (candidate.paths.length === 1)
-      return Effect.succeed({
-        name,
-        sourcePath: candidate.paths[0],
-      });
-    return prompter
-      .select(
-        `Choose the authoritative copy of ${name}`,
-        candidate.paths.map((path) => ({ value: path, label: path })),
-      )
-      .pipe(
-        Effect.map((sourcePath) => ({
-          name,
-          sourcePath,
-        })),
-      );
-  });
+  const remove = rows
+    .filter((row) => selectedValues.includes(`remove\0${row.choice.value}`))
+    .map(({ instance }) => ({ name: instance.name, paths: [instance.path] }));
+  return { add, bind, remove, removablePaths };
 });
 
 export const setupCliCommand = Command.make(

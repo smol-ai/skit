@@ -1,5 +1,6 @@
+import { sourceIdentityLabel } from "./skill-metadata.js";
 import { createHash } from "node:crypto";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, join, matchesGlob, posix, relative, resolve, sep } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import {
@@ -198,26 +199,6 @@ export const setupRepositoryDecisions = (
   config: CurrentMachineDocument,
 ): readonly { path: string; status: "watched" | "ignored" }[] => config.repositories;
 
-const sourceIdentityLabel = (source: SourceIdentity): string => {
-  switch (source.kind) {
-    case "github":
-      return `${source.owner}/${source.repository}${source.collection_root === "." ? "" : `/${source.collection_root}`}`;
-    case "git":
-      return `${source.remote.value}${source.collection_root === "." ? "" : `/${source.collection_root}`}`;
-    case "registry":
-      return `${source.authority.replace(/\/+$/, "")}/${source.namespace}/${source.slug}`;
-    case "url":
-    case "archive":
-      return source.url.value;
-    case "local":
-      return source.path.value;
-    case "authored-workspace":
-      return `authored:${source.workspace_id}`;
-    case "well-known":
-      return source.locator.value;
-  }
-};
-
 export const classifyObservedOwner = (input: {
   readonly canonicalPath: string;
   readonly home: string;
@@ -243,8 +224,8 @@ export const classifyObservedOwner = (input: {
   return { kind: "unknown" };
 };
 
-export const isSetupCandidateSelectedByDefault = (owner: SetupSkillInstance["owner"]): boolean =>
-  owner.kind === "unknown";
+export const isSetupCandidateFromCodex = (paths: readonly string[], home = homedir()): boolean =>
+  paths.some((path) => pathIsWithin(join(resolve(home), ".codex"), resolve(path)));
 
 export const readSetupMachineConfig = Effect.fn("Setup.readMachineConfig")(function* (
   libraryHome: string,
@@ -769,7 +750,10 @@ const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
     : { custody: "invalid-marker" as const };
 });
 
-const collectHarnessRoots = (inventory: InventoryRootOptions, repositories: readonly string[]) => {
+export const collectHarnessRoots = (
+  inventory: InventoryRootOptions,
+  repositories: readonly string[],
+) => {
   const roots: Array<{ harness: Harness; scope: "global" | "project"; root: string }> = [];
   for (const harness of HARNESSES) {
     const global =
@@ -1238,6 +1222,16 @@ export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   return current;
 });
 
+/** Match copies only within the same repository or global installation scope. */
+export const setupInstanceGroupKey = (instance: SetupSkillInstance): string => {
+  const scope = instance.git.repository
+    ? `repository:${instance.git.repository}`
+    : instance.scope === "global"
+      ? "global"
+      : `standalone:${instance.path}`;
+  return `${scope}\0${instance.name}`;
+};
+
 export const classifySetupOnboarding = (
   instances: ReadonlyArray<SetupSkillInstance>,
   retained?: {
@@ -1303,12 +1297,7 @@ export const classifySetupOnboarding = (
   const groups = new Map<string, SetupSkillInstance[]>();
   for (const instance of instances) {
     if (instance.owner.kind === "skit" || instance.owner.kind === "authored") continue;
-    const custodyScope = instance.git.repository
-      ? `repository:${instance.git.repository}`
-      : instance.scope === "global"
-        ? "global"
-        : `standalone:${instance.path}`;
-    const key = `${custodyScope}\0${instance.name}`;
+    const key = setupInstanceGroupKey(instance);
     groups.set(key, [...(groups.get(key) ?? []), instance]);
   }
   const candidates: SetupOnboardingCandidate[] = [];

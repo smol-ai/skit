@@ -1,3 +1,10 @@
+import {
+  skillMetadataLines,
+  metadataSource,
+  metadataRevision,
+  metadataDate,
+} from "./skill-metadata.js";
+import { terminalColors } from "./terminal-style.js";
 import type { HarnessName as Harness } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { resolve } from "node:path";
@@ -238,6 +245,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
           ...rows.map((row) => ({
             value: row.skillVersionId,
             label: row.bindings.length > 0 ? `${row.name} · enabled` : row.name,
+            hint: `${metadataSource(row.source)} · revision ${metadataRevision(row.revision)} · source updated ${metadataDate(row.source_updated_at)}`,
           })),
           { value: BACK_TO_COLLECTIONS, label: BACK_TO_COLLECTIONS },
         ])
@@ -247,7 +255,12 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
         const row = session.skills.find((candidate) => candidate.skillVersionId === skillId);
         if (row === undefined) break;
         yield* renderer.note(
-          `${row.heading}\n  ${row.name}\n  ${row.bindings.length === 0 ? "not enabled" : row.bindings.map((binding) => binding.label).join("\n  ")}`,
+          [
+            terminalColors().cyan(row.heading),
+            `  ${terminalColors().bold(row.name)}`,
+            ...skillMetadataLines(row).map((line) => `    ${terminalColors().dim(line)}`),
+            `  ${row.bindings.length === 0 ? "not enabled" : row.bindings.map((binding) => binding.label).join("\n  ")}`,
+          ].join("\n"),
           "Skill",
         );
         const action = yield* prompter
