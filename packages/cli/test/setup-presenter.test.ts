@@ -63,8 +63,19 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   expect(choices.find((item) => item.label === "align-me")).toMatchObject({
     group: "Local source · ~/Work/skills",
     selected: true,
-    description: "Used by Claude, Codex, Devin · symlinked",
   });
+  expect(rows.find((row) => row.instance.name === "align-me")?.details).toContain(
+    "Link: ~/.claude/skills/align-me → ~/Work/skills/align-me",
+  );
+  expect(
+    choices.every((choice) => choice.description === undefined && choice.detail === undefined),
+  ).toBe(true);
+  const conflicting = choices.filter((item) => item.label === "different");
+  expect(conflicting.map((item) => item.group)).toEqual([
+    "Copies · different · global · choose one",
+    "Copies · different · global · choose one",
+  ]);
+  expect(choices.slice(0, 2)).toEqual(conflicting);
   expect(
     choices
       .filter((item) => item.group === "Codex local skills · ~/.codex/skills")
@@ -75,13 +86,13 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
       .filter((item) => item.label === "different")
       .every((item) => !item.selected && item.selectExplicitly && !item.disabled),
   ).toBe(true);
-  expect(choices.find((item) => item.label === "different")?.description).toContain(
-    "choose a copy with Space",
+  expect(rows.find((row) => row.instance.name === "different")?.details).toContain(
+    "Space selects this copy",
   );
   expect(
     choices
       .filter((item) => item.label === "same")
-      .every((item) => item.description?.includes("Duplicate content")),
+      .every((item) => item.searchText?.includes("Duplicate content")),
   ).toBe(true);
   expect(choices.find((item) => item.label === "invalid")).toMatchObject({
     selected: false,

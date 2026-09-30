@@ -10,6 +10,10 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { afterEach, beforeEach, expect, vi, type MockInstance } from "vitest";
 import { Prompter, terminalPrompterLayer, type Choice } from "../src/presentation/prompter.js";
 
+import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
+import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
+import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
+
 type Key =
   | "up"
   | "down"
@@ -379,4 +383,33 @@ it.effect("keeps blocked skills previewable and bulk selection leaves conflicts 
       ]),
     ),
   ),
+);
+
+it.effect("Space keeps same-name skills from separate repositories selected together", () =>
+  Effect.gen(function* () {
+    const instances: SetupSkillInstance[] = ["fullres", "stackseer"].map((repository, index) => ({
+      name: "tdd",
+      path: `/work/${repository}/.agents/skills/tdd`,
+      aliases: [`/work/${repository}/.agents/skills/tdd`],
+      scope: "project",
+      harnesses: ["claude-code"],
+      owner: { kind: "repository", repository: `/work/${repository}` },
+      git: { status: index === 0 ? "committed" : "untracked", repository: `/work/${repository}` },
+      locks: [],
+      contentIdentity: {
+        status: "none",
+        observedHash: `sha256:${String(index).repeat(64)}`,
+        libraryMatches: [],
+      },
+    }));
+    const rows = setupDiscoveredSkillChoices(instances, classifySetupOnboarding(instances));
+    const selected = yield* (yield* Prompter).multiselect(
+      "Choose project skills",
+      rows.map((row) => row.choice),
+    );
+    expect(selected).toEqual(instances.map((instance) => `tdd\0${instance.path}`));
+    const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+    expect(frames).toContain("tdd  · /work/fullres/.agents/skills/tdd · committed");
+    expect(frames).toContain("tdd  · /work/stackseer/.agents/skills/tdd · untracked");
+  }).pipe(Effect.provide(promptedWith(["space", "down", "space", "enter"]))),
 );

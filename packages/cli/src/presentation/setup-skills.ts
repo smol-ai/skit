@@ -6,7 +6,7 @@ import type {
   SetupOnboardingCandidate,
   SetupSkillInstance,
 } from "../workflows/library/setup-contract.js";
-import { isSetupCandidateFromCodex } from "../workflows/library/setup.js";
+import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "../workflows/library/setup.js";
 
 const compactPath = (path: string, home: string) =>
   path === home ? "~" : path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
@@ -24,6 +24,7 @@ const usage = (instance: SetupSkillInstance) =>
     .join(", ");
 
 const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
+  if (instance.git.repository) return `Repository · ${compactPath(instance.git.repository, home)}`;
   const owner = instance.owner;
   if (owner.kind === "harness") return `Plugins · ${owner.source}`;
   if (owner.kind === "skills-sh") return `Known source · ${owner.source}`;
@@ -40,6 +41,8 @@ const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
 
 const groupOrder = (group: string) =>
   [
+    "Copies",
+    "Repository",
     "Local source",
     "Claude local skills",
     "Codex local skills",
@@ -56,7 +59,9 @@ const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardi
   if (candidate?.action === "blocked" && candidate.reason !== "divergent-copies")
     return `Blocked · ${candidate.reason.replaceAll("-", " ")} · preview to inspect`;
   if (candidate?.action === "bind-existing-entry") return "Exact Library match · reconnect";
-  if (candidate?.action === "import-observed-collection") return "Recorded source · add to Library";
+  if (candidate?.action === "import-observed-collection") return "Add installed copy to Library";
+  if (candidate?.action === "repository-owned")
+    return "Add to Library; project files stay in place";
   return candidate ? undefined : "Already retained · kept in place";
 };
 
@@ -70,9 +75,21 @@ export const setupDiscoveredSkillChoices = (
     .filter(
       (instance) => instance.owner.kind !== "skit" || instance.owner.membership.kind !== "retained",
     )
+    .filter(
+      (instance) =>
+        !candidates.some(
+          (candidate) =>
+            candidate.action === "import-observed-collection" &&
+            candidate.paths.includes(instance.path),
+        ),
+    )
     .map((instance) => {
       const candidate = candidates.find((item) => item.paths.includes(instance.path));
+      const groupKey = setupInstanceGroupKey(instance);
       const siblings = instances.filter(
+        (item) => setupInstanceGroupKey(item) === groupKey && item.path !== instance.path,
+      );
+      const sameNameElsewhere = instances.some(
         (item) => item.name === instance.name && item.path !== instance.path,
       );
       const identical = siblings.filter(
@@ -88,38 +105,55 @@ export const setupDiscoveredSkillChoices = (
         instance.owner.kind === "authored" ||
         (candidate.action === "blocked" && candidate.reason !== "divergent-copies");
       const copyContext = differing.length
-        ? `Different copy also exists in ${differing.map((item) => usage(item) || compactPath(dirname(item.path), home)).join("; ")} · choose a copy with Space`
+        ? "Content differs · Space selects this copy; other copies stay in place"
         : identical.length
           ? `Duplicate content · ${identical.length} independent cop${identical.length === 1 ? "y" : "ies"}`
           : undefined;
+      const sources = [
+        ...new Set([
+          ...(instance.owner.kind === "skills-sh" ? [instance.owner.source] : []),
+          ...(candidate?.action === "import-observed-collection" ? [candidate.source] : []),
+          ...instance.locks.map((lock) => lock.entry.source),
+        ]),
+      ];
+      const metadata = [
+        `Git: ${instance.git.status === "committed" ? "committed, clean" : instance.git.status.replaceAll("-", " ")}`,
+        ...sources.map((source) => `skills.sh lock: ${source}`),
+        instance.harnesses.length ? `Discoverable by ${usage(instance)}` : "No agent installation",
+        copyContext,
+        status,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const links = instance.aliases
+        .filter((path) => path !== instance.path)
+        .map((path) => `Link: ${compactPath(path, home)} → ${compactPath(instance.path, home)}`);
+      const details = [compactPath(instance.path, home), metadata, ...links].join("\n");
       const choice: Choice<string> = {
-        value: siblings.length ? `${instance.name}\0${instance.path}` : instance.name,
+        value: sameNameElsewhere ? `${instance.name}\0${instance.path}` : instance.name,
         label: instance.name,
-        hint: compactPath(instance.path, home),
-        group: sourceGroup(instance, home),
-        description: [
-          instance.harnesses.length ? `Used by ${usage(instance)}` : "No agent installation",
-          instance.aliases.some((path) => path !== instance.path) ? "symlinked" : "local directory",
-          copyContext,
-          status,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        detail:
-          instance.aliases
-            .filter((path) => path !== instance.path)
-            .map((path) => compactPath(path, home))
-            .join(" · ") || undefined,
+        hint:
+          [
+            compactPath(instance.path, home),
+            ...(instance.git.status !== "outside-git" ? [instance.git.status] : []),
+            ...sources,
+            ...(disabled ? ["inspect"] : []),
+          ].join(" · ") || undefined,
+        searchText: details,
+        group: differing.length
+          ? `Copies · ${instance.name} · ${instance.git.repository ? compactPath(instance.git.repository, home) : "global"} · choose one`
+          : sourceGroup(instance, home),
         disabled,
         selected:
           !disabled &&
           differing.length === 0 &&
-          instance.owner.kind !== "harness" &&
+          instance.owner.kind === "unknown" &&
+          instance.git.repository === undefined &&
           !isSetupCandidateFromCodex([instance.path], home),
-        ...(siblings.length ? { exclusiveGroup: instance.name } : {}),
+        ...(siblings.length ? { exclusiveGroup: groupKey } : {}),
         ...(differing.length ? { selectExplicitly: true } : {}),
       };
-      return { instance, candidate, choice };
+      return { instance, candidate, choice, details };
     })
     .sort(
       (left, right) =>
@@ -128,10 +162,11 @@ export const setupDiscoveredSkillChoices = (
         left.instance.name.localeCompare(right.instance.name) ||
         left.instance.path.localeCompare(right.instance.path),
     );
-  const selectedNames = new Set<string>();
+  const selectedGroups = new Set<string>();
   for (const { instance, choice } of rows) {
-    if (choice.selected && selectedNames.has(instance.name)) choice.selected = false;
-    if (choice.selected) selectedNames.add(instance.name);
+    const key = setupInstanceGroupKey(instance);
+    if (choice.selected && selectedGroups.has(key)) choice.selected = false;
+    if (choice.selected) selectedGroups.add(key);
   }
   return rows;
 };

@@ -71,18 +71,16 @@ it.effect("adds selected skills and takes custody only of eligible global copies
 
     const prompts = yield* interaction.prompts;
     expect(prompts.map((prompt) => prompt.kind)).toEqual(["multiselect", "multiselect", "confirm"]);
-    expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(
-      [
-        { value: "review", group: `Local source · ${codexRoot}` },
-        { value: "repo-only", group: `Local source · ${join(repository, ".agents", "skills")}` },
-      ]
-        .sort((left, right) => left.group.localeCompare(right.group))
-        .map((choice) => choice.value),
-    );
+    expect(prompts[1]?.choices.map((choice) => choice.value)).toEqual(["repo-only", "review"]);
+    expect(prompts[1]?.choices.find((choice) => choice.value === "repo-only")).toMatchObject({
+      group: "Repository · ~/repository",
+      selected: false,
+    });
     expect(yield* interaction.remaining).toBe(0);
     const preview = prompts[1]?.choices.find((choice) => choice.value === "review")?.preview;
     expect(preview).toBeDefined();
-    expect(yield* preview!()).toContain(`${join(managedSkill, "SKILL.md")}\n\n${managedText}`);
+    expect(yield* preview!()).toContain(managedText);
+    expect(yield* preview!()).toContain("SKILL.md modified");
     yield* fs.remove(join(managedSkill, "SKILL.md"));
     expect(yield* preview!()).toContain("Content unavailable");
     yield* fs.writeFileString(join(managedSkill, "SKILL.md"), managedText);
@@ -250,7 +248,10 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
     expect(conflicts.filter((choice) => choice.hint?.includes("/.claude/skills/"))).toHaveLength(5);
     const sharedRows = picker.choices.filter((choice) => choice.label === "shared");
     expect(sharedRows).toHaveLength(1);
-    expect(sharedRows[0].description).toContain("Used by Claude, Codex · symlinked");
+    expect(sharedRows[0].description).toBeUndefined();
+    expect(sharedRows[0].detail).toBeUndefined();
+    expect(yield* sharedRows[0].preview!()).toContain("Discoverable by Claude, Codex");
+    expect(yield* sharedRows[0].preview!()).toContain("Link:");
     const codexPath = yield* fs.realPath(join(codex, names[0]));
     const codexPreview = conflicts.find(
       (choice) => choice.value === `${names[0]}\0${codexPath}`,

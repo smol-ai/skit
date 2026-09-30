@@ -110,8 +110,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots = !input.dryRun && (persistRoots || decisionsChanged);
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
+  const retainedSourceSelections = yield* chooseKnownSources(observed);
   const {
-    import: retainedSourceSelections,
     bind: existingBindingSelections,
     add: localCustodySelections,
     remove,
@@ -336,6 +336,58 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   yield* renderer.note(renderCheck(checks), "Source updates");
 });
 
+const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
+  observed: SetupResult,
+) {
+  const bySource = new Map<
+    string,
+    {
+      label: string;
+      candidates: Array<
+        Extract<
+          SetupResult["onboarding"]["candidates"][number],
+          { action: "import-observed-collection" }
+        >
+      >;
+    }
+  >();
+  for (const candidate of observed.onboarding.candidates)
+    if (candidate.action === "import-observed-collection") {
+      const prior = bySource.get(candidate.groupKey);
+      bySource.set(candidate.groupKey, {
+        label: candidate.source,
+        candidates: [...(prior?.candidates ?? []), candidate],
+      });
+    }
+  if (!bySource.size) return [];
+  const prompter = yield* Prompter;
+  const selectedSources = yield* prompter
+    .multiselect(
+      "Select skills.sh Collections to add to the SKIT Library",
+      [...bySource]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([locator, group]) => ({
+          value: locator,
+          label: group.label,
+          hint: `${group.candidates.length} installed ${group.candidates.length === 1 ? "skill" : "skills"}`,
+          selected: true,
+        })),
+    )
+    .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
+  return selectedSources
+    .flatMap((source) => bySource.get(source)?.candidates ?? [])
+    .map((candidate) => ({
+      name: candidate.name,
+      paths: candidate.paths,
+      groupKey: candidate.groupKey,
+    }))
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) ||
+        left.paths.join("\0").localeCompare(right.paths.join("\0")),
+    );
+});
+
 const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(function* (
   options: SetupOptions,
   observed: SetupResult,
@@ -357,15 +409,16 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
         ...((removablePaths.get(row.instance.path)?.length ?? 0) > 0
           ? { removeValue: `remove\0${row.choice.value}` }
           : {}),
-        hint: `${row.choice.hint} · SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
+        searchText: `${row.details} · SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
         preview: () =>
           fs.readFileString(path).pipe(
             Effect.map(
               (content) =>
-                `${path}\n\n${content.length > 65_536 ? `${content.slice(0, 65_536)}\n\n[Preview truncated at 65,536 characters]` : content}`,
+                `${path}\n${row.details}\nSKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}\n\n${content.length > 65_536 ? `${content.slice(0, 65_536)}\n\n[Preview truncated at 65,536 characters]` : content}`,
             ),
             Effect.orElseSucceed(
-              () => `${path}\n\nContent unavailable: the file could not be read.`,
+              () =>
+                `${path}\n${row.details}\nSKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}\n\nContent unavailable: the file could not be read.`,
             ),
           ),
       };
@@ -385,11 +438,7 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
       ? [{ name: instance.name, sourcePath: instance.path }]
       : [],
   );
-  const imported = selectedRows.flatMap(({ instance, candidate }) =>
-    candidate?.action === "import-observed-collection"
-      ? [{ name: candidate.name, paths: [instance.path], groupKey: candidate.groupKey }]
-      : [],
-  );
+
   const bind = selectedRows.flatMap(({ instance, candidate }) =>
     candidate?.action === "bind-existing-entry"
       ? [{ name: candidate.name, path: instance.path }]
@@ -398,7 +447,7 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
   const remove = rows
     .filter((row) => selectedValues.includes(`remove\0${row.choice.value}`))
     .map(({ instance }) => ({ name: instance.name, paths: [instance.path] }));
-  return { add, import: imported, bind, remove, removablePaths };
+  return { add, bind, remove, removablePaths };
 });
 
 export const setupCliCommand = Command.make(

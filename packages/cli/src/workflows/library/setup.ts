@@ -1222,6 +1222,16 @@ export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   return current;
 });
 
+/** Match copies only within the same repository or global installation scope. */
+export const setupInstanceGroupKey = (instance: SetupSkillInstance): string => {
+  const scope = instance.git.repository
+    ? `repository:${instance.git.repository}`
+    : instance.scope === "global"
+      ? "global"
+      : `standalone:${instance.path}`;
+  return `${scope}\0${instance.name}`;
+};
+
 export const classifySetupOnboarding = (
   instances: ReadonlyArray<SetupSkillInstance>,
   retained?: {
@@ -1287,12 +1297,7 @@ export const classifySetupOnboarding = (
   const groups = new Map<string, SetupSkillInstance[]>();
   for (const instance of instances) {
     if (instance.owner.kind === "skit" || instance.owner.kind === "authored") continue;
-    const custodyScope = instance.git.repository
-      ? `repository:${instance.git.repository}`
-      : instance.scope === "global"
-        ? "global"
-        : `standalone:${instance.path}`;
-    const key = `${custodyScope}\0${instance.name}`;
+    const key = setupInstanceGroupKey(instance);
     groups.set(key, [...(groups.get(key) ?? []), instance]);
   }
   const candidates: SetupOnboardingCandidate[] = [];

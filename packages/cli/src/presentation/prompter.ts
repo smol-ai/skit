@@ -30,6 +30,8 @@ export interface Choice<Value> {
   detail?: string;
   /** Context displayed below every row, even while another row is highlighted. */
   description?: string;
+  /** Metadata included in filtering without rendering it in every row. */
+  searchText?: string;
   group?: string;
   /** Visible and previewable, but cannot be selected for addition. */
   disabled?: boolean;
@@ -116,7 +118,7 @@ const filterableMultiSelect = <Value extends string>(
     const query = state.query.toLocaleLowerCase();
     if (query.length === 0) return items.map((_, index) => index);
     return items.flatMap((item, index) =>
-      `${item.group ?? ""} ${item.label} ${item.hint ?? ""} ${item.detail ?? ""} ${item.description ?? ""}`
+      `${item.group ?? ""} ${item.label} ${item.hint ?? ""} ${item.detail ?? ""} ${item.description ?? ""} ${item.searchText ?? ""}`
         .toLocaleLowerCase()
         .includes(query)
         ? [index]
@@ -133,8 +135,11 @@ const filterableMultiSelect = <Value extends string>(
     const page = visible.slice(start, start + maxItems);
     const pageLineCount = () =>
       page.length +
-      page.filter((index) => items[index].description).length +
-      (items[visible[cursor]]?.detail ? 1 : 0) +
+      page.reduce(
+        (count, index) => count + (items[index].description?.split("\n").length ?? 0),
+        0,
+      ) +
+      (items[visible[cursor]]?.detail?.split("\n").length ?? 0) +
       page.filter((itemIndex, index) => {
         const group = items[itemIndex].group;
         return group !== undefined && (index === 0 || group !== items[page[index - 1]].group);
@@ -173,8 +178,11 @@ const filterableMultiSelect = <Value extends string>(
       lines.push(
         `${indent}${active} ${checked} ${label}${removed ? color.red("  · Remove") : ""}${item.hint ? color.dim(`  · ${item.hint}`) : ""}`,
       );
-      if (item.description) lines.push(`${indent}    ${color.dim(item.description)}`);
-      if (highlighted && item.detail) lines.push(`${indent}    ${color.dim(item.detail)}`);
+      for (const line of item.description?.split("\n") ?? [])
+        lines.push(`${indent}    ${color.dim(line)}`);
+      if (highlighted)
+        for (const line of item.detail?.split("\n") ?? [])
+          lines.push(`${indent}    ${color.dim(line)}`);
     }
     return lines;
   };
