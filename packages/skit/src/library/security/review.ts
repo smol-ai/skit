@@ -9,7 +9,11 @@ import {
 import { LibraryStore } from "../store/library-store.js";
 import { auditSkill, evaluateSkillAudit } from "../../auditing/skill-audit.js";
 import type { LibraryState } from "../library-state.js";
-import { currentSkillVersion, versionBacking } from "../library-contracts.js";
+import {
+  currentCollectionSkills,
+  currentSkillVersion,
+  versionBacking,
+} from "../library-contracts.js";
 import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
 import { retainedTreePath } from "../retention/retain-tree.js";
 
@@ -37,8 +41,13 @@ const securitySkill = Effect.fn("Library.securitySkill")(function* (
           : [{ version, skill, member: backing.member, tree: backing.copy }];
       });
   });
-  if (matches.length !== 1) return yield* new UnknownInstalledSkill({ query });
-  return matches[0]!;
+  // A Skill that moved upstream leaves a retired row with the same name; the current one wins.
+  const current = matches.filter((match) =>
+    currentCollectionSkills(state, match.skill.collection_id).includes(match.skill),
+  );
+  const [match, ...others] = matches.length > 1 && current.length > 0 ? current : matches;
+  if (match === undefined || others.length > 0) return yield* new UnknownInstalledSkill({ query });
+  return match;
 });
 
 export const securityReviewFromStateEffect = Effect.fn("Library.securityReviewSnapshot")(function* (

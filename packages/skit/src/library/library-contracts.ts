@@ -422,7 +422,11 @@ export const LibraryManifest = Schema.Struct({
           (skill) => skill.collection_id === collection.collection_id,
         );
         const paths = owned.map((skill) => skill.path);
-        const names = owned.map((skill) => skill.name);
+        // A Skill whose path moved upstream leaves its old row behind with its retained history, so
+        // only the Skills the newest Source Acquisition still contains must have distinct names.
+        const names = currentCollectionSkills(manifest, collection.collection_id).map(
+          (skill) => skill.name,
+        );
         if (new Set(paths).size !== paths.length || new Set(names).size !== names.length)
           return false;
         if (

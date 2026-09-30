@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../artifact/skit.js";
 import { InvalidLibraryState } from "../failures.js";
@@ -179,6 +179,8 @@ export const prepareObservedCollectionEffect = Effect.fn("Library.prepareObserve
   },
 );
 
+const formatManifestIssue = SchemaIssue.makeFormatterDefault();
+
 interface PersistPreparedRequest extends ObservedImport {
   readonly retainedRoot: string;
   readonly retainedDigest: Digest;
@@ -323,7 +325,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       (error) =>
         new InvalidLibraryState({
           path: join(store.home, "state.json"),
-          detail: `observed Collection would violate the portable manifest: ${String(error)}`,
+          detail: `observed Collection would violate the portable manifest: ${formatManifestIssue(error)}`,
         }),
     ),
   );
@@ -468,7 +470,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
         (error) =>
           new InvalidLibraryState({
             path: join(store.home, "state.json"),
-            detail: `Projection retention would violate the portable manifest: ${String(error)}`,
+            detail: `Projection retention would violate the portable manifest: ${formatManifestIssue(error)}`,
           }),
       ),
     );
