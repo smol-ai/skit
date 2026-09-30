@@ -304,7 +304,7 @@ describe("the terminal prompter", () => {
       const frames = stderr.mock.calls
         .map(([frame]) => String(frame))
         .filter((frame) => frame.startsWith("\u001b[?25l"));
-      expect(frames.every((frame) => frame.split("\n").length <= 21)).toBe(true);
+      expect(frames.every((frame) => frame.split("\n").length <= 22)).toBe(true);
       expect(frames.some((frame) => frame.includes("❯ ☐ Skill 24"))).toBe(true);
     }).pipe(Effect.provide(promptedWith(["up", "space", "enter"]))),
   );

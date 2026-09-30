@@ -228,10 +228,7 @@ const filterableMultiSelect = <Value extends string>(
           previewOffset = frame.offset;
           previewPageSize = frame.pageSize;
         } else {
-          lines = renderedLines(
-            state,
-            Math.max(1, Math.min(AUTOCOMPLETE_MAX_ITEMS, (rows || 24) - 3)),
-          );
+          lines = renderedLines(state, Math.max(1, (rows || 24) - 3));
           if (columns > 0) lines = lines.map((line) => fitTerminalLine(line, columns));
         }
         renderedCount = lines.length;
