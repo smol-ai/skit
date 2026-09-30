@@ -94,6 +94,51 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   expect(new Set(choices.map((item) => item.value)).size).toBe(instances.length);
 });
 
+it("omits managed Library projections while preserving unmanaged copies and orphaned markers", () => {
+  const unmanaged: SetupSkillInstance = {
+    name: "review",
+    path: "/home/.claude/skills/review",
+    aliases: ["/home/.claude/skills/review"],
+    scope: "global",
+    harnesses: ["claude-code"],
+    owner: { kind: "unknown" },
+    git: { status: "outside-git" },
+    locks: [],
+    contentIdentity: { status: "none", libraryMatches: [] },
+  };
+  const membership = {
+    projectionId: makeProjectionId(),
+    skillId: makeSkillId(),
+    skillVersionId: makeSkillVersionId(),
+  };
+  const managed: SetupSkillInstance = {
+    ...unmanaged,
+    path: "/home/.codex/skills/review",
+    aliases: ["/home/.codex/skills/review"],
+    owner: {
+      kind: "skit",
+      membership: {
+        ...membership,
+        kind: "retained",
+        collectionId: makeCollectionId(),
+        displayName: "review",
+      },
+    },
+  };
+  const orphaned: SetupSkillInstance = {
+    ...unmanaged,
+    name: "orphaned",
+    path: "/home/.codex/skills/orphaned",
+    owner: { kind: "skit", membership: { ...membership, kind: "missing-from-library" } },
+  };
+  const instances = [managed, unmanaged, orphaned];
+  const rows = setupDiscoveredSkillChoices(instances, classifySetupOnboarding(instances));
+  expect(rows.map((row) => row.instance.path)).toEqual([unmanaged.path, orphaned.path]);
+  expect(rows.find((row) => row.instance === unmanaged)?.choice.selectExplicitly).toBe(true);
+  expect(rows.find((row) => row.instance === orphaned)?.choice.disabled).toBe(true);
+  expect(setupDiscoveredSkillChoices([managed], [])).toEqual([]);
+});
+
 it("models large discovery results as collapsed while retaining their Collections", () => {
   const names = Array.from({ length: 6 }, (_, index) => `skill-${index + 1}`);
   const summary = setupDiscoverySummary({

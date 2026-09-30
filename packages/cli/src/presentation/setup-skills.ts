@@ -60,13 +60,16 @@ const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardi
   return candidate ? undefined : "Already retained · kept in place";
 };
 
-/** Every physical instance gets a row, including blocked and already managed content. */
+/** Show discovered copies that still need attention, including blocked content. */
 export const setupDiscoveredSkillChoices = (
   instances: readonly SetupSkillInstance[],
   candidates: readonly SetupOnboardingCandidate[],
   home = homedir(),
 ) => {
   const rows = instances
+    .filter(
+      (instance) => instance.owner.kind !== "skit" || instance.owner.membership.kind !== "retained",
+    )
     .map((instance) => {
       const candidate = candidates.find((item) => item.paths.includes(instance.path));
       const siblings = instances.filter(
