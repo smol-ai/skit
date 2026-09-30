@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { LibraryDoctorReport, type LibraryState } from "@smolai/skit-core";
+import { type LibraryState } from "@smolai/skit-core";
 import { probeHarnessEffect } from "../../harness/probe.js";
 
 const NativeSkill = Schema.Struct({
@@ -62,14 +62,11 @@ export const CodexDoctorCheck = Schema.Struct({
   cwd: Schema.String,
   version: Schema.optionalKey(Schema.String),
   detail: Schema.optionalKey(Schema.String),
+  instances: Schema.Array(CodexDoctorInstance),
   findings: Schema.Array(CodexDoctorFinding),
   errors: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
 });
 export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
-export const DoctorReport = Schema.Struct({
-  ...LibraryDoctorReport.fields,
-  codex: CodexDoctorCheck,
-});
 
 /** Canonical document identity, not names or visible labels, collapses symlink aliases. */
 export function codexDuplicateFindings(
@@ -189,7 +186,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
   cwd: string,
   overrideRoot?: string,
 ) {
-  const empty = { cwd, findings: [], errors: [] };
+  const empty = { cwd, instances: [], findings: [], errors: [] };
   if (overrideRoot)
     return {
       ...empty,
@@ -248,6 +245,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       ...empty,
       ...version,
       status: "checked" as const,
+      instances,
       findings: codexDuplicateFindings(instances),
       errors,
     };

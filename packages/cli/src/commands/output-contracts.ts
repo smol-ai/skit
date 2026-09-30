@@ -28,7 +28,7 @@ import {
   ProjectionRetentionResult,
 } from "../workflows/library/projection-retention-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
-import { DoctorReport } from "../workflows/library/doctor-codex.js";
+import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
 
 function effectOutput<
   const TId extends string,

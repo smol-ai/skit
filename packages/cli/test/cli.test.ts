@@ -438,7 +438,21 @@ describe("CLI contracts", () => {
     await rm(join(codexRoot, "review"), { recursive: true });
     const result = spawnSync(
       process.execPath,
-      [bin, "doctor", "--home", home, "--codex-root", codexRoot, "--json"],
+      [
+        bin,
+        "doctor",
+        "--home",
+        home,
+        "--codex-root",
+        codexRoot,
+        "--claude-root",
+        join(root, "claude"),
+        "--opencode-root",
+        join(root, "opencode"),
+        "--devin-root",
+        join(root, "devin"),
+        "--json",
+      ],
       { encoding: "utf8" },
     );
     expect(result.status).toBe(12);

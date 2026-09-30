@@ -96,6 +96,47 @@
         "detail": {
           "type": "string"
         },
+        "instances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "canonicalPath": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "pluginId": {
+                "type": "string"
+              },
+              "skitManaged": {
+                "type": "boolean"
+              },
+              "documentDigest": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "displayName",
+              "path",
+              "canonicalPath",
+              "scope",
+              "skitManaged"
+            ],
+            "additionalProperties": true
+          }
+        },
         "findings": {
           "type": "array",
           "items": {
@@ -193,16 +234,129 @@
       "required": [
         "status",
         "cwd",
+        "instances",
         "findings",
         "errors"
       ],
       "additionalProperties": true
+    },
+    "harnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "type": "string",
+            "enum": [
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "checked",
+              "missing",
+              "failed",
+              "skipped"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "coverage": {
+            "type": "string",
+            "enum": [
+              "callable-commands",
+              "resolved-skills",
+              "native-skills"
+            ]
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "triggers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "warnings",
+                "errors"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "harness",
+          "status",
+          "cwd",
+          "coverage",
+          "limitations",
+          "skills",
+          "warnings"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
     "ok",
     "issues",
-    "codex"
+    "codex",
+    "harnesses"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

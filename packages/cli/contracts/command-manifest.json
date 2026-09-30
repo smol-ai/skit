@@ -439,7 +439,14 @@
         ],
         "subprocesses": [
           "codex --version",
-          "codex app-server"
+          "codex app-server",
+          "claude --version",
+          "claude --print --input-format stream-json --output-format stream-json",
+          "opencode --version",
+          "node (bounded OpenCode capture)",
+          "opencode debug skill",
+          "devin --version",
+          "devin skills list --json"
         ]
       },
       "outputSchemas": [
