@@ -6,8 +6,10 @@ import { LinkStat, skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import {
   makeScriptedInteraction,
+  type InteractionEvent,
   type ScriptedAnswer,
 } from "../src/presentation/interaction-recorder.js";
+import { setupPrompts, setupStepTitles } from "../src/presentation/setup-steps.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import {
   applySetupRemovals,
@@ -46,7 +48,7 @@ const fixture = Effect.gen(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const setup = (answers: readonly ScriptedAnswer[], dryRun = false) =>
+  const setup = (answers: readonly ScriptedAnswer[], dryRun = false, workDirFlag?: string) =>
     Effect.gen(function* () {
       const interaction = yield* makeScriptedInteraction(answers);
       const result = yield* home.owned(
@@ -57,6 +59,7 @@ const fixture = Effect.gen(function* () {
             cwd: root,
             interactive: true,
             dryRun,
+            ...(workDirFlag ? { workDirFlag } : {}),
             localCustody: { acquisition: home.addOptions, bindings: home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
@@ -66,13 +69,64 @@ const fixture = Effect.gen(function* () {
   return { root, fs, agentRoot, source, copy, link, home, options, setup };
 });
 
+const stepsAndPrompts = (events: ReadonlyArray<InteractionEvent>) =>
+  events.flatMap((event) =>
+    event._tag === "Step"
+      ? [`step ${event.index}/${event.total} ${event.title}`]
+      : event._tag === "PromptShown"
+        ? [event.message]
+        : [],
+  );
+
+it.effect(
+  "setup announces every step before its question, including steps with nothing to decide",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const { interaction } = yield* f.setup([["remove\0copied"], false]);
+      expect(stepsAndPrompts(yield* interaction.events)).toEqual([
+        `step 1/3 ${setupStepTitles.collections}`,
+        `step 2/3 ${setupStepTitles.skills}`,
+        setupPrompts.skills,
+        `step 3/3 ${setupStepTitles.confirm}`,
+        setupPrompts.confirm,
+      ]);
+      expect(yield* f.fs.exists(f.copy)).toBe(true);
+    }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("setup adds the repository step only when given a work dir", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const { interaction } = yield* f.setup([["remove\0copied"], false], false, f.root);
+    expect(
+      stepsAndPrompts(yield* interaction.events).filter((item) => item.startsWith("step")),
+    ).toEqual([
+      `step 1/4 ${setupStepTitles.repositories}`,
+      `step 2/4 ${setupStepTitles.collections}`,
+      `step 3/4 ${setupStepTitles.skills}`,
+      `step 4/4 ${setupStepTitles.confirm}`,
+    ]);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("non-interactive setup announces no steps", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const { interaction } = yield* f.setup([], true);
+    expect(yield* interaction.events).not.toContainEqual(expect.objectContaining({ _tag: "Step" }));
+  }).pipe(Effect.provide(skitLayer)),
+);
+
 it.effect(
   "setup previews exact installed locations, archives copies, and preserves symlink sources",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
       const { interaction, result } = yield* f.setup([["remove\0copied", "remove\0linked"], true]);
-      const plan = (yield* interaction.notes).find((note) => note.title === "Setup plan")!.body;
+      const plan = (yield* interaction.steps).find(
+        (step) => step.title === setupStepTitles.confirm,
+      )!.body;
       expect(plan).toContain(`copied · ${f.copy}`);
       expect(plan).toContain(`linked · ${f.link} (symlink only; source stays)`);
       expect(plan).not.toContain(`linked · ${f.source}`);
@@ -218,7 +272,9 @@ it.effect("removing one duplicate row preserves the independent copy in another 
     expect(yield* f.fs.exists(f.copy)).toBe(false);
     expect(yield* f.fs.readFileString(join(otherCopy, ".DS_Store"))).toBe("incidental bytes");
     expect(yield* f.fs.readLink(f.link)).toBe(f.source);
-    const plan = (yield* interaction.notes).find((note) => note.title === "Setup plan")!.body;
+    const plan = (yield* interaction.steps).find(
+      (step) => step.title === setupStepTitles.confirm,
+    )!.body;
     expect(plan).toContain("Remove installed copies: 1");
     expect(plan).not.toContain(`copied · ${otherCopy}`);
   }).pipe(Effect.provide(skitLayer)),

@@ -555,49 +555,6 @@ export function setupDiscoverySummary(data: SetupDiscoveryInput) {
   };
 }
 
-export function renderSetupDiscovery(
-  data: SetupDiscoveryInput,
-  color = createColors(false),
-): string {
-  const summary = setupDiscoverySummary(data);
-
-  const lines = [
-    `${color.bold(String(summary.skills.count))} skill${summary.skills.count === 1 ? "" : "s"}${summary.skills.locations === summary.skills.count ? "" : color.dim(` across ${summary.skills.locations} locations`)}`,
-  ];
-  if (summary.skills.expanded)
-    for (const { name, paths } of summary.skills.items)
-      if (paths.length === 1) lines.push(`  ${name} · ${compactSetupPath(paths[0]!)}`);
-      else {
-        lines.push(`  ${name} · ${paths.length} locations`);
-        lines.push(...paths.sort().map((path) => `    ${compactSetupPath(path)}`));
-      }
-
-  lines.push(
-    "",
-    `${color.bold(String(summary.lockFiles.length))} skills.sh lock file${summary.lockFiles.length === 1 ? "" : "s"}`,
-  );
-  for (const lock of summary.lockFiles) {
-    lines.push(`  ${color.dim(compactSetupPath(lock.directory))}`);
-    if (!lock.collections.length) lines.push(`    ${lock.status}`);
-    for (const collection of lock.collections) {
-      lines.push(
-        `    ${color.cyan(collection.source)} ${color.dim(`· ${collection.skills.length} skill${collection.skills.length === 1 ? "" : "s"}`)}`,
-      );
-      if (collection.expanded)
-        lines.push(
-          ...collection.skills.map((skill) => {
-            const hashes = [
-              ...(skill.computedHash ? [`computedHash ${skill.computedHash}`] : []),
-              ...(skill.skillFolderHash ? [`skillFolderHash ${skill.skillFolderHash}`] : []),
-            ];
-            return `      ${skill.name} · ${hashes.join(" · ") || "no recorded hash"}`;
-          }),
-        );
-    }
-  }
-  return lines.join("\n");
-}
-
 function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {

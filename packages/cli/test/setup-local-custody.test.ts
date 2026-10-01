@@ -12,6 +12,7 @@ import {
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { setupStepTitles } from "../src/presentation/setup-steps.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const skillDocument = (name: string, body: string) =>
@@ -267,9 +268,9 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
     expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(
       skillDocument("shared", "Shared source"),
     );
-    expect((yield* interaction.notes).find((note) => note.title === "Setup plan")?.body).toContain(
-      `Authoritative copy: ${names[0]} · ${chosenPath}`,
-    );
+    expect(
+      (yield* interaction.steps).find((step) => step.title === setupStepTitles.confirm)?.body,
+    ).toContain(`Authoritative copy: ${names[0]} · ${chosenPath}`);
   }).pipe(Effect.provide(skitLayer)),
 );
 

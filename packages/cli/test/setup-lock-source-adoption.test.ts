@@ -14,6 +14,7 @@ import {
 } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { setupPrompts } from "../src/presentation/setup-steps.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { applySetupObservedCollections } from "../src/workflows/library/setup-observed-collections.js";
 import {
@@ -153,7 +154,7 @@ for (const skillCount of [1, 12]) {
           "Verifying the completed setup",
         ]);
         const sourcePicker = (yield* interaction.prompts).find(
-          (prompt) => prompt.message === "Select skills.sh Collections to add to the SKIT Library",
+          (prompt) => prompt.message === setupPrompts.collections,
         );
         expect(sourcePicker?.choices).toEqual([
           expect.objectContaining({
@@ -163,9 +164,7 @@ for (const skillCount of [1, 12]) {
           }),
         ]);
         expect(
-          (yield* interaction.prompts).some((prompt) =>
-            prompt.message.startsWith("Manage discovered skills:"),
-          ),
+          (yield* interaction.prompts).some((prompt) => prompt.message === setupPrompts.skills),
         ).toBe(false);
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
           Effect.provide(libraryStoreLayer({ home: home.home })),

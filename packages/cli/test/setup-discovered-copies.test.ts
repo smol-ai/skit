@@ -6,6 +6,7 @@ import { expect } from "vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { setupPrompts } from "../src/presentation/setup-steps.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const names = [
@@ -128,8 +129,8 @@ for (const scenario of [
       expect(observed.instances.filter((item) => names.includes(item.name))).toHaveLength(
         scenario === "global symlink aliases" ? 5 : 10,
       );
-      const picker = (yield* interaction.prompts).find((prompt) =>
-        prompt.message.startsWith("Manage discovered skills:"),
+      const picker = (yield* interaction.prompts).find(
+        (prompt) => prompt.message === setupPrompts.skills,
       );
       expect(picker).toBeDefined();
       const copies = picker?.choices.filter((choice) => names.includes(choice.label)) ?? [];
