@@ -416,7 +416,10 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
           Effect.catchTag("QuitError", () =>
             Effect.gen(function* () {
               const reason = yield* Ref.get(cancellation);
-              if (reason === "back") yield* promptTerminal.display("\n").pipe(Effect.orDie);
+              // A cancelled prompt leaves its last frame with the cursor at the end of the line.
+              // Every later block starts with a blank line on the assumption that the cursor is at
+              // the start of a fresh line, as a submitted prompt leaves it.
+              yield* promptTerminal.display("\n").pipe(Effect.orDie);
               return yield* new PromptCancelled({ prompt: message, reason });
             }),
           ),

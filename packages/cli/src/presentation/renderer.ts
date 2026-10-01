@@ -21,6 +21,11 @@ export interface RendererShape {
   readonly help: (text: string) => Effect.Effect<void>;
   /** An aside during an interactive flow. Suppressed when the caller asked for JSON. */
   readonly note: (body: string, title: string) => Effect.Effect<void>;
+  /** One numbered step of a guided flow, announced before its question. Suppressed like a note. */
+  readonly step: (
+    step: { readonly index: number; readonly total: number; readonly title: string },
+    body: string,
+  ) => Effect.Effect<void>;
   /** Replace the message of the currently visible status without starting another spinner. */
   readonly updateStatus: (message: string) => Effect.Effect<void>;
   /** Progress around a running effect, released on every exit including interruption. */
@@ -55,6 +60,13 @@ export function consoleRenderer(json: boolean): RendererShape {
     return write(process.stderr, CLEAR_STATUS_LINE);
   });
 
+  const note = (body: string, title: string) => {
+    const frame = renderNoteFrame(body, title, format);
+    return frame.stderr
+      ? clearStatus.pipe(Effect.andThen(write(process.stderr, frame.stderr)))
+      : Effect.void;
+  };
+
   return {
     result: (result, options) =>
       Effect.gen(function* () {
@@ -75,11 +87,10 @@ export function consoleRenderer(json: boolean): RendererShape {
         process.exitCode = frame.exitCode;
       }),
     help: (text) => write(process.stdout, renderHelpFrame(text, format).stdout),
-    note: (body, title) => {
-      const frame = renderNoteFrame(body, terminalColors().bold(title), format);
-      return frame.stderr
-        ? clearStatus.pipe(Effect.andThen(write(process.stderr, frame.stderr)))
-        : Effect.void;
+    note: (body, title) => note(body, terminalColors().bold(title)),
+    step: ({ index, total, title }, body) => {
+      const color = terminalColors();
+      return note(body, `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`);
     },
     updateStatus: (message) =>
       Effect.sync(() => {

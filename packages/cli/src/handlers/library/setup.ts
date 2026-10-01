@@ -8,8 +8,14 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
+import { compactHomePath } from "../../presentation/home-path.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { renderSetupDiscovery } from "../../presentation/contract-presenters.js";
+import {
+  setupOverviewTitle,
+  setupPrompts,
+  setupStepPlan,
+  type SetupStepPlan,
+} from "../../presentation/setup-steps.js";
 import {
   readSetupMachineConfig,
   setupRepositoryDecisions,
@@ -29,7 +35,6 @@ import { LibraryStore } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupDiscoveredSkillChoices } from "../../presentation/setup-skills.js";
-import { terminalColors } from "../../presentation/terminal-style.js";
 import {
   applySetupRemovals,
   planSetupRemovals,
@@ -70,12 +75,23 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots: !input.interactive && persistRoots,
   };
   const renderer = yield* Renderer;
+  const guided = input.interactive && !input.dryRun && input.localCustody !== undefined;
+  const steps = setupStepPlan({ scanRepositories: roots.length > 0 });
+  if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
   const observe = (options: SetupOptions) =>
     renderer.withStatus("Observing local skills", runSetup(options));
   let observed = yield* observe(setupOptions);
-  if (!input.interactive || input.dryRun || !input.localCustody) return observed;
-  yield* renderer.note(renderSetupDiscovery(observed, terminalColors()), "Local discovery");
+  if (!guided || !input.localCustody) return observed;
   const discoveredRepositories = observed.repositories;
+  const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
+  const displayRoots = roots.map(displayPath).join(", ");
+  if (roots.length)
+    yield* renderer.step(
+      steps.step("repositories"),
+      discoveredRepositories.length
+        ? `Found ${discoveredRepositories.length} ${discoveredRepositories.length === 1 ? "repository" : "repositories"} with skills under ${displayRoots}. SKIT ignores the ones you leave unselected.`
+        : `No repositories with skills were found under ${displayRoots}.`,
+    );
   let repositoryDecisions: ReadonlyArray<{
     path: string;
     status: "watched" | "ignored";
@@ -83,10 +99,10 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   if (discoveredRepositories.length) {
     const prompter = yield* Prompter;
     const watched = yield* prompter.multiselect(
-      "Select repositories for SKIT to track. Deselect for SKIT to ignore.",
+      setupPrompts.repositories,
       discoveredRepositories.map((repository) => ({
         value: repository.path,
-        label: repository.path,
+        label: displayPath(repository.path),
         hint: `${repository.skills.length} skill${repository.skills.length === 1 ? "" : "s"}`,
         selected: repository.status !== "ignored",
       })),
@@ -110,13 +126,13 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots = !input.dryRun && (persistRoots || decisionsChanged);
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
-  const retainedSourceSelections = yield* chooseKnownSources(observed);
+  const retainedSourceSelections = yield* chooseKnownSources(steps, observed);
   const {
     bind: existingBindingSelections,
     add: localCustodySelections,
     remove,
     removablePaths,
-  } = yield* chooseDiscoveredSkills(setupOptions, observed);
+  } = yield* chooseDiscoveredSkills(steps, setupOptions, observed);
   const removalPlan = yield* planSetupRemovals(setupOptions, observed, remove, removablePaths);
   const prompter = yield* Prompter;
   const hasChanges =
@@ -126,9 +142,9 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     localCustodySelections.length > 0 ||
     removalPlan.entries.length > 0;
   if (!hasChanges) {
-    yield* renderer.note(
-      "Nothing was selected and the repository roots are unchanged.",
-      "No setup changes",
+    yield* renderer.step(
+      steps.step("confirm"),
+      "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
     );
     yield* offerSkillsShUpdateCheck();
     return observed;
@@ -158,10 +174,10 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     (selection) => !repositorySelections.includes(selection),
   );
   const planLines = [
-    ...(persistRoots ? [`Save discovery roots: ${roots.join(", ")}`] : []),
+    ...(persistRoots ? [`Save discovery roots: ${displayRoots}`] : []),
     ...repositoryDecisions.map(
       (decision) =>
-        `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${decision.path}`,
+        `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${displayPath(decision.path)}`,
     ),
     ...(retainedSourceSelections.length && !observed.machineConfig.machineId
       ? ["Create this machine's stable Library identity"]
@@ -218,8 +234,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
         ]
       : []),
   ];
-  yield* renderer.note(planLines.join("\n"), "Setup plan");
-  const approved = yield* prompter.confirm("Apply this setup plan?");
+  yield* renderer.step(steps.step("confirm"), planLines.join("\n"));
+  const approved = yield* prompter.confirm(setupPrompts.confirm);
   if (!approved) {
     yield* renderer.note("No changes were applied.", "Setup cancelled");
     return observed;
@@ -337,6 +353,7 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
 });
 
 const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
+  steps: SetupStepPlan,
   observed: SetupResult,
 ) {
   const bySource = new Map<
@@ -359,11 +376,19 @@ const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
         candidates: [...(prior?.candidates ?? []), candidate],
       });
     }
-  if (!bySource.size) return [];
+  const renderer = yield* Renderer;
+  if (!bySource.size) {
+    yield* renderer.step(steps.step("collections"), "No skills.sh collections to add.");
+    return [];
+  }
+  yield* renderer.step(
+    steps.step("collections"),
+    `Found ${bySource.size} installed skills.sh collection${bySource.size === 1 ? "" : "s"} not yet in the SKIT Library.`,
+  );
   const prompter = yield* Prompter;
   const selectedSources = yield* prompter
     .multiselect(
-      "Select skills.sh Collections to add to the SKIT Library",
+      setupPrompts.collections,
       [...bySource]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([locator, group]) => ({
@@ -389,6 +414,7 @@ const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
 });
 
 const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(function* (
+  steps: SetupStepPlan,
   options: SetupOptions,
   observed: SetupResult,
 ) {
@@ -424,9 +450,17 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
       };
     }),
   );
+  const skillNames = new Set(rows.map((row) => row.instance.name)).size;
+  const renderer = yield* Renderer;
+  yield* renderer.step(
+    steps.step("skills"),
+    choices.length
+      ? `Found ${skillNames} other installed skill${skillNames === 1 ? "" : "s"} in ${rows.length} location${rows.length === 1 ? "" : "s"}.`
+      : "No other installed skills to review.",
+  );
   const selectedValues = choices.length
     ? yield* prompter
-        .multiselect("Manage discovered skills: choose a copy to add, or mark Remove", choices)
+        .multiselect(setupPrompts.skills, choices)
         .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])))
     : [];
   const selectedRows = rows.filter((row) => selectedValues.includes(row.choice.value));

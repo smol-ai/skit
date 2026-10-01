@@ -1,15 +1,13 @@
 import { homedir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { dirname, join } from "node:path";
 import type { HarnessName } from "@smolai/skit-core";
+import { compactHomePath } from "./home-path.js";
 import type { Choice } from "./prompter.js";
 import type {
   SetupOnboardingCandidate,
   SetupSkillInstance,
 } from "../workflows/library/setup-contract.js";
 import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "../workflows/library/setup.js";
-
-const compactPath = (path: string, home: string) =>
-  path === home ? "~" : path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
 
 const agentNames: Record<HarnessName, string> = {
   "claude-code": "Claude",
@@ -24,7 +22,8 @@ const usage = (instance: SetupSkillInstance) =>
     .join(", ");
 
 const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
-  if (instance.git.repository) return `Repository · ${compactPath(instance.git.repository, home)}`;
+  if (instance.git.repository)
+    return `Repository · ${compactHomePath(instance.git.repository, home)}`;
   const owner = instance.owner;
   if (owner.kind === "harness") return `Plugins · ${owner.source}`;
   if (owner.kind === "skills-sh") return `Known source · ${owner.source}`;
@@ -36,7 +35,7 @@ const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
   const parent = dirname(instance.path);
   if (parent === join(home, ".claude", "skills")) return "Claude local skills · ~/.claude/skills";
   if (parent === join(home, ".codex", "skills")) return "Codex local skills · ~/.codex/skills";
-  return `Local source · ${compactPath(parent, home)}`;
+  return `Local source · ${compactHomePath(parent, home)}`;
 };
 
 const groupOrder = (group: string) =>
@@ -127,21 +126,24 @@ export const setupDiscoveredSkillChoices = (
         .join("\n");
       const links = instance.aliases
         .filter((path) => path !== instance.path)
-        .map((path) => `Link: ${compactPath(path, home)} → ${compactPath(instance.path, home)}`);
-      const details = [compactPath(instance.path, home), metadata, ...links].join("\n");
+        .map(
+          (path) =>
+            `Link: ${compactHomePath(path, home)} → ${compactHomePath(instance.path, home)}`,
+        );
+      const details = [compactHomePath(instance.path, home), metadata, ...links].join("\n");
       const choice: Choice<string> = {
         value: sameNameElsewhere ? `${instance.name}\0${instance.path}` : instance.name,
         label: instance.name,
         hint:
           [
-            compactPath(instance.path, home),
+            compactHomePath(instance.path, home),
             ...(instance.git.status !== "outside-git" ? [instance.git.status] : []),
             ...sources,
             ...(disabled ? ["inspect"] : []),
           ].join(" · ") || undefined,
         searchText: details,
         group: differing.length
-          ? `Copies · ${instance.name} · ${instance.git.repository ? compactPath(instance.git.repository, home) : "global"} · choose one`
+          ? `Copies · ${instance.name} · ${instance.git.repository ? compactHomePath(instance.git.repository, home) : "global"} · choose one`
           : sourceGroup(instance, home),
         disabled,
         selected:

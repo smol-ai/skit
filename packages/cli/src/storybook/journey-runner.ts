@@ -33,6 +33,7 @@ function renderEvent(
     PromptAnswered: ({ answer }) =>
       `answered ${Array.isArray(answer) ? answer.join(", ") : String(answer)}`,
     Note: ({ title, body }) => `${title}\n${body}`,
+    Step: ({ index, total, title, body }) => `Step ${index} of ${total} · ${title}\n${body}`,
     StatusStarted: ({ message }) => `${message}…`,
     StatusUpdated: ({ message }) => `${message}…`,
     StatusEnded: () => "status cleared",

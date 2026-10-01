@@ -26,6 +26,12 @@ export type InteractionEvent = Data.TaggedEnum<{
   };
   PromptAnswered: { readonly answer: ScriptedAnswer | "<redacted>" };
   Note: { readonly title: string; readonly body: string };
+  Step: {
+    readonly index: number;
+    readonly total: number;
+    readonly title: string;
+    readonly body: string;
+  };
   StatusStarted: { readonly message: string };
   StatusUpdated: { readonly message: string };
   StatusEnded: {};
@@ -44,6 +50,7 @@ export interface ScriptedInteraction {
     ReadonlyArray<Extract<InteractionEvent, { _tag: "PromptShown" }>>
   >;
   readonly notes: Effect.Effect<ReadonlyArray<Extract<InteractionEvent, { _tag: "Note" }>>>;
+  readonly steps: Effect.Effect<ReadonlyArray<Extract<InteractionEvent, { _tag: "Step" }>>>;
   readonly results: Effect.Effect<ReadonlyArray<RecordedCommandResult>>;
   readonly failures: Effect.Effect<ReadonlyArray<CommandFailure>>;
 }
@@ -174,6 +181,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
     failure: (failure) => record(InteractionEvent.Failure({ failure })),
     help: (text) => record(InteractionEvent.Help({ text })),
     note: (body, title) => record(InteractionEvent.Note({ title, body })),
+    step: (step, body) => record(InteractionEvent.Step({ ...step, body })),
     updateStatus: (message) => record(InteractionEvent.StatusUpdated({ message })),
     withStatus: (status, operation) =>
       record(
@@ -196,6 +204,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
       Effect.map((items) => items.filter(InteractionEvent.$is("PromptShown"))),
     ),
     notes: Ref.get(events).pipe(Effect.map((items) => items.filter(InteractionEvent.$is("Note")))),
+    steps: Ref.get(events).pipe(Effect.map((items) => items.filter(InteractionEvent.$is("Step")))),
     results: Ref.get(events).pipe(
       Effect.map((items) =>
         items.filter(InteractionEvent.$is("Result")).map(({ result }) => result),

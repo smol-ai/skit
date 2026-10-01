@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import { metadataDate } from "./skill-metadata.js";
-import { homedir } from "node:os";
 import { basename, dirname, sep } from "node:path";
+import { compactHomePath } from "./home-path.js";
 import {
   projectionTargetHarnesses,
   type HarnessName,
@@ -78,15 +78,6 @@ const gitLabel = (
   }
 };
 
-const compactPath = (path: string): string => {
-  const home = homedir();
-  return path === home
-    ? "~"
-    : path.startsWith(`${home}${sep}`)
-      ? `~${path.slice(home.length)}`
-      : path;
-};
-
 const libraryRelationshipLabel = (identity: MachineInstance["contentIdentity"]): string => {
   if (identity.status === "unhashable") return "Library bytes: could not compare";
   if (identity.libraryMatches.length === 0) return "Library bytes: no match";
@@ -96,7 +87,7 @@ const libraryRelationshipLabel = (identity: MachineInstance["contentIdentity"]):
 const displayPath = (path: string, repository?: string): string =>
   repository !== undefined && path.startsWith(`${repository}${sep}`)
     ? path.slice(repository.length + 1)
-    : compactPath(path);
+    : compactHomePath(path);
 
 const instancePaths = (instance: MachineInstance, repository?: string): readonly string[] =>
   [...new Set([instance.path, ...instance.aliases])]
@@ -109,7 +100,7 @@ const instanceFacts = (instance: MachineInstance, repository?: string): readonly
       const path =
         repository !== undefined && lock.lockPath.startsWith(`${repository}${sep}`)
           ? lock.lockPath.slice(repository.length + 1)
-          : compactPath(lock.lockPath);
+          : compactHomePath(lock.lockPath);
       return `Lock: ${path} · ${lock.content}`;
     })
     .sort();
@@ -163,7 +154,7 @@ export function renderMachineSkills(
     const scopes = new Set(instances.map((instance) => instance.scope));
     const locationLabel =
       location !== "Global and standalone"
-        ? compactPath(location)
+        ? compactHomePath(location)
         : scopes.size === 1 && scopes.has("global")
           ? "Global"
           : scopes.size === 1 && scopes.has("standalone")
@@ -254,7 +245,7 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
     `  Repository depth: ${machine.scan.repositorySearchDepth}`,
     "  Repository roots:",
     ...(machine.repositoryRoots.length
-      ? machine.repositoryRoots.map((root) => `    ${compactPath(root)}`)
+      ? machine.repositoryRoots.map((root) => `    ${compactHomePath(root)}`)
       : ["    none configured"]),
   ];
   const ignoredRepositories = machine.repositoryDecisions.filter(
@@ -263,12 +254,12 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
   if (ignoredRepositories.length)
     lines.push(
       "  Ignored repositories:",
-      ...ignoredRepositories.map((repository) => `    ${compactPath(repository.path)}`),
+      ...ignoredRepositories.map((repository) => `    ${compactHomePath(repository.path)}`),
     );
   if (machine.scan.missingRepositories?.length)
     lines.push(
       "  Missing watched repositories:",
-      ...machine.scan.missingRepositories.map((path) => `    ${compactPath(path)}`),
+      ...machine.scan.missingRepositories.map((path) => `    ${compactHomePath(path)}`),
     );
   return lines.join("\n");
 };
@@ -280,7 +271,7 @@ const inventoryFindings = (state: LibraryInventory): string[] => {
     for (const issue of state.custodyIssues)
       lines.push(
         `  ${conditionHeadline(issue.code, "Local custody issue")}`,
-        `    Path: ${compactPath(issue.path)}`,
+        `    Path: ${compactHomePath(issue.path)}`,
       );
     lines.push("  Run skit doctor for details.");
   }
@@ -293,8 +284,8 @@ const inventoryFindings = (state: LibraryInventory): string[] => {
           "",
           "  Dangling link",
           `    Harness: ${harnessLabel(issue.harness)}`,
-          `    Link: ${compactPath(issue.path)}`,
-          `    Missing target: ${compactPath(issue.target)}`,
+          `    Link: ${compactHomePath(issue.path)}`,
+          `    Missing target: ${compactHomePath(issue.target)}`,
         );
         continue;
       }
@@ -302,7 +293,7 @@ const inventoryFindings = (state: LibraryInventory): string[] => {
         "",
         `  ${issue.code === "MISSING_ROOT" ? "Missing root" : "Unreadable root"}`,
         `    Harness: ${harnessLabel(issue.harness)}`,
-        `    Path: ${compactPath(issue.path)}`,
+        `    Path: ${compactHomePath(issue.path)}`,
       );
     }
   }
