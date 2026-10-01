@@ -274,29 +274,32 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("reconnects only the selected exact Library copy", () =>
+it.effect("reconnects multiple exact Library copies without reusing stale state", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* scratch("skit-setup-exact-copy-");
-    const source = join(root, "source", "review");
+    const names = ["review", "deploy"];
     const claude = join(root, ".claude", "skills");
     const codex = join(root, ".codex", "skills");
-    for (const path of [source, join(claude, "review"), join(codex, "review")]) {
-      yield* fs.makeDirectory(path, { recursive: true });
-      yield* fs.writeFileString(join(path, "SKILL.md"), skillDocument("review", "Same content"));
-    }
+    for (const name of names)
+      for (const path of [join(root, "source", name), join(claude, name), join(codex, name)]) {
+        yield* fs.makeDirectory(path, { recursive: true });
+        yield* fs.writeFileString(join(path, "SKILL.md"), skillDocument(name, "Same content"));
+      }
     const home = yield* libraryHome({
       home: join(root, "library"),
       inventoryHome: root,
       roots: { claude, codex },
     });
-    const selected = yield* fs.realPath(join(claude, "review"));
-    const interaction = yield* makeScriptedInteraction([[`review\0${selected}`], true]);
+    const selected = yield* Effect.forEach(names, (name) =>
+      fs.realPath(join(claude, name)).pipe(Effect.map((path) => `${name}\0${path}`)),
+    );
+    const interaction = yield* makeScriptedInteraction([selected, true]);
     yield* home.owned(
       writingTo(
         home.home,
         Effect.gen(function* () {
-          yield* addLibrarySourceEffect(source);
+          for (const name of names) yield* addLibrarySourceEffect(join(root, "source", name));
           yield* setupCommand({
             options: {
               libraryHome: home.home,
@@ -312,9 +315,11 @@ it.effect("reconnects only the selected exact Library copy", () =>
         }),
       ),
     );
-    expect((yield* inspectOwnershipMarkerEffect(join(claude, "review"))).kind).toBe("valid");
-    expect((yield* inspectOwnershipMarkerEffect(join(codex, "review"))).kind).toBe("absent");
-    expect((yield* home.durable).collections).toHaveLength(1);
-    expect((yield* interaction.prompts)[0].choices).toHaveLength(2);
+    for (const name of names) {
+      expect((yield* inspectOwnershipMarkerEffect(join(claude, name))).kind).toBe("valid");
+      expect((yield* inspectOwnershipMarkerEffect(join(codex, name))).kind).toBe("absent");
+    }
+    expect((yield* home.durable).collections).toHaveLength(2);
+    expect((yield* interaction.prompts)[0].choices).toHaveLength(4);
   }).pipe(Effect.provide(skitLayer)),
 );

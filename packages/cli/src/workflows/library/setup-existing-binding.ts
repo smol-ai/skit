@@ -34,7 +34,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
   selectedCopies: readonly { readonly name: string; readonly path: string }[],
 ) {
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
-  const state = yield* (yield* LibraryStore).load;
+  const store = yield* LibraryStore;
   const selected = new Set<string>();
   const results = [];
   for (const { name, path: selectedPath } of selectedCopies) {
@@ -60,7 +60,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
     results.push(
-      yield* applyLibraryBindings(state, {
+      yield* applyLibraryBindings(yield* store.load, {
         query: candidate.subjectId,
         all: false,
         selectedSkills: [name],
