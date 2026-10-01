@@ -237,10 +237,16 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
         }
         yield* store.publish({ ...current, global_bindings, local_bindings });
       }
+      const selected = yield* resolveLibrarySubject(current, options.query);
       const reconciled = yield* reconcileLibraryProjections({
         roots: options.roots,
         variantsPath: options.variantsPath,
         onlyBindings: plan.bindings,
+        restoreNativeDeletedSkills: options.invocation.enabled
+          ? selected.skills
+              .filter((skill) => plan.skills.includes(skill.name))
+              .map((skill) => skill.skill_id)
+          : [],
         ...(options.adoptionObservedHash === undefined
           ? {}
           : { adoptionObservedHash: options.adoptionObservedHash }),

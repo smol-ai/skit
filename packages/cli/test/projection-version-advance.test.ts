@@ -7,6 +7,7 @@ import {
   LibraryStore,
   libraryStoreLayer,
   projectBindingEffect,
+  refreshLibraryInventory,
   skitLayer,
 } from "@smolai/skit-core";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
@@ -191,3 +192,143 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
     assert.deepStrictEqual(after.global_bindings, before.global_bindings);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const followedCollection of [false, true])
+  it.effect(
+    `explicit enable recreates only the selected Projection (followed Collection=${followedCollection})`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, home, roots, layer, project, projected } = yield* boundRawReview;
+        const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+        const otherSource = join(home, "other-source");
+        yield* fs.makeDirectory(otherSource);
+        yield* fs.writeFileString(join(otherSource, "SKILL.md"), "other Skill bytes\n");
+        const other = yield* writingTo(
+          home,
+          retainObservedIn(home)({
+            source: { type: "local", path: otherSource },
+            input: otherSource,
+            retainedAt: "2026-09-16T00:00:00.000Z",
+            skills: [
+              {
+                name: "other",
+                sourcePath: otherSource,
+                relativePath: ".",
+                observedHash: yield* deterministicTreeHashEffect(otherSource),
+              },
+            ],
+            observations: [],
+          }),
+        );
+        const otherId = other.skills[0]?.skill_id;
+        assert.ok(otherId);
+        const withOther = yield* load;
+        const selectedSkill = withOther.skills.find((skill) => skill.name === "raw-review");
+        assert.ok(selectedSkill);
+        const skillId = selectedSkill.skill_id;
+        yield* writingTo(
+          home,
+          LibraryStore.use((store) =>
+            store.publish({
+              ...withOther,
+              global_bindings: [
+                ...withOther.global_bindings.map((binding) => ({
+                  ...binding,
+                  entries: [
+                    ...(followedCollection
+                      ? [
+                          {
+                            kind: "collection" as const,
+                            collection_id: selectedSkill.collection_id,
+                          },
+                        ]
+                      : binding.entries),
+                    { kind: "skill" as const, skill_id: otherId },
+                  ],
+                })),
+                {
+                  harness: "claude-code" as const,
+                  scope: { kind: "global" as const },
+                  entries: [{ kind: "skill" as const, skill_id: skillId }],
+                },
+              ],
+            }),
+          ).pipe(Effect.provide(layer)),
+        );
+        yield* project;
+        yield* writingTo(
+          home,
+          projectBindingEffect({
+            harness: "claude-code",
+            root: roots.claudeRoot,
+            variantsPath: join(home, "variants"),
+          }).pipe(Effect.provide(layer)),
+        );
+        yield* fs.remove(join(roots.claudeRoot, "raw-review"), { recursive: true });
+        yield* fs.remove(join(roots.codexRoot, "other"), { recursive: true });
+        yield* fs.remove(join(roots.codexRoot, "raw-review"), { recursive: true });
+        const installed = yield* load;
+        yield* writingTo(
+          home,
+          refreshLibraryInventory(installed, () => []).pipe(Effect.provide(layer)),
+        );
+        const suppressed = yield* load;
+        const suppressedRow = suppressed.projections.find(
+          (row) => row.skill_id === skillId && row.harness === "codex",
+        );
+        assert.strictEqual(suppressedRow?.status, "suppressed");
+        assert.strictEqual(suppressedRow?.suppression_reason, "native_delete");
+        yield* project;
+        assert.strictEqual(yield* fs.exists(projected), false);
+        const before = yield* load;
+
+        const enable = (dryRun: boolean) =>
+          writingTo(
+            home,
+            applyLibraryBindings(before, {
+              query: skillId,
+              all: false,
+              roots: {
+                home,
+                configHome: join(home, "config"),
+                overrides: { codex: roots.codexRoot },
+              },
+              variantsPath: join(home, "variants"),
+              invocation: {
+                subjects: [skillId],
+                harnesses: ["codex"],
+                scope: { kind: "global" },
+                enabled: true,
+                dryRun,
+              },
+            }).pipe(Effect.provide(layer)),
+          );
+        const preview = yield* enable(true);
+        assert.strictEqual(preview.kind, "plan");
+        assert.strictEqual(yield* fs.exists(projected), false);
+        assert.deepStrictEqual(yield* load, before);
+        const applied = yield* enable(false);
+        assert.strictEqual(applied.kind, "applied");
+        assert.strictEqual(applied.value.changed, false);
+        assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
+        const after = yield* load;
+        const restored = after.projections.find(
+          (row) => row.skill_id === skillId && row.harness === "codex",
+        );
+        assert.strictEqual(restored?.status, "installed");
+        assert.strictEqual(restored?.suppression_reason, undefined);
+        assert.strictEqual(restored?.suppressed_at, undefined);
+        assert.strictEqual(yield* fs.exists(join(roots.claudeRoot, "raw-review")), false);
+        assert.strictEqual(
+          after.projections.find((row) => row.skill_id === skillId && row.harness === "claude-code")
+            ?.suppression_reason,
+          "native_delete",
+        );
+        assert.deepStrictEqual(after.global_bindings, before.global_bindings);
+        assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "other")), false);
+        assert.strictEqual(
+          after.projections.find((row) => row.skill_id === otherId)?.suppression_reason,
+          "native_delete",
+        );
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );

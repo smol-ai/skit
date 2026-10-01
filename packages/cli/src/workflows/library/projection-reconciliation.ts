@@ -29,6 +29,7 @@ export interface LibraryProjectionReconciliationOptions {
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
   readonly adoptionObservedHash?: Digest;
+  readonly restoreNativeDeletedSkills?: readonly string[];
 }
 
 const reconcileWithinWrite = Effect.fnUntraced(function* (
@@ -69,6 +70,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
       scope: binding.scope,
       root,
       variantsPath: options.variantsPath,
+      restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
       ...(options.acceptedObservations === undefined
         ? {}
         : { acceptedObservations: options.acceptedObservations }),
