@@ -178,6 +178,13 @@ Foreign or drifted content is not silently overwritten. Materialization uses own
 
 ## Operation flows
 
+Deleting a managed Projection directory leaves its Binding intact. Inventory records
+`native_delete` suppression, which ordinary reconciliation respects. Explicit `enable`
+recreates absent Projections for the selected Skills and Harnesses and clears that suppression;
+other suppressed Projections in the same Binding remain absent. This applies to every explicit
+enable action, including invocation-policy changes and enable actions through setup or the TUI.
+Preview does not materialize.
+
 Projection mutations prepare replacement trees in scoped random directories on the destination
 filesystem, verify custody, apply the derived directory changes, and atomically publish candidate
 Library state once. Failure before publication leaves the prior state authoritative; retrying the

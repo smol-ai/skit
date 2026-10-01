@@ -33,6 +33,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
   adoptionObservedHash?: Digest;
+  restoreNativeDeletedSkills?: readonly string[];
 }) {
   const store = yield* LibraryStore;
   const state = yield* store.load;
@@ -214,6 +215,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
                     observedHash: options.adoptionObservedHash,
                   },
                 }),
+            restoreNativeDeletion:
+              options.restoreNativeDeletedSkills?.includes(item.skill.skill_id) ?? false,
             projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           });
           mutation.state.projections.push(projected);

@@ -76,6 +76,8 @@ export interface MaterializeProjectionRequest {
     readonly skillId: SkillIdType;
     readonly skillVersionId: SkillVersionIdType;
   };
+  /** Explicit enable may recreate an absent Projection suppressed by native deletion. */
+  restoreNativeDeletion?: boolean;
   projectedAt: string;
 }
 
@@ -265,6 +267,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
       };
       const settled = () => projection;
       const nativeDeletion =
+        !request.restoreNativeDeletion &&
         prior?.status === "suppressed" &&
         prior.suppression_reason === "native_delete" &&
         !(yield* exists(destination));
