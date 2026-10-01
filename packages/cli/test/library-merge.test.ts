@@ -8,10 +8,19 @@ import {
   makeSkillId,
   makeSkillVersionId,
   LibraryManifest,
+  LibraryState,
+  makeProjectionId,
+  restoreCustodyConflicts,
 } from "@smolai/skit-core";
 import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { deferredLibraryBindings } from "../src/workflows/library/library-sync.js";
+
+import {
+  alignLibraryVersionIds,
+  applyLibraryVersionAliases,
+  applyDeviceVersionAliases,
+} from "../src/workflows/library/library-version-alignment.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
@@ -260,5 +269,243 @@ it.effect("marks a Collection whose only difference is fetch records as evidence
         evidence_only: true,
       },
     ]);
+  }),
+);
+
+it.effect(
+  "aligns identical concurrent updates without losing device references or provenance",
+  () =>
+    Effect.gen(function* () {
+      const localId = makeSkillVersionId();
+      const base = yield* decode({
+        ...manifest(),
+        skills: [{ ...skill, versions: skill.versions.slice(0, 1) }],
+      });
+      const remote = yield* decode(manifest());
+      const local = yield* decode({
+        ...manifest(),
+        skills: [
+          {
+            ...skill,
+            versions: skill.versions.map((version) =>
+              version.skill_version_id === second
+                ? { ...version, skill_version_id: localId }
+                : version,
+            ),
+          },
+        ],
+        acquisitions: [
+          ...manifest().acquisitions,
+          { ...manifest().acquisitions[0], acquisition_id: makeAcquisitionId() },
+        ],
+      });
+      const original = structuredClone(local);
+      const aligned = alignLibraryVersionIds(local, remote);
+      const merged = mergeLibraryManifests(
+        applyLibraryVersionAliases(base, aligned.aliases),
+        aligned.manifest,
+        remote,
+      );
+      assert.deepEqual(merged.conflicts, []);
+      yield* decode(merged.manifest);
+      assert.strictEqual(merged.manifest.acquisitions.length, local.acquisitions.length);
+      assert.deepEqual(local, original);
+      const state = yield* Schema.decodeUnknownEffect(LibraryState)({
+        schemaVersion: 6,
+        ...local,
+        global_bindings: [
+          {
+            harness: "codex",
+            scope: { kind: "global" },
+            entries: [{ kind: "skill", skill_id: skillId }],
+          },
+        ],
+        local_bindings: [],
+        unmanaged: [],
+        projections: [
+          {
+            projection_id: makeProjectionId(),
+            skill_id: skillId,
+            skill_version_id: localId,
+            harness: "codex",
+            root: "/tmp/skills",
+            path: "/tmp/skills/review",
+            expected_digest: digestB,
+            status: "installed",
+            projected_at: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        assessmentAcceptances: [digestB, digestC].map((artifactContentDigest) => ({
+          fingerprint: digest,
+          artifactContentDigest,
+          skill_version_id: localId,
+          context: "project",
+          principal: "test",
+          rationale: "accepted",
+          acceptedAt: "2026-01-01T00:00:00.000Z",
+        })),
+      });
+      const device = applyDeviceVersionAliases(state, aligned.aliases);
+      yield* LibraryState.makeEffect(device);
+      assert.deepEqual(
+        restoreCustodyConflicts(device, { ...merged.manifest, bindings: state.global_bindings }),
+        [],
+      );
+      assert.strictEqual(device.projections[0]?.skill_version_id, second);
+      assert.strictEqual(device.projections[0]?.expected_digest, digestB);
+      assert.strictEqual(device.assessmentAcceptances?.[0]?.skill_version_id, second);
+      assert.strictEqual(device.assessmentAcceptances?.[1]?.skill_version_id, localId);
+      assert.strictEqual(state.projections[0]?.skill_version_id, localId);
+      // A third device adopts the already published handle, and subsequent syncs are idempotent.
+      const thirdDevice = {
+        ...local,
+        skills: local.skills.map((row) => ({
+          ...row,
+          versions: row.versions.map((version) => ({
+            ...version,
+            skill_version_id: makeSkillVersionId(),
+          })),
+        })),
+      };
+      const thirdAligned = alignLibraryVersionIds(thirdDevice, merged.manifest);
+      assert.deepEqual(thirdAligned.manifest.skills, merged.manifest.skills);
+      assert.deepEqual(alignLibraryVersionIds(thirdAligned.manifest, merged.manifest).aliases, []);
+    }),
+);
+
+it.effect("aligns equivalent retained-edit selections but preserves different edit conflicts", () =>
+  Effect.gen(function* () {
+    const base = yield* decode(manifest());
+    const localId = makeSkillVersionId();
+    const local = yield* decode({
+      ...manifest(),
+      skills: [
+        {
+          ...skill,
+          local_version_id: localId,
+          versions: skill.versions.map((version) =>
+            version.skill_version_id === second
+              ? { ...version, skill_version_id: localId }
+              : version,
+          ),
+        },
+      ],
+    });
+    const remote = yield* decode({
+      ...manifest(),
+      skills: [{ ...skill, local_version_id: second }],
+    });
+    const aligned = alignLibraryVersionIds(local, remote);
+    const merged = mergeLibraryManifests(
+      applyLibraryVersionAliases(base, aligned.aliases),
+      aligned.manifest,
+      remote,
+    );
+    assert.deepEqual(merged.conflicts, []);
+    assert.strictEqual(merged.manifest.skills[0]?.local_version_id, second);
+    const different = yield* decode({
+      ...manifest(),
+      skills: [{ ...skill, local_version_id: third }],
+    });
+    const differentAligned = alignLibraryVersionIds(local, different);
+    assert.strictEqual(differentAligned.aliases.length, 1);
+    const differentBase = applyLibraryVersionAliases(base, differentAligned.aliases);
+    const preliminary = mergeLibraryManifests(differentBase, differentAligned.manifest, different);
+    assert.deepEqual(preliminary.conflicts, [`skill:${skillId}`]);
+    const resolved = mergeLibraryManifests(
+      differentBase,
+      differentAligned.manifest,
+      different,
+      new Set(preliminary.conflicts),
+    );
+    assert.deepEqual(resolved.conflicts, []);
+    assert.strictEqual(resolved.manifest.skills[0]?.local_version_id, third);
+    yield* decode(resolved.manifest);
+  }),
+);
+
+it.effect("does not alias different validation metadata or another Skill's versions", () =>
+  Effect.gen(function* () {
+    const base = yield* decode({
+      ...manifest(),
+      skills: [{ ...skill, versions: skill.versions.slice(0, 1) }],
+    });
+    const remote = yield* decode(manifest());
+    const local = yield* decode({
+      ...manifest(),
+      skills: [
+        {
+          ...skill,
+          versions: skill.versions.map((version) =>
+            version.skill_version_id === second
+              ? {
+                  ...version,
+                  skill_version_id: makeSkillVersionId(),
+                  validation_identity_digest: digestC,
+                }
+              : version,
+          ),
+        },
+      ],
+    });
+    const aligned = alignLibraryVersionIds(local, remote);
+    assert.deepEqual(aligned.aliases, []);
+    assert.deepEqual(mergeLibraryManifests(base, aligned.manifest, remote).conflicts, [
+      `skill:${skillId}`,
+    ]);
+    assert.deepEqual(
+      alignLibraryVersionIds(local, {
+        ...remote,
+        skills: remote.skills.map((row) => ({ ...row, skill_id: makeSkillId() })),
+      }).aliases,
+      [],
+    );
+  }),
+);
+
+it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
+  Effect.gen(function* () {
+    const localId = makeSkillVersionId();
+    const local = yield* decode({
+      ...manifest(),
+      skills: [
+        {
+          ...skill,
+          versions: skill.versions.map((version) =>
+            version.skill_version_id === second
+              ? { ...version, skill_version_id: localId }
+              : version,
+          ),
+        },
+      ],
+    });
+    const remote = yield* decode(manifest());
+    const aligned = alignLibraryVersionIds(local, remote);
+    const alignedBase = applyLibraryVersionAliases(local, aligned.aliases);
+    assert.deepEqual(mergeLibraryManifests(alignedBase, aligned.manifest, remote).conflicts, []);
+    const independentBase = {
+      ...local,
+      skills: local.skills.map((row) => ({
+        ...row,
+        versions: row.versions.map((version) =>
+          version.skill_version_id === localId
+            ? { ...version, skill_version_id: makeSkillVersionId() }
+            : version,
+        ),
+      })),
+    };
+    assert.deepEqual(applyLibraryVersionAliases(independentBase, aligned.aliases), independentBase);
+    const pruned = {
+      ...local,
+      skills: local.skills.map((row) => ({
+        ...row,
+        versions: row.versions.filter((version) => version.skill_version_id !== localId),
+      })),
+    };
+    const result = mergeLibraryManifests(alignedBase, pruned, remote);
+    assert.deepEqual(result.conflicts, []);
+    assert.isFalse(
+      result.manifest.skills[0]?.versions.some((version) => version.skill_version_id === second),
+    );
   }),
 );

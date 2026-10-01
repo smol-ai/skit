@@ -387,6 +387,22 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           };
         }
         if (observed === desiredHash) {
+          if (marker.skill_version_id !== request.identity.skillVersionId) {
+            // Stage outside the projected tree so an interrupted write cannot leave hash drift.
+            const markerTemporary = join(staging, "ownership.json");
+            yield* fs.writeFileString(
+              markerTemporary,
+              `${JSON.stringify(ownershipMarker(request, projectionId, desiredHash), null, 2)}\n`,
+              { mode: 0o600, flag: "wx" },
+            );
+            yield* fs
+              .rename(markerTemporary, join(destination, ".skit-ownership.json"))
+              .pipe(Effect.uninterruptible);
+            if ((yield* hasher.hash(destination)) !== desiredHash)
+              return yield* new ProjectionFailure({
+                message: `Post-marker hash verification failed for ${skill.skillId} on ${harness}`,
+              });
+          }
           projection.status = "installed";
           projection.observed_digest = observed;
           return settled();

@@ -3,7 +3,7 @@ import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
-import { migratedMachineId } from "../src/library/entity-ids.js";
+import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { projectBindingEffect } from "../src/library/installation/project-binding.js";
 import { retireUnboundGlobalProjectionsEffect } from "../src/library/installation/retire-unbound.js";
 import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
@@ -151,5 +151,80 @@ it.effect("publishes nothing when the written Projection does not hash to the re
       Effect.provide(storeLayer),
     );
     assert.deepStrictEqual(after.projections, []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("refreshes an equivalent Version handle only on an intact owned projection", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const target = join(targetRoot, "review");
+    const project = projectBindingEffect({
+      harness: "codex",
+      root: targetRoot,
+      variantsPath: join(home, "variants"),
+    }).pipe(Effect.provide(storeLayer));
+    yield* withLibraryWriterLock(home, project);
+    const before = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(storeLayer),
+    );
+    const hash = yield* deterministicTreeHashEffect(target);
+    const newId = makeSkillVersionId();
+    yield* withLibraryWriterLock(
+      home,
+      Effect.flatMap(LibraryStore, (store) =>
+        store.publish({
+          ...before,
+          skills: before.skills.map((skill) => ({
+            ...skill,
+            versions: skill.versions.map((version) => ({ ...version, skill_version_id: newId })),
+          })),
+          projections: before.projections.map((projection) => ({
+            ...projection,
+            skill_version_id: newId,
+          })),
+        }),
+      ).pipe(Effect.provide(storeLayer)),
+    );
+    yield* withLibraryWriterLock(home, project);
+    const marker = yield* inspectOwnershipMarkerEffect(target);
+    assert.strictEqual(marker.kind, "valid");
+    if (marker.kind === "valid") {
+      assert.strictEqual(marker.marker.skill_version_id, newId);
+      assert.strictEqual(marker.marker.projection_id, before.projections[0]?.projection_id);
+    }
+    assert.strictEqual(yield* deterministicTreeHashEffect(target), hash);
+    assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "raw Skill bytes\n");
+    // User edits still block metadata refresh and materialization.
+    const editedId = makeSkillVersionId();
+    const installed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(storeLayer),
+    );
+    yield* withLibraryWriterLock(
+      home,
+      Effect.flatMap(LibraryStore, (store) =>
+        store.publish({
+          ...installed,
+          skills: installed.skills.map((skill) => ({
+            ...skill,
+            versions: skill.versions.map((version) => ({ ...version, skill_version_id: editedId })),
+          })),
+          projections: installed.projections.map((projection) => ({
+            ...projection,
+            skill_version_id: editedId,
+          })),
+        }),
+      ).pipe(Effect.provide(storeLayer)),
+    );
+    yield* fs.writeFileString(join(target, "SKILL.md"), "user edited bytes\n");
+    yield* withLibraryWriterLock(home, project);
+    const editedMarker = yield* inspectOwnershipMarkerEffect(target);
+    assert.strictEqual(editedMarker.kind, "valid");
+    if (editedMarker.kind === "valid")
+      assert.strictEqual(editedMarker.marker.skill_version_id, newId);
+    assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "user edited bytes\n");
+    const conflicted = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(storeLayer),
+    );
+    assert.strictEqual(conflicted.projections[0]?.status, "conflicted");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
