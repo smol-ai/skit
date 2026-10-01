@@ -3,8 +3,19 @@ import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Result, Schedule } from "effect";
 import { SourceProcess } from "@smolai/skit-core";
 import { join } from "node:path";
-import { expect } from "vitest";
-import { readClaudeCommands, readNativeSkills } from "../src/workflows/library/doctor-harnesses.js";
+import { expect, test } from "vitest";
+import {
+  currentLibraryState,
+  makeProjectionId,
+  makeSkillId,
+  makeSkillVersionId,
+} from "@smolai/skit-core";
+import {
+  classifyOpenCodeWarnings,
+  type HarnessDoctorCheck,
+  readClaudeCommands,
+  readNativeSkills,
+} from "../src/workflows/library/doctor-harnesses.js";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
 
 const processLayer = (stdout: unknown, exitCode = 0, stderr = "") =>
@@ -243,3 +254,92 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
       expect(yield* fs.readFileString(closed)).toBe("closed");
     }).pipe(Effect.provide(nativeLibraryLayer)),
 );
+
+const collisionFixture = () => {
+  const skillId = makeSkillId();
+  const versionId = makeSkillVersionId();
+  const digest = `sha256:${"a".repeat(64)}`;
+  const state = currentLibraryState({
+    collections: [],
+    skills: [],
+    retained_copies: [],
+    acquisitions: [],
+    global_bindings: [],
+    local_bindings: [],
+    unmanaged: [],
+    projections: (["agents", "claude"] as const).map((target) => ({
+      projection_id: makeProjectionId(),
+      skill_id: skillId,
+      skill_version_id: versionId,
+      target,
+      root: `/home/.${target}/skills`,
+      path: `/home/.${target}/skills/review`,
+      expected_digest: digest,
+      observed_digest: digest,
+      status: "installed" as const,
+      projected_at: "2026-10-01T00:00:00.000Z",
+    })),
+  });
+  const warning =
+    "WARN duplicate skill name name=review existing=/home/.claude/skills/review/SKILL.md duplicate=/home/.agents/skills/review/SKILL.md";
+  const check = {
+    harness: "opencode",
+    status: "checked",
+    cwd: "/home/project",
+    coverage: "resolved-skills",
+    limitations: [],
+    warnings: [warning],
+    skills: [
+      { name: "review", path: "/home/.agents/skills/review/SKILL.md", warnings: [], errors: [] },
+    ],
+  } satisfies HarnessDoctorCheck;
+  return { state, check, warning };
+};
+
+test("doctor treats matching managed targets with the shared copy selected as healthy", () => {
+  const { state, check } = collisionFixture();
+  expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
+  expect(check.warnings).toHaveLength(1);
+});
+
+test.each([
+  "different-content",
+  "different-version",
+  "edited",
+  "foreign",
+  "claude-selected",
+  "third-copy",
+  "unknown-warning",
+])("doctor keeps OpenCode warnings for %s", (kind) => {
+  const { state, check } = collisionFixture();
+  const claude = state.projections[1];
+  if (!claude) throw new Error("Missing fixture projection");
+  if (kind === "different-content") claude.observed_digest = `sha256:${"b".repeat(64)}`;
+  if (kind === "different-version")
+    state.projections[1] = { ...claude, skill_version_id: makeSkillVersionId() };
+  if (kind === "edited") claude.status = "conflicted";
+  if (kind === "foreign") state.projections.pop();
+  if (kind === "claude-selected")
+    check.skills = [
+      { name: "review", path: "/home/.claude/skills/review/SKILL.md", warnings: [], errors: [] },
+    ];
+  if (kind === "third-copy")
+    check.warnings.push(
+      "WARN duplicate skill name name=review existing=/home/.agents/skills/review/SKILL.md duplicate=/home/.config/opencode/skills/review/SKILL.md",
+    );
+  if (kind === "unknown-warning") check.warnings.push("unknown native warning name=review");
+  expect(classifyOpenCodeWarnings(check, state).warnings).toEqual(check.warnings);
+});
+
+test("doctor accepts intact target-specific invocation renderings of the same Version", () => {
+  const { state, check } = collisionFixture();
+  const claude = state.projections[1];
+  if (!claude) throw new Error("Missing fixture projection");
+  const claudeDigest = `sha256:${"b".repeat(64)}`;
+  state.projections[1] = {
+    ...claude,
+    expected_digest: claudeDigest,
+    observed_digest: claudeDigest,
+  };
+  expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
+});

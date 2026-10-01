@@ -16,7 +16,10 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
-import { doctorHarnessCheck } from "../../workflows/library/doctor-harnesses.js";
+import {
+  classifyOpenCodeWarnings,
+  doctorHarnessCheck,
+} from "../../workflows/library/doctor-harnesses.js";
 import { doctorCodexCheck } from "../../workflows/library/doctor-codex.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
@@ -120,7 +123,11 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
       return { codex, harnesses };
     }),
   );
-  return { ...report, codex, harnesses };
+  return {
+    ...report,
+    codex,
+    harnesses: harnesses.map((check) => classifyOpenCodeWarnings(check, inventory)),
+  };
 });
 
 const localInventoryMetadata = {

@@ -317,8 +317,6 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: Render
   );
   if (codex.status !== "checked" && codex.status !== "missing")
     lines.push(`      ${color.dim(codex.detail ?? codex.status)}`);
-  if (codex.status === "checked" && !codex.findings.length && !codex.errors.length)
-    lines.push(`      ${color.dim("No duplicate names or display names found")}`);
   if (context.detail === "full")
     lines.push(
       ...codex.instances.map((instance) => `      ${instance.name} · ${path(instance.path)}`),
