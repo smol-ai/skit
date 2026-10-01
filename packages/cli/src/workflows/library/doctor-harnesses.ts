@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { LibraryDoctorReport, SourceProcess } from "@smolai/skit-core";
+import { type LibraryState, LibraryDoctorReport, SourceProcess } from "@smolai/skit-core";
 import { probeHarnessEffect, type ProbeableHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
@@ -309,3 +309,74 @@ export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
     ),
   );
 });
+
+/** Remove only proven, expected shared/Claude collisions from the diagnostic warnings. */
+export function classifyOpenCodeWarnings(
+  check: HarnessDoctorCheck,
+  state: LibraryState,
+): HarnessDoctorCheck {
+  if (check.harness !== "opencode" || check.status !== "checked") return check;
+  const lines = check.warnings.flatMap((warning) => warning.split("\n").filter(Boolean));
+  const field = (line: string, key: string) => {
+    const value = line.match(new RegExp(`(?:^|\\s)${key}=("(?:\\\\.|[^"\\\\])*"|\\S+)`))?.[1];
+    if (!value) return undefined;
+    try {
+      return value.startsWith('"') ? String(JSON.parse(value)) : value;
+    } catch {
+      return undefined;
+    }
+  };
+  const collisions = lines.map((line) => ({
+    line,
+    name: field(line, "name"),
+    existing: field(line, "existing"),
+    duplicate: field(line, "duplicate"),
+  }));
+  const expected = new Set<string>();
+  for (const skill of check.skills) {
+    if (!skill.path) continue;
+    const selectedPath = resolve(skill.path);
+    const agents = state.projections.find(
+      (projection) =>
+        projection.target === "agents" &&
+        projection.status === "installed" &&
+        resolve(join(projection.path, "SKILL.md")) === selectedPath,
+    );
+    if (!agents || agents.observed_digest !== agents.expected_digest) continue;
+    const claude = state.projections.find(
+      (projection) =>
+        projection.target === "claude" &&
+        projection.status === "installed" &&
+        projection.skill_id === agents.skill_id &&
+        projection.skill_version_id === agents.skill_version_id &&
+        // Targets render the same retained Version with different native invocation fields.
+        // Each copy must match its own recorded rendering, not the other target's bytes.
+        projection.observed_digest === projection.expected_digest &&
+        dirname(dirname(projection.root)) === dirname(dirname(agents.root)),
+    );
+    if (!claude) continue;
+    const paths = new Set([
+      resolve(join(agents.path, "SKILL.md")),
+      resolve(join(claude.path, "SKILL.md")),
+    ]);
+    const named = collisions.filter((collision) => collision.name === skill.name);
+    if (
+      named.length &&
+      named.every(
+        (collision) =>
+          collision.line.includes("duplicate skill name") &&
+          collision.existing &&
+          collision.duplicate &&
+          paths.has(resolve(collision.existing)) &&
+          paths.has(resolve(collision.duplicate)),
+      )
+    )
+      expected.add(skill.name);
+  }
+  return {
+    ...check,
+    warnings: collisions
+      .filter((collision) => !collision.name || !expected.has(collision.name))
+      .map(({ line }) => line),
+  };
+}
