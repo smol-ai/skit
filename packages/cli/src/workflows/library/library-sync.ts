@@ -26,6 +26,11 @@ import { mergeLibraryManifests, normalizeLibraryManifest } from "./library-merge
 import { publishAcceptedBaseEffect, readAcceptedBaseEffect } from "./library-sync-state.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planLibrarySync, type SyncPlan } from "./library-sync-plan.js";
+import {
+  alignLibraryVersionIds,
+  applyLibraryVersionAliases,
+  applyDeviceVersionAliases,
+} from "./library-version-alignment.js";
 
 const emptyManifest: LibraryManifest = currentLibraryManifest({
   collections: [],
@@ -333,25 +338,25 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
   }
   if (accepted === undefined && !options.adopt)
     return { status: "adoption_required" as const, revision_id: remote.revision_id };
-  const preliminary = mergeLibraryManifests(
+  const aligned = alignLibraryVersionIds(manifest, remoteManifest);
+  const alignedBase = applyLibraryVersionAliases(
     accepted?.base_manifest ?? emptyManifest,
-    manifest,
-    remoteManifest,
+    aligned.aliases,
   );
+  const preliminary = mergeLibraryManifests(alignedBase, aligned.manifest, remoteManifest);
   const requested = new Set(options.takeRemote ?? []);
   if ([...requested].some((key) => !preliminary.conflicts.some((conflict) => conflict === key)))
     return { status: "resolution_invalid" as const, revision_id: remote.revision_id };
-  const merged = mergeLibraryManifests(
-    accepted?.base_manifest ?? emptyManifest,
-    manifest,
-    remoteManifest,
-    requested,
+  const merged = mergeLibraryManifests(alignedBase, aligned.manifest, remoteManifest, requested);
+  const custody = restoreCustodyConflicts(
+    applyDeviceVersionAliases(local.state, aligned.aliases),
+    merged.manifest,
   );
-  const custody = restoreCustodyConflicts(local.state, merged.manifest);
   const conflicts = [...new Set([...merged.conflicts, ...custody])].sort();
   if (conflicts.length > 0)
     return { status: "conflicted" as const, revision_id: remote.revision_id, conflicts };
-  const plan = planLibrarySync(manifest, remoteManifest, merged.manifest);
+  // Equivalent handle alignment alone is not a Collection content or evidence change.
+  const plan = planLibrarySync(aligned.manifest, remoteManifest, merged.manifest);
   const deferredBindings = deferredLibraryBindings(merged.manifest, projectionOptions.rootFor);
   const required = [...new Set(merged.manifest.retained_copies.map((tree) => tree.digest))];
   const localArchiveByDigest = new Map(localArchives.map((archive) => [archive.digest, archive]));
@@ -406,7 +411,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
   });
   const afterRetirement = yield* store.inspect;
   if (!afterRetirement.present) return yield* new SyncLocalChanged();
-  const blended = yield* blendRestoredStateEffect(afterRetirement.state, restored.state);
+  const blended = yield* blendRestoredStateEffect(
+    applyDeviceVersionAliases(afterRetirement.state, aligned.aliases),
+    restored.state,
+  );
   yield* store.publish(blended);
   yield* remember(saved.library_id, saved.revision_id, merged.manifest);
   const projections = projectionCounts(
