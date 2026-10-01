@@ -3,8 +3,8 @@ import {
   type ContractDataForId,
   type ContractId,
 } from "../commands/output-contracts.js";
-import { homedir } from "node:os";
 import { basename, dirname, relative, sep } from "node:path";
+import { compactHomePath } from "./home-path.js";
 import { harnessLabel } from "../harness/catalog.js";
 import { renderInventory } from "./inventory.js";
 import { renderSetEnabled } from "./set-enabled.js";
@@ -196,8 +196,8 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
 function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
-  const path = (value: string) => color.cyan(compactSetupPath(value));
-  const lines = [section("SKIT doctor"), color.dim(compactSetupPath(data.codex.cwd)), ""];
+  const path = (value: string) => color.cyan(compactHomePath(value));
+  const lines = [section("SKIT doctor"), color.dim(compactHomePath(data.codex.cwd)), ""];
   lines.push(
     data.ok
       ? `${color.green("✓")} ${color.bold("Local library is healthy")}`
@@ -483,15 +483,6 @@ const setupGitStateOrder = [
   "unavailable",
 ] as const;
 const setupExpandedSkillLimit = 5;
-
-const compactSetupPath = (path: string): string => {
-  const home = homedir();
-  return path === home
-    ? "~"
-    : path.startsWith(`${home}${sep}`)
-      ? `~${path.slice(home.length)}`
-      : path;
-};
 
 type SetupDiscoveryInput = {
   readonly instances: ReadonlyArray<{ readonly name: string; readonly path: string }>;

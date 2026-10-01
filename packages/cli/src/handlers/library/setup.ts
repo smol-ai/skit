@@ -8,6 +8,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
+import { compactHomePath } from "../../presentation/home-path.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   setupOverviewTitle,
@@ -82,12 +83,14 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   let observed = yield* observe(setupOptions);
   if (!guided || !input.localCustody) return observed;
   const discoveredRepositories = observed.repositories;
+  const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
+  const displayRoots = roots.map(displayPath).join(", ");
   if (roots.length)
     yield* renderer.step(
       steps.step("repositories"),
       discoveredRepositories.length
-        ? `Found ${discoveredRepositories.length} ${discoveredRepositories.length === 1 ? "repository" : "repositories"} with skills under ${roots.join(", ")}. SKIT ignores the ones you leave unselected.`
-        : `No repositories with skills were found under ${roots.join(", ")}.`,
+        ? `Found ${discoveredRepositories.length} ${discoveredRepositories.length === 1 ? "repository" : "repositories"} with skills under ${displayRoots}. SKIT ignores the ones you leave unselected.`
+        : `No repositories with skills were found under ${displayRoots}.`,
     );
   let repositoryDecisions: ReadonlyArray<{
     path: string;
@@ -99,7 +102,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       setupPrompts.repositories,
       discoveredRepositories.map((repository) => ({
         value: repository.path,
-        label: repository.path,
+        label: displayPath(repository.path),
         hint: `${repository.skills.length} skill${repository.skills.length === 1 ? "" : "s"}`,
         selected: repository.status !== "ignored",
       })),
@@ -171,10 +174,10 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     (selection) => !repositorySelections.includes(selection),
   );
   const planLines = [
-    ...(persistRoots ? [`Save discovery roots: ${roots.join(", ")}`] : []),
+    ...(persistRoots ? [`Save discovery roots: ${displayRoots}`] : []),
     ...repositoryDecisions.map(
       (decision) =>
-        `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${decision.path}`,
+        `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${displayPath(decision.path)}`,
     ),
     ...(retainedSourceSelections.length && !observed.machineConfig.machineId
       ? ["Create this machine's stable Library identity"]
