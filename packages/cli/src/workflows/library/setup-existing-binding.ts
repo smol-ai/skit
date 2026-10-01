@@ -56,8 +56,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
     const observedHash = instance?.contentIdentity.observedHash;
     if (!observedHash)
       return yield* new SetupExistingBindingInvalid({ name, reason: "content-identity-missing" });
-    const harnesses = instance.scope === "global" ? instance.harnesses : [];
-    if (!harnesses.length)
+    if (instance.scope !== "global" || !instance.harnesses.length)
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
     results.push(
@@ -67,14 +66,13 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
         selectedSkills: [name],
         invocation: {
           subjects: [candidate.subjectId],
-          harnesses,
           scope: { kind: "global" },
           enabled: true,
           dryRun: false,
         },
         roots: options.bindings,
         variantsPath: options.bindings.variantsPath,
-        adoptionObservedHash: observedHash,
+        adoption: { path: selectedPath, observedHash },
       }),
     );
   }

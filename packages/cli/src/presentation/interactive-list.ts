@@ -5,14 +5,12 @@ import {
   metadataDate,
 } from "./skill-metadata.js";
 import { terminalColors } from "./terminal-style.js";
-import type { HarnessName as Harness } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { resolve } from "node:path";
 import type { InvocationOption } from "../invocation/policy.js";
 import {
   DESTINATION_QUESTION,
   destinationLabel,
-  harnessChoices,
   invocationChoices,
   invocationEligibleBindings,
   invocationBriefing,
@@ -38,22 +36,11 @@ const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";
 const BACK_TO_SKILLS = "Back to skills";
 const ALL_BINDINGS = "all";
-type BrowseServices = Prompter | Renderer;
 
 const abandonOnCancel = <E, R>(
   effect: Effect.Effect<LibrarySessionState, E | PromptCancelled, R>,
   state: LibrarySessionState,
 ) => effect.pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(state)));
-
-function chooseHarness(
-  candidates: readonly Harness[],
-): Effect.Effect<Harness | undefined, PromptCancelled, BrowseServices> {
-  return Effect.gen(function* () {
-    if (candidates.length === 0) return undefined;
-    if (candidates.length === 1) return candidates[0];
-    return yield* (yield* Prompter).autocomplete("Select a harness", harnessChoices(candidates));
-  });
-}
 
 export function pendingReviewText(pending: PendingLibraryChange): string {
   return pending.facts
@@ -61,7 +48,7 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
       const policy = pending.policies[index] ?? pending.policies[0];
       return [
         `  ${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")}`,
-        `    agents     ${fact.harnessLabels.join(", ")}`,
+        "    agents     every agent",
         `    applies to ${fact.destination}`,
         ...(fact.action === "enable" && policy
           ? [
@@ -111,7 +98,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
       proposed.pending.facts
         .map(
           (fact) =>
-            `${fact.action === "enable" ? "Enabled" : "Disabled"} for ${fact.harnessLabels.join(", ")} (${fact.destination})`,
+            `${fact.action === "enable" ? "Enabled" : "Disabled"} for every agent (${fact.destination})`,
         )
         .join("\n"),
       "Applied",
@@ -124,20 +111,8 @@ const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
   configuration: ProjectionOptions,
   row: LibrarySkillRow,
 ) {
-  const renderer = yield* Renderer;
-  const harness = yield* chooseHarness(session.harnesses);
-  if (harness === undefined) {
-    yield* renderer.note(
-      "No supported harnesses detected. Configure a harness, then try again.",
-      "Not enabled",
-    );
-    return session;
-  }
   const scope = yield* promptForScope(resolve(process.cwd()));
-  const proposed = yield* proposeLibraryEnable(session, configuration, row, {
-    harnesses: [harness],
-    scope,
-  });
+  const proposed = yield* proposeLibraryEnable(session, configuration, row, { scope });
   return yield* applyWithConfirmation(proposed, configuration, "Projecting Skill");
 });
 
@@ -174,7 +149,7 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   }
   const binding = yield* chooseBinding(DESTINATION_QUESTION, eligible);
   if (binding.policy === undefined) return session;
-  yield* renderer.note(invocationBriefing(binding.policy), binding.policy.harnessLabel);
+  yield* renderer.note(invocationBriefing(binding.policy), "Invocation");
   const invocation = yield* (yield* Prompter).autocomplete<InvocationOption>(
     binding.policy.question,
     invocationChoices(binding),

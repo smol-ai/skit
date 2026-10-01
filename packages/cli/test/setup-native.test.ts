@@ -785,7 +785,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const retained = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 6,
+      schemaVersion: 7,
       collections: [
         {
           collection_id: collectionId,
@@ -982,7 +982,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     yield* f.fs.writeFileString(join(projectedSkill, ".skit-ownership.json"), projectionMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), projectionMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 6,
+      schemaVersion: 7,
       collections: [
         {
           collection_id: collectionId,
@@ -1050,7 +1050,6 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       ],
       global_bindings: [
         {
-          harness: "codex",
           scope: { kind: "global" },
           entries: [{ kind: "skill", skill_id: skillId }],
         },
@@ -1062,7 +1061,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
           collection_id: collectionId,
           skill_id: skillId,
           skill_version_id: skillVersionId,
-          harness: "codex",
+          target: "agents",
           root: f.codex,
           path: projectedSkill,
           expected_digest: contentHash,
@@ -1254,7 +1253,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       }),
     );
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 6,
+      schemaVersion: 7,
       collections: [
         {
           collection_id: collectionId,
@@ -1329,7 +1328,6 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       ],
       global_bindings: [
         {
-          harness: "codex",
           scope: { kind: "global" },
           entries: [
             { kind: "skill", skill_id: currentSkillId },
@@ -1344,7 +1342,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
           collection_id: collectionId,
           skill_id: currentSkillId,
           skill_version_id: currentVersionId,
-          harness: "codex",
+          target: "agents",
           root: f.codex,
           path: current,
           expected_digest: currentHash,
@@ -1356,7 +1354,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
           collection_id: collectionId,
           skill_id: missingSkillId,
           skill_version_id: missingVersionId,
-          harness: "codex",
+          target: "agents",
           root: f.codex,
           path: missing,
           expected_digest: currentHash,

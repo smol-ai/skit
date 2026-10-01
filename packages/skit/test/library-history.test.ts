@@ -91,7 +91,6 @@ it.effect("records one event for one action, however many writers it nests", () 
               ...state,
               global_bindings: [
                 {
-                  harness: "codex",
                   scope: { kind: "global" },
                   entries: state.skills.map((skill) => ({
                     kind: "skill" as const,

@@ -303,7 +303,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
         skills: [{ name: "author-lifecycle" }],
       },
     });
-    skit(["enable", "author-lifecycle", "--for", "codex", "--home", consumerHome]);
+    skit(["enable", "author-lifecycle", "--home", consumerHome]);
     expect(await readFile(join(roots.codex, "author-lifecycle", "SKILL.md"), "utf8")).toContain(
       "Published from the generated scaffold.",
     );
@@ -377,7 +377,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
     });
     expect(staleUpdate.status, await staleUpdate.clone().text()).toBe(409);
 
-    skit(["disable", "author-lifecycle", "--for", "codex", "--home", consumerHome]);
+    skit(["disable", "author-lifecycle", "--home", consumerHome]);
     expect(existsSync(join(roots.codex, "author-lifecycle"))).toBe(false);
 
     const deleteIdentity = `skit://${registryUrl.host}/lifecycle-author/author-lifecycle`;
@@ -623,7 +623,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     first(["add", raw]);
     first(["add", gitRemote]);
     const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(6);
+    expect(retained.schemaVersion).toBe(7);
     expect(retained.collections).toHaveLength(2);
     expect(retained.global_bindings).toEqual([]);
     const collectionId = retained.collections[0].collection_id;
@@ -654,7 +654,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
       }),
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
-      schema: "skit.library.v6",
+      schema: "skit.library.v7",
       snapshot_digests: [selected!.digest],
       bindings: [],
     });
@@ -665,7 +665,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(6);
+    expect(restored.schemaVersion).toBe(7);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.acquisitions[0].observations).toEqual([]);
     expect(restored.global_bindings).toEqual([]);
@@ -687,15 +687,18 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(existsSync(join(gitOriginal, "outside-skill"))).toBe(false);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
 
-    first(["enable", collectionId, "--all", "--for", "codex"]);
-    second(["enable", collectionId, "--all", "--for", "claude"]);
+    // Each device enables something different; the entries merge rather than conflict.
+    first(["enable", collectionId, "--all"]);
+    second(["enable", "git-review"]);
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect(second(["sync"])).toMatchObject({ data: { status: "merge_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     const converged = await state(secondHome);
-    expect(converged.global_bindings.map((binding) => binding.harness).sort()).toEqual(
-      ["claude-code", "codex"].sort(),
+    expect(converged.global_bindings).toHaveLength(1);
+    expect(converged.global_bindings[0]?.entries).toEqual(
+      expect.arrayContaining([{ kind: "collection", collection_id: collectionId }]),
     );
+    expect(converged.global_bindings[0]?.entries).toHaveLength(2);
     expect(await readFile(join(secondCodex, "raw-review", "SKILL.md"), "utf8")).toBe(rawText);
     expect(await readFile(join(secondClaude, "raw-review", "SKILL.md"), "utf8")).toBe(rawText);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });

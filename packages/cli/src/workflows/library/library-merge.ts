@@ -4,7 +4,12 @@ import {
   planThreeWayRecords,
   librarySnapshotDigests,
   LibraryManifest,
+  bindingSkillIds,
+  mergeGlobalBindings,
   type Binding,
+  type BindingEntry,
+  type CollectionId,
+  type SkillId,
   type Collection,
   type Skill,
   type RetainedCopy,
@@ -15,7 +20,57 @@ import { Option, Schema } from "effect";
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const byKey = <T>(records: readonly T[], key: (record: T) => string) =>
   Object.fromEntries(records.map((record) => [key(record), record])) as Record<string, T>;
-const bindingKey = (binding: Binding) => binding.harness;
+const bindingKey = (binding: Binding) => binding.scope.kind;
+
+/** One device's global intent: which Collections it follows and which Skills are enabled now. */
+const bindingIntent = (manifest: LibraryManifest) => {
+  const entries = manifest.bindings.flatMap((binding) => binding.entries);
+  return {
+    followed: Object.fromEntries(
+      entries.flatMap((entry) =>
+        entry.kind === "collection" ? [[entry.collection_id, true] as const] : [],
+      ),
+    ),
+    enabled: Object.fromEntries(
+      bindingSkillIds(manifest, { entries }).map((skillId) => [skillId, true] as const),
+    ),
+  };
+};
+
+/**
+ * Merge global Binding intent per Skill rather than per stored entry. Disabling one Skill of a
+ * followed Collection rewrites the Collection entry as individual Skill entries, so merging raw
+ * entries would let two devices that each disabled a different Skill re-enable both.
+ */
+function mergeBindingIntent(
+  base: LibraryManifest,
+  local: LibraryManifest,
+  remote: LibraryManifest,
+  library: Parameters<typeof bindingSkillIds>[0],
+  takeRemote: ReadonlySet<string>,
+) {
+  const [before, mine, theirs] = [base, local, remote].map(bindingIntent);
+  const followed = planThreeWayRecords(before!.followed, mine!.followed, theirs!.followed, equal);
+  const enabled = planThreeWayRecords(before!.enabled, mine!.enabled, theirs!.enabled, equal);
+  const entries: BindingEntry[] = [
+    ...Object.keys(followed.records).map((collectionId): BindingEntry => ({
+      kind: "collection",
+      collection_id: collectionId as CollectionId,
+    })),
+    ...Object.keys(enabled.records).map((skillId): BindingEntry => ({
+      kind: "skill",
+      skill_id: skillId as SkillId,
+    })),
+  ];
+  // A followed Collection enables every current member, so it cannot coexist with one disabled.
+  const coherent = bindingSkillIds(library, {
+    entries: entries.filter((entry) => entry.kind === "collection"),
+  }).every((skillId) => enabled.records[skillId] !== undefined);
+  if (coherent) return { values: mergeGlobalBindings(library, [{ entries }]), conflicts: [] };
+  return takeRemote.has("binding:global")
+    ? { values: remote.bindings, conflicts: [] }
+    : { values: local.bindings, conflicts: ["binding:global"] };
+}
 
 export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryManifest {
   return currentLibraryManifest({
@@ -121,14 +176,12 @@ export function mergeLibraryManifests(
     (item) => item.acquisition_id,
     takeRemote,
   );
-  const bindings = mergeRecords<Binding>(
-    "binding",
-    base.bindings,
-    local.bindings,
-    remote.bindings,
-    bindingKey,
-    takeRemote,
-  );
+  const library = {
+    skills: skills.values,
+    retained_copies: trees.values,
+    acquisitions: acquisitions.values,
+  };
+  const bindings = mergeBindingIntent(base, local, remote, library, takeRemote);
   const manifest = currentLibraryManifest({
     collections: collections.values,
     skills: skills.values,

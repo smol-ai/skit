@@ -190,7 +190,7 @@ The context in which a binding applies: global or repository-specific. The same 
 _Avoid_: level, project
 
 **Binding**:
-The intent that selected skills be available to one harness at one scope. A binding does not prove that SKIT materialized the corresponding files.
+The intent that selected skills be available at one scope. A binding names no harness, because every harness that reads a Projection Target sees its copies. A binding does not prove that SKIT materialized the corresponding files.
 _Avoid_: installation, link, projection
 
 **Library Manifest**:
@@ -208,7 +208,7 @@ A concrete directory in which Skill artifact instances may be discovered or mate
 _Avoid_: Harness, Binding, Collection
 
 **Projection Target**:
-The destination at which a Skill folder is materialized. Two Bindings selecting the same physical destination are a routing collision until reconciliation proves how that folder can be managed safely.
+The destination at which a Skill folder is materialized: the shared `.agents/skills` root, and `.claude/skills` when Claude Code is present. Two Bindings selecting the same physical destination are a routing collision until reconciliation proves how that folder can be managed safely.
 _Avoid_: Projection, Harness, Scope, generic location
 
 **Projection**:

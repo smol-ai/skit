@@ -3,9 +3,10 @@ import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-  HarnessName,
   OwnershipMarker,
   OwnershipMarkerV2,
+  OwnershipMarkerV3,
+  type ProjectionTarget,
   type Digest,
   type InvocationPolicy,
 } from "../contracts.js";
@@ -54,8 +55,8 @@ export interface MaterializeProjectionRequest {
     readonly name: string;
     readonly contentHash: Digest;
   };
-  harness: HarnessName;
-  /** An enclosing native batch can declare distinct roots on one Harness. */
+  target: ProjectionTarget;
+  /** An enclosing native batch can declare distinct roots on one target. */
   root?: string;
   sourcePath: string;
   shared?: Array<{ from: string; to: string }>;
@@ -107,7 +108,7 @@ const copyProjectionTree = Effect.fn("Projection.copyTree")((from: string, to: s
 const copySkill = Effect.fn("Projection.copySkill")(function* (
   request: Pick<
     MaterializeProjectionRequest,
-    "sourcePath" | "shared" | "harness" | "declaredInvocation" | "invocationIntent"
+    "sourcePath" | "shared" | "target" | "declaredInvocation" | "invocationIntent"
   > & { destination: string; libraryPath: string },
 ): Effect.fn.Return<
   void,
@@ -128,7 +129,7 @@ const copySkill = Effect.fn("Projection.copySkill")(function* (
   }
   yield* applyInvocationPolicyEffect(
     request.destination,
-    request.harness,
+    request.target,
     request.declaredInvocation,
     request.invocationIntent,
   );
@@ -152,10 +153,16 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
     return { kind: "invalid", detail: "Ownership marker must be a JSON object" };
   const decoded = Schema.decodeUnknownOption(OwnershipMarker)(value);
   if (decoded._tag === "Some") return { kind: "valid", marker: decoded.value };
-  const legacy = Schema.decodeUnknownOption(OwnershipMarkerV2)(value);
-  if (legacy._tag === "Some") {
-    const { collection_id: _collectionId, ...fields } = legacy.value;
-    return { kind: "valid", marker: { ...fields, schemaVersion: 3 } };
+  // Older markers named the Harness a copy was written for; custody never depended on it.
+  const v3 = Schema.decodeUnknownOption(OwnershipMarkerV3)(value);
+  if (v3._tag === "Some") {
+    const { harness: _harness, ...fields } = v3.value;
+    return { kind: "valid", marker: { ...fields, schemaVersion: 4 } };
+  }
+  const v2 = Schema.decodeUnknownOption(OwnershipMarkerV2)(value);
+  if (v2._tag === "Some") {
+    const { collection_id: _collectionId, harness: _harness, ...fields } = v2.value;
+    return { kind: "valid", marker: { ...fields, schemaVersion: 4 } };
   }
   return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
 }
@@ -175,21 +182,19 @@ const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.projection_id === right.projection_id &&
   left.skill_id === right.skill_id &&
   left.skill_version_id === right.skill_version_id &&
-  left.expected_digest === right.expected_digest &&
-  left.harness === right.harness;
+  left.expected_digest === right.expected_digest;
 
 const ownershipMarker = (
   request: MaterializeProjectionRequest,
   projectionId: ProjectionIdType,
   expectedHash: Digest,
 ): OwnershipMarker => ({
-  schemaVersion: 3,
+  schemaVersion: 4,
   projectionPolicyVersion: 1,
   projection_id: request.identity.projectionId,
   skill_id: request.identity.skillId,
   skill_version_id: request.identity.skillVersionId,
   expected_digest: expectedHash,
-  harness: request.harness,
 });
 
 export function inspectOwnershipMarkerEffect(
@@ -222,7 +227,7 @@ export function expectedProjectionHashResult(
     return Result.fail(
       new OwnershipMarkerDisagrees({
         skillId: projection.skill_id,
-        harness: projection.harness,
+        target: projection.target,
       }),
     );
   return Result.succeed(projection.expected_digest);
@@ -234,9 +239,9 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
 ): Effect.fn.Return<ManagedProjection, ProjectionMutationError, TreeRequirements | TreeHasher> {
   const fs = yield* FileSystem.FileSystem;
   const hasher = yield* TreeHasher;
-  const { installation, skill, harness, previous } = request;
-  const root = request.root ?? context.rootFor(harness);
-  if (!root) return yield* Effect.fail(new NoProjectionRoot({ harness }));
+  const { installation, skill, target, previous } = request;
+  const root = request.root ?? context.rootFor(target);
+  if (!root) return yield* Effect.fail(new NoProjectionRoot({ target }));
   yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
   const destination = join(root, yield* projectionName(skill.name));
   const projectionId = request.identity.projectionId;
@@ -258,7 +263,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         projection_id: projectionId,
         skill_id: request.identity.skillId,
         skill_version_id: request.identity.skillVersionId,
-        harness,
+        target,
         root,
         path: destination,
         expected_digest: desiredHash,
@@ -305,7 +310,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           const acceptedHash = yield* hasher.hash(destination);
           if (acceptedHash !== desiredHash)
             return yield* new ProjectionFailure({
-              message: `Post-replacement hash verification failed for ${skill.skillId} on ${harness}`,
+              message: `Post-replacement hash verification failed for ${skill.skillId} at ${target}`,
             });
           projection.status = "installed";
           projection.observed_digest = acceptedHash;
@@ -355,7 +360,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             const adoptedHash = yield* hasher.hash(destination);
             if (adoptedHash !== desiredHash)
               return yield* new ProjectionFailure({
-                message: `Post-adoption hash verification failed for ${skill.skillId} on ${harness}`,
+                message: `Post-adoption hash verification failed for ${skill.skillId} at ${target}`,
               });
             projection.status = "installed";
             projection.observed_digest = adoptedHash;
@@ -368,7 +373,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         if (observed !== markerExpectedHash(marker)) {
           const variant = join(
             context.variantsPath,
-            harness,
+            target,
             yield* projectionName(skill.name),
             observed.slice(7),
           );
@@ -403,7 +408,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
               .pipe(Effect.uninterruptible);
             if ((yield* hasher.hash(destination)) !== desiredHash)
               return yield* new ProjectionFailure({
-                message: `Post-marker hash verification failed for ${skill.skillId} on ${harness}`,
+                message: `Post-marker hash verification failed for ${skill.skillId} at ${target}`,
               });
           }
           projection.status = "installed";
@@ -425,7 +430,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         const nextHash = yield* hasher.hash(destination);
         if (nextHash !== desiredHash)
           return yield* new ProjectionFailure({
-            message: `Post-write hash verification failed for ${skill.skillId} on ${harness}`,
+            message: `Post-write hash verification failed for ${skill.skillId} at ${target}`,
           });
         projection.status = "installed";
         projection.observed_digest = nextHash;
@@ -446,7 +451,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         const observed = yield* hasher.hash(destination);
         if (observed !== desiredHash)
           return yield* new ProjectionFailure({
-            message: `Post-write hash verification failed for ${skill.skillId} on ${harness}`,
+            message: `Post-write hash verification failed for ${skill.skillId} at ${target}`,
           });
         projection.status = "installed";
         projection.observed_digest = observed;
@@ -525,7 +530,7 @@ export type ProjectionMutationError =
   | PlatformError;
 
 export interface NativeProjectionContext {
-  readonly rootFor: (harness: HarnessName) => string | undefined;
+  readonly rootFor: (target: ProjectionTarget) => string | undefined;
   readonly variantsPath: string;
 }
 
@@ -568,8 +573,8 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
   const mutation: ProjectionMutation<S> = {
     state: candidate,
     project: Effect.fn("Projection.project")(function* (request) {
-      const root = request.root ?? context.rootFor(request.harness);
-      if (!root) return yield* new NoProjectionRoot({ harness: request.harness });
+      const root = request.root ?? context.rootFor(request.target);
+      if (!root) return yield* new NoProjectionRoot({ target: request.target });
       yield* projectionName(request.skill.name);
       return yield* materializeProjectionEffect({ ...request, state: candidate }, context);
     }),

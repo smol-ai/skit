@@ -8,13 +8,9 @@ import {
   migrateLibraryEntitiesFromV5,
   SkillV5,
 } from "../library-contracts-v5.js";
-import {
-  AbsoluteDevicePath,
-  currentLibraryState,
-  ManagedProjection,
-  type LibraryState,
-} from "../library-state.js";
+import { AbsoluteDevicePath } from "../library-state.js";
 import { HarnessName, InvocationPolicy, LibraryDeviceStateFields } from "./state-schema.js";
+import { LibraryStateV6 } from "./state-schema-v6.js";
 
 const DeviceBindingV5 = Schema.Struct({
   ...BindingV5.fields,
@@ -36,11 +32,11 @@ export const LibraryStateV5 = Schema.Struct({
   acquisitions: Schema.Array(AcquisitionV5),
   global_bindings: Schema.Array(DeviceBindingV5),
   local_bindings: Schema.Array(RepositoryBindingV5),
-  projections: Schema.Array(ManagedProjection),
+  projections: LibraryStateV6.fields.projections,
 });
 export type LibraryStateV5 = typeof LibraryStateV5.Type;
 
-export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryState => {
+export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryStateV6 => {
   const {
     schemaVersion: _legacyVersion,
     collections: _collections,
@@ -53,8 +49,9 @@ export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryState =
     ...fields
   } = state;
   const migrated = migrateLibraryEntitiesFromV5(state);
-  return currentLibraryState({
+  return {
     ...fields,
+    schemaVersion: 6,
     collections: [...migrated.collections],
     skills: [...migrated.skills],
     retained_copies: [...migrated.retained_copies],
@@ -68,5 +65,5 @@ export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryState =
       entries: migrated.entries(skills),
     })),
     projections: [...projections],
-  });
+  };
 };

@@ -119,20 +119,18 @@ function skillChangeLines(
   ];
 }
 
-function renderUpdate(data: ContractDataForId<"skit.update.v5">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v6">): string {
   if (!data.length) return "No device-local Sources to update";
   const updated = data.filter((item) => item.changed);
   const current = data.length - updated.length;
   if (updated.length === 0)
     return `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`;
-  const deferred = data.reduce((total, item) => total + item.deferred, 0);
   const lines = ["Update complete"];
   for (const item of updated) lines.push(item.label, ...skillChangeLines(item));
   lines.push(
     "",
     `${plural(updated.length, "Source")} updated${current ? `; ${current} already current` : ""}.`,
   );
-  if (deferred) lines.push(`${plural(deferred, "Binding")} deferred on this device.`);
   return lines.join("\n");
 }
 
@@ -195,7 +193,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v3">, context: RenderContext): string {
+function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactSetupPath(value));
@@ -210,7 +208,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v3">, context: Render
   let hasCollisions = data.codex.findings.length > 0;
   for (const issue of data.issues) {
     findings.push(
-      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.harness ? color.dim(` · ${harnessLabel(issue.harness)}`) : ""}`,
+      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former Harness root" : `.${issue.target}`}`) : ""}`,
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
@@ -941,7 +939,7 @@ const contractPresenters: ContractPresenters = {
       `Snapshot: ${data.snapshot_digest}`,
       `Destination: ${data.retained_path}`,
       ...data.projections.map(
-        (projection) => `${projection.harness} · ${projection.path} · ${projection.agreement}`,
+        (projection) => `${projection.target} · ${projection.path} · ${projection.agreement}`,
       ),
     ].join("\n"),
   [outputContracts.projectionRetention.id]: (data) =>
@@ -951,7 +949,7 @@ const contractPresenters: ContractPresenters = {
         : `Reconciled ${data.skill_name} using retained Version ${data.retained_skill_version_id}`,
       `Previous Version: ${data.previous_skill_version_id}`,
       ...data.projections.map(
-        (projection) => `${projection.harness} · ${projection.path} · ${projection.status}`,
+        (projection) => `${projection.target} · ${projection.path} · ${projection.status}`,
       ),
     ].join("\n"),
   [outputContracts.remove.id]: renderRemove,

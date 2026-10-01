@@ -242,21 +242,21 @@ export class UnknownInstalledSkill extends Data.TaggedError("UnknownInstalledSki
   }
 }
 
-export class NoProjectionRoot extends Data.TaggedError("NoProjectionRoot")<{ harness: string }> {
+export class NoProjectionRoot extends Data.TaggedError("NoProjectionRoot")<{ target: string }> {
   readonly code = "INVALID_ARGUMENT" as const;
   get message(): string {
-    return `No projection root configured for ${this.harness}`;
+    return `No projection root configured for ${this.target}`;
   }
 }
 
 /** A Projection was modified or is conflicted, so custody will not be given up silently. */
 export class OwnershipMarkerDisagrees extends Data.TaggedError("OwnershipMarkerDisagrees")<{
   skillId: string;
-  harness: string;
+  target: string;
 }> {
   readonly code = "CONFLICT" as const;
   get message(): string {
-    return `Projection state and ownership marker disagree for ${this.skillId} on ${this.harness}`;
+    return `Projection state and ownership marker disagree for ${this.skillId} at ${this.target}`;
   }
 }
 

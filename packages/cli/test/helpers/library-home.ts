@@ -100,14 +100,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     installation: {
       statePath,
       variantsPath: bindings.variantsPath,
-      rootFor: (harness) =>
-        harness === "codex"
-          ? roots.codex
-          : harness === "claude-code"
-            ? roots.claude
-            : harness === "opencode"
-              ? roots.opencode
-              : undefined,
+      rootFor: (target) => (target === "agents" ? roots.codex : roots.claude),
     },
     originalsPath: join(home, "originals"),
   };

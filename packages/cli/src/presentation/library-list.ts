@@ -3,7 +3,7 @@ import { metadataDate, metadataSource, metadataRevision } from "./skill-metadata
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
 export function renderLibraryList(
-  data: ContractDataForId<"skit.list.v5">,
+  data: ContractDataForId<"skit.list.v6">,
   color = createColors(false),
 ): string {
   if (data.subjects.length === 0) return "No retained Skills in this Library.";
@@ -29,7 +29,7 @@ export function renderLibraryList(
   }
   for (const binding of data.bindings)
     lines.push(
-      `${binding.harness}: ${
+      `Enabled for every agent: ${
         binding.entries
           .map((entry) =>
             entry.kind === "collection" ? `${entry.label} (whole Collection)` : entry.name,

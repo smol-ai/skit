@@ -35,16 +35,13 @@ export {
   type PendingLibraryChange,
 } from "./workflows/library/session.js";
 export {
-  harnessChoices,
   DESTINATION_QUESTION,
   destinationLabel,
-  harnessLabel,
   invocationChoices,
   invocationBriefing,
   invocationEligibleBindings,
   invocationRowSummary,
   scopeChoices,
-  type Harness,
   type Scope,
 } from "./library/read-model.js";
 export type { InvocationOption } from "./invocation/policy.js";

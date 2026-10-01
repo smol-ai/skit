@@ -1,16 +1,8 @@
-import { type HarnessName, type InvocationIntent } from "@smolai/skit-core";
+import { type InvocationIntent } from "@smolai/skit-core";
 import { UnknownInvocationPolicy } from "./failures.js";
 
 export const invocationOptions = ["declared", "explicit", "implicit", "host-policy"] as const;
 export type InvocationOption = (typeof invocationOptions)[number];
-
-/** Harnesses whose Projections carry a model invocation policy. */
-export const invocationHarnesses = [
-  "claude-code",
-  "codex",
-  "opencode",
-  "devin",
-] as const satisfies readonly HarnessName[];
 
 export function invocationSelectionFor(option: InvocationOption): InvocationIntent {
   return option === "declared" ? { source: "declared" } : { source: "override", policy: option };

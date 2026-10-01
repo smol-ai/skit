@@ -9,7 +9,7 @@ SKIT is a lossless local library and distribution system for agent skills. It se
 SKIT is a strict package-level extension of Agent Skills rather than a replacement format. The ownership of `SKILL.md`, `skit.json`, Registry metadata, Library intent, and device-local evidence is defined in [Agent Skills compatibility](agent-skills-compatibility.md).
 
 ```text
-source --add/pull--> local library --enable/disable--> harness × scope
+source --add/pull--> local library --enable/disable--> scope --> .agents (+ .claude)
 local SKIT --------------------------publish--------> registry
 ```
 
@@ -26,7 +26,7 @@ The following rules define the system:
 - `state.json` is the authoritative record of managed local state.
 - Harness projections are derived filesystem effects, not independent sources of truth.
 - Bindings express desired enablement; library entries retain artifacts; projections record materialized copies.
-- Harness Availability is device-local; an unavailable Harness defers its Projection without changing portable Binding intent.
+- Bindings name no Harness. Every Binding projects into the shared `.agents` target, and into the `.claude` target only while Claude Code is present on the device.
 - Sources are canonicalized as structured `SourceIdentity` values; Collections have opaque stable IDs and human labels.
 - Core owns state persistence and serialized Projection mutation.
 - Published versions are immutable. An existing owner, SKIT, and version tuple cannot be replaced.
@@ -113,24 +113,29 @@ source locators and labels are not IDs:
 | `release`             | Declared immutable version                                |
 | `releaseContentHash`  | Digest of normalized release content                      |
 | `originalContentHash` | Digest of the losslessly retained source tree             |
-| `projectionId`        | One materialized skill copy at a concrete harness target  |
+| `projectionId`        | One materialized skill copy at a concrete Projection Target |
 
 Hashes establish content identity; they do not replace readable source, SKIT, or skill identities.
 
 ### Binding
 
-A Library Binding records desired enablement for a Harness, Scope, and set of Skill IDs. Its Scope
-is either global or tied to a canonical repository root.
+A Library Binding records desired enablement for a Scope and set of Skill IDs. Its Scope is either
+global or tied to a canonical repository root. There is at most one Binding per Scope.
 
 Bindings describe intent. They do not prove that files are currently present or unchanged.
 
-In accordance with [ADR-0008](adr/0008-defer-bindings-for-unavailable-harnesses.md), a device reconciles Bindings only for locally available Harnesses. Bindings for unavailable Harnesses remain portable desired state and become eligible for Projection when the Harness later becomes available; they are not pruned, materialized into speculative roots, or classified as conflicts.
+In accordance with [ADR-0022](adr/0022-project-into-shared-and-claude-targets.md), a Binding names
+no Harness. Harnesses read each other's Skill Roots, so a per-Harness Binding could not keep a
+Skill away from any Harness. Every Binding projects into the shared `.agents/skills` target, which
+Codex, OpenCode, Devin, Cursor, and Pi read, and into `.claude/skills` only while Claude Code is
+detected. Its copies carry each reader's native invocation metadata.
 
 ### Library entry and projection
 
 A Collection groups Skills acquired and managed together and may record an upstream Source. Each
 Skill retains its versions and Acquisition provenance. Each managed Projection records one concrete
-Skill copy at a Harness target and its observed status:
+Skill copy at a Projection Target (`agents`, `claude`, or `legacy` for a former per-Harness root
+awaiting retirement) and its observed status:
 
 - `pending`
 - `installed`

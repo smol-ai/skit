@@ -199,7 +199,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v5" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v6" });
 
     const add = spawnSync(
       process.execPath,
@@ -244,11 +244,9 @@ describe("CLI contracts", () => {
   });
 
   test("rejects options that do not belong to the selected command", () => {
-    const result = spawnSync(
-      process.execPath,
-      [bin, "list", "--json", "--for", "codex", "--revision", "zzz"],
-      { encoding: "utf8" },
-    );
+    const result = spawnSync(process.execPath, [bin, "list", "--json", "--revision", "zzz"], {
+      encoding: "utf8",
+    });
     expect(result.status).toBe(64);
     expect(result.stdout).toBe("");
     expect(JSON.parse(result.stderr).error).toEqual(
@@ -311,7 +309,7 @@ describe("CLI contracts", () => {
         const failure = JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v6");
+        expect(failure.message).toContain("supports v4–v7");
         expect(failure.remediation).toContain("Back up the state file");
         expect(failure.remediation).toContain("skit setup");
         expect(failure.remediation).not.toContain("author validate");
@@ -345,13 +343,13 @@ describe("CLI contracts", () => {
 
     const enabled = spawnSync(
       process.execPath,
-      [bin, "enable", "review", "--for", "codex", "--home", home, "--codex-root", codex, "--json"],
+      [bin, "enable", "review", "--home", home, "--codex-root", codex, "--json"],
       { encoding: "utf8" },
     );
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v4",
+        schema: "skit.enable.v5",
         data: expect.objectContaining({ enabled: true }),
       }),
     );
@@ -396,7 +394,7 @@ describe("CLI contracts", () => {
     expect(
       spawnSync(
         process.execPath,
-        [bin, "enable", "review", "--for", "codex", "--home", home, "--codex-root", codex],
+        [bin, "enable", "review", "--home", home, "--codex-root", codex],
         { encoding: "utf8" },
       ).status,
     ).toBe(0);
@@ -412,7 +410,7 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v5",
+      schema: "skit.list.v6",
       data: { subjects: [], bindings: [] },
     });
     expect(result.stderr).toBe("");
@@ -431,7 +429,7 @@ describe("CLI contracts", () => {
     expect(
       spawnSync(
         process.execPath,
-        [bin, "enable", "review", "--for", "codex", "--home", home, "--codex-root", codexRoot],
+        [bin, "enable", "review", "--home", home, "--codex-root", codexRoot],
         { encoding: "utf8" },
       ).status,
     ).toBe(0);
@@ -459,7 +457,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v3",
+        schema: "skit.doctor.v4",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );
@@ -553,23 +551,11 @@ describe("CLI contracts", () => {
     ).toBe(0);
     const result = spawnSync(
       process.execPath,
-      [
-        bin,
-        "enable",
-        "review",
-        "--for",
-        "codex",
-        "--repo",
-        repo,
-        "--dry-run",
-        "--json",
-        "--home",
-        home,
-      ],
+      [bin, "enable", "review", "--repo", repo, "--dry-run", "--json", "--home", home],
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v4");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v5");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
@@ -577,7 +563,7 @@ describe("CLI contracts", () => {
     expect(state.global_bindings).toEqual([]);
   });
 
-  test("all harnesses and lifecycle dry-runs preserve exact state and projections", async () => {
+  test("both targets and lifecycle dry-runs preserve exact state and projections", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-matrix-"));
     const home = join(root, "home");
     const configHome = join(root, "config");
@@ -608,20 +594,18 @@ describe("CLI contracts", () => {
       );
     expect(run("add", source).status).toBe(0);
     expect(run("enable", "review", "--repo", repo).status).toBe(0);
-    for (const relative of [
-      ".agents/skills/review/SKILL.md",
-      ".claude/skills/review/SKILL.md",
-      ".opencode/skills/review/SKILL.md",
-      ".devin/skills/review/SKILL.md",
-    ])
+    for (const relative of [".agents/skills/review/SKILL.md", ".claude/skills/review/SKILL.md"])
       expect(readFileSync(join(repo, relative), "utf8")).toContain("# v1");
+    // OpenCode and Devin read `.agents`, so nothing is written to their own roots.
+    for (const relative of [".opencode/skills/review", ".devin/skills/review"])
+      expect(existsSync(join(repo, relative))).toBe(false);
 
     const stateBefore = readFileSync(join(home, "state.json"));
     const collectionId = JSON.parse(stateBefore.toString()).collections[0].collection_id as string;
     const codexBefore = readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"));
     await writeFile(skill, "---\nname: review\ndescription: Review code.\n---\n# v2\n");
     for (const args of [
-      ["disable", "review", "--for", "codex", "--repo", repo, "--dry-run", "--json"],
+      ["disable", "review", "--repo", repo, "--dry-run", "--json"],
       ["remove", collectionId, "--dry-run", "--json"],
     ])
       expect(run(...args).status).toBe(0);
@@ -633,7 +617,7 @@ describe("CLI contracts", () => {
       codexBefore,
     );
 
-    expect(run("disable", "review", "--for", "codex", "--repo", repo).status).toBe(0);
+    expect(run("disable", "review", "--repo", repo).status).toBe(0);
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
   });
 
@@ -646,9 +630,9 @@ describe("CLI contracts", () => {
     const args = (values: string[]) =>
       spawnSync(process.execPath, [bin, ...values, "--home", home], { encoding: "utf8" });
     expect(args(["add", source]).status).toBe(0);
-    expect(args(["enable", "review", "--for", "codex", "--repo", repo]).status).toBe(0);
+    expect(args(["enable", "review", "--repo", repo]).status).toBe(0);
     await writeFile(join(repo, ".agents", "skills", "review", "SKILL.md"), "changed externally\n");
-    const result = args(["disable", "review", "--for", "codex", "--repo", repo, "--json"]);
+    const result = args(["disable", "review", "--repo", repo, "--json"]);
     expect(result.status).toBe(12);
     expect(JSON.parse(result.stderr).error.code).toBe("CONFLICT");
     expect(result.stdout).toBe("");
@@ -660,10 +644,8 @@ describe("CLI contracts", () => {
     const source = join(root, "source");
     const codexRoot = join(root, "codex");
     const claudeRoot = join(root, "claude");
-    const opencodeRoot = join(root, "opencode");
     let configuredCodexRoot = codexRoot;
     let configuredClaudeRoot = claudeRoot;
-    let configuredOpencodeRoot = opencodeRoot;
     await mkdir(source, { recursive: true });
     await writeFile(
       join(source, "SKILL.md"),
@@ -681,8 +663,6 @@ describe("CLI contracts", () => {
           configuredCodexRoot,
           "--claude-root",
           configuredClaudeRoot,
-          "--opencode-root",
-          configuredOpencodeRoot,
           "--json",
         ],
         {
@@ -691,48 +671,39 @@ describe("CLI contracts", () => {
         },
       );
     expect(run("add", source).status).toBe(0);
-    for (const harness of ["codex", "claude-code", "opencode"])
-      expect(run("enable", "review", "--for", harness).status).toBe(0);
+    expect(run("enable", "review").status).toBe(0);
 
-    const paths = {
-      codex: join(codexRoot, "review"),
-      "claude-code": join(claudeRoot, "review"),
-      opencode: join(opencodeRoot, "review"),
-    };
+    const paths = { agents: join(codexRoot, "review"), claude: join(claudeRoot, "review") };
     configuredCodexRoot = join(root, "new-codex-root");
     configuredClaudeRoot = join(root, "new-claude-root");
-    configuredOpencodeRoot = join(root, "new-opencode-root");
     const markerBefore = {
-      codex: await readFile(join(paths.codex, ".skit-ownership.json"), "utf8"),
-      "claude-code": await readFile(join(paths["claude-code"], ".skit-ownership.json"), "utf8"),
-      opencode: await readFile(join(paths.opencode, ".skit-ownership.json"), "utf8"),
+      agents: await readFile(join(paths.agents, ".skit-ownership.json"), "utf8"),
+      claude: await readFile(join(paths.claude, ".skit-ownership.json"), "utf8"),
     };
     const selectedBytes = "---\nname: review\ndescription: Review code.\n---\nselected change\n";
     const differentBytes = "---\nname: review\ndescription: Review code.\n---\ndifferent change\n";
-    await writeFile(join(paths.codex, "SKILL.md"), selectedBytes);
-    await writeFile(join(paths["claude-code"], "SKILL.md"), selectedBytes);
-    await writeFile(join(paths.opencode, "SKILL.md"), differentBytes);
+    await writeFile(join(paths.claude, "SKILL.md"), selectedBytes);
+    await writeFile(join(paths.agents, "SKILL.md"), differentBytes);
 
     const stateBeforePreview = await readFile(join(home, "state.json"), "utf8");
-    const previewProcess = run("update", "review", "--from-projection", "claude-code", "--dry-run");
+    const previewProcess = run("update", "review", "--from-projection", "claude", "--dry-run");
     expect(previewProcess.status).toBe(0);
     const preview = Schema.decodeUnknownSync(ProjectionRetentionPlanDocument)(
       previewProcess.stdout,
     );
-    expect(preview.data.projections.map(({ harness, agreement }) => [harness, agreement])).toEqual([
-      ["codex", "identical"],
-      ["claude-code", "selected"],
-      ["opencode", "different"],
+    expect(preview.data.projections.map(({ target, agreement }) => [target, agreement])).toEqual([
+      ["agents", "different"],
+      ["claude", "selected"],
     ]);
     expect(preview.data.observed_digest).not.toBe("");
     expect(preview.data.snapshot_digest).not.toBe("");
     expect(existsSync(preview.data.retained_path)).toBe(false);
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
-    expect(await readFile(join(paths.opencode, ".skit-ownership.json"), "utf8")).toBe(
-      markerBefore.opencode,
+    expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
+      markerBefore.agents,
     );
 
-    const applyProcess = run("update", "review", "--from-projection", "claude-code");
+    const applyProcess = run("update", "review", "--from-projection", "claude");
     expect(applyProcess.status).toBe(0);
     const applied = Schema.decodeUnknownSync(ProjectionRetentionResultDocument)(
       applyProcess.stdout,
@@ -740,10 +711,9 @@ describe("CLI contracts", () => {
     expect(applied.data.previous_skill_version_id).toBe(preview.data.previous_skill_version_id);
     expect(applied.data.retained_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
     expect(applied.data.retained).toBe(true);
-    expect(applied.data.projections.map(({ harness, status }) => [harness, status])).toEqual([
-      ["codex", "projected"],
-      ["claude-code", "projected"],
-      ["opencode", "conflicted"],
+    expect(applied.data.projections.map(({ target, status }) => [target, status])).toEqual([
+      ["agents", "conflicted"],
+      ["claude", "projected"],
     ]);
 
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
@@ -756,65 +726,56 @@ describe("CLI contracts", () => {
       kind: "retained-edit",
       source_identity: {
         kind: "local",
-        path: { value: paths["claude-code"] },
+        path: { value: paths.claude },
       },
-      input: { value: paths["claude-code"] },
+      input: { value: paths.claude },
     });
     expect(await readFile(join(preview.data.retained_path, "SKILL.md"), "utf8")).toBe(
       selectedBytes,
     );
-    expect(await readFile(join(paths.codex, "SKILL.md"), "utf8")).toBe(selectedBytes);
-    expect(await readFile(join(paths["claude-code"], "SKILL.md"), "utf8")).toBe(selectedBytes);
-    expect(await readFile(join(paths.opencode, "SKILL.md"), "utf8")).toBe(differentBytes);
-    expect(await readFile(join(paths.codex, ".skit-ownership.json"), "utf8")).not.toBe(
-      markerBefore.codex,
+    expect(await readFile(join(paths.claude, "SKILL.md"), "utf8")).toBe(selectedBytes);
+    expect(await readFile(join(paths.agents, "SKILL.md"), "utf8")).toBe(differentBytes);
+    expect(await readFile(join(paths.claude, ".skit-ownership.json"), "utf8")).not.toBe(
+      markerBefore.claude,
     );
-    expect(await readFile(join(paths["claude-code"], ".skit-ownership.json"), "utf8")).not.toBe(
-      markerBefore["claude-code"],
-    );
-    expect(await readFile(join(paths.opencode, ".skit-ownership.json"), "utf8")).toBe(
-      markerBefore.opencode,
+    expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
+      markerBefore.agents,
     );
     expect(existsSync(join(configuredCodexRoot, "review"))).toBe(false);
     expect(existsSync(join(configuredClaudeRoot, "review"))).toBe(false);
-    expect(existsSync(join(configuredOpencodeRoot, "review"))).toBe(false);
 
     const doctorProcess = run("doctor");
     expect(doctorProcess.status).toBe(12);
     const doctor = Schema.decodeUnknownSync(DoctorDocument)(doctorProcess.stdout);
     expect(doctor.data.issues).toEqual([
-      expect.objectContaining({ code: "PROJECTION_CONFLICT", path: paths.opencode }),
+      expect.objectContaining({ code: "PROJECTION_CONFLICT", path: paths.agents }),
     ]);
 
     const partialState = JSON.parse(await readFile(join(home, "state.json"), "utf8"));
     const selectedDigest = preview.data.observed_digest;
-    for (const harness of ["codex", "claude-code"] as const) {
-      const marker = JSON.parse(markerBefore[harness]);
-      await writeFile(join(paths[harness], ".skit-ownership.json"), markerBefore[harness]);
-      const projection = partialState.projections.find(
-        (candidate: { harness: string; path: string }) =>
-          candidate.harness === harness && candidate.path === paths[harness],
-      );
-      projection.skill_version_id = marker.skill_version_id;
-      projection.expected_digest = marker.expected_digest;
-      projection.observed_digest = selectedDigest;
-      projection.status = "conflicted";
-    }
+    const marker = JSON.parse(markerBefore.claude);
+    await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
+    const projection = partialState.projections.find(
+      (candidate: { path: string }) => candidate.path === paths.claude,
+    );
+    projection.skill_version_id = marker.skill_version_id;
+    projection.expected_digest = marker.expected_digest;
+    projection.observed_digest = selectedDigest;
+    projection.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
-    const recoveredProcess = run("update", "review", "--from-projection", "claude-code");
+    const recoveredProcess = run("update", "review", "--from-projection", "claude");
     expect(recoveredProcess.status).toBe(0);
     const recovered = Schema.decodeUnknownSync(ProjectionRetentionResultDocument)(
       recoveredProcess.stdout,
     );
     expect(recovered.data.retained).toBe(false);
     expect(recovered.data.retained_skill_version_id).toBe(applied.data.retained_skill_version_id);
-    expect(recovered.data.projections.map(({ harness, status }) => [harness, status])).toEqual([
-      ["codex", "projected"],
-      ["claude-code", "projected"],
-      ["opencode", "conflicted"],
+    expect(recovered.data.projections.map(({ target, status }) => [target, status])).toEqual([
+      ["agents", "conflicted"],
+      ["claude", "projected"],
     ]);
     const afterRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),

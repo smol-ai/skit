@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.plan.v4",
+  "$id": "skit.disable.v5",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -9,18 +9,6 @@
       "type": "array",
       "items": {
         "type": "string"
-      }
-    },
-    "harnesses": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": [
-          "codex",
-          "claude-code",
-          "opencode",
-          "devin"
-        ]
       }
     },
     "scope": {
@@ -77,15 +65,6 @@
           {
             "type": "object",
             "properties": {
-              "harness": {
-                "type": "string",
-                "enum": [
-                  "codex",
-                  "claude-code",
-                  "opencode",
-                  "devin"
-                ]
-              },
               "scope": {
                 "type": "object",
                 "properties": {
@@ -159,7 +138,6 @@
               }
             },
             "required": [
-              "harness",
               "scope",
               "entries"
             ],
@@ -168,15 +146,6 @@
           {
             "type": "object",
             "properties": {
-              "harness": {
-                "type": "string",
-                "enum": [
-                  "codex",
-                  "claude-code",
-                  "opencode",
-                  "devin"
-                ]
-              },
               "scope": {
                 "type": "object",
                 "properties": {
@@ -254,7 +223,6 @@
               }
             },
             "required": [
-              "harness",
               "scope",
               "entries"
             ],
@@ -262,16 +230,35 @@
           }
         ]
       }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
     "subject_id",
     "skills",
-    "harnesses",
     "scope",
     "enabled",
     "changed",
-    "bindings"
+    "bindings",
+    "projections"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

@@ -15,9 +15,9 @@ import {
 import {
   Digest,
   HarnessInstallStatus,
-  HarnessName,
   InvocationPolicy,
   LibraryDeviceStateFields,
+  RecordedProjectionTarget,
 } from "./store/state-schema.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
@@ -32,7 +32,6 @@ export const DeviceBinding = Schema.Struct({
 export interface DeviceBinding extends Schema.Schema.Type<typeof DeviceBinding> {}
 
 export const RepositoryBinding = Schema.Struct({
-  harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
   entries: Schema.Array(BindingEntry),
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
@@ -43,7 +42,7 @@ export const ManagedProjection = Schema.Struct({
   projection_id: ProjectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  harness: HarnessName,
+  target: RecordedProjectionTarget,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
   expected_digest: Digest,
@@ -55,7 +54,7 @@ export const ManagedProjection = Schema.Struct({
 });
 export interface ManagedProjection extends Schema.Schema.Type<typeof ManagedProjection> {}
 
-export const CURRENT_LIBRARY_STATE_VERSION = 6 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 7 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
@@ -72,13 +71,10 @@ export const LibraryState = Schema.Struct({
     (state) => {
       const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
       const collections = new Set(state.collections.map((collection) => collection.collection_id));
-      const localCoordinates = state.local_bindings.map(
-        (binding) => `${binding.harness}\0${resolve(binding.scope.root)}`,
-      );
-      const projectionCoordinates = state.projections.map(
-        (projection) => `${projection.harness}\0${resolve(projection.path)}`,
-      );
+      const localCoordinates = state.local_bindings.map((binding) => resolve(binding.scope.root));
+      const projectionCoordinates = state.projections.map((projection) => resolve(projection.path));
       return (
+        state.global_bindings.length <= 1 &&
         new Set(localCoordinates).size === localCoordinates.length &&
         new Set(projectionCoordinates).size === projectionCoordinates.length &&
         new Set(state.projections.map((projection) => projection.projection_id)).size ===

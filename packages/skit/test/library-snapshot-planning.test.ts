@@ -117,7 +117,7 @@ const sourceCopy: RetainedCopy = {
 };
 const { revision: _unpinnedRevision, ...unpinnedAcquisition } = acquisition({});
 const mixedManifest: LibraryManifest = {
-  schema: "skit.library.v6",
+  schema: "skit.library.v7",
   collections: [{ collection_id: collectionId, label: "skills" }],
   skills: [],
   retained_copies: [copy, sourceCopy],
@@ -182,7 +182,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
     snapshot_digests: [digest],
     bindings: [],
   });
-  assert.strictEqual(decoded.schema, "skit.library.v6");
+  assert.strictEqual(decoded.schema, "skit.library.v7");
   assert.strictEqual("v3_normalized_tree" in decoded.retained_copies[0]!, false);
   assert.deepStrictEqual(decoded.acquisitions[0]?.source_identity, {
     kind: "well-known",

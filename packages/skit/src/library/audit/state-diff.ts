@@ -5,9 +5,7 @@ import { bindingSkillIds, currentSkillVersion } from "../library-contracts.js";
 type Binding = LibraryState["global_bindings"][number] | LibraryState["local_bindings"][number];
 
 const bindingId = (binding: Binding) =>
-  binding.scope.kind === "repository"
-    ? `${binding.harness}:repository:${binding.scope.root}`
-    : `${binding.harness}:${binding.scope.kind}`;
+  binding.scope.kind === "repository" ? `repository:${binding.scope.root}` : binding.scope.kind;
 
 const byKey = <T>(items: readonly T[], key: (item: T) => string) =>
   new Map(items.map((item) => [key(item), item]));

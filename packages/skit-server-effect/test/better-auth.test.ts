@@ -873,7 +873,7 @@ describe("Better Auth adapter", () => {
         bindings: [],
       };
       const portable = {
-        schema: "skit.library.v6",
+        schema: "skit.library.v7",
         collections: [
           {
             collection_id: collectionId,
@@ -926,6 +926,12 @@ describe("Better Auth adapter", () => {
       expect((yield* writeLibrarySync(libraryBody.library.revision_id, portableV5)).status).toBe(
         400,
       );
+      expect(
+        (yield* writeLibrarySync(libraryBody.library.revision_id, {
+          ...portable,
+          schema: "skit.library.v6",
+        })).status,
+      ).toBe(400);
       const committed = yield* writeLibrarySync(libraryBody.library.revision_id, portable);
       expect(committed.status).toBe(200);
       const syncedBody = Schema.decodeUnknownSync(
@@ -1030,7 +1036,7 @@ describe("Better Auth adapter", () => {
       });
       expect(legacyRead.status).toBe(200);
       expect(yield* webPromise(() => legacyRead.json())).toMatchObject({
-        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v6" } },
+        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v7" } },
       });
       const v5RevisionId = "library_revision_v5_fixture";
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
@@ -1047,7 +1053,7 @@ describe("Better Auth adapter", () => {
       });
       expect(v5Read.status).toBe(200);
       expect(yield* webPromise(() => v5Read.json())).toMatchObject({
-        library: { revision_id: v5RevisionId, manifest: { schema: "skit.library.v6" } },
+        library: { revision_id: v5RevisionId, manifest: { schema: "skit.library.v7" } },
       });
 
       yield* Effect.flatMap(

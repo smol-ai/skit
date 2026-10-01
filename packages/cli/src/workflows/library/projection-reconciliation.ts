@@ -8,18 +8,17 @@ import {
   type RepositoryBinding,
   type Digest,
   type ProjectionId,
+  type ProjectionTarget,
   type OwnershipMarker,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { bindingRoot } from "../../projection/roots.js";
+import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 
 export interface LibraryProjectionReconciliationOptions {
   readonly roots?: InventoryRootOptions;
-  readonly rootFor?: (
-    harness: DeviceBinding["harness"],
-    scope: DeviceBinding["scope"] | RepositoryBinding["scope"],
-  ) => string | undefined;
+  /** A target's global root, or undefined when it is inactive; overrides `roots` for routing. */
+  readonly rootFor?: (target: ProjectionTarget) => string | undefined;
   readonly variantsPath: string;
   readonly desiredGlobalBindings?: readonly Binding[];
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
@@ -28,63 +27,66 @@ export interface LibraryProjectionReconciliationOptions {
     ProjectionId,
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
-  readonly adoptionObservedHash?: Digest;
+  readonly adoption?: { readonly path: string; readonly observedHash: Digest };
   readonly restoreNativeDeletedSkills?: readonly string[];
 }
+
+const targets = ["agents", "claude"] as const satisfies readonly ProjectionTarget[];
 
 const reconcileWithinWrite = Effect.fnUntraced(function* (
   options: LibraryProjectionReconciliationOptions,
 ) {
-  const retired =
-    options.onlyBindings === undefined || options.desiredGlobalBindings !== undefined
-      ? yield* retireUnboundGlobalProjectionsEffect({
-          variantsPath: options.variantsPath,
-          ...(options.desiredGlobalBindings === undefined
-            ? {}
-            : { desiredBindings: options.desiredGlobalBindings }),
-        })
-      : 0;
-  if (options.retireOnly) return { projected: 0, deferred: 0, retired, outcomes: [] };
+  // Without routing this device's targets are unknown, not inactive: retire nothing for that.
+  const activeTargets =
+    options.rootFor !== undefined
+      ? targets.filter((target) => options.rootFor!(target) !== undefined)
+      : options.roots !== undefined
+        ? yield* activeProjectionTargetsEffect(options.roots)
+        : targets;
+  // Copies at a former or inactive target are never wanted, whichever Bindings changed.
+  const retired = yield* retireUnboundGlobalProjectionsEffect({
+    variantsPath: options.variantsPath,
+    activeTargets,
+    ...(options.desiredGlobalBindings === undefined
+      ? {}
+      : { desiredBindings: options.desiredGlobalBindings }),
+    inactiveOnly: options.onlyBindings !== undefined && options.desiredGlobalBindings === undefined,
+  });
+  if (options.retireOnly) return { projected: 0, retired, outcomes: [] };
 
   const state = yield* (yield* LibraryStore).load;
   let projected = 0;
-  let deferred = 0;
   const bindings = options.onlyBindings ?? [...state.global_bindings, ...state.local_bindings];
-  const outcomes: Array<{
-    harness: (typeof bindings)[number]["harness"];
-    status: "projected" | "deferred";
-  }> = [];
+  const outcomes: Array<{ target: ProjectionTarget; scope: (typeof bindings)[number]["scope"] }> =
+    [];
   for (const binding of bindings) {
-    const root =
-      options.rootFor?.(binding.harness, binding.scope) ??
-      (options.roots === undefined
-        ? undefined
-        : bindingRoot(binding.harness, binding.scope, options.roots));
-    if (root === undefined) {
-      deferred++;
-      outcomes.push({ harness: binding.harness, status: "deferred" });
-      continue;
+    for (const target of activeTargets) {
+      const root =
+        binding.scope.kind === "global" && options.rootFor !== undefined
+          ? options.rootFor(target)
+          : options.roots === undefined
+            ? undefined
+            : bindingRoot(target, binding.scope, options.roots);
+      if (root === undefined) continue;
+      yield* projectBindingEffect({
+        target,
+        scope: binding.scope,
+        root,
+        variantsPath: options.variantsPath,
+        restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
+        ...(options.acceptedObservations === undefined
+          ? {}
+          : { acceptedObservations: options.acceptedObservations }),
+        ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
+      });
+      projected++;
+      outcomes.push({ target, scope: binding.scope });
     }
-    yield* projectBindingEffect({
-      harness: binding.harness,
-      scope: binding.scope,
-      root,
-      variantsPath: options.variantsPath,
-      restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
-      ...(options.acceptedObservations === undefined
-        ? {}
-        : { acceptedObservations: options.acceptedObservations }),
-      ...(options.adoptionObservedHash === undefined
-        ? {}
-        : { adoptionObservedHash: options.adoptionObservedHash }),
-    });
-    projected++;
-    outcomes.push({ harness: binding.harness, status: "projected" });
   }
-  return { projected, deferred, retired, outcomes };
+  return { projected, retired, outcomes };
 });
 
-/** Converge all available Projection targets with current Binding intent under write authority. */
+/** Converge every active Projection target with current Binding intent under write authority. */
 export const reconcileLibraryProjections = Effect.fn("LibraryProjections.reconcile")(function* (
   options: LibraryProjectionReconciliationOptions,
 ) {

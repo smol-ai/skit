@@ -102,7 +102,7 @@ it.effect(
         }).pipe(withLibraryWriter, Effect.provide(device.layer));
       const project = (device: typeof a) =>
         projectBindingEffect({
-          harness: "codex",
+          target: "agents",
           root: device.root,
           variantsPath: join(device.home, "variants"),
         }).pipe(withLibraryWriter, Effect.provide(device.layer));
@@ -112,7 +112,10 @@ it.effect(
           token: "test",
           apply,
           takeRemote,
-          projection: { variantsPath: join(device.home, "variants"), rootFor: () => device.root },
+          projection: {
+            variantsPath: join(device.home, "variants"),
+            rootFor: (target) => (target === "agents" ? device.root : undefined),
+          },
         }).pipe(
           withLibraryWriter,
           Effect.provide(device.layer),
@@ -128,7 +131,6 @@ it.effect(
             ...state,
             global_bindings: [
               {
-                harness: "codex",
                 scope: { kind: "global" },
                 entries: [{ kind: "skill", skill_id: skillId }],
               },

@@ -255,7 +255,6 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
             variantsPath: join(home, "variants"),
             invocation: {
               subjects: [query],
-              harnesses: ["codex" as const],
               scope: { kind: "global" as const },
               enabled,
               dryRun: false,

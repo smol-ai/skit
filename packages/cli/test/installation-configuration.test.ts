@@ -8,32 +8,28 @@ const roots = {
 };
 
 describe("Library installation configuration", () => {
-  test("resolves native global roots only for detected harnesses", () => {
-    const installation = libraryInstallationConfiguration("/library", roots, [
-      "codex",
-      "claude-code",
-    ]);
+  test("always projects into .agents and into .claude only when Claude Code is present", () => {
+    const withClaude = libraryInstallationConfiguration("/library", roots, ["claude-code"]);
+    expect(withClaude.rootFor("agents")).toBe("/home/tester/.agents/skills");
+    expect(withClaude.rootFor("claude")).toBe("/home/tester/.claude/skills");
 
-    expect(installation.rootFor("codex")).toBe("/home/tester/.agents/skills");
-    expect(installation.rootFor("claude-code")).toBe("/home/tester/.claude/skills");
-    expect(installation.rootFor("opencode")).toBeUndefined();
-    expect(installation.rootFor("devin")).toBeUndefined();
+    const withoutClaude = libraryInstallationConfiguration("/library", roots, [
+      "codex",
+      "opencode",
+      "devin",
+    ]);
+    expect(withoutClaude.rootFor("agents")).toBe("/home/tester/.agents/skills");
+    expect(withoutClaude.rootFor("claude")).toBeUndefined();
   });
 
-  test("honors direct overrides while Devin keeps its native projection root", () => {
+  test("honors direct root overrides", () => {
     const installation = libraryInstallationConfiguration(
       "/library",
-      {
-        ...roots,
-        overrides: {
-          codex: "/custom/codex",
-          devin: ["/custom/devin"],
-        },
-      },
-      ["codex", "devin"],
+      { ...roots, overrides: { codex: "/custom/agents", claude: "/custom/claude" } },
+      ["claude-code"],
     );
 
-    expect(installation.rootFor("codex")).toBe("/custom/codex");
-    expect(installation.rootFor("devin")).toBe("/home/tester/.config/devin/skills");
+    expect(installation.rootFor("agents")).toBe("/custom/agents");
+    expect(installation.rootFor("claude")).toBe("/custom/claude");
   });
 });

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.enable.plan.v4",
+  "$id": "skit.enable.plan.v5",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -9,18 +9,6 @@
       "type": "array",
       "items": {
         "type": "string"
-      }
-    },
-    "harnesses": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": [
-          "codex",
-          "claude-code",
-          "opencode",
-          "devin"
-        ]
       }
     },
     "scope": {
@@ -77,15 +65,6 @@
           {
             "type": "object",
             "properties": {
-              "harness": {
-                "type": "string",
-                "enum": [
-                  "codex",
-                  "claude-code",
-                  "opencode",
-                  "devin"
-                ]
-              },
               "scope": {
                 "type": "object",
                 "properties": {
@@ -159,7 +138,6 @@
               }
             },
             "required": [
-              "harness",
               "scope",
               "entries"
             ],
@@ -168,15 +146,6 @@
           {
             "type": "object",
             "properties": {
-              "harness": {
-                "type": "string",
-                "enum": [
-                  "codex",
-                  "claude-code",
-                  "opencode",
-                  "devin"
-                ]
-              },
               "scope": {
                 "type": "object",
                 "properties": {
@@ -254,7 +223,6 @@
               }
             },
             "required": [
-              "harness",
               "scope",
               "entries"
             ],
@@ -267,7 +235,6 @@
   "required": [
     "subject_id",
     "skills",
-    "harnesses",
     "scope",
     "enabled",
     "changed",

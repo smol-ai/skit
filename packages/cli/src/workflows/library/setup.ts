@@ -25,6 +25,7 @@ import {
   currentSkillVersion,
   SourceProcess,
   writeJsonAtomicEffect,
+  projectionTargetHarnesses,
   type HarnessName as Harness,
   type LibraryState,
   type MachineId,
@@ -1130,7 +1131,8 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
       skillId: skill.skill_id,
       name: skill.name,
       path,
-      harnesses: [projection.harness],
+      harnesses:
+        projection.target === "legacy" ? [] : [...projectionTargetHarnesses[projection.target]],
       status: !present ? "missing" : projection.status === "installed" ? "current" : "modified",
     });
   }

@@ -11,6 +11,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { reconcileLibraryProjections } from "../src/workflows/library/projection-reconciliation.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 
@@ -56,7 +57,6 @@ const boundRawReview = Effect.gen(function* () {
         ...bound,
         global_bindings: [
           {
-            harness: "codex",
             scope: { kind: "global" },
             entries: bound.skills
               .filter((skill) => skill.collection_id === first.collection?.collection_id)
@@ -69,7 +69,7 @@ const boundRawReview = Effect.gen(function* () {
   const project = writingTo(
     home,
     projectBindingEffect({
-      harness: "codex",
+      target: "agents",
       root: roots.codexRoot,
       variantsPath: join(home, "variants"),
     }).pipe(Effect.provide(layer)),
@@ -80,7 +80,7 @@ const boundRawReview = Effect.gen(function* () {
   const projection = Effect.gen(function* () {
     const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(state);
-    const row = state.projections.find((item) => item.harness === "codex");
+    const row = state.projections.find((item) => item.target === "agents");
     assert.ok(row);
     const skill = state.skills[0];
     return {
@@ -113,7 +113,7 @@ it.effect("keeps a locally edited Projection conflicted when the selected Versio
     assert.strictEqual(yield* fs.readFileString(projected), "my local edit\n");
     const { row } = yield* projection;
     assert.strictEqual(row.status, "conflicted");
-    const variants = join(home, "variants", "codex", "raw-review");
+    const variants = join(home, "variants", "agents", "raw-review");
     const [variant, ...others] = yield* fs.readDirectory(variants);
     assert.ok(variant);
     assert.deepStrictEqual(others, []);
@@ -172,7 +172,6 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
         variantsPath: join(home, "variants"),
         invocation: {
           subjects: [skillId],
-          harnesses: ["codex"],
           scope: { kind: "global" },
           enabled: true,
           dryRun: false,
@@ -231,40 +230,24 @@ for (const followedCollection of [false, true])
           LibraryStore.use((store) =>
             store.publish({
               ...withOther,
-              global_bindings: [
-                ...withOther.global_bindings.map((binding) => ({
-                  ...binding,
-                  entries: [
-                    ...(followedCollection
-                      ? [
-                          {
-                            kind: "collection" as const,
-                            collection_id: selectedSkill.collection_id,
-                          },
-                        ]
-                      : binding.entries),
-                    { kind: "skill" as const, skill_id: otherId },
-                  ],
-                })),
-                {
-                  harness: "claude-code" as const,
-                  scope: { kind: "global" as const },
-                  entries: [{ kind: "skill" as const, skill_id: skillId }],
-                },
-              ],
+              global_bindings: withOther.global_bindings.map((binding) => ({
+                ...binding,
+                entries: [
+                  ...(followedCollection
+                    ? [
+                        {
+                          kind: "collection" as const,
+                          collection_id: selectedSkill.collection_id,
+                        },
+                      ]
+                    : binding.entries),
+                  { kind: "skill" as const, skill_id: otherId },
+                ],
+              })),
             }),
           ).pipe(Effect.provide(layer)),
         );
         yield* project;
-        yield* writingTo(
-          home,
-          projectBindingEffect({
-            harness: "claude-code",
-            root: roots.claudeRoot,
-            variantsPath: join(home, "variants"),
-          }).pipe(Effect.provide(layer)),
-        );
-        yield* fs.remove(join(roots.claudeRoot, "raw-review"), { recursive: true });
         yield* fs.remove(join(roots.codexRoot, "other"), { recursive: true });
         yield* fs.remove(join(roots.codexRoot, "raw-review"), { recursive: true });
         const installed = yield* load;
@@ -274,7 +257,7 @@ for (const followedCollection of [false, true])
         );
         const suppressed = yield* load;
         const suppressedRow = suppressed.projections.find(
-          (row) => row.skill_id === skillId && row.harness === "codex",
+          (row) => row.skill_id === skillId && row.target === "agents",
         );
         assert.strictEqual(suppressedRow?.status, "suppressed");
         assert.strictEqual(suppressedRow?.suppression_reason, "native_delete");
@@ -296,7 +279,6 @@ for (const followedCollection of [false, true])
               variantsPath: join(home, "variants"),
               invocation: {
                 subjects: [skillId],
-                harnesses: ["codex"],
                 scope: { kind: "global" },
                 enabled: true,
                 dryRun,
@@ -313,17 +295,11 @@ for (const followedCollection of [false, true])
         assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
         const after = yield* load;
         const restored = after.projections.find(
-          (row) => row.skill_id === skillId && row.harness === "codex",
+          (row) => row.skill_id === skillId && row.target === "agents",
         );
         assert.strictEqual(restored?.status, "installed");
         assert.strictEqual(restored?.suppression_reason, undefined);
         assert.strictEqual(restored?.suppressed_at, undefined);
-        assert.strictEqual(yield* fs.exists(join(roots.claudeRoot, "raw-review")), false);
-        assert.strictEqual(
-          after.projections.find((row) => row.skill_id === skillId && row.harness === "claude-code")
-            ?.suppression_reason,
-          "native_delete",
-        );
         assert.deepStrictEqual(after.global_bindings, before.global_bindings);
         assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "other")), false);
         assert.strictEqual(
@@ -332,3 +308,20 @@ for (const followedCollection of [false, true])
         );
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect(
+  "reconciling without routing keeps intact copies rather than treating them as inactive",
+  () =>
+    Effect.gen(function* () {
+      const { fs, home, layer, projected, projection } = yield* boundRawReview;
+      const reconciled = yield* writingTo(
+        home,
+        reconcileLibraryProjections({ variantsPath: join(home, "variants") }).pipe(
+          Effect.provide(layer),
+        ),
+      );
+      assert.strictEqual(reconciled.retired, 0);
+      assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
+      assert.strictEqual((yield* projection).row.status, "installed");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

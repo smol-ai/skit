@@ -16,6 +16,18 @@ export const Digest = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}
 export type Digest = typeof Digest.Type;
 export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
 export type HarnessName = typeof HarnessName.Type;
+/**
+ * Where SKIT materializes Skills. `agents` is the shared `.agents/skills` root read by Codex,
+ * OpenCode, Devin, Cursor, and Pi; `claude` exists because Claude Code does not read it.
+ */
+export const ProjectionTarget = Schema.Literals(["agents", "claude"]);
+export type ProjectionTarget = typeof ProjectionTarget.Type;
+/**
+ * A recorded Projection's target. `legacy` marks a copy at a former per-Harness root; it is
+ * never desired, so reconciliation retires it under the ordinary custody checks.
+ */
+export const RecordedProjectionTarget = Schema.Literals(["agents", "claude", "legacy"]);
+export type RecordedProjectionTarget = typeof RecordedProjectionTarget.Type;
 export const InvocationPolicy = Schema.Literals(["explicit", "implicit", "host-policy"]);
 export type InvocationPolicy = typeof InvocationPolicy.Type;
 export const InventoryScanIssue = Schema.Union([

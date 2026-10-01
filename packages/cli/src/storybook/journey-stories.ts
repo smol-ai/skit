@@ -36,7 +36,7 @@ const skillId = makeSkillId();
 const acquisitionId = makeAcquisitionId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 6,
+  schemaVersion: 7,
   collections: [
     {
       collection_id: collectionId,
@@ -118,14 +118,13 @@ const previewEnable = Effect.scoped(
       yield* presentSetEnabled({
         action: "enable",
         enabled: true,
-        requested: "codex",
         cwd: home,
         all: true,
         dryRun: true,
         interactive: true,
         configuration,
       });
-      return yield* openLibrarySession(["codex"]);
+      return yield* openLibrarySession();
     }).pipe(
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(libraryAuditLogLayer({ home })),

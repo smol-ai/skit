@@ -100,7 +100,6 @@ codex_test_root=$(mktemp -d)
 skit add tim/dad-joke --home "$skit_test_home"
 skit list --home "$skit_test_home" --json
 skit enable tim/dad-joke \
-  --for codex \
   --home "$skit_test_home" \
   --codex-root "$codex_test_root"
 

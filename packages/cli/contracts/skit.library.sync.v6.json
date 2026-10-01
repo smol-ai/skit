@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v5",
+  "$id": "skit.library.sync.v6",
   "type": "object",
   "properties": {
     "status": {
@@ -68,49 +68,6 @@
           ]
         }
       ]
-    },
-    "deferred": {
-      "anyOf": [
-        {
-          "type": "number"
-        },
-        {
-          "type": "string",
-          "enum": [
-            "Infinity",
-            "-Infinity",
-            "NaN"
-          ]
-        }
-      ]
-    },
-    "deferred_bindings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "harness": {
-            "type": "string",
-            "enum": [
-              "codex",
-              "claude-code",
-              "opencode",
-              "devin"
-            ]
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "harness",
-          "skills"
-        ],
-        "additionalProperties": true
-      }
     },
     "retired": {
       "anyOf": [
@@ -235,15 +192,6 @@
                       "remove"
                     ]
                   },
-                  "harness": {
-                    "type": "string",
-                    "enum": [
-                      "codex",
-                      "claude-code",
-                      "opencode",
-                      "devin"
-                    ]
-                  },
                   "entries_added": {
                     "type": "array",
                     "items": {
@@ -294,7 +242,6 @@
                 "required": [
                   "kind",
                   "action",
-                  "harness",
                   "entries_added",
                   "entries_removed"
                 ],
@@ -387,15 +334,6 @@
                       "remove"
                     ]
                   },
-                  "harness": {
-                    "type": "string",
-                    "enum": [
-                      "codex",
-                      "claude-code",
-                      "opencode",
-                      "devin"
-                    ]
-                  },
                   "entries_added": {
                     "type": "array",
                     "items": {
@@ -446,7 +384,6 @@
                 "required": [
                   "kind",
                   "action",
-                  "harness",
                   "entries_added",
                   "entries_removed"
                 ],

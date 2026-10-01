@@ -285,17 +285,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -381,17 +381,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -450,7 +450,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v3"
+        "skit.doctor.v4"
       ],
       "exitCodes": [
         0,
@@ -476,17 +476,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -525,13 +525,13 @@
         "disable"
       ],
       "stability": "stable",
-      "summary": "Disable retained Skills for selected harnesses and scope.",
+      "summary": "Disable retained Skills for every agent at a scope.",
       "effects": {
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.disable.v4",
-        "skit.disable.plan.v4"
+        "skit.disable.v5",
+        "skit.disable.plan.v5"
       ],
       "exitCodes": [
         0,
@@ -542,8 +542,8 @@
       ],
       "interactive": true,
       "examples": [
-        "skit disable review --for codex",
-        "skit disable owner/tools --all --for codex"
+        "skit disable review",
+        "skit disable owner/tools --all"
       ],
       "positionals": [
         {
@@ -552,11 +552,6 @@
         }
       ],
       "flags": {
-        "for": {
-          "type": "choice",
-          "valueName": "choice",
-          "description": "Select a harness. (choices: codex, claude, claude-code, opencode, devin)"
-        },
         "repo": {
           "type": "string",
           "valueName": "string",
@@ -570,7 +565,7 @@
         "invocation": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override model invocation policy; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+          "description": "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
         },
         "dry-run": {
           "type": "boolean",
@@ -590,17 +585,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -639,13 +634,13 @@
         "enable"
       ],
       "stability": "stable",
-      "summary": "Enable retained Skills for selected harnesses and scope.",
+      "summary": "Enable retained Skills for every agent at a scope.",
       "effects": {
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.enable.v4",
-        "skit.enable.plan.v4"
+        "skit.enable.v5",
+        "skit.enable.plan.v5"
       ],
       "exitCodes": [
         0,
@@ -656,8 +651,8 @@
       ],
       "interactive": true,
       "examples": [
-        "skit enable review --for codex",
-        "skit enable owner/tools --all --for codex"
+        "skit enable review",
+        "skit enable owner/tools --all"
       ],
       "positionals": [
         {
@@ -666,11 +661,6 @@
         }
       ],
       "flags": {
-        "for": {
-          "type": "choice",
-          "valueName": "choice",
-          "description": "Select a harness. (choices: codex, claude, claude-code, opencode, devin)"
-        },
         "repo": {
           "type": "string",
           "valueName": "string",
@@ -684,7 +674,7 @@
         "invocation": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override model invocation policy; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+          "description": "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
         },
         "dry-run": {
           "type": "boolean",
@@ -704,17 +694,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -770,7 +760,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v7"
+        "skit.inventory.v8"
       ],
       "exitCodes": [
         0,
@@ -795,17 +785,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -910,7 +900,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.list.v5"
+        "skit.list.v6"
       ],
       "exitCodes": [
         0,
@@ -938,17 +928,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -992,7 +982,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.pull.v5"
+        "skit.pull.v6"
       ],
       "exitCodes": [
         0,
@@ -1025,17 +1015,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -1637,17 +1627,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -1747,17 +1737,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -1835,17 +1825,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -2026,17 +2016,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -2080,7 +2070,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v5"
+        "skit.library.sync.v6"
       ],
       "exitCodes": [
         0,
@@ -2129,17 +2119,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",
@@ -2183,10 +2173,10 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.update.v5",
+        "skit.update.v6",
         "skit.update.plan.v5",
-        "skit.update.projection-retention.v1",
-        "skit.update.projection-retention.plan.v1"
+        "skit.update.projection-retention.v2",
+        "skit.update.projection-retention.plan.v2"
       ],
       "exitCodes": [
         0,
@@ -2230,17 +2220,17 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex skills root."
+          "description": "Override the shared .agents skills root that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root."
+          "description": "Override the Claude skills root; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the OpenCode skills root."
+          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
         },
         "devin-root": {
           "type": "string",

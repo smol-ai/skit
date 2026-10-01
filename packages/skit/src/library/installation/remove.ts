@@ -91,7 +91,7 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
           const outcome = yield* mutation.retire(
             projection,
             "throw",
-            `Refusing to remove modified ${skill.name} on ${projection.harness}`,
+            `Refusing to remove modified ${skill.name} at ${projection.path}`,
           );
           if (outcome.kind === "retired") retired++;
         }

@@ -1,111 +1,88 @@
 import { resolve } from "node:path";
+import { Effect } from "effect";
 import {
   harnessProfile,
   projectionRoot,
+  projectionTargetRoot,
   resolveHarnessRoot,
   deduplicateInventoryRoots,
   type HarnessName,
+  type ProjectionTarget,
   type SkitBindingScope,
   type LibraryState,
   type InventoryScanRoot,
 } from "@smolai/skit-core";
+import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
 export interface InventoryRootOptions {
   readonly home: string;
   readonly configHome: string;
   readonly overrides: {
+    /** The shared `.agents/skills` root, which Codex reads natively. */
     readonly codex?: string;
     readonly claude?: string;
     readonly opencode?: string;
     readonly devin?: string[];
   };
 }
-export function resolveLibraryRoots(
-  harness: HarnessName,
+
+/** Resolve one target's writable physical Skill root for a Scope. */
+export function bindingRoot(
+  target: ProjectionTarget,
   scope: SkitBindingScope,
   options: InventoryRootOptions,
-): { codex?: string; claude?: string; opencode?: string; devin?: string[] } {
-  if (harness === "devin") {
-    const context = {
+): string {
+  const override = target === "agents" ? options.overrides.codex : options.overrides.claude;
+  if (scope.kind === "global" && override !== undefined) return resolve(override);
+  return resolve(
+    projectionTargetRoot(target, scope.kind === "global" ? "global" : "project", {
       home: options.home,
       configHome: options.configHome,
       ...(scope.kind === "repository" ? { repository: scope.root } : {}),
-    };
-    const profile = harnessProfile("devin");
-    const target = projectionRoot(
-      "devin",
-      scope.kind === "global" ? "global" : "project",
-      context,
-    )!;
-    return {
-      devin: [
-        target,
-        ...profile.roots
-          .filter((root) => root.scope === scope.kind && root.readable)
-          .map((root) => resolveHarnessRoot(root, context))
-          .filter((root) => root !== target),
-        ...(options.overrides.devin ?? []).map((root) => resolve(root)),
-      ],
-    };
-  }
-  if (scope.kind === "global" && harness === "codex")
-    return {
-      codex: resolve(options.overrides.codex ?? projectionRoot("codex", "global", options)!),
-    };
-  if (scope.kind === "global" && harness === "claude-code")
-    return {
-      claude: resolve(
-        options.overrides.claude ?? projectionRoot("claude-code", "global", options)!,
-      ),
-    };
-  if (scope.kind === "global")
-    return {
-      opencode: resolve(
-        options.overrides.opencode ?? projectionRoot("opencode", "global", options)!,
-      ),
-    };
-  const target = projectionRoot(harness, "project", {
-    home: options.home,
-    configHome: options.configHome,
-    repository: scope.root,
-  })!;
-  if (harness === "codex") return { codex: target };
-  if (harness === "claude-code") return { claude: target };
-  return { opencode: target };
+    }),
+  );
 }
-/** Resolve one writable physical Skill root from device Harness configuration. */
-export function bindingRoot(
-  harness: HarnessName,
-  scope: SkitBindingScope,
+
+/** The targets this device materializes into: `.agents` always, `.claude` only with Claude Code. */
+export const activeProjectionTargetsEffect = Effect.fn("Projection.activeTargets")(function* (
   options: InventoryRootOptions,
 ) {
-  const roots = resolveLibraryRoots(harness, scope, options);
-  const root =
-    harness === "codex"
-      ? roots.codex
-      : harness === "claude-code"
-        ? roots.claude
-        : harness === "opencode"
-          ? roots.opencode
-          : roots.devin?.[0];
-  return root === undefined ? undefined : resolve(root);
-}
+  const detected = yield* detectInstalledHarnessesEffect({
+    home: options.home,
+    configHome: options.configHome,
+    ...(options.overrides.claude === undefined ? {} : { claudeRoot: options.overrides.claude }),
+  });
+  return activeProjectionTargets(detected);
+});
+
+export const activeProjectionTargets = (
+  detected: readonly HarnessName[],
+): readonly ProjectionTarget[] =>
+  detected.includes("claude-code") ? ["agents", "claude"] : ["agents"];
+
+/** Every Harness's own global roots, plus the target roots of each repository Binding. */
 export function selectInventoryRoots(
   state: LibraryState,
   options: InventoryRootOptions,
 ): InventoryScanRoot[] {
-  const bindings = [...state.global_bindings, ...state.local_bindings];
-  const selections = [
-    ...(["codex", "claude-code", "opencode", "devin"] as const).map((harness) =>
-      resolveLibraryRoots(harness, { kind: "global" }, options),
-    ),
-    ...bindings.map((binding) => resolveLibraryRoots(binding.harness, binding.scope, options)),
-  ];
-  return deduplicateInventoryRoots(
-    selections.flatMap((selection) => [
-      ...(selection.codex ? [{ harness: "codex" as const, root: selection.codex }] : []),
-      ...(selection.claude ? [{ harness: "claude-code" as const, root: selection.claude }] : []),
-      ...(selection.opencode ? [{ harness: "opencode" as const, root: selection.opencode }] : []),
-      ...(selection.devin ?? []).map((root) => ({ harness: "devin" as const, root })),
+  const context = { home: options.home, configHome: options.configHome };
+  const devin = harnessProfile("devin");
+  return deduplicateInventoryRoots([
+    { harness: "codex", root: bindingRoot("agents", { kind: "global" }, options) },
+    { harness: "claude-code", root: bindingRoot("claude", { kind: "global" }, options) },
+    {
+      harness: "opencode",
+      root: resolve(options.overrides.opencode ?? projectionRoot("opencode", "global", context)!),
+    },
+    ...devin.roots
+      .filter((root) => root.scope === "global" && root.readable)
+      .map((root) => ({ harness: "devin" as const, root: resolveHarnessRoot(root, context) })),
+    ...(options.overrides.devin ?? []).map((root) => ({
+      harness: "devin" as const,
+      root: resolve(root),
+    })),
+    ...state.local_bindings.flatMap((binding) => [
+      { harness: "codex" as const, root: bindingRoot("agents", binding.scope, options) },
+      { harness: "claude-code" as const, root: bindingRoot("claude", binding.scope, options) },
     ]),
-  );
+  ]);
 }

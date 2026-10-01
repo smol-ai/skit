@@ -23,7 +23,6 @@ export type SyncChange =
   | {
       readonly kind: "binding";
       readonly action: "add" | "update" | "remove";
-      readonly harness: LibraryManifest["bindings"][number]["harness"];
       readonly entries_added: readonly SyncBindingEntry[];
       readonly entries_removed: readonly SyncBindingEntry[];
     };
@@ -134,19 +133,18 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       },
     ];
   });
-  const previousBindings = new Map(before.bindings.map((binding) => [binding.harness, binding]));
-  const desiredBindings = new Map(after.bindings.map((binding) => [binding.harness, binding]));
+  const previousBindings = new Map(before.bindings.map((binding) => [binding.scope.kind, binding]));
+  const desiredBindings = new Map(after.bindings.map((binding) => [binding.scope.kind, binding]));
   const bindingChanges = [...new Set([...previousBindings.keys(), ...desiredBindings.keys()])]
     .sort()
-    .flatMap((harness): SyncChange[] => {
-      const previous = previousBindings.get(harness);
-      const desired = desiredBindings.get(harness);
+    .flatMap((scope): SyncChange[] => {
+      const previous = previousBindings.get(scope);
+      const desired = desiredBindings.get(scope);
       if (canonicalJson(previous ?? null) === canonicalJson(desired ?? null)) return [];
       return [
         {
           kind: "binding",
           action: action(previous, desired),
-          harness,
           entries_added: entriesMissing(after, desired, previous),
           entries_removed: entriesMissing(before, previous, desired),
         },

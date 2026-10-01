@@ -11,6 +11,8 @@ import {
   Digest,
   HarnessName,
   InvocationPolicy,
+  ProjectionTarget,
+  RecordedProjectionTarget,
   SkillsShProvenanceObservation,
   SkitBindingScope,
   SkillAssessmentAcceptance,
@@ -21,6 +23,8 @@ export {
   Digest,
   HarnessName,
   InvocationPolicy,
+  ProjectionTarget,
+  RecordedProjectionTarget,
   SkillsShProvenanceObservation,
   SkitBindingScope,
   SkillAssessmentAcceptance,
@@ -115,8 +119,18 @@ export const OwnershipMarkerV3 = Schema.Struct({
 });
 export type OwnershipMarkerV3 = typeof OwnershipMarkerV3.Type;
 
-/** V2 remains readable because ownership markers live outside versioned Library state. */
-export const OwnershipMarker = OwnershipMarkerV3;
+export const OwnershipMarkerV4 = Schema.Struct({
+  schemaVersion: Schema.Literal(4),
+  projectionPolicyVersion: Schema.Literal(1),
+  projection_id: ProjectionId,
+  skill_id: SkillId,
+  skill_version_id: SkillVersionId,
+  expected_digest: Digest,
+});
+export type OwnershipMarkerV4 = typeof OwnershipMarkerV4.Type;
+
+/** V2 and V3 remain readable because ownership markers live outside versioned Library state. */
+export const OwnershipMarker = OwnershipMarkerV4;
 export type OwnershipMarker = typeof OwnershipMarker.Type;
 
 export const SkillAuditFinding = Schema.Struct({

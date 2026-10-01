@@ -46,14 +46,14 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
     snapshot_digest: expect.stringMatching(/^sha256:/),
   });
 
-  const enabledCollection = run("enable", sourceData.collection_id, "--all", "--for", "codex");
+  const enabledCollection = run("enable", sourceData.collection_id, "--all");
   expect(enabledCollection.status, enabledCollection.stderr).toBe(0);
   const enabledCollectionData = JSON.parse(enabledCollection.stdout).data;
   expect(enabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
   // `--all` follows the whole Collection rather than freezing today's Skills.
   expect(enabledCollectionData.bindings).toEqual([
     expect.objectContaining({
-      harness: "codex",
+      scope: { kind: "global" },
       entries: [{ kind: "collection", collection_id: sourceData.collection_id }],
     }),
   ]);
@@ -69,14 +69,14 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   );
   expect(collection).toBeDefined();
   expect(listing.bindings).toContainEqual({
-    harness: "codex",
+    scope: { kind: "global" },
     entries: [
       { kind: "collection", collection_id: sourceData.collection_id, label: collection.label },
     ],
     skills: collection.skills.map((skill: { skill_id: string }) => skill.skill_id),
   });
 
-  const disabledCollection = run("disable", sourceData.collection_id, "--all", "--for", "codex");
+  const disabledCollection = run("disable", sourceData.collection_id, "--all");
   expect(disabledCollection.status, disabledCollection.stderr).toBe(0);
   const disabledCollectionData = JSON.parse(disabledCollection.stdout).data;
   expect(disabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
@@ -125,7 +125,7 @@ test("retains GitHub collection identity through add, enable, and list", async (
   const addedCollection = JSON.parse(added.stdout).data;
   expect(addedCollection.collection_id).toEqual(expect.any(String));
 
-  const enabled = run("enable", addedCollection.collection_id, "--all", "--for", "codex");
+  const enabled = run("enable", addedCollection.collection_id, "--all");
   expect(enabled.status, enabled.stderr).toBe(0);
   const listed = run("list");
   expect(listed.status, listed.stderr).toBe(0);
@@ -140,7 +140,7 @@ test("retains GitHub collection identity through add, enable, and list", async (
   expect(codeReview).toBeDefined();
   expect(listing.bindings).toContainEqual(
     expect.objectContaining({
-      harness: "codex",
+      scope: { kind: "global" },
       skills: [codeReview!.skill_id],
     }),
   );

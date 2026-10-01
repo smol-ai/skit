@@ -81,7 +81,6 @@ const boundCollectionWith = (second = false) =>
           ...initial,
           global_bindings: [
             {
-              harness: "codex",
               scope: { kind: "global" },
               entries: retained.skills.map((skill) => ({
                 kind: "skill" as const,
@@ -108,7 +107,7 @@ it.effect(
       yield* fs.makeDirectory(target);
       yield* fs.writeFileString(join(target, "SKILL.md"), "foreign\n");
       const project = projectBindingEffect({
-        harness: "codex",
+        target: "agents",
         root: targetRoot,
         variantsPath: join(home, "variants"),
       }).pipe(Effect.provide(storeLayer));
@@ -132,7 +131,7 @@ it.effect(
       assert.strictEqual(installed.projections[0]?.status, "installed");
       const markerV2 = yield* inspectOwnershipMarkerEffect(target);
       assert.strictEqual(markerV2.kind, "valid");
-      if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 3);
+      if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 4);
 
       yield* withLibraryWriterLock(
         home,
@@ -145,6 +144,7 @@ it.effect(
       );
       const retire = retireUnboundGlobalProjectionsEffect({
         variantsPath: join(home, "variants"),
+        activeTargets: ["agents", "claude"],
       }).pipe(Effect.provide(storeLayer));
       assert.strictEqual(yield* withLibraryWriterLock(home, retire), 1);
       assert.strictEqual(yield* fs.exists(target), false);
@@ -164,7 +164,7 @@ it.effect("publishes nothing when the written Projection does not hash to the re
     const projected = yield* withLibraryWriterLock(
       home,
       projectBindingEffect({
-        harness: "codex",
+        target: "agents",
         root: targetRoot,
         variantsPath: join(home, "variants"),
       }).pipe(Effect.provide(storeLayer), Effect.provide(diverged)),
@@ -184,7 +184,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned projec
     const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
     const target = join(targetRoot, "review");
     const project = projectBindingEffect({
-      harness: "codex",
+      target: "agents",
       root: targetRoot,
       variantsPath: join(home, "variants"),
     }).pipe(Effect.provide(storeLayer));
@@ -261,7 +261,7 @@ it.effect("retires intact former roots when a globally bound Skill moves to a ne
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ harness: "codex", root, variantsPath: join(home, "variants") }).pipe(
+        projectBindingEffect({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -291,7 +291,7 @@ for (const changed of ["bytes", "ownership"] as const)
         withLibraryWriterLock(
           home,
           projectBindingEffect({
-            harness: "codex",
+            target: "agents",
             root,
             variantsPath: join(home, "variants"),
           }).pipe(Effect.provide(storeLayer)),
@@ -321,7 +321,7 @@ for (const changed of ["bytes", "ownership"] as const)
 
 for (const alias of [false, true])
   it.effect(
-    `keeps repository-scoped and other-harness installations during a global root change (alias=${alias})`,
+    `keeps repository-scoped and other-target installations during a global root change (alias=${alias})`,
     () =>
       Effect.gen(function* () {
         const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
@@ -343,38 +343,28 @@ for (const alias of [false, true])
           LibraryStore.use((store) =>
             store.publish({
               ...state,
-              global_bindings: [
-                ...state.global_bindings,
-                {
-                  harness: "claude-code",
-                  scope: { kind: "global" },
-                  entries,
-                },
-              ],
-              local_bindings: [
-                { harness: "codex", scope: { kind: "repository", root: bindingRoot }, entries },
-              ],
+              local_bindings: [{ scope: { kind: "repository", root: bindingRoot }, entries }],
             }),
           ).pipe(Effect.provide(storeLayer)),
         );
         const project = (
-          harness: "codex" | "claude-code",
+          target: "agents" | "claude",
           root: string,
           scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
         ) =>
           withLibraryWriterLock(
             home,
             projectBindingEffect({
-              harness,
+              target,
               root,
               scope,
               variantsPath: join(home, "variants"),
             }).pipe(Effect.provide(storeLayer)),
           );
-        yield* project("codex", targetRoot);
-        yield* project("codex", repositoryRoot, { kind: "repository", root: bindingRoot });
-        yield* project("claude-code", otherRoot);
-        yield* project("codex", newRoot);
+        yield* project("agents", targetRoot);
+        yield* project("agents", repositoryRoot, { kind: "repository", root: bindingRoot });
+        yield* project("claude", otherRoot);
+        yield* project("agents", newRoot);
         assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), false);
         for (const root of [repositoryRoot, otherRoot, newRoot])
           assert.strictEqual(
@@ -387,7 +377,7 @@ for (const alias of [false, true])
           [repositoryRoot, otherRoot, newRoot].sort(),
         );
         assert.deepStrictEqual(after.local_bindings, [
-          { harness: "codex", scope: { kind: "repository", root: bindingRoot }, entries },
+          { scope: { kind: "repository", root: bindingRoot }, entries },
         ]);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
@@ -403,7 +393,7 @@ it.effect(
         withLibraryWriterLock(
           home,
           projectBindingEffect({
-            harness: "codex",
+            target: "agents",
             root,
             variantsPath: join(home, "variants"),
           }).pipe(Effect.provide(storeLayer)),
@@ -438,7 +428,7 @@ it.effect("treats symlink aliases of the same root as one target without retirin
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ harness: "codex", root, variantsPath: join(home, "variants") }).pipe(
+        projectBindingEffect({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -462,7 +452,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ harness: "codex", root, variantsPath: join(home, "variants") }).pipe(
+        projectBindingEffect({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -502,4 +492,116 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     );
     assert.deepStrictEqual(after, before);
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("retires a bound Skill's copies at a target that is no longer active", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const claudeRoot = join(home, "claude", "skills");
+    for (const [target, root] of [
+      ["agents", targetRoot],
+      ["claude", claudeRoot],
+    ] as const)
+      yield* withLibraryWriterLock(
+        home,
+        projectBindingEffect({ target, root, variantsPath: join(home, "variants") }).pipe(
+          Effect.provide(storeLayer),
+        ),
+      );
+    const retired = yield* withLibraryWriterLock(
+      home,
+      retireUnboundGlobalProjectionsEffect({
+        variantsPath: join(home, "variants"),
+        activeTargets: ["agents"],
+      }).pipe(Effect.provide(storeLayer)),
+    );
+    assert.strictEqual(retired, 1);
+    assert.strictEqual(yield* fs.exists(join(claudeRoot, "review")), false);
+    assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), true);
+    const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(storeLayer),
+    );
+    assert.deepStrictEqual(
+      after.projections.map((projection) => projection.target),
+      ["agents"],
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a targeted reconcile retires only copies at inactive targets", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const claudeRoot = join(home, "claude", "skills");
+    for (const [target, root] of [
+      ["agents", targetRoot],
+      ["claude", claudeRoot],
+    ] as const)
+      yield* withLibraryWriterLock(
+        home,
+        projectBindingEffect({ target, root, variantsPath: join(home, "variants") }).pipe(
+          Effect.provide(storeLayer),
+        ),
+      );
+    const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(storeLayer),
+    );
+    // Unbinding everything must not retire the active copy when only inactive ones are in scope.
+    yield* withLibraryWriterLock(
+      home,
+      Effect.flatMap(LibraryStore, (store) =>
+        store.publish({ ...state, global_bindings: [] }),
+      ).pipe(Effect.provide(storeLayer)),
+    );
+    const retired = yield* withLibraryWriterLock(
+      home,
+      retireUnboundGlobalProjectionsEffect({
+        variantsPath: join(home, "variants"),
+        activeTargets: ["agents"],
+        inactiveOnly: true,
+      }).pipe(Effect.provide(storeLayer)),
+    );
+    assert.strictEqual(retired, 1);
+    assert.strictEqual(yield* fs.exists(join(claudeRoot, "review")), false);
+    assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), true);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("keeps and reports an edited copy at an inactive target without blocking", () =>
+  Effect.gen(function* () {
+    const { fs, home, storeLayer } = yield* boundCollection;
+    const claudeRoot = join(home, "claude", "skills");
+    yield* withLibraryWriterLock(
+      home,
+      projectBindingEffect({
+        target: "claude",
+        root: claudeRoot,
+        variantsPath: join(home, "variants"),
+      }).pipe(Effect.provide(storeLayer)),
+    );
+    const edited = join(claudeRoot, "review", "SKILL.md");
+    yield* fs.writeFileString(edited, "my edit\n");
+    const retire = withLibraryWriterLock(
+      home,
+      retireUnboundGlobalProjectionsEffect({
+        variantsPath: join(home, "variants"),
+        activeTargets: ["agents"],
+        inactiveOnly: true,
+      }).pipe(Effect.provide(storeLayer)),
+    );
+    const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+      Effect.provide(storeLayer),
+    );
+
+    assert.strictEqual(yield* retire, 0);
+    assert.strictEqual(yield* fs.readFileString(edited), "my edit\n");
+    assert.deepStrictEqual(
+      (yield* load).projections.map((projection) => [projection.target, projection.status]),
+      [["claude", "conflicted"]],
+    );
+
+    // Once the operator removes the copy, the next pass releases the record.
+    yield* fs.remove(join(claudeRoot, "review"), { recursive: true });
+    yield* retire;
+    assert.deepStrictEqual((yield* load).projections, []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

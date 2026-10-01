@@ -21,11 +21,17 @@ export const optionalString = (name: string, description: string) =>
   Flag.string(name).pipe(Flag.withDescription(description), Flag.optional);
 
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
-export const codexRootFlag = optionalString("codex-root", "Override the Codex skills root.");
-export const claudeRootFlag = optionalString("claude-root", "Override the Claude skills root.");
+export const codexRootFlag = optionalString(
+  "codex-root",
+  "Override the shared .agents skills root that Codex and other agents read.",
+);
+export const claudeRootFlag = optionalString(
+  "claude-root",
+  "Override the Claude skills root; treats Claude Code as present.",
+);
 export const opencodeRootFlag = optionalString(
   "opencode-root",
-  "Override the OpenCode skills root.",
+  "Scan an OpenCode skills root for inventory; SKIT does not project there.",
 );
 export const devinRootFlag = Flag.string("devin-root").pipe(
   Flag.withDescription(

@@ -4,19 +4,12 @@ import {
   currentSkillVersion,
   LibraryStore,
   withLibraryWriter,
-  type HarnessName as Harness,
   type LibraryState,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
 import { Effect, Result } from "effect";
-import { harnessLabel } from "../../harness/catalog.js";
 import type { InvocationOption } from "../../invocation/policy.js";
-import { invocationHarnesses } from "../../invocation/policy.js";
-import {
-  invocationReadModel,
-  type InvocationHarness,
-  type InvocationReadModel,
-} from "../../invocation/read-model.js";
+import { invocationReadModel, type InvocationReadModel } from "../../invocation/read-model.js";
 import { bindingRowLabel, destinationLabel, scopeKey } from "../../library/read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../../failure-classification.js";
 import { unspecifiedDeclaredInvocation } from "../../invocation/library-source.js";
@@ -30,7 +23,6 @@ import {
 import type { SetEnabledInvocation } from "./set-enabled-invocation.js";
 
 export interface LibraryBindingRow {
-  readonly harness: Harness;
   readonly scope: Scope;
   readonly invocation: InvocationOption;
   readonly policy?: InvocationReadModel;
@@ -48,8 +40,6 @@ export interface LibrarySkillRow extends SkillMetadata {
 export interface PreviewFacts {
   readonly action: "enable" | "disable";
   readonly skills: readonly string[];
-  readonly harnesses: readonly Harness[];
-  readonly harnessLabels: readonly string[];
   readonly scope: Scope;
   readonly destination: string;
   readonly invocation?: InvocationOption;
@@ -75,7 +65,6 @@ export type LibraryActionOutcome =
   | { readonly kind: "failed"; readonly failure: ClassifiedFailure };
 
 export interface LibrarySessionState {
-  readonly harnesses: readonly Harness[];
   readonly skills: readonly LibrarySkillRow[];
   readonly pending?: PendingLibraryChange;
   readonly outcome?: LibraryActionOutcome;
@@ -90,25 +79,16 @@ const bindingRows = (
     .filter((binding) => bindingSkillIds(state, binding).includes(skillId))
     .map((binding) => {
       const invocation = (binding.invocation_policies?.[skillId] ?? "declared") as InvocationOption;
-      const carriesPolicy = (invocationHarnesses as readonly Harness[]).includes(binding.harness);
-      const policy = carriesPolicy
-        ? invocationReadModel({
-            skill: skillName,
-            harness: binding.harness as InvocationHarness,
-            author: unspecifiedDeclaredInvocation()[binding.harness as InvocationHarness],
-            storedIntent: invocation,
-          })
-        : undefined;
+      const policy = invocationReadModel({
+        skill: skillName,
+        author: unspecifiedDeclaredInvocation(),
+        storedIntent: invocation,
+      });
       return {
-        harness: binding.harness,
         scope: binding.scope,
         invocation,
-        ...(policy === undefined ? {} : { policy }),
-        label: bindingRowLabel({
-          harness: binding.harness,
-          scope: binding.scope,
-          ...(policy === undefined ? {} : { policy }),
-        }),
+        policy,
+        label: bindingRowLabel({ scope: binding.scope, policy }),
       };
     });
 
@@ -135,34 +115,29 @@ const skillRows = (
     ];
   });
 
-export const openLibrarySession = Effect.fn("LibrarySession.open")(function* (
-  harnesses: readonly Harness[],
-) {
+export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () {
   const store = yield* LibraryStore;
   const state = yield* store.load;
   const metadata = yield* readLibrarySkillMetadata(state, store.originalsPath);
-  return { harnesses, skills: skillRows(state, metadata) } satisfies LibrarySessionState;
+  return { skills: skillRows(state, metadata) } satisfies LibrarySessionState;
 });
 
 export const refreshLibrarySession = Effect.fn("LibrarySession.refresh")(function* (
   state: LibrarySessionState,
 ) {
   return {
-    ...(yield* openLibrarySession(state.harnesses)),
+    ...(yield* openLibrarySession()),
     ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
   } satisfies LibrarySessionState;
 });
 
 export function libraryPolicyAfter(
   row: LibrarySkillRow,
-  harness: Harness,
   intent: InvocationOption,
-): InvocationReadModel | undefined {
-  if (!(invocationHarnesses as readonly Harness[]).includes(harness)) return undefined;
+): InvocationReadModel {
   return invocationReadModel({
     skill: row.name,
-    harness: harness as InvocationHarness,
-    author: unspecifiedDeclaredInvocation()[harness as InvocationHarness],
+    author: unspecifiedDeclaredInvocation(),
     storedIntent: intent,
   });
 }
@@ -172,8 +147,6 @@ const factFromPlan = (
 ): PreviewFacts => ({
   action: plan.enabled ? "enable" : "disable",
   skills: plan.skills,
-  harnesses: plan.harnesses,
-  harnessLabels: plan.harnesses.map(harnessLabel),
   scope: plan.scope,
   destination: destinationLabel(plan.scope),
   ...(plan.invocation === undefined ? {} : { invocation: plan.invocation }),
@@ -226,14 +199,12 @@ export function proposeLibraryEnable(
   _configuration: ProjectionOptions,
   row: LibrarySkillRow,
   selection: {
-    readonly harnesses: readonly Harness[];
     readonly scope: Scope;
     readonly invocation?: InvocationOption;
   },
 ) {
   const invocation: SetEnabledInvocation = {
     subjects: [row.skillVersionId],
-    harnesses: selection.harnesses,
     scope: selection.scope,
     enabled: true,
     ...(selection.invocation === undefined ? {} : { invocation: selection.invocation }),
@@ -242,9 +213,7 @@ export function proposeLibraryEnable(
   return proposeLibraryChange(
     state,
     [{ query: row.skillVersionId, invocation }],
-    selection.harnesses.flatMap(
-      (harness) => libraryPolicyAfter(row, harness, selection.invocation ?? "declared") ?? [],
-    ),
+    [libraryPolicyAfter(row, selection.invocation ?? "declared")],
   );
 }
 
@@ -254,20 +223,13 @@ export function proposeLibraryDisable(
   row: LibrarySkillRow,
   bindings: readonly LibraryBindingRow[],
 ) {
-  const byScope = new Map<string, { scope: Scope; harnesses: Harness[] }>();
-  for (const binding of bindings) {
-    const key = scopeKey(binding.scope);
-    const group = byScope.get(key) ?? { scope: binding.scope, harnesses: [] };
-    if (!group.harnesses.includes(binding.harness)) group.harnesses.push(binding.harness);
-    byScope.set(key, group);
-  }
+  const byScope = new Map(bindings.map((binding) => [scopeKey(binding.scope), binding.scope]));
   return proposeLibraryChange(
     state,
-    [...byScope.values()].map(({ scope, harnesses }) => ({
+    [...byScope.values()].map((scope) => ({
       query: row.skillVersionId,
       invocation: {
         subjects: [row.skillVersionId],
-        harnesses,
         scope,
         enabled: false,
         dryRun: false,
@@ -290,7 +252,6 @@ export function proposeLibraryInvocation(
         query: row.skillVersionId,
         invocation: {
           subjects: [row.skillVersionId],
-          harnesses: [binding.harness],
           scope: binding.scope,
           enabled: true,
           invocation,
@@ -298,9 +259,7 @@ export function proposeLibraryInvocation(
         },
       },
     ],
-    [libraryPolicyAfter(row, binding.harness, invocation)].filter(
-      (policy): policy is InvocationReadModel => policy !== undefined,
-    ),
+    [libraryPolicyAfter(row, invocation)],
   );
 }
 
@@ -346,7 +305,7 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
       }),
     ),
   );
-  const refreshed = yield* openLibrarySession(state.harnesses);
+  const refreshed = yield* openLibrarySession();
   const outcome: LibraryActionOutcome = Result.isSuccess(applied)
     ? { kind: "applied", pending }
     : { kind: "failed", failure: classifyFailure(applied.failure) };

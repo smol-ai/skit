@@ -2,7 +2,11 @@ import { createColors } from "picocolors";
 import { metadataDate } from "./skill-metadata.js";
 import { homedir } from "node:os";
 import { basename, dirname, sep } from "node:path";
-import type { HarnessName, LibraryInventory } from "@smolai/skit-core";
+import {
+  projectionTargetHarnesses,
+  type HarnessName,
+  type LibraryInventory,
+} from "@smolai/skit-core";
 import { harnessLabel } from "../harness/catalog.js";
 import { conditionHeadline, projectionStatusLabel } from "./condition-language.js";
 import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
@@ -310,12 +314,13 @@ export function renderInventory(
   machine?: MachineInventoryResult["machine"],
   color = createColors(false),
 ): string {
-  const groups = new Map<string, string[]>();
+  // One group per Skill root, headed by every Harness known to read it.
+  const groups = new Map<string, { harnesses: Set<HarnessName>; rows: string[] }>();
   const add = (harnesses: readonly HarnessName[], path: string, row: string) => {
-    const heading = `${harnesses.map(harnessLabel).join(", ")} · ${dirname(path)}`;
-    const rows = groups.get(heading) ?? [];
-    rows.push(row);
-    groups.set(heading, rows);
+    const group = groups.get(dirname(path)) ?? { harnesses: new Set<HarnessName>(), rows: [] };
+    for (const harness of harnesses) group.harnesses.add(harness);
+    group.rows.push(row);
+    groups.set(dirname(path), group);
   };
   const managed = new Map<
     string,
@@ -330,13 +335,15 @@ export function renderInventory(
       statuses: new Set<string>(),
       harnesses: new Set<HarnessName>(),
     };
-    row.harnesses.add(projection.harness);
+    if (projection.target !== "legacy")
+      for (const harness of projectionTargetHarnesses[projection.target])
+        row.harnesses.add(harness);
     row.statuses.add(projection.status);
     managed.set(path, row);
   }
   for (const [path, row] of managed)
     add(
-      [...row.harnesses].sort(),
+      [...row.harnesses],
       path,
       `  ${row.name} · managed · ${[...row.statuses].sort().map(projectionStatusLabel).join(", ")}\n    ${path}`,
     );
@@ -349,7 +356,12 @@ export function renderInventory(
     );
   }
   const lines: string[] = [];
-  for (const [heading, rows] of groups) lines.push(heading, ...rows, "");
+  for (const [root, group] of groups)
+    lines.push(
+      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former Harness root"} · ${root}`,
+      ...group.rows,
+      "",
+    );
   if (!groups.size) lines.push("No skill copies observed.", "");
   const findings = inventoryFindings(state);
   if (findings.length) lines.push("", ...findings);

@@ -12,7 +12,7 @@ import { ProjectionRetireConflict } from "../../failures.js";
 import { repositorySelectsProjection } from "./retire-unbound.js";
 import { originalTreeHashEffect, retainedTreePath } from "../retention/retain-tree.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { Digest, HarnessName } from "../store/state-schema.js";
+import type { Digest, ProjectionTarget } from "../store/state-schema.js";
 import type { ManagedProjection } from "../library-state.js";
 import { makeProjectionId } from "../entity-ids.js";
 import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
@@ -22,9 +22,9 @@ export class ProjectionInvalid extends Schema.TaggedError<ProjectionInvalid>()(
   { detail: Schema.String },
 ) {}
 
-/** Reconcile one Binding against one available Harness root. Caller owns the writer lock. */
+/** Reconcile one Binding against one active target root. Caller owns the writer lock. */
 export const projectBindingEffect = Effect.fn("Library.projectBinding")(function* (options: {
-  harness: HarnessName;
+  target: ProjectionTarget;
   scope?: { kind: "global" } | { kind: "repository"; root: string };
   root: string;
   variantsPath: string;
@@ -32,7 +32,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     string,
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
-  adoptionObservedHash?: Digest;
+  /** The one existing copy the operator chose to take custody of, as previewed. */
+  adoption?: { readonly path: string; readonly observedHash: Digest };
   restoreNativeDeletedSkills?: readonly string[];
 }) {
   const store = yield* LibraryStore;
@@ -40,11 +41,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const scope = options.scope ?? { kind: "global" as const };
   const binding =
     scope.kind === "global"
-      ? state.global_bindings.find((item) => item.harness === options.harness)
-      : state.local_bindings.find(
-          (item) =>
-            item.harness === options.harness && resolve(item.scope.root) === resolve(scope.root),
-        );
+      ? state.global_bindings[0]
+      : state.local_bindings.find((item) => resolve(item.scope.root) === resolve(scope.root));
   if (binding === undefined) return yield* new ProjectionInvalid({ detail: "Binding is missing" });
 
   const boundSkillIds = bindingSkillIds(state, binding);
@@ -67,12 +65,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const canonicalRoots = new Map<string, string>();
   for (const root of new Set([
     options.root,
-    ...state.projections
-      .filter((item) => item.harness === options.harness)
-      .map((item) => item.root),
-    ...state.local_bindings
-      .filter((item) => item.harness === options.harness)
-      .map((item) => item.scope.root),
+    ...state.projections.filter((item) => item.target === options.target).map((item) => item.root),
+    ...state.local_bindings.map((item) => item.scope.root),
   ])) {
     const identity = yield* projectionTargetPathIdentityEffect(root).pipe(
       Effect.orElseSucceed(() => ({
@@ -84,19 +78,18 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     canonicalRoots.set(root, identity.canonicalPath ?? resolve(root));
   }
   const atTarget = (projection: ManagedProjection) =>
-    projection.harness === options.harness &&
+    projection.target === options.target &&
     rootKeys.get(projection.root) === rootKeys.get(options.root);
   const former =
     scope.kind === "global"
       ? state.projections.filter(
           (projection) =>
-            projection.harness === options.harness &&
+            projection.target === options.target &&
             !atTarget(projection) &&
             boundSkillIds.includes(projection.skill_id) &&
             !repositorySelectsProjection(state, projection) &&
             !state.local_bindings.some(
               (local) =>
-                local.harness === projection.harness &&
                 bindingSkillIds(state, local).includes(projection.skill_id) &&
                 pathIsWithin(
                   canonicalRoots.get(local.scope.root) ?? local.scope.root,
@@ -106,7 +99,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         )
       : [];
   const retirementMessage = (projection: ManagedProjection) =>
-    `Refusing to relocate modified Skill on ${options.harness} from ${projection.path}`;
+    `Refusing to relocate modified Skill from ${projection.path}`;
   // Refuse an edited former copy before creating another installation or removing any old copy.
   for (const projection of former) {
     if ((yield* projectionCustodyEffect(projection)).kind === "conflicted")
@@ -129,7 +122,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           const retired = yield* mutation.retire(
             existing,
             "throw",
-            `Refusing to disable modified ${skill.name} on ${options.harness}`,
+            `Refusing to disable modified ${skill.name} at ${existing.path}`,
           );
           void retired;
         }
@@ -172,7 +165,6 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           const priorProjection = previousRows[0];
           const projectionId = priorProjection?.projection_id ?? makeProjectionId();
           const policy = binding.invocation_policies?.[item.skill.skill_id];
-          const projectionPath = resolve(join(options.root, item.skill.name));
           const projected = yield* mutation.project({
             installation: { libraryPath: root },
             skill: {
@@ -181,7 +173,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
               name: item.skill.name,
               contentHash: item.version.validation_identity_digest,
             },
-            harness: options.harness,
+            target: options.target,
             root: options.root,
             sourcePath:
               descriptorSkill === undefined ? retainedPath : join(root, descriptorSkill.path),
@@ -207,14 +199,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
                     ...options.acceptedObservations.get(projectionId)!,
                   },
                 }),
-            ...(options.adoptionObservedHash === undefined
-              ? {}
-              : {
-                  adoption: {
-                    path: projectionPath,
-                    observedHash: options.adoptionObservedHash,
-                  },
-                }),
+            ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
             restoreNativeDeletion:
               options.restoreNativeDeletedSkills?.includes(item.skill.skill_id) ?? false,
             projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),

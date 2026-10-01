@@ -92,10 +92,8 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
   );
   const conflicts = [
     ...current.projections.flatMap((projection) =>
-      !manifest.bindings.some(
-        (binding) =>
-          binding.harness === projection.harness &&
-          bindingSkillIds(manifest, binding).includes(projection.skill_id),
+      !manifest.bindings.some((binding) =>
+        bindingSkillIds(manifest, binding).includes(projection.skill_id),
       ) ||
       (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
         ? []
@@ -110,7 +108,7 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
             ),
       )
         ? []
-        : [`device:${binding.harness}/${binding.scope.root}:repository-binding`];
+        : [`device:${binding.scope.root}:repository-binding`];
     }),
   ];
   return [...new Set(conflicts)].sort();
@@ -133,19 +131,16 @@ export const blendRestoredStateEffect = Effect.fn("Library.blendRestoredState")(
   });
   const custody = restoreCustodyConflicts(current, manifest);
   if (custody.length > 0) return yield* new RestoreInvalid({ detail: custody.join(", ") });
-  const localPolicies = new Map(
-    current.global_bindings.map((binding) => [binding.harness, binding.invocation_policies]),
-  );
+  const localPolicies = current.global_bindings[0]?.invocation_policies;
   return yield* LibraryState.makeEffect({
     ...current,
     collections: restored.collections,
     skills: restored.skills,
     retained_copies: restored.retained_copies,
     acquisitions: restored.acquisitions,
-    global_bindings: restored.global_bindings.map((binding) => {
-      const policies = localPolicies.get(binding.harness);
-      return policies === undefined ? binding : { ...binding, invocation_policies: policies };
-    }),
+    global_bindings: restored.global_bindings.map((binding) =>
+      localPolicies === undefined ? binding : { ...binding, invocation_policies: localPolicies },
+    ),
   }).pipe(
     Effect.mapError(
       () =>

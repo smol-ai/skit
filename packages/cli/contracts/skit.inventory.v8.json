@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v7",
+  "$id": "skit.inventory.v8",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -296,7 +296,7 @@
     "schemaVersion": {
       "type": "number",
       "enum": [
-        6
+        7
       ]
     },
     "skills": {
@@ -400,13 +400,12 @@
           "skill_version_id": {
             "type": "string"
           },
-          "harness": {
+          "target": {
             "type": "string",
             "enum": [
-              "codex",
-              "claude-code",
-              "opencode",
-              "devin"
+              "agents",
+              "claude",
+              "legacy"
             ]
           },
           "root": {
@@ -472,7 +471,7 @@
           "projection_id",
           "skill_id",
           "skill_version_id",
-          "harness",
+          "target",
           "root",
           "path",
           "expected_digest",

@@ -55,39 +55,31 @@ it.effect(
         (candidate) => candidate.collection_id === collection.collection?.collection_id,
       );
       assert.ok(skill);
-      const harnesses = ["codex", "claude-code", "opencode"] as const;
       yield* writingTo(
         home,
         LibraryStore.use((store) =>
           store.publish({
             ...initial,
-            global_bindings: harnesses.map((harness) => ({
-              harness,
-              scope: { kind: "global" as const },
-              entries: [{ kind: "skill" as const, skill_id: skill.skill_id }],
-            })),
+            global_bindings: [
+              {
+                scope: { kind: "global" as const },
+                entries: [{ kind: "skill" as const, skill_id: skill.skill_id }],
+              },
+            ],
           }),
         ).pipe(Effect.provide(storeLayer)),
       );
-      const rootByHarness = {
-        codex: roots.codexRoot,
-        "claude-code": roots.claudeRoot,
-        opencode: roots.opencodeRoot,
-      } as const;
-      for (const harness of harnesses)
+      const rootByTarget = { agents: roots.codexRoot, claude: roots.claudeRoot } as const;
+      for (const target of ["agents", "claude"] as const)
         yield* writingTo(
           home,
           projectBindingEffect({
-            harness,
-            root: rootByHarness[harness],
+            target,
+            root: rootByTarget[target],
             variantsPath: join(home, "variants"),
           }).pipe(Effect.provide(storeLayer)),
         );
       yield* fs.writeFileString(join(roots.codexRoot, "review", "SKILL.md"), "selected change\n");
-      yield* fs.writeFileString(
-        join(roots.opencodeRoot, "review", "SKILL.md"),
-        "selected change\n",
-      );
       yield* fs.writeFileString(join(roots.claudeRoot, "review", "SKILL.md"), "different change\n");
 
       const before = yield* LibraryStore.use((store) => store.load).pipe(
@@ -107,30 +99,28 @@ it.effect(
         variantsPath: join(home, "variants"),
         now,
       };
-      const plan = yield* planProjectionRetention(before, options, skill.name, "codex").pipe(
+      const plan = yield* planProjectionRetention(before, options, skill.name, "agents").pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
       assert.strictEqual(plan.skill_id, skill.skill_id);
       assert.deepStrictEqual(
-        plan.projections.map((projection) => [projection.harness, projection.agreement]),
+        plan.projections.map((projection) => [projection.target, projection.agreement]),
         [
-          ["codex", "selected"],
-          ["claude-code", "different"],
-          ["opencode", "identical"],
+          ["agents", "selected"],
+          ["claude", "different"],
         ],
       );
       assert.strictEqual(before.skills[0]?.versions.length, 1);
       assert.strictEqual(yield* fs.exists(plan.retained_path), false);
 
-      const result = yield* applyProjectionRetention(before, options, skill.name, "codex").pipe(
+      const result = yield* applyProjectionRetention(before, options, skill.name, "agents").pipe(
         Effect.provide(storeLayer),
       );
       assert.deepStrictEqual(
-        result.projections.map((projection) => [projection.harness, projection.status]),
+        result.projections.map((projection) => [projection.target, projection.status]),
         [
-          ["codex", "projected"],
-          ["claude-code", "conflicted"],
-          ["opencode", "projected"],
+          ["agents", "projected"],
+          ["claude", "conflicted"],
         ],
       );
       const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
@@ -140,10 +130,6 @@ it.effect(
       assert.strictEqual(after.acquisitions.at(-1)?.source_identity.kind, "local");
       assert.strictEqual(
         yield* fs.readFileString(join(roots.codexRoot, "review", "SKILL.md")),
-        "selected change\n",
-      );
-      assert.strictEqual(
-        yield* fs.readFileString(join(roots.opencodeRoot, "review", "SKILL.md")),
         "selected change\n",
       );
       assert.strictEqual(
