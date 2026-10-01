@@ -3,7 +3,13 @@ import { join, resolve } from "node:path";
 import { validateSkitDirectoryEffect } from "../../artifact/skit.js";
 import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
-import { withProjectionMutationEffect } from "../../projection/mutation.js";
+import {
+  projectionCustodyEffect,
+  withProjectionMutationEffect,
+} from "../../projection/mutation.js";
+import { pathIsWithin, projectionTargetPathIdentityEffect } from "../../platform/path-identity.js";
+import { ProjectionRetireConflict } from "../../failures.js";
+import { repositorySelectsProjection } from "./retire-unbound.js";
 import { originalTreeHashEffect, retainedTreePath } from "../retention/retain-tree.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { Digest, HarnessName } from "../store/state-schema.js";
@@ -55,8 +61,56 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
       detail: "Binding selects a Skill without a selected retained Version",
     });
 
+  // Compare physical roots so a configured symlink alias cannot retire the active installation.
+  const rootKeys = new Map<string, string>();
+  const canonicalRoots = new Map<string, string>();
+  for (const root of new Set([
+    options.root,
+    ...state.projections
+      .filter((item) => item.harness === options.harness)
+      .map((item) => item.root),
+    ...state.local_bindings
+      .filter((item) => item.harness === options.harness)
+      .map((item) => item.scope.root),
+  ])) {
+    const identity = yield* projectionTargetPathIdentityEffect(root).pipe(
+      Effect.orElseSucceed(() => ({
+        comparisonKey: `path:${resolve(root)}`,
+        canonicalPath: resolve(root),
+      })),
+    );
+    rootKeys.set(root, identity.comparisonKey);
+    canonicalRoots.set(root, identity.canonicalPath ?? resolve(root));
+  }
   const atTarget = (projection: ManagedProjection) =>
-    projection.harness === options.harness && resolve(projection.root) === resolve(options.root);
+    projection.harness === options.harness &&
+    rootKeys.get(projection.root) === rootKeys.get(options.root);
+  const former =
+    scope.kind === "global"
+      ? state.projections.filter(
+          (projection) =>
+            projection.harness === options.harness &&
+            !atTarget(projection) &&
+            boundSkillIds.includes(projection.skill_id) &&
+            !repositorySelectsProjection(state, projection) &&
+            !state.local_bindings.some(
+              (local) =>
+                local.harness === projection.harness &&
+                bindingSkillIds(state, local).includes(projection.skill_id) &&
+                pathIsWithin(
+                  canonicalRoots.get(local.scope.root) ?? local.scope.root,
+                  canonicalRoots.get(projection.root) ?? projection.root,
+                ),
+            ),
+        )
+      : [];
+  const retirementMessage = (projection: ManagedProjection) =>
+    `Refusing to relocate modified Skill on ${options.harness} from ${projection.path}`;
+  // Refuse an edited former copy before creating another installation or removing any old copy.
+  for (const projection of former) {
+    if ((yield* projectionCustodyEffect(projection)).kind === "conflicted")
+      return yield* new ProjectionRetireConflict({ detail: retirementMessage(projection) });
+  }
   const result = yield* withProjectionMutationEffect(
     state,
     {
@@ -83,6 +137,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           mutation.state.projections.length,
           ...mutation.state.projections.filter((item) => !atTarget(item)),
         );
+        const toRetire: ManagedProjection[] = [];
         for (const item of selected) {
           const root = retainedTreePath(store.originalsPath, item.tree.digest);
           const authored = item.version.materialization_profile === "declared-skit-skill/v1";
@@ -162,6 +217,23 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
             projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           });
           mutation.state.projections.push(projected);
+          // Keep the last working copy when the new destination is blocked or locally modified.
+          if (projected.status === "installed")
+            toRetire.push(
+              ...former.filter((candidate) => candidate.skill_id === item.skill.skill_id),
+            );
+        }
+        // Finish the whole installation batch before removing any former working copy.
+        for (const old of toRetire) {
+          if ((yield* projectionCustodyEffect(old)).kind === "conflicted")
+            return yield* new ProjectionRetireConflict({ detail: retirementMessage(old) });
+        }
+        for (const old of toRetire) {
+          yield* mutation.retire(old, "throw", retirementMessage(old));
+          const index = mutation.state.projections.findIndex(
+            (candidate) => candidate.projection_id === old.projection_id,
+          );
+          if (index >= 0) mutation.state.projections.splice(index, 1);
         }
         return selected.length;
       }),

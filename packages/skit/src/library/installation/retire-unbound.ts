@@ -1,8 +1,18 @@
 import { Effect } from "effect";
-import { isAbsolute, relative, resolve } from "node:path";
+import { pathIsWithin } from "../../platform/path-identity.js";
+import type { LibraryState, ManagedProjection } from "../library-state.js";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import { LibraryStore } from "../store/library-store.js";
 import { bindingSkillIds, type Binding } from "../library-contracts.js";
+
+/** A repository Binding owns its selected installations beneath that repository. */
+export const repositorySelectsProjection = (state: LibraryState, projection: ManagedProjection) =>
+  state.local_bindings.some(
+    (binding) =>
+      binding.harness === projection.harness &&
+      pathIsWithin(binding.scope.root, projection.root) &&
+      bindingSkillIds(state, binding).includes(projection.skill_id),
+  );
 
 /** Retire owned global Projections whose portable Binding has disappeared. Caller owns the writer lock. */
 export const retireUnboundGlobalProjectionsEffect = Effect.fn(
@@ -10,23 +20,13 @@ export const retireUnboundGlobalProjectionsEffect = Effect.fn(
 )(function* (options: { variantsPath: string; desiredBindings?: readonly Binding[] }) {
   const store = yield* LibraryStore;
   const loaded = yield* store.load;
-  const repoSelects = (harness: string, root: string, skillId: string) =>
-    loaded.local_bindings.some((binding) => {
-      const offset = relative(resolve(binding.scope.root), resolve(root));
-      return (
-        binding.harness === harness &&
-        !offset.startsWith("..") &&
-        !isAbsolute(offset) &&
-        bindingSkillIds(loaded, binding).includes(skillId as never)
-      );
-    });
   const targets = loaded.projections.filter(
     (projection) =>
       !(options.desiredBindings ?? loaded.global_bindings).some(
         (binding) =>
           binding.harness === projection.harness &&
           bindingSkillIds(loaded, binding).includes(projection.skill_id),
-      ) && !repoSelects(projection.harness, projection.root, projection.skill_id),
+      ) && !repositorySelectsProjection(loaded, projection),
   );
   if (targets.length === 0) return 0;
   const result = yield* withProjectionMutationEffect(
