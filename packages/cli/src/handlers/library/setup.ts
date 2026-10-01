@@ -273,9 +273,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   }
   if (localCustodySelections.length) {
     observed = yield* observe(setupOptions);
-    const names = localCustodySelections.map((selection) => selection.name).join(", ");
     yield* renderer.withStatus(
-      `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}: ${names}`,
+      `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}`,
       applySetupLocalCustody(
         { setup: setupOptions, adoption: input.localCustody },
         observed.onboarding.planId,
