@@ -87,10 +87,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
 
     const state = yield* home.durable;
     expect(state.global_bindings).toHaveLength(1);
-    expect(state.global_bindings[0]).toMatchObject({
-      harness: "codex",
-      scope: { kind: "global" },
-    });
+    expect(state.global_bindings[0]).toMatchObject({ scope: { kind: "global" } });
     expect(state.collections).toHaveLength(2);
     expect(state.collections.every((collection) => collection.upstream === undefined)).toBe(true);
     expect(state.skills.every((skill) => skill.collection_id !== undefined)).toBe(true);

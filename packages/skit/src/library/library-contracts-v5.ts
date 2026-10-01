@@ -17,6 +17,7 @@ import {
   HistoricalLocator,
   LibraryManifest,
   librarySnapshotDigests,
+  mergeGlobalBindings,
   MaterializationProfile,
   RetainedCopy,
   type Skill,
@@ -234,11 +235,10 @@ export const LibraryManifestFromV5 = LibraryManifestV5.pipe(
         retained_copies: migrated.retained_copies,
         acquisitions: migrated.acquisitions,
         snapshot_digests: librarySnapshotDigests(migrated),
-        bindings: manifest.bindings.map((binding) => ({
-          harness: binding.harness,
-          scope: binding.scope,
-          entries: migrated.entries(binding.skills),
-        })),
+        bindings: mergeGlobalBindings(
+          migrated,
+          manifest.bindings.map((binding) => ({ entries: migrated.entries(binding.skills) })),
+        ),
       };
     }),
     encode: SchemaGetter.forbidden(() => "v5 portable Library manifests are decode-only"),

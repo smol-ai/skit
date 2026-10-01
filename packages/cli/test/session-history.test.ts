@@ -52,10 +52,9 @@ it.effect("a front end that confirms a Library session change leaves attributed 
     const history = home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
     const retainedEvents = (yield* history).length;
 
-    const session = yield* home.owned(openLibrarySession(["codex"]));
+    const session = yield* home.owned(openLibrarySession());
     const proposed = yield* home.owned(
       proposeLibraryEnable(session, home.bindings, session.skills[0]!, {
-        harnesses: ["codex"],
         scope: { kind: "global" },
       }),
     );

@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect";
 import {
-  bindingSkillIds,
   canonicalJson,
   blendRestoredStateEffect,
   captureSnapshotArchiveEffect,
@@ -17,6 +16,7 @@ import {
   retainedTreePath,
   type Acquisition,
   type LibraryManifest,
+  type ProjectionTarget,
   type SkitSource,
   type SnapshotArchive,
 } from "@smolai/skit-core";
@@ -42,33 +42,9 @@ const emptyManifest: LibraryManifest = currentLibraryManifest({
 });
 const same = (a: LibraryManifest, b: LibraryManifest) =>
   canonicalJson(normalizeLibraryManifest(a)) === canonicalJson(normalizeLibraryManifest(b));
-export const deferredLibraryBindings = (
-  manifest: LibraryManifest,
-  rootFor: (harness: LibraryManifest["bindings"][number]["harness"]) => string | undefined,
-) =>
-  manifest.bindings.flatMap((binding) => {
-    if (rootFor(binding.harness) !== undefined) return [];
-    const skills = bindingSkillIds(manifest, binding).flatMap((skillId) => {
-      const skill = manifest.skills.find((candidate) => candidate.skill_id === skillId);
-      return skill === undefined ? [] : [skill.name];
-    });
-    return [
-      {
-        harness: binding.harness,
-        skills,
-      },
-    ];
-  });
-
-const projectionCounts = (
-  result: { readonly projected: number; readonly deferred: number; readonly retired: number },
-  manifest: LibraryManifest,
-  rootFor: (harness: LibraryManifest["bindings"][number]["harness"]) => string | undefined,
-) => ({
+const projectionCounts = (result: { readonly projected: number; readonly retired: number }) => ({
   projected: result.projected,
-  deferred: result.deferred,
   retired: result.retired,
-  deferred_bindings: deferredLibraryBindings(manifest, rootFor),
 });
 export class SyncLocalChanged extends Schema.TaggedError<SyncLocalChanged>()(
   "Library.SyncLocalChanged",
@@ -196,7 +172,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
   takeRemote?: readonly string[];
   projection?: {
     variantsPath: string;
-    rootFor: (harness: LibraryManifest["bindings"][number]["harness"]) => string | undefined;
+    rootFor: (target: ProjectionTarget) => string | undefined;
   };
   onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
 }) {
@@ -204,8 +180,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
   const projectionOptions = {
     home: store.home,
     variantsPath: options.projection?.variantsPath ?? store.originalsPath,
-    rootFor: (harness: LibraryManifest["bindings"][number]["harness"]) =>
-      options.projection?.rootFor(harness),
+    ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
   };
   const api = yield* librarySyncApiEffect({ origin: options.origin, token: options.token });
   const local = yield* store.inspect;
@@ -275,14 +250,11 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
   if (!local.present) {
     const required = [...new Set(remoteManifest.retained_copies.map((tree) => tree.digest))];
     const plan = planLibrarySync(emptyManifest, remoteManifest, remoteManifest);
-    const deferredBindings = deferredLibraryBindings(remoteManifest, projectionOptions.rootFor);
     if (!options.apply)
       return {
         status: "pull_ready" as const,
         snapshots: remoteManifest.snapshot_digests.length,
         plan,
-        deferred: deferredBindings.length,
-        deferred_bindings: deferredBindings,
       };
     if (options.onPlan) yield* options.onPlan(plan);
     const snapshotSet = new Set(remoteManifest.snapshot_digests);
@@ -305,8 +277,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
         desiredGlobalBindings: remoteManifest.bindings,
         onlyBindings: remoteManifest.bindings,
       }),
-      remoteManifest,
-      projectionOptions.rootFor,
     );
     return {
       status: "pulled" as const,
@@ -325,10 +295,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
             desiredGlobalBindings: remoteManifest.bindings,
             onlyBindings: remoteManifest.bindings,
           }),
-          remoteManifest,
-          projectionOptions.rootFor,
         )
-      : { projected: 0, deferred: 0, retired: 0, deferred_bindings: [] };
+      : { projected: 0, retired: 0 };
     return {
       status: "clean" as const,
       changed: false,
@@ -357,7 +325,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
     return { status: "conflicted" as const, revision_id: remote.revision_id, conflicts };
   // Equivalent handle alignment alone is not a Collection content or evidence change.
   const plan = planLibrarySync(aligned.manifest, remoteManifest, merged.manifest);
-  const deferredBindings = deferredLibraryBindings(merged.manifest, projectionOptions.rootFor);
   const required = [...new Set(merged.manifest.retained_copies.map((tree) => tree.digest))];
   const localArchiveByDigest = new Map(localArchives.map((archive) => [archive.digest, archive]));
   const missing = required.filter((digest) => !localArchiveByDigest.has(digest));
@@ -375,8 +342,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
           ),
       ).length,
       plan,
-      deferred: deferredBindings.length,
-      deferred_bindings: deferredBindings,
     };
   if (options.onPlan) yield* options.onPlan(plan);
   const downloaded = yield* Effect.forEach(
@@ -423,8 +388,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
       desiredGlobalBindings: merged.manifest.bindings,
       onlyBindings: merged.manifest.bindings,
     }),
-    merged.manifest,
-    projectionOptions.rootFor,
   );
   return {
     status: "merged" as const,

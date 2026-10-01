@@ -13,6 +13,7 @@ export * from "./harnesses/invocation-metadata.js";
 export * from "./invocation/conformance.js";
 export * from "./authoring/invocation/generation.js";
 export * from "./harnesses/default-roots.js";
+export * from "./harnesses/projection-targets.js";
 export * from "./library/inventory/doctor-report.js";
 export * from "./library/security/review.js";
 export * from "./authoring/archive.js";

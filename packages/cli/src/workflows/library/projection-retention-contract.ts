@@ -1,9 +1,15 @@
-import { Digest, HarnessName, ProjectionId, SkillId, SkillVersionId } from "@smolai/skit-core";
+import {
+  Digest,
+  ProjectionId,
+  RecordedProjectionTarget,
+  SkillId,
+  SkillVersionId,
+} from "@smolai/skit-core";
 import { Schema } from "effect";
 
 const ProjectionRetentionObservation = Schema.Struct({
   projection_id: ProjectionId,
-  harness: HarnessName,
+  target: RecordedProjectionTarget,
   path: Schema.String,
   observed_digest: Digest,
   agreement: Schema.Literals(["selected", "identical", "different"]),
@@ -34,7 +40,7 @@ export const ProjectionRetentionResult = Schema.Struct({
   projections: Schema.Array(
     Schema.Struct({
       projection_id: ProjectionId,
-      harness: HarnessName,
+      target: RecordedProjectionTarget,
       path: Schema.String,
       status: Schema.Literals(["projected", "conflicted", "deferred"]),
     }),

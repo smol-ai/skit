@@ -225,10 +225,11 @@ effectIt.effect("projecting a conforming artifact rewrites nothing", () =>
     const claudeBefore = yield* read(join(skill, "SKILL.md"));
     const codexBefore = yield* read(join(root, CODEX));
 
-    yield* applyInvocationPolicyEffect(skill, "claude-code", "explicit");
-    yield* applyInvocationPolicyEffect(skill, "codex", "explicit");
-
+    yield* applyInvocationPolicyEffect(skill, "claude", "explicit");
     expect(yield* read(join(skill, "SKILL.md"))).toBe(claudeBefore);
+
+    // The shared copy also gains OpenCode and Devin settings; the authored Codex file is untouched.
+    yield* applyInvocationPolicyEffect(skill, "agents", "explicit");
     expect(yield* read(join(root, CODEX))).toBe(codexBefore);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

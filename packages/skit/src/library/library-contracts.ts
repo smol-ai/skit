@@ -8,7 +8,7 @@ import {
   SkillId,
   SkillVersionId,
 } from "./entity-ids.js";
-import { Digest, HarnessName } from "./store/state-schema.js";
+import { Digest } from "./store/state-schema.js";
 
 export const SourceRelativePath = Schema.String.check(
   Schema.makeFilter(
@@ -270,12 +270,48 @@ export const BindingEntry = Schema.Union([
 ]);
 export type BindingEntry = typeof BindingEntry.Type;
 
+/**
+ * Skills enabled at a Scope. A Binding does not name a Harness: every Harness that reads a
+ * projection target sees its copies, so naming one would promise isolation SKIT cannot give.
+ */
 export const Binding = Schema.Struct({
-  harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("global") }),
   entries: Schema.Array(BindingEntry),
 });
 export interface Binding extends Schema.Schema.Type<typeof Binding> {}
+
+/**
+ * Combine the entries of several Bindings into one, as when per-Harness Bindings merge. A Skill
+ * entry is dropped only when a whole-Collection entry already enables it now; a Skill deleted
+ * upstream stays enabled by its own entry.
+ */
+export const mergeBindingEntries = (
+  library: LibraryEntities,
+  bindings: readonly { readonly entries: readonly BindingEntry[] }[],
+): BindingEntry[] => {
+  const entries = bindings.flatMap((binding) => binding.entries);
+  const followed = new Set<string>(
+    bindingSkillIds(library, {
+      entries: entries.filter((entry) => entry.kind === "collection"),
+    }),
+  );
+  const merged: BindingEntry[] = [];
+  for (const entry of entries) {
+    if (merged.some((other) => Schema.toEquivalence(BindingEntry)(entry, other))) continue;
+    if (entry.kind === "skill" && followed.has(entry.skill_id)) continue;
+    merged.push(entry);
+  }
+  return merged;
+};
+
+/** The single global Binding that per-Harness global Bindings become, if any enable something. */
+export const mergeGlobalBindings = (
+  library: LibraryEntities,
+  bindings: readonly { readonly entries: readonly BindingEntry[] }[],
+): Binding[] => {
+  const entries = mergeBindingEntries(library, bindings);
+  return entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }];
+};
 
 interface LibraryEntities {
   readonly skills: readonly Skill[];
@@ -388,7 +424,7 @@ export const bindingSkillIds = (
 const isNested = (left: string, right: string) =>
   left !== "." && right !== "." && (left.startsWith(`${right}/`) || right.startsWith(`${left}/`));
 
-export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v6" as const;
+export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v7" as const;
 
 export const LibraryManifest = Schema.Struct({
   schema: Schema.Literal(CURRENT_PORTABLE_LIBRARY_SCHEMA),
@@ -508,10 +544,7 @@ export const LibraryManifest = Schema.Struct({
         )
           return false;
       }
-      return (
-        new Set(manifest.bindings.map((binding) => binding.harness)).size ===
-        manifest.bindings.length
-      );
+      return manifest.bindings.length <= 1;
     },
     {
       message:

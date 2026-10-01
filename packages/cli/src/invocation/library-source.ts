@@ -1,20 +1,11 @@
-import {
-  INVOCATION_HARNESSES,
-  type InvocationHarness,
-  type DeclaredInvocationResolution,
-} from "@smolai/skit-core";
+import type { DeclaredInvocationResolution } from "@smolai/skit-core";
 
-export type SkillDeclaredInvocation = Record<InvocationHarness, DeclaredInvocationResolution>;
-
-export function unspecifiedDeclaredInvocation(): SkillDeclaredInvocation {
-  const resolutions = {} as SkillDeclaredInvocation;
-  for (const harness of INVOCATION_HARNESSES)
-    resolutions[harness] = {
-      harness,
-      policy: "unspecified",
-      source: { kind: "unspecified" },
-      declarations: [],
-      conformance: { state: "conforming" },
-    };
-  return resolutions;
+/** An author who declared no invocation policy, for Skills SKIT has no declaration for. */
+export function unspecifiedDeclaredInvocation(): Omit<DeclaredInvocationResolution, "harness"> {
+  return {
+    policy: "unspecified",
+    source: { kind: "unspecified" },
+    declarations: [],
+    conformance: { state: "conforming" },
+  };
 }

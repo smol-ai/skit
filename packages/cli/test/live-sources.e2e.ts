@@ -45,7 +45,7 @@ test.skipIf(!live)("adds and projects a skill from a real GitHub collection", as
     const added = command(workspace, ["add", source]).data;
     const skill = added.skills[0];
     expect(skill.ref).toMatch(/^github:mattpocock\/skills#/);
-    const { codexRoot } = command(workspace, ["enable", skill.ref, "--for", "codex"]);
+    const { codexRoot } = command(workspace, ["enable", skill.ref]);
     expect(existsSync(join(codexRoot, skill.name, "SKILL.md"))).toBe(true);
   } finally {
     await rm(workspace, { recursive: true, force: true });
@@ -58,7 +58,7 @@ test.skipIf(!live || !registrySource)("adds and projects a real Registry SKIT", 
     const added = command(workspace, ["add", registrySource!]).data;
     expect(added.skills.length).toBeGreaterThan(0);
     const skill = added.skills[0];
-    const { codexRoot } = command(workspace, ["enable", skill.ref, "--for", "codex"]);
+    const { codexRoot } = command(workspace, ["enable", skill.ref]);
     expect(existsSync(join(codexRoot, skill.name, "SKILL.md"))).toBe(true);
   } finally {
     await rm(workspace, { recursive: true, force: true });

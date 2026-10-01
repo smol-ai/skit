@@ -1,6 +1,6 @@
 import { SkillMetadata } from "./skill-metadata.js";
 import { Schema } from "effect";
-import { CollectionId, Digest, HarnessName, SkillId, SkillVersionId } from "@smolai/skit-core";
+import { CollectionId, Digest, SkillId, SkillVersionId } from "@smolai/skit-core";
 
 export const ListResult = Schema.Struct({
   subjects: Schema.Array(
@@ -26,7 +26,7 @@ export const ListResult = Schema.Struct({
   ),
   bindings: Schema.Array(
     Schema.Struct({
-      harness: HarnessName,
+      scope: Schema.Struct({ kind: Schema.Literal("global") }),
       /** What was enabled: a whole Collection that follows its Source, or one Skill. */
       entries: Schema.Array(
         Schema.Union([

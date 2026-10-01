@@ -64,7 +64,7 @@ const upstream = Effect.gen(function* () {
         Effect.flatMap(LibraryStore, (store) =>
           store.publish({
             ...state,
-            global_bindings: [{ harness: "codex", scope: { kind: "global" }, entries }],
+            global_bindings: [{ scope: { kind: "global" }, entries }],
           }),
         ).pipe(Effect.provide(storeLayer)),
       );
@@ -72,7 +72,7 @@ const upstream = Effect.gen(function* () {
   const project = withLibraryWriterLock(
     home,
     projectBindingEffect({
-      harness: "codex",
+      target: "agents",
       root,
       variantsPath: join(home, "variants"),
     }).pipe(Effect.provide(storeLayer)),

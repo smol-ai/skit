@@ -22,7 +22,6 @@ import {
   LibraryActor,
   libraryStoreLayer,
   skitLayer,
-  detectInstalledHarnessesEffect,
   errorMessage,
   auditLocalCapabilitiesV1Alpha4Effect,
   probeHarnessEffect,
@@ -33,10 +32,8 @@ import {
   proposeLibraryInvocation,
   confirmLibraryChange,
   cancelLibraryChange,
-  harnessChoices,
   DESTINATION_QUESTION,
   destinationLabel,
-  harnessLabel,
   invocationChoices,
   invocationBriefing,
   invocationEligibleBindings,
@@ -50,7 +47,6 @@ import {
   type LibraryBindingRow,
   type LibrarySkillRow,
   type PendingLibraryChange,
-  type Harness,
   type Scope,
   type InvocationOption,
 } from "../../cli/src/front-end";
@@ -138,15 +134,7 @@ const libraryHost = createLibraryHost(
     Layer.provideMerge(skitLayer),
     Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   ),
-  Effect.gen(function* () {
-    const harnesses = yield* detectInstalledHarnessesEffect({
-      home: libraryConfiguration.home,
-      configHome: libraryConfiguration.configHome,
-      codexRoot: libraryConfiguration.overrides.codex,
-      claudeRoot: libraryConfiguration.overrides.claude,
-    });
-    return yield* openLibrarySession(harnesses);
-  }),
+  openLibrarySession(),
 );
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
@@ -551,7 +539,7 @@ function libraryRow(row: LibrarySkillRow): LibraryRow {
     evidence: enabled
       ? row.bindings.map((binding) => binding.label)
       : ["not active anywhere · press e to enable"],
-    agents: row.bindings.map((binding) => binding.harness),
+    agents: enabled ? ["every agent"] : [],
     row,
   };
 }
@@ -580,7 +568,7 @@ function changeSummary(pending: PendingLibraryChange): string {
   return pending.facts
     .map(
       (fact) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")} for ${fact.harnessLabels.join(", ")} (${fact.destination})`,
+        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")} for every agent (${fact.destination})`,
     )
     .join("; ");
 }
@@ -1172,7 +1160,7 @@ function openConfirm(): void {
       content: receipt(
         pending.facts.flatMap((fact, index) => [
           kv("skills", fact.skills.join(", "), 14),
-          kv("agents", fact.harnessLabels.join(", "), 14),
+          kv("agents", "every agent", 14),
           kv("applies to", fact.destination, 14),
           ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
             ? [
@@ -1224,42 +1212,21 @@ function bindingChooserOptions(bindings: readonly LibraryBindingRow[]): ChooserO
   return bindings.map((binding, index) => ({
     value: String(index),
     label: destinationLabel(binding.scope),
-    hint: binding.policy ? invocationRowSummary(binding.policy) : harnessLabel(binding.harness),
+    ...(binding.policy ? { hint: invocationRowSummary(binding.policy) } : {}),
   }));
-}
-
-function libraryUnavailable(message: string): void {
-  libraryOpenError = message;
-  render();
 }
 
 function startEnable(): void {
   const row = selectedLibraryRow();
   const session = libraryHost.state;
   if (!row || !session) return;
-  if (!session.harnesses.length) {
-    libraryUnavailable("No supported harnesses detected. Configure a harness, then try again.");
-    return;
-  }
-  const harnesses = session.harnesses;
-  const pickScope = (harness: Harness) =>
-    chooseScopeThen(async (scope) =>
-      afterProposal(
-        await transitionLibrary((state) =>
-          proposeLibraryEnable(state, libraryConfiguration, row, {
-            harnesses: [harness],
-            scope,
-          }),
-        ),
+  chooseScopeThen(async (scope) =>
+    afterProposal(
+      await transitionLibrary((state) =>
+        proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
       ),
-    );
-  if (harnesses.length === 1) pickScope(harnesses[0]!);
-  else
-    openChooser({
-      title: "select a harness",
-      options: harnessChoices(harnesses),
-      choose: (value) => pickScope(value as Harness),
-    });
+    ),
+  );
 }
 
 function startDisable(): void {
@@ -1532,10 +1499,7 @@ if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY && sections[variant]?.key === "library
     if (row && libraryHost.state)
       afterProposal(
         await transitionLibrary((state) =>
-          proposeLibraryEnable(state, libraryConfiguration, row, {
-            harnesses: [state.harnesses[0] ?? "codex"],
-            scope: { kind: "global" },
-          }),
+          proposeLibraryEnable(state, libraryConfiguration, row, { scope: { kind: "global" } }),
         ),
       );
   }

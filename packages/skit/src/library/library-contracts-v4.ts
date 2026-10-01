@@ -7,6 +7,7 @@ import {
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
   LibraryManifest,
   librarySnapshotDigests,
+  mergeGlobalBindings,
   RetainedCopy,
   SourceRelativePath,
 } from "./library-contracts.js";
@@ -20,6 +21,7 @@ import {
   SkillVersionV5,
   UpstreamV5,
 } from "./library-contracts-v5.js";
+import { LibraryManifestFromV6 } from "./library-contracts-v6.js";
 import { Digest, HarnessName } from "./store/state-schema.js";
 
 export const RetainedCopyV4 = Schema.Struct({
@@ -264,11 +266,10 @@ const LibraryManifestFromV4 = LibraryManifestV4.pipe(
         retained_copies: migrated.retained_copies,
         acquisitions: migrated.acquisitions,
         snapshot_digests: librarySnapshotDigests(migrated),
-        bindings: v5.bindings.map((binding) => ({
-          harness: binding.harness,
-          scope: binding.scope,
-          entries: migrated.entries(binding.skills),
-        })),
+        bindings: mergeGlobalBindings(
+          migrated,
+          v5.bindings.map((binding) => ({ entries: migrated.entries(binding.skills) })),
+        ),
       };
     }),
     encode: SchemaGetter.forbidden(() => "v4 portable Library manifests are decode-only"),
@@ -281,6 +282,7 @@ const LibraryManifestFromV4 = LibraryManifestV4.pipe(
 export const LibraryManifestAnyVersion = Schema.Union([
   LibraryManifestFromV4,
   LibraryManifestFromV5,
+  LibraryManifestFromV6,
   LibraryManifest,
 ]);
 

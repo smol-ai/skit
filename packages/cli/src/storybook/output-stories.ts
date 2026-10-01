@@ -40,7 +40,6 @@ const skillId = makeSkillId();
 const retainedTreeId = makeRetainedCopyId();
 const projectionId = makeProjectionId();
 const binding = {
-  harness: "codex" as const,
   scope: { kind: "global" as const },
   entries: [{ kind: "skill" as const, skill_id: skillId }],
 };
@@ -190,7 +189,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
     bindings: [
       {
-        harness: "codex",
+        scope: { kind: "global" },
         entries: [{ kind: "collection", collection_id: collectionId, label: "review-tools" }],
         skills: [skillId],
       },
@@ -267,7 +266,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("inventory", "empty", outputContracts.inventory, {
-    schemaVersion: 6,
+    schemaVersion: 7,
     skills: [],
     projections: [],
     unmanaged: [],
@@ -281,7 +280,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     },
   }),
   resultStory("inventory", "copy-dates", outputContracts.inventory, {
-    schemaVersion: 6,
+    schemaVersion: 7,
     skills: [],
     projections: [],
     unmanaged: [],
@@ -465,8 +464,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       {
         code: "PROJECTION_CONFLICT",
         skillId,
-        path: "/home/story/.codex/skills/review",
-        harness: "codex",
+        path: "/home/story/.agents/skills/review",
+        target: "agents",
       },
     ],
   }),
@@ -530,7 +529,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       snapshot_digest: `sha256:${"1".repeat(64)}`,
       changed: true,
       projected: 1,
-      deferred: 0,
       label: "review-tools",
       enabled: ["release-notes"],
       new_available: 12,
@@ -552,8 +550,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     projections: [
       {
         projection_id: projectionId,
-        harness: "codex",
-        path: "/home/story/.codex/skills/review",
+        target: "agents",
+        path: "/home/story/.agents/skills/review",
         observed_digest: digest,
         agreement: "selected",
       },
@@ -570,8 +568,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     projections: [
       {
         projection_id: projectionId,
-        harness: "codex",
-        path: "/home/story/.codex/skills/review",
+        target: "agents",
+        path: "/home/story/.agents/skills/review",
         status: "projected",
       },
     ],
@@ -598,7 +596,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("enable", "preview", outputContracts.enablePlan, {
     subject_id: collectionId,
     skills: ["review"],
-    harnesses: ["codex"],
     scope: { kind: "global" },
     enabled: true,
     changed: true,
@@ -607,17 +604,15 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("enable", "applied", outputContracts.enable, {
     subject_id: collectionId,
     skills: ["review"],
-    harnesses: ["codex"],
     scope: { kind: "global" },
     enabled: true,
     changed: true,
     bindings: [binding],
-    projections: [{ harness: "codex", status: "projected" }],
+    projections: [{ target: "agents" }],
   }),
   resultStory("disable", "preview", outputContracts.disablePlan, {
     subject_id: collectionId,
     skills: ["review"],
-    harnesses: ["codex"],
     scope: { kind: "global" },
     enabled: false,
     changed: true,
@@ -626,12 +621,11 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("disable", "applied", outputContracts.disable, {
     subject_id: collectionId,
     skills: ["review"],
-    harnesses: ["codex"],
     scope: { kind: "global" },
     enabled: false,
     changed: true,
     bindings: [],
-    projections: [{ harness: "codex", status: "projected" }],
+    projections: [{ target: "agents" }],
   }),
   resultStory("publish", "release", outputContracts.publish, {
     release: {
@@ -666,7 +660,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     revision_id: "revision-story",
     snapshots: 1,
     projected: 1,
-    deferred: 0,
   }),
   resultStory("server-bootstrap", "complete", outputContracts.serverBootstrap, {
     origin: "https://registry.example",

@@ -21,7 +21,7 @@ interface LegacySkillVersionFixture {
   readonly [field: string]: unknown;
 }
 
-it.effect("migrates a persisted v4 well-known subset to v6 once at the state-file boundary", () =>
+it.effect("migrates a persisted v4 well-known subset to v7 once at the state-file boundary", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v4-migration-" });
@@ -31,7 +31,7 @@ it.effect("migrates a persisted v4 well-known subset to v6 once at the state-fil
     const migrated = yield* inspectLibrary(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 6);
+    assert.strictEqual(migrated.state.schemaVersion, 7);
     assert.strictEqual(migrated.state.collections.length, 1);
     assert.strictEqual(migrated.state.acquisitions[0]?.kind, "source");
     assert.strictEqual(
@@ -337,7 +337,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 6);
+    assert.strictEqual(state.schemaVersion, 7);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -369,12 +369,93 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(skill(ids.beta).local_version_id, ids.betaEdit);
     assert.strictEqual(currentSkillVersion(state, skill(ids.beta))?.skill_version_id, ids.betaEdit);
     assert.strictEqual(currentSkillVersion(state, skill(ids.gone))?.skill_version_id, ids.gone1);
+    // Per-Harness Bindings merge into one.
     assert.deepStrictEqual(
-      state.global_bindings.map((binding) => [binding.harness, binding.entries]),
+      state.global_bindings.map((binding) => binding.entries),
       [
-        ["codex", [{ kind: "collection", collection_id: collectionId }]],
-        ["claude-code", [{ kind: "skill", skill_id: ids.gone }]],
+        [
+          { kind: "collection", collection_id: collectionId },
+          { kind: "skill", skill_id: ids.gone },
+        ],
       ],
+    );
+    assert.deepStrictEqual(
+      state.projections.map((projection) => projection.target),
+      ["agents"],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const agreed of [true, false])
+  it.effect(
+    `migrates v6 per-Harness Bindings into one and marks former roots legacy (agreed=${agreed})`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v6-migration-" });
+        yield* fs.writeFileString(
+          join(home, "state.json"),
+          yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+        );
+        const current = yield* inspectLibrary(home);
+        assert.strictEqual(current.present, true);
+        if (!current.present) return;
+        const { schemaVersion: _current, ...state } = current.state;
+        const skill = state.skills[0]!;
+        const version = skill.versions[0]!.skill_version_id;
+        const entries = state.global_bindings[0]!.entries;
+        const binding = (harness: string, policy: string) => ({
+          harness,
+          scope: { kind: "global" },
+          entries,
+          invocation_policies: { [skill.skill_id]: policy },
+        });
+        const projection = (harness: string, root: string) => ({
+          projection_id: makeProjectionId(),
+          skill_id: skill.skill_id,
+          skill_version_id: version,
+          harness,
+          root,
+          path: join(root, skill.name),
+          expected_digest: `sha256:${"1".repeat(64)}`,
+          status: "installed",
+          projected_at: "2026-09-16T00:00:00.000Z",
+        });
+        yield* fs.writeFileString(
+          join(home, "state.json"),
+          JSON.stringify({
+            ...state,
+            schemaVersion: 6,
+            global_bindings: [
+              binding("codex", "explicit"),
+              binding("opencode", "explicit"),
+              binding("claude-code", agreed ? "explicit" : "implicit"),
+            ],
+            local_bindings: [],
+            projections: [
+              projection("codex", "/home/.agents/skills"),
+              projection("claude-code", "/home/.claude/skills"),
+              projection("opencode", "/home/.config/opencode/skills"),
+              projection("devin", "/home/.config/devin/skills"),
+            ],
+          }),
+        );
+
+        const migrated = yield* inspectLibrary(home);
+        assert.strictEqual(migrated.present, true);
+        if (!migrated.present) return;
+        assert.strictEqual(migrated.state.schemaVersion, 7);
+        assert.deepStrictEqual(migrated.state.global_bindings, [
+          {
+            scope: { kind: "global" },
+            entries,
+            // Harnesses that disagreed leave the Skill on its declared policy.
+            ...(agreed ? { invocation_policies: { [skill.skill_id]: "explicit" } } : {}),
+          },
+        ]);
+        assert.deepStrictEqual(
+          migrated.state.projections.map((item) => item.target),
+          ["agents", "claude", "legacy", "legacy"],
+        );
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );

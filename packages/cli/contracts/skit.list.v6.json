@@ -1,5 +1,5 @@
 {
-  "$id": "skit.list.v5",
+  "$id": "skit.list.v6",
   "type": "object",
   "properties": {
     "subjects": {
@@ -122,14 +122,20 @@
       "items": {
         "type": "object",
         "properties": {
-          "harness": {
-            "type": "string",
-            "enum": [
-              "codex",
-              "claude-code",
-              "opencode",
-              "devin"
-            ]
+          "scope": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "global"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": true
           },
           "entries": {
             "type": "array",
@@ -192,7 +198,7 @@
           }
         },
         "required": [
-          "harness",
+          "scope",
           "entries",
           "skills"
         ],

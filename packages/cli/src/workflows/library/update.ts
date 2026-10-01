@@ -210,7 +210,6 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
     );
     const changed = retained.snapshot_digest !== priorTree.digest;
     let projected = 0;
-    let deferred = 0;
     const collectionId =
       before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
     if (changed) {
@@ -221,9 +220,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
           complete: (value) =>
             value.projected
               ? `${before.label} · ${value.projected} projected Skill${value.projected === 1 ? "" : "s"} updated`
-              : value.deferred
-                ? `${before.label} · ${value.deferred} projected Skill${value.deferred === 1 ? "" : "s"} deferred`
-                : `${before.label} · No projected Skills needed updating`,
+              : `${before.label} · No projected Skills needed updating`,
         },
         reconcileLibraryProjections({
           roots: options.roots,
@@ -241,7 +238,6 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
         }),
       );
       projected = reconciled.projected;
-      deferred = reconciled.deferred;
     }
     const after = yield* (yield* LibraryStore).load;
     const retainedTree = after.retained_copies.find(
@@ -255,7 +251,6 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
       snapshot_digest: retained.snapshot_digest,
       changed,
       projected,
-      deferred,
       label: before.label,
       ...skillChanges(
         state,

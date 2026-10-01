@@ -62,14 +62,14 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     (candidate) => candidate.name === "code-review",
   );
   expect(skill).toBeDefined();
-  succeed(outputContracts.enable, "enable", skill!.name, "--for", "codex");
+  succeed(outputContracts.enable, "enable", skill!.name);
   expect(await readFile(join(codexRoot, "code-review", "SKILL.md"), "utf8")).toContain(
     "# Code Review",
   );
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
   expect(succeed(outputContracts.list, "list").bindings).toEqual([
     expect.objectContaining({
-      harness: "codex",
+      scope: { kind: "global" },
       skills: [skill!.skill_id],
     }),
   ]);
@@ -78,8 +78,6 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     outputContracts.enable,
     "enable",
     skill!.name,
-    "--for",
-    "codex",
     "--invocation",
     "implicit",
   );
@@ -90,21 +88,13 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     "allow_implicit_invocation: true",
   );
 
-  const reset = succeed(
-    outputContracts.enable,
-    "enable",
-    skill!.name,
-    "--for",
-    "codex",
-    "--invocation",
-    "declared",
-  );
+  const reset = succeed(outputContracts.enable, "enable", skill!.name, "--invocation", "declared");
   expect(reset.bindings).toEqual([
     expect.not.objectContaining({ invocation_policies: expect.anything() }),
   ]);
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
 
-  succeed(outputContracts.disable, "disable", skill!.name, "--for", "codex");
+  succeed(outputContracts.disable, "disable", skill!.name);
   expect(existsSync(join(codexRoot, "code-review"))).toBe(false);
   expect(succeed(outputContracts.list, "list").bindings).toEqual([]);
 

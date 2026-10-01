@@ -1,9 +1,10 @@
-import type { HarnessName, InvocationPolicy } from "../contracts.js";
+import type { InvocationPolicy, ProjectionTarget } from "../contracts.js";
 import { Effect, FileSystem } from "effect";
 import {
   applyHarnessInvocationPolicyEffect,
   type HarnessInvocationWriteFailure,
 } from "../harnesses/projection.js";
+import { projectionTargetHarnesses } from "../harnesses/projection-targets.js";
 
 export type InvocationIntent =
   | { source: "declared" }
@@ -22,14 +23,17 @@ export function overrideInvocationIntent(policy: InvocationPolicy): InvocationIn
  */
 export function applyInvocationPolicyEffect(
   directory: string,
-  harness: HarnessName,
+  target: ProjectionTarget,
   declaredPolicy: InvocationPolicy | undefined,
   intent: InvocationIntent = declaredInvocationIntent,
 ): Effect.Effect<void, HarnessInvocationWriteFailure, FileSystem.FileSystem> {
   const policy = intent.source === "declared" ? declaredPolicy : intent.policy;
   if (!policy) return Effect.void;
-  return applyHarnessInvocationPolicyEffect(directory, harness, {
-    source: intent.source,
-    policy,
-  }).pipe(Effect.asVoid);
+  // Each reader's native field lives in its own file or key, so one copy carries them all.
+  return Effect.forEach(
+    projectionTargetHarnesses[target],
+    (harness) =>
+      applyHarnessInvocationPolicyEffect(directory, harness, { source: intent.source, policy }),
+    { discard: true },
+  );
 }

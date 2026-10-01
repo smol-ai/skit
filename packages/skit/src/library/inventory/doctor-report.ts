@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { HarnessName } from "../store/state-schema.js";
+import { HarnessName, RecordedProjectionTarget } from "../store/state-schema.js";
 import type { LibraryState } from "../library-state.js";
 
 /** One diagnostic report over an observed inventory snapshot. Pure: the caller does the reading. */
@@ -8,7 +8,7 @@ export const LibraryDoctorIssue = Schema.Struct({
   code: Schema.String,
   skillId: Schema.optional(SkillId),
   path: Schema.optional(Schema.String),
-  harness: Schema.optional(HarnessName),
+  target: Schema.optional(RecordedProjectionTarget),
   harnesses: Schema.optional(Schema.Array(HarnessName)),
 });
 export type LibraryDoctorIssue = typeof LibraryDoctorIssue.Type;
@@ -26,7 +26,7 @@ export function libraryDoctorReport(state: LibraryState): LibraryDoctorReport {
       code: item.status === "conflicted" ? "PROJECTION_CONFLICT" : "PROJECTION_DRIFT",
       skillId: item.skill_id,
       path: item.path,
-      harness: item.harness,
+      target: item.target,
     }));
   issues.push(
     ...(state.scanIssues ?? [])

@@ -146,14 +146,16 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       selectedSkills: [selection.name],
       invocation: {
         subjects: [subjectId],
-        harnesses: [...new Set(targets.map((target) => target.harness))],
         scope: { kind: "global" },
         enabled: true,
         dryRun: false,
       },
       roots: options.adoption.bindings,
       variantsPath: options.adoption.bindings.variantsPath,
-      adoptionObservedHash: adoptionPlan.skill.validationDigest,
+      adoption: {
+        path: adoptionPlan.sourcePath,
+        observedHash: adoptionPlan.skill.validationDigest,
+      },
     });
     adopted.push({
       subject_id: subjectId,

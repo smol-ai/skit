@@ -190,7 +190,7 @@ test.runIf(realGit)(
       const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      expect(state.schemaVersion).toBe(6);
+      expect(state.schemaVersion).toBe(7);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
       expect(state.retained_copies).toHaveLength(1);
       expect(state.retained_copies[0].digest).toBe(entry.snapshot_digest);
@@ -329,7 +329,7 @@ test.runIf(realGit)(
       // Following the whole Collection, an upstream change installs and retires Skills.
       const collectionId = entry.collection_id;
       if (collectionId === undefined) throw new Error("add reported no Collection");
-      const enabled = await run("enable", collectionId, "--all", "--for", "codex");
+      const enabled = await run("enable", collectionId, "--all");
       expect(enabled.code, enabled.stderr).toBe(0);
       await rm(join(fixture.repo, "imported", "security-review"), { recursive: true });
       await mkdir(join(fixture.repo, "imported", "release-notes"), { recursive: true });
@@ -368,8 +368,8 @@ test.runIf(realGit)(
       expect((await readdir(roots.codexRoot)).sort()).toEqual(["code-review", "release-notes"]);
 
       // With one Skill enabled on its own, its deletion upstream keeps it; new Skills are counted.
-      expect((await run("disable", collectionId, "--all", "--for", "codex")).code).toBe(0);
-      expect((await run("enable", "release-notes", "--for", "codex")).code).toBe(0);
+      expect((await run("disable", collectionId, "--all")).code).toBe(0);
+      expect((await run("enable", "release-notes")).code).toBe(0);
       await rm(join(fixture.repo, "imported", "release-notes"), { recursive: true });
       await mkdir(join(fixture.repo, "imported", "triage"), { recursive: true });
       await writeFile(

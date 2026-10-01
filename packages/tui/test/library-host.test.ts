@@ -1,7 +1,7 @@
 // Runtime entry and disposal are the subject here, so these tests drive the Promise host API.
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vitest";
-import type { LibrarySessionState } from "../../cli/src/front-end";
+import type { LibrarySessionState, LibrarySkillRow } from "../../cli/src/front-end";
 import { createLibraryHost } from "../src/library-host";
 
 /**
@@ -14,10 +14,9 @@ import { createLibraryHost } from "../src/library-host";
 // oxlint-disable-next-line skit/no-nested-runtime
 const outside = <A>(effect: Effect.Effect<A>): Promise<A> => Effect.runPromise(effect);
 
-const initial: LibrarySessionState = {
-  harnesses: [],
-  skills: [],
-};
+const initial: LibrarySessionState = { skills: [] };
+const row = (name: string) => ({ name }) as LibrarySkillRow;
+const names = (state: LibrarySessionState | undefined) => state?.skills.map((skill) => skill.name);
 
 test("queued transitions read the state committed by their predecessor", async () => {
   const reached = Deferred.makeUnsafe<void>();
@@ -29,7 +28,7 @@ test("queued transitions read the state committed by their predecessor", async (
       Effect.gen(function* () {
         yield* Deferred.succeed(reached, undefined);
         yield* Deferred.await(resume);
-        return { ...state, harnesses: ["codex"] as const };
+        return { ...state, skills: [row("first")] };
       }),
     );
     await outside(Deferred.await(reached));
@@ -37,14 +36,14 @@ test("queued transitions read the state committed by their predecessor", async (
     const second = host.transition((state) =>
       Effect.sync(() => {
         seen.push(state);
-        return { ...state, harnesses: [...state.harnesses, "claude-code" as const] };
+        return { ...state, skills: [...state.skills, row("second")] };
       }),
     );
     await outside(Deferred.succeed(resume, undefined));
     await Promise.all([first, second]);
-    expect(seen.map((state) => state.harnesses)).toEqual([["codex"]]);
-    expect(host.state?.harnesses).toEqual(["codex", "claude-code"]);
-    expect(initial.harnesses).toEqual([]);
+    expect(seen.map(names)).toEqual([["first"]]);
+    expect(names(host.state)).toEqual(["first", "second"]);
+    expect(initial.skills).toEqual([]);
   } finally {
     await host.dispose();
   }

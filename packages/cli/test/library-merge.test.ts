@@ -8,13 +8,13 @@ import {
   makeSkillId,
   makeSkillVersionId,
   LibraryManifest,
+  LibraryManifestAnyVersion,
   LibraryState,
   makeProjectionId,
   restoreCustodyConflicts,
 } from "@smolai/skit-core";
 import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
-import { deferredLibraryBindings } from "../src/workflows/library/library-sync.js";
 
 import {
   alignLibraryVersionIds,
@@ -72,7 +72,7 @@ const skill = {
   ],
 };
 const manifest = (bindings: unknown[] = []) => ({
-  schema: "skit.library.v6",
+  schema: "skit.library.v7",
   collections: [collection],
   skills: [skill],
   retained_copies: [
@@ -152,7 +152,6 @@ it.effect("merges an independently added global Binding", () =>
     const local = yield* decode(
       manifest([
         {
-          harness: "codex",
           scope: { kind: "global" },
           entries: [{ kind: "skill", skill_id: skillId }],
         },
@@ -187,7 +186,6 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
     const desired = yield* decode({
       ...manifest([
         {
-          harness: "codex",
           scope: { kind: "global" },
           entries: [{ kind: "skill", skill_id: skillId }],
         },
@@ -212,7 +210,6 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
       {
         kind: "binding",
         action: "add",
-        harness: "codex",
         entries_added: [{ kind: "skill", label: "review" }],
         entries_removed: [],
       },
@@ -220,28 +217,33 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
   }),
 );
 
-it.effect("names every deferred Binding and its affected Skills", () =>
+it.effect("merges a v6 manifest's per-Harness Bindings into one global Binding", () =>
   Effect.gen(function* () {
-    const portable = yield* decode(
-      manifest([
+    const v6 = {
+      ...manifest(),
+      schema: "skit.library.v6",
+      bindings: [
         {
           harness: "codex",
           scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: skillId }],
+          entries: [{ kind: "collection", collection_id: collectionId }],
         },
         {
           harness: "claude-code",
           scope: { kind: "global" },
           entries: [{ kind: "skill", skill_id: skillId }],
         },
-      ]),
-    );
-    assert.deepEqual(
-      deferredLibraryBindings(portable, (harness) =>
-        harness === "codex" ? "/available" : undefined,
-      ),
-      [{ harness: "claude-code", skills: ["review"] }],
-    );
+      ],
+    };
+    const decoded = yield* Schema.decodeUnknownEffect(LibraryManifestAnyVersion)(v6);
+    assert.strictEqual(decoded.schema, "skit.library.v7");
+    // The Skill entry is covered by its whole-Collection entry, so only the Collection remains.
+    assert.deepEqual(decoded.bindings, [
+      {
+        scope: { kind: "global" },
+        entries: [{ kind: "collection", collection_id: collectionId }],
+      },
+    ]);
   }),
 );
 
@@ -311,11 +313,10 @@ it.effect(
       assert.strictEqual(merged.manifest.acquisitions.length, local.acquisitions.length);
       assert.deepEqual(local, original);
       const state = yield* Schema.decodeUnknownEffect(LibraryState)({
-        schemaVersion: 6,
+        schemaVersion: 7,
         ...local,
         global_bindings: [
           {
-            harness: "codex",
             scope: { kind: "global" },
             entries: [{ kind: "skill", skill_id: skillId }],
           },
@@ -327,7 +328,7 @@ it.effect(
             projection_id: makeProjectionId(),
             skill_id: skillId,
             skill_version_id: localId,
-            harness: "codex",
+            target: "agents",
             root: "/tmp/skills",
             path: "/tmp/skills/review",
             expected_digest: digestB,
@@ -507,5 +508,96 @@ it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
     assert.isFalse(
       result.manifest.skills[0]?.versions.some((version) => version.skill_version_id === second),
     );
+  }),
+);
+
+// A Collection with two Skills, `alpha` and `beta`, observed by one Source Acquisition.
+const pairCollection = makeCollectionId();
+const pairCopy = makeRetainedCopyId();
+const pairDigest = `sha256:${"d".repeat(64)}`;
+const alpha = makeSkillId();
+const beta = makeSkillId();
+const pairManifest = (entries: unknown[]) => ({
+  schema: "skit.library.v7",
+  collections: [{ collection_id: pairCollection, label: "fixture/pair" }],
+  skills: [
+    [alpha, "alpha", digestB],
+    [beta, "beta", digestC],
+  ].map(([skill_id, name, value]) => ({
+    skill_id,
+    collection_id: pairCollection,
+    path: name,
+    name,
+    versions: [
+      {
+        skill_version_id: `${skill_id}`.replace("skill_", "skv_"),
+        source_digest: value,
+        artifact_digest: value,
+        validation_identity_digest: value,
+        materialization_profile: "plain-skill/v1" as const,
+      },
+    ],
+  })),
+  retained_copies: [
+    {
+      retained_copy_id: pairCopy,
+      digest: pairDigest,
+      copy_profile: "verbatim/v1" as const,
+      members: [
+        ["alpha", digestB],
+        ["beta", digestC],
+      ].map(([source_path, value]) => ({
+        source_path,
+        source_digest: value,
+        artifact_digest: value,
+        materialization_profile: "plain-skill/v1" as const,
+      })),
+    },
+  ],
+  acquisitions: [
+    {
+      acquisition_id: makeAcquisitionId(),
+      collection_id: pairCollection,
+      kind: "source" as const,
+      retained_copy_id: pairCopy,
+      source_identity: { kind: "local" as const, machine_id: machineId, path: { value: "/pair" } },
+      input: { value: "/pair" },
+      acquired_at: "2026-01-01T00:00:00.000Z",
+      machine_id: machineId,
+      observations: [],
+    },
+  ],
+  snapshot_digests: [pairDigest],
+  bindings: entries.length ? [{ scope: { kind: "global" }, entries }] : [],
+});
+
+it.effect(
+  "keeps both Skills disabled when two devices each disable one of a followed Collection",
+  () =>
+    Effect.gen(function* () {
+      const base = yield* decode(
+        pairManifest([{ kind: "collection", collection_id: pairCollection }]),
+      );
+      // Disabling one Skill of a followed Collection rewrites it as the remaining Skill's entry.
+      const local = yield* decode(pairManifest([{ kind: "skill", skill_id: beta }]));
+      const remote = yield* decode(pairManifest([{ kind: "skill", skill_id: alpha }]));
+      const merged = mergeLibraryManifests(base, local, remote);
+      assert.deepEqual(merged.conflicts, []);
+      assert.deepEqual(merged.manifest.bindings, []);
+    }),
+);
+
+it.effect("keeps one device's disable when the other device changed nothing", () =>
+  Effect.gen(function* () {
+    const base = yield* decode(
+      pairManifest([{ kind: "collection", collection_id: pairCollection }]),
+    );
+    const local = yield* decode(pairManifest([{ kind: "skill", skill_id: beta }]));
+    const remote = yield* decode(base);
+    const merged = mergeLibraryManifests(base, local, remote);
+    assert.deepEqual(merged.conflicts, []);
+    assert.deepEqual(merged.manifest.bindings, [
+      { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: beta }] },
+    ]);
   }),
 );

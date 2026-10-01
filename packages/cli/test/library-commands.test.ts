@@ -69,7 +69,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v5");
+    assert.strictEqual(rendered[0]?.schema, "skit.list.v6");
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
@@ -81,14 +81,11 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     assert.deepStrictEqual(listing.bindings, []);
     assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
-    const session = yield* home.owned(openLibrarySession(["codex"]));
+    const session = yield* home.owned(openLibrarySession());
     const row = session.skills[0];
     assert.ok(row);
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.bindings, row, {
-        harnesses: ["codex"],
-        scope: { kind: "global" },
-      }),
+      proposeLibraryEnable(session, home.bindings, row, { scope: { kind: "global" } }),
     );
     const beforeStaleChange = yield* home.durable;
     yield* home.owned(
@@ -115,7 +112,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
 
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession([])), home.bindings).pipe(
+      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
         Effect.provide(interaction.layer),
       ),
     );
@@ -182,14 +179,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
           store.publish({
             ...state,
             global_bindings: [
+              { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
+            ],
+            local_bindings: [
               {
-                harness: "codex",
-                scope: { kind: "global" },
-                entries: [{ kind: "skill", skill_id: reviewId }],
-              },
-              {
-                harness: "claude-code",
-                scope: { kind: "global" },
+                scope: { kind: "repository", root },
                 entries: [{ kind: "skill", skill_id: reviewId }],
               },
             ],
@@ -225,14 +219,14 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual(prompts[0]?.choices[0], {
       value: `all:${collection.collection?.collection_id}`,
       label: `${collection.collection?.label} — everywhere enabled`,
-      hint: "codex · global, claude-code · global",
+      hint: `global, repository ${root}`,
     });
     assert.strictEqual(prompts[1]?.message, "Select Skills to disable");
     assert.deepStrictEqual(prompts[1]?.choices, [
       {
         value: "review",
         label: "review",
-        hint: `${collection.collection?.label} · codex · global, ${collection.collection?.label} · claude-code · global`,
+        hint: `${collection.collection?.label} · global, ${collection.collection?.label} · repository ${root}`,
       },
     ]);
     assert.strictEqual((yield* interaction.results).length, 2);

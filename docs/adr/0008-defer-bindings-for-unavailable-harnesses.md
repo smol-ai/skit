@@ -1,5 +1,7 @@
 # Defer Bindings for unavailable Harnesses
 
+> Superseded by [ADR-0022](0022-project-into-shared-and-claude-targets.md): Bindings no longer name a Harness; only the `.claude` target depends on a Harness being present.
+
 SKIT treats a Binding as portable Library intent and Harness Availability as device-local evidence. Synchronizing a Binding onto a device where its Harness is unavailable retains the Binding unchanged but defers its Projection. Unavailability is not a Conflict, does not make the Library partially synchronized, and must not remove or rewrite portable intent.
 
 This preserves the meaning of a Binding across heterogeneous devices. A Library Owner may want a Skill available to Codex and Claude Code even when one device has only Codex. That device must apply the Codex Projection without creating a speculative Claude Code directory, while another device with Claude Code continues to honor the same Library Manifest. If Claude Code later becomes available, an ordinary reconciliation can materialize the deferred Projection.

@@ -1,10 +1,7 @@
 {
-  "$id": "skit.update.projection-retention.plan.v1",
+  "$id": "skit.update.projection-retention.v2",
   "type": "object",
   "properties": {
-    "revision": {
-      "type": "string"
-    },
     "skill_id": {
       "type": "string"
     },
@@ -14,21 +11,17 @@
     "previous_skill_version_id": {
       "type": "string"
     },
-    "selected_projection_id": {
+    "retained_skill_version_id": {
       "type": "string"
     },
-    "observed_digest": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+    "retained_copy_id": {
+      "type": "string"
     },
     "snapshot_digest": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
     },
-    "retained_path": {
-      "type": "string"
-    },
-    "retention_required": {
+    "retained": {
       "type": "boolean"
     },
     "projections": {
@@ -39,52 +32,44 @@
           "projection_id": {
             "type": "string"
           },
-          "harness": {
+          "target": {
             "type": "string",
             "enum": [
-              "codex",
-              "claude-code",
-              "opencode",
-              "devin"
+              "agents",
+              "claude",
+              "legacy"
             ]
           },
           "path": {
             "type": "string"
           },
-          "observed_digest": {
-            "type": "string",
-            "pattern": "^sha256:[a-f0-9]{64}$"
-          },
-          "agreement": {
+          "status": {
             "type": "string",
             "enum": [
-              "selected",
-              "identical",
-              "different"
+              "projected",
+              "conflicted",
+              "deferred"
             ]
           }
         },
         "required": [
           "projection_id",
-          "harness",
+          "target",
           "path",
-          "observed_digest",
-          "agreement"
+          "status"
         ],
         "additionalProperties": true
       }
     }
   },
   "required": [
-    "revision",
     "skill_id",
     "skill_name",
     "previous_skill_version_id",
-    "selected_projection_id",
-    "observed_digest",
+    "retained_skill_version_id",
+    "retained_copy_id",
     "snapshot_digest",
-    "retained_path",
-    "retention_required",
+    "retained",
     "projections"
   ],
   "additionalProperties": true,

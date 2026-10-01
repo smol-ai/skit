@@ -1,16 +1,13 @@
-import { resolveDeclaredInvocation } from "@smolai/skit-core";
+import { resolveDeclaredInvocation, type InvocationHarness } from "@smolai/skit-core";
 import { describe, expect, test } from "vitest";
 import { Result } from "effect";
-import {
-  invocationPolicyChoices,
-  invocationReadModel,
-  type InvocationHarness,
-} from "../src/invocation/read-model.js";
+import { invocationPolicyChoices, invocationReadModel } from "../src/invocation/read-model.js";
 import type { InvocationOption } from "../src/invocation/policy.js";
 
 const CLAUDE = "skills/review/SKILL.md";
 
 function model(options: {
+  /** Whose native metadata supplies the author's default. */
   harness?: InvocationHarness;
   invocation?: "explicit" | "implicit" | "host-policy";
   files?: Record<string, string>;
@@ -29,7 +26,6 @@ function model(options: {
   );
   return invocationReadModel({
     skill: "review",
-    harness,
     author: author[harness],
     storedIntent: options.storedIntent ?? "declared",
   });
@@ -54,14 +50,13 @@ describe("invocation read model", () => {
     expect(resolved.policySource).toBe("local-override");
   });
 
-  test("OpenCode explicit policy warns that V1 cannot enforce it", () => {
-    const resolved = model({ harness: "opencode", storedIntent: "explicit" });
+  test("an explicit policy warns that OpenCode V1 cannot enforce it", () => {
+    const resolved = model({ storedIntent: "explicit" });
 
-    expect(resolved.effectiveSummary).toContain("OpenCode V2");
     expect(resolved.effectiveSummary).toContain("OpenCode V1 ignores this setting");
   });
 
-  test("an unspecified author policy defers visibly to the Harness", () => {
+  test("an unspecified author policy defers visibly to each agent", () => {
     const resolved = model({ harness: "codex" });
 
     expect(resolved.effectivePolicy).toBe("host-policy");

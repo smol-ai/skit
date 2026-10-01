@@ -117,7 +117,7 @@ it.effect(
           },
         ],
       });
-      const session = yield* home.owned(openLibrarySession([]));
+      const session = yield* home.owned(openLibrarySession());
       expect(session.skills[0]).toMatchObject({
         revision: "1".repeat(40),
         source_updated_at: "2026-04-20T00:00:00.000Z",

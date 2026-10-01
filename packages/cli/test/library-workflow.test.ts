@@ -1,11 +1,5 @@
-import { Result } from "effect";
 import { describe, expect, test } from "vitest";
-import {
-  eligibleHarnesses,
-  invocationEligibleBindings,
-  scopeChoices,
-  scopeKey,
-} from "../src/library/read-model.js";
+import { invocationEligibleBindings, scopeChoices, scopeKey } from "../src/library/read-model.js";
 
 describe("Library workflow choices", () => {
   test("keys a Scope by the destination it selects", () => {
@@ -20,37 +14,18 @@ describe("Library workflow choices", () => {
     expect(choices[1].scope).toEqual({ kind: "repository", root: "/work" });
   });
 
-  test("an explicit Harness request wins over detection", () => {
-    expect(
-      Result.getOrThrow(
-        eligibleHarnesses({ detected: ["codex", "claude-code"], requested: "codex" }),
-      ),
-    ).toEqual(["codex"]);
-    expect(Result.getOrThrow(eligibleHarnesses({ detected: ["codex", "claude-code"] }))).toEqual([
-      "codex",
-      "claude-code",
-    ]);
-  });
-
-  test("no candidate Harness is a named failure", () => {
-    const outcome = eligibleHarnesses({ detected: [] });
-    expect(Result.isFailure(outcome)).toBe(true);
-    if (Result.isFailure(outcome))
-      expect(outcome.failure).toMatchObject({ _tag: "NoSupportedHarnesses", code: "NOT_FOUND" });
-  });
-
-  test("finds only Bindings whose Harness carries invocation policy", () => {
+  test("finds only Bindings that carry an invocation policy", () => {
+    const policy = {} as NonNullable<
+      Parameters<typeof invocationEligibleBindings>[0]["bindings"][number]["policy"]
+    >;
     const row = {
       bindings: [
-        { harness: "codex" as const, scope: { kind: "global" as const } },
-        { harness: "devin" as const, scope: { kind: "global" as const } },
-        { harness: "opencode" as const, scope: { kind: "global" as const } },
+        { scope: { kind: "global" as const }, policy },
+        { scope: { kind: "repository" as const, root: "/repo" } },
       ],
     };
-    expect(invocationEligibleBindings(row).map((binding) => binding.harness)).toEqual([
-      "codex",
-      "devin",
-      "opencode",
+    expect(invocationEligibleBindings(row).map((binding) => binding.scope.kind)).toEqual([
+      "global",
     ]);
   });
 });

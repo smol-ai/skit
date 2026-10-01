@@ -80,9 +80,10 @@ skit enable
 skit disable
 ```
 
+Enabled skills are available to every agent. SKIT writes one copy into `.agents/skills`, which Codex, OpenCode, Devin, Cursor and Pi read, and, when Claude Code is installed, one into `.claude/skills`.
+
 Alternatively, you can supply these flags:
 
-- `--for [codex, claude, opencode, devin]` to enable in a single harness
 - `--repo [path]` to enable in a single repo
 - `--all` to enable all skills in a collection
 - `--invocation [declared, explicit, implicit, host-policy]` to control whether an agent can invoke the skill automatically

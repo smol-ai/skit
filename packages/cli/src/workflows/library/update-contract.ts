@@ -25,7 +25,6 @@ export const UpdateResult = Schema.Array(
     snapshot_digest: Digest,
     changed: Schema.Boolean,
     projected: Schema.Number,
-    deferred: Schema.Number,
     ...SkillChanges,
   }),
 );

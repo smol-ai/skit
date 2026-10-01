@@ -109,7 +109,7 @@ describe("declared exit codes match the binary", () => {
   // a validation failure on the same declared code as any other unreadable ledger.
   test.each([
     { handler: "check", args: ["check"] },
-    { handler: "enable", args: ["enable", "nope", "--for", "codex"] },
+    { handler: "enable", args: ["enable", "nope"] },
   ])("$handler reports VALIDATION_FAILED for a non-current ledger", async ({ handler, args }) => {
     const directory = await home();
     await writeFile(

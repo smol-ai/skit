@@ -1,5 +1,7 @@
 # Handle shared destinations as routing collisions
 
+> Partly superseded by [ADR-0022](0022-project-into-shared-and-claude-targets.md): Bindings no longer name a Harness.
+
 The custody-recovery incident does not require a new Projection identity model. A Binding states Harness and Scope; routing maps those inputs to a Projection Target. A Projection is the concrete Skill folder materialized at that destination. SKIT keeps local Library state version 2, whose current Projection records include a `harness` field as routing metadata. It does not introduce committed satisfied-Binding sets, reference-counted deletion, or authenticated device identity as part of this repair.
 
 The motivating collision is narrow: if `$HOME` is itself the selected Git repository, a Harness whose global and repository targets share a relative path resolves both Bindings to one destination. Today that includes Codex at `$HOME/.agents/skills` and Claude Code at `$HOME/.claude/skills`. Similar collisions may arise from explicit custom roots. These are routing conflicts, not evidence that Projection ownership must be redesigned globally.

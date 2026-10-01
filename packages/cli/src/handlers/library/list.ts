@@ -47,7 +47,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
       }),
     })),
     bindings: state.global_bindings.map((binding) => ({
-      harness: binding.harness,
+      scope: binding.scope,
       entries: binding.entries.map((entry) =>
         entry.kind === "collection"
           ? {
@@ -82,7 +82,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) => {
     interactive
       ? Effect.gen(function* () {
           const configuration = yield* libraryCommandConfiguration(input);
-          const session = yield* openLibrarySession(yield* configuration.detectedHarnesses);
+          const session = yield* openLibrarySession();
           yield* browseLibraryEffect(session, configuration.pull.bindings);
         }).pipe(Effect.provide(terminalPrompterLayer))
       : presentListCommand(),

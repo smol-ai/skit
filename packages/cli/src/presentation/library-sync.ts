@@ -1,7 +1,6 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
-import { harnessLabel } from "../harness/catalog.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v5">;
+type SyncData = ContractDataForId<"skit.library.sync.v6">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -49,7 +48,7 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
     if (bindings.length) lines.push("  Bindings");
     for (const change of bindings) {
       const marker = { add: "+", update: "~", remove: "-" }[change.action];
-      lines.push(`    ${marker} ${harnessLabel(change.harness)}`);
+      lines.push(`    ${marker} Enabled Skills`);
       for (const entry of change.entries_added) lines.push(`        + ${entry.label}`);
       for (const entry of change.entries_removed) lines.push(`        - ${entry.label}`);
     }
@@ -75,18 +74,6 @@ export function renderLibrarySync(data: SyncData): string {
           `${plural(data.projection_drift.length, "enabled Skill")} differ from the synced Version: ${data.projection_drift.join(", ")}`,
         ]
       : []),
-    ...(data.deferred_bindings?.length
-      ? data.deferred_bindings.map(
-          (binding) =>
-            `${harnessLabel(binding.harness)} isn't available on this device, so these Skills aren't enabled here: ${binding.skills.join(", ") || "none"}`,
-        )
-      : data.deferred
-        ? [
-            data.deferred === 1
-              ? "An agent isn't available on this device, so its Skills aren't enabled here."
-              : `${data.deferred} agents aren't available on this device, so their Skills aren't enabled here.`,
-          ]
-        : []),
   ];
   const withNotes = (message: string) =>
     notes.length ? `${message}\n\n${notes.join("\n")}` : message;

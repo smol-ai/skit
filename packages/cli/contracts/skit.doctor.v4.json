@@ -1,5 +1,5 @@
 {
-  "$id": "skit.doctor.v3",
+  "$id": "skit.doctor.v4",
   "type": "object",
   "properties": {
     "ok": {
@@ -33,15 +33,14 @@
               }
             ]
           },
-          "harness": {
+          "target": {
             "anyOf": [
               {
                 "type": "string",
                 "enum": [
-                  "codex",
-                  "claude-code",
-                  "opencode",
-                  "devin"
+                  "agents",
+                  "claude",
+                  "legacy"
                 ]
               },
               {

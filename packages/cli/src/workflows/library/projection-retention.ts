@@ -89,7 +89,7 @@ const matchingProjection = Effect.fn("Library.ProjectionRetention.matchProjectio
   const matches = projections.filter(
     (projection) =>
       projection.projection_id === selector ||
-      projection.harness === selector ||
+      projection.target === selector ||
       resolve(projection.path) === resolve(selector),
   );
   if (matches.length === 0)
@@ -139,7 +139,7 @@ export const planProjectionRetention = Effect.fn("Library.planProjectionRetentio
     const digest = yield* deterministicTreeHashEffect(projection.path);
     observations.push({
       projection_id: projection.projection_id,
-      harness: projection.harness,
+      target: projection.target,
       path: projection.path,
       observed_digest: digest,
       agreement:
@@ -170,7 +170,7 @@ const bindingForProjection = (
 ): DeviceBinding | RepositoryBinding | undefined =>
   [...state.global_bindings, ...state.local_bindings].find(
     (binding) =>
-      binding.harness === projection.harness &&
+      projection.target !== "legacy" &&
       bindingSkillIds(state, binding).includes(projection.skill_id) &&
       (binding.scope.kind === "global" || resolve(binding.scope.root) === resolve(projection.root)),
   );
@@ -248,12 +248,13 @@ export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetent
         );
         const binding =
           projection === undefined ? undefined : bindingForProjection(afterRetention, projection);
-        if (projection === undefined || binding === undefined) continue;
-        const coordinate = `${binding.harness}\0${canonicalJson(binding.scope)}\0${projection.root}`;
+        if (projection === undefined || binding === undefined || projection.target === "legacy")
+          continue;
+        const coordinate = `${projection.target}\0${canonicalJson(binding.scope)}\0${projection.root}`;
         if (reconciled.has(coordinate)) continue;
         reconciled.add(coordinate);
         yield* projectBindingEffect({
-          harness: binding.harness,
+          target: projection.target,
           scope: binding.scope,
           root: projection.root,
           variantsPath: options.variantsPath,
@@ -277,7 +278,7 @@ export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetent
             projection === undefined ? undefined : bindingForProjection(settled, projection);
           return {
             projection_id: observation.projection_id,
-            harness: observation.harness,
+            target: observation.target,
             path: observation.path,
             status:
               hasBinding === undefined
