@@ -184,6 +184,13 @@ Library state once. Failure before publication leaves the prior state authoritat
 mutation reconciles missing or managed-stale Projections from retained content. Foreign or modified
 content remains protected. See [ADR-0020](adr/0020-treat-projections-as-reconcilable-derived-state.md).
 
+When a global Harness root changes, Binding reconciliation verifies that its former projections
+still match SKIT's ownership markers and bytes before creating a new installation. It retires each
+former copy only after the new copy is installed successfully. A modified or unowned former copy
+reports a conflict with its path; a blocked new destination leaves the old working copy intact.
+Installations selected by repository Bindings remain in place. Physical aliases of one root are
+reconciled as one target rather than treated as a relocation.
+
 This native boundary covers core `setProjection`, each normalized CLI Binding batch,
 and complete local author initialization/registration.
 Install, update, remove, Binding reconciliation, and author refresh share this mutation and

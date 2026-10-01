@@ -9,6 +9,7 @@ import {
   projectBindingEffect,
   skitLayer,
 } from "@smolai/skit-core";
+import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 
@@ -87,7 +88,7 @@ const boundRawReview = Effect.gen(function* () {
         skill === undefined ? undefined : currentSkillVersion(state, skill)?.skill_version_id,
     };
   });
-  return { fs, home, layer, observe, project, projected, projection };
+  return { fs, home, roots, layer, observe, project, projected, projection };
 });
 
 it.effect("rewrites an untouched Projection when the selected Version advances", () =>
@@ -151,5 +152,42 @@ it.effect("heals an untouched Projection already recorded as conflicted", () =>
     assert.strictEqual(yield* fs.readFileString(projected), "second verbatim Skill\n");
     const { row } = yield* projection;
     assert.strictEqual(row.status, "installed");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("re-enabling an unchanged Binding reconciles a changed global root", () =>
+  Effect.gen(function* () {
+    const { fs, home, roots, layer, projected } = yield* boundRawReview;
+    const newRoot = join(home, "relocated", "skills");
+    const before = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+    const skillId = before.skills[0]?.skill_id;
+    assert.ok(skillId);
+    const changed = yield* writingTo(
+      home,
+      applyLibraryBindings(before, {
+        query: skillId,
+        all: false,
+        roots: { home, configHome: join(home, "config"), overrides: { codex: newRoot } },
+        variantsPath: join(home, "variants"),
+        invocation: {
+          subjects: [skillId],
+          harnesses: ["codex"],
+          scope: { kind: "global" },
+          enabled: true,
+          dryRun: false,
+        },
+      }).pipe(Effect.provide(layer)),
+    );
+    assert.strictEqual(changed.kind, "applied");
+    assert.strictEqual(changed.value.changed, false);
+    assert.strictEqual(yield* fs.exists(projected), false);
+    assert.strictEqual(
+      yield* fs.readFileString(join(newRoot, "raw-review", "SKILL.md")),
+      "first verbatim Skill\n",
+    );
+    const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+    assert.strictEqual(after.projections.filter((row) => row.root === roots.codexRoot).length, 0);
+    assert.strictEqual(after.projections.filter((row) => row.root === newRoot).length, 1);
+    assert.deepStrictEqual(after.global_bindings, before.global_bindings);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
