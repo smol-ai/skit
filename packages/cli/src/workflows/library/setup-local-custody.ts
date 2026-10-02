@@ -32,12 +32,20 @@ import { addLibrarySourceEffect } from "./add.js";
 import { applyLibraryBindings } from "./set-enabled.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 
+import {
+  copyConflict,
+  retirableShadowAliases,
+  SetupDuplicateAction,
+  SetupApprovedAlias,
+} from "./setup-decisions.js";
+
+export { retirableShadowAliases } from "./setup-decisions.js";
+
 export const SetupLocalCustodySelection = Schema.Struct({
   name: Schema.String,
   sourcePath: Schema.String,
-  duplicateAction: Schema.optionalKey(
-    Schema.Literals(["retain-only", "retire-aliases", "keep-both"]),
-  ),
+  duplicateAction: Schema.optionalKey(SetupDuplicateAction),
+  approvedAliases: Schema.optionalKey(Schema.Array(SetupApprovedAlias)),
 });
 export interface SetupLocalCustodySelection extends Schema.Schema.Type<
   typeof SetupLocalCustodySelection
@@ -76,30 +84,35 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
   approvedPlanId: Digest,
   selectionInput: readonly SetupLocalCustodySelection[],
 ) {
-  const selections = yield* Schema.decodeUnknownEffect(SetupLocalCustodySelections)(selectionInput);
+  const decoded = yield* Schema.decodeUnknownEffect(SetupLocalCustodySelections)(selectionInput);
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   yield* (yield* LibraryStore).load;
-  for (const selection of selections) {
-    const candidate = current.onboarding.candidates.find(
-      (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
-    );
-    const instance = current.instances.find((item) => item.path === selection.sourcePath);
-    const willEnable =
-      instance?.scope === "global" && !instance.git.repository && instance.harnesses.length > 0;
-    if (willEnable && candidate?.shadows?.length && !selection.duplicateAction)
-      return yield* new SetupLocalCustodySelectionInvalid({
-        name: selection.name,
-        reason: "duplicate-action-required",
-      });
-    if (
-      selection.duplicateAction === "retire-aliases" &&
-      !retirableShadowAliases(selection.sourcePath, candidate?.shadows ?? []).length
-    )
-      return yield* new SetupLocalCustodySelectionInvalid({
-        name: selection.name,
-        reason: "aliases-not-retirable",
-      });
-  }
+  const selections = yield* Effect.forEach(decoded, (selection) =>
+    Effect.gen(function* () {
+      const conflict = copyConflict(current, selection);
+      if (conflict.kind !== "none" && !selection.duplicateAction)
+        return yield* new SetupLocalCustodySelectionInvalid({
+          name: selection.name,
+          reason: "duplicate-action-required",
+        });
+      if (selection.duplicateAction !== "retire-aliases") return selection;
+      if (conflict.kind !== "retirable")
+        return yield* selection.approvedAliases
+          ? new PlanIsStale()
+          : new SetupLocalCustodySelectionInvalid({
+              name: selection.name,
+              reason: "aliases-not-retirable",
+            });
+      return {
+        ...selection,
+        approvedAliases: yield* captureSetupAliasApproval(
+          selection.sourcePath,
+          conflict.shadows,
+          selection.approvedAliases,
+        ),
+      };
+    }),
+  );
   const selectedCandidates = new Set<string>();
   const adopted: Array<{ readonly subject_id: string; readonly retained_version_id: string }> = [];
   const plans: Array<{ name: string; plan: LocalAdoptionPlan }> = [];
@@ -163,6 +176,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
             selection.name,
             sourcePath,
             shadows,
+            selection.approvedAliases,
           )
         : undefined;
     // An explicit row selects only that physical copy. Differing siblings remain untouched.
@@ -245,48 +259,65 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
   return { planId: current.onboarding.planId, plans, adopted, recoveryDirectories, warnings };
 });
 
-/** Only individual links to this retained source can be retired by the duplicate choice. */
-export function retirableShadowAliases(sourcePath: string, shadows: readonly HarnessShadow[]) {
+/** Bind observed aliases to filesystem identities before approval, and verify that consent later. */
+export const captureSetupAliasApproval = Effect.fn("Setup.captureAliasApproval")(function* (
+  sourcePath: string,
+  shadows: readonly HarnessShadow[],
+  approved?: readonly SetupApprovedAlias[],
+) {
+  const paths = retirableShadowAliases(sourcePath, shadows);
+  if (!paths.length) return yield* new PlanIsStale();
+  const links = yield* LinkStat;
+  const fs = yield* FileSystem.FileSystem;
+  const aliases = yield* Effect.forEach(paths, (path) =>
+    Effect.gen(function* () {
+      const info = yield* links.identity.lstat(path);
+      if (info.type !== "SymbolicLink") return yield* new PlanIsStale();
+      const canonicalPath = yield* fs.realPath(path);
+      const linkTarget = yield* fs.readLink(path);
+      if (
+        canonicalPath !== sourcePath ||
+        shadows.some((shadow) =>
+          shadow.aliases.some((alias) => alias.path === path && alias.linkTarget !== linkTarget),
+        )
+      )
+        return yield* new PlanIsStale();
+      return { path, canonicalPath, linkTarget, dev: info.dev, ino: info.ino };
+    }).pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        Effect.fail(error.reason._tag === "NotFound" ? new PlanIsStale() : error),
+      ),
+    ),
+  );
   if (
-    !shadows.length ||
-    shadows.some(
-      (shadow) =>
-        shadow.canonicalPath !== sourcePath ||
-        shadow.aliases.some((alias) => alias.via !== "symlink" || alias.linkPath !== alias.path),
+    approved &&
+    !Schema.toEquivalence(Schema.Array(SetupApprovedAlias))(
+      [...approved].sort((left, right) => left.path.localeCompare(right.path)),
+      [...aliases].sort((left, right) => left.path.localeCompare(right.path)),
     )
   )
-    return [];
-  return [
-    ...new Set(shadows.flatMap((shadow) => shadow.aliases.map((alias) => alias.path))),
-  ].sort();
-}
+    return yield* new PlanIsStale();
+  return aliases;
+});
 
 export const planSetupAliasRetirement = Effect.fn("Setup.planAliasRetirement")(function* (
   libraryHome: string,
   name: string,
   sourcePath: string,
   shadows: readonly HarnessShadow[],
+  approvedAliases?: readonly SetupApprovedAlias[],
 ) {
-  const paths = retirableShadowAliases(sourcePath, shadows);
-  if (!paths.length) return yield* new PlanIsStale();
-  const links = yield* LinkStat;
-  const fs = yield* FileSystem.FileSystem;
+  const aliases = yield* captureSetupAliasApproval(sourcePath, shadows, approvedAliases);
   const recoveryDirectory = join(libraryHome, "removed", randomUUID());
-  const entries: SetupRemoval[] = [];
-  for (const path of paths) {
-    const info = yield* links.identity.lstat(path);
-    if (info.type !== "SymbolicLink" || (yield* fs.realPath(path)) !== sourcePath)
-      return yield* new PlanIsStale();
-    entries.push({
-      name,
-      path,
-      recoveryPath: join(recoveryDirectory, `${entries.length + 1}-${basename(path)}`),
-      type: "SymbolicLink",
-      dev: info.dev,
-      ino: info.ino,
-      linkTarget: yield* fs.readLink(path),
-    });
-  }
+  const entries: SetupRemoval[] = aliases.map((alias, index) => ({
+    name,
+    path: alias.path,
+    recoveryPath: join(recoveryDirectory, `${index + 1}-${basename(alias.path)}`),
+    type: "SymbolicLink",
+    dev: alias.dev,
+    ino: alias.ino,
+    linkTarget: alias.linkTarget,
+  }));
   const harnesses = [...new Set(shadows.map((shadow) => shadow.harness).filter(hasHarnessProfile))];
   return { recoveryDirectory, entries, harnesses };
 });

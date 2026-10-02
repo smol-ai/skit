@@ -1,6 +1,6 @@
 import {
   planSetupAliasRetirement,
-  retirableShadowAliases,
+  captureSetupAliasApproval,
   retireSetupAliases,
 } from "./setup-local-custody.js";
 import { observeHarnessShadows } from "../../projection/harness-shadows.js";
@@ -9,6 +9,13 @@ import { LibraryStore, type Digest } from "@smolai/skit-core";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 import { applyLibraryBindings } from "./set-enabled.js";
+import { PlanIsStale } from "../../library/failures.js";
+
+import {
+  copyConflict,
+  type SetupApprovedAlias,
+  type SetupDuplicateAction,
+} from "./setup-decisions.js";
 
 export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistingBindingInvalid>()(
   "SetupExistingBindingInvalid",
@@ -33,7 +40,8 @@ export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistin
 export interface SetupExistingBindingSelection {
   readonly name: string;
   readonly path: string;
-  readonly duplicateAction?: "retain-only" | "retire-aliases" | "keep-both";
+  readonly duplicateAction?: SetupDuplicateAction;
+  readonly approvedAliases?: readonly SetupApprovedAlias[];
 }
 
 export interface SetupExistingBindingOptions {
@@ -49,29 +57,37 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
 ) {
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   const store = yield* LibraryStore;
-  for (const selection of selectedCopies) {
-    const candidate = current.onboarding.candidates.find(
-      (item) => item.name === selection.name && item.paths.includes(selection.path),
-    );
-    if (candidate?.shadows?.length && !selection.duplicateAction)
-      return yield* new SetupExistingBindingInvalid({
-        name: selection.name,
-        reason: "duplicate-action-required",
-      });
-    if (
-      selection.duplicateAction === "retire-aliases" &&
-      !retirableShadowAliases(selection.path, candidate?.shadows ?? []).length
-    )
-      return yield* new SetupExistingBindingInvalid({
-        name: selection.name,
-        reason: "aliases-not-retirable",
-      });
-  }
+  const selections = yield* Effect.forEach(selectedCopies, (selection) =>
+    Effect.gen(function* () {
+      const conflict = copyConflict(current, { name: selection.name, sourcePath: selection.path });
+      if (conflict.kind !== "none" && !selection.duplicateAction)
+        return yield* new SetupExistingBindingInvalid({
+          name: selection.name,
+          reason: "duplicate-action-required",
+        });
+      if (selection.duplicateAction !== "retire-aliases") return selection;
+      if (conflict.kind !== "retirable")
+        return yield* selection.approvedAliases
+          ? new PlanIsStale()
+          : new SetupExistingBindingInvalid({
+              name: selection.name,
+              reason: "aliases-not-retirable",
+            });
+      return {
+        ...selection,
+        approvedAliases: yield* captureSetupAliasApproval(
+          selection.path,
+          conflict.shadows,
+          selection.approvedAliases,
+        ),
+      };
+    }),
+  );
   const selected = new Set<string>();
   const results = [];
   const recoveryDirectories: string[] = [];
   const warnings: { name: string; message: string }[] = [];
-  for (const { name, path: selectedPath, duplicateAction } of selectedCopies) {
+  for (const { name, path: selectedPath, duplicateAction, approvedAliases } of selections) {
     if (selected.has(name))
       return yield* new SetupExistingBindingInvalid({ name, reason: "duplicate-selection" });
     selected.add(name);
@@ -100,7 +116,13 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
         : [];
     const retirement =
       duplicateAction === "retire-aliases"
-        ? yield* planSetupAliasRetirement(options.setup.libraryHome, name, selectedPath, shadows)
+        ? yield* planSetupAliasRetirement(
+            options.setup.libraryHome,
+            name,
+            selectedPath,
+            shadows,
+            approvedAliases,
+          )
         : undefined;
     const state = yield* store.load;
     results.push(

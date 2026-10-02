@@ -2,9 +2,12 @@ import { LinkStat } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
 import {
   applySetupLocalCustody,
+  captureSetupAliasApproval,
   planSetupAliasRetirement,
   retireSetupAliases,
 } from "../src/workflows/library/setup-local-custody.js";
+import { applySetupExistingBindings } from "../src/workflows/library/setup-existing-binding.js";
+import { copyConflict } from "../src/workflows/library/setup-decisions.js";
 import type { ShadowObservationError } from "../src/projection/harness-shadows.js";
 import { codexSkillAliases } from "../src/workflows/library/doctor-codex.js";
 import { it } from "@effect/vitest";
@@ -21,6 +24,7 @@ import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
+import { Renderer } from "../src/presentation/renderer.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
   libraryHome,
@@ -658,4 +662,156 @@ it.effect(
         expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name))).toBe(false);
       }
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const operation of ["add", "bind"] as const) {
+  it.effect.each(["added", "retargeted", "replaced", "removed", "directory"] as const)(
+    `${operation} rejects %s aliases despite a freshly observed plan`,
+    (change) =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        yield* initializeLibraryMachine(f.home.home);
+        yield* f.home.owned(
+          writingTo(
+            f.home.home,
+            Effect.gen(function* () {
+              if (operation === "bind") yield* addLibrarySourceEffect(f.source);
+              const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
+              const before = yield* (yield* LibraryStore).load;
+              const observed = yield* runSetup(setup);
+              const conflict = copyConflict(observed, { name: "review", sourcePath: f.source });
+              if (conflict.kind !== "retirable")
+                return yield* Effect.die("Expected retirable aliases");
+              const approvedAliases = yield* captureSetupAliasApproval(f.source, conflict.shadows);
+              if (change === "added") {
+                const root = join(f.root, ".codex", "skills");
+                yield* f.fs.makeDirectory(root, { recursive: true });
+                yield* f.fs.symlink(f.source, join(root, "review-alias"));
+              } else if (change === "removed") {
+                yield* f.fs.remove(f.alias);
+              } else {
+                // Keep the displaced inode alive so a recreated link cannot reuse its identity.
+                yield* f.fs.rename(f.alias, join(f.root, "displaced-link"));
+                if (change === "directory") yield* f.fs.copy(f.source, f.alias);
+                else
+                  yield* f.fs.symlink(
+                    change === "retargeted" ? "../../Work/skills/review" : f.source,
+                    f.alias,
+                  );
+              }
+              const fresh = yield* runSetup(setup);
+              const selection = {
+                name: "review",
+                duplicateAction: "retire-aliases" as const,
+                approvedAliases,
+              };
+              const result =
+                operation === "add"
+                  ? yield* applySetupLocalCustody(
+                      {
+                        setup,
+                        adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+                      },
+                      fresh.onboarding.planId,
+                      [{ ...selection, sourcePath: f.source }],
+                    ).pipe(Effect.asVoid, Effect.result)
+                  : yield* applySetupExistingBindings(
+                      { setup, bindings: f.home.bindings },
+                      fresh.onboarding.planId,
+                      [{ ...selection, path: f.source }],
+                    ).pipe(Effect.asVoid, Effect.result);
+              expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
+              expect(yield* (yield* LibraryStore).load).toEqual(before);
+              expect(yield* f.fs.exists(f.alias)).toBe(change !== "removed");
+              expect(yield* f.fs.exists(f.destination)).toBe(false);
+              expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+            }),
+          ),
+        );
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
+
+it.effect("duplicate decisions apply only to copies that setup can enable", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const observed = yield* f.home.owned(
+      runSetup({ ...f.options, repositoryRoots: [], persistRoots: false }),
+    );
+    const selection = { name: "review", sourcePath: f.source };
+    expect(copyConflict(observed, selection).kind).toBe("retirable");
+    for (const changed of [
+      { scope: "project" as const },
+      { harnesses: [] },
+      { git: { repository: f.root, status: "committed" as const } },
+    ]) {
+      const ineligible = {
+        ...observed,
+        instances: observed.instances.map((instance) =>
+          instance.path === f.source ? { ...instance, ...changed } : instance,
+        ),
+      };
+      expect(copyConflict(ineligible, selection).kind).toBe("none");
+    }
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("setup keeps retirement consent across its reconnect and add stages", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const later = join(f.root, "Work", "skills", "later");
+    const laterAlias = join(f.root, ".codex", "skills", "later");
+    const addedAlias = join(f.root, ".codex", "skills", "later-alias");
+    yield* f.fs.makeDirectory(later, { recursive: true });
+    yield* f.fs.writeFileString(
+      join(later, "SKILL.md"),
+      "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+    );
+    yield* f.fs.symlink(later, laterAlias);
+    yield* initializeLibraryMachine(f.home.home);
+    yield* f.home.owned(writingTo(f.home.home, addLibrarySourceEffect(f.source)));
+    const interaction = yield* makeScriptedInteraction([
+      ["review", "later"],
+      "retire-aliases",
+      true,
+    ]);
+    const result = yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          return yield* setupCommand({
+            options: f.options,
+            cwd: f.root,
+            interactive: true,
+            dryRun: false,
+            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+          }).pipe(
+            Effect.provideService(Renderer, {
+              ...renderer,
+              withStatus: (message, operation) =>
+                renderer
+                  .withStatus(message, operation)
+                  .pipe(
+                    Effect.tap(() =>
+                      typeof message === "string" && message.startsWith("Reconnecting")
+                        ? f.fs.symlink(later, addedAlias).pipe(Effect.orDie)
+                        : Effect.void,
+                    ),
+                  ),
+            }),
+            Effect.result,
+          );
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+    expect(Result.isFailure(result) && result.failure._tag).toBe("PlanIsStale");
+    // The earlier approved reconnect succeeded; the newly observed links do not authorize an add.
+    expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["review"]);
+    expect(yield* f.fs.exists(f.alias)).toBe(false);
+    expect(yield* f.fs.exists(f.destination)).toBe(true);
+    expect(yield* f.fs.readLink(laterAlias)).toBe(later);
+    expect(yield* f.fs.readLink(addedAlias)).toBe(later);
+    expect(yield* f.fs.exists(join(f.root, ".agents", "skills", "later"))).toBe(false);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

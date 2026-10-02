@@ -1389,3 +1389,178 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
     expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
   }).pipe(Effect.provide(skitLayer)),
 );
+
+for (const kind of ["source", "retained-edit"] as const) {
+  it.effect(`requires matching retained lock evidence for a ${kind} acquisition`, () =>
+    Effect.sync(() => {
+      const machineId = makeMachineId();
+      const collectionId = makeCollectionId();
+      const copyId = makeRetainedCopyId();
+      const hash = `sha256:${"a".repeat(64)}`;
+      const lock = setupLock("acme/reviews", "agrees", "review");
+      const instance = setupInstance("review", "/global/review", {
+        locks: [lock],
+        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+      });
+      const library = Schema.decodeUnknownSync(LibraryState)({
+        schemaVersion: 8,
+        collections: [{ collection_id: collectionId, label: "Reviews" }],
+        skills: [
+          {
+            skill_id: makeSkillId(),
+            collection_id: collectionId,
+            path: "skills/review",
+            name: "review",
+            versions: [
+              {
+                skill_version_id: makeSkillVersionId(),
+                source_digest: hash,
+                artifact_digest: hash,
+                validation_identity_digest: hash,
+                materialization_profile: "plain-skill/v1",
+              },
+            ],
+          },
+        ],
+        retained_copies: [
+          {
+            retained_copy_id: copyId,
+            digest: hash,
+            copy_profile: "verbatim/v1",
+            members: [
+              {
+                source_path: kind === "source" ? "skills/review" : ".",
+                source_digest: hash,
+                artifact_digest: hash,
+                materialization_profile: "plain-skill/v1",
+              },
+            ],
+          },
+        ],
+        acquisitions: [
+          {
+            acquisition_id: makeAcquisitionId(),
+            collection_id: collectionId,
+            kind,
+            retained_copy_id: copyId,
+            input: { value: "https://github.com/acme/reviews" },
+            source_identity: {
+              kind: "github",
+              owner: "acme",
+              repository: "reviews",
+              collection_root: ".",
+            },
+            acquired_at: "2026-01-01T00:00:00.000Z",
+            machine_id: machineId,
+            observations: [
+              {
+                type: "skills.sh-lock",
+                machine_id: machineId,
+                observed_at: "2026-01-01T00:00:00.000Z",
+                lock_path: { value: lock.lockPath },
+                lock_version: 3,
+                lock_scope: "global",
+                lock_content_hash: lock.lockContentHash,
+                source: lock.entry.source,
+                source_type: "github",
+                skill_name: "review",
+                skill_path: lock.entry.skillPath,
+                content_agreement: "agrees",
+                original_entry_digest: hash,
+                original_entry: lock.entry.originalEntry,
+              },
+            ],
+          },
+        ],
+        global_bindings: [],
+        local_bindings: [],
+        projections: [],
+        tombstones: [],
+        unmanaged: [],
+        adoption_receipts: [],
+      });
+      expect(classifySetupOnboarding([instance], { library, machineId })).toEqual([]);
+      const offered: readonly SetupSkillInstance[] = [instance];
+      const expectImport = (
+        state: LibraryState,
+        observed: readonly SetupSkillInstance[] = offered,
+        selectedMachine = machineId,
+      ) =>
+        expect(
+          classifySetupOnboarding(observed, { library: state, machineId: selectedMachine }),
+        ).toMatchObject([{ action: "import-observed-collection", name: "review" }]);
+      expectImport(library, offered, makeMachineId());
+      expectImport({ ...library, retained_copies: [] });
+      expectImport({
+        ...library,
+        acquisitions: library.acquisitions.map((acquisition) => ({
+          ...acquisition,
+          collection_id: makeCollectionId(),
+        })),
+      });
+      expectImport({
+        ...library,
+        retained_copies: library.retained_copies.map((copy) => ({
+          ...copy,
+          members: copy.members.map((member) => ({ ...member, source_path: "other" })),
+        })),
+      });
+      expectImport(library, [
+        {
+          ...instance,
+          contentIdentity: {
+            ...instance.contentIdentity,
+            observedHash: `sha256:${"b".repeat(64)}`,
+          },
+        },
+      ]);
+      expectImport({
+        ...library,
+        acquisitions: library.acquisitions.map((acquisition) => ({
+          ...acquisition,
+          observations: acquisition.observations.map((observation) => ({
+            ...observation,
+            lock_content_hash: `sha256:${"b".repeat(64)}`,
+          })),
+        })),
+      });
+      // Retention outranks another contested claim, but a separate eligible import still wins.
+      const contested = setupLock("acme/contested", "agrees", "review");
+      const collision = setupInstance("other", "/global/other", { locks: [contested] });
+      const retainedAndContested = { ...instance, locks: [contested, lock] };
+      expect(
+        classifySetupOnboarding([retainedAndContested, collision], { library, machineId }).filter(
+          (candidate) => candidate.name === "review",
+        ),
+      ).toEqual([]);
+      const fresh = setupLock("acme/fresh", "agrees", "review");
+      expect(
+        classifySetupOnboarding([{ ...instance, locks: [contested, lock, fresh] }, collision], {
+          library,
+          machineId,
+        }).filter((candidate) => candidate.name === "review"),
+      ).toMatchObject([{ action: "import-observed-collection", source: "acme/fresh" }]);
+    }),
+  );
+}
+
+it.effect("includes unreported missing repository config in the approved plan identity", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const missing = yield* observeSetup(f.options);
+    expect(missing.repositoryConfigs).toEqual([]);
+    yield* f.fs.writeFileString(
+      join(f.repository, "skit.config.json"),
+      JSON.stringify({
+        schema: "skit.config.v1",
+        discovery: { exclude: [], collections: [] },
+      }),
+    );
+    const configured = yield* observeSetup(f.options);
+    expect(configured.instances).toEqual(missing.instances);
+    expect(configured.onboarding.candidates).toEqual(missing.onboarding.candidates);
+    expect(configured.onboarding.planId).not.toBe(missing.onboarding.planId);
+    yield* f.fs.remove(join(f.repository, "skit.config.json"));
+    expect((yield* observeSetup(f.options)).onboarding.planId).toBe(missing.onboarding.planId);
+  }).pipe(Effect.provide(skitLayer)),
+);
