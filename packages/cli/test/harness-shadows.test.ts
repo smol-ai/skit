@@ -504,3 +504,158 @@ it.effect(
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"] as const) {
+  it.effect(`applies grouped setup duplicate choices: ${action}`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const source = join(f.root, "Work", "skills", "later");
+      const alias = join(f.root, ".codex", "skills", "later");
+      yield* f.fs.makeDirectory(source, { recursive: true });
+      yield* f.fs.writeFileString(
+        join(source, "SKILL.md"),
+        "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+      );
+      yield* f.fs.symlink(source, alias);
+      const interaction = yield* makeScriptedInteraction([
+        ["review", "later"],
+        action,
+        ...(action === "individual" ? ["retire-aliases", "retain-only"] : []),
+        true,
+      ]);
+      yield* f.home.owned(
+        writingTo(
+          f.home.home,
+          setupCommand({
+            options: f.options,
+            cwd: f.root,
+            interactive: true,
+            dryRun: false,
+            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+          }).pipe(Effect.provide(interaction.layer)),
+        ),
+      );
+      expect(yield* interaction.remaining).toBe(0);
+      const state = yield* f.home.durable;
+      expect(state.skills).toHaveLength(2);
+      expect(state.global_bindings.flatMap((binding) => binding.entries)).toHaveLength(
+        action === "retain-only" ? 0 : action === "individual" ? 1 : 2,
+      );
+      for (const path of [f.source, source])
+        expect(yield* f.fs.exists(join(path, "SKILL.md"))).toBe(true);
+      const survivingAliases = yield* Effect.forEach([f.alias, alias], (path) => f.fs.exists(path));
+      expect(survivingAliases.filter(Boolean)).toHaveLength(
+        action === "retire-aliases" ? 0 : action === "individual" ? 1 : 2,
+      );
+      if (action === "retire-aliases") {
+        const removed = join(f.home.home, "removed");
+        expect(yield* f.fs.readDirectory(removed)).toHaveLength(2);
+        for (const name of ["review", "later"])
+          expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(
+            true,
+          );
+      }
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
+
+it.effect.each(["retain-only", "keep-both"] as const)(
+  "bulk %s preserves a whole-root symlink",
+  (action) =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const source = join(f.root, "Work", "skills", "later");
+      yield* f.fs.makeDirectory(source, { recursive: true });
+      yield* f.fs.writeFileString(
+        join(source, "SKILL.md"),
+        "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+      );
+      const aliasRoot = join(f.root, ".codex", "skills");
+      yield* f.fs.remove(aliasRoot, { recursive: true });
+      yield* f.fs.symlink(join(f.root, "Work", "skills"), aliasRoot);
+      const interaction = yield* makeScriptedInteraction([["review", "later"], action, true]);
+      yield* f.home.owned(
+        writingTo(
+          f.home.home,
+          setupCommand({
+            options: f.options,
+            cwd: f.root,
+            interactive: true,
+            dryRun: false,
+            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+          }).pipe(Effect.provide(interaction.layer)),
+        ),
+      );
+      expect(yield* interaction.remaining).toBe(0);
+      expect(
+        (yield* f.home.durable).global_bindings.flatMap((binding) => binding.entries),
+      ).toHaveLength(action === "retain-only" ? 0 : 2);
+      expect(yield* f.fs.readLink(aliasRoot)).toBe(join(f.root, "Work", "skills"));
+      expect(yield* f.fs.exists(f.destination)).toBe(action === "keep-both");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "uses separate bulk decisions for retirable and ordinary copies across add and bind",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const later = join(f.root, "Work", "skills", "later");
+      yield* f.fs.makeDirectory(later, { recursive: true });
+      yield* f.fs.writeFileString(
+        join(later, "SKILL.md"),
+        "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+      );
+      yield* f.fs.symlink(later, join(f.root, ".codex", "skills", "later"));
+      for (const name of ["ordinary-one", "ordinary-two"]) {
+        const path = join(f.root, ".codex", "skills", name);
+        yield* f.fs.makeDirectory(path);
+        yield* f.fs.writeFileString(
+          join(path, "SKILL.md"),
+          `---\nname: ${name}\ndescription: Ordinary skill\n---\nOrdinary.\n`,
+        );
+      }
+      yield* initializeLibraryMachine(f.home.home);
+      yield* f.home.owned(writingTo(f.home.home, addLibrarySourceEffect(f.source)));
+      const interaction = yield* makeScriptedInteraction([
+        ["review", "later", "ordinary-one", "ordinary-two"],
+        "retire-aliases",
+        "retain-only",
+        true,
+      ]);
+      yield* f.home.owned(
+        writingTo(
+          f.home.home,
+          setupCommand({
+            options: f.options,
+            cwd: f.root,
+            interactive: true,
+            dryRun: false,
+            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+          }).pipe(Effect.provide(interaction.layer)),
+        ),
+      );
+      expect(yield* interaction.remaining).toBe(0);
+      const state = yield* f.home.durable;
+      expect(state.skills).toHaveLength(4);
+      const enabled = new Set(
+        state.global_bindings
+          .flatMap((binding) => binding.entries)
+          .flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
+      );
+      expect(
+        state.skills
+          .filter((skill) => enabled.has(skill.skill_id))
+          .map((skill) => skill.name)
+          .sort(),
+      ).toEqual(["later", "review"]);
+      for (const name of ["review", "later"]) {
+        expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name))).toBe(false);
+        expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
+      }
+      for (const name of ["ordinary-one", "ordinary-two"]) {
+        expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name, "SKILL.md"))).toBe(true);
+        expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name))).toBe(false);
+      }
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
