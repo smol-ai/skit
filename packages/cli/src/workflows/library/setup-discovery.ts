@@ -18,7 +18,6 @@ import {
   type HarnessName as Harness,
   type LibraryState,
 } from "@smolai/skit-core";
-import { probeHarnessesEffect } from "../../harness/probe.js";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import {
@@ -454,8 +453,6 @@ const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
   };
 });
 
-const computeSkillsLockCompatibleHash = computeSkillsShCompatibleHash;
-
 export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
   hit: SkillHit,
   locks: readonly SetupSkillsLock[],
@@ -475,7 +472,7 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
     let content: SetupLockMatch["content"] = "unverifiable";
     const recordedHash = entry.computedHash ?? entry.skillFolderHash;
     if (lock.scope === "project" && recordedHash) {
-      const observedHash = yield* computeSkillsLockCompatibleHash(hit.realPath, hit.realPath);
+      const observedHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
       if (observedHash !== undefined)
         content = observedHash === recordedHash ? "agrees" : "mismatch";
     }
@@ -727,11 +724,3 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
 });
 
 export type SetupEvidence = Effect.Success<ReturnType<typeof collectSetupEvidence>>;
-
-export const collectSetupProbes = Effect.fn("Setup.collectProbes")(function* (probePath?: string) {
-  return (yield* probeHarnessesEffect(undefined, { path: probePath })).map((probe) => ({
-    harness: probe.harnessId,
-    status: probe.status,
-    command: probe.command,
-  }));
-});

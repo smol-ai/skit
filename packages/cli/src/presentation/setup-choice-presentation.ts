@@ -19,21 +19,26 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
   const renderer = yield* Renderer;
   const captureDecision = Effect.fn("CLI.setup.captureDecision")(function* (
     copy: SetupSelectedCopy,
-    action: SetupDuplicateAction,
-  ) {
-    if (action !== "retire-aliases")
-      return { copy, duplicateAction: action } satisfies SetupCopyDecision;
+    action: SetupDuplicateAction | undefined,
+  ): Effect.fn.Return<
+    SetupCopyDecision,
+    Effect.Error<ReturnType<typeof captureSetupAliasApproval>>,
+    Effect.Services<ReturnType<typeof captureSetupAliasApproval>>
+  > {
+    if (action === undefined) return copy;
+    if (action !== "retire-aliases") return { ...copy, duplicateAction: action };
     const approvedAliases = yield* captureSetupAliasApproval(
       copy.sourcePath,
       copy.conflict.kind === "none" ? [] : copy.conflict.shadows,
     );
-    return { copy, duplicateAction: action, approvedAliases } satisfies SetupCopyDecision;
+    return { ...copy, duplicateAction: action, approvedAliases };
   });
+  const actions = new Map<SetupSelectedCopy, SetupDuplicateAction>();
   const prompt = Effect.fn("CLI.setup.promptCopies")(function* (
     group: readonly SetupSelectedCopy[],
   ) {
     const first = group[0];
-    if (!first || first.conflict.kind === "none") return [];
+    if (!first || first.conflict.kind === "none") return;
     const bulk = group.length > 1;
     const retirable = first.conflict.kind === "retirable";
     const aliases = new Set(
@@ -96,35 +101,22 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
       `How should setup handle ${bulk ? `these ${group.length} skills` : first.name}?`,
       choices,
     );
-    return action === "individual"
-      ? []
-      : yield* Effect.forEach(group, (copy) => captureDecision(copy, action));
+    if (action !== "individual") for (const copy of group) actions.set(copy, action);
   });
-  const decisions: SetupCopyDecision[] = copies
-    .filter((copy) => copy.conflict.kind === "none")
-    .map((copy) => ({ copy }));
-  const individual: SetupSelectedCopy[] = [];
   for (const kind of ["retirable", "preserve-copies"] as const) {
     const group = copies.filter((copy) => copy.conflict.kind === kind);
-    if (group.length < 2) {
-      individual.push(...group);
-      continue;
-    }
-    const selected = yield* prompt(group);
-    if (selected.length) decisions.push(...selected);
-    else individual.push(...group);
+    if (group.length > 1) yield* prompt(group);
   }
-  for (const copy of individual.sort((left, right) => left.order - right.order))
-    decisions.push(...(yield* prompt([copy])));
-  return decisions.sort((left, right) => left.copy.order - right.copy.order);
+  for (const copy of copies)
+    if (copy.conflict.kind !== "none" && !actions.has(copy)) yield* prompt([copy]);
+  return yield* Effect.forEach(copies, (copy) => captureDecision(copy, actions.get(copy)));
 });
 
 export function setupDuplicatePlanLines(decisions: readonly SetupCopyDecision[]) {
   return (["retain-only", "retire-aliases", "keep-both"] as const).flatMap((action) => {
     const selected = decisions.filter((decision) => decision.duplicateAction === action);
     if (!selected.length) return [];
-    const names =
-      selected.length <= 5 ? ` · ${selected.map(({ copy }) => copy.name).join(", ")}` : "";
+    const names = selected.length <= 5 ? ` · ${selected.map((copy) => copy.name).join(", ")}` : "";
     if (action === "retain-only")
       return [`Retain only: ${skillCount(selected.length)}${names} · no new Binding or Projection`];
     if (action === "keep-both")

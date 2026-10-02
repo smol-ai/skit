@@ -702,6 +702,7 @@ for (const operation of ["add", "bind"] as const) {
               const fresh = yield* runSetup(setup);
               const selection = {
                 name: "review",
+                sourcePath: f.source,
                 duplicateAction: "retire-aliases" as const,
                 approvedAliases,
               };
@@ -713,12 +714,12 @@ for (const operation of ["add", "bind"] as const) {
                         adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
                       },
                       fresh.onboarding.planId,
-                      [{ ...selection, sourcePath: f.source }],
+                      [selection],
                     ).pipe(Effect.asVoid, Effect.result)
                   : yield* applySetupExistingBindings(
                       { setup, bindings: f.home.bindings },
                       fresh.onboarding.planId,
-                      [{ ...selection, path: f.source }],
+                      [selection],
                     ).pipe(Effect.asVoid, Effect.result);
               expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
               expect(yield* (yield* LibraryStore).load).toEqual(before);

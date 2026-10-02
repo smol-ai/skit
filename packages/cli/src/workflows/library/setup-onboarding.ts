@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Data, Schema } from "effect";
+import { Schema } from "effect";
 import {
   SourceIdentity,
   sourceIdentityFromSource,
@@ -9,6 +9,7 @@ import {
 } from "@smolai/skit-core";
 import {
   indexSetupOnboardingEvidence,
+  lockEvidenceKey,
   type SetupOnboardingEvidence,
   type SetupRetainedEvidence,
 } from "./setup-evidence.js";
@@ -48,13 +49,9 @@ type LockImport = Omit<
   Extract<SetupOnboardingCandidate, { action: "import-observed-collection" }>,
   "name" | "owner"
 >;
-type LockDecision = Data.TaggedEnum<{
-  Importable: { imports: readonly LockImport[] };
-  AlreadyRetained: {};
-  Contested: {};
-  NoClaim: {};
-}>;
-const LockDecision = Data.taggedEnum<LockDecision>();
+type LockDecision =
+  | { readonly _tag: "Importable"; readonly imports: readonly LockImport[] }
+  | { readonly _tag: "AlreadyRetained" | "Contested" | "NoClaim" };
 
 /** Any import wins; otherwise retained wins over contested, then ordinary classification. */
 const classifyLockClaims = (
@@ -62,13 +59,13 @@ const classifyLockClaims = (
   locks: readonly (readonly [string, SetupLockMatch])[],
   evidence: SetupOnboardingEvidence,
 ): LockDecision => {
-  let decision: LockDecision = LockDecision.NoClaim();
+  let decision: LockDecision = { _tag: "NoClaim" };
   const imports: LockImport[] = [];
   for (const [groupKey, lock] of locks) {
     const claim = evidence.lockClaims.get(groupKey);
     if (claim?._tag !== "Resolved") {
       if (claim?._tag === "Contested" && decision._tag === "NoClaim")
-        decision = LockDecision.Contested();
+        decision = { _tag: "Contested" };
       continue;
     }
     const observedInstances = group.filter((instance) =>
@@ -82,24 +79,21 @@ const classifyLockClaims = (
         matchingCollections = new Set();
         break;
       }
-      const key = [
+      const key = lockEvidenceKey(
         matchingLock.lockPath,
         matchingLock.lockContentHash,
         instance.name,
-        matchingLock.entry.skillPath ?? "",
-      ].join("\0");
-      const collections = new Set(
-        (evidence.retainedByLockEvidence.get(key) ?? [])
-          .filter((entry) => entry.validationIdentityDigest === observedHash)
-          .map((entry) => entry.subjectId),
+        matchingLock.entry.skillPath,
+        observedHash,
       );
+      const collections = evidence.retainedByLockEvidence.get(key) ?? new Set<string>();
       matchingCollections =
         matchingCollections === undefined
           ? collections
           : new Set([...matchingCollections].filter((collection) => collections.has(collection)));
     }
     if ((matchingCollections?.size ?? 0) > 0) {
-      decision = LockDecision.AlreadyRetained();
+      decision = { _tag: "AlreadyRetained" };
       continue;
     }
     imports.push({
@@ -112,7 +106,7 @@ const classifyLockClaims = (
       ...(lock.entry.skillPath ? { skillPath: lock.entry.skillPath } : {}),
     });
   }
-  return imports.length ? LockDecision.Importable({ imports }) : decision;
+  return imports.length ? { _tag: "Importable", imports } : decision;
 };
 
 /** Match copies only within the same repository or global installation scope. */
@@ -130,7 +124,8 @@ export const classifySetupOnboarding = (
   retained?: SetupRetainedEvidence,
 ): SetupOnboardingCandidate[] => {
   const evidence = indexSetupOnboardingEvidence(instances, retained);
-  const { libraryCollectionsById, librarySkillsBySubject } = evidence;
+  const collections = retained?.library?.collections ?? [];
+  const skills = retained?.library?.skills ?? [];
   const groups = new Map<string, SetupSkillInstance[]>();
   for (const instance of instances) {
     if (instance.owner.kind === "skit" || instance.owner.kind === "authored") continue;
@@ -182,10 +177,10 @@ export const classifySetupOnboarding = (
         }),
       ).entries(),
     ];
-    const lockDecision =
+    const lockDecision: LockDecision =
       hashes.size === 1
         ? classifyLockClaims(group, importableLocks, evidence)
-        : LockDecision.NoClaim();
+        : { _tag: "NoClaim" };
     switch (lockDecision._tag) {
       case "Importable":
         candidates.push(...lockDecision.imports.map((selection) => ({ ...base, ...selection })));
@@ -231,12 +226,16 @@ export const classifySetupOnboarding = (
         if (
           importableLocks.some(([, lock]) => {
             const source = setupLockCollection(lock)?.source;
-            const retainedSkill = librarySkillsBySubject.get(match.subjectId);
+            const retainedSkill = skills.find(
+              (skill) =>
+                skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
+            );
             const retainedSource =
               retainedSkill === undefined
                 ? undefined
-                : libraryCollectionsById.get(retainedSkill.collection_id)?.upstream
-                    ?.source_identity;
+                : collections.findLast(
+                    (collection) => collection.collection_id === retainedSkill.collection_id,
+                  )?.upstream?.source_identity;
             if (source === undefined || retainedSource === undefined) return false;
             const lockSource = sourceIdentityFromSource(source, retained?.machineId);
             if (lockSource === undefined) return false;
@@ -264,11 +263,16 @@ export const classifySetupOnboarding = (
         subjectId: match.subjectId,
         skillVersionId: match.skillVersionId,
         ...(() => {
-          const matchedSkill = librarySkillsBySubject.get(match.subjectId);
+          const matchedSkill = skills.find(
+            (skill) =>
+              skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
+          );
           const label =
             matchedSkill === undefined
               ? undefined
-              : libraryCollectionsById.get(matchedSkill.collection_id)?.label;
+              : collections.findLast(
+                  (collection) => collection.collection_id === matchedSkill.collection_id,
+                )?.label;
           return label === undefined ? {} : { collectionDisplayName: label };
         })(),
       });

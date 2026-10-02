@@ -1,16 +1,70 @@
 import { resolve } from "node:path";
 import { Effect, FileSystem, Result } from "effect";
 import {
+  currentSkillVersion,
+  type LibraryState,
+  type SkillId,
+  type SkillVersionId,
   deterministicTreeHashEffect,
   pathIsWithin,
   projectionTargetHarnesses,
 } from "@smolai/skit-core";
 import { sourceIdentityLabel } from "./skill-metadata.js";
 import { custodyAt, lockMatches, type SetupEvidence } from "./setup-discovery.js";
-import type { indexSetupLibrary } from "./setup-evidence.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
-import type { SetupProjection, SetupSkillInstance } from "./setup-contract.js";
-export const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
+import { probeHarnessesEffect } from "../../harness/probe.js";
+import type {
+  SetupAuthoredCollection,
+  SetupProjection,
+  SetupSkillInstance,
+} from "./setup-contract.js";
+const indexSetupLibrary = (
+  library: LibraryState,
+  authoredCollections: readonly SetupAuthoredCollection[],
+) => {
+  const authoredBySkillPath = new Map(
+    authoredCollections.flatMap((collection) =>
+      collection.skills.map(
+        (skill) =>
+          [
+            skill.path,
+            {
+              skitLocator: collection.skitLocator,
+              ...(collection.collectionId ? { collectionId: collection.collectionId } : {}),
+            },
+          ] as const,
+      ),
+    ),
+  );
+  const libraryCollectionsById = new Map(
+    library.collections.map((collection) => [collection.collection_id, collection] as const),
+  );
+  const librarySkillsByHash = new Map<
+    string,
+    Array<{
+      subjectId: string;
+      skillId: SkillId;
+      skillVersionId: SkillVersionId;
+      name: string;
+    }>
+  >();
+  for (const skill of library.skills) {
+    const selected = currentSkillVersion(library, skill);
+    if (selected === undefined) continue;
+    librarySkillsByHash.set(selected.validation_identity_digest, [
+      ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
+      {
+        subjectId: skill.collection_id ?? skill.skill_id,
+        skillId: skill.skill_id,
+        skillVersionId: selected.skill_version_id,
+        name: skill.name,
+      },
+    ]);
+  }
+  return { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath };
+};
+
+const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
   evidence: SetupEvidence,
   indexes: ReturnType<typeof indexSetupLibrary>,
   home: string,
@@ -127,7 +181,7 @@ export const observeSetupInstances = Effect.fn("Setup.observeInstances")(functio
   return instances;
 });
 
-export const observeSetupProjections = Effect.fn("Setup.observeProjections")(function* (
+const observeSetupProjections = Effect.fn("Setup.observeProjections")(function* (
   observedLibrary: SetupEvidence["observedLibrary"],
   indexes: ReturnType<typeof indexSetupLibrary>,
 ) {
@@ -153,4 +207,20 @@ export const observeSetupProjections = Effect.fn("Setup.observeProjections")(fun
     });
   }
   return projections;
+});
+
+export const observeSetupCopies = Effect.fn("Setup.observeCopies")(function* (
+  evidence: SetupEvidence,
+  home: string,
+  probePath?: string,
+) {
+  const indexes = indexSetupLibrary(evidence.library, evidence.authoredCollections);
+  const instances = yield* observeSetupInstances(evidence, indexes, home);
+  const probes = (yield* probeHarnessesEffect(undefined, { path: probePath })).map((probe) => ({
+    harness: probe.harnessId,
+    status: probe.status,
+    command: probe.command,
+  }));
+  const projections = yield* observeSetupProjections(evidence.observedLibrary, indexes);
+  return { instances, probes, projections };
 });

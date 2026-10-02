@@ -29,27 +29,20 @@ import {
 } from "./local-adoption.js";
 import { PlanIsStale } from "../../library/failures.js";
 import { addLibrarySourceEffect } from "./add.js";
-import { applyLibraryBindings } from "./set-enabled.js";
+import { applyLibraryBindings, type SetEnabledOptions } from "./set-enabled.js";
+import type { SetupResult } from "./setup-contract.js";
+import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 
 import {
   copyConflict,
   retirableShadowAliases,
-  SetupDuplicateAction,
+  SetupCopySelection,
   SetupApprovedAlias,
 } from "./setup-decisions.js";
 
-export { retirableShadowAliases } from "./setup-decisions.js";
-
-export const SetupLocalCustodySelection = Schema.Struct({
-  name: Schema.String,
-  sourcePath: Schema.String,
-  duplicateAction: Schema.optionalKey(SetupDuplicateAction),
-  approvedAliases: Schema.optionalKey(Schema.Array(SetupApprovedAlias)),
-});
-export interface SetupLocalCustodySelection extends Schema.Schema.Type<
-  typeof SetupLocalCustodySelection
-> {}
+export const SetupLocalCustodySelection = SetupCopySelection;
+export interface SetupLocalCustodySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
 
 const SetupLocalCustodySelections = Schema.Array(SetupLocalCustodySelection);
 
@@ -88,30 +81,11 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   yield* (yield* LibraryStore).load;
   const selections = yield* Effect.forEach(decoded, (selection) =>
-    Effect.gen(function* () {
-      const conflict = copyConflict(current, selection);
-      if (conflict.kind !== "none" && !selection.duplicateAction)
-        return yield* new SetupLocalCustodySelectionInvalid({
-          name: selection.name,
-          reason: "duplicate-action-required",
-        });
-      if (selection.duplicateAction !== "retire-aliases") return selection;
-      if (conflict.kind !== "retirable")
-        return yield* selection.approvedAliases
-          ? new PlanIsStale()
-          : new SetupLocalCustodySelectionInvalid({
-              name: selection.name,
-              reason: "aliases-not-retirable",
-            });
-      return {
-        ...selection,
-        approvedAliases: yield* captureSetupAliasApproval(
-          selection.sourcePath,
-          conflict.shadows,
-          selection.approvedAliases,
-        ),
-      };
-    }),
+    approveSetupCopy(
+      current,
+      selection,
+      (reason) => new SetupLocalCustodySelectionInvalid({ name: selection.name, reason }),
+    ),
   );
   const selectedCandidates = new Set<string>();
   const adopted: Array<{ readonly subject_id: string; readonly retained_version_id: string }> = [];
@@ -214,49 +188,84 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
         name: selection.name,
         reason: "source-not-candidate",
       });
-    const state = yield* (yield* LibraryStore).load;
-    yield* applyLibraryBindings(state, {
-      query: subjectId,
-      all: false,
-      allowDuplicate: selection.duplicateAction === "keep-both",
-      ...(retirement
-        ? {
-            allowedShadowAliases: retirement.entries.map((entry) => ({
-              ...entry,
-              canonicalPath: sourcePath,
-            })),
-          }
-        : {}),
-      selectedSkills: [selection.name],
-      invocation: {
-        subjects: [subjectId],
-        scope: { kind: "global" },
-        enabled: true,
-        dryRun: false,
-      },
-      roots: options.adoption.bindings,
-      variantsPath: options.adoption.bindings.variantsPath,
-      adoption: {
-        path: adoptionPlan.sourcePath,
-        observedHash: adoptionPlan.skill.validationDigest,
-      },
-    });
-    if (retirement) {
-      const outcome = yield* retireSetupAliases(
-        options.setup.inventory,
-        subjectId,
-        selection.name,
-        retirement,
-      );
-      if (outcome.kind === "retired") recoveryDirectories.push(retirement.recoveryDirectory);
-      else warnings.push({ name: selection.name, message: outcome.message });
-    }
+    const bound = yield* bindSetupCopy(
+      { setup: options.setup, bindings: options.adoption.bindings },
+      selection,
+      subjectId,
+      { path: adoptionPlan.sourcePath, observedHash: adoptionPlan.skill.validationDigest },
+      retirement,
+    );
+    recoveryDirectories.push(...bound.recoveryDirectories);
+    warnings.push(...bound.warnings);
     adopted.push({
       subject_id: subjectId,
       retained_version_id: retained.retained_version_id,
     });
   }
   return { planId: current.onboarding.planId, plans, adopted, recoveryDirectories, warnings };
+});
+
+/** Shared preflight; callers retain their own selection-error contract. */
+export const approveSetupCopy = Effect.fn("Setup.approveCopy")(function* <E>(
+  current: SetupResult,
+  selection: SetupCopySelection,
+  invalid: (reason: "duplicate-action-required" | "aliases-not-retirable") => E,
+) {
+  const conflict = copyConflict(current, selection);
+  if (conflict.kind !== "none" && !selection.duplicateAction)
+    return yield* Effect.fail(invalid("duplicate-action-required"));
+  if (selection.duplicateAction !== "retire-aliases") return selection;
+  if (conflict.kind !== "retirable")
+    return yield* Effect.fail(
+      selection.approvedAliases ? new PlanIsStale() : invalid("aliases-not-retirable"),
+    );
+  return {
+    ...selection,
+    approvedAliases: yield* captureSetupAliasApproval(
+      selection.sourcePath,
+      conflict.shadows,
+      selection.approvedAliases,
+    ),
+  };
+});
+
+/** Consume a retirement prepared before adoption; bind before retiring any approved link. */
+export const bindSetupCopy = Effect.fn("Setup.bindCopy")(function* (
+  options: { setup: SetupOptions; bindings: ProjectionOptions },
+  selection: SetupCopySelection,
+  subjectId: string,
+  adoption: NonNullable<SetEnabledOptions["adoption"]>,
+  retirement?: Effect.Success<ReturnType<typeof planSetupAliasRetirement>>,
+) {
+  const state = yield* (yield* LibraryStore).load;
+  const result = yield* applyLibraryBindings(state, {
+    query: subjectId,
+    all: false,
+    allowDuplicate: selection.duplicateAction === "keep-both",
+    ...(retirement
+      ? {
+          allowedShadowAliases: retirement.entries.map((entry) => ({
+            ...entry,
+            canonicalPath: selection.sourcePath,
+          })),
+        }
+      : {}),
+    selectedSkills: [selection.name],
+    invocation: { subjects: [subjectId], scope: { kind: "global" }, enabled: true, dryRun: false },
+    roots: options.bindings,
+    variantsPath: options.bindings.variantsPath,
+    adoption,
+  });
+  const outcome = retirement
+    ? yield* retireSetupAliases(options.setup.inventory, subjectId, selection.name, retirement)
+    : undefined;
+  return {
+    result,
+    recoveryDirectories:
+      retirement && outcome?.kind === "retired" ? [retirement.recoveryDirectory] : [],
+    warnings:
+      outcome?.kind === "preserved" ? [{ name: selection.name, message: outcome.message }] : [],
+  };
 });
 
 /** Bind observed aliases to filesystem identities before approval, and verify that consent later. */

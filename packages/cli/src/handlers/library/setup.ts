@@ -143,22 +143,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     setupSelectedCopies(observed, add, bind),
     displayPath,
   );
-  const localCustodySelections = decisions
-    .filter(({ copy }) => copy.operation === "add")
-    .map(({ copy, duplicateAction, approvedAliases }) => ({
-      name: copy.name,
-      sourcePath: copy.sourcePath,
-      ...(duplicateAction ? { duplicateAction } : {}),
-      ...(approvedAliases ? { approvedAliases } : {}),
-    }));
-  const existingBindingSelections = decisions
-    .filter(({ copy }) => copy.operation === "bind")
-    .map(({ copy, duplicateAction, approvedAliases }) => ({
-      name: copy.name,
-      path: copy.sourcePath,
-      ...(duplicateAction ? { duplicateAction } : {}),
-      ...(approvedAliases ? { approvedAliases } : {}),
-    }));
+  const localCustodySelections = decisions.filter((copy) => copy.operation === "add");
+  const existingBindingSelections = decisions.filter((copy) => copy.operation === "bind");
   const removalPlan = yield* planSetupRemovals(setupOptions, observed, remove, removablePaths);
   const prompter = yield* Prompter;
   const hasChanges =
@@ -226,7 +212,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
           `Reconnect existing Library matches: ${reconnectSelections.length}`,
           ...reconnectSelections
             .slice(0, 5)
-            .map(({ name, path }) => `  ${name} · ${displayPath(path)}`),
+            .map(({ name, sourcePath }) => `  ${name} · ${displayPath(sourcePath)}`),
           ...(reconnectSelections.length > 5
             ? [`  … and ${reconnectSelections.length - 5} more`]
             : []),

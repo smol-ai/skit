@@ -61,25 +61,30 @@ export function copyConflict(
   return { kind: aliases.length ? "retirable" : "preserve-copies", shadows, aliases };
 }
 
+export const SetupCopySelection = Schema.Struct({
+  name: Schema.String,
+  sourcePath: Schema.String,
+  duplicateAction: Schema.optionalKey(SetupDuplicateAction),
+  approvedAliases: Schema.optionalKey(Schema.Array(SetupApprovedAlias)),
+});
+export interface SetupCopySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
+
 export interface SetupSelectedCopy {
   readonly operation: "add" | "bind";
   readonly name: string;
   readonly sourcePath: string;
-  readonly order: number;
   readonly conflict: SetupCopyConflict;
 }
 
-export type SetupCopyDecision = { readonly copy: SetupSelectedCopy } & (
-  | { readonly duplicateAction?: never; readonly approvedAliases?: never }
-  | {
-      readonly duplicateAction: "retain-only" | "keep-both";
-      readonly approvedAliases?: never;
-    }
-  | {
-      readonly duplicateAction: "retire-aliases";
-      readonly approvedAliases: readonly SetupApprovedAlias[];
-    }
-);
+export type SetupCopyDecision = SetupSelectedCopy &
+  (
+    | { readonly duplicateAction?: never; readonly approvedAliases?: never }
+    | { readonly duplicateAction: "retain-only" | "keep-both"; readonly approvedAliases?: never }
+    | {
+        readonly duplicateAction: "retire-aliases";
+        readonly approvedAliases: readonly SetupApprovedAlias[];
+      }
+  );
 
 export function setupSelectedCopies(
   observed: SetupResult,
@@ -89,5 +94,5 @@ export function setupSelectedCopies(
   return [
     ...add.map((selection) => ({ ...selection, operation: "add" as const })),
     ...bind.map(({ name, path }) => ({ name, sourcePath: path, operation: "bind" as const })),
-  ].map((copy, order) => ({ ...copy, order, conflict: copyConflict(observed, copy) }));
+  ].map((copy) => ({ ...copy, conflict: copyConflict(observed, copy) }));
 }

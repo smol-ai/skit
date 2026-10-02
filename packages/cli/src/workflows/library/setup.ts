@@ -3,9 +3,8 @@ import { canonicalJson, Digest, hashParts } from "@smolai/skit-core";
 import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
-import { collectSetupEvidence, collectSetupProbes, collectBrokenLinks } from "./setup-discovery.js";
-import { indexSetupLibrary } from "./setup-evidence.js";
-import { observeSetupInstances, observeSetupProjections } from "./setup-observation.js";
+import { collectSetupEvidence, collectBrokenLinks } from "./setup-discovery.js";
+import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 export {
   SetupConfigUnusable,
@@ -55,14 +54,14 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     harnessRoots,
     library,
     authoredCollections,
-    observedLibrary,
     repositoryScans,
     locks,
   } = evidence;
-  const indexes = indexSetupLibrary(library, authoredCollections);
-  const instances = yield* observeSetupInstances(evidence, indexes, options.inventory.home);
-  const probes = yield* collectSetupProbes(options.probePath);
-  const projections = yield* observeSetupProjections(observedLibrary, indexes);
+  const { instances, probes, projections } = yield* observeSetupCopies(
+    evidence,
+    options.inventory.home,
+    options.probePath,
+  );
   const candidates = classifySetupOnboarding(instances, {
     library,
     machineId: machineConfig.machineId,
