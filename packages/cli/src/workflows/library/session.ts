@@ -1,3 +1,4 @@
+import { ProjectionWouldDuplicate } from "../../projection/harness-shadows.js";
 import { readLibrarySkillMetadata, type SkillMetadata } from "./skill-metadata.js";
 import {
   bindingSkillIds,
@@ -155,6 +156,7 @@ const factFromPlan = (
 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   state: LibrarySessionState,
+  configuration: ProjectionOptions,
   operations: readonly PendingOperation[],
   policies: readonly InvocationReadModel[] = [],
 ) {
@@ -164,12 +166,17 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
       return {
         libraryRevision: libraryStateRevision(current),
         plans: yield* Effect.forEach(operations, ({ query, invocation }) =>
-          previewLibraryBindings(current, {
-            query,
-            all: false,
-            invocation,
-            roots: { home: "", configHome: "", overrides: {} },
-            variantsPath: "",
+          Effect.gen(function* () {
+            const plan = yield* previewLibraryBindings(current, {
+              query,
+              all: false,
+              invocation,
+              roots: configuration,
+              variantsPath: configuration.variantsPath,
+            });
+            if (plan.shadows?.length)
+              return yield* new ProjectionWouldDuplicate({ shadows: plan.shadows });
+            return plan;
           }),
         ),
       };
@@ -196,7 +203,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
 
 export function proposeLibraryEnable(
   state: LibrarySessionState,
-  _configuration: ProjectionOptions,
+  configuration: ProjectionOptions,
   row: LibrarySkillRow,
   selection: {
     readonly scope: Scope;
@@ -212,6 +219,7 @@ export function proposeLibraryEnable(
   };
   return proposeLibraryChange(
     state,
+    configuration,
     [{ query: row.skillVersionId, invocation }],
     [libraryPolicyAfter(row, selection.invocation ?? "declared")],
   );
@@ -219,13 +227,14 @@ export function proposeLibraryEnable(
 
 export function proposeLibraryDisable(
   state: LibrarySessionState,
-  _configuration: ProjectionOptions,
+  configuration: ProjectionOptions,
   row: LibrarySkillRow,
   bindings: readonly LibraryBindingRow[],
 ) {
   const byScope = new Map(bindings.map((binding) => [scopeKey(binding.scope), binding.scope]));
   return proposeLibraryChange(
     state,
+    configuration,
     [...byScope.values()].map((scope) => ({
       query: row.skillVersionId,
       invocation: {
@@ -240,13 +249,14 @@ export function proposeLibraryDisable(
 
 export function proposeLibraryInvocation(
   state: LibrarySessionState,
-  _configuration: ProjectionOptions,
+  configuration: ProjectionOptions,
   row: LibrarySkillRow,
   binding: LibraryBindingRow,
   invocation: InvocationOption,
 ) {
   return proposeLibraryChange(
     state,
+    configuration,
     [
       {
         query: row.skillVersionId,

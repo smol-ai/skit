@@ -58,6 +58,8 @@ For each discovered repository, you can configure SKIT to track or ignore them i
 
 Select any discovered skill to add its exact current version to your SKIT library. For an unmanaged global skill, SKIT also takes custody of its harness installation.
 
+If enabling would create another same-scope copy in an agent’s known skill directories, setup asks whether to retain without enabling, explicitly keep both copies, or retire redundant symlinks. Symlinks are retired only after replacement Projections succeed; their targets stay in place, and the links are saved with recovery receipts. Setup never offers this cleanup for a real source directory.
+
 ### skills.sh
 
 When SKIT can determine the source of a skill from a skills.sh lockfile, you can add these sources to your SKIT library for updates.
@@ -87,6 +89,8 @@ Alternatively, you can supply these flags:
 - `--repo [path]` to enable in a single repo
 - `--all` to enable all skills in a collection
 - `--invocation [declared, explicit, implicit, host-policy]` to control whether an agent can invoke the skill automatically
+
+Before enabling a new skill, SKIT checks the same-scope directories readable by each agent. An existing copy blocks enable, including an identical copy reached through a symlink. `skit enable --dry-run` shows the conflict; `--allow-duplicate` explicitly permits it. Existing Bindings can still change invocation policy. `skit doctor` shows duplicate symlink locations and their resolved targets.
 
 The interactive `skit list` flow allows you to change invocation settings for all skills.
 

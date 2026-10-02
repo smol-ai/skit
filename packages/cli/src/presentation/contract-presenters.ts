@@ -193,7 +193,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: RenderContext): string {
+function renderDoctor(data: ContractDataForId<"skit.doctor.v5">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactHomePath(value));
@@ -205,7 +205,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: Render
   );
 
   const findings: string[] = [];
-  let hasCollisions = data.codex.findings.length > 0;
+  let hasCollisions = data.codex.findings.some((finding) => finding.kind !== "layered-name");
   for (const issue of data.issues) {
     findings.push(
       `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former Harness root" : `.${issue.target}`}`) : ""}`,
@@ -216,11 +216,25 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: Render
   for (const finding of data.codex.findings) {
     findings.push(
       `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
-      `      ${finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
-      ...finding.instances.map(
-        (instance) =>
-          `      ${path(instance.path)} ${color.dim(`· ${instance.scope}${instance.pluginId ? ` · plugin ${instance.pluginId}` : ""} · ${instance.skitManaged ? "SKIT projection" : "not tracked by SKIT"}`)}`,
-      ),
+      `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
+      ...finding.instances.flatMap((instance) => {
+        const locations: readonly import("../projection/harness-shadows.js").SkillAlias[] = instance
+          .aliases?.length
+          ? instance.aliases
+          : [{ path: instance.path, via: "unknown-root" }];
+        return locations.map(
+          (alias) =>
+            `      ${path(alias.path)}${alias.via === "symlink" ? ` → ${path(dirname(instance.canonicalPath))} ${color.dim(`(symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${compactHomePath(alias.linkPath)}` : ""})`)}` : color.dim(` (${alias.via})`)} ${color.dim(`· ${instance.scope}${instance.pluginId ? ` · plugin ${instance.pluginId}` : ""} · ${instance.skitManaged ? "SKIT projection" : "not tracked by SKIT"}`)}`,
+        );
+      }),
+      ...(finding.kind !== "layered-name" &&
+      finding.instances.some((instance) =>
+        instance.aliases?.some((alias) => alias.via === "symlink"),
+      )
+        ? [
+            "      Remove the redundant symlink alias or disable the SKIT Binding; preserve the source directory.",
+          ]
+        : []),
     );
   }
   for (const error of data.codex.errors)
@@ -287,11 +301,15 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: Render
       );
       const selected = check.skills.find((skill) => skill.name === name)?.path;
       findings.push(
-        ...[...paths]
-          .sort()
-          .map(
-            (value) => `      ${path(value)}${value === selected ? color.dim(" · selected") : ""}`,
-          ),
+        ...[...paths].sort().map((value) => {
+          const location = check.locations?.find(
+            (item) =>
+              item.canonicalPath === dirname(value) ||
+              item.aliases.some((alias) => alias.path === dirname(value)),
+          );
+          const aliases = location?.aliases.filter((alias) => alias.via === "symlink") ?? [];
+          return `      ${path(value)}${value === selected ? color.dim(" · selected") : ""}${aliases.length ? `\n${aliases.map((alias) => `      ${path(alias.path)} → ${path(location?.canonicalPath ?? dirname(value))} ${color.dim("(symlink)")}`).join("\n")}` : ""}`;
+        }),
       );
     }
     findings.push(
@@ -313,7 +331,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v4">, context: Render
         : color.yellow("!");
   const codex = data.codex;
   lines.push(
-    `  ${status(codex.status, Boolean(codex.findings.length || codex.errors.length))} ${"Codex".padEnd(14)} ${codex.status === "checked" ? `${codex.instances.length} enabled skill${codex.instances.length === 1 ? "" : "s"}` : codex.status === "missing" ? "not installed" : "not checked"}${codex.version ? color.dim(` · ${codex.version}`) : ""}`,
+    `  ${status(codex.status, Boolean(codex.findings.some((finding) => finding.kind !== "layered-name") || codex.errors.length))} ${"Codex".padEnd(14)} ${codex.status === "checked" ? `${codex.instances.length} enabled skill${codex.instances.length === 1 ? "" : "s"}` : codex.status === "missing" ? "not installed" : "not checked"}${codex.version ? color.dim(` · ${codex.version}`) : ""}`,
   );
   if (codex.status !== "checked" && codex.status !== "missing")
     lines.push(`      ${color.dim(codex.detail ?? codex.status)}`);
@@ -546,7 +564,7 @@ export function setupDiscoverySummary(data: SetupDiscoveryInput) {
   };
 }
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v5">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -651,7 +669,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v4">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v4">["projections"],
+  projections: ContractDataForId<"skit.setup.v5">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -678,7 +696,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v5">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -698,7 +716,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v4">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v5">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -740,7 +758,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v4">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v4">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v5">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,

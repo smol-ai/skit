@@ -8,6 +8,7 @@ export default defineConfig({
       "test/add-git-parity.test.ts",
       "test/application-cli.test.ts",
       "test/cli.test.ts",
+      "test/doctor-symlinks-cli.test.ts",
       "test/declared-exit-codes.e2e.test.ts",
       "test/explicit-binding-command.test.ts",
       "test/harness-probe.test.ts",

@@ -1,3 +1,12 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  SkillAlias,
+  type HarnessShadow,
+  observeHarnessSkills,
+  readableHarnessRoots,
+} from "../../projection/harness-shadows.js";
+import type { InventoryRootOptions } from "../../projection/roots.js";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
@@ -48,10 +57,11 @@ export const CodexDoctorInstance = Schema.Struct({
   pluginId: Schema.optionalKey(Schema.String),
   skitManaged: Schema.Boolean,
   documentDigest: Schema.optionalKey(Schema.String),
+  aliases: Schema.optionalKey(Schema.Array(SkillAlias)),
 });
 export type CodexDoctorInstance = typeof CodexDoctorInstance.Type;
 export const CodexDoctorFinding = Schema.Struct({
-  kind: Schema.Literals(["duplicate-name", "display-name-collision"]),
+  kind: Schema.Literals(["duplicate-name", "display-name-collision", "layered-name"]),
   name: Schema.String,
   documents: Schema.Literals(["identical", "different", "unknown"]),
   instances: Schema.Array(CodexDoctorInstance),
@@ -68,26 +78,53 @@ export const CodexDoctorCheck = Schema.Struct({
 });
 export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
 
+export function codexSkillAliases(
+  canonicalDocument: string,
+  reportedDocument: string,
+  index: readonly HarnessShadow[],
+): readonly SkillAlias[] {
+  return (
+    index.find((instance) => instance.canonicalPath === dirname(canonicalDocument))?.aliases ?? [
+      { path: dirname(reportedDocument), via: "unknown-root" },
+    ]
+  );
+}
+
 /** Canonical document identity, not names or visible labels, collapses symlink aliases. */
 export function codexDuplicateFindings(
   instances: readonly CodexDoctorInstance[],
 ): CodexDoctorFinding[] {
-  const unique = [...new Map(instances.map((item) => [item.canonicalPath, item])).values()];
+  const physical = new Map<string, CodexDoctorInstance>();
+  for (const item of instances) {
+    const prior = physical.get(item.canonicalPath);
+    const aliases = [
+      ...new Map(
+        [...(prior?.aliases ?? []), ...(item.aliases ?? [])].map((alias) => [alias.path, alias]),
+      ).values(),
+    ];
+    physical.set(item.canonicalPath, {
+      ...item,
+      skitManaged: item.skitManaged || prior?.skitManaged === true,
+      ...(aliases.length ? { aliases } : {}),
+    });
+  }
+  const unique = [...physical.values()];
   const findings: CodexDoctorFinding[] = [];
   for (const kind of ["duplicate-name", "display-name-collision"] as const) {
     const groups = new Map<string, CodexDoctorInstance[]>();
     for (const item of unique) {
       const key = kind === "duplicate-name" ? item.name : item.displayName;
-      groups.set(key, [...(groups.get(key) ?? []), item]);
+      const scopedKey = `${item.scope}\0${key}`;
+      groups.set(scopedKey, [...(groups.get(scopedKey) ?? []), item]);
     }
-    for (const [name, group] of groups) {
+    for (const [scopedName, group] of groups) {
       if (group.length < 2) continue;
       if (kind === "display-name-collision" && new Set(group.map((item) => item.name)).size < 2)
         continue;
       const hashes = group.map((item) => item.documentDigest);
       findings.push({
         kind,
-        name,
+        name: scopedName.slice(scopedName.indexOf("\0") + 1),
         documents: hashes.some((hash) => hash === undefined)
           ? "unknown"
           : new Set(hashes).size === 1
@@ -96,6 +133,22 @@ export function codexDuplicateFindings(
         instances: group.sort((a, b) => a.path.localeCompare(b.path)),
       });
     }
+  }
+  const layered = new Map<string, CodexDoctorInstance[]>();
+  for (const item of unique) layered.set(item.name, [...(layered.get(item.name) ?? []), item]);
+  for (const [name, group] of layered) {
+    if (new Set(group.map((item) => item.scope)).size < 2) continue;
+    const hashes = group.map((item) => item.documentDigest);
+    findings.push({
+      kind: "layered-name",
+      name,
+      documents: hashes.some((hash) => hash === undefined)
+        ? "unknown"
+        : new Set(hashes).size === 1
+          ? "identical"
+          : "different",
+      instances: group.sort((a, b) => a.path.localeCompare(b.path)),
+    });
   }
   return findings.sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
 }
@@ -185,6 +238,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
   state: LibraryState,
   cwd: string,
   overrideRoot?: string,
+  inventoryRoots?: InventoryRootOptions,
 ) {
   const empty = { cwd, instances: [], findings: [], errors: [] };
   if (overrideRoot)
@@ -212,6 +266,26 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       ),
     );
     const errors = [...entry.errors];
+    const roots = inventoryRoots ?? {
+      home: homedir(),
+      configHome: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+      overrides: {},
+    };
+    const aliasIndex = yield* observeHarnessSkills(
+      [
+        ...readableHarnessRoots(roots, { kind: "global" }),
+        ...readableHarnessRoots(roots, { kind: "repository", root: cwd }),
+      ].filter((root) => root.harness === "codex"),
+      { errors },
+    ).pipe(
+      Effect.catchTag("PlatformError", (error) => {
+        errors.push({
+          path: cwd,
+          message: `Could not inspect Codex skill aliases: ${String(error)}`,
+        });
+        return Effect.succeed([]);
+      }),
+    );
     const instances = yield* Effect.forEach(
       entry.skills.filter((skill) => skill.enabled),
       (skill) =>
@@ -235,6 +309,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
             path: skill.path,
             canonicalPath,
             scope: skill.scope,
+            aliases: codexSkillAliases(canonicalPath, skill.path, aliasIndex),
             ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
             skitManaged: managed.has(dirname(canonicalPath)),
             ...(documentDigest ? { documentDigest } : {}),

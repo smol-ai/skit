@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.plan.v5",
+  "$id": "skit.disable.v6",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -57,6 +57,83 @@
     },
     "changed": {
       "type": "boolean"
+    },
+    "shadows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "canonicalPath": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "via": {
+                  "type": "string",
+                  "enum": [
+                    "symlink",
+                    "directory",
+                    "unknown-root"
+                  ]
+                },
+                "linkPath": {
+                  "type": "string"
+                },
+                "linkTarget": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "via"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "documentDigest": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "harness",
+          "canonicalPath",
+          "aliases",
+          "documentDigest"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message"
+        ],
+        "additionalProperties": true
+      }
     },
     "bindings": {
       "type": "array",
@@ -230,6 +307,25 @@
           }
         ]
       }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
@@ -238,7 +334,8 @@
     "scope",
     "enabled",
     "changed",
-    "bindings"
+    "bindings",
+    "projections"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

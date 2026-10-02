@@ -62,7 +62,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   const choices = rows.map((row) => row.choice);
   expect(choices.find((item) => item.label === "align-me")).toMatchObject({
     group: "Local source · ~/Work/skills",
-    selected: true,
+    selected: false,
   });
   expect(rows.find((row) => row.instance.name === "align-me")?.details).toContain(
     "Link: ~/.claude/skills/align-me → ~/Work/skills/align-me",
@@ -249,7 +249,7 @@ it("separates installed, repository-authored, and loose skills", () => {
   const managedSkillId = makeSkillId();
   const managedSkillVersionId = makeSkillVersionId();
   const output = renderContract(
-    "skit.setup.v4",
+    "skit.setup.v5",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -450,7 +450,7 @@ it("rolls up collections with more than five skill names", () => {
     ],
   }));
   const output = renderContract(
-    "skit.setup.v4",
+    "skit.setup.v5",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
@@ -481,7 +481,7 @@ it("presents authored SKITs without treating their source skills as inferred col
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const output = renderContract(
-    "skit.setup.v4",
+    "skit.setup.v5",
     {
       machineConfig: {
         path: "/home/.skit/machine.json",
