@@ -39,6 +39,11 @@ export class LibraryApiInvalidResponse extends Schema.TaggedError<LibraryApiInva
   "Library.LibraryApiInvalidResponse",
   { operation: Schema.String },
 ) {}
+/** The remote Library is in a wire format this CLI can read but cannot merge with. */
+export class LibraryRemoteUnsupported extends Schema.TaggedError<LibraryRemoteUnsupported>()(
+  "Library.LibraryRemoteUnsupported",
+  { revision_id: Schema.String },
+) {}
 export class LibraryApiInvalidRequest extends Schema.TaggedError<LibraryApiInvalidRequest>()(
   "Library.LibraryApiInvalidRequest",
   {},
@@ -75,11 +80,18 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
   const read = Effect.fn("Library.librarySyncApi.read")(function* () {
     return yield* client.librarySync.read({}).pipe(
       (effect) => mapRegistryFailureCause(effect, (error) => error),
-      Effect.map((response) => response.library),
       Effect.catch((error) => {
         return Schema.is(LibraryNotFoundResponse)(error)
           ? Effect.succeed(null)
           : Effect.fail(mapGeneratedFailure("read portable Library", error));
+      }),
+      // Every supported wire version decodes to the current manifest; v2 has no such migration.
+      Effect.flatMap((response) => {
+        if (response === null) return Effect.succeed(null);
+        const { library_id, revision_id, manifest } = response.library;
+        return manifest.schema === "skit.library.v2"
+          ? Effect.fail(new LibraryRemoteUnsupported({ revision_id }))
+          : Effect.succeed({ library_id, revision_id, manifest });
       }),
     );
   });
