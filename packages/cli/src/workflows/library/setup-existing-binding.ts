@@ -1,9 +1,8 @@
 import {
-  planSetupAliasRetirement,
+  prepareSetupAliasRetirement,
   approveSetupCopy,
   bindSetupCopy,
 } from "./setup-local-custody.js";
-import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import { Effect, Schema } from "effect";
 import { type Digest } from "@smolai/skit-core";
 import type { ProjectionOptions } from "./projection-options.js";
@@ -31,8 +30,6 @@ export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistin
   }
 }
 
-export interface SetupExistingBindingSelection extends SetupCopySelection {}
-
 export interface SetupExistingBindingOptions {
   readonly setup: SetupOptions;
   readonly bindings: ProjectionOptions;
@@ -42,7 +39,7 @@ export interface SetupExistingBindingOptions {
 export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings")(function* (
   options: SetupExistingBindingOptions,
   approvedPlanId: Digest,
-  selectedCopies: readonly SetupExistingBindingSelection[],
+  selectedCopies: readonly SetupCopySelection[],
 ) {
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   const selections = yield* Effect.forEach(selectedCopies, (selection) =>
@@ -56,7 +53,8 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
   const results = [];
   const recoveryDirectories: string[] = [];
   const warnings: { name: string; message: string }[] = [];
-  for (const { name, sourcePath: selectedPath, duplicateAction, approvedAliases } of selections) {
+  for (const selection of selections) {
+    const { name, sourcePath: selectedPath, duplicateAction } = selection;
     if (selected.has(name))
       return yield* new SetupExistingBindingInvalid({ name, reason: "duplicate-selection" });
     selected.add(name);
@@ -79,23 +77,10 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
     if (duplicateAction === "retain-only") continue;
-    const shadows =
-      duplicateAction === "retire-aliases"
-        ? yield* observeHarnessShadows(options.setup.inventory, { kind: "global" }, [name])
-        : [];
-    const retirement =
-      duplicateAction === "retire-aliases"
-        ? yield* planSetupAliasRetirement(
-            options.setup.libraryHome,
-            name,
-            selectedPath,
-            shadows,
-            approvedAliases,
-          )
-        : undefined;
+    const retirement = yield* prepareSetupAliasRetirement(options.setup, selection);
     const bound = yield* bindSetupCopy(
       options,
-      { name, sourcePath: selectedPath, duplicateAction, approvedAliases },
+      selection,
       candidate.subjectId,
       { path: selectedPath, observedHash },
       retirement,

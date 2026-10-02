@@ -41,7 +41,10 @@ import {
   setupRemovablePaths,
 } from "../../workflows/library/setup-removal.js";
 
-import { setupSelectedCopies } from "../../workflows/library/setup-decisions.js";
+import {
+  setupSelectedCopies,
+  isSetupProjectionTarget,
+} from "../../workflows/library/setup-decisions.js";
 import {
   chooseSetupCopyDecisions,
   setupDuplicatePlanLines,
@@ -177,9 +180,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     observed.instances.some(
       (instance) =>
         instance.path === selection.sourcePath &&
-        (instance.git.repository !== undefined ||
-          instance.scope !== "global" ||
-          instance.harnesses.length === 0),
+        (instance.git.repository !== undefined || !isSetupProjectionTarget(instance)),
     ),
   );
   const custodySelections = localCustodySelections.filter(
@@ -507,7 +508,7 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
 
   const bind = selectedRows.flatMap(({ instance, candidate }) =>
     candidate?.action === "bind-existing-entry"
-      ? [{ name: candidate.name, path: instance.path }]
+      ? [{ name: candidate.name, sourcePath: instance.path }]
       : [],
   );
   const remove = rows

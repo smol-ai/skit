@@ -36,15 +36,13 @@ import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 
 import {
   copyConflict,
+  isSetupProjectionTarget,
   retirableShadowAliases,
   SetupCopySelection,
   SetupApprovedAlias,
 } from "./setup-decisions.js";
 
-export const SetupLocalCustodySelection = SetupCopySelection;
-export interface SetupLocalCustodySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
-
-const SetupLocalCustodySelections = Schema.Array(SetupLocalCustodySelection);
+const SetupLocalCustodySelections = Schema.Array(SetupCopySelection);
 
 export class SetupLocalCustodySelectionInvalid extends Schema.TaggedError<SetupLocalCustodySelectionInvalid>()(
   "SetupLocalCustodySelectionInvalid",
@@ -75,7 +73,7 @@ export interface SetupLocalCustodyOptions {
 export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(function* (
   options: SetupLocalCustodyOptions,
   approvedPlanId: Digest,
-  selectionInput: readonly SetupLocalCustodySelection[],
+  selectionInput: readonly SetupCopySelection[],
 ) {
   const decoded = yield* Schema.decodeUnknownEffect(SetupLocalCustodySelections)(selectionInput);
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
@@ -124,9 +122,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     if (
       selection.duplicateAction === "retain-only" ||
       candidate.action === "repository-owned" ||
-      selectedInstance?.git.repository ||
-      selectedInstance?.scope !== "global" ||
-      selectedInstance.harnesses.length === 0
+      !isSetupProjectionTarget(selectedInstance)
     ) {
       const retained = yield* addLibrarySourceEffect(sourcePath);
       if (retained.collection_id === undefined)
@@ -140,19 +136,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       });
       continue;
     }
-    const shadows = yield* observeHarnessShadows(options.setup.inventory, { kind: "global" }, [
-      selection.name,
-    ]);
-    const retirement =
-      selection.duplicateAction === "retire-aliases"
-        ? yield* planSetupAliasRetirement(
-            options.setup.libraryHome,
-            selection.name,
-            sourcePath,
-            shadows,
-            selection.approvedAliases,
-          )
-        : undefined;
+    const retirement = yield* prepareSetupAliasRetirement(options.setup, selection);
     // An explicit row selects only that physical copy. Differing siblings remain untouched.
     const targets: LocalAdoptionTarget[] = selectedInstance.harnesses.map((harness) => ({
       path: sourcePath,
@@ -214,19 +198,40 @@ export const approveSetupCopy = Effect.fn("Setup.approveCopy")(function* <E>(
   const conflict = copyConflict(current, selection);
   if (conflict.kind !== "none" && !selection.duplicateAction)
     return yield* Effect.fail(invalid("duplicate-action-required"));
-  if (selection.duplicateAction !== "retire-aliases") return selection;
+  if (selection.duplicateAction !== "retire-aliases")
+    return { ...selection, duplicateAction: selection.duplicateAction };
   if (conflict.kind !== "retirable")
     return yield* Effect.fail(
       selection.approvedAliases ? new PlanIsStale() : invalid("aliases-not-retirable"),
     );
   return {
     ...selection,
+    duplicateAction: selection.duplicateAction,
     approvedAliases: yield* captureSetupAliasApproval(
       selection.sourcePath,
       conflict.shadows,
       selection.approvedAliases,
     ),
   };
+});
+
+/** Only retirement rows need a fresh shadow scan; prepare before adoption or binding. */
+export const prepareSetupAliasRetirement = Effect.fn("Setup.prepareAliasRetirement")(function* (
+  setup: SetupOptions,
+  selection: Effect.Success<ReturnType<typeof approveSetupCopy>>,
+) {
+  if (selection.duplicateAction !== "retire-aliases") return undefined;
+  const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
+  const shadows = yield* observeHarnessShadows(setup.inventory, { kind: "global" }, [
+    selection.name,
+  ]);
+  return yield* planSetupAliasRetirement(
+    setup.libraryHome,
+    selection.name,
+    selection.sourcePath,
+    shadows,
+    approvedAliases,
+  );
 });
 
 /** Consume a retirement prepared before adoption; bind before retiring any approved link. */

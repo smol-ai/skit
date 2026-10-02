@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import type { HarnessShadow } from "../../projection/harness-shadows.js";
-import type { SetupResult } from "./setup-contract.js";
+import type { SetupResult, SetupSkillInstance } from "./setup-contract.js";
 
 export const SetupDuplicateAction = Schema.Literals(["retain-only", "retire-aliases", "keep-both"]);
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
@@ -39,6 +39,12 @@ export type SetupCopyConflict =
       readonly aliases: readonly string[];
     };
 
+/** Eligible global copies have harness readers and no repository custody. */
+export const isSetupProjectionTarget = (
+  instance: SetupSkillInstance | undefined,
+): instance is SetupSkillInstance & { readonly scope: "global" } =>
+  instance?.scope === "global" && !instance.git.repository && instance.harnesses.length > 0;
+
 /** Shared applicability and allowed actions for prompting and both mutation validators. */
 export function copyConflict(
   observed: SetupResult,
@@ -51,9 +57,7 @@ export function copyConflict(
   const shadows = candidate?.shadows ?? [];
   if (
     !shadows.length ||
-    instance?.scope !== "global" ||
-    instance.git.repository ||
-    !instance.harnesses.length ||
+    !isSetupProjectionTarget(instance) ||
     candidate?.action === "repository-owned"
   )
     return { kind: "none" };
@@ -89,10 +93,10 @@ export type SetupCopyDecision = SetupSelectedCopy &
 export function setupSelectedCopies(
   observed: SetupResult,
   add: readonly { readonly name: string; readonly sourcePath: string }[],
-  bind: readonly { readonly name: string; readonly path: string }[],
+  bind: readonly { readonly name: string; readonly sourcePath: string }[],
 ): SetupSelectedCopy[] {
   return [
     ...add.map((selection) => ({ ...selection, operation: "add" as const })),
-    ...bind.map(({ name, path }) => ({ name, sourcePath: path, operation: "bind" as const })),
+    ...bind.map((selection) => ({ ...selection, operation: "bind" as const })),
   ].map((copy) => ({ ...copy, conflict: copyConflict(observed, copy) }));
 }
