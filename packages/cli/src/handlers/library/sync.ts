@@ -18,6 +18,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly apply: boolean;
   readonly adopt: boolean;
   readonly takeRemote?: readonly string[];
+  readonly keepEnabled?: readonly string[];
   readonly projection: Pick<LibraryInstallationConfiguration, "variantsPath" | "rootFor">;
 }) {
   const auth = yield* Effect.fromResult(options.authState);
@@ -30,6 +31,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       apply: options.apply,
       adopt: options.adopt,
       ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+      ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
       projection: options.projection,
       ...(options.apply
         ? {
@@ -58,10 +60,16 @@ const takeRemote = Flag.string("take-remote").pipe(
   Flag.atLeast(0),
 );
 const registry = optionalString("registry", "Select the Registry to synchronize.");
+const keepEnabled = Flag.string("keep-enabled").pipe(
+  Flag.withDescription(
+    "Resolve a destination collision by keeping this Skill ID enabled; retain the other Skills without enabling them.",
+  ),
+  Flag.atLeast(0),
+);
 
 export const librarySyncCliCommand = Command.make(
   "sync",
-  { apply, adopt, takeRemote, registry, ...localFlags },
+  { apply, adopt, takeRemote, keepEnabled, registry, ...localFlags },
   (input) =>
     handleCommand(
       Effect.gen(function* () {
@@ -76,6 +84,7 @@ export const librarySyncCliCommand = Command.make(
           apply: input.apply,
           adopt: input.adopt,
           takeRemote: input.takeRemote,
+          keepEnabled: input.keepEnabled,
           projection: configuration.pull.installation,
         });
         yield* renderer.result(

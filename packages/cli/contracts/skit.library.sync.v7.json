@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v6",
+  "$id": "skit.library.sync.v7",
   "type": "object",
   "properties": {
     "status": {
@@ -103,6 +103,34 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "conflict_details": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "take-remote",
+              "keep-enabled",
+              "local"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "message",
+          "resolution"
+        ],
+        "additionalProperties": true
       }
     },
     "plan": {

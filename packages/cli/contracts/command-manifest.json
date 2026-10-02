@@ -2075,7 +2075,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v6"
+        "skit.library.sync.v7"
       ],
       "exitCodes": [
         0,
@@ -2105,6 +2105,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Resolve a named Collection or Binding conflict from the current remote Library."
+        },
+        "keep-enabled": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Resolve a destination collision by keeping this Skill ID enabled; retain the other Skills without enabling them."
         },
         "registry": {
           "type": "string",

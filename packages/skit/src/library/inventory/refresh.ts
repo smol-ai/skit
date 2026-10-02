@@ -44,6 +44,9 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
     );
     if (skill === undefined || version === undefined) continue;
     if (!(yield* fs.exists(projection.path))) {
+      // Pending copies may be between managed retirement and sync rematerialization. Their
+      // absence is not evidence that the user deleted an installed copy.
+      if (projection.status === "pending") continue;
       if (projection.status !== "suppressed") {
         projection.status = "suppressed";
         projection.suppression_reason = "native_delete";

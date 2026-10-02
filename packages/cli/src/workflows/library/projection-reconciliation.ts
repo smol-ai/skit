@@ -12,7 +12,11 @@ import {
   type OwnershipMarker,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
+import {
+  activeProjectionTargetsEffect,
+  bindingRoot,
+  existingRepositoryProjectionRoot,
+} from "../../projection/roots.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 
 export interface LibraryProjectionReconciliationOptions {
@@ -29,6 +33,8 @@ export interface LibraryProjectionReconciliationOptions {
   >;
   readonly adoption?: { readonly path: string; readonly observedHash: Digest };
   readonly restoreNativeDeletedSkills?: readonly string[];
+  /** Sync also repairs repository copies at their existing device-local roots. */
+  readonly includeRepositoryBindings?: boolean;
 }
 
 const targets = ["agents", "claude"] as const satisfies readonly ProjectionTarget[];
@@ -56,16 +62,22 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
 
   const state = yield* (yield* LibraryStore).load;
   let projected = 0;
-  const bindings = options.onlyBindings ?? [...state.global_bindings, ...state.local_bindings];
+  const bindings = options.includeRepositoryBindings
+    ? [...state.global_bindings, ...state.local_bindings]
+    : (options.onlyBindings ?? [...state.global_bindings, ...state.local_bindings]);
   const outcomes: Array<{ target: ProjectionTarget; scope: (typeof bindings)[number]["scope"] }> =
     [];
   for (const binding of bindings) {
+    const repositoryBinding =
+      binding.scope.kind === "repository" ? { ...binding, scope: binding.scope } : undefined;
     for (const target of activeTargets) {
       const root =
         binding.scope.kind === "global" && options.rootFor !== undefined
           ? options.rootFor(target)
           : options.roots === undefined
-            ? undefined
+            ? options.includeRepositoryBindings && repositoryBinding !== undefined
+              ? existingRepositoryProjectionRoot(state, repositoryBinding, target)
+              : undefined
             : bindingRoot(target, binding.scope, options.roots);
       if (root === undefined) continue;
       yield* projectBindingEffect({

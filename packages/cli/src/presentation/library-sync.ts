@@ -1,6 +1,6 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v6">;
+type SyncData = ContractDataForId<"skit.library.sync.v7">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -105,10 +105,12 @@ export function renderLibrarySync(data: SyncData): string {
     case "adoption_required":
       return "This device hasn't synced with this Library before. Review what would change with skit sync --adopt.";
     case "conflicted":
+      if (data.conflict_details?.length)
+        return `Library sync stopped:\n${data.conflict_details.map((detail) => `  ${detail.key}\n    ${detail.message}`).join("\n")}\n\nNo sync changes applied.`;
       return `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`;
     case "base_mismatch":
       return "This device last synced with a different Library; sync stopped. Run sync --adopt to merge with this Library without inferring deletions.";
     case "resolution_invalid":
-      return "--take-remote named something that isn't a current conflict.";
+      return "The requested resolution isn't available. Use --take-remote for a listed resolvable conflict, or --keep-enabled for one Skill in a listed destination collision.";
   }
 }
