@@ -71,7 +71,6 @@ export const shouldSetupInteractively = (input: {
 export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
   readonly localCustody?: SetupLocalCustodyOptions["adoption"];
-  readonly cwd: string;
   readonly interactive: boolean;
   readonly dryRun: boolean;
   readonly workDirFlag?: string;
@@ -535,7 +534,6 @@ export const setupCliCommand = Command.make(
         const configuration = yield* libraryCommandConfiguration(input);
         const value = yield* setupCommand({
           workDirFlag: Option.getOrUndefined(input.workDir),
-          cwd: resolve(process.cwd()),
           interactive,
           dryRun: input.dryRun || input.json,
           options: {

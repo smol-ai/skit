@@ -7,36 +7,7 @@ import {
 import { Schema } from "effect";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
-export type SyncChange =
-  | {
-      readonly kind: "collection";
-      readonly action: "add" | "update" | "remove";
-      readonly subject_id: string;
-      readonly label: string;
-      readonly label_before?: string;
-      readonly label_after?: string;
-      readonly skills_added: readonly string[];
-      readonly skills_removed: readonly string[];
-      readonly skills_changed: readonly string[];
-      readonly evidence_only: boolean;
-    }
-  | {
-      readonly kind: "binding";
-      readonly action: "add" | "update" | "remove";
-      readonly entries_added: readonly SyncBindingEntry[];
-      readonly entries_removed: readonly SyncBindingEntry[];
-    };
-
-export interface SyncBindingEntry {
-  readonly kind: "collection" | "skill";
-  readonly label: string;
-}
-
-export interface SyncPlan {
-  readonly local: readonly SyncChange[];
-  readonly remote: readonly SyncChange[];
-}
-
+import type { SyncChange, SyncBindingEntry, SyncPlan } from "./library-sync-contract.js";
 const action = (before: unknown, after: unknown): SyncChange["action"] =>
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 

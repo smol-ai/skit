@@ -44,8 +44,6 @@ export * from "./platform/tree-requirements.js";
 export * from "./shared/tree-error.js";
 export * from "./artifact/tree.js";
 
-export * as LibraryStateSchema from "./library/store/state-schema.js";
-
 export * from "./library/store/library-store.js";
 export * from "./library/inventory/refresh.js";
 
@@ -65,7 +63,6 @@ export * from "./library/library-state.js";
 export * from "./library/library-restore.js";
 export * from "./library/installation/retire-unbound.js";
 export * from "./library/installation/remove.js";
-export * from "./library/plain-skill-projection.js";
 export * from "./library/skill-materialization.js";
 export * from "./library/observed-import.js";
 export * from "./library/installation/project-binding.js";

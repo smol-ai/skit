@@ -56,7 +56,6 @@ const fixture = Effect.gen(function* () {
           home.home,
           setupCommand({
             options,
-            cwd: root,
             interactive: true,
             dryRun,
             ...(workDirFlag ? { workDirFlag } : {}),
@@ -262,7 +261,6 @@ it.effect("removing one duplicate row preserves the independent copy in another 
         home.home,
         setupCommand({
           options: { ...f.options, inventory: home.inventory },
-          cwd: f.root,
           interactive: true,
           dryRun: false,
           localCustody: { acquisition: home.addOptions, bindings: home.bindings },

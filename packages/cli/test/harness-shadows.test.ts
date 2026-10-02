@@ -123,7 +123,6 @@ it.effect.each(["retain-only", "retire-aliases", "keep-both"] as const)(
           f.home.home,
           setupCommand({
             options: f.options,
-            cwd: f.root,
             interactive: true,
             dryRun: false,
             localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
@@ -532,7 +531,6 @@ for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"
           f.home.home,
           setupCommand({
             options: f.options,
-            cwd: f.root,
             interactive: true,
             dryRun: false,
             localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
@@ -583,7 +581,6 @@ it.effect.each(["retain-only", "keep-both"] as const)(
           f.home.home,
           setupCommand({
             options: f.options,
-            cwd: f.root,
             interactive: true,
             dryRun: false,
             localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
@@ -632,7 +629,6 @@ it.effect(
           f.home.home,
           setupCommand({
             options: f.options,
-            cwd: f.root,
             interactive: true,
             dryRun: false,
             localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
@@ -783,7 +779,6 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
           const renderer = yield* Renderer;
           return yield* setupCommand({
             options: f.options,
-            cwd: f.root,
             interactive: true,
             dryRun: false,
             localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },

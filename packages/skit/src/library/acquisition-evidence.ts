@@ -15,42 +15,6 @@ const safeRelative = (path: string) =>
   !path.includes("\0") &&
   path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 
-/** Lock claims travel without custody or inferred Source verification. */
-export const acquisitionEvidenceFromObservations = (
-  observations: readonly SkillsShProvenanceObservation[],
-  name: string,
-) => {
-  const records = observations
-    .filter((observation) => observation.skillName === name)
-    .flatMap((observation) => {
-      const claims = [
-        ["computed", observation.computedHash],
-        ["folder", observation.skillFolderHash],
-        ["well-known", observation.wellKnownDigest],
-      ] as const;
-      return claims.flatMap(([hash_kind, hash_digest]) =>
-        hash_digest === undefined
-          ? []
-          : [
-              {
-                kind: "skills.sh-lock" as const,
-                claimed_source: sanitizeSourceClaim(observation.source),
-                ...(observation.ref === undefined
-                  ? {}
-                  : { ref: sanitizeSourceClaim(observation.ref) }),
-                ...(observation.skillPath === undefined || !safeRelative(observation.skillPath)
-                  ? {}
-                  : { selected_skill_path: observation.skillPath }),
-                hash_kind,
-                hash_digest,
-                retained_byte_agreement: observation.contentAgreement,
-              },
-            ],
-      );
-    });
-  return [...new Map(records.map((record) => [JSON.stringify(record), record])).values()];
-};
-
 export const acquisitionObservations = (
   observations: readonly SkillsShProvenanceObservation[],
   machineId?: SkillsShObservation["machine_id"],

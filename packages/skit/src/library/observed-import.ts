@@ -99,7 +99,6 @@ export interface ObservedImport {
   readonly retainedAt: string;
   readonly skills: readonly ObservedSkill[];
   readonly observations: readonly SkillsShProvenanceObservation[];
-  readonly retainLocalEntry?: boolean;
 }
 
 const safeRelative = (path: string) =>
@@ -182,7 +181,6 @@ export const prepareObservedCollectionEffect = Effect.fn("Library.prepareObserve
 const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
 interface PersistPreparedRequest extends ObservedImport {
-  readonly retainedRoot: string;
   readonly retainedDigest: Digest;
   readonly facts: readonly PreparedFact[];
   readonly sourceIdentity?: SourceIdentity;
@@ -343,15 +341,9 @@ export const retainObservedCollectionEffect = Effect.fn("Library.retainObservedC
   function* (request: ObservedImport) {
     const store = yield* LibraryStore;
     const prepared = yield* prepareObservedCollectionEffect(request.skills);
-    const retainedRoot = yield* retainLocalTreeEffect(
-      prepared.staged,
-      store.originalsPath,
-      prepared.digest,
-      true,
-    );
+    yield* retainLocalTreeEffect(prepared.staged, store.originalsPath, prepared.digest, true);
     return yield* persistPrepared({
       ...request,
-      retainedRoot,
       retainedDigest: prepared.digest,
       facts: prepared.facts,
     });
@@ -541,7 +533,6 @@ export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
     ...request,
     skills: [],
     observations: [],
-    retainedRoot,
     retainedDigest,
     facts,
   });

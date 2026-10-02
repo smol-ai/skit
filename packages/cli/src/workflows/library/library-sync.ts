@@ -28,7 +28,8 @@ import {
   describeLibraryMergeConflicts,
 } from "./library-merge.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
-import { planLibrarySync, type SyncPlan } from "./library-sync-plan.js";
+import { planLibrarySync } from "./library-sync-plan.js";
+import type { SyncPlan } from "./library-sync-contract.js";
 import {
   alignLibraryVersionIds,
   applyLibraryVersionAliases,

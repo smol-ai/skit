@@ -24,7 +24,6 @@ import {
   localAdoptionPlanIdentity,
   planLocalAdoption,
   type LocalAdoptionOptions,
-  type LocalAdoptionPlan,
   type LocalAdoptionTarget,
 } from "./local-adoption.js";
 import { PlanIsStale } from "../../library/failures.js";
@@ -86,8 +85,6 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     ),
   );
   const selectedCandidates = new Set<string>();
-  const adopted: Array<{ readonly subject_id: string; readonly retained_version_id: string }> = [];
-  const plans: Array<{ name: string; plan: LocalAdoptionPlan }> = [];
   const recoveryDirectories: string[] = [];
   const warnings: { name: string; message: string }[] = [];
   for (const selection of selections) {
@@ -130,10 +127,6 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
           name: selection.name,
           reason: "source-not-candidate",
         });
-      adopted.push({
-        subject_id: retained.collection_id,
-        retained_version_id: retained.retained_version_id,
-      });
       continue;
     }
     const retirement = yield* prepareSetupAliasRetirement(options.setup, selection);
@@ -144,7 +137,6 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       scope: { kind: "global" },
     }));
     const adoptionPlan = yield* planLocalAdoption(options.adoption, targets, sourcePath);
-    plans.push({ name: selection.name, plan: adoptionPlan });
     if (
       adoptionPlan.targets.some((target) => target.status === "adoptable") &&
       !current.machineConfig.machineId
@@ -181,12 +173,8 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
     );
     recoveryDirectories.push(...bound.recoveryDirectories);
     warnings.push(...bound.warnings);
-    adopted.push({
-      subject_id: subjectId,
-      retained_version_id: retained.retained_version_id,
-    });
   }
-  return { planId: current.onboarding.planId, plans, adopted, recoveryDirectories, warnings };
+  return { planId: current.onboarding.planId, recoveryDirectories, warnings };
 });
 
 /** Shared preflight; callers retain their own selection-error contract. */
