@@ -65,7 +65,6 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
         home.home,
         setupCommand({
           options,
-          cwd: root,
           interactive: true,
           dryRun: false,
           localCustody: { acquisition: home.addOptions, bindings: home.bindings },
