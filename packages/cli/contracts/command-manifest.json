@@ -450,7 +450,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v4"
+        "skit.doctor.v5"
       ],
       "exitCodes": [
         0,
@@ -530,8 +530,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.disable.v5",
-        "skit.disable.plan.v5"
+        "skit.disable.v6",
+        "skit.disable.plan.v6"
       ],
       "exitCodes": [
         0,
@@ -639,8 +639,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.enable.v5",
-        "skit.enable.plan.v5"
+        "skit.enable.v6",
+        "skit.enable.plan.v6"
       ],
       "exitCodes": [
         0,
@@ -680,6 +680,11 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Report projection changes without applying them."
+        },
+        "allow-duplicate": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Explicitly allow another same-scope copy of a skill already discoverable by an agent."
         },
         "json": {
           "type": "boolean",
@@ -1976,7 +1981,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v4"
+        "skit.setup.v5"
       ],
       "exitCodes": [
         0,

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v4",
+  "$id": "skit.setup.v5",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -333,6 +333,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -599,6 +657,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -851,6 +967,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1103,6 +1277,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1351,6 +1583,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1592,6 +1882,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1833,6 +2181,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -2086,6 +2492,64 @@
               {
                 "type": "object",
                 "properties": {
+                  "shadows": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentDigest": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentDigest"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },

@@ -1,3 +1,4 @@
+import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import { sourceIdentityLabel } from "./skill-metadata.js";
 import { createHash } from "node:crypto";
 import { homedir, hostname } from "node:os";
@@ -1136,9 +1137,26 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
       status: !present ? "missing" : projection.status === "installed" ? "current" : "modified",
     });
   }
-  const onboarding = classifySetupOnboarding(instances, {
+  const candidates = classifySetupOnboarding(instances, {
     library,
     machineId: machineConfig.machineId,
+  });
+  const globalNames = candidates
+    .filter((candidate) =>
+      candidate.paths.some((path) =>
+        instances.some(
+          (instance) =>
+            instance.path === path && instance.scope === "global" && !instance.git.repository,
+        ),
+      ),
+    )
+    .map((candidate) => candidate.name);
+  const shadows = globalNames.length
+    ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
+    : [];
+  const onboarding = candidates.map((candidate) => {
+    const matches = shadows.filter((shadow) => shadow.name === candidate.name);
+    return matches.length ? { ...candidate, shadows: matches } : candidate;
   });
   const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
   const planId = hashParts([

@@ -1,5 +1,7 @@
 import {
   BindingEntry,
+  bindingSkillIds,
+  LinkStat,
   canonicalJson,
   currentCollectionSkills,
   LibraryStore,
@@ -11,7 +13,7 @@ import {
   type Digest,
   type SkitBindingScope,
 } from "@smolai/skit-core";
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { OptionCombinationInvalid } from "../../handlers/failures.js";
@@ -21,11 +23,25 @@ import {
 } from "./set-enabled-invocation.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
+import {
+  observeHarnessShadows,
+  ProjectionWouldDuplicate,
+  type ShadowObservationError,
+} from "../../projection/harness-shadows.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
 
 export interface SetEnabledOptions {
   readonly query: string;
   readonly all: boolean;
+  readonly allowDuplicate?: boolean;
+  /** Setup consent applies only to these exact symlinks, which remain until projection succeeds. */
+  readonly allowedShadowAliases?: readonly {
+    readonly path: string;
+    readonly canonicalPath: string;
+    readonly dev: number;
+    readonly ino: number;
+    readonly linkTarget?: string;
+  }[];
   readonly selectedSkills?: readonly string[];
   readonly invocation: SetEnabledInvocation;
   readonly roots: InventoryRootOptions;
@@ -181,7 +197,20 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
         binding.invocation_policies,
       ),
   );
+  const existingIds = new Set(existing ? bindingSkillIds(state, existing) : []);
+  const newlyEnabledSkills = options.invocation.enabled
+    ? skills.filter((name) => {
+        const id = skillIdsByName.get(name);
+        return id !== undefined && !existingIds.has(id);
+      })
+    : [];
+  const warnings: ShadowObservationError[] = [];
+  const shadows = newlyEnabledSkills.length
+    ? yield* observeHarnessShadows(options.roots, scope, newlyEnabledSkills, warnings)
+    : [];
   return {
+    ...(shadows.length ? { shadows } : {}),
+    ...(warnings.length ? { warnings } : {}),
     subject_id: subject.subjectId,
     skills,
     scope,
@@ -210,6 +239,45 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
         return yield* new SetEnabledStale({
           message: "Library changed after this Binding change was previewed",
         });
+      if (options.invocation.enabled && !options.allowDuplicate) {
+        const selected = yield* resolveLibrarySubject(current, options.query);
+        const existing = scopeBinding(current, plan.scope);
+        const existingIds = new Set(existing ? bindingSkillIds(current, existing) : []);
+        const newlyEnabled = selected.skills.filter(
+          (skill) => plan.skills.includes(skill.name) && !existingIds.has(skill.skill_id),
+        );
+        const shadows = newlyEnabled.length
+          ? yield* observeHarnessShadows(
+              options.roots,
+              plan.scope,
+              newlyEnabled.map((skill) => skill.name),
+            )
+          : [];
+        const links = yield* LinkStat;
+        const fs = yield* FileSystem.FileSystem;
+        const remaining = [];
+        for (const shadow of shadows) {
+          const aliases = [];
+          for (const alias of shadow.aliases) {
+            const approved = options.allowedShadowAliases?.find(
+              (item) => item.path === alias.path && item.canonicalPath === shadow.canonicalPath,
+            );
+            if (approved) {
+              const info = yield* links.identity.lstat(alias.path);
+              if (
+                info.type === "SymbolicLink" &&
+                info.dev === approved.dev &&
+                info.ino === approved.ino &&
+                (yield* fs.readLink(alias.path)) === approved.linkTarget
+              )
+                continue;
+            }
+            aliases.push(alias);
+          }
+          if (aliases.length) remaining.push({ ...shadow, aliases });
+        }
+        if (remaining.length) return yield* new ProjectionWouldDuplicate({ shadows: remaining });
+      }
       if (plan.changed) {
         const global_bindings = [...current.global_bindings];
         const local_bindings = [...current.local_bindings];

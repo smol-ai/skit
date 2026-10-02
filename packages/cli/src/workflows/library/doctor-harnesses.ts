@@ -1,3 +1,4 @@
+import { HarnessShadow } from "../../projection/harness-shadows.js";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -32,6 +33,7 @@ export const HarnessDoctorCheck = Schema.Struct({
   coverage: Schema.Literals(["callable-commands", "resolved-skills", "native-skills"]),
   limitations: Schema.Array(Schema.String),
   skills: Schema.Array(HarnessDoctorSkill),
+  locations: Schema.optionalKey(Schema.Array(HarnessShadow)),
   warnings: Schema.Array(Schema.String),
 });
 export type HarnessDoctorCheck = typeof HarnessDoctorCheck.Type;

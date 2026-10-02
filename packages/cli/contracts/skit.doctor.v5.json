@@ -1,5 +1,5 @@
 {
-  "$id": "skit.doctor.v4",
+  "$id": "skit.doctor.v5",
   "type": "object",
   "properties": {
     "ok": {
@@ -123,6 +123,36 @@
               },
               "documentDigest": {
                 "type": "string"
+              },
+              "aliases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "via": {
+                      "type": "string",
+                      "enum": [
+                        "symlink",
+                        "directory",
+                        "unknown-root"
+                      ]
+                    },
+                    "linkPath": {
+                      "type": "string"
+                    },
+                    "linkTarget": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "via"
+                  ],
+                  "additionalProperties": true
+                }
               }
             },
             "required": [
@@ -145,7 +175,8 @@
                 "type": "string",
                 "enum": [
                   "duplicate-name",
-                  "display-name-collision"
+                  "display-name-collision",
+                  "layered-name"
                 ]
               },
               "name": {
@@ -187,6 +218,36 @@
                     },
                     "documentDigest": {
                       "type": "string"
+                    },
+                    "aliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "via": {
+                            "type": "string",
+                            "enum": [
+                              "symlink",
+                              "directory",
+                              "unknown-root"
+                            ]
+                          },
+                          "linkPath": {
+                            "type": "string"
+                          },
+                          "linkTarget": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "via"
+                        ],
+                        "additionalProperties": true
+                      }
                     }
                   },
                   "required": [
@@ -330,6 +391,64 @@
                 "name",
                 "warnings",
                 "errors"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "harness": {
+                  "type": "string"
+                },
+                "canonicalPath": {
+                  "type": "string"
+                },
+                "aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "via": {
+                        "type": "string",
+                        "enum": [
+                          "symlink",
+                          "directory",
+                          "unknown-root"
+                        ]
+                      },
+                      "linkPath": {
+                        "type": "string"
+                      },
+                      "linkTarget": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "via"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "documentDigest": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "harness",
+                "canonicalPath",
+                "aliases",
+                "documentDigest"
               ],
               "additionalProperties": true
             }

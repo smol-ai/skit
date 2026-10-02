@@ -25,10 +25,15 @@ import {
 } from "../../workflows/library/setup.js";
 import {
   applySetupLocalCustody,
+  retirableShadowAliases,
+  type SetupLocalCustodySelection,
   type SetupLocalCustodyOptions,
 } from "../../workflows/library/setup-local-custody.js";
 import type { SetupResult } from "../../workflows/library/setup-contract.js";
-import { applySetupExistingBindings } from "../../workflows/library/setup-existing-binding.js";
+import {
+  applySetupExistingBindings,
+  type SetupExistingBindingSelection,
+} from "../../workflows/library/setup-existing-binding.js";
 import { applySetupObservedCollections } from "../../workflows/library/setup-observed-collections.js";
 import { result } from "../contracts.js";
 import { LibraryStore } from "@smolai/skit-core";
@@ -127,12 +132,71 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
   const retainedSourceSelections = yield* chooseKnownSources(steps, observed);
-  const {
-    bind: existingBindingSelections,
-    add: localCustodySelections,
-    remove,
-    removablePaths,
-  } = yield* chooseDiscoveredSkills(steps, setupOptions, observed);
+  const { bind, add, remove, removablePaths } = yield* chooseDiscoveredSkills(
+    steps,
+    setupOptions,
+    observed,
+  );
+  const localCustodySelections: SetupLocalCustodySelection[] = [];
+  const duplicatePrompter = yield* Prompter;
+  const chooseDuplicateAction = Effect.fn("CLI.setup.duplicateAction")(function* (selection: {
+    name: string;
+    sourcePath: string;
+  }) {
+    const candidate = observed.onboarding.candidates.find(
+      (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
+    );
+    const instance = observed.instances.find((item) => item.path === selection.sourcePath);
+    const shadows = candidate?.shadows ?? [];
+    if (!shadows.length || instance?.git.repository || instance?.scope !== "global") {
+      return undefined;
+    }
+    const aliases = retirableShadowAliases(selection.sourcePath, shadows);
+    yield* renderer.note(
+      shadows
+        .flatMap((shadow) =>
+          shadow.aliases.map(
+            (alias) =>
+              `${displayPath(alias.path)}${alias.via === "symlink" ? ` → ${displayPath(shadow.canonicalPath)} (symlink)` : " (directory)"}`,
+          ),
+        )
+        .join("\n"),
+      `${selection.name}: enabling would create another agent copy`,
+    );
+    const action = yield* duplicatePrompter.select(`How should setup handle ${selection.name}?`, [
+      ...(aliases.length
+        ? [
+            {
+              value: "retire-aliases" as const,
+              label: "Manage with SKIT and retire redundant symlinks",
+              hint: "Source stays in place; links saved with a recovery receipt",
+            },
+          ]
+        : []),
+      { value: "retain-only" as const, label: "Retain in Library without enabling" },
+      {
+        value: "keep-both" as const,
+        label: "Keep both copies and enable",
+        hint: "The agent may discover duplicate skills",
+      },
+    ]);
+    return action;
+  });
+  for (const selection of add) {
+    const duplicateAction = yield* chooseDuplicateAction(selection);
+    localCustodySelections.push({ ...selection, ...(duplicateAction ? { duplicateAction } : {}) });
+  }
+  const existingBindingSelections: SetupExistingBindingSelection[] = [];
+  for (const selection of bind) {
+    const duplicateAction = yield* chooseDuplicateAction({
+      name: selection.name,
+      sourcePath: selection.path,
+    });
+    existingBindingSelections.push({
+      ...selection,
+      ...(duplicateAction ? { duplicateAction } : {}),
+    });
+  }
   const removalPlan = yield* planSetupRemovals(setupOptions, observed, remove, removablePaths);
   const prompter = yield* Prompter;
   const hasChanges =
@@ -171,7 +235,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     ),
   );
   const custodySelections = localCustodySelections.filter(
-    (selection) => !repositorySelections.includes(selection),
+    (selection) =>
+      !repositorySelections.includes(selection) && selection.duplicateAction !== "retain-only",
   );
   const planLines = [
     ...(persistRoots ? [`Save discovery roots: ${displayRoots}`] : []),
@@ -205,6 +270,15 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
           ),
         ]
       : []),
+    ...[...localCustodySelections, ...existingBindingSelections].flatMap((selection) =>
+      selection.duplicateAction === "retain-only"
+        ? [`Retain only: ${selection.name} · no Binding or Projection`]
+        : selection.duplicateAction === "retire-aliases"
+          ? [`Retire redundant symlinks: ${selection.name} · source stays; recovery receipt saved`]
+          : selection.duplicateAction === "keep-both"
+            ? [`Allow duplicate agent copies: ${selection.name}`]
+            : [],
+    ),
     ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
     ...localCustodySelections.flatMap((selection) => {
       const candidate = observed.onboarding.candidates.find((item) =>
@@ -278,7 +352,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   }
   if (existingBindingSelections.length) {
     observed = yield* observe(setupOptions);
-    yield* renderer.withStatus(
+    const applied = yield* renderer.withStatus(
       `Reconnecting ${existingBindingSelections.length} existing Library match${existingBindingSelections.length === 1 ? "" : "es"}`,
       applySetupExistingBindings(
         { setup: setupOptions, bindings: input.localCustody.bindings },
@@ -286,11 +360,18 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
         existingBindingSelections,
       ),
     );
+    for (const warning of applied.warnings)
+      yield* renderer.note(warning.message, `${warning.name}: alias preserved`);
+    for (const directory of applied.recoveryDirectories)
+      yield* renderer.note(
+        `Symlinks and their restoration receipt are saved at ${directory}. Source directories stay in place.`,
+        "Redundant symlinks retired",
+      );
   }
   if (localCustodySelections.length) {
     observed = yield* observe(setupOptions);
     const names = localCustodySelections.map((selection) => selection.name).join(", ");
-    yield* renderer.withStatus(
+    const applied = yield* renderer.withStatus(
       `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}: ${names}`,
       applySetupLocalCustody(
         { setup: setupOptions, adoption: input.localCustody },
@@ -298,6 +379,13 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
         localCustodySelections,
       ),
     );
+    for (const warning of applied.warnings)
+      yield* renderer.note(warning.message, `${warning.name}: alias preserved`);
+    for (const directory of applied.recoveryDirectories)
+      yield* renderer.note(
+        `Symlinks and their restoration receipt are saved at ${directory}. Source directories stay in place.`,
+        "Redundant symlinks retired",
+      );
   }
   if (
     retainedSourceSelections.length &&

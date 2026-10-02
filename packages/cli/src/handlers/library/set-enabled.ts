@@ -33,13 +33,27 @@ const dryRun = Flag.boolean("dry-run").pipe(
   Flag.withDescription("Report projection changes without applying them."),
   Flag.withDefault(false),
 );
+const allowDuplicate = Flag.boolean("allow-duplicate").pipe(
+  Flag.withDescription(
+    "Explicitly allow another same-scope copy of a skill already discoverable by an agent.",
+  ),
+  Flag.withDefault(false),
+);
 const DONE = "Done";
 
 const setEnabledCliCommand = (enabled: boolean) => {
   const action = enabled ? "enable" : "disable";
   return Command.make(
     action,
-    { subject, repo, all, invocation, dryRun, ...localFlags },
+    {
+      subject,
+      repo,
+      all,
+      invocation,
+      dryRun,
+      ...(enabled ? { allowDuplicate } : {}),
+      ...localFlags,
+    },
     (input) => {
       const selectedHome = homePath(input.home);
       return handleCommand(
@@ -63,6 +77,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
             scope: selectedScope,
             cwd: resolve(process.cwd()),
             all: input.all,
+            allowDuplicate: input.allowDuplicate,
             invocation: selectedInvocation,
             dryRun: input.dryRun,
             interactive,
@@ -98,6 +113,7 @@ export interface SetEnabledCommandInput {
   readonly scope?: Scope;
   readonly cwd: string;
   readonly all: boolean;
+  readonly allowDuplicate?: boolean;
   readonly invocation?: InvocationOption;
   readonly dryRun: boolean;
   readonly interactive: boolean;
@@ -326,6 +342,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     applyLibraryBindings(state, {
       query,
       all: input.all,
+      allowDuplicate: input.allowDuplicate,
       ...(selectedSkills === undefined ? {} : { selectedSkills }),
       invocation: {
         subjects: [query],

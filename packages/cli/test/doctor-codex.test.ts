@@ -39,6 +39,7 @@ test("separates distinct copies from aliases, across scopes and plugin ownership
   });
   expect(codexDuplicateFindings([copy, project])[0]).toEqual(
     expect.objectContaining({
+      kind: "layered-name",
       documents: "different",
       instances: [copy, project],
     }),
@@ -117,3 +118,36 @@ it.effect.each(["error", "malformed", "omitted-cwd"])(
       expect(Result.isFailure(result)).toBe(true);
     }).pipe(Effect.provide(nativeLibraryLayer)),
 );
+
+test("preserves every observed alias when native entries share a canonical document", () => {
+  const source = instance("/work/review/SKILL.md", {
+    aliases: [
+      {
+        path: "/codex/review",
+        via: "symlink",
+        linkPath: "/codex/review",
+        linkTarget: "/work/review",
+      },
+    ],
+  });
+  const alias = instance("/another/review/SKILL.md", {
+    canonicalPath: source.canonicalPath,
+    aliases: [
+      {
+        path: "/another/review",
+        via: "symlink",
+        linkPath: "/another/review",
+        linkTarget: "/work/review",
+      },
+    ],
+  });
+  const copy = instance("/agents/review/SKILL.md", {
+    skitManaged: true,
+    aliases: [{ path: "/agents/review", via: "directory" }],
+  });
+  const finding = codexDuplicateFindings([source, alias, copy])[0];
+  expect(finding.instances).toHaveLength(2);
+  expect(
+    finding.instances.find((item) => item.canonicalPath === source.canonicalPath)?.aliases,
+  ).toEqual([...source.aliases!, ...alias.aliases!]);
+});

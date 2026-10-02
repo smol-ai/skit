@@ -1,3 +1,8 @@
+import {
+  observeHarnessSkills,
+  readableHarnessRoots,
+  type ShadowObservationError,
+} from "../../projection/harness-shadows.js";
 import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
 import { Effect } from "effect";
 import { Command } from "effect/unstable/cli";
@@ -111,7 +116,12 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
   const { codex, harnesses } = yield* renderer.withStatus(
     "Checking native harness skill discovery",
     Effect.gen(function* () {
-      const codex = yield* doctorCodexCheck(inventory, process.cwd(), options.overrides.codex);
+      const codex = yield* doctorCodexCheck(
+        inventory,
+        process.cwd(),
+        options.overrides.codex,
+        options,
+      );
       const harnesses = yield* Effect.all(
         [
           doctorHarnessCheck("claude-code", process.cwd(), options.overrides.claude),
@@ -123,10 +133,32 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
       return { codex, harnesses };
     }),
   );
+  const aliasErrors: ShadowObservationError[] = [];
+  const locations = yield* observeHarnessSkills(
+    [
+      ...readableHarnessRoots(options, { kind: "global" }),
+      ...readableHarnessRoots(options, { kind: "repository", root: process.cwd() }),
+    ],
+    { errors: aliasErrors },
+  );
   return {
     ...report,
     codex,
-    harnesses: harnesses.map((check) => classifyOpenCodeWarnings(check, inventory)),
+    harnesses: harnesses.map((check) =>
+      classifyOpenCodeWarnings(
+        {
+          ...check,
+          locations: locations.filter((location) => location.harness === check.harness),
+          warnings: [
+            ...check.warnings,
+            ...aliasErrors.map(
+              (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
+            ),
+          ],
+        },
+        inventory,
+      ),
+    ),
   };
 });
 

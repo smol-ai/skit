@@ -151,7 +151,7 @@ export const setupDiscoveredSkillChoices = (
           differing.length === 0 &&
           instance.owner.kind === "unknown" &&
           instance.git.repository === undefined &&
-          !isSetupCandidateFromCodex([instance.path], home),
+          !isSetupCandidateFromCodex([instance.path, ...instance.aliases], home),
         ...(siblings.length ? { exclusiveGroup: groupKey } : {}),
         ...(differing.length ? { selectExplicitly: true } : {}),
       };

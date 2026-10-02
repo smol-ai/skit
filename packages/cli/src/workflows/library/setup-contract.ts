@@ -1,3 +1,4 @@
+import { HarnessShadow } from "../../projection/harness-shadows.js";
 import {
   CollectionId,
   Digest,
@@ -202,6 +203,7 @@ export const SetupProjection = Schema.Struct({
 export type SetupProjection = typeof SetupProjection.Type;
 
 const SetupOnboardingBase = {
+  shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
   name: Schema.String,
   paths: Schema.Array(Schema.String),
   owner: SetupInstanceOwner,

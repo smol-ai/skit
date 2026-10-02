@@ -17,5 +17,12 @@ export function renderSetEnabled(
   const skills = data.skills.length ? data.skills.join(", ") : "no Skills";
   const destination = data.scope.kind === "global" ? "all projects" : data.scope.root;
   const change = data.changed ? "" : data.enabled ? " · Already enabled" : " · Already disabled";
-  return `${verb} ${skills} for every agent (${destination})${change}`;
+  const shadows = data.shadows ?? [];
+  const warning = shadows.length
+    ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
+    : "";
+  const warnings = data.warnings
+    ?.map((warning) => `Could not inspect ${warning.path}: ${warning.message}`)
+    .join("\n");
+  return `${verb} ${skills} for every agent (${destination})${change}${warning}${warnings ? `\n${warnings}` : ""}`;
 }
