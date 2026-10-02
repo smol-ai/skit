@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -469,6 +469,61 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
   });
   let registryUrl: URL;
   let token: string;
+  // The CLI reaches the Registry through a loopback relay process that can hold a committed
+  // Library write unanswered, so the CLI can be killed after the server has accepted it. It runs
+  // apart from this process because spawnSync blocks this event loop.
+  const relaySource = `
+const { createServer } = require("node:http");
+const upstream = process.argv[1];
+let hold = false;
+const relay = createServer(async (request, response) => {
+  if (request.url === "/__relay/hold") {
+    hold = true;
+    return response.end();
+  }
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(request.headers))
+    if (name !== "host" && name !== "connection" && typeof value === "string") headers.set(name, value);
+  const reply = await fetch(new URL(request.url, upstream), {
+    method: request.method,
+    headers,
+    ...(chunks.length === 0 ? {} : { body: Buffer.concat(chunks) }),
+  });
+  const payload = Buffer.from(await reply.arrayBuffer());
+  if (hold && request.method === "PUT" && request.url === "/api/library/portable") {
+    hold = false;
+    process.stdout.write("committed\\n");
+    return;
+  }
+  // fetch has already decoded the body, so its encoding and length no longer apply.
+  const replyHeaders = new Headers(reply.headers);
+  replyHeaders.delete("content-encoding");
+  replyHeaders.delete("content-length");
+  response.writeHead(reply.status, Object.fromEntries(replyHeaders));
+  response.end(payload);
+});
+relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.address().port + "\\n"));
+`;
+  let relay: ReturnType<typeof spawn> | undefined;
+  const relayOutput: string[] = [];
+  const relayLine = (prefix: string) =>
+    new Promise<string>((resolveLine) => {
+      const check = () => {
+        const line = relayOutput.find((item) => item.startsWith(prefix));
+        if (line === undefined) return false;
+        relayOutput.splice(relayOutput.indexOf(line), 1);
+        resolveLine(line);
+        return true;
+      };
+      if (check()) return;
+      const listener = () => {
+        if (check()) relay?.stdout?.off("data", listener);
+      };
+      relay?.stdout?.on("data", listener);
+    });
+  let cliOrigin: string;
   const run = (
     args: string[],
     home: string,
@@ -488,7 +543,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
           ...process.env,
           HOME: device,
           PATH: `${gitShimDirectory}:${process.env.PATH}`,
-          SKIT_SERVER_URL: registryUrl.origin,
+          SKIT_SERVER_URL: cliOrigin,
           SKIT_TOKEN: token,
         },
         timeout: 30_000,
@@ -548,6 +603,14 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     );
     await chmod(gitShim, 0o755);
     registryUrl = (await server.listen()).url;
+    relay = spawn(process.execPath, ["-e", relaySource, registryUrl.origin], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    relay.stdout?.setEncoding("utf8");
+    relay.stdout?.on("data", (chunk: string) =>
+      relayOutput.push(...chunk.split("\n").filter(Boolean)),
+    );
+    cliOrigin = `http://127.0.0.1:${(await relayLine("listening ")).slice("listening ".length)}`;
     await server.update({
       root: serverRoot,
       workers: [
@@ -623,7 +686,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     first(["add", raw]);
     first(["add", gitRemote]);
     const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(7);
+    expect(retained.schemaVersion).toBe(8);
     expect(retained.collections).toHaveLength(2);
     expect(retained.global_bindings).toEqual([]);
     const collectionId = retained.collections[0].collection_id;
@@ -665,7 +728,7 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(7);
+    expect(restored.schemaVersion).toBe(8);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.acquisitions[0].observations).toEqual([]);
     expect(restored.global_bindings).toEqual([]);
@@ -717,7 +780,75 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
     expect(existsSync(join(secondClaude, "raw-review"))).toBe(false);
     expect((await state(secondHome)).collections).toHaveLength(1);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
+
+    // Kill the first device after the Registry commits its write but before it hears back.
+    const killedRaw = join(workspace, "killed-review");
+    await mkdir(killedRaw, { recursive: true });
+    await writeFile(
+      join(killedRaw, "SKILL.md"),
+      "---\nname: killed-review\ndescription: Added before a killed sync.\n---\n\n# Killed\n",
+    );
+    first(["add", killedRaw]);
+    const stateBeforeKill = await readFile(join(firstHome, "state.json"), "utf8");
+    const committed = relayLine("committed");
+    await fetch(new URL("/__relay/hold", cliOrigin));
+    const killed = spawn(
+      process.execPath,
+      [
+        cli,
+        "sync",
+        "--apply",
+        "--home",
+        firstHome,
+        "--codex-root",
+        firstCodex,
+        "--claude-root",
+        firstClaude,
+        "--json",
+      ],
+      {
+        cwd: repositoryRoot,
+        env: {
+          ...process.env,
+          HOME: firstDevice,
+          PATH: `${gitShimDirectory}:${process.env.PATH}`,
+          SKIT_SERVER_URL: cliOrigin,
+          SKIT_TOKEN: token,
+        },
+        stdio: "ignore",
+      },
+    );
+    const exited = new Promise((resolveExit) => killed.once("exit", resolveExit));
+    // A CLI that exits before its write reaches the Registry fails here instead of hanging.
+    expect(
+      await Promise.race([committed.then(() => "committed"), exited.then(() => "exited")]),
+    ).toBe("committed");
+    killed.kill("SIGKILL");
+    await exited;
+    // The killed writer left its lock and its previous state with the previous ancestry.
+    expect(existsSync(join(firstHome, ".lock"))).toBe(true);
+    expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
+    const head = await fetch(new URL("/api/library/portable", registryUrl), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const committedCollections = Schema.decodeUnknownSync(
+      Schema.Struct({
+        library: Schema.Struct({
+          manifest: Schema.Struct({ collections: Schema.Array(Schema.Unknown) }),
+        }),
+      }),
+    )(await head.json()).library.manifest.collections;
+    expect(committedCollections).toHaveLength(2);
+
+    // The retry reclaims the dead writer's lock and finds the remote already holds its state.
+    expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
+    expect(existsSync(join(firstHome, ".lock"))).toBe(false);
+    expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
+    expect((await state(secondHome)).collections).toHaveLength(2);
+    expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
+    expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
   } finally {
+    relay?.kill("SIGKILL");
     await server.close();
     if (keepWorkspace) console.error(`Retained portable E2E workspace at ${workspace}`);
     else await rm(workspace, { recursive: true, force: true });

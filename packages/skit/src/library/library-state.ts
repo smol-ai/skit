@@ -54,11 +54,24 @@ export const ManagedProjection = Schema.Struct({
 });
 export interface ManagedProjection extends Schema.Schema.Type<typeof ManagedProjection> {}
 
-export const CURRENT_LIBRARY_STATE_VERSION = 7 as const;
+/**
+ * The portable Library this state was last reconciled with. It lives in the same document as the
+ * state it describes so that no write, crash, or restore can pair state with a newer base.
+ */
+export const SyncAncestry = Schema.Struct({
+  origin: Schema.NonEmptyString,
+  library_id: Schema.NonEmptyString,
+  revision_id: Schema.NonEmptyString,
+  base_manifest: LibraryManifest,
+});
+export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
+
+export const CURRENT_LIBRARY_STATE_VERSION = 8 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
   schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
+  sync_ancestry: Schema.optionalKey(SyncAncestry),
   collections: Schema.mutable(Schema.Array(Collection)),
   skills: Schema.mutable(Schema.Array(Skill)),
   retained_copies: Schema.mutable(Schema.Array(RetainedCopy)),
@@ -106,7 +119,9 @@ export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">)
 
 export const LibraryInventory = LibraryState.mapFields(
   Struct.omit([
+    "schemaVersion",
     "assessmentAcceptances",
+    "sync_ancestry",
     "collections",
     "retained_copies",
     "acquisitions",

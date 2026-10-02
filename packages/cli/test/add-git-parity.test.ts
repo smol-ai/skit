@@ -190,7 +190,7 @@ test.runIf(realGit)(
       const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      expect(state.schemaVersion).toBe(7);
+      expect(state.schemaVersion).toBe(8);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
       expect(state.retained_copies).toHaveLength(1);
       expect(state.retained_copies[0].digest).toBe(entry.snapshot_digest);

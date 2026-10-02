@@ -13,7 +13,7 @@ import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { classifyFailure } from "../src/failure-classification.js";
-import { AcceptedBaseInvalid } from "../src/workflows/library/library-sync-state.js";
+import { SyncSourceRestoreInvalid } from "../src/workflows/library/library-sync.js";
 import {
   Conflict,
   InvalidArgument,
@@ -72,12 +72,12 @@ describe("declared exit codes", () => {
   });
 
   test("message-less tagged failures retain their detail", () => {
-    const failure = new AcceptedBaseInvalid({
-      path: "/tmp/library-sync.json",
-      detail: "invalid accepted sync base",
+    const failure = new SyncSourceRestoreInvalid({
+      digest: `sha256:${"a".repeat(64)}`,
+      detail: "pinned Git acquisition has no commit",
     });
     expect(failure.message).toBe("");
-    expect(errorMessage(failure)).toBe("invalid accepted sync base");
+    expect(errorMessage(failure)).toBe("pinned Git acquisition has no commit");
   });
 });
 

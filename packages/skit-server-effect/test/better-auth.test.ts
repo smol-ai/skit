@@ -1242,6 +1242,103 @@ describe("Better Auth adapter", () => {
     }).pipe(Effect.provide(bindingsLayer)),
   );
 
+  it.effect(
+    "commits exactly one of two concurrent first Library writes and isolates snapshots",
+    () =>
+      Effect.gen(function* () {
+        yield* prepareDatabase;
+        const openWeb = makeWebHandler({
+          ...env,
+          ACCOUNT_REGISTRATION_MODE: "open",
+          PUBLIC_APP_ORIGIN: "https://registry.test",
+          BETTER_AUTH_SECRET: "skit-worker-test-secret-that-is-at-least-thirty-two-characters",
+          SKIT_BOOTSTRAP_SECRET:
+            "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+        });
+        const send = (path: string, init?: RequestInit) =>
+          webPromise(() => openWeb.handler(new Request(`https://registry.test${path}`, init)));
+        const account = Effect.fn(function* (username: string, address: string) {
+          const json = { "content-type": "application/json", origin: "https://registry.test" };
+          const signedUp = yield* send("/api/auth/sign-up/email", {
+            method: "POST",
+            headers: { ...json, "cf-connecting-ip": address },
+            body: JSON.stringify({
+              name: username,
+              username,
+              email: `${username}@example.test`,
+              password: "password1234",
+            }),
+          });
+          expect(signedUp.status).toBe(200);
+          const signedIn = yield* send("/api/auth/sign-in/email", {
+            method: "POST",
+            headers: { ...json, "cf-connecting-ip": address },
+            body: JSON.stringify({ email: `${username}@example.test`, password: "password1234" }),
+          });
+          expect(signedIn.status).toBe(200);
+          return {
+            cookie: (signedIn.headers.get("set-cookie") ?? "").split(";", 1)[0]!,
+            json,
+          };
+        });
+        const alice = yield* account("alice", "192.0.2.120");
+        const bob = yield* account("bob", "192.0.2.121");
+        const manifest = {
+          schema: "skit.library.v7",
+          collections: [],
+          skills: [],
+          retained_copies: [],
+          acquisitions: [],
+          snapshot_digests: [],
+          bindings: [],
+        };
+        const firstWrite = () =>
+          send("/api/library/portable", {
+            method: "PUT",
+            headers: { ...alice.json, cookie: alice.cookie },
+            body: JSON.stringify({ expected_revision_id: null, manifest }),
+          });
+
+        // workerd may serialize the two requests; either way exactly one first write may commit.
+        const raced = yield* Effect.all([firstWrite(), firstWrite()], { concurrency: "unbounded" });
+        expect(raced.map((response) => response.status).sort()).toEqual([200, 409]);
+        const winner = Schema.decodeUnknownSync(
+          Schema.Struct({
+            library: Schema.Struct({ library_id: Schema.String, revision_id: Schema.String }),
+          }),
+        )(yield* webPromise(() => raced.find((response) => response.status === 200)!.json()));
+        const head = yield* send("/api/library/portable", { headers: { cookie: alice.cookie } });
+        expect(yield* webPromise(() => head.json())).toMatchObject({ library: winner.library });
+
+        const archive = {
+          profile: "verbatim/v1",
+          digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          entries: [],
+        };
+        const upload = (owner: typeof alice) =>
+          send("/api/library/snapshots", {
+            method: "POST",
+            headers: { ...owner.json, cookie: owner.cookie },
+            body: JSON.stringify(archive),
+          });
+        expect((yield* upload(alice)).status).toBe(200);
+        const aliceSnapshot = `/api/libraries/${winner.library.library_id}/snapshots/${encodeURIComponent(archive.digest)}`;
+        expect((yield* send(aliceSnapshot, { headers: { cookie: alice.cookie } })).status).toBe(
+          200,
+        );
+        // Another account cannot read Alice's snapshot, even by its exact Library id and digest.
+        expect((yield* send(aliceSnapshot, { headers: { cookie: bob.cookie } })).status).toBe(403);
+        // The same bytes uploaded by Bob are his own snapshot in his own Library.
+        const bobUpload = yield* upload(bob);
+        expect(bobUpload.status).toBe(200);
+        const bobSnapshot = Schema.decodeUnknownSync(
+          Schema.Struct({ library_id: Schema.String, reused: Schema.Boolean }),
+        )(yield* webPromise(() => bobUpload.json()));
+        expect(bobSnapshot.library_id).not.toBe(winner.library.library_id);
+        expect(bobSnapshot.reused).toBe(false);
+      }).pipe(Effect.provide(bindingsLayer)),
+  );
+
   it.effect("creates a team and manages member lifecycle through a session", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;

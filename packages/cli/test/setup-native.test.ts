@@ -785,7 +785,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const retained = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 7,
+      schemaVersion: 8,
       collections: [
         {
           collection_id: collectionId,
@@ -982,7 +982,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     yield* f.fs.writeFileString(join(projectedSkill, ".skit-ownership.json"), projectionMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), projectionMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 7,
+      schemaVersion: 8,
       collections: [
         {
           collection_id: collectionId,
@@ -1253,7 +1253,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       }),
     );
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 7,
+      schemaVersion: 8,
       collections: [
         {
           collection_id: collectionId,

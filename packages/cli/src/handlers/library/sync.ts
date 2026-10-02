@@ -46,7 +46,9 @@ const apply = Flag.boolean("apply").pipe(
   Flag.withDefault(false),
 );
 const adopt = Flag.boolean("adopt").pipe(
-  Flag.withDescription("Explicitly adopt the current remote Library."),
+  Flag.withDescription(
+    "Explicitly adopt the current remote Library, setting aside ancestry from another Library.",
+  ),
   Flag.withDefault(false),
 );
 const takeRemote = Flag.string("take-remote").pipe(

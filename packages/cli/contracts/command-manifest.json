@@ -765,7 +765,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v8"
+        "skit.inventory.v9"
       ],
       "exitCodes": [
         0,
@@ -2099,7 +2099,7 @@
         "adopt": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Explicitly adopt the current remote Library."
+          "description": "Explicitly adopt the current remote Library, setting aside ancestry from another Library."
         },
         "take-remote": {
           "type": "string",

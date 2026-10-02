@@ -46,12 +46,20 @@ function mergeBindingIntent(
   base: LibraryManifest,
   local: LibraryManifest,
   remote: LibraryManifest,
-  library: Parameters<typeof bindingSkillIds>[0],
+  library: Parameters<typeof bindingSkillIds>[0] & { readonly collections: readonly Collection[] },
   takeRemote: ReadonlySet<string>,
 ) {
   const [before, mine, theirs] = [base, local, remote].map(bindingIntent);
   const followed = planThreeWayRecords(before!.followed, mine!.followed, theirs!.followed, equal);
   const enabled = planThreeWayRecords(before!.enabled, mine!.enabled, theirs!.enabled, equal);
+  // A removal on either device takes the removed records' entries with it, exactly as removing
+  // them after the other device's Binding change would have.
+  const collectionIds = new Set<string>(library.collections.map((item) => item.collection_id));
+  const skillIds = new Set<string>(library.skills.map((item) => item.skill_id));
+  const present = (entry: BindingEntry) =>
+    entry.kind === "collection"
+      ? collectionIds.has(entry.collection_id)
+      : skillIds.has(entry.skill_id);
   const entries: BindingEntry[] = [
     ...Object.keys(followed.records).map((collectionId): BindingEntry => ({
       kind: "collection",
@@ -61,14 +69,20 @@ function mergeBindingIntent(
       kind: "skill",
       skill_id: skillId as SkillId,
     })),
-  ];
+  ].filter(present);
   // A followed Collection enables every current member, so it cannot coexist with one disabled.
   const coherent = bindingSkillIds(library, {
     entries: entries.filter((entry) => entry.kind === "collection"),
   }).every((skillId) => enabled.records[skillId] !== undefined);
   if (coherent) return { values: mergeGlobalBindings(library, [{ entries }]), conflicts: [] };
   return takeRemote.has("binding:global")
-    ? { values: remote.bindings, conflicts: [] }
+    ? {
+        values: mergeGlobalBindings(
+          library,
+          remote.bindings.map((binding) => ({ entries: binding.entries.filter(present) })),
+        ),
+        conflicts: [],
+      }
     : { values: local.bindings, conflicts: ["binding:global"] };
 }
 
@@ -177,6 +191,7 @@ export function mergeLibraryManifests(
     takeRemote,
   );
   const library = {
+    collections: collections.values,
     skills: skills.values,
     retained_copies: trees.values,
     acquisitions: acquisitions.values,

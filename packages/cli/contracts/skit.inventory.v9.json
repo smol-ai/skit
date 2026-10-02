@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v8",
+  "$id": "skit.inventory.v9",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -291,12 +291,6 @@
         {
           "type": "null"
         }
-      ]
-    },
-    "schemaVersion": {
-      "type": "number",
-      "enum": [
-        7
       ]
     },
     "skills": {
@@ -1069,7 +1063,6 @@
   },
   "required": [
     "unmanaged",
-    "schemaVersion",
     "skills",
     "projections",
     "machine"

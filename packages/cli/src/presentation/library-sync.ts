@@ -107,7 +107,7 @@ export function renderLibrarySync(data: SyncData): string {
     case "conflicted":
       return `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`;
     case "base_mismatch":
-      return "This device last synced with a different Library; sync stopped.";
+      return "This device last synced with a different Library; sync stopped. Run sync --adopt to merge with this Library without inferring deletions.";
     case "resolution_invalid":
       return "--take-remote named something that isn't a current conflict.";
   }

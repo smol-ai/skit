@@ -21,7 +21,7 @@ interface LegacySkillVersionFixture {
   readonly [field: string]: unknown;
 }
 
-it.effect("migrates a persisted v4 well-known subset to v7 once at the state-file boundary", () =>
+it.effect("migrates a persisted v4 well-known subset to v8 once at the state-file boundary", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v4-migration-" });
@@ -31,7 +31,7 @@ it.effect("migrates a persisted v4 well-known subset to v7 once at the state-fil
     const migrated = yield* inspectLibrary(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 7);
+    assert.strictEqual(migrated.state.schemaVersion, 8);
     assert.strictEqual(migrated.state.collections.length, 1);
     assert.strictEqual(migrated.state.acquisitions[0]?.kind, "source");
     assert.strictEqual(
@@ -337,7 +337,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 7);
+    assert.strictEqual(state.schemaVersion, 8);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -444,7 +444,7 @@ for (const agreed of [true, false])
         const migrated = yield* inspectLibrary(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
-        assert.strictEqual(migrated.state.schemaVersion, 7);
+        assert.strictEqual(migrated.state.schemaVersion, 8);
         assert.deepStrictEqual(migrated.state.global_bindings, [
           {
             scope: { kind: "global" },
@@ -459,3 +459,27 @@ for (const agreed of [true, false])
         );
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v7-migration-" });
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+    );
+    const current = yield* inspectLibrary(home);
+    assert.strictEqual(current.present, true);
+    if (!current.present) return;
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      JSON.stringify({ ...current.state, schemaVersion: 7 }),
+    );
+
+    const migrated = yield* inspectLibrary(home);
+    assert.strictEqual(migrated.present, true);
+    if (!migrated.present) return;
+    assert.deepStrictEqual(migrated.state, current.state);
+    assert.notProperty(migrated.state, "sync_ancestry");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
