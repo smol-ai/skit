@@ -7,12 +7,12 @@ export const SyncConflictDetail = Schema.Struct({
 });
 export type SyncConflictDetail = typeof SyncConflictDetail.Type;
 
-const SyncBindingEntry = Schema.Struct({
+export const SyncBindingEntry = Schema.Struct({
   kind: Schema.Literals(["collection", "skill"]),
   label: Schema.String,
 });
 
-const SyncChange = Schema.Union([
+export const SyncChange = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("collection"),
     action: Schema.Literals(["add", "update", "remove"]),
@@ -35,7 +35,7 @@ const SyncChange = Schema.Union([
   }),
 ]);
 
-const SyncPlan = Schema.Struct({
+export const SyncPlan = Schema.Struct({
   local: Schema.Array(SyncChange),
   remote: Schema.Array(SyncChange),
 });
@@ -73,3 +73,7 @@ export const SyncResult = Schema.Struct({
   plan: Schema.optionalKey(SyncPlan),
 });
 export type SyncResult = typeof SyncResult.Type;
+
+export type SyncBindingEntry = typeof SyncBindingEntry.Type;
+export type SyncChange = typeof SyncChange.Type;
+export type SyncPlan = typeof SyncPlan.Type;

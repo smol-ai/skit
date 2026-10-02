@@ -67,25 +67,12 @@ export const makeMachineId = (): MachineId =>
   typeidUnboxed(EntityIdPrefixes.machine) as unknown as MachineId;
 export const makeOperationId = (): OperationId =>
   typeidUnboxed(EntityIdPrefixes.operation) as unknown as OperationId;
-export const makeAdoptionReceiptId = (): AdoptionReceiptId =>
-  typeidUnboxed(EntityIdPrefixes.adoptionReceipt) as unknown as AdoptionReceiptId;
 
 /** UUIDv7 identities read only from schema-v3 state and machine configuration. */
 export const LegacyMachineId = Schema.String.check(Schema.isUUID(7)).pipe(
   Schema.brand("LegacyMachineId"),
 );
 export type LegacyMachineId = typeof LegacyMachineId.Type;
-export const EntryId = Schema.String.check(Schema.isUUID(7)).pipe(Schema.brand("EntryId"));
-export type EntryId = typeof EntryId.Type;
-export const CollectionVersionId = Schema.String.check(Schema.isUUID(7)).pipe(
-  Schema.brand("CollectionVersionId"),
-);
-export type CollectionVersionId = typeof CollectionVersionId.Type;
-export const LegacySkillVersionId = Schema.String.check(Schema.isUUID(7)).pipe(
-  Schema.brand("LegacySkillVersionId"),
-);
-export type LegacySkillVersionId = typeof LegacySkillVersionId.Type;
-
 type MigratedEntity = keyof typeof EntityIdPrefixes;
 
 const uuidBytes = (uuid: string): Uint8Array => {
@@ -121,17 +108,5 @@ export const deterministicMigrationId = <Entity extends MigratedEntity>(
   return fromUUIDBytes(prefix, bytes) as string;
 };
 
-export const migratedCollectionId = (timestampSource: string, seed: string): CollectionId =>
-  deterministicMigrationId("collection", timestampSource, seed) as CollectionId;
-export const migratedSkillId = (timestampSource: string, seed: string): SkillId =>
-  deterministicMigrationId("skill", timestampSource, seed) as SkillId;
-export const migratedSkillVersionId = (timestampSource: string, seed: string): SkillVersionId =>
-  deterministicMigrationId("skillVersion", timestampSource, seed) as SkillVersionId;
-export const migratedRetainedCopyId = (timestampSource: string, seed: string): RetainedCopyId =>
-  deterministicMigrationId("retainedCopy", timestampSource, seed) as RetainedCopyId;
-export const migratedAcquisitionId = (timestampSource: string, seed: string): AcquisitionId =>
-  deterministicMigrationId("acquisition", timestampSource, seed) as AcquisitionId;
-export const migratedProjectionId = (timestampSource: string | Date, seed: string): ProjectionId =>
-  deterministicMigrationId("projection", timestampSource, seed) as ProjectionId;
 export const migratedMachineId = (timestampSource: string, seed: string): MachineId =>
   deterministicMigrationId("machine", timestampSource, seed) as MachineId;

@@ -134,9 +134,6 @@ export type LibraryInventory = typeof LibraryInventory.Type;
 export const decodeLibraryState = Schema.decodeUnknownEffect(LibraryState, {
   onExcessProperty: "preserve",
 });
-export const encodeLibraryState = Schema.encodeUnknownEffect(LibraryState, {
-  onExcessProperty: "preserve",
-});
 
 export const libraryManifestFromLocalStateEffect = Effect.fn(
   "Library.libraryManifestFromLocalState",
@@ -155,6 +152,3 @@ export const libraryManifestFromLocalStateEffect = Effect.fn(
     }),
   );
 });
-
-export const collectionSkills = (state: Pick<LibraryState, "skills">, collection: Collection) =>
-  state.skills.filter((skill) => skill.collection_id === collection.collection_id);

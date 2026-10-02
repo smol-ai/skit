@@ -105,7 +105,6 @@ for (const scenario of [
               probePath: "",
               skillsStateHome: join(root, "state"),
             },
-            cwd: root,
             interactive: true,
             dryRun: false,
             ...(repositories.length ? { workDirFlag: join(root, "work") } : {}),

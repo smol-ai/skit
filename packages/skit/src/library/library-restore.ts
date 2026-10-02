@@ -82,7 +82,7 @@ export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function
       () => new RestoreInvalid({ detail: "restored state failed Library validation" }),
     ),
   );
-  return { state, projectionDrift: [] as string[] };
+  return { state };
 });
 
 /** Preview device facts that replacement of portable Library state would strand. */
