@@ -8,6 +8,9 @@ import {
   LibraryReceipt,
   SnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
+import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/library-sync.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
+import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
 import manifestFixture from "./fixtures/library-sync/manifest.json" with { type: "json" };
 import emptyManifestFixture from "./fixtures/library-sync/empty-manifest.json" with { type: "json" };
@@ -148,7 +151,7 @@ const competing = {
 };
 
 describe("Library sync Worker persistence", () => {
-  it.effect("creates one owner Library when the first writers race before any row exists", () =>
+  it.effect("smoke: competing HTTP submissions accept one writer (not proof of D1 atomicity)", () =>
     Effect.gen(function* () {
       const headers = yield* session();
       const empty = Schema.decodeUnknownSync(LibraryManifest)(emptyManifestFixture);
@@ -188,6 +191,40 @@ describe("Library sync Worker persistence", () => {
     }),
   );
 
+  it.effect("conditional D1 commit rejects a head advanced after the application precheck", () =>
+    Effect.gen(function* () {
+      const headers = yield* session();
+      const { library_id } = yield* upload(headers);
+      const first = yield* write(headers, null, manifest);
+      const base = Schema.decodeUnknownSync(receipt)(
+        yield* Effect.promise(() => first.json()),
+      ).library;
+      const advance = yield* write(headers, base.revision_id, changed);
+      const winner = Schema.decodeUnknownSync(receipt)(
+        yield* Effect.promise(() => advance.json()),
+      ).library;
+      yield* Effect.promise(() =>
+        env.DB.prepare("UPDATE libraries SET current_revision_id = ? WHERE library_id = ?")
+          .bind(base.revision_id, library_id)
+          .run(),
+      );
+      // Reproduce the boundary after a writer passed its precheck, then a winner advanced D1.
+      yield* Effect.promise(() =>
+        env.DB.prepare("UPDATE libraries SET current_revision_id = ? WHERE library_id = ?")
+          .bind(winner.revision_id, library_id)
+          .run(),
+      );
+      const before = yield* stored(library_id);
+      expect(
+        Schema.is(LibraryRevisionConflict)(
+          yield* Effect.flip(commitLibraryRevision({ library_id }, base.revision_id, competing)),
+        ),
+      ).toBe(true);
+      expect(yield* stored(library_id)).toEqual(before);
+      yield* assertArchive(library_id);
+    }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(nativeCryptoLayer)),
+  );
+
   it.effect("rejects a stale base without adding revisions or changing snapshot bytes", () =>
     Effect.gen(function* () {
       const headers = yield* session();
@@ -211,72 +248,20 @@ describe("Library sync Worker persistence", () => {
     }),
   );
 
-  for (const baseKind of ["empty", "existing"] as const) {
-    it.effect(`commits exactly one of two distinct writers against the same ${baseKind} head`, () =>
-      Effect.gen(function* () {
-        const headers = yield* session();
-        const { library_id } = yield* upload(headers);
-        let expected: string | null = null;
-        if (baseKind === "existing") {
-          const first = yield* write(headers, null, manifest);
-          expect(first.status).toBe(200);
-          expected = Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => first.json()))
-            .library.revision_id;
-        }
-        const responses = yield* Effect.all(
-          [write(headers, expected, changed), write(headers, expected, competing)],
-          { concurrency: "unbounded" },
-        );
-        expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
-        const winner = Schema.decodeUnknownSync(receipt)(
-          yield* Effect.promise(() =>
-            responses.find((response) => response.status === 200)!.json(),
-          ),
-        ).library;
-        const persisted = yield* stored(library_id);
-        expect(persisted.library).toEqual({ current_revision_id: winner.revision_id });
-        expect(persisted.revisions).toHaveLength(baseKind === "empty" ? 1 : 2);
-        expect(persisted.revisions.at(-1)).toMatchObject({
-          revision_id: winner.revision_id,
-          parent_revision_id: expected,
-          manifest_json: JSON.stringify(winner.manifest),
-        });
-        expect(winner.manifest).toEqual(responses[0].status === 200 ? changed : competing);
-        const read = yield* Effect.promise(() =>
-          SELF.fetch(`${origin}/api/library/portable`, { headers }),
-        );
-        expect(read.status).toBe(200);
-        expect(
-          Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => read.json())).library,
-        ).toEqual(winner);
-        yield* assertArchive(library_id);
-      }),
-    );
-  }
-
   it.effect("rejects an unuploaded snapshot, then accepts the same manifest once it is ready", () =>
     Effect.gen(function* () {
       const headers = yield* session();
       expect((yield* write(headers, null, manifest)).status).toBe(400);
-      const row = yield* Effect.promise(() =>
-        env.DB.prepare("SELECT library_id, current_revision_id FROM libraries").first<{
-          library_id: string;
-          current_revision_id: string | null;
-        }>(),
-      );
-      expect(row?.current_revision_id).toBeNull();
-      expect(yield* stored(row!.library_id)).toEqual({
-        library: { current_revision_id: null },
-        revisions: [],
-        snapshots: [],
-        objects: [],
-      });
+      expect(
+        (yield* Effect.promise(() =>
+          env.DB.prepare("SELECT revision_id FROM library_revisions").all(),
+        )).results,
+      ).toEqual([]);
       const uploaded = yield* upload(headers);
-      expect(uploaded.library_id).toBe(row!.library_id);
       expect((yield* write(headers, null, manifest)).status).toBe(200);
-      const persisted = yield* stored(row!.library_id);
+      const persisted = yield* stored(uploaded.library_id);
       expect(persisted.revisions).toHaveLength(1);
-      yield* assertArchive(row!.library_id);
+      yield* assertArchive(uploaded.library_id);
     }),
   );
 

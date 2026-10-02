@@ -10,7 +10,7 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 
 ## Worker endpoint characterization
 
-`packages/skit-server-effect/test/library-sync.test.ts` exercises the Worker fetch handler on real D1 and R2 initialized from committed migrations. Stale revisions and competing writers return a CAS conflict (`409`); exactly one writer advances an empty or existing head. A manifest requiring an unuploaded snapshot is rejected (`400`) without adding a revision. Tests inspect revision parentage, snapshot rows, stored archive bytes, and R2 metadata after accepted and rejected writes.
+`packages/skit-server-effect/test/library-sync.test.ts` exercises the Worker fetch handler on real D1 and R2 initialized from committed migrations. An extracted conditional commit is tested after a direct D1 head advance, bypassing the application precheck: it rejects the stale base and leaves revision rows, head, and R2 bytes unchanged. A concurrent HTTP submission test is only a smoke test; it does not prove D1 atomicity. Stale requests return `409`. A manifest requiring an unuploaded snapshot is rejected (`400`) without adding a revision. Tests inspect revision parentage, snapshot rows, stored archive bytes, and R2 metadata after accepted and rejected writes.
 
 If a committed write's response is lost, immediately retrying with its original expected revision returns `409`, including a first write with a null base. Reading the current head and submitting the identical manifest with that revision returns `200` without adding a revision or changing stored snapshots.
 
