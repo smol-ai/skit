@@ -1,0 +1,12 @@
+{
+  "profile": "verbatim/v1",
+  "digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+  "entries": [
+    {
+      "path": "SKILL.md",
+      "kind": "file",
+      "mode": 420,
+      "content_base64": "LS0tCm5hbWU6IGF1dGhvci1saWZlY3ljbGUKZGVzY3JpcHRpb246IFByb3ZlcyB0aGUgY29tcGxldGUgYXV0aG9yIGxpZmVjeWNsZS4KLS0tCgojIEF1dGhvciBsaWZlY3ljbGUKClB1Ymxpc2hlZCBmcm9tIHRoZSBnZW5lcmF0ZWQgc2NhZmZvbGQuCg=="
+    }
+  ]
+}

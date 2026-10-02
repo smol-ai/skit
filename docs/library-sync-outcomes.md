@@ -8,6 +8,14 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 | Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
 | A sync killed after the Registry commits, against the real Worker | `packages/skit-server-effect/test/e2e.test.ts` |
 
+## Worker endpoint characterization
+
+`packages/skit-server-effect/test/library-sync.test.ts` exercises the Worker fetch handler on real D1 and R2 initialized from committed migrations. Stale revisions and competing writers return a CAS conflict (`409`); exactly one writer advances an empty or existing head. A manifest requiring an unuploaded snapshot is rejected (`400`) without adding a revision. Tests inspect revision parentage, snapshot rows, stored archive bytes, and R2 metadata after accepted and rejected writes.
+
+If a committed write's response is lost, immediately retrying with its original expected revision returns `409`, including a first write with a null base. Reading the current head and submitting the identical manifest with that revision returns `200` without adding a revision or changing stored snapshots.
+
+The legacy v2 `PUT /api/library` currently shares the same Library head as `PUT /api/library/portable`. With the current revision as its CAS base, it can replace a portable manifest with a v2 manifest; the portable GET then returns that v2 head. The preceding portable revision and its snapshot bytes remain stored. This is a characterization of the existing endpoint, not endpoint retirement; the client-side `legacy_remote_conflict` guard remains necessary.
+
 ## Durable state
 
 | Store | Where | Written by | Atomicity |

@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
@@ -29,132 +29,10 @@ const webPromise = <A>(evaluate: () => Promise<A>) =>
 const request = (path: string, init?: RequestInit) =>
   webPromise(() => web.handler(new Request(`https://registry.test${path}`, init)));
 
-const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
-  sql.batch([
-    sql.unsafe("DROP TABLE IF EXISTS server_bootstrap"),
-    sql.unsafe("DROP TABLE IF EXISTS d1_migrations"),
-    sql.unsafe("DROP TABLE IF EXISTS personal_access_tokens"),
-    sql.unsafe("DROP TABLE IF EXISTS team_memberships"),
-    sql.unsafe("DROP TABLE IF EXISTS teams"),
-    sql.unsafe("DROP TABLE IF EXISTS library_revisions"),
-    sql.unsafe("DROP TABLE IF EXISTS library_snapshots"),
-    sql.unsafe("DROP TABLE IF EXISTS libraries"),
-    sql.unsafe("DROP TABLE IF EXISTS resource_grants"),
-    sql.unsafe("DROP TABLE IF EXISTS releases"),
-    sql.unsafe("DROP TABLE IF EXISTS draft_files"),
-    sql.unsafe("DROP TABLE IF EXISTS draft_revisions"),
-    sql.unsafe("DROP TABLE IF EXISTS drafts"),
-    sql.unsafe("DROP TABLE IF EXISTS server_operators"),
-    sql.unsafe("DROP TABLE IF EXISTS namespaces"),
-    sql.unsafe("DROP TABLE IF EXISTS principals"),
-    sql.unsafe("DROP TABLE IF EXISTS verification"),
-    sql.unsafe("DROP TABLE IF EXISTS session"),
-    sql.unsafe("DROP TABLE IF EXISTS account"),
-    sql.unsafe("DROP TABLE IF EXISTS user"),
-    sql.unsafe(`CREATE TABLE user (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
-      emailVerified INTEGER NOT NULL DEFAULT 0, image TEXT,
-      createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL,
-      username TEXT UNIQUE
-    )`),
-    sql.unsafe(`CREATE TABLE session (
-      id TEXT PRIMARY KEY, expiresAt INTEGER NOT NULL, token TEXT NOT NULL UNIQUE,
-      createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, ipAddress TEXT,
-      userAgent TEXT, userId TEXT NOT NULL,
-      authorizationGeneration INTEGER NOT NULL DEFAULT 1
-    )`),
-    sql.unsafe(`CREATE TABLE account (
-      id TEXT PRIMARY KEY, issuer TEXT NOT NULL, accountId TEXT NOT NULL,
-      providerId TEXT NOT NULL, userId TEXT NOT NULL, accessToken TEXT,
-      refreshToken TEXT, idToken TEXT, accessTokenExpiresAt INTEGER,
-      refreshTokenExpiresAt INTEGER, scope TEXT, password TEXT,
-      createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE verification (
-      id TEXT PRIMARY KEY, identifier TEXT NOT NULL, value TEXT NOT NULL,
-      expiresAt INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE principals (
-      principal_id TEXT PRIMARY KEY, better_auth_user_id TEXT NOT NULL UNIQUE,
-      state TEXT NOT NULL DEFAULT 'active', authorization_generation INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE personal_access_tokens (
-      token_id TEXT PRIMARY KEY, principal_id TEXT NOT NULL,
-      token_hash TEXT NOT NULL UNIQUE, token_prefix TEXT NOT NULL,
-      name TEXT NOT NULL, scopes_json TEXT NOT NULL,
-      authorization_generation INTEGER NOT NULL, expires_at TEXT,
-      revoked_at TEXT, last_used_at TEXT, created_at TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE teams (
-      team_id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL, created_at TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE team_memberships (
-      team_id TEXT NOT NULL, principal_id TEXT NOT NULL,
-      role TEXT NOT NULL, created_at TEXT NOT NULL,
-      PRIMARY KEY (team_id, principal_id)
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE resource_grants (
-      grant_id TEXT PRIMARY KEY, subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL,
-      resource_kind TEXT NOT NULL, resource_id TEXT NOT NULL, permission TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE libraries (
-      library_id TEXT PRIMARY KEY, owner_subject_kind TEXT NOT NULL,
-      owner_subject_id TEXT NOT NULL, current_revision_id TEXT,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-      UNIQUE(owner_subject_kind, owner_subject_id)
-    )`),
-    sql.unsafe(`CREATE TABLE library_revisions (
-      revision_id TEXT PRIMARY KEY, library_id TEXT NOT NULL,
-      parent_revision_id TEXT, manifest_json TEXT NOT NULL, created_at TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE library_snapshots (
-      library_id TEXT NOT NULL, snapshot_digest TEXT NOT NULL,
-      status TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0,
-      r2_key TEXT NOT NULL, created_at TEXT NOT NULL, ready_at TEXT,
-      PRIMARY KEY (library_id, snapshot_digest)
-    )`),
-    sql.unsafe(`CREATE TABLE drafts (
-      owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, visibility TEXT NOT NULL,
-      current_revision_id TEXT, PRIMARY KEY (owner_slug, skit_slug)
-    )`),
-    sql.unsafe(`CREATE TABLE draft_revisions (
-      revision_id TEXT PRIMARY KEY, owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE draft_files (
-      revision_id TEXT NOT NULL, path TEXT NOT NULL,
-      PRIMARY KEY (revision_id, path)
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE releases (
-      owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL,
-      version TEXT NOT NULL, release_id TEXT NOT NULL UNIQUE,
-      archive_object_key TEXT NOT NULL UNIQUE, published_at TEXT NOT NULL,
-      visibility TEXT NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE namespaces (
-      namespace_slug TEXT PRIMARY KEY, subject_kind TEXT NOT NULL,
-      subject_id TEXT NOT NULL, created_at TEXT NOT NULL
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE server_operators (
-      principal_id TEXT PRIMARY KEY, created_at TEXT NOT NULL
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE server_bootstrap (
-      id TEXT PRIMARY KEY CHECK (id = 'singleton'), claimed_at TEXT NOT NULL,
-      claimed_by TEXT NOT NULL
-    ) WITHOUT ROWID`),
-    sql.unsafe(`CREATE TABLE d1_migrations (
-      id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL
-    )`),
-    ...expectedMigrations.map((name, index) =>
-      sql.unsafe("INSERT INTO d1_migrations (id, name, applied_at) VALUES (?, ?, ?)", [
-        index + 1,
-        name,
-        "2026-09-11T00:00:00.000Z",
-      ]),
-    ),
-  ]),
-);
+const prepareDatabase = webPromise(async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+});
 
 describe("Better Auth adapter", () => {
   it("trusts only same-email GitHub linking for an unverified bootstrap identity", () => {
@@ -1058,7 +936,10 @@ describe("Better Auth adapter", () => {
 
       yield* Effect.flatMap(
         D1Client.D1Client,
-        (sql) => sql`INSERT INTO drafts VALUES ('operator', 'tools', 'private', 'revision_tools')`,
+        (
+          sql,
+        ) => sql`INSERT INTO drafts (owner_slug, skit_slug, title, visibility, current_revision_id, created_at, updated_at)
+          VALUES ('operator', 'tools', 'Tools', 'private', 'revision_tools', '2026-01-01', '2026-01-01')`,
       );
       const authorInventory = yield* request("/api/author/skits", {
         headers: { cookie: sessionCookie },
