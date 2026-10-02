@@ -56,27 +56,33 @@ function mergeBindingIntent(
   // them after the other device's Binding change would have.
   const collectionIds = new Set<string>(library.collections.map((item) => item.collection_id));
   const skillIds = new Set<string>(library.skills.map((item) => item.skill_id));
+  const present = (entry: BindingEntry) =>
+    entry.kind === "collection"
+      ? collectionIds.has(entry.collection_id)
+      : skillIds.has(entry.skill_id);
   const entries: BindingEntry[] = [
-    ...Object.keys(followed.records)
-      .filter((collectionId) => collectionIds.has(collectionId))
-      .map((collectionId): BindingEntry => ({
-        kind: "collection",
-        collection_id: collectionId as CollectionId,
-      })),
-    ...Object.keys(enabled.records)
-      .filter((skillId) => skillIds.has(skillId))
-      .map((skillId): BindingEntry => ({
-        kind: "skill",
-        skill_id: skillId as SkillId,
-      })),
-  ];
+    ...Object.keys(followed.records).map((collectionId): BindingEntry => ({
+      kind: "collection",
+      collection_id: collectionId as CollectionId,
+    })),
+    ...Object.keys(enabled.records).map((skillId): BindingEntry => ({
+      kind: "skill",
+      skill_id: skillId as SkillId,
+    })),
+  ].filter(present);
   // A followed Collection enables every current member, so it cannot coexist with one disabled.
   const coherent = bindingSkillIds(library, {
     entries: entries.filter((entry) => entry.kind === "collection"),
   }).every((skillId) => enabled.records[skillId] !== undefined);
   if (coherent) return { values: mergeGlobalBindings(library, [{ entries }]), conflicts: [] };
   return takeRemote.has("binding:global")
-    ? { values: remote.bindings, conflicts: [] }
+    ? {
+        values: mergeGlobalBindings(
+          library,
+          remote.bindings.map((binding) => ({ entries: binding.entries.filter(present) })),
+        ),
+        conflicts: [],
+      }
     : { values: local.bindings, conflicts: ["binding:global"] };
 }
 

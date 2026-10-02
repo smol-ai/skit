@@ -188,7 +188,14 @@ it.prop(
   "concurrent removals and Binding changes never leave an unresolvable merge",
   [side, side, side],
   ([base, local, remote]) => {
-    const merged = mergeLibraryManifests(manifestOf(base), manifestOf(local), manifestOf(remote));
+    const before = manifestOf(base);
+    const mine = manifestOf(local);
+    const theirs = manifestOf(remote);
+    const merged = mergeLibraryManifests(before, mine, theirs);
     assert.notInclude(merged.conflicts, "manifest:invariants");
+    // Taking the remote side of every reported conflict must always yield a valid Library.
+    const resolved = mergeLibraryManifests(before, mine, theirs, new Set(merged.conflicts));
+    assert.deepStrictEqual(resolved.conflicts, []);
+    assert.isTrue(Schema.is(LibraryManifest)(resolved.manifest));
   },
 );
