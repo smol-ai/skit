@@ -18,12 +18,12 @@ import {
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
-import { testHttpClientLayer } from "./http-test-client.js";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { librarySyncServer } from "./library-sync-server.js";
 
 /**
  * Devices sharing one compare-and-swap Library server. `loseNextWriteResponse` commits the next
- * Library write and then answers as if it had failed, as a timeout after the commit would.
+ * Library write and then throws a transport error instead of returning the response.
  */
 export const devices = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -32,31 +32,47 @@ export const devices = Effect.gen(function* () {
   const faults = Object.assign(server.faults, {
     failNextAnchoredPublish: false,
     failNextLocalPublish: false,
-    changeBeforeReinspect: undefined as { home: string; state: LibraryState } | undefined,
+    changeWhenHeadRead: undefined as { home: string; state: LibraryState } | undefined,
     blockProjectionAfterPublish: undefined as { home: string; path: string } | undefined,
   });
-  const http = registryHttpLayer(testHttpClientLayer(server.transport));
+  const http = registryHttpLayer(
+    Layer.succeed(
+      HttpClient.HttpClient,
+      HttpClient.make((incoming) =>
+        Effect.gen(function* () {
+          const response = yield* Effect.try(() => server.transport(incoming));
+          if (
+            incoming.method === "GET" &&
+            new URL(incoming.url).pathname === "/api/library/portable" &&
+            faults.changeWhenHeadRead !== undefined
+          ) {
+            const change = faults.changeWhenHeadRead;
+            faults.changeWhenHeadRead = undefined;
+            // The head GET is a semantic boundary between local inspection and publication.
+            yield* fs.makeDirectory(change.home, { recursive: true });
+            yield* fs.writeFileString(
+              join(change.home, "state.json"),
+              Schema.encodeSync(Schema.fromJsonString(LibraryState))(change.state),
+            );
+          }
+          return HttpClientResponse.fromWeb(incoming, response);
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.TransportError({ request: incoming, cause }),
+              }),
+          ),
+        ),
+      ),
+    ),
+  );
   const device = (name: string) => {
     const home = join(workspace, name);
-    let inspections = 0;
     const layer = Layer.effect(
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
         ...store,
-        inspect: Effect.gen(function* () {
-          inspections++;
-          if (inspections === 2 && faults.changeBeforeReinspect?.home === home) {
-            const change = faults.changeBeforeReinspect;
-            faults.changeBeforeReinspect = undefined;
-            // A non-cooperating writer changes the real file at the restore/re-inspect boundary.
-            yield* fs.makeDirectory(home, { recursive: true });
-            yield* fs.writeFileString(
-              join(home, "state.json"),
-              Schema.encodeSync(Schema.fromJsonString(LibraryState))(change.state),
-            );
-          }
-          return yield* store.inspect;
-        }),
         publish: Effect.fn("Test.LibraryStore.publish")(function* (state: LibraryState) {
           if (
             faults.failNextLocalPublish ||
@@ -163,19 +179,16 @@ export const devices = Effect.gen(function* () {
           rootFor?: (target: ProjectionTarget) => string | undefined;
         } = {},
       ) =>
-        Effect.suspend(() => {
-          inspections = 0;
-          return syncLibraryEffect({
-            origin: "https://registry.test",
-            token: "test",
-            apply: true,
-            ...options,
-            projection: {
-              variantsPath: join(home, "variants"),
-              rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
-            },
-          }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped);
-        }),
+        syncLibraryEffect({
+          origin: "https://registry.test",
+          token: "test",
+          apply: true,
+          ...options,
+          projection: {
+            variantsPath: join(home, "variants"),
+            rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
+          },
+        }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),
     };
   };
   return {

@@ -11,6 +11,10 @@ import {
 import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/library-sync.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
+import {
+  librarySyncCasScenarios,
+  librarySyncLabels,
+} from "../../../test-support/library-sync-cas.mjs";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
 import manifestFixture from "./fixtures/library-sync/manifest.json" with { type: "json" };
 import emptyManifestFixture from "./fixtures/library-sync/empty-manifest.json" with { type: "json" };
@@ -140,13 +144,16 @@ const assertArchive = Effect.fn("Test.assertArchive")(function* (libraryId: stri
 
 const changed = {
   ...manifest,
-  collections: manifest.collections.map((collection) => ({ ...collection, label: "test/changed" })),
+  collections: manifest.collections.map((collection) => ({
+    ...collection,
+    label: librarySyncLabels.changed,
+  })),
 };
 const competing = {
   ...manifest,
   collections: manifest.collections.map((collection) => ({
     ...collection,
-    label: "test/competing",
+    label: librarySyncLabels.competing,
   })),
 };
 
@@ -225,84 +232,60 @@ describe("Library sync Worker persistence", () => {
     }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(nativeCryptoLayer)),
   );
 
-  it.effect("rejects a stale base without adding revisions or changing snapshot bytes", () =>
-    Effect.gen(function* () {
-      const headers = yield* session();
-      const { library_id } = yield* upload(headers);
-      const first = yield* write(headers, null, manifest);
-      expect(first.status).toBe(200);
-      const base = Schema.decodeUnknownSync(receipt)(
-        yield* Effect.promise(() => first.json()),
-      ).library;
-      const advance = yield* write(headers, base.revision_id, changed);
-      expect(advance.status).toBe(200);
-      const accepted = Schema.decodeUnknownSync(receipt)(
-        yield* Effect.promise(() => advance.json()),
-      ).library;
-      const before = yield* stored(library_id);
-      expect((yield* write(headers, base.revision_id, competing)).status).toBe(409);
-      expect(yield* stored(library_id)).toEqual(before);
-      expect(before.revisions).toHaveLength(2);
-      expect(before.library).toEqual({ current_revision_id: accepted.revision_id });
-      yield* assertArchive(library_id);
-    }),
-  );
-
-  it.effect("rejects an unuploaded snapshot, then accepts the same manifest once it is ready", () =>
-    Effect.gen(function* () {
-      const headers = yield* session();
-      expect((yield* write(headers, null, manifest)).status).toBe(400);
-      expect(
-        (yield* Effect.promise(() =>
-          env.DB.prepare("SELECT revision_id FROM library_revisions").all(),
-        )).results,
-      ).toEqual([]);
-      const uploaded = yield* upload(headers);
-      expect((yield* write(headers, null, manifest)).status).toBe(200);
-      const persisted = yield* stored(uploaded.library_id);
-      expect(persisted.revisions).toHaveLength(1);
-      yield* assertArchive(uploaded.library_id);
-    }),
-  );
-
-  for (const baseKind of ["empty", "existing"] as const) {
-    it.effect(
-      `conflicts on an old ${baseKind} base after a lost response and reuses the recovered head`,
-      () =>
-        Effect.gen(function* () {
-          const headers = yield* session();
-          const { library_id } = yield* upload(headers);
-          let expected: string | null = null;
-          if (baseKind === "existing") {
-            const first = yield* write(headers, null, manifest);
-            expected = Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => first.json()))
-              .library.revision_id;
+  for (const scenario of librarySyncCasScenarios)
+    it.effect(`shared HTTP scenario: ${scenario.id}`, () =>
+      Effect.gen(function* () {
+        const headers = yield* session();
+        let libraryId: string | undefined;
+        if (scenario.uploadInitially) libraryId = (yield* upload(headers)).library_id;
+        const revisions: Record<string, string | null> = { null: null };
+        const values = { initial: manifest, changed, competing };
+        for (const step of scenario.steps) {
+          const before = step.unchanged ? yield* stored(libraryId!) : undefined;
+          const response =
+            step.method === "PUT"
+              ? yield* write(
+                  headers,
+                  revisions[step.expectedRevision!]!,
+                  values[step.manifest!],
+                  step.path,
+                )
+              : yield* Effect.promise(() =>
+                  SELF.fetch(`${origin}${step.path}`, {
+                    method: step.method,
+                    headers,
+                    ...(step.archive ? { body: JSON.stringify(archive) } : {}),
+                  }),
+                );
+          expect(response.status).toBe(step.status);
+          if (step.discard) {
+            if (response.body) yield* Effect.promise(() => response.body!.cancel());
+          } else {
+            const body = yield* Effect.promise(() => response.json());
+            if (step.body) expect(body).toMatchObject(step.body);
+            if (step.status === 200 && step.method !== "POST") {
+              const head = Schema.decodeUnknownSync(receipt)(body).library;
+              libraryId = head.library_id;
+              if (step.capture) revisions[step.capture] = head.revision_id;
+              if (step.method === "PUT") expect(head.manifest).toEqual(values[step.manifest!]);
+            } else if (step.status === 200) {
+              libraryId = Schema.decodeUnknownSync(Schema.Struct({ library_id: Schema.String }))(
+                body,
+              ).library_id;
+            }
           }
-          // Let the actual Worker commit, then discard its response instead of fabricating an outage.
-          const lost = yield* write(headers, expected, changed);
-          expect(lost.status).toBe(200);
-          if (lost.body) yield* Effect.promise(() => lost.body!.cancel());
-          const before = yield* stored(library_id);
-          expect((yield* write(headers, expected, changed)).status).toBe(409);
-          expect(yield* stored(library_id)).toEqual(before);
-          const recovered = yield* Effect.promise(() =>
-            SELF.fetch(`${origin}/api/library/portable`, { headers }),
-          );
-          expect(recovered.status).toBe(200);
-          const head = Schema.decodeUnknownSync(receipt)(
-            yield* Effect.promise(() => recovered.json()),
-          ).library;
-          expect(head.manifest).toEqual(changed);
-          const retry = yield* write(headers, head.revision_id, changed);
-          expect(retry.status).toBe(200);
-          expect(
-            Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => retry.json())).library,
-          ).toEqual(head);
-          expect(yield* stored(library_id)).toEqual(before);
-          yield* assertArchive(library_id);
-        }),
+          if (step.noRevision)
+            expect(
+              (yield* Effect.promise(() =>
+                env.DB.prepare("SELECT revision_id FROM library_revisions").all(),
+              )).results,
+            ).toEqual([]);
+          if (step.unchanged) expect(yield* stored(libraryId!)).toEqual(before);
+        }
+        expect((yield* stored(libraryId!)).revisions).toHaveLength(scenario.revisions);
+        yield* assertArchive(libraryId!);
+      }),
     );
-  }
 
   it.effect("reuses snapshot uploads and returns the immutable archive bytes through HTTP", () =>
     Effect.gen(function* () {

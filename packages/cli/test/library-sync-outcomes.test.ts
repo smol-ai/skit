@@ -1,15 +1,19 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, Schema, type Layer, type Scope } from "effect";
-import { spawnSync } from "node:child_process";
+import { Effect, Schema, Exit, type Layer, type Scope } from "effect";
 import { join } from "node:path";
 import {
   LibraryState,
+  InvalidLibraryState,
   captureSnapshotArchiveEffect,
   retainedTreePath,
   libraryManifestFromLocalStateEffect,
   skitLayer,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer } from "../src/registry/failures.js";
+import {
+  LibraryApiRejected,
+  LibraryApiUnreachable,
+} from "../src/workflows/library/library-sync-api.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import { devices, untouched } from "./helpers/library-sync-devices.js";
 
@@ -34,7 +38,6 @@ const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
 
 const cases: readonly {
   row: string;
-  expectedFailure?: boolean;
   run: (
     homes: Homes,
   ) => Effect.Effect<void, unknown, Layer.Success<typeof skitLayer> | Scope.Scope>;
@@ -51,57 +54,6 @@ const cases: readonly {
         assert.strictEqual((yield* a.sync()).status, "local_bytes_changed");
         yield* unchanged;
         assert.deepStrictEqual(server.stored, before);
-        // Run the real command; assert its exit status, never its rendered output.
-        const result = spawnSync(
-          process.execPath,
-          [
-            join(import.meta.dirname, "../bin/skit.js"),
-            "sync",
-            "--apply",
-            "--home",
-            a.home,
-            "--json",
-          ],
-          {
-            env: { ...process.env, SKIT_SERVER_URL: "https://registry.test", SKIT_TOKEN: "test" },
-            encoding: "utf8",
-            timeout: 10_000,
-          },
-        );
-        assert.strictEqual(result.error, undefined);
-        assert.strictEqual(JSON.parse(result.stdout).data.status, "local_bytes_changed");
-        yield* unchanged;
-        assert.deepStrictEqual(server.stored, before);
-      }),
-  },
-  {
-    row: "Preflight: local_bytes_changed requires a nonzero CLI exit",
-    expectedFailure: true,
-    run: (homes) =>
-      Effect.gen(function* () {
-        const { a } = homes;
-        yield* seed(homes);
-        yield* a.corruptOriginal;
-        const result = spawnSync(
-          process.execPath,
-          [
-            join(import.meta.dirname, "../bin/skit.js"),
-            "sync",
-            "--apply",
-            "--home",
-            a.home,
-            "--json",
-          ],
-          {
-            env: { ...process.env, SKIT_SERVER_URL: "https://registry.test", SKIT_TOKEN: "test" },
-            encoding: "utf8",
-            timeout: 10_000,
-          },
-        );
-        assert.strictEqual(result.error, undefined);
-        assert.strictEqual(JSON.parse(result.stdout).data.status, "local_bytes_changed");
-        // The separate ordinary row above proves nonmutation without an expected-failure mask.
-        assert.notStrictEqual(result.status, 0);
       }),
   },
   {
@@ -139,7 +91,7 @@ const cases: readonly {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         faults.failNextUpload = true;
-        yield* Effect.flip(a.sync());
+        assert.ok(Schema.is(LibraryApiRejected)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         assert.strictEqual(server.remote, null);
         assert.strictEqual((yield* a.sync()).status, "pushed");
@@ -171,13 +123,28 @@ const cases: readonly {
       }),
   },
   {
+    row: "Push: HTTP 500 after commit differs from a lost transport response",
+    run: ({ a, faults, server }) =>
+      Effect.gen(function* () {
+        yield* a.retain("first");
+        const unchanged = yield* untouched(a);
+        faults.failNextCommittedWriteResponse = true;
+        const error = yield* Effect.flip(a.sync());
+        assert.ok(Schema.is(LibraryApiRejected)(error));
+        if (Schema.is(LibraryApiRejected)(error)) assert.strictEqual(error.status, 500);
+        yield* unchanged;
+        assert.ok(server.remote);
+        assert.strictEqual((yield* a.sync()).status, "clean");
+      }),
+  },
+  {
     row: "Push: P2 response lost before P4",
     run: ({ a, faults, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         faults.loseNextWriteResponse = true;
-        yield* Effect.flip(a.sync());
+        assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         const committed = server.remote;
         assert.ok(committed);
@@ -193,7 +160,7 @@ const cases: readonly {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         faults.failNextLocalPublish = true;
-        yield* Effect.flip(a.sync());
+        assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* unchanged;
         assert.ok(server.remote);
         assert.strictEqual((yield* a.sync()).status, "clean");
@@ -207,7 +174,7 @@ const cases: readonly {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         faults.loseNextWriteResponse = true;
-        yield* Effect.flip(a.sync());
+        assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         yield* b.sync();
         yield* b.retain("second");
@@ -230,7 +197,7 @@ const cases: readonly {
         const unchanged = yield* untouched(b);
         const head = server.remote;
         faults.failNextLocalPublish = true;
-        yield* Effect.flip(b.sync());
+        assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
         yield* unchanged;
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* b.sync()).status, "pulled");
@@ -247,7 +214,7 @@ const cases: readonly {
         const concurrent = yield* c.state;
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
-        faults.changeBeforeReinspect = { home: b.home, state: concurrent };
+        faults.changeWhenHeadRead = { home: b.home, state: concurrent };
         const head = server.remote;
         assert.ok(Schema.is(SyncLocalChanged)(yield* Effect.flip(b.sync())));
         assert.strictEqual(
@@ -274,7 +241,7 @@ const cases: readonly {
             label: "concurrent-local",
           })),
         };
-        faults.changeBeforeReinspect = { home: a.home, state: concurrent };
+        faults.changeWhenHeadRead = { home: a.home, state: concurrent };
         const markerBefore = yield* fs.readFile(join(a.root, "first", ".skit-ownership.json"));
         const skillBefore = yield* fs.readFile(join(a.root, "first", "SKILL.md"));
         const head = server.remote;
@@ -334,7 +301,7 @@ const cases: readonly {
         yield* b.sync();
         const unchanged = yield* untouched(a);
         faults.failNextLocalPublish = true;
-        yield* Effect.flip(a.sync());
+        assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* unchanged;
         const committed = server.remote!;
         assert.strictEqual(committed.manifest.collections.length, 3);
@@ -357,7 +324,7 @@ const cases: readonly {
         const unchanged = yield* untouched(a);
         const head = server.remote;
         faults.failNextUpload = true;
-        yield* Effect.flip(a.sync());
+        assert.ok(Schema.is(LibraryApiRejected)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* a.sync()).status, "merged");
@@ -442,17 +409,29 @@ const cases: readonly {
           }
         }
         const blockedRoot = join(device.home, "blocked-root");
+        const expectedBytes = (yield* fs.exists(join(device.root, "first", "SKILL.md")))
+          ? yield* fs.readFileString(join(device.root, "first", "SKILL.md"))
+          : "first\n";
         faults.blockProjectionAfterPublish = { home: device.home, path: blockedRoot };
-        yield* Effect.exit(
+        const first = yield* Effect.exit(
           device.sync({ rootFor: (target) => (target === "agents" ? blockedRoot : undefined) }),
         );
+        assert.isTrue(Exit.isFailure(first));
         const published = yield* device.state;
         assert.ok(published.sync_ancestry);
         assert.strictEqual(published.sync_ancestry.revision_id, server.remote!.revision_id);
         assert.strictEqual(published.collections.length, row.startsWith("Merge") ? 2 : 1);
         yield* fs.remove(blockedRoot);
-        assert.strictEqual((yield* device.sync()).status, "clean");
-        assert.isTrue(yield* fs.exists(join(device.root, "first", "SKILL.md")));
+        assert.strictEqual(
+          (yield* device.sync({
+            rootFor: (target) => (target === "agents" ? blockedRoot : undefined),
+          })).status,
+          "clean",
+        );
+        assert.strictEqual(
+          yield* fs.readFileString(join(blockedRoot, "first", "SKILL.md")),
+          expectedBytes,
+        );
       }),
   })),
   {
@@ -475,7 +454,10 @@ const cases: readonly {
         yield* a.retain("local-only");
         const unchanged = yield* untouched(a);
         faults.failNextLocalPublish = true;
-        yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] }));
+        assert.instanceOf(
+          yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
+          InvalidLibraryState,
+        );
         yield* unchanged;
         const committed = server.remote!;
         assert.strictEqual((yield* a.sync()).status, "conflicted");
@@ -492,7 +474,7 @@ const cases: readonly {
 ];
 
 for (const scenario of cases)
-  (scenario.expectedFailure ? it.effect.fails : it.effect)(`oracle row: ${scenario.row}`, () =>
+  it.effect(`oracle row: ${scenario.row}`, () =>
     Effect.gen(function* () {
       yield* scenario.run(yield* devices);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

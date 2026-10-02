@@ -16,6 +16,7 @@ export function librarySyncServer() {
   let libraryId = "library_test";
   const faults = {
     loseNextWriteResponse: false,
+    failNextCommittedWriteResponse: false,
     rejectNextWrite: false,
     competingWrite: undefined as LibraryManifest | undefined,
     remoteManifest: undefined as unknown,
@@ -80,20 +81,25 @@ export function librarySyncServer() {
         parent_revision_id,
         manifest: request.manifest,
       });
-      if (faults.loseNextWriteResponse) {
-        faults.loseNextWriteResponse = false;
+      if (faults.failNextCommittedWriteResponse) {
+        faults.failNextCommittedWriteResponse = false;
         return Response.json({ error: "storage_failure" }, { status: 500 });
       }
       return Response.json({ library: published });
     }
     assert.fail(`Unexpected request: ${method} ${path}`);
   };
-  const transport: TestHttpHandler = (incoming) => {
+  const transport = (incoming: Parameters<TestHttpHandler>[0]) => {
     const payload: unknown =
       incoming.body._tag === "Uint8Array"
         ? JSON.parse(new TextDecoder().decode(incoming.body.body))
         : undefined;
-    return respond(incoming.method, new URL(incoming.url).pathname, payload);
+    const response = respond(incoming.method, new URL(incoming.url).pathname, payload);
+    if (incoming.method === "PUT" && response.status === 200 && faults.loseNextWriteResponse) {
+      faults.loseNextWriteResponse = false;
+      throw new TypeError("Connection reset after committed Library write");
+    }
+    return response;
   };
   return {
     transport,

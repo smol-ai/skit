@@ -10,6 +10,7 @@ export default defineConfig({
       "test/cli.test.ts",
       "test/doctor-symlinks-cli.test.ts",
       "test/declared-exit-codes.e2e.test.ts",
+      "test/library-sync-local-bytes.e2e.test.ts",
       "test/explicit-binding-command.test.ts",
       "test/harness-probe.test.ts",
       "test/native-probes.test.ts",

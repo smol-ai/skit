@@ -7,13 +7,15 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 | Named preflight, push, pull, and merge fault rows; byte-level state and projection checks | `packages/cli/test/library-sync-outcomes.test.ts` |
 | Lost response on a later push, restored older state, ancestry, removals, and device policies | `packages/cli/test/library-sync-crash.test.ts` |
 | Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
-| Shared fake and real Worker CAS scenarios, including conflict response bodies | `test-support/library-sync-cas.mjs`, `packages/cli/test/library-sync-server.test.ts`, `packages/skit-server-effect/test/library-sync.test.ts` |
+| Shared sequential HTTP request steps and response expectations for stale bases, retries, and snapshot readiness/reuse | `test-support/library-sync-cas.mjs`, `packages/cli/test/library-sync-server.test.ts`, `packages/skit-server-effect/test/library-sync.test.ts` |
 | Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
 | A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
 
 The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards, merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
 
-**Known failing behavior:** the `local_bytes_changed` row reports that sync stopped but the CLI exits `0`. Its matrix test asserts the required nonzero exit as an expected failure (`.fails`); A separate ordinary row checks the structured outcome, unchanged state/projection bytes, and unchanged remote storage, so an unexpected mutation cannot be hidden by the expected-failure test. Fixing that exit behavior is separate from these tests.
+**Known bug characterization:** `local_bytes_changed` reports that sync stopped but the CLI exits `0`. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` belongs to the subprocess suite and asserts that current status and structured outcome with a BUG comment requiring a nonzero exit when fixed. The ordinary in-process matrix row separately checks unchanged state/projection bytes and remote storage. There is no expected-failure mask.
+
+Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root.
 
 ## Worker endpoint characterization
 
