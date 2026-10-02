@@ -1,6 +1,12 @@
 # Library sync outcomes
 
-This document is the test oracle for `skit sync`. It lists every path through `syncLibraryEffect` (`packages/cli/src/workflows/library/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges". `packages/cli/test/library-sync-crash.test.ts` covers the rows that could lose data.
+This document is the test oracle for `skit sync`. It lists every path through `syncLibraryEffect` (`packages/cli/src/workflows/library/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
+
+| Coverage | Where |
+| --- | --- |
+| Rows that could lose data or block sync, with injected failures | `packages/cli/test/library-sync-crash.test.ts` |
+| Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
+| A sync killed after the Registry commits, against the real Worker | `packages/skit-server-effect/test/e2e.test.ts` |
 
 ## Durable state
 
@@ -70,6 +76,8 @@ Without `--adopt`: `adoption_required`, nothing written. With `--adopt`: the mer
 
 ## Merge — L and R differ, B present (or `--adopt`)
 
+Records merge three-way by identity. Global Binding intent merges per Skill and per followed Collection, and a Binding entry for a record the merge removed is dropped: removing a Collection on one device wins over enabling its Skills on another, as it would if the removal had happened second.
+
 Resolution and conflict outcomes write nothing:
 
 | Condition | Outcome |
@@ -94,6 +102,7 @@ Apply:
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
 | Before M5 | Orphan originals and uploads | The same merge, or a new merge if R advanced |
+| The process is killed after M5 commits | As the row below, plus the writer's `.lock` naming a dead PID | The next command reclaims the lock; then as below |
 | M5 loses the CAS | Orphan originals and uploads; `LibraryChangedOnServer`; L, B, projections unchanged | A merge against the new R |
 | After M5 (or M5's response lost), before M7 | R = merged; L and B old; some projections possibly retired | Re-merge of (B, L, merged). If merged equals L this is `clean`; otherwise it yields merged and M5 is skipped. A `--take-remote` resolution must be repeated. If another home advanced R, a genuine `conflicted` is legal. |
 | After M7, before M8 | Projections stale | `clean`, which reconciles |
