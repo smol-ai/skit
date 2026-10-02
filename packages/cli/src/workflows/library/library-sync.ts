@@ -8,7 +8,6 @@ import {
   deterministicTreeHashEffect,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
-  restoreCustodyConflicts,
   prepareRestoreEffect,
   prepareObservedCollectionEffect,
   acquisitionIsSourceRestorable,
@@ -23,7 +22,11 @@ import {
 } from "@smolai/skit-core";
 import { join } from "node:path";
 import { librarySyncApiEffect } from "./library-sync-api.js";
-import { mergeLibraryManifests, normalizeLibraryManifest } from "./library-merge.js";
+import {
+  mergeLibraryManifests,
+  normalizeLibraryManifest,
+  describeLibraryMergeConflicts,
+} from "./library-merge.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planLibrarySync, type SyncPlan } from "./library-sync-plan.js";
 import {
@@ -31,6 +34,23 @@ import {
   applyLibraryVersionAliases,
   applyDeviceVersionAliases,
 } from "./library-version-alignment.js";
+import {
+  alignLibraryIdentitiesEffect,
+  applyDeviceIdentityAliasesEffect,
+} from "./library-identity-alignment.js";
+import {
+  planSyncProjectionsEffect,
+  resolveSyncProjectionCollisionsEffect,
+  retireSyncProjectionsEffect,
+} from "./library-sync-projections.js";
+import { SyncConflictDetail } from "./library-sync-contract.js";
+
+const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({
+  status: "conflicted" as const,
+  ...(revision_id === undefined ? {} : { revision_id }),
+  conflicts: [...new Set(details.map((item) => item.key))].sort(),
+  conflict_details: details,
+});
 
 const emptyManifest: LibraryManifest = currentLibraryManifest({
   collections: [],
@@ -171,6 +191,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     apply: boolean;
     adopt?: boolean;
     takeRemote?: readonly string[];
+    keepEnabled?: readonly string[];
     projection?: {
       variantsPath: string;
       rootFor: (target: ProjectionTarget) => string | undefined;
@@ -237,25 +258,80 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const accepted = mismatched ? undefined : ancestry;
     if (remote === null) {
       if (!local.present) return { status: "clean" as const, changed: false };
-      const plan = planLibrarySync(manifest, emptyManifest, manifest);
+      const collision = yield* resolveSyncProjectionCollisionsEffect(
+        manifest,
+        options.projection?.rootFor,
+        options.keepEnabled,
+        local.state,
+      );
+      if (collision.invalid || options.takeRemote?.length)
+        return { status: "resolution_invalid" as const };
+      if (collision.conflicts.length) return conflicted(collision.conflicts);
+      const desired = collision.manifest;
+      const devicePlan = yield* planSyncProjectionsEffect(
+        local.state,
+        local.state,
+        desired,
+        options.projection?.rootFor,
+      );
+      if (devicePlan.conflicts.length) return conflicted(devicePlan.conflicts);
+      const plan = planLibrarySync(manifest, emptyManifest, desired);
       if (!options.apply)
         return { status: "push_ready" as const, snapshots: snapshots.length, plan };
       if (options.onPlan) yield* options.onPlan(plan);
       // The writer lock held for the whole sync keeps `local.state` the state this plan describes.
       for (const archive of snapshots) yield* api.upload(archive);
-      const saved = yield* api.write(null, manifest);
-      yield* store.publish(anchored(local.state, saved.library_id, saved.revision_id, manifest));
+      const saved = yield* api.write(null, desired);
+      const retired = yield* retireSyncProjectionsEffect(
+        devicePlan,
+        projectionOptions.variantsPath,
+      );
+      const afterRetirement = yield* store.load;
+      const policies = local.state.global_bindings[0]?.invocation_policies;
+      yield* store.publish(
+        anchored(
+          {
+            ...afterRetirement,
+            global_bindings: desired.bindings.map((binding) => ({
+              ...binding,
+              ...(policies === undefined ? {} : { invocation_policies: policies }),
+            })),
+          },
+          saved.library_id,
+          saved.revision_id,
+          desired,
+        ),
+      );
+      const projections = projectionCounts(
+        yield* reconcileLibraryProjections({
+          ...projectionOptions,
+          desiredGlobalBindings: desired.bindings,
+          onlyBindings: desired.bindings,
+          includeRepositoryBindings: true,
+        }),
+      );
       return {
         status: "pushed" as const,
         revision_id: saved.revision_id,
         snapshots: snapshots.length,
+        ...projections,
+        retired: retired + projections.retired,
         plan,
       };
     }
     const remoteManifest = remote.manifest;
     if (!local.present) {
-      const required = [...new Set(remoteManifest.retained_copies.map((tree) => tree.digest))];
-      const plan = planLibrarySync(emptyManifest, remoteManifest, remoteManifest);
+      const collision = yield* resolveSyncProjectionCollisionsEffect(
+        remoteManifest,
+        options.projection?.rootFor,
+        options.keepEnabled,
+      );
+      if (collision.invalid || options.takeRemote?.length)
+        return { status: "resolution_invalid" as const, revision_id: remote.revision_id };
+      if (collision.conflicts.length) return conflicted(collision.conflicts, remote.revision_id);
+      const desired = collision.manifest;
+      const required = [...new Set(desired.retained_copies.map((tree) => tree.digest))];
+      const plan = planLibrarySync(emptyManifest, remoteManifest, desired);
       if (!options.apply)
         return {
           status: "pull_ready" as const,
@@ -268,32 +344,50 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         required.filter((digest) => snapshotSet.has(digest)),
         (digest) => api.download(remote.library_id, digest),
       );
-      const archives = yield* completeRestoreArchivesEffect(remoteManifest, downloaded, (digest) =>
-        reacquireSourceArchiveEffect(remoteManifest, digest, options),
+      const archives = yield* completeRestoreArchivesEffect(desired, downloaded, (digest) =>
+        reacquireSourceArchiveEffect(desired, digest, options),
       );
       const restored = yield* Effect.scoped(
-        prepareRestoreEffect(remoteManifest, archives, store.originalsPath),
+        prepareRestoreEffect(desired, archives, store.originalsPath),
       );
       if ((yield* store.inspect).present) return yield* new SyncLocalChanged();
-      yield* store.publish(
-        anchored(restored.state, remote.library_id, remote.revision_id, remoteManifest),
-      );
+      const saved = same(desired, remoteManifest)
+        ? remote
+        : yield* api.write(remote.revision_id, desired);
+      yield* store.publish(anchored(restored.state, saved.library_id, saved.revision_id, desired));
       const projections = projectionCounts(
         yield* reconcileLibraryProjections({
           ...projectionOptions,
-          desiredGlobalBindings: remoteManifest.bindings,
-          onlyBindings: remoteManifest.bindings,
+          desiredGlobalBindings: desired.bindings,
+          onlyBindings: desired.bindings,
         }),
       );
       return {
         status: "pulled" as const,
-        revision_id: remote.revision_id,
+        revision_id: saved.revision_id,
         snapshots: remoteManifest.snapshot_digests.length,
         ...projections,
         plan,
       };
     }
-    if (same(manifest, remoteManifest)) {
+    const equalToRemote = same(manifest, remoteManifest);
+    if (equalToRemote && !options.keepEnabled?.length) {
+      if (options.takeRemote?.length)
+        return { status: "resolution_invalid" as const, revision_id: remote.revision_id };
+      const collision = yield* resolveSyncProjectionCollisionsEffect(
+        remoteManifest,
+        options.projection?.rootFor,
+        [],
+        local.state,
+      );
+      if (collision.conflicts.length) return conflicted(collision.conflicts, remote.revision_id);
+      const devicePlan = yield* planSyncProjectionsEffect(
+        local.state,
+        local.state,
+        remoteManifest,
+        options.projection?.rootFor,
+      );
+      if (devicePlan.conflicts.length) return conflicted(devicePlan.conflicts, remote.revision_id);
       // As for a push, the writer lock keeps `local.state` the state that equals the remote.
       if (options.apply)
         yield* store.publish(
@@ -305,6 +399,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
               ...projectionOptions,
               desiredGlobalBindings: remoteManifest.bindings,
               onlyBindings: remoteManifest.bindings,
+              includeRepositoryBindings: true,
             }),
           )
         : { projected: 0, retired: 0 };
@@ -315,25 +410,70 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         ...projections,
       };
     }
-    if (accepted === undefined && !options.adopt)
+    if (accepted === undefined && !options.adopt && !equalToRemote)
       return { status: "adoption_required" as const, revision_id: remote.revision_id };
-    const aligned = alignLibraryVersionIds(manifest, remoteManifest);
-    const alignedBase = applyLibraryVersionAliases(
-      accepted?.base_manifest ?? emptyManifest,
+    const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
+    const identities = yield* alignLibraryIdentitiesEffect(manifest, remoteManifest, base);
+    const aligned = alignLibraryVersionIds(identities.manifest, remoteManifest);
+    const alignedBase = applyLibraryVersionAliases(base, aligned.aliases);
+    const imports = identities.aliases.skills.map((alias) => alias.to);
+    const preliminary = mergeLibraryManifests(
+      alignedBase,
+      aligned.manifest,
+      remoteManifest,
+      new Set(),
+      imports,
+      identities.aliases.collections.map((alias) => alias.to),
+    );
+    const requested = new Set(options.takeRemote ?? []);
+    const availableResolutions = describeLibraryMergeConflicts(
+      preliminary.conflicts,
+      preliminary.manifest,
+      preliminary.unresolvable,
+    );
+    if (
+      [...requested].some(
+        (key) =>
+          !availableResolutions.some(
+            (detail) => detail.key === key && detail.resolution === "take-remote",
+          ),
+      )
+    )
+      return { status: "resolution_invalid" as const, revision_id: remote.revision_id };
+    const merged = mergeLibraryManifests(
+      alignedBase,
+      aligned.manifest,
+      remoteManifest,
+      requested,
+      imports,
+      identities.aliases.collections.map((alias) => alias.to),
+    );
+    if (merged.conflicts.length)
+      return conflicted(
+        describeLibraryMergeConflicts(merged.conflicts, merged.manifest, merged.unresolvable),
+        remote.revision_id,
+      );
+    const alignedDevice = applyDeviceVersionAliases(
+      yield* applyDeviceIdentityAliasesEffect(local.state, identities.aliases),
       aligned.aliases,
     );
-    const preliminary = mergeLibraryManifests(alignedBase, aligned.manifest, remoteManifest);
-    const requested = new Set(options.takeRemote ?? []);
-    if ([...requested].some((key) => !preliminary.conflicts.some((conflict) => conflict === key)))
-      return { status: "resolution_invalid" as const, revision_id: remote.revision_id };
-    const merged = mergeLibraryManifests(alignedBase, aligned.manifest, remoteManifest, requested);
-    const custody = restoreCustodyConflicts(
-      applyDeviceVersionAliases(local.state, aligned.aliases),
+    const collision = yield* resolveSyncProjectionCollisionsEffect(
       merged.manifest,
+      options.projection?.rootFor,
+      options.keepEnabled,
+      alignedDevice,
     );
-    const conflicts = [...new Set([...merged.conflicts, ...custody])].sort();
-    if (conflicts.length > 0)
-      return { status: "conflicted" as const, revision_id: remote.revision_id, conflicts };
+    if (collision.invalid)
+      return { status: "resolution_invalid" as const, revision_id: remote.revision_id };
+    if (collision.conflicts.length) return conflicted(collision.conflicts, remote.revision_id);
+    merged.manifest = collision.manifest;
+    const devicePlan = yield* planSyncProjectionsEffect(
+      local.state,
+      alignedDevice,
+      merged.manifest,
+      options.projection?.rootFor,
+    );
+    if (devicePlan.conflicts.length) return conflicted(devicePlan.conflicts, remote.revision_id);
     // Equivalent handle alignment alone is not a Collection content or evidence change.
     const plan = planLibrarySync(aligned.manifest, remoteManifest, merged.manifest);
     const required = [...new Set(merged.manifest.retained_copies.map((tree) => tree.digest))];
@@ -370,7 +510,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const fresh = yield* store.inspect;
     if (!fresh.present || !same(yield* libraryManifestFromLocalStateEffect(fresh.state), manifest))
       return yield* new SyncLocalChanged();
-    for (const archive of snapshots)
+    for (const archive of localArchiveByDigest.values())
       if (
         required.includes(archive.digest) &&
         merged.manifest.snapshot_digests.includes(archive.digest) &&
@@ -380,15 +520,20 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const saved = same(merged.manifest, remoteManifest)
       ? remote
       : yield* api.write(remote.revision_id, merged.manifest);
-    const retiredBeforeMerge = yield* reconcileLibraryProjections({
-      ...projectionOptions,
-      desiredGlobalBindings: merged.manifest.bindings,
-      retireOnly: true,
-    });
+    const retiredBeforeMerge = yield* retireSyncProjectionsEffect(
+      devicePlan,
+      projectionOptions.variantsPath,
+    );
     const afterRetirement = yield* store.inspect;
     if (!afterRetirement.present) return yield* new SyncLocalChanged();
     const blended = yield* blendRestoredStateEffect(
-      applyDeviceVersionAliases(afterRetirement.state, aligned.aliases),
+      {
+        ...applyDeviceVersionAliases(
+          yield* applyDeviceIdentityAliasesEffect(afterRetirement.state, identities.aliases),
+          aligned.aliases,
+        ),
+        projections: [...devicePlan.projections],
+      },
       restored.state,
     );
     yield* store.publish(anchored(blended, saved.library_id, saved.revision_id, merged.manifest));
@@ -397,6 +542,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         ...projectionOptions,
         desiredGlobalBindings: merged.manifest.bindings,
         onlyBindings: merged.manifest.bindings,
+        includeRepositoryBindings: true,
       }),
     );
     return {
@@ -404,7 +550,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       revision_id: saved.revision_id,
       snapshots: missingSnapshots.length,
       ...projections,
-      retired: retiredBeforeMerge.retired + projections.retired,
+      retired: retiredBeforeMerge + projections.retired,
       plan,
     };
   },

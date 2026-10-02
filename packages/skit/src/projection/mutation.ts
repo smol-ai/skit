@@ -243,7 +243,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
   const root = request.root ?? context.rootFor(target);
   if (!root) return yield* Effect.fail(new NoProjectionRoot({ target }));
   yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
-  const destination = join(root, yield* projectionName(skill.name));
+  const destination = join(root, yield* projectionNameEffect(skill.name));
   const projectionId = request.identity.projectionId;
   const prior = previous?.projection_id === projectionId ? previous : undefined;
   return yield* Effect.scoped(
@@ -374,7 +374,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           const variant = join(
             context.variantsPath,
             target,
-            yield* projectionName(skill.name),
+            yield* projectionNameEffect(skill.name),
             observed.slice(7),
           );
           if (!(yield* exists(variant))) {
@@ -534,7 +534,7 @@ export interface NativeProjectionContext {
   readonly variantsPath: string;
 }
 
-const projectionName = Effect.fn("Projection.name")(function* (name: string) {
+export const projectionNameEffect = Effect.fn("Projection.name")(function* (name: string) {
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) return yield* new UnsafeProjectionName({ name });
   return name;
 });
@@ -575,7 +575,7 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
     project: Effect.fn("Projection.project")(function* (request) {
       const root = request.root ?? context.rootFor(request.target);
       if (!root) return yield* new NoProjectionRoot({ target: request.target });
-      yield* projectionName(request.skill.name);
+      yield* projectionNameEffect(request.skill.name);
       return yield* materializeProjectionEffect({ ...request, state: candidate }, context);
     }),
     retire: Effect.fn("Projection.retire")(function* (projection, onConflict, message) {

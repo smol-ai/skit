@@ -1,5 +1,12 @@
 import { Schema } from "effect";
 
+export const SyncConflictDetail = Schema.Struct({
+  key: Schema.String,
+  message: Schema.String,
+  resolution: Schema.Literals(["take-remote", "keep-enabled", "local"]),
+});
+export type SyncConflictDetail = typeof SyncConflictDetail.Type;
+
 const SyncBindingEntry = Schema.Struct({
   kind: Schema.Literals(["collection", "skill"]),
   label: Schema.String,
@@ -62,6 +69,7 @@ export const SyncResult = Schema.Struct({
   retired: Schema.optionalKey(Schema.Number),
   collections_to_remove: Schema.optionalKey(Schema.Number),
   conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
+  conflict_details: Schema.optionalKey(Schema.Array(SyncConflictDetail)),
   plan: Schema.optionalKey(SyncPlan),
 });
 export type SyncResult = typeof SyncResult.Type;

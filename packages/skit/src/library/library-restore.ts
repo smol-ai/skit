@@ -11,6 +11,7 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "./library-contracts.js";
+import { repositorySelectsProjection } from "./installation/retire-unbound.js";
 
 export class RestoreInvalid extends Schema.TaggedError<RestoreInvalid>()("Library.RestoreInvalid", {
   detail: Schema.String,
@@ -92,9 +93,10 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
   );
   const conflicts = [
     ...current.projections.flatMap((projection) =>
-      !manifest.bindings.some((binding) =>
+      (!manifest.bindings.some((binding) =>
         bindingSkillIds(manifest, binding).includes(projection.skill_id),
-      ) ||
+      ) &&
+        !repositorySelectsProjection(current, projection)) ||
       (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
         ? []
         : [`device:${projection.projection_id}:managed-projection`],

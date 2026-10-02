@@ -11,6 +11,12 @@ export const repositorySelectsProjection = (state: LibraryState, projection: Man
   state.local_bindings.some(
     (binding) =>
       pathIsWithin(binding.scope.root, projection.root) &&
+      !state.local_bindings.some(
+        (other) =>
+          other.scope.root !== binding.scope.root &&
+          pathIsWithin(binding.scope.root, other.scope.root) &&
+          pathIsWithin(other.scope.root, projection.root),
+      ) &&
       bindingSkillIds(state, binding).includes(projection.skill_id),
   );
 

@@ -146,6 +146,167 @@ const manifest = (bindings: unknown[] = []) => ({
   bindings,
 });
 
+it.effect(
+  "independent Collection membership differences conflict even when shared content matches",
+  () =>
+    Effect.gen(function* () {
+      const remote = yield* decode({
+        ...manifest(),
+        skills: [{ ...skill, path: "one" }],
+        retained_copies: manifest().retained_copies.map((item) =>
+          item.retained_copy_id === retainedCopyId
+            ? {
+                ...item,
+                members: item.members.map((member) => ({ ...member, source_path: "one" })),
+              }
+            : item,
+        ),
+      });
+      const extra = makeSkillId();
+      const copy = makeRetainedCopyId();
+      const latestDigest = `sha256:${"d".repeat(64)}`;
+      const local = yield* decode({
+        ...remote,
+        skills: [
+          ...remote.skills,
+          {
+            ...skill,
+            skill_id: extra,
+            name: "extra",
+            path: "extra",
+            versions: [{ ...skill.versions[0], skill_version_id: makeSkillVersionId() }],
+          },
+        ],
+        retained_copies: [
+          ...remote.retained_copies,
+          {
+            ...manifest().retained_copies[0],
+            retained_copy_id: copy,
+            digest: latestDigest,
+            members: [
+              ...remote.retained_copies[0].members,
+              { ...manifest().retained_copies[0].members[0], source_path: "extra" },
+            ],
+          },
+        ],
+        acquisitions: [
+          ...manifest().acquisitions,
+          {
+            ...manifest().acquisitions[0],
+            acquisition_id: makeAcquisitionId(),
+            retained_copy_id: copy,
+            acquired_at: "2026-02-01T00:00:00Z",
+          },
+        ],
+        snapshot_digests: [...manifest().snapshot_digests, latestDigest],
+      });
+      const empty = yield* decode({
+        schema: "skit.library.v7",
+        collections: [],
+        skills: [],
+        acquisitions: [],
+        retained_copies: [],
+        snapshot_digests: [],
+        bindings: [],
+      });
+      const merged = mergeLibraryManifests(empty, local, remote, new Set(), [], [collectionId]);
+      assert.deepEqual(merged.conflicts, [`collection:${collectionId}`]);
+      assert.deepEqual(merged.unresolvable, [`collection:${collectionId}`]);
+      const pinned = yield* decode({
+        ...local,
+        snapshot_digests: local.snapshot_digests.filter((value) => value !== latestDigest),
+        acquisitions: local.acquisitions.map((item) =>
+          item.retained_copy_id === copy
+            ? {
+                ...item,
+                source_identity: {
+                  kind: "github",
+                  owner: "fixture",
+                  repository: "skills",
+                  collection_root: ".",
+                },
+                revision: "b".repeat(40),
+              }
+            : item,
+        ),
+      });
+      const chosen = mergeLibraryManifests(
+        empty,
+        pinned,
+        remote,
+        new Set([`collection:${collectionId}`]),
+        [],
+        [collectionId],
+      );
+      assert.deepEqual(chosen.conflicts, []);
+      assert.deepEqual(chosen.unresolvable, []);
+      assert.isFalse(chosen.manifest.skills.some((item) => item.skill_id === extra));
+      assert.isFalse(chosen.manifest.acquisitions.some((item) => item.retained_copy_id === copy));
+      yield* decode(chosen.manifest);
+    }).pipe(Effect.scoped),
+);
+
+it.effect("independent Collection remote choice cannot discard a selected local edit", () =>
+  Effect.gen(function* () {
+    const remote = yield* decode(manifest());
+    const local = yield* decode({
+      ...manifest(),
+      skills: [{ ...skill, local_version_id: second }],
+    });
+    const empty = yield* decode({
+      schema: "skit.library.v7",
+      collections: [],
+      skills: [],
+      acquisitions: [],
+      retained_copies: [],
+      snapshot_digests: [],
+      bindings: [],
+    });
+    const key = `collection:${collectionId}`;
+    const merged = mergeLibraryManifests(empty, local, remote, new Set([key]), [skillId]);
+    assert.deepEqual(merged.conflicts, [key]);
+    assert.deepEqual(merged.unresolvable, [key]);
+  }).pipe(Effect.scoped),
+);
+
+it.effect("resolves Collection deletion against a new Acquisition as one conflict", () =>
+  Effect.gen(function* () {
+    const base = yield* decode(manifest());
+    const removed = yield* decode({
+      ...manifest(),
+      collections: [],
+      skills: [],
+      acquisitions: [],
+      retained_copies: [],
+      snapshot_digests: [],
+    });
+    const refreshed = yield* decode({
+      ...manifest(),
+      acquisitions: [
+        ...manifest().acquisitions,
+        {
+          ...manifest().acquisitions[0],
+          acquisition_id: makeAcquisitionId(),
+          acquired_at: "2026-02-01T00:00:00.000Z",
+        },
+      ],
+    });
+    for (const [local, remote] of [
+      [removed, refreshed],
+      [refreshed, removed],
+    ]) {
+      const key = `collection:${collectionId}`;
+      assert.deepEqual(mergeLibraryManifests(base, local, remote).conflicts, [key]);
+      const resolved = mergeLibraryManifests(base, local, remote, new Set([key]));
+      assert.deepEqual(resolved.conflicts, []);
+      yield* LibraryManifest.makeEffect(resolved.manifest);
+      assert.deepEqual(resolved.manifest.collections, remote.collections);
+      assert.deepEqual(resolved.manifest.acquisitions, remote.acquisitions);
+      assert.deepEqual(resolved.manifest.skills, remote.skills);
+    }
+  }),
+);
+
 it.effect("merges an independently added global Binding", () =>
   Effect.gen(function* () {
     const base = yield* decode(manifest());

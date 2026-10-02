@@ -28,6 +28,7 @@ export {
   inspectOwnershipMarkerEffect,
   parseOwnershipMarker,
   projectionCustodyEffect,
+  projectionNameEffect,
   withProjectionMutationEffect,
   type ProjectionMutation,
   type NativeProjectionContext,

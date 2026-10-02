@@ -6,11 +6,13 @@ import {
   projectionTargetRoot,
   resolveHarnessRoot,
   deduplicateInventoryRoots,
+  pathIsWithin,
   type HarnessName,
   type ProjectionTarget,
   type SkitBindingScope,
   type LibraryState,
   type InventoryScanRoot,
+  type RepositoryBinding,
 } from "@smolai/skit-core";
 import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
 export interface InventoryRootOptions {
@@ -23,6 +25,25 @@ export interface InventoryRootOptions {
     readonly opencode?: string;
     readonly devin?: string[];
   };
+}
+
+/** Reuse a repository's own route, excluding routes owned by a nested repository Binding. */
+export function existingRepositoryProjectionRoot(
+  state: LibraryState,
+  binding: RepositoryBinding,
+  target: ProjectionTarget,
+): string | undefined {
+  return state.projections.find(
+    (projection) =>
+      projection.target === target &&
+      pathIsWithin(binding.scope.root, projection.root) &&
+      !state.local_bindings.some(
+        (other) =>
+          other.scope.root !== binding.scope.root &&
+          pathIsWithin(binding.scope.root, other.scope.root) &&
+          pathIsWithin(other.scope.root, projection.root),
+      ),
+  )?.root;
 }
 
 /** Resolve one target's writable physical Skill root for a Scope. */

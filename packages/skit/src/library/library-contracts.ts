@@ -435,122 +435,159 @@ export const LibraryManifest = Schema.Struct({
   snapshot_digests: Schema.Array(Digest),
   bindings: Schema.Array(Binding),
 }).check(
-  Schema.makeFilter(
-    (manifest) => {
-      const collections = new Set(manifest.collections.map((item) => item.collection_id));
-      const skills = new Set(manifest.skills.map((skill) => skill.skill_id));
-      const versionIds = manifest.skills.flatMap((skill) =>
-        skill.versions.map((version) => version.skill_version_id),
-      );
-      const copies = new Map(manifest.retained_copies.map((copy) => [copy.retained_copy_id, copy]));
-      if (
-        collections.size !== manifest.collections.length ||
-        skills.size !== manifest.skills.length ||
-        copies.size !== manifest.retained_copies.length ||
-        new Set(manifest.acquisitions.map((item) => item.acquisition_id)).size !==
-          manifest.acquisitions.length ||
-        new Set(versionIds).size !== versionIds.length
-      )
-        return false;
+  Schema.makeFilter((manifest) => {
+    const collections = new Set(manifest.collections.map((item) => item.collection_id));
+    const skills = new Set(manifest.skills.map((skill) => skill.skill_id));
+    const versionIds = manifest.skills.flatMap((skill) =>
+      skill.versions.map((version) => version.skill_version_id),
+    );
+    const copies = new Map(manifest.retained_copies.map((copy) => [copy.retained_copy_id, copy]));
+    if (
+      collections.size !== manifest.collections.length ||
+      skills.size !== manifest.skills.length ||
+      copies.size !== manifest.retained_copies.length ||
+      new Set(manifest.acquisitions.map((item) => item.acquisition_id)).size !==
+        manifest.acquisitions.length ||
+      new Set(versionIds).size !== versionIds.length
+    )
+      return {
+        path: ["collections"],
+        issue: "Duplicate Collection, Skill, Acquisition, retained-copy or Version IDs",
+      };
 
-      for (const collection of manifest.collections) {
-        const owned = manifest.skills.filter(
-          (skill) => skill.collection_id === collection.collection_id,
-        );
-        const paths = owned.map((skill) => skill.path);
-        // A Skill whose path moved upstream leaves its old row behind with its retained history, so
-        // only the Skills the newest Source Acquisition still contains must have distinct names.
-        const names = currentCollectionSkills(manifest, collection.collection_id).map(
-          (skill) => skill.name,
-        );
-        if (new Set(paths).size !== paths.length || new Set(names).size !== names.length)
-          return false;
-        if (
-          paths.some((path, index) => paths.slice(index + 1).some((other) => isNested(path, other)))
-        )
-          return false;
-        if (paths.includes(".") && paths.length !== 1) return false;
-      }
-      const upstreams = manifest.collections.flatMap((collection) =>
-        collection.upstream === undefined ? [] : [collection.upstream],
+    for (const collection of manifest.collections) {
+      const owned = manifest.skills.filter(
+        (skill) => skill.collection_id === collection.collection_id,
       );
+      const paths = owned.map((skill) => skill.path);
+      // A Skill whose path moved upstream leaves its old row behind with its retained history, so
+      // only the Skills the newest Source Acquisition still contains must have distinct names.
+      const names = currentCollectionSkills(manifest, collection.collection_id).map(
+        (skill) => skill.name,
+      );
+      if (new Set(paths).size !== paths.length || new Set(names).size !== names.length)
+        return {
+          path: ["skills"],
+          issue: `Collection ${collection.label} (${collection.collection_id}) contains duplicate Skill paths or current names`,
+        };
       if (
-        upstreams.some((upstream, index) =>
-          upstreams
+        paths.some((path, index) => paths.slice(index + 1).some((other) => isNested(path, other)))
+      )
+        return {
+          path: ["skills"],
+          issue: `Collection ${collection.label} (${collection.collection_id}) contains overlapping Skill paths`,
+        };
+      if (paths.includes(".") && paths.length !== 1)
+        return {
+          path: ["skills"],
+          issue: `Collection ${collection.label} (${collection.collection_id}) mixes a root Skill with child Skills`,
+        };
+    }
+    for (const [index, collection] of manifest.collections.entries()) {
+      const upstream = collection.upstream;
+      if (upstream === undefined) continue;
+      const duplicate = manifest.collections
+        .slice(index + 1)
+        .find(
+          (other) =>
+            other.upstream !== undefined &&
+            Schema.toEquivalence(Upstream)(upstream, other.upstream),
+        );
+      if (duplicate !== undefined)
+        return {
+          path: ["collections"],
+          issue: `Collections ${collection.label} (${collection.collection_id}) and ${duplicate.label} (${duplicate.collection_id}) track the same upstream`,
+        };
+    }
+
+    for (const acquisition of manifest.acquisitions)
+      if (!collections.has(acquisition.collection_id) || !copies.has(acquisition.retained_copy_id))
+        return {
+          path: ["acquisitions"],
+          issue: `Acquisition ${acquisition.acquisition_id} references missing Collection ${acquisition.collection_id} or retained copy ${acquisition.retained_copy_id}`,
+        };
+    for (const copy of manifest.retained_copies)
+      if (
+        copy.members.length === 0 ||
+        new Set(copy.members.map((member) => member.source_path)).size !== copy.members.length ||
+        !manifest.acquisitions.some(
+          (acquisition) => acquisition.retained_copy_id === copy.retained_copy_id,
+        )
+      )
+        return {
+          path: ["retained_copies"],
+          issue: `Retained copy ${copy.retained_copy_id} has invalid members or no owning Acquisition`,
+        };
+
+    for (const skill of manifest.skills) {
+      if (!collections.has(skill.collection_id))
+        return {
+          path: ["skills"],
+          issue: `Skill ${skill.name} (${skill.skill_id}) references missing Collection ${skill.collection_id}`,
+        };
+      if (
+        skill.local_version_id !== undefined &&
+        !skill.versions.some((version) => version.skill_version_id === skill.local_version_id)
+      )
+        return {
+          path: ["skills"],
+          issue: `Skill ${skill.name} (${skill.skill_id}) selects missing Version ${skill.local_version_id}`,
+        };
+      for (const version of skill.versions) {
+        if (
+          skill.versions.filter((other) => other.artifact_digest === version.artifact_digest)
+            .length !== 1
+        )
+          return {
+            path: ["skills"],
+            issue: `Skill ${skill.name} (${skill.skill_id}) contains more than one Version for ${version.artifact_digest}`,
+          };
+        // Every retained Version is backed by bytes one of its Collection's Acquisitions holds.
+        const backed = versionBacking(manifest, skill, version) !== undefined;
+        if (!backed)
+          return {
+            path: ["skills"],
+            issue: `Skill ${skill.name} (${skill.skill_id}) Version ${version.skill_version_id} has no retained Acquisition backing`,
+          };
+      }
+    }
+
+    if (
+      new Set(manifest.snapshot_digests).size !== manifest.snapshot_digests.length ||
+      !Schema.toEquivalence(Schema.Array(Schema.String))(
+        [...manifest.snapshot_digests].sort(),
+        librarySnapshotDigests(manifest),
+      )
+    )
+      return {
+        path: ["snapshot_digests"],
+        issue: "Snapshot digests do not match the retained copies that require private snapshots",
+      };
+    for (const binding of manifest.bindings) {
+      if (
+        binding.entries.some((entry, index) =>
+          binding.entries
             .slice(index + 1)
-            .some((other) => Schema.toEquivalence(Upstream)(upstream, other)),
+            .some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
         )
       )
-        return false;
-
-      for (const acquisition of manifest.acquisitions)
-        if (
-          !collections.has(acquisition.collection_id) ||
-          !copies.has(acquisition.retained_copy_id)
-        )
-          return false;
-      for (const copy of manifest.retained_copies)
-        if (
-          copy.members.length === 0 ||
-          new Set(copy.members.map((member) => member.source_path)).size !== copy.members.length ||
-          !manifest.acquisitions.some(
-            (acquisition) => acquisition.retained_copy_id === copy.retained_copy_id,
-          )
-        )
-          return false;
-
-      for (const skill of manifest.skills) {
-        if (!collections.has(skill.collection_id)) return false;
-        if (
-          skill.local_version_id !== undefined &&
-          !skill.versions.some((version) => version.skill_version_id === skill.local_version_id)
-        )
-          return false;
-        for (const version of skill.versions) {
-          if (
-            skill.versions.filter((other) => other.artifact_digest === version.artifact_digest)
-              .length !== 1
-          )
-            return false;
-          // Every retained Version is backed by bytes one of its Collection's Acquisitions holds.
-          const backed = versionBacking(manifest, skill, version) !== undefined;
-          if (!backed) return false;
-        }
-      }
-
+        return { path: ["bindings"], issue: "The global Binding contains duplicate entries" };
       if (
-        new Set(manifest.snapshot_digests).size !== manifest.snapshot_digests.length ||
-        !Schema.toEquivalence(Schema.Array(Schema.String))(
-          [...manifest.snapshot_digests].sort(),
-          librarySnapshotDigests(manifest),
+        binding.entries.some((entry) =>
+          entry.kind === "collection"
+            ? !collections.has(entry.collection_id)
+            : !skills.has(entry.skill_id),
         )
       )
-        return false;
-      for (const binding of manifest.bindings) {
-        if (
-          binding.entries.some((entry, index) =>
-            binding.entries
-              .slice(index + 1)
-              .some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
-          )
-        )
-          return false;
-        if (
-          binding.entries.some((entry) =>
-            entry.kind === "collection"
-              ? !collections.has(entry.collection_id)
-              : !skills.has(entry.skill_id),
-          )
-        )
-          return false;
-      }
-      return manifest.bindings.length <= 1;
-    },
-    {
-      message:
-        "Library Collections, Skills, retained copies, Acquisitions, and Bindings must agree",
-    },
-  ),
+        return {
+          path: ["bindings"],
+          issue: "The global Binding references a missing Skill or Collection",
+        };
+    }
+    return (
+      manifest.bindings.length <= 1 || { path: ["bindings"], issue: "More than one global Binding" }
+    );
+  }),
 );
 export interface LibraryManifest extends Schema.Schema.Type<typeof LibraryManifest> {}
 
