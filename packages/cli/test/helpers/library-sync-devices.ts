@@ -6,8 +6,6 @@ import {
   type ManagedProjection,
   InvalidLibraryState,
   LibraryStore,
-  LibraryWriteRequest,
-  SnapshotArchive,
   deterministicTreeHashEffect,
   libraryStoreLayer,
   makeMachineId,
@@ -15,13 +13,13 @@ import {
   removeCollectionEffect,
   retainObservedCollectionEffect,
   withLibraryWriter,
-  type LibraryManifest,
-  type LibraryState,
+  LibraryState,
   type ProjectionTarget,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
-import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
+import { testHttpClientLayer } from "./http-test-client.js";
+import { librarySyncServer } from "./library-sync-server.js";
 
 /**
  * Devices sharing one compare-and-swap Library server. `loseNextWriteResponse` commits the next
@@ -30,80 +28,54 @@ import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js
 export const devices = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-crash-" });
-  let published: { library_id: string; revision_id: string; manifest: LibraryManifest } | null =
-    null;
-  const snapshots = new Map<string, typeof SnapshotArchive.Type>();
-  const faults = {
-    loseNextWriteResponse: false,
+  const server = librarySyncServer();
+  const faults = Object.assign(server.faults, {
     failNextAnchoredPublish: false,
-    rejectNextWrite: false,
-  };
-  let libraryId = "library_test";
-  let writes = 0;
-  const transport: TestHttpHandler = (incoming) => {
-    const path = new URL(incoming.url).pathname;
-    if (path.startsWith("/api/libraries/")) {
-      const archive = snapshots.get(decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)));
-      assert.ok(archive);
-      return Response.json(archive);
-    }
-    if (path === "/api/library/portable" && incoming.method === "GET")
-      return published === null
-        ? Response.json({ error: "library_not_found" }, { status: 404 })
-        : Response.json({ library: published });
-    if (incoming.body._tag !== "Uint8Array") assert.fail("Expected an encoded JSON body");
-    const payload: unknown = JSON.parse(new TextDecoder().decode(incoming.body.body));
-    if (path === "/api/library/snapshots") {
-      const archive = Schema.decodeUnknownSync(SnapshotArchive)(payload);
-      snapshots.set(archive.digest, archive);
-      return Response.json({
-        library_id: libraryId,
-        snapshot_digest: archive.digest,
-        reused: false,
-      });
-    }
-    if (path === "/api/library/portable" && incoming.method === "PUT") {
-      const request = Schema.decodeUnknownSync(LibraryWriteRequest)(payload);
-      if (faults.rejectNextWrite) {
-        faults.rejectNextWrite = false;
-        return Response.json({ error: "revision_conflict" }, { status: 409 });
-      }
-      if (request.expected_revision_id !== (published?.revision_id ?? null))
-        return Response.json({ error: "revision_conflict" }, { status: 409 });
-      for (const digest of request.manifest.snapshot_digests)
-        assert.isTrue(snapshots.has(digest), `Snapshot ${digest} must exist before committing`);
-      published = {
-        library_id: libraryId,
-        revision_id: `revision_${++writes}`,
-        manifest: request.manifest,
-      };
-      if (faults.loseNextWriteResponse) {
-        faults.loseNextWriteResponse = false;
-        return Response.json({ error: "storage_failure" }, { status: 503 });
-      }
-      return Response.json({ library: published });
-    }
-    assert.fail(`Unexpected request: ${incoming.method} ${path}`);
-  };
-  const http = registryHttpLayer(testHttpClientLayer(transport));
+    failNextLocalPublish: false,
+    changeBeforeReinspect: undefined as { home: string; state: LibraryState } | undefined,
+    blockProjectionAfterPublish: undefined as { home: string; path: string } | undefined,
+  });
+  const http = registryHttpLayer(testHttpClientLayer(server.transport));
   const device = (name: string) => {
     const home = join(workspace, name);
+    let inspections = 0;
     const layer = Layer.effect(
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
         ...store,
+        inspect: Effect.gen(function* () {
+          inspections++;
+          if (inspections === 2 && faults.changeBeforeReinspect?.home === home) {
+            const change = faults.changeBeforeReinspect;
+            faults.changeBeforeReinspect = undefined;
+            // A non-cooperating writer changes the real file at the restore/re-inspect boundary.
+            yield* fs.makeDirectory(home, { recursive: true });
+            yield* fs.writeFileString(
+              join(home, "state.json"),
+              Schema.encodeSync(Schema.fromJsonString(LibraryState))(change.state),
+            );
+          }
+          return yield* store.inspect;
+        }),
         publish: Effect.fn("Test.LibraryStore.publish")(function* (state: LibraryState) {
           if (
-            faults.failNextAnchoredPublish &&
-            state.sync_ancestry?.revision_id === published?.revision_id
+            faults.failNextLocalPublish ||
+            (faults.failNextAnchoredPublish &&
+              state.sync_ancestry?.revision_id === server.remote?.revision_id)
           ) {
             faults.failNextAnchoredPublish = false;
+            faults.failNextLocalPublish = false;
             return yield* new InvalidLibraryState({
               path: home,
               detail: "Test interruption before merged state publication",
             });
           }
           yield* store.publish(state);
+          if (faults.blockProjectionAfterPublish?.home === home) {
+            const obstruction = faults.blockProjectionAfterPublish;
+            faults.blockProjectionAfterPublish = undefined;
+            yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
+          }
         }),
       })),
     ).pipe(Layer.provide(libraryStoreLayer({ home })));
@@ -112,6 +84,16 @@ export const devices = Effect.gen(function* () {
     return {
       home,
       root,
+      corruptOriginal: Effect.gen(function* () {
+        const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+          Effect.provide(layer),
+        );
+        const digest = state.retained_copies[0]!.digest.slice("sha256:".length);
+        yield* fs.writeFileString(
+          join(home, "originals", digest.slice(0, 2), digest, "SKILL.md"),
+          "corrupted original\n",
+        );
+      }),
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
       retainProjectionEdit: (projection: ManagedProjection) =>
         Effect.gen(function* () {
@@ -181,16 +163,19 @@ export const devices = Effect.gen(function* () {
           rootFor?: (target: ProjectionTarget) => string | undefined;
         } = {},
       ) =>
-        syncLibraryEffect({
-          origin: "https://registry.test",
-          token: "test",
-          apply: true,
-          ...options,
-          projection: {
-            variantsPath: join(home, "variants"),
-            rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
-          },
-        }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),
+        Effect.suspend(() => {
+          inspections = 0;
+          return syncLibraryEffect({
+            origin: "https://registry.test",
+            token: "test",
+            apply: true,
+            ...options,
+            projection: {
+              variantsPath: join(home, "variants"),
+              rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
+            },
+          }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped);
+        }),
     };
   };
   return {
@@ -199,15 +184,48 @@ export const devices = Effect.gen(function* () {
     b: device("b"),
     c: device("c"),
     faults,
-    remote: Effect.sync(() => published),
+    server,
+    remote: Effect.sync(() => server.remote),
     /** The Registry loses the Library, as a deleted account or reset database would. */
-    resetRemote: Effect.sync(() => {
-      published = null;
-      snapshots.clear();
-      libraryId = "library_recreated";
-    }),
+    resetRemote: Effect.sync(() => server.reset()),
     remoteCollections: Effect.sync(
-      () => published?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
+      () => server.remote?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
     ),
   };
+});
+
+/** Capture state and owned projection bytes, then assert that a stopped sync leaves them intact. */
+export const untouched = Effect.fn("Test.untouched")(function* (device: {
+  home: string;
+  state: Effect.Effect<LibraryState, unknown, FileSystem.FileSystem>;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const statePath = join(device.home, "state.json");
+  const stateBytes = (yield* fs.exists(statePath))
+    ? Array.from(yield* fs.readFile(statePath))
+    : null;
+  const paths =
+    stateBytes === null ? [] : (yield* device.state).projections.map((item) => item.path);
+  const readTree = Effect.fn("Test.projectionBytes")(function* (
+    root: string,
+  ): Effect.fn.Return<Record<string, readonly number[]>, unknown, FileSystem.FileSystem> {
+    const result: Record<string, readonly number[]> = {};
+    if (!(yield* fs.exists(root))) return result;
+    for (const name of (yield* fs.readDirectory(root)).sort()) {
+      const path = join(root, name);
+      if ((yield* fs.stat(path)).type === "Directory") {
+        for (const [child, bytes] of Object.entries(yield* readTree(path)))
+          result[join(name, child)] = bytes;
+      } else result[name] = Array.from(yield* fs.readFile(path));
+    }
+    return result;
+  });
+  const before = yield* Effect.forEach(paths, readTree);
+  return Effect.gen(function* () {
+    assert.deepStrictEqual(
+      (yield* fs.exists(statePath)) ? Array.from(yield* fs.readFile(statePath)) : null,
+      stateBytes,
+    );
+    assert.deepStrictEqual(yield* Effect.forEach(paths, readTree), before);
+  });
 });

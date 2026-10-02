@@ -4,9 +4,16 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 
 | Coverage | Where |
 | --- | --- |
-| Rows that could lose data or block sync, with injected failures | `packages/cli/test/library-sync-crash.test.ts` |
+| Named preflight, push, pull, and merge fault rows; byte-level state and projection checks | `packages/cli/test/library-sync-outcomes.test.ts` |
+| Lost response on a later push, restored older state, ancestry, removals, and device policies | `packages/cli/test/library-sync-crash.test.ts` |
+| Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
+| Shared fake and real Worker CAS scenarios, including conflict response bodies | `test-support/library-sync-cas.mjs`, `packages/cli/test/library-sync-server.test.ts`, `packages/skit-server-effect/test/library-sync.test.ts` |
 | Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
-| A sync killed after the Registry commits, against the real Worker | `packages/skit-server-effect/test/e2e.test.ts` |
+| A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
+
+The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards, merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
+
+**Known failing behavior:** the `local_bytes_changed` row reports that sync stopped but the CLI exits `0`. Its matrix test asserts the required nonzero exit as an expected failure (`.fails`); A separate ordinary row checks the structured outcome, unchanged state/projection bytes, and unchanged remote storage, so an unexpected mutation cannot be hidden by the expected-failure test. Fixing that exit behavior is separate from these tests.
 
 ## Worker endpoint characterization
 
@@ -128,7 +135,9 @@ Apply:
 
 An intact projection whose previous Version is dropped by a remote Skill choice is carried into M7 with the merged selected Version, preserving its projection ID, expected digest and repository root. M8 then rewrites it under ordinary marker/hash custody checks. A reidentified Skill instead retires its old on-disk identity at M6; its old state references remain valid until M7. Pending missing copies remain pending during inventory scans and are recreated on retry. Native-deletion suppression is carried through identity alignment.
 
-## Invariants every test asserts
+## Safety invariants and their coverage
+
+These are obligations of sync, not a claim that every existing test asserts all seven. The fault matrix uses `untouched(device)` for byte-level nonmutation checks where the row forbids local writes. The concurrent-local-write rows instead compare the new writer's exact state bytes and preserve existing projection bytes. Publication and recovery rows assert ancestry and retained records. The crash, custody, version-alignment, and merge-property suites cover the additional cases listed above; generated manifest merge properties do not constitute an exhaustive model of device synchronization.
 
 1. **The loser of a CAS race changes no portable state.** `state.json` and owned projections are byte-identical to before; only orphans may appear.
 2. **Only `pushed`, `pulled`, `merged`, and `clean` replace B, and each replaces it in the same publish as the state it reconciled.**

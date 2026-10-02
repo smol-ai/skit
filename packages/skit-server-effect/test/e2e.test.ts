@@ -476,7 +476,17 @@ test("restores an unbound raw Skill and reconciles two portable Library homes", 
 const { createServer } = require("node:http");
 const upstream = process.argv[1];
 let hold = false;
+let holdBefore = false;
+let releaseWrite;
 const relay = createServer(async (request, response) => {
+  if (request.url === "/__relay/hold-before") {
+    holdBefore = true;
+    return response.end();
+  }
+  if (request.url === "/__relay/release") {
+    if (releaseWrite) releaseWrite();
+    return response.end();
+  }
   if (request.url === "/__relay/hold") {
     hold = true;
     return response.end();
@@ -486,6 +496,14 @@ const relay = createServer(async (request, response) => {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers))
     if (name !== "host" && name !== "connection" && typeof value === "string") headers.set(name, value);
+  if (holdBefore && request.method === "PUT" && request.url === "/api/library/portable") {
+    holdBefore = false;
+    await new Promise((resolve) => {
+      releaseWrite = resolve;
+      process.stdout.write("held\\n");
+    });
+    releaseWrite = undefined;
+  }
   const reply = await fetch(new URL(request.url, upstream), {
     method: request.method,
     headers,
@@ -847,6 +865,89 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect((await state(secondHome)).collections).toHaveLength(2);
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
+
+    // Two homes race with independent additions. Hold A before forwarding its CAS write,
+    // let B commit, then release A and recover its genuine stale-revision conflict.
+    first(["add", join(serverRoot, "test/fixtures/library-sync/racing-left")]);
+    second(["add", join(serverRoot, "test/fixtures/library-sync/racing-right")]);
+    const raceStateBefore = await readFile(join(firstHome, "state.json"));
+    const expectedCollections = [
+      ...new Set(
+        [...(await state(firstHome)).collections, ...(await state(secondHome)).collections].map(
+          (item) => item.collection_id,
+        ),
+      ),
+    ].sort();
+    await fetch(new URL("/__relay/hold-before", cliOrigin));
+    const held = relayLine("held");
+    const racing = spawn(
+      process.execPath,
+      [
+        cli,
+        "sync",
+        "--apply",
+        "--home",
+        firstHome,
+        "--codex-root",
+        firstCodex,
+        "--claude-root",
+        firstClaude,
+        "--json",
+      ],
+      {
+        cwd: repositoryRoot,
+        env: {
+          ...process.env,
+          HOME: firstDevice,
+          PATH: `${gitShimDirectory}:${process.env.PATH}`,
+          SKIT_SERVER_URL: cliOrigin,
+          SKIT_TOKEN: token,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    const raceOutput: Buffer[] = [];
+    racing.stderr?.on("data", (chunk: Buffer) => raceOutput.push(chunk));
+    const raceExit = new Promise<number | null>((resolveExit) => racing.once("exit", resolveExit));
+    try {
+      expect(await Promise.race([held.then(() => "held"), raceExit.then(() => "exited")])).toBe(
+        "held",
+      );
+      expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
+      await fetch(new URL("/__relay/release", cliOrigin));
+      expect(await raceExit).toBe(12);
+      expect(JSON.parse(Buffer.concat(raceOutput).toString()).error.code).toBe("CONFLICT");
+      expect(await readFile(join(firstHome, "state.json"))).toEqual(raceStateBefore);
+    } finally {
+      if (racing.exitCode === null) racing.kill("SIGKILL");
+      await raceExit;
+    }
+    expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
+    expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
+    expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
+    expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
+    const convergedBase = (await state(firstHome)).sync_ancestry?.base_manifest;
+    for (const home of [firstHome, secondHome]) {
+      const synced = await state(home);
+      expect(synced.sync_ancestry?.base_manifest).toEqual(convergedBase);
+      expect(synced.collections.map((item) => item.collection_id).sort()).toEqual(
+        expectedCollections,
+      );
+      for (const name of ["racing-left", "racing-right"]) {
+        const skill = synced.skills.find((item) => item.name === name)!;
+        expect(skill).toBeDefined();
+        const acquisition = synced.acquisitions.find(
+          (item) => item.collection_id === skill.collection_id,
+        )!;
+        const copy = synced.retained_copies.find(
+          (item) => item.retained_copy_id === acquisition.retained_copy_id,
+        )!;
+        const digest = copy.digest.slice("sha256:".length);
+        expect(
+          await readFile(join(home, "originals", digest.slice(0, 2), digest, "SKILL.md")),
+        ).toEqual(await readFile(join(serverRoot, "test/fixtures/library-sync", name, "SKILL.md")));
+      }
+    }
   } finally {
     relay?.kill("SIGKILL");
     await server.close();
