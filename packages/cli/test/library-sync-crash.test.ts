@@ -13,6 +13,7 @@ import {
   skitLayer,
   withLibraryWriter,
   type LibraryManifest,
+  type LibraryState,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../src/workflows/library/library-sync.js";
@@ -77,7 +78,15 @@ const devices = Effect.gen(function* () {
     const machineId = makeMachineId();
     return {
       home,
+      root,
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
+      /** A local edit made outside sync, as any Library command makes one. */
+      edit: (change: (state: LibraryState) => LibraryState) =>
+        withLibraryWriter(
+          Effect.flatMap(LibraryStore, (store) =>
+            Effect.flatMap(store.load, (state) => store.publish(change(state))),
+          ),
+        ).pipe(Effect.provide(layer)),
       retain: (repository: string) =>
         Effect.gen(function* () {
           const sourcePath = join(workspace, repository);
@@ -104,7 +113,7 @@ const devices = Effect.gen(function* () {
           withLibraryWriter,
           Effect.provide(layer),
         ),
-      sync: (options: { adopt?: boolean } = {}) =>
+      sync: (options: { adopt?: boolean; takeRemote?: readonly string[] } = {}) =>
         syncLibraryEffect({
           origin: "https://registry.test",
           token: "test",
@@ -121,6 +130,7 @@ const devices = Effect.gen(function* () {
     fs,
     a: device("a"),
     b: device("b"),
+    c: device("c"),
     faults,
     remote: Effect.sync(() => published),
     remoteCollections: Effect.sync(
@@ -242,3 +252,126 @@ it.effect("state without ancestry adopts explicitly and keeps remote-only Collec
     assert.strictEqual((yield* a.state).collections.length, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+/** Enable one Skill globally with a device-local invocation policy. */
+const enable =
+  (skillId: string) =>
+  (state: LibraryState): LibraryState => ({
+    ...state,
+    global_bindings: [
+      {
+        scope: { kind: "global" },
+        entries: [
+          ...(state.global_bindings[0]?.entries ?? []),
+          { kind: "skill", skill_id: skillId as LibraryState["skills"][number]["skill_id"] },
+        ],
+        invocation_policies: {
+          ...state.global_bindings[0]?.invocation_policies,
+          [skillId]: "explicit",
+        },
+      },
+    ],
+  });
+
+it.effect("a merge keeps device-local invocation policies", () =>
+  Effect.gen(function* () {
+    const { a, b } = yield* devices;
+    yield* a.retain("first");
+    const skillId = (yield* a.state).skills[0]!.skill_id;
+    yield* a.edit(enable(skillId));
+    yield* a.sync();
+    yield* b.sync();
+    yield* b.retain("second");
+    yield* b.sync();
+
+    assert.strictEqual((yield* a.sync()).status, "merged");
+    const merged = yield* a.state;
+    assert.strictEqual(merged.collections.length, 2);
+    assert.deepStrictEqual(merged.global_bindings[0]?.invocation_policies, {
+      [skillId]: "explicit",
+    });
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a projection failure after sync publishes leaves state and ancestry coherent", () =>
+  Effect.gen(function* () {
+    const { fs, a, b, remote } = yield* devices;
+    yield* a.retain("first");
+    yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
+    yield* a.sync();
+    // B's Harness root is occupied by a file, so no Projection can be written there.
+    yield* fs.writeFileString(b.root, "not a directory\n");
+
+    yield* Effect.exit(b.sync());
+    const pulled = yield* b.state;
+    assert.strictEqual(pulled.collections.length, 1);
+    assert.strictEqual(pulled.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
+
+    yield* fs.remove(b.root);
+    assert.strictEqual((yield* b.sync()).status, "clean");
+    assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "a retry after a lost response conflicts with a later edit instead of overwriting it",
+  () =>
+    Effect.gen(function* () {
+      const { a, c, faults, remote } = yield* devices;
+      yield* a.retain("first");
+      yield* a.sync();
+      yield* c.sync();
+      const relabel =
+        (label: string) =>
+        (state: LibraryState): LibraryState => ({
+          ...state,
+          collections: state.collections.map((item) => ({ ...item, label })),
+        });
+
+      yield* a.edit(relabel("from-a"));
+      faults.loseNextWriteResponse = true;
+      yield* Effect.exit(a.sync());
+      // C saw A's committed label and deliberately replaced it.
+      assert.strictEqual((yield* c.sync()).status, "merged");
+      yield* c.edit(relabel("from-c"));
+      assert.strictEqual((yield* c.sync()).status, "merged");
+
+      const retried = yield* a.sync();
+      assert.strictEqual(retried.status, "conflicted");
+      assert.strictEqual((yield* remote)?.manifest.collections[0]?.label, "from-c");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const removalSyncsFirst of [true, false])
+  it.effect(
+    `a removal wins over enabling its Skill elsewhere (removal syncs first=${removalSyncsFirst})`,
+    () =>
+      Effect.gen(function* () {
+        const { a, b, remote } = yield* devices;
+        yield* a.retain("first");
+        yield* a.retain("second");
+        yield* a.sync();
+        yield* b.sync();
+        const removed = (yield* a.state).collections[0]!.collection_id;
+        const skillId = (yield* b.state).skills.find(
+          (skill) => skill.collection_id === removed,
+        )!.skill_id;
+
+        yield* a.remove(removed);
+        yield* b.edit(enable(skillId));
+        const [first, second] = removalSyncsFirst ? [a, b] : [b, a];
+        assert.strictEqual((yield* first.sync()).status, "merged");
+        assert.strictEqual((yield* second.sync()).status, "merged");
+        yield* first.sync();
+
+        for (const device of [a, b]) {
+          const state = yield* device.state;
+          assert.isFalse(state.collections.some((item) => item.collection_id === removed));
+          assert.deepStrictEqual(state.global_bindings, []);
+          assert.strictEqual((yield* device.sync()).status, "clean");
+        }
+        assert.isFalse(
+          (yield* remote)!.manifest.collections.some((item) => item.collection_id === removed),
+        );
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
