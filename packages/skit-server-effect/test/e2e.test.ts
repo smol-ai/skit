@@ -819,7 +819,10 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       },
     );
     const exited = new Promise((resolveExit) => killed.once("exit", resolveExit));
-    await committed;
+    // A CLI that exits before its write reaches the Registry fails here instead of hanging.
+    expect(
+      await Promise.race([committed.then(() => "committed"), exited.then(() => "exited")]),
+    ).toBe("committed");
     killed.kill("SIGKILL");
     await exited;
     // The killed writer left its lock and its previous state with the previous ancestry.
