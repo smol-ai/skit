@@ -632,7 +632,8 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
   const machineConfig = options.persistRoots
     ? yield* writeSetupMachineConfig(
         options.libraryHome,
-        discoveryRoots,
+        // Setup never clears saved discovery roots; an empty list only narrows this scan.
+        discoveryRoots.length ? discoveryRoots : setupDiscoveryRoots(prior),
         [...existingDecisions]
           .map(([path, status]) => ({ path, status }))
           .sort((left, right) => left.path.localeCompare(right.path)),
