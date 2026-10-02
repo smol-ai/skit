@@ -1,14 +1,14 @@
 import {
-  planSetupAliasRetirement,
-  retirableShadowAliases,
-  retireSetupAliases,
+  prepareSetupAliasRetirement,
+  approveSetupCopy,
+  bindSetupCopy,
 } from "./setup-local-custody.js";
-import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import { Effect, Schema } from "effect";
-import { LibraryStore, type Digest } from "@smolai/skit-core";
+import { type Digest } from "@smolai/skit-core";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
-import { applyLibraryBindings } from "./set-enabled.js";
+
+import type { SetupCopySelection } from "./setup-decisions.js";
 
 export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistingBindingInvalid>()(
   "SetupExistingBindingInvalid",
@@ -30,12 +30,6 @@ export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistin
   }
 }
 
-export interface SetupExistingBindingSelection {
-  readonly name: string;
-  readonly path: string;
-  readonly duplicateAction?: "retain-only" | "retire-aliases" | "keep-both";
-}
-
 export interface SetupExistingBindingOptions {
   readonly setup: SetupOptions;
   readonly bindings: ProjectionOptions;
@@ -45,33 +39,22 @@ export interface SetupExistingBindingOptions {
 export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings")(function* (
   options: SetupExistingBindingOptions,
   approvedPlanId: Digest,
-  selectedCopies: readonly SetupExistingBindingSelection[],
+  selectedCopies: readonly SetupCopySelection[],
 ) {
   const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
-  const store = yield* LibraryStore;
-  for (const selection of selectedCopies) {
-    const candidate = current.onboarding.candidates.find(
-      (item) => item.name === selection.name && item.paths.includes(selection.path),
-    );
-    if (candidate?.shadows?.length && !selection.duplicateAction)
-      return yield* new SetupExistingBindingInvalid({
-        name: selection.name,
-        reason: "duplicate-action-required",
-      });
-    if (
-      selection.duplicateAction === "retire-aliases" &&
-      !retirableShadowAliases(selection.path, candidate?.shadows ?? []).length
-    )
-      return yield* new SetupExistingBindingInvalid({
-        name: selection.name,
-        reason: "aliases-not-retirable",
-      });
-  }
+  const selections = yield* Effect.forEach(selectedCopies, (selection) =>
+    approveSetupCopy(
+      current,
+      selection,
+      (reason) => new SetupExistingBindingInvalid({ name: selection.name, reason }),
+    ),
+  );
   const selected = new Set<string>();
   const results = [];
   const recoveryDirectories: string[] = [];
   const warnings: { name: string; message: string }[] = [];
-  for (const { name, path: selectedPath, duplicateAction } of selectedCopies) {
+  for (const selection of selections) {
+    const { name, sourcePath: selectedPath, duplicateAction } = selection;
     if (selected.has(name))
       return yield* new SetupExistingBindingInvalid({ name, reason: "duplicate-selection" });
     selected.add(name);
@@ -94,50 +77,17 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
     if (duplicateAction === "retain-only") continue;
-    const shadows =
-      duplicateAction === "retire-aliases"
-        ? yield* observeHarnessShadows(options.setup.inventory, { kind: "global" }, [name])
-        : [];
-    const retirement =
-      duplicateAction === "retire-aliases"
-        ? yield* planSetupAliasRetirement(options.setup.libraryHome, name, selectedPath, shadows)
-        : undefined;
-    const state = yield* store.load;
-    results.push(
-      yield* applyLibraryBindings(state, {
-        query: candidate.subjectId,
-        all: false,
-        allowDuplicate: duplicateAction === "keep-both",
-        ...(retirement
-          ? {
-              allowedShadowAliases: retirement.entries.map((entry) => ({
-                ...entry,
-                canonicalPath: selectedPath,
-              })),
-            }
-          : {}),
-        selectedSkills: [name],
-        invocation: {
-          subjects: [candidate.subjectId],
-          scope: { kind: "global" },
-          enabled: true,
-          dryRun: false,
-        },
-        roots: options.bindings,
-        variantsPath: options.bindings.variantsPath,
-        adoption: { path: selectedPath, observedHash },
-      }),
+    const retirement = yield* prepareSetupAliasRetirement(options.setup, selection);
+    const bound = yield* bindSetupCopy(
+      options,
+      selection,
+      candidate.subjectId,
+      { path: selectedPath, observedHash },
+      retirement,
     );
-    if (retirement) {
-      const outcome = yield* retireSetupAliases(
-        options.setup.inventory,
-        candidate.subjectId,
-        name,
-        retirement,
-      );
-      if (outcome.kind === "retired") recoveryDirectories.push(retirement.recoveryDirectory);
-      else warnings.push({ name, message: outcome.message });
-    }
+    results.push(bound.result);
+    recoveryDirectories.push(...bound.recoveryDirectories);
+    warnings.push(...bound.warnings);
   }
   return { planId: current.onboarding.planId, results, recoveryDirectories, warnings };
 });

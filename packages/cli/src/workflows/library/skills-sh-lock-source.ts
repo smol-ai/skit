@@ -1,5 +1,5 @@
 import { Data, Schema } from "effect";
-import { SkitSource } from "@smolai/skit-core";
+import { sourceLocator, SkitSource } from "@smolai/skit-core";
 import type { SetupLockMatch } from "./setup-contract.js";
 
 const namePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -106,3 +106,18 @@ export function resolveSkillsShSelectedSource(
     },
   });
 }
+
+export const setupLockCollection = (
+  lock: SetupLockMatch,
+): { source: SkitSource; sourceKey: string } | undefined => {
+  const source = skillsShLockCoordinate(lock);
+  if (!source) return undefined;
+  return { source, sourceKey: sourceLocator(source) };
+};
+
+export const setupLockGroupKey = (lock: SetupLockMatch) => {
+  const collection = setupLockCollection(lock);
+  return collection
+    ? `${lock.lockPath}\0${collection.sourceKey}\0${lock.entry.ref ?? ""}\0${lock.lockContentHash}`
+    : undefined;
+};
