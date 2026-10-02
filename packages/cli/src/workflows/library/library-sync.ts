@@ -206,7 +206,12 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       }
     }
     const remote = yield* api.read();
-    const accepted = local.present ? local.state.sync_ancestry : undefined;
+    const ancestry = local.present ? local.state.sync_ancestry : undefined;
+    const mismatched =
+      ancestry !== undefined &&
+      (ancestry.origin !== options.origin ||
+        remote === null ||
+        ancestry.library_id !== remote.library_id);
     // State and the base it was reconciled with are always published together, never apart.
     const anchored = (
       state: LibraryState,
@@ -222,22 +227,21 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         base_manifest: normalizeLibraryManifest(base_manifest),
       },
     });
-    if (
-      accepted !== undefined &&
-      (accepted.origin !== options.origin ||
-        remote === null ||
-        accepted.library_id !== remote.library_id)
-    )
+    if (mismatched && !options.adopt)
       return {
         status: "base_mismatch" as const,
         ...(remote === null ? {} : { revision_id: remote.revision_id }),
       };
+    // Explicit adoption sets aside ancestry from another Library. Against an empty base the merge
+    // can only add records, never infer a deletion.
+    const accepted = mismatched ? undefined : ancestry;
     if (remote === null) {
       if (!local.present) return { status: "clean" as const, changed: false };
       const plan = planLibrarySync(manifest, emptyManifest, manifest);
       if (!options.apply)
         return { status: "push_ready" as const, snapshots: snapshots.length, plan };
       if (options.onPlan) yield* options.onPlan(plan);
+      // The writer lock held for the whole sync keeps `local.state` the state this plan describes.
       for (const archive of snapshots) yield* api.upload(archive);
       const saved = yield* api.write(null, manifest);
       yield* store.publish(anchored(local.state, saved.library_id, saved.revision_id, manifest));
@@ -290,6 +294,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       };
     }
     if (same(manifest, remoteManifest)) {
+      // As for a push, the writer lock keeps `local.state` the state that equals the remote.
       if (options.apply)
         yield* store.publish(
           anchored(local.state, remote.library_id, remote.revision_id, remoteManifest),

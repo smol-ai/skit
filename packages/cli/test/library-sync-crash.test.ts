@@ -30,6 +30,7 @@ const devices = Effect.gen(function* () {
     null;
   const snapshots = new Map<string, typeof SnapshotArchive.Type>();
   const faults = { loseNextWriteResponse: false };
+  let libraryId = "library_test";
   let writes = 0;
   const transport: TestHttpHandler = (incoming) => {
     const path = new URL(incoming.url).pathname;
@@ -48,7 +49,7 @@ const devices = Effect.gen(function* () {
       const archive = Schema.decodeUnknownSync(SnapshotArchive)(payload);
       snapshots.set(archive.digest, archive);
       return Response.json({
-        library_id: "library_test",
+        library_id: libraryId,
         snapshot_digest: archive.digest,
         reused: false,
       });
@@ -58,7 +59,7 @@ const devices = Effect.gen(function* () {
       if (request.expected_revision_id !== (published?.revision_id ?? null))
         return Response.json({ error: "revision_conflict" }, { status: 409 });
       published = {
-        library_id: "library_test",
+        library_id: libraryId,
         revision_id: `revision_${++writes}`,
         manifest: request.manifest,
       };
@@ -133,6 +134,12 @@ const devices = Effect.gen(function* () {
     c: device("c"),
     faults,
     remote: Effect.sync(() => published),
+    /** The Registry loses the Library, as a deleted account or reset database would. */
+    resetRemote: Effect.sync(() => {
+      published = null;
+      snapshots.clear();
+      libraryId = "library_recreated";
+    }),
     remoteCollections: Effect.sync(
       () => published?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
     ),
@@ -375,3 +382,23 @@ for (const removalSyncsFirst of [true, false])
         );
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect("adoption recovers a home whose Library vanished without deleting anything", () =>
+  Effect.gen(function* () {
+    const { a, b, resetRemote, remoteCollections } = yield* devices;
+    yield* a.retain("first");
+    yield* a.sync();
+    yield* b.sync();
+    yield* b.retain("second");
+    yield* resetRemote;
+
+    assert.strictEqual((yield* a.sync()).status, "base_mismatch");
+    assert.strictEqual((yield* a.sync({ adopt: true })).status, "pushed");
+    assert.strictEqual((yield* b.sync()).status, "base_mismatch");
+    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* remoteCollections).length, 2);
+    assert.strictEqual((yield* a.sync()).status, "merged");
+    assert.strictEqual((yield* a.state).collections.length, 2);
+    assert.strictEqual((yield* b.sync()).status, "clean");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

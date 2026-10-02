@@ -30,10 +30,10 @@ Preflight writes nothing. Each row is checked in order; the first match returns.
 | --- | --- |
 | A retained copy's bytes no longer hash to its digest | `local_bytes_changed` |
 | R has schema `skit.library.v2` | `legacy_remote_conflict` |
-| B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id) | `base_mismatch` |
+| B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id), without `--adopt` | `base_mismatch` |
 | Neither L nor R exists | `clean` (nothing written) |
 
-Then exactly one of the paths below runs. Every path holds the home's writer lock for its whole duration when entered through `handleCommand`; `syncLibraryEffect` does not take the lock itself, so any other caller must.
+With `--adopt`, mismatched ancestry is set aside and sync continues as if B were absent, so the merge can only add records. Then exactly one of the paths below runs. Every path holds the home's writer lock for its whole duration when entered through `handleCommand`; `syncLibraryEffect` does not take the lock itself, so any other caller must.
 
 ## Push — R absent, L present
 
