@@ -313,7 +313,7 @@ it.effect(
       assert.strictEqual(merged.manifest.acquisitions.length, local.acquisitions.length);
       assert.deepEqual(local, original);
       const state = yield* Schema.decodeUnknownEffect(LibraryState)({
-        schemaVersion: 7,
+        schemaVersion: 8,
         ...local,
         global_bindings: [
           {

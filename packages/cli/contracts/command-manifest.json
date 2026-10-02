@@ -765,7 +765,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v8"
+        "skit.inventory.v9"
       ],
       "exitCodes": [
         0,

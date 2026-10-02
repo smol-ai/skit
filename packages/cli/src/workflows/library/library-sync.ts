@@ -16,6 +16,7 @@ import {
   retainedTreePath,
   type Acquisition,
   type LibraryManifest,
+  type LibraryState,
   type ProjectionTarget,
   type SkitSource,
   type SnapshotArchive,
@@ -23,7 +24,6 @@ import {
 import { join } from "node:path";
 import { librarySyncApiEffect } from "./library-sync-api.js";
 import { mergeLibraryManifests, normalizeLibraryManifest } from "./library-merge.js";
-import { publishAcceptedBaseEffect, readAcceptedBaseEffect } from "./library-sync-state.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planLibrarySync, type SyncPlan } from "./library-sync-plan.js";
 import {
@@ -207,19 +207,21 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
   const remote = yield* api.read();
   if (remote?.manifest.schema === "skit.library.v2")
     return { status: "legacy_remote_conflict" as const, revision_id: remote.revision_id };
-  const accepted = yield* readAcceptedBaseEffect(store.home);
-  const remember = Effect.fn("Library.sync.remember")(function* (
+  const accepted = local.present ? local.state.sync_ancestry : undefined;
+  // State and the base it was reconciled with are always published together, never apart.
+  const anchored = (
+    state: LibraryState,
     library_id: string,
     revision_id: string,
     base_manifest: LibraryManifest,
-  ) {
-    yield* publishAcceptedBaseEffect(store.home, {
-      schemaVersion: 1,
+  ): LibraryState => ({
+    ...state,
+    sync_ancestry: {
       origin: options.origin,
       library_id,
       revision_id,
       base_manifest: normalizeLibraryManifest(base_manifest),
-    });
+    },
   });
   if (
     accepted !== undefined &&
@@ -231,14 +233,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
       status: "base_mismatch" as const,
       ...(remote === null ? {} : { revision_id: remote.revision_id }),
     };
-  if (remote === null && !local.present) return { status: "clean" as const, changed: false };
   if (remote === null) {
+    if (!local.present) return { status: "clean" as const, changed: false };
     const plan = planLibrarySync(manifest, emptyManifest, manifest);
     if (!options.apply) return { status: "push_ready" as const, snapshots: snapshots.length, plan };
     if (options.onPlan) yield* options.onPlan(plan);
     for (const archive of snapshots) yield* api.upload(archive);
     const saved = yield* api.write(null, manifest);
-    yield* remember(saved.library_id, saved.revision_id, manifest);
+    yield* store.publish(anchored(local.state, saved.library_id, saved.revision_id, manifest));
     return {
       status: "pushed" as const,
       revision_id: saved.revision_id,
@@ -269,8 +271,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
       prepareRestoreEffect(remoteManifest, archives, store.originalsPath),
     );
     if ((yield* store.inspect).present) return yield* new SyncLocalChanged();
-    yield* store.publish(restored.state);
-    yield* remember(remote.library_id, remote.revision_id, remoteManifest);
+    yield* store.publish(
+      anchored(restored.state, remote.library_id, remote.revision_id, remoteManifest),
+    );
     const projections = projectionCounts(
       yield* reconcileLibraryProjections({
         ...projectionOptions,
@@ -287,7 +290,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
     };
   }
   if (same(manifest, remoteManifest)) {
-    if (options.apply) yield* remember(remote.library_id, remote.revision_id, remoteManifest);
+    if (options.apply)
+      yield* store.publish(
+        anchored(local.state, remote.library_id, remote.revision_id, remoteManifest),
+      );
     const projections = options.apply
       ? projectionCounts(
           yield* reconcileLibraryProjections({
@@ -380,8 +386,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(function* (options: {
     applyDeviceVersionAliases(afterRetirement.state, aligned.aliases),
     restored.state,
   );
-  yield* store.publish(blended);
-  yield* remember(saved.library_id, saved.revision_id, merged.manifest);
+  yield* store.publish(anchored(blended, saved.library_id, saved.revision_id, merged.manifest));
   const projections = projectionCounts(
     yield* reconcileLibraryProjections({
       ...projectionOptions,

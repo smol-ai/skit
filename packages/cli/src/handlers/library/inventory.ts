@@ -192,6 +192,8 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
       const renderer = yield* Renderer;
       const value = yield* inventoryCommand(options);
       const {
+        schemaVersion: _schemaVersion,
+        sync_ancestry: _syncAncestry,
         assessmentAcceptances: _,
         collections: __,
         global_bindings: ___,

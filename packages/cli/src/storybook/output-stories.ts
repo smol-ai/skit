@@ -266,7 +266,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("inventory", "empty", outputContracts.inventory, {
-    schemaVersion: 7,
     skills: [],
     projections: [],
     unmanaged: [],
@@ -280,7 +279,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     },
   }),
   resultStory("inventory", "copy-dates", outputContracts.inventory, {
-    schemaVersion: 7,
     skills: [],
     projections: [],
     unmanaged: [],
