@@ -6,7 +6,7 @@ import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core";
 import { publishEffect } from "../src/workflows/author/publish.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { fetchTestClientLayer } from "./helpers/http-test-client.js";
+import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /**
@@ -19,12 +19,12 @@ const publish = (
   root: string,
   version: string,
   revision: string | undefined,
-  options: { fetch: typeof fetch; baseUrl?: string; token?: string },
+  options: { transport: TestHttpHandler; baseUrl?: string; token?: string },
 ) =>
   publishEffect(root, version, revision, {
     baseUrl: options.baseUrl,
     token: options.token,
-  }).pipe(Effect.provide(registryHttpLayer(fetchTestClientLayer(options.fetch))));
+  }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))));
 
 /** The error a publication failed or died with, or `undefined` when it succeeded. */
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -65,29 +65,34 @@ it.effect("publish sends a validated archive to the Registry", () =>
       authorization?: string;
       body?: Schema.Schema.Type<typeof Schema.JsonObject>;
     } = {};
-    const fetcher: typeof fetch = async (input, init) => {
-      if (String(input).endsWith("/.well-known/agent-skills/"))
-        return Response.json({ publish: "/registry/{owner}/{slug}/publish" });
-      received = {
-        url: String(input),
-        authorization: new Headers(init?.headers).get("authorization") ?? undefined,
-        body: Schema.decodeUnknownSync(Schema.JsonObject)(await new Request(input, init).json()),
-      };
-      return Response.json(
-        {
-          release: {
-            release_id: "rel_1",
-            version: "1.2.3",
-            revision_id: "revision-1",
-            archive_digest: `sha256:${"a".repeat(64)}`,
-            download_path: "/api/skits/test/tools/releases/1.2.3/download",
+    const fetcher: TestHttpHandler = (input, url) =>
+      Effect.sync(() => {
+        if (input.url.endsWith("/.well-known/agent-skills/"))
+          return Response.json({ publish: "/registry/{owner}/{slug}/publish" });
+        received = {
+          url: url.toString(),
+          authorization: input.headers["authorization"],
+          body: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+            new TextDecoder().decode(
+              input.body._tag === "Uint8Array" ? input.body.body : undefined,
+            ),
+          ),
+        };
+        return Response.json(
+          {
+            release: {
+              release_id: "rel_1",
+              version: "1.2.3",
+              revision_id: "revision-1",
+              archive_digest: `sha256:${"a".repeat(64)}`,
+              download_path: "/api/skits/test/tools/releases/1.2.3/download",
+            },
           },
-        },
-        { status: 201 },
-      );
-    };
+          { status: 201 },
+        );
+      });
     const result = yield* publish(root, "1.2.3", "revision-1", {
-      fetch: fetcher,
+      transport: fetcher,
       baseUrl: "https://registry.test",
       token: "test-token",
     });
@@ -155,23 +160,30 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
     let archiveBase64 = "";
     yield* publish(root, "1.2.3", "revision-1", {
       baseUrl: "https://registry.example",
-      fetch: async (input, init) => {
-        if (String(input).includes(".well-known")) return new Response(null, { status: 404 });
-        publishUrl = String(input);
-        archiveBase64 = (await new Request(input, init).json()).archive_base64;
-        return Response.json(
-          {
-            release: {
-              release_id: "rel_json",
-              version: "1.2.3",
-              revision_id: "revision-1",
-              archive_digest: `sha256:${"a".repeat(64)}`,
-              download_path: "/api/skits/test/tools/releases/1.2.3/download",
+      transport: (input, url) =>
+        Effect.sync(() => {
+          if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
+          publishUrl = url.toString();
+          archiveBase64 = String(
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+              new TextDecoder().decode(
+                input.body._tag === "Uint8Array" ? input.body.body : undefined,
+              ),
+            ).archive_base64,
+          );
+          return Response.json(
+            {
+              release: {
+                release_id: "rel_json",
+                version: "1.2.3",
+                revision_id: "revision-1",
+                archive_digest: `sha256:${"a".repeat(64)}`,
+                download_path: "/api/skits/test/tools/releases/1.2.3/download",
+              },
             },
-          },
-          { status: 201 },
-        );
-      },
+            { status: 201 },
+          );
+        }),
     });
     expect(publishUrl).toBe("https://registry.example/api/skits/test/tools/releases");
     const archive = join(root, "skit-json-uploaded.zip");
@@ -191,23 +203,27 @@ it.effect("publish lets the Registry select its current Draft when --revision is
     yield* publish(root, "1.2.3", undefined, {
       baseUrl: "https://registry.test",
       token: "test-token",
-      fetch: async (input, init) => {
-        const url = String(input);
-        if (url.includes(".well-known")) return new Response(null, { status: 404 });
-        publishedRevision = (await new Request(input, init).json()).revision_id;
-        return Response.json(
-          {
-            release: {
-              release_id: "rel_current",
-              version: "1.2.3",
-              revision_id: "draft_current",
-              archive_digest: `sha256:${"a".repeat(64)}`,
-              download_path: "/api/skits/test/tools/releases/1.2.3/download",
+      transport: (input, url) =>
+        Effect.sync(() => {
+          if (url.toString().includes(".well-known")) return new Response(null, { status: 404 });
+          publishedRevision = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+            new TextDecoder().decode(
+              input.body._tag === "Uint8Array" ? input.body.body : undefined,
+            ),
+          ).revision_id;
+          return Response.json(
+            {
+              release: {
+                release_id: "rel_current",
+                version: "1.2.3",
+                revision_id: "draft_current",
+                archive_digest: `sha256:${"a".repeat(64)}`,
+                download_path: "/api/skits/test/tools/releases/1.2.3/download",
+              },
             },
-          },
-          { status: 201 },
-        );
-      },
+            { status: 201 },
+          );
+        }),
     });
     expect(publishedRevision).toBeUndefined();
   }).pipe(Effect.provide(skitLayer)),
@@ -229,10 +245,11 @@ it.effect("publish rejects a Registry authority mismatch before making a request
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
           baseUrl: "https://other.example",
-          fetch: async () => {
-            requests++;
-            return Response.json({});
-          },
+          transport: () =>
+            Effect.sync(() => {
+              requests++;
+              return Response.json({});
+            }),
         }),
       ),
     ).toMatchObject({ code: "CONFLICT" });
@@ -248,10 +265,11 @@ it.effect("publish validates before making a request", () =>
     expect(
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
-          fetch: async () => {
-            requests++;
-            return Response.json({});
-          },
+          transport: () =>
+            Effect.sync(() => {
+              requests++;
+              return Response.json({});
+            }),
         }),
       ),
     ).toBeInstanceOf(Error);
@@ -275,10 +293,11 @@ it.effect("publish rejects unbaked invocation policy before any archive exists",
         publish(root, "1.2.3", "revision-1", {
           baseUrl: "https://registry.test",
           token: "test-token",
-          fetch: async () => {
-            requests++;
-            return Response.json({});
-          },
+          transport: () =>
+            Effect.sync(() => {
+              requests++;
+              return Response.json({});
+            }),
         }),
       ),
     ).toMatchObject({
@@ -299,7 +318,8 @@ it.effect("publish reports non-success responses without accepting their body", 
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
           baseUrl: "https://registry.test",
-          fetch: async () => Response.json({ error: "insufficient_scope" }, { status: 403 }),
+          transport: () =>
+            Effect.succeed(Response.json({ error: "insufficient_scope" }, { status: 403 })),
         }),
       ),
     ).toMatchObject({ message: expect.stringMatching(/lacks publication:write/) });
@@ -308,7 +328,7 @@ it.effect("publish reports non-success responses without accepting their body", 
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
           baseUrl: "https://registry.test",
-          fetch: async () => Response.json({ error: "forbidden" }, { status: 403 }),
+          transport: () => Effect.succeed(Response.json({ error: "forbidden" }, { status: 403 })),
         }),
       ),
     ).toMatchObject({ message: expect.stringMatching(/not authorized to publish this SKIT/) });
@@ -324,27 +344,29 @@ it.effect("publish reports the diagnostics that block publication", () =>
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
           baseUrl: "https://registry.test",
-          fetch: async (input) =>
-            String(input).includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : Response.json(
-                  {
-                    error: "publish_blocked",
-                    diagnostics: [
-                      {
-                        severity: "warning",
-                        code: "REVIEW_RECOMMENDED",
-                        message: "this warning must not be presented as a blocker",
-                      },
-                      {
-                        severity: "error",
-                        code: "SECURITY_POLICY_BLOCKED",
-                        message: "review contains undeclared executable behavior",
-                      },
-                    ],
-                  },
-                  { status: 422 },
-                ),
+          transport: (input) =>
+            Effect.succeed(
+              input.url.includes(".well-known")
+                ? new Response(null, { status: 404 })
+                : Response.json(
+                    {
+                      error: "publish_blocked",
+                      diagnostics: [
+                        {
+                          severity: "warning",
+                          code: "REVIEW_RECOMMENDED",
+                          message: "this warning must not be presented as a blocker",
+                        },
+                        {
+                          severity: "error",
+                          code: "SECURITY_POLICY_BLOCKED",
+                          message: "review contains undeclared executable behavior",
+                        },
+                      ],
+                    },
+                    { status: 422 },
+                  ),
+            ),
         }),
       ),
     ).toMatchObject({
@@ -365,10 +387,12 @@ it.effect("publish tells the author to sync when local files do not match the Dr
       yield* failure(
         publish(root, "1.0.0", undefined, {
           baseUrl: "https://registry.test",
-          fetch: async (input) =>
-            String(input).includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+          transport: (input) =>
+            Effect.succeed(
+              input.url.includes(".well-known")
+                ? new Response(null, { status: 404 })
+                : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+            ),
         }),
       ),
     ).toMatchObject({ message: expect.stringContaining(`skit author sync ${root} --apply`) });
@@ -386,10 +410,12 @@ it.effect("publish uses the authored path in sync remediation", () =>
       yield* failure(
         publish(root, "1.0.0", undefined, {
           baseUrl: "https://registry.test",
-          fetch: async (input) =>
-            String(input).includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+          transport: (input) =>
+            Effect.succeed(
+              input.url.includes(".well-known")
+                ? new Response(null, { status: 404 })
+                : Response.json({ error: "ARCHIVE_MANIFEST_MISMATCH" }, { status: 400 }),
+            ),
         }),
       ),
     ).toMatchObject({ message: expect.stringContaining(`skit author sync '${root}' --apply`) });
@@ -404,20 +430,22 @@ it.effect("publish accepts an older successful response without the selected rev
     expect(
       yield* publish(root, "1.0.0", "revision-1", {
         baseUrl: "https://registry.test",
-        fetch: async (input) =>
-          String(input).includes(".well-known")
-            ? new Response(null, { status: 404 })
-            : Response.json(
-                {
-                  release: {
-                    release_id: "rel_old",
-                    version: "1.0.0",
-                    archive_digest: `sha256:${"a".repeat(64)}`,
-                    download_path: "/api/skits/test/tools/releases/1.0.0/download",
+        transport: (input) =>
+          Effect.succeed(
+            input.url.includes(".well-known")
+              ? new Response(null, { status: 404 })
+              : Response.json(
+                  {
+                    release: {
+                      release_id: "rel_old",
+                      version: "1.0.0",
+                      archive_digest: `sha256:${"a".repeat(64)}`,
+                      download_path: "/api/skits/test/tools/releases/1.0.0/download",
+                    },
                   },
-                },
-                { status: 201 },
-              ),
+                  { status: 201 },
+                ),
+          ),
       }),
     ).toMatchObject({ release: { version: "1.0.0" } });
   }).pipe(Effect.provide(skitLayer)),
@@ -432,10 +460,12 @@ it.effect("publish preserves non-JSON Registry error bodies", () =>
       yield* failure(
         publish(root, "1.0.0", undefined, {
           baseUrl: "https://registry.test",
-          fetch: async (input) =>
-            String(input).includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : new Response("upstream unavailable", { status: 502 }),
+          transport: (input) =>
+            Effect.succeed(
+              input.url.includes(".well-known")
+                ? new Response(null, { status: 404 })
+                : new Response("upstream unavailable", { status: 502 }),
+            ),
         }),
       ),
     ).toMatchObject({ message: expect.stringMatching(/upstream unavailable/) });
@@ -451,10 +481,12 @@ it.effect("publish carries immutable release conflicts as a typed error", () =>
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
           baseUrl: "https://registry.test",
-          fetch: async (input) =>
-            String(input).includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : Response.json({ error: "release_conflict" }, { status: 409 }),
+          transport: (input) =>
+            Effect.succeed(
+              input.url.includes(".well-known")
+                ? new Response(null, { status: 404 })
+                : Response.json({ error: "release_conflict" }, { status: 409 }),
+            ),
         }),
       ),
     ).toMatchObject({ code: "CONFLICT" });
@@ -470,10 +502,12 @@ it.effect("publish preserves a non-JSON conflict as a rejected write", () =>
       yield* failure(
         publish(root, "1.0.0", "revision-1", {
           baseUrl: "https://registry.test",
-          fetch: async (input) =>
-            String(input).includes(".well-known")
-              ? new Response(null, { status: 404 })
-              : new Response("conflict", { status: 409 }),
+          transport: (input) =>
+            Effect.succeed(
+              input.url.includes(".well-known")
+                ? new Response(null, { status: 404 })
+                : new Response("conflict", { status: 409 }),
+            ),
         }),
       ),
     ).toMatchObject({ code: "CONFLICT", message: expect.stringContaining("conflict") });
@@ -487,7 +521,9 @@ it.effect("publish rejects a successful response that violates the server contra
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        publish(root, "1.0.0", "revision-1", { fetch: async () => Response.json({ release: {} }) }),
+        publish(root, "1.0.0", "revision-1", {
+          transport: () => Effect.succeed(Response.json({ release: {} })),
+        }),
       ),
     ).toBeDefined();
   }).pipe(Effect.provide(skitLayer)),

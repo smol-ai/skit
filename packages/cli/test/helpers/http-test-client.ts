@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer } from "effect";
 import {
   HttpClient,
   HttpClientError,
@@ -10,7 +10,9 @@ import { FetchHttpClient } from "effect/unstable/http";
 
 export type TestHttpHandler = (
   request: HttpClientRequest.HttpClientRequest,
-) => Response | Promise<Response>;
+  url: URL,
+  signal: AbortSignal,
+) => Effect.Effect<Response, HttpClientError.HttpClientError>;
 
 /**
  * Stub the transport at the `HttpClient` service.
@@ -22,55 +24,20 @@ export type TestHttpHandler = (
  * never seen. A client built here is the object the caller's Layer hands out, so nothing
  * outside it can take over.
  *
- * The real abort signal is forwarded, so interruption and streaming stay production's.
+ * The handler is an Effect, so interrupting a pending request interrupts the handler: a test
+ * observes that with `Effect.onInterrupt` and fails the transport with an `HttpClientError`.
+ * Once a response is returned, its body is read through the web `Response`, which only the
+ * request's `signal` can cancel — as fetch ties a body to its request — so a streaming body
+ * observes cancellation there.
  */
-/** The one place a test Promise becomes an Effect; every test client goes through it. */
-const clientFrom = (
-  answer: (
-    request: HttpClientRequest.HttpClientRequest,
-    url: URL,
-    signal: AbortSignal,
-    body: BodyInit | undefined,
-  ) => Promise<Response> | Response,
-): HttpClient.HttpClient =>
-  HttpClient.make((request, url, signal) => {
-    const send = (body: BodyInit | undefined) =>
-      Effect.map(
-        Effect.tryPromise({
-          try: async () => answer(request, url, signal, body),
-          catch: (cause) =>
-            new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({ request, cause }),
-            }),
-        }),
-        (response) => HttpClientResponse.fromWeb(request, response),
-      );
-    switch (request.body._tag) {
-      case "Raw":
-      case "Uint8Array":
-        return send(request.body.body as BodyInit);
-      case "FormData":
-        return send(request.body.formData);
-      case "Stream":
-        return Effect.flatMap(Stream.toReadableStreamEffect(request.body.stream), send);
-    }
-    return send(undefined);
-  });
-
-/** Serve a test's `fetch`-shaped handler as the application's HTTP client. */
-export const fetchTestClientLayer = (fetcher: typeof globalThis.fetch) =>
-  Layer.succeed(
-    HttpClient.HttpClient,
-    clientFrom((request, url, signal, body) =>
-      fetcher(url, { method: request.method, headers: request.headers, body, signal }),
-    ),
-  );
-
-/** The same, for a handler that reads the Effect request rather than a `RequestInit`. */
 export const testHttpClientLayer = (handler: TestHttpHandler) =>
   Layer.succeed(
     HttpClient.HttpClient,
-    clientFrom((request) => handler(request)),
+    HttpClient.make((request, url, signal) =>
+      Effect.map(handler(request, url, signal), (response) =>
+        HttpClientResponse.fromWeb(request, response),
+      ),
+    ),
   );
 
 /** Preserve the production URL through policy validation, then route its path to the test server. */

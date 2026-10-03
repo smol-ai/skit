@@ -240,7 +240,7 @@ export function projectSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Map<string, ProjectedSkillFile> {
+): Result.Result<Map<string, ProjectedSkillFile>, SharedTargetCollision> {
   const projected = new Map<string, ProjectedSkillFile>();
   const normalizedSkillPath = skillPath.normalize("NFC");
   for (const file of files) {
@@ -255,18 +255,18 @@ export function projectSkillFiles(
       if (path !== from && !path.startsWith(`${from}/`)) continue;
       const suffix = path === from ? "" : path.slice(from.length + 1);
       const target = (suffix ? `${mapping.to}/${suffix}` : mapping.to).normalize("NFC");
-      if (projected.has(target)) throw new SharedTargetCollision({ target });
+      if (projected.has(target)) return Result.fail(new SharedTargetCollision({ target }));
       projected.set(target, file);
     }
-  return projected;
+  return Result.succeed(projected);
 }
 
 export function hashProjectedSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Digest {
-  return hashParts(projectedSkillHashParts(files, skillPath, shared));
+): Result.Result<Digest, SharedTargetCollision | ProjectedPathCollision> {
+  return Result.map(projectedSkillHashParts(files, skillPath, shared), hashParts);
 }
 
 /** Canonical digest inputs, separated so every runtime can supply its native SHA-256. */
@@ -274,14 +274,15 @@ export function projectedSkillHashParts(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Array<string | Uint8Array> {
+): Result.Result<Array<string | Uint8Array>, SharedTargetCollision | ProjectedPathCollision> {
   const projected = projectSkillFiles(files, skillPath, shared);
+  if (Result.isFailure(projected)) return Result.fail(projected.failure);
   interface ProjectedNode {
     children: Map<string, ProjectedNode>;
     file?: { bytes: Uint8Array; executable?: boolean };
   }
   const root: ProjectedNode = { children: new Map() };
-  for (const [path, file] of projected) {
+  for (const [path, file] of projected.success) {
     const segments = path.split("/");
     let node = root;
     for (const [index, segment] of segments.entries()) {
@@ -291,10 +292,10 @@ export function projectedSkillHashParts(
         node.children.set(segment, child);
       }
       if (node.file || (index === segments.length - 1 && child.children.size > 0))
-        throw new ProjectedPathCollision({ path, kind: "file-or-directory" });
+        return Result.fail(new ProjectedPathCollision({ path, kind: "file-or-directory" }));
       node = child;
     }
-    if (node.file) throw new ProjectedPathCollision({ path, kind: "file" });
+    if (node.file) return Result.fail(new ProjectedPathCollision({ path, kind: "file" }));
     node.file = file;
   }
   const parts: Array<string | Uint8Array> = [];
@@ -307,5 +308,5 @@ export function projectedSkillHashParts(
     }
   }
   walk(root);
-  return parts;
+  return Result.succeed(parts);
 }

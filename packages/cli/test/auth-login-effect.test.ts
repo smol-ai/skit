@@ -14,7 +14,7 @@ import { skitLayer } from "@smolai/skit-core";
 import { expect } from "vitest";
 import { loginEffect } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { fetchTestClientLayer } from "./helpers/http-test-client.js";
+import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { Prompter } from "../src/presentation/prompter.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 
@@ -43,27 +43,22 @@ it.effect("an interrupted login aborts its in-flight request and stores nothing"
   Effect.gen(function* () {
     const home = yield* scratch("skit-login-interrupt-");
     let aborted = false;
-    // The fetch double is a plain callback, so readiness is signalled by an unsafe completion.
-    const gated = Deferred.makeUnsafe<void>();
-    const reached = () => Deferred.doneUnsafe(gated, Effect.void);
+    const gated = yield* Deferred.make<void>();
     // The sign-in never answers, so the only way out is the interrupt.
-    const server = ((_url: string | URL, init?: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener(
-          "abort",
-          () => {
+    const server: TestHttpHandler = () =>
+      Deferred.succeed(gated, undefined).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
             aborted = true;
-            reject(init.signal!.reason);
-          },
-          { once: true },
-        );
-        reached();
-      })) as typeof fetch;
+          }),
+        ),
+      );
 
     const fiber = yield* Effect.forkChild(
       Effect.scoped(
         loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
-          Effect.provide(registryHttpLayer(fetchTestClientLayer(server))),
+          Effect.provide(registryHttpLayer(testHttpClientLayer(server))),
         ),
       ).pipe(Effect.provide(skitLayer)),
     );
@@ -100,59 +95,57 @@ it.effect("the credential prompts answer from the Prompter and cancel as a typed
 );
 
 /** A Registry that answers the exchange, with one stage held open until the test releases it. */
-function gatedServer(gate: "mint" | "sign-out", reached: () => void) {
+function gatedServer(gate: "mint" | "sign-out", reached: Deferred.Deferred<void>) {
   const seen: Array<{ url: string; method: string }> = [];
-  const hold = () => new Promise<Response>(() => {});
-  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
-    const method = init?.method ?? "GET";
+  const hold = Deferred.succeed(reached, undefined).pipe(Effect.andThen(Effect.never));
+  const handler: TestHttpHandler = (request) => {
+    const url = request.url;
+    const method = request.method;
     seen.push({ url, method });
     if (url.endsWith("/.well-known/skit"))
-      return Response.json({
-        schema: "skit.server.v1",
-        download: "/api/skits/{owner}/{slug}/releases/{version}/download",
-        scopes: ["library:sync", "authoring:write", "publication:write"],
-      });
-    if (url.endsWith("/api/auth/sign-in/email"))
-      return new Response("{}", {
-        status: 200,
-        headers: { "set-cookie": "skit-auth.session_token=session-secret; Path=/" },
-      });
-    if (url.endsWith("/api/tokens") && method === "POST") {
-      if (gate === "mint") {
-        reached();
-        return hold();
-      }
-      return Response.json(
-        {
-          token: "skit_pat_secret",
-          token_id: "pat_one",
-          token_prefix: "skit_pat_secret",
-          scopes: ["library:sync"],
-        },
-        { status: 201 },
+      return Effect.succeed(
+        Response.json({
+          schema: "skit.server.v1",
+          download: "/api/skits/{owner}/{slug}/releases/{version}/download",
+          scopes: ["library:sync", "authoring:write", "publication:write"],
+        }),
       );
-    }
-    if (url.endsWith("/api/auth/sign-out")) {
-      if (gate === "sign-out") {
-        reached();
-        return hold();
-      }
-      return Response.json({ success: true });
-    }
-    return new Response(null, { status: 204 });
-  }) as typeof fetch;
-  return { fetcher, seen };
+    if (url.endsWith("/api/auth/sign-in/email"))
+      return Effect.succeed(
+        new Response("{}", {
+          status: 200,
+          headers: { "set-cookie": "skit-auth.session_token=session-secret; Path=/" },
+        }),
+      );
+    if (url.endsWith("/api/tokens") && method === "POST")
+      return gate === "mint"
+        ? hold
+        : Effect.succeed(
+            Response.json(
+              {
+                token: "skit_pat_secret",
+                token_id: "pat_one",
+                token_prefix: "skit_pat_secret",
+                scopes: ["library:sync"],
+              },
+              { status: 201 },
+            ),
+          );
+    if (url.endsWith("/api/auth/sign-out"))
+      return gate === "sign-out" ? hold : Effect.succeed(Response.json({ success: true }));
+    return Effect.succeed(new Response(null, { status: 204 }));
+  };
+  return { handler, seen };
 }
 
 const interruptedLogin = Effect.fn("test.interruptedLogin")(function* (gate: "mint" | "sign-out") {
   const home = yield* scratch(`skit-login-${gate}-`);
-  const gated = Deferred.makeUnsafe<void>();
-  const server = gatedServer(gate, () => void Deferred.doneUnsafe(gated, Effect.void));
+  const gated = yield* Deferred.make<void>();
+  const server = gatedServer(gate, gated);
   const fiber = yield* Effect.forkChild(
     Effect.scoped(
       loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
-        Effect.provide(registryHttpLayer(fetchTestClientLayer(server.fetcher))),
+        Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
       ),
     ).pipe(Effect.provide(skitLayer)),
   );

@@ -36,7 +36,7 @@ export function createSkitArchiveEffect(
           Effect.callback<void>((resume) => {
             // yazl types expose only NodeJS.ReadableStream; the implementation is a PassThrough.
             if (!(zip.outputStream instanceof Readable))
-              throw new TypeError("Expected yazl Readable output");
+              return resume(Effect.die(new TypeError("Expected yazl Readable output")));
             if (zip.outputStream.closed) return resume(Effect.void);
             zip.outputStream.once("close", () => resume(Effect.void));
             zip.outputStream.destroy();

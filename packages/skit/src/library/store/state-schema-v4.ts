@@ -120,8 +120,8 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryStateV5
         ? {}
         : {
             invocation_policies: {
-              ...(prior?.invocation_policies ?? {}),
-              ...(binding.invocation_policies ?? {}),
+              ...prior?.invocation_policies,
+              ...binding.invocation_policies,
             },
           }),
     });
@@ -147,7 +147,7 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryStateV5
       const legacyPolicies = state.global_bindings
         .filter((candidate) => candidate.harness === binding.harness)
         .reduce<Record<string, InvocationPolicy>>(
-          (all, candidate) => ({ ...all, ...(candidate.invocation_policies ?? {}) }),
+          (all, candidate) => ({ ...all, ...candidate.invocation_policies }),
           {},
         );
       return {

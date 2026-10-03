@@ -24,7 +24,9 @@ it.effect("retains an undeclared response status without inventing an error code
       }
     }).pipe(
       Effect.provide(
-        registryHttpLayer(testHttpClientLayer(() => new Response("gateway", { status: 502 }))),
+        registryHttpLayer(
+          testHttpClientLayer(() => Effect.succeed(new Response("gateway", { status: 502 }))),
+        ),
       ),
     ),
   ),
@@ -46,13 +48,15 @@ it.effect("reports a v2 remote Library as unsupported instead of returning it", 
       Effect.provide(
         registryHttpLayer(
           testHttpClientLayer(() =>
-            Response.json({
-              library: {
-                library_id: "library_test",
-                revision_id: "revision_v2",
-                manifest: { schema: "skit.library.v2", entries: [], bindings: [] },
-              },
-            }),
+            Effect.succeed(
+              Response.json({
+                library: {
+                  library_id: "library_test",
+                  revision_id: "revision_v2",
+                  manifest: { schema: "skit.library.v2", entries: [], bindings: [] },
+                },
+              }),
+            ),
           ),
         ),
       ),

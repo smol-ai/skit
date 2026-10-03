@@ -30,10 +30,12 @@ it.effect("revokes and forgets a credential through the application Layer", () =
     );
     const statuses: string[] = [];
     let request: HttpClientRequest.HttpClientRequest | undefined;
-    const registry = testHttpClientLayer((incoming) => {
-      request = incoming;
-      return new Response(null, { status: 204 });
-    });
+    const registry = testHttpClientLayer((incoming) =>
+      Effect.sync(() => {
+        request = incoming;
+        return new Response(null, { status: 204 });
+      }),
+    );
     const applicationLayer = Layer.mergeAll(
       skitLayer,
       registryHttpLayer(registry),

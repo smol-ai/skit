@@ -1,4 +1,4 @@
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
@@ -30,9 +30,9 @@ import {
 } from "./descriptor.js";
 import {
   type DescriptorFailure,
-  HarnessMetadataInvalid,
-  ProjectedPathCollision,
-  SharedTargetCollision,
+  type HarnessMetadataInvalid,
+  type ProjectedPathCollision,
+  type SharedTargetCollision,
 } from "../failures.js";
 
 export function readSkitDescriptorEffect(
@@ -73,23 +73,29 @@ function releaseIdentityFromEntries(
   tree: TreeEntry[],
   release: string,
   releaseContentHash?: Digest,
-): SkitReleaseIdentity {
+): Result.Result<SkitReleaseIdentity, SharedTargetCollision | ProjectedPathCollision> {
   const files = tree.flatMap((entry) =>
     entry.kind === "file"
       ? [{ path: entry.path, bytes: entry.bytes, executable: entry.mode === 0o755 }]
       : [],
   );
-  const skills = descriptor.skills.map((skill) => ({
-    name: skill.name,
-    contentHash: hashProjectedSkillFiles(files, skill.path, skill.shared),
-    enabled: skill.default_enabled,
-  }));
-  return {
-    slug: descriptor.slug,
-    release,
-    releaseContentHash: releaseContentHash ?? hashNormalizedEntries(tree),
-    skills,
-  };
+  return Result.map(
+    Result.all(
+      descriptor.skills.map((skill) =>
+        Result.map(hashProjectedSkillFiles(files, skill.path, skill.shared), (contentHash) => ({
+          name: skill.name,
+          contentHash,
+          enabled: skill.default_enabled,
+        })),
+      ),
+    ),
+    (skills) => ({
+      slug: descriptor.slug,
+      release,
+      releaseContentHash: releaseContentHash ?? hashNormalizedEntries(tree),
+      skills,
+    }),
+  );
 }
 
 const MIME: Record<string, string> = {
@@ -159,14 +165,9 @@ export function validateSkitDirectoryEffect(
         options.assessmentContext === "author" || options.assessmentContext === "publish",
     });
     const files = inventoryEntries(tree);
-    const identity = yield* Effect.try({
-      try: () => releaseIdentityFromEntries(descriptor, tree, release),
-      catch: (error) => {
-        if (error instanceof SharedTargetCollision || error instanceof ProjectedPathCollision)
-          return error;
-        throw error;
-      },
-    });
+    const identity = yield* Effect.fromResult(
+      releaseIdentityFromEntries(descriptor, tree, release),
+    );
     const filePaths = new Set(files.map((file) => file.path));
     const diagnostics: SkitValidationDiagnostic[] = [];
     const audits: ValidatedSkit["audits"] = {};
@@ -240,19 +241,12 @@ export function validateSkitDirectoryEffect(
         ),
       );
       const decoder = new TextDecoder();
-      // assessInvocationConformance is shared with the Registry Worker, which has no `effect`
-      // dependency, so it still throws HarnessMetadataInvalid rather than returning a Result.
-      const conformance = yield* Effect.try({
-        try: () =>
-          assessInvocationConformance(descriptor.skills, (path) => {
-            const content = bytes.get(path);
-            return content === undefined ? undefined : decoder.decode(content);
-          }),
-        catch: (error) => {
-          if (error instanceof HarnessMetadataInvalid) return error;
-          throw error;
-        },
-      });
+      const conformance = yield* Effect.fromResult(
+        assessInvocationConformance(descriptor.skills, (path) => {
+          const content = bytes.get(path);
+          return content === undefined ? undefined : decoder.decode(content);
+        }),
+      );
       for (const issue of conformance)
         diagnostics.push({
           code: "INVOCATION_METADATA_MISMATCH",

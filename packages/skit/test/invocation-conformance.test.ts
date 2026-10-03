@@ -240,7 +240,7 @@ test("conformance assessment skips a Skill whose SKILL.md is missing", () => {
       [{ name: "review", path: "skills/review", invocation: "explicit" }],
       () => undefined,
     ),
-  ).toEqual([expect.objectContaining({ harness: "codex", path: CODEX_PATH })]);
+  ).toEqual(Result.succeed([expect.objectContaining({ harness: "codex", path: CODEX_PATH })]));
 });
 
 const REVIEW = { name: "review", path: "skills/review" } as const;

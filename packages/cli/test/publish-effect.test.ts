@@ -4,8 +4,9 @@ import { skitLayer } from "@smolai/skit-core";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
+import { HttpClientError } from "effect/unstable/http";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { fetchTestClientLayer } from "./helpers/http-test-client.js";
+import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { publishEffect } from "../src/workflows/author/publish.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
@@ -52,14 +53,12 @@ it.effect.each([
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fixture();
-    // The fetch and stream doubles are plain callbacks, so they signal through an unsafe completion.
-    const ready = Deferred.makeUnsafe<void>();
-    const reached = () => Deferred.doneUnsafe(ready, Effect.void);
+    const ready = yield* Deferred.make<void>();
     let finalized = false;
     let temporary = "";
     const requests: string[] = [];
     const signals: AbortSignal[] = [];
-    const pause = Effect.sync(reached).pipe(
+    const pause = Deferred.succeed(ready, undefined).pipe(
       Effect.andThen(Effect.never),
       Effect.ensuring(
         Effect.sync(() => {
@@ -67,18 +66,8 @@ it.effect.each([
         }),
       ),
     );
-    const pending = (signal: AbortSignal) =>
-      new Promise<Response>((_resolve, reject) => {
-        signal.addEventListener(
-          "abort",
-          () => {
-            finalized = true;
-            reject(signal.reason);
-          },
-          { once: true },
-        );
-        reached();
-      });
+    // A response body is read by the web Response outside the runtime, so it observes
+    // cancellation through the request's signal and signals readiness by an unsafe completion.
     const body = (signal: AbortSignal, status: number) =>
       new Response(
         new ReadableStream(
@@ -95,7 +84,7 @@ it.effect.each([
               // Pull marks actual body consumption, not merely receipt of headers.
             },
             pull() {
-              reached();
+              Deferred.doneUnsafe(ready, Effect.void);
               return new Promise<void>(() => {});
             },
           },
@@ -103,26 +92,26 @@ it.effect.each([
         ),
         { status, headers: { "content-type": "application/json" } },
       );
-    const fetcher: typeof fetch = async (input, init) => {
-      const signal = init?.signal;
-      if (!signal) throw new Error("Missing operation signal");
+    const fetcher: TestHttpHandler = (input, _url, signal) => {
       signals.push(signal);
-      requests.push(String(input));
-      const discovery = String(input).includes(".well-known");
+      requests.push(input.url);
+      const discovery = input.url.includes(".well-known");
       if (
         stage === "discovery" ||
-        (stage === "legacy-discovery" && String(input).endsWith("/skit")) ||
+        (stage === "legacy-discovery" && input.url.endsWith("/skit")) ||
         (stage === "upload" && !discovery)
       )
-        return pending(signal);
+        return pause;
       if (discovery)
-        return stage === "discovery-body" ? body(signal, 200) : new Response(null, { status: 404 });
-      return body(signal, stage === "forbidden-body" ? 403 : 201);
+        return Effect.succeed(
+          stage === "discovery-body" ? body(signal, 200) : new Response(null, { status: 404 }),
+        );
+      return Effect.succeed(body(signal, stage === "forbidden-body" ? 403 : 201));
     };
     const operation = Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       return yield* publishEffect(root, "1.0.0", undefined).pipe(
-        Effect.provide(registryHttpLayer(fetchTestClientLayer(fetcher))),
+        Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>
@@ -195,17 +184,31 @@ it.effect.each([
       return yield* publishEffect(root, "1.0.0", undefined).pipe(
         Effect.provide(
           registryHttpLayer(
-            fetchTestClientLayer(async (input) => {
+            testHttpClientLayer((request) => {
               requests++;
-              if (outcome === "http-defect") throw new ReferenceError("broken HTTP implementation");
-              if (String(input).includes(".well-known"))
-                throw new TypeError("ordinary discovery failure");
-              if (outcome === "transport") throw new TypeError("upload failed");
-              return outcome === "rejection" || outcome === "cleanup-rejection"
-                ? Response.json({ error: "release_conflict" }, { status: 409 })
-                : outcome === "parser"
-                  ? Response.json({ release: {} }, { status: 201 })
-                  : success();
+              // FetchHttpClient reports any fetch rejection, even a broken implementation's, as a
+              // transport failure.
+              const cause =
+                outcome === "http-defect"
+                  ? new ReferenceError("broken HTTP implementation")
+                  : request.url.includes(".well-known")
+                    ? new TypeError("ordinary discovery failure")
+                    : outcome === "transport"
+                      ? new TypeError("upload failed")
+                      : undefined;
+              if (cause)
+                return Effect.fail(
+                  new HttpClientError.HttpClientError({
+                    reason: new HttpClientError.TransportError({ request, cause }),
+                  }),
+                );
+              return Effect.succeed(
+                outcome === "rejection" || outcome === "cleanup-rejection"
+                  ? Response.json({ error: "release_conflict" }, { status: 409 })
+                  : outcome === "parser"
+                    ? Response.json({ release: {} }, { status: 201 })
+                    : success(),
+              );
             }),
           ),
         ),

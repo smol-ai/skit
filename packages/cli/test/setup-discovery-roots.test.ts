@@ -55,6 +55,7 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
     );
     expect(candidate?.action).toBe("import-observed-collection");
     if (!candidate || candidate.action !== "import-observed-collection")
+      // oxlint-disable-next-line skit/no-throw-in-effect -- This assertion guard fails the test and narrows the candidate.
       throw new Error("Expected import candidate");
     expect(JSON.parse(yield* fs.readFileString(machinePath)).repositoryRoots).toEqual([savedRoot]);
     expect(preview.machineConfig.machineId).toBeUndefined();

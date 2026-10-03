@@ -330,15 +330,15 @@ const effectRules = {
       },
     },
     create(context) {
-      const inEffectCallback = (node) =>
-        Boolean(
-          findAncestor(
-            node,
-            (ancestor) =>
-              ancestor.type === "CallExpression" &&
-              isEffectMember(ancestor.callee, effectCallbackNames),
-          ),
+      // Only the nearest function owns this throw. Nested transport/mocked callbacks may
+      // deliberately throw even when they are constructed inside an Effect generator.
+      const inEffectCallback = (node) => {
+        const owner = findAncestor(node, isFunctionNode);
+        return (
+          owner?.parent?.type === "CallExpression" &&
+          isEffectMember(owner.parent.callee, effectCallbackNames)
         );
+      };
       return {
         ThrowStatement(node) {
           if (inEffectCallback(node)) context.report({ node, messageId: "forbidden" });
@@ -360,6 +360,21 @@ const effectRules = {
       return {
         BinaryExpression(node) {
           if (node.operator !== "instanceof") return;
+          // Extracting a native Error message for diagnostics is not failure recovery.
+          const conditional = node.parent;
+          if (
+            node.right?.type === "Identifier" &&
+            node.right.name === "Error" &&
+            conditional?.type === "ConditionalExpression" &&
+            conditional.test === node &&
+            conditional.consequent?.type === "MemberExpression" &&
+            !conditional.consequent.computed &&
+            conditional.consequent.property?.name === "message" &&
+            node.left?.type === "Identifier" &&
+            conditional.consequent.object?.type === "Identifier" &&
+            conditional.consequent.object.name === node.left.name
+          )
+            return;
           const subject = node.left?.type === "Identifier" && errorOperandNames.has(node.left.name);
           const constructor =
             node.right?.type === "Identifier" &&

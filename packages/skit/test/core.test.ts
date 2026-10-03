@@ -1,10 +1,10 @@
-import { Deferred, Effect, Fiber, FileSystem, Layer, Result, Stream } from "effect";
+import { Cause, Deferred, Effect, Fiber, FileSystem, Layer, Result, Stream } from "effect";
 import { it } from "@effect/vitest";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { skitLayer, sourceProcessLayer, validateSkitDirectoryEffect } from "../src/index.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
   deterministicTreeHashEffect,
   hashProjectedSkillFiles,
@@ -14,6 +14,7 @@ import {
   inspectNormalizedTreeEffect,
   walkTreeEffect,
 } from "../src/index.js";
+import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 
 const validSkitEffect = Effect.gen(function* () {
@@ -40,8 +41,8 @@ test("pins depth-first code-unit ordering for Skill Artifact digests", () => {
     bytes: new TextEncoder().encode(contents),
   }));
 
-  expect(hashProjectedSkillFiles(files, "skills/review")).toBe(
-    "sha256:8e60154df4bbfb3eb6cc8ae833518f4c6ef1c82df527ba6b00260fdfec995ad1",
+  expect(hashProjectedSkillFiles(files, "skills/review")).toEqual(
+    Result.succeed("sha256:8e60154df4bbfb3eb6cc8ae833518f4c6ef1c82df527ba6b00260fdfec995ad1"),
   );
 });
 
@@ -574,5 +575,34 @@ it.effect("projected content collisions enter the validation error channel", () 
         validateSkitDirectoryEffect(root, "draft", { assessmentContext: "author" }),
       ),
     ).toMatchObject({ _tag: "SharedTargetCollision" });
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("unexpected validation adapter exceptions remain defects", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* validSkitEffect;
+    yield* fs.writeFileString(
+      join(root, "skit.json"),
+      JSON.stringify({
+        slug: "tools",
+        skills: [{ name: "review", path: "skills/review", invocation: "explicit" }],
+      }),
+    );
+    const defect = new ReferenceError("unexpected metadata reader exception");
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        vi.spyOn(invocationMetadataAdapters["claude-code"], "read").mockImplementation(() => {
+          throw defect;
+        }),
+      ),
+      (spy) => Effect.sync(() => spy.mockRestore()),
+    );
+    const exit = yield* Effect.exit(author(root).pipe(Effect.result));
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Cause.hasDies(exit.cause)).toBe(true);
+      expect(Cause.squash(exit.cause)).toBe(defect);
+    }
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
