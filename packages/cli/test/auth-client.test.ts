@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
+import { HttpClientResponse } from "effect/unstable/http";
 import { skitLayer } from "@smolai/skit-core";
 import {
   addRegistryRemoteEffect,
@@ -74,11 +75,12 @@ describe("saved login reuse", () => {
       yield* seed(home);
       const interaction = yield* makeScriptedInteraction([]);
       const observed: string[] = [];
-      const handler: TestHttpHandler = (request) => {
-        observed.push(request.method);
-        expect(request.headers.authorization).toBe("Bearer saved-test-token");
-        return Response.json({ error: "library_not_found" }, { status: 404 });
-      };
+      const handler: TestHttpHandler = (request) =>
+        Effect.sync(() => {
+          observed.push(request.method);
+          expect(request.headers.authorization).toBe("Bearer saved-test-token");
+          return Response.json({ error: "library_not_found" }, { status: 404 });
+        });
       const value = yield* authLoginCommand({
         registry: "https://skit.example",
         home,
@@ -116,9 +118,11 @@ describe("saved login reuse", () => {
           Effect.provide(
             registryHttpLayer(
               testHttpClientLayer(() =>
-                Response.json(
-                  status === 200 ? { library: null } : { error: "insufficient_scope" },
-                  { status },
+                Effect.succeed(
+                  Response.json(
+                    status === 200 ? { library: null } : { error: "insufficient_scope" },
+                    { status },
+                  ),
                 ),
               ),
             ),
@@ -140,9 +144,7 @@ describe("saved login reuse", () => {
           Effect.provide(interaction.layer),
           Effect.provide(
             registryHttpLayer(
-              testHttpClientLayer(() => {
-                expect.fail("Expired bearer was sent");
-              }),
+              testHttpClientLayer(() => Effect.sync(() => expect.fail("Expired bearer was sent"))),
             ),
           ),
         ),
@@ -162,7 +164,9 @@ describe("saved login reuse", () => {
             Effect.provide(interaction.layer),
             Effect.provide(
               registryHttpLayer(
-                testHttpClientLayer(() => Response.json({ error: "unavailable" }, { status })),
+                testHttpClientLayer(() =>
+                  Effect.succeed(Response.json({ error: "unavailable" }, { status })),
+                ),
               ),
             ),
           ),
@@ -247,40 +251,41 @@ const MintedToken = Schema.Struct({
 
 function successfulServer(observed: Array<{ url: string; init?: RequestInit }>): TestHttpHandler {
   let minted = 0;
-  return async (request) => {
-    const url = request.url;
-    const init = requestInit(request);
-    observed.push({ url, init });
-    if (url.endsWith("/.well-known/skit"))
-      return Response.json({
-        schema: "skit.server.v1",
-        download: "/api/skits/{owner}/{slug}/releases/{version}/download",
-        scopes: ["library:sync", "authoring:write", "publication:write"],
-      });
-    if (url.endsWith("/api/auth/sign-in/email"))
-      return new Response("{}", {
-        status: 200,
-        headers: { "set-cookie": "skit-auth.session_token=session-secret; Path=/; HttpOnly" },
-      });
-    if (url.endsWith("/api/tokens") && init?.method === "POST") {
-      const suffix = minted++ === 0 ? "one" : "two";
-      const requested = Schema.decodeUnknownSync(MintRequest)(JSON.parse(payload(init)));
-      return Response.json(
-        {
-          token: `skit_pat_secret_${suffix}`,
-          token_id: `pat_${suffix}`,
-          token_prefix: `skit_pat_secret_${suffix}`.slice(0, 18),
-          scopes: requested.scopes,
-          expires_at: requested.expires_at,
-        },
-        { status: 201 },
-      );
-    }
-    if (url.endsWith("/api/auth/sign-out")) return Response.json({ success: true });
-    if (url.includes("/api/tokens/pat_") && init?.method === "DELETE")
-      return new Response(null, { status: 204 });
-    return new Response(null, { status: 404 });
-  };
+  return (request) =>
+    Effect.sync(() => {
+      const url = request.url;
+      const init = requestInit(request);
+      observed.push({ url, init });
+      if (url.endsWith("/.well-known/skit"))
+        return Response.json({
+          schema: "skit.server.v1",
+          download: "/api/skits/{owner}/{slug}/releases/{version}/download",
+          scopes: ["library:sync", "authoring:write", "publication:write"],
+        });
+      if (url.endsWith("/api/auth/sign-in/email"))
+        return new Response("{}", {
+          status: 200,
+          headers: { "set-cookie": "skit-auth.session_token=session-secret; Path=/; HttpOnly" },
+        });
+      if (url.endsWith("/api/tokens") && init?.method === "POST") {
+        const suffix = minted++ === 0 ? "one" : "two";
+        const requested = Schema.decodeUnknownSync(MintRequest)(JSON.parse(payload(init)));
+        return Response.json(
+          {
+            token: `skit_pat_secret_${suffix}`,
+            token_id: `pat_${suffix}`,
+            token_prefix: `skit_pat_secret_${suffix}`.slice(0, 18),
+            scopes: requested.scopes,
+            expires_at: requested.expires_at,
+          },
+          { status: 201 },
+        );
+      }
+      if (url.endsWith("/api/auth/sign-out")) return Response.json({ success: true });
+      if (url.includes("/api/tokens/pat_") && init?.method === "DELETE")
+        return new Response(null, { status: 204 });
+      return new Response(null, { status: 404 });
+    });
 }
 
 describe("CLI authentication journey", () => {
@@ -310,14 +315,15 @@ describe("CLI authentication journey", () => {
             scopes: ["authoring:write"],
             home,
           },
-          async (request) => {
-            observed.push(new URL(request.url).pathname);
-            return Response.json({
-              schema: "skit.server.v1",
-              download: "/api/skits/{owner}/{slug}/releases/{version}/download",
-              scopes: ["library:sync"],
-            });
-          },
+          (request) =>
+            Effect.sync(() => {
+              observed.push(new URL(request.url).pathname);
+              return Response.json({
+                schema: "skit.server.v1",
+                download: "/api/skits/{owner}/{slug}/releases/{version}/download",
+                scopes: ["library:sync"],
+              });
+            }),
         ),
       );
 
@@ -381,16 +387,17 @@ describe("CLI authentication journey", () => {
       const home = yield* authHome;
       const observed: Array<{ url: string; init?: RequestInit }> = [];
       const base = successfulServer(observed);
-      const server: TestHttpHandler = async (request) => {
-        const response = await base(request);
-        if (request.url.endsWith("/api/tokens") && request.method === "POST") {
-          const { expires_at: _omitted, ...body } = Schema.decodeUnknownSync(MintedToken)(
-            await response.json(),
-          );
-          return Response.json(body, { status: 201 });
-        }
-        return response;
-      };
+      const server: TestHttpHandler = (request, url, signal) =>
+        Effect.gen(function* () {
+          const response = yield* base(request, url, signal);
+          if (request.url.endsWith("/api/tokens") && request.method === "POST") {
+            const { expires_at: _omitted, ...body } = Schema.decodeUnknownSync(MintedToken)(
+              yield* HttpClientResponse.fromWeb(request, response).json,
+            );
+            return Response.json(body, { status: 201 });
+          }
+          return response;
+        });
 
       const result = yield* login(
         {
@@ -475,13 +482,13 @@ describe("CLI authentication journey", () => {
       const home = yield* authHome;
       const observed: Array<{ url: string; init?: RequestInit }> = [];
       const base = successfulServer(observed);
-      const server: TestHttpHandler = async (request) => {
-        if (request.url.endsWith("/api/auth/sign-out")) {
-          observed.push({ url: request.url, init: requestInit(request) });
-          return new Response(null, { status: 503 });
-        }
-        return base(request);
-      };
+      const server: TestHttpHandler = (request, url, signal) =>
+        request.url.endsWith("/api/auth/sign-out")
+          ? Effect.sync(() => {
+              observed.push({ url: request.url, init: requestInit(request) });
+              return new Response(null, { status: 503 });
+            })
+          : base(request, url, signal);
 
       const failure = yield* Effect.flip(
         login(
@@ -506,12 +513,10 @@ describe("CLI authentication journey", () => {
       const home = yield* authHome;
       const observed: Array<{ url: string; init?: RequestInit }> = [];
       const base = successfulServer(observed);
-      const server: TestHttpHandler = async (request) => {
-        const url = request.url;
-        if (url.endsWith("/api/auth/sign-out") || url.includes("/api/tokens/pat_"))
-          return new Response(null, { status: 503 });
-        return base(request);
-      };
+      const server: TestHttpHandler = (request, url, signal) =>
+        request.url.endsWith("/api/auth/sign-out") || request.url.includes("/api/tokens/pat_")
+          ? Effect.succeed(new Response(null, { status: 503 }))
+          : base(request, url, signal);
 
       const failure = yield* Effect.flip(
         login(
@@ -587,13 +592,13 @@ describe("CLI authentication journey", () => {
       const home = yield* authHome;
       const observed: Array<{ url: string; init?: RequestInit }> = [];
       const base = successfulServer(observed);
-      const server: TestHttpHandler = async (request) => {
-        if (request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE") {
-          observed.push({ url: request.url, init: requestInit(request) });
-          return new Response(null, { status: 503 });
-        }
-        return base(request);
-      };
+      const server: TestHttpHandler = (request, url, signal) =>
+        request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE"
+          ? Effect.sync(() => {
+              observed.push({ url: request.url, init: requestInit(request) });
+              return new Response(null, { status: 503 });
+            })
+          : base(request, url, signal);
       const input = {
         origin: "https://skit.example",
         email: "user@example.test",

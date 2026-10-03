@@ -5,7 +5,7 @@ import { skitLayer } from "@smolai/skit-core";
 import { authorDeleteCommand, deleteAuthorSkitEffect } from "../src/workflows/author/delete.js";
 import { DeleteRequiresPrivate } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { fetchTestClientLayer, testHttpClientLayer } from "./helpers/http-test-client.js";
+import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
 const remote = {
@@ -17,26 +17,32 @@ const remote = {
 
 it.effect("previews and deletes the selected private SKIT", () =>
   Effect.forEach([true, false], (dryRun) => {
-    let request: Request | undefined;
-    const registry = fetchTestClientLayer(async (input, init) => {
-      request = new Request(input, init);
-      return Response.json({
-        status: dryRun ? "delete_ready" : "deleted",
-        skit_id: "tim/tools",
-        changed: !dryRun,
-        draft_revisions: 2,
-        releases: 1,
-        release_versions: ["1.0.0"],
-        ...(dryRun ? {} : { archive_cleanup: "complete" }),
-      });
-    });
+    let request: { method: string; authorization?: string; url: string } | undefined;
+    const registry = testHttpClientLayer((input, url) =>
+      Effect.sync(() => {
+        request = {
+          method: input.method,
+          authorization: input.headers["authorization"],
+          url: url.href,
+        };
+        return Response.json({
+          status: dryRun ? "delete_ready" : "deleted",
+          skit_id: "tim/tools",
+          changed: !dryRun,
+          draft_revisions: 2,
+          releases: 1,
+          release_versions: ["1.0.0"],
+          ...(dryRun ? {} : { archive_cleanup: "complete" }),
+        });
+      }),
+    );
     return Effect.gen(function* () {
       const value = yield* Effect.scoped(
         deleteAuthorSkitEffect(remote, { token: "secret", dryRun }),
       ).pipe(Effect.provide(registryHttpLayer(registry)));
       assert.isDefined(request);
       assert.strictEqual(request.method, "DELETE");
-      assert.strictEqual(request.headers.get("authorization"), "Bearer secret");
+      assert.strictEqual(request.authorization, "Bearer secret");
       assert.strictEqual(
         request.url,
         `https://registry.example/api/skits/tim/tools${dryRun ? "?dry_run=true" : ""}`,
@@ -48,7 +54,7 @@ it.effect("previews and deletes the selected private SKIT", () =>
 
 it.effect("refuses non-private deletion with a stable conflict", () => {
   const registry = testHttpClientLayer(() =>
-    Response.json({ error: "delete_requires_private" }, { status: 409 }),
+    Effect.succeed(Response.json({ error: "delete_requires_private" }, { status: 409 })),
   );
   return Effect.scoped(deleteAuthorSkitEffect(remote, { token: "secret" })).pipe(
     Effect.provide(registryHttpLayer(registry)),
@@ -78,18 +84,20 @@ it.effect("runs destination, credential, status and DELETE as one application Ef
     );
     const statuses: string[] = [];
     let requests = 0;
-    const registry = testHttpClientLayer(() => {
-      requests++;
-      return Response.json({
-        status: "deleted",
-        skit_id: "tim/tools",
-        changed: true,
-        draft_revisions: 2,
-        releases: 1,
-        release_versions: ["1.0.0"],
-        archive_cleanup: "complete",
-      });
-    });
+    const registry = testHttpClientLayer(() =>
+      Effect.sync(() => {
+        requests++;
+        return Response.json({
+          status: "deleted",
+          skit_id: "tim/tools",
+          changed: true,
+          draft_revisions: 2,
+          releases: 1,
+          release_versions: ["1.0.0"],
+          archive_cleanup: "complete",
+        });
+      }),
+    );
     const applicationLayer = Layer.mergeAll(
       skitLayer,
       registryHttpLayer(registry),

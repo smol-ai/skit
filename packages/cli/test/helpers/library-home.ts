@@ -22,7 +22,7 @@ import {
 } from "@smolai/skit-core";
 import type { ProjectionOptions } from "../../src/workflows/library/projection-options.js";
 import type { RetentionOptions } from "../../src/workflows/library/retention-options.js";
-import { fetchTestClientLayer } from "./http-test-client.js";
+import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
@@ -42,7 +42,7 @@ export interface LibraryHomeInput {
   readonly registryBaseUrl?: string;
   readonly registryToken?: string;
   readonly now?: () => string;
-  readonly transport?: typeof globalThis.fetch;
+  readonly transport?: TestHttpHandler;
   readonly state?: unknown;
 }
 
@@ -105,7 +105,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     originalsPath: join(home, "originals"),
   };
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
-    ? fetchTestClientLayer(input.transport)
+    ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;
   const registryAuth = registryAuthAccessLayer({
     authState: Result.succeed({
@@ -211,17 +211,6 @@ export const archiveBytes = Effect.fn("Test.archiveBytes")(function* (
   yield* createSkitArchiveEffect(source, archivePath);
   return yield* fs.readFile(archivePath);
 });
-
-export const serveArchive =
-  (bytes: () => Uint8Array): typeof globalThis.fetch =>
-  async () =>
-    new Response(new Uint8Array(bytes()), { headers: { "content-type": "application/zip" } });
-
-export const noTransport =
-  (reason: string): typeof globalThis.fetch =>
-  async () => {
-    throw new Error(reason);
-  };
 
 export { deterministicTreeHashEffect };
 

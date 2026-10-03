@@ -6,7 +6,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { skitLayer } from "@smolai/skit-core";
 import { parseAuthorDestination, syncDraftEffect } from "../src/workflows/author/sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { fetchTestClientLayer } from "./helpers/http-test-client.js";
+import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /**
@@ -20,11 +20,11 @@ import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 const syncDraft = (
   root: string,
   options: Parameters<typeof syncDraftEffect>[1],
-  transport: typeof fetch,
+  transport: TestHttpHandler,
 ) =>
   Effect.scoped(
     syncDraftEffect(root, options).pipe(
-      Effect.provide(registryHttpLayer(fetchTestClientLayer(transport))),
+      Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
     ),
   );
 
@@ -45,18 +45,16 @@ const exists = (path: string) => Effect.flatMap(fs, (fs) => fs.exists(path));
 const digest = `sha256:${"a".repeat(64)}`;
 
 /**
- * The request payload, however the transport chose to carry it.
+ * The request payload, as the client encoded it.
  *
  * Effect's HTTP client sends an encoded body and names the method on every request, including
  * reads; these tests distinguish the Draft read from a write by the method itself rather than by
  * the absence of one.
  */
-function payload(init?: RequestInit): string {
-  const body = init?.body;
-  if (body === undefined || body === null) return "";
-  return typeof body === "string" ? body : new TextDecoder().decode(body as Uint8Array);
+function payload(request: Parameters<TestHttpHandler>[0]): string {
+  return request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
 }
-const isWrite = (init?: RequestInit) => init?.method !== undefined && init.method !== "GET";
+const isWrite = (request: Parameters<TestHttpHandler>[0]) => request.method !== "GET";
 
 it.effect("first sync previews then records one remote home without publishing it", () =>
   Effect.gen(function* () {
@@ -100,24 +98,25 @@ it.effect("first sync previews then records one remote home without publishing i
       visibility: string;
       files: Array<{ path: string }>;
     };
-    const transport = async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if (!isWrite(init)) return Response.json({ error: "draft_not_found" }, { status: 404 });
-      posts++;
-      createBody = JSON.parse(payload(init));
-      return Response.json(
-        {
-          draft: {
-            skit_id: "tim/tools",
-            revision_id: "draft_first",
-            manifest_digest: digest,
-            bundle_digest: digest,
-            files: [],
-            diagnostics: [],
+    const transport: TestHttpHandler = (request) =>
+      Effect.sync(() => {
+        if (!isWrite(request)) return Response.json({ error: "draft_not_found" }, { status: 404 });
+        posts++;
+        createBody = JSON.parse(payload(request));
+        return Response.json(
+          {
+            draft: {
+              skit_id: "tim/tools",
+              revision_id: "draft_first",
+              manifest_digest: digest,
+              bundle_digest: digest,
+              files: [],
+              diagnostics: [],
+            },
           },
-        },
-        { status: 201 },
-      );
-    };
+          { status: 201 },
+        );
+      });
 
     expect(
       yield* syncDraft(
@@ -181,10 +180,12 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
     ] as const) {
       const root = yield* scratch(`skit-first-sync-${serverError}-`);
       yield* copySkitFixtureEffect("authored", root);
-      const transport = async (_input: RequestInfo | URL, init?: RequestInit) =>
-        isWrite(init)
-          ? Response.json({ error: serverError }, { status: 403 })
-          : Response.json({ error: "draft_not_found" }, { status: 404 });
+      const transport: TestHttpHandler = (request) =>
+        Effect.succeed(
+          isWrite(request)
+            ? Response.json({ error: serverError }, { status: 403 })
+            : Response.json({ error: "draft_not_found" }, { status: 404 }),
+        );
 
       expect(
         yield* failure(
@@ -214,7 +215,7 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
             to: "tim/tools",
             visibility: "private",
           },
-          async () => new Response(null, { status: 404 }),
+          () => Effect.succeed(new Response(null, { status: 404 })),
         ),
       ),
     ).toMatchObject({ message: expect.stringContaining("draft read failed (404)") });
@@ -269,56 +270,57 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
     }> = [];
     let created = false;
     let updateBody: { descriptor?: { id?: string } } | undefined;
-    const transport = async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if (!created && !isWrite(init))
-        return Response.json({ error: "draft_not_found" }, { status: 404 });
-      if (init?.method === "POST") {
-        baseFiles = JSON.parse(payload(init)).files;
-        created = true;
-        return Response.json(
-          {
+    const transport: TestHttpHandler = (request) =>
+      Effect.sync(() => {
+        if (!created && !isWrite(request))
+          return Response.json({ error: "draft_not_found" }, { status: 404 });
+        if (request.method === "POST") {
+          baseFiles = JSON.parse(payload(request)).files;
+          created = true;
+          return Response.json(
+            {
+              draft: {
+                skit_id: "test/tools",
+                revision_id: "draft_1",
+                manifest_digest: digest,
+                bundle_digest: digest,
+                files: [],
+                diagnostics: [],
+              },
+            },
+            { status: 201 },
+          );
+        }
+        if (request.method === "PUT") {
+          updateBody = JSON.parse(payload(request));
+          return Response.json({
             draft: {
               skit_id: "test/tools",
-              revision_id: "draft_1",
+              revision_id: "draft_2",
               manifest_digest: digest,
               bundle_digest: digest,
               files: [],
               diagnostics: [],
             },
-          },
-          { status: 201 },
-        );
-      }
-      if (init?.method === "PUT") {
-        updateBody = JSON.parse(payload(init));
+          });
+        }
         return Response.json({
           draft: {
-            skit_id: "test/tools",
-            revision_id: "draft_2",
-            manifest_digest: digest,
+            revision_id: "draft_1",
             bundle_digest: digest,
-            files: [],
+            title: "tools",
+            visibility: "private",
+            descriptor: {
+              skit: 1,
+              id: "test/tools",
+              slug: "tools",
+              skills: config.skills.map((skill) => ({ ...skill, default_enabled: true })),
+            },
             diagnostics: [],
+            files: baseFiles.map((file) => ({ ...file, executable: false })),
           },
         });
-      }
-      return Response.json({
-        draft: {
-          revision_id: "draft_1",
-          bundle_digest: digest,
-          title: "tools",
-          visibility: "private",
-          descriptor: {
-            skit: 1,
-            id: "test/tools",
-            slug: "tools",
-            skills: config.skills.map((skill) => ({ ...skill, default_enabled: true })),
-          },
-          diagnostics: [],
-          files: baseFiles.map((file) => ({ ...file, executable: false })),
-        },
       });
-    };
 
     expect(
       yield* syncDraft(
@@ -353,18 +355,15 @@ it.effect("an interrupted sync aborts its in-flight Draft request and writes not
     let aborted = false;
     const reached = yield* Deferred.make<void>();
     // The Draft read never answers, so the only way out is the interrupt.
-    const transport = async (_input: RequestInfo | URL, init?: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener(
-          "abort",
-          () => {
+    const transport: TestHttpHandler = () =>
+      Deferred.succeed(reached, undefined).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
             aborted = true;
-            reject(init.signal!.reason);
-          },
-          { once: true },
-        );
-        Deferred.doneUnsafe(reached, Exit.void);
-      });
+          }),
+        ),
+      );
 
     const fiber = yield* Effect.forkScoped(
       syncDraft(
@@ -382,8 +381,8 @@ it.effect("an interrupted sync aborts its in-flight Draft request and writes not
     yield* Deferred.await(reached);
     yield* Fiber.interrupt(fiber);
 
-    // The request belongs to the workflow's Scope: the promise implementation had no signal to
-    // cancel, and left the read to settle on its own.
+    // The request belongs to the workflow's Scope: the promise implementation had no owner to
+    // cancel it, and left the read to settle on its own.
     expect(aborted).toBe(true);
     expect(yield* exists(join(home, "sync-bindings.json"))).toBe(false);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);

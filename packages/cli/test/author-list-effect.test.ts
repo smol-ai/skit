@@ -1,5 +1,6 @@
 import { Deferred, Effect, Fiber, Result } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { HttpClientError } from "effect/unstable/http";
 import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
@@ -16,11 +17,11 @@ import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { registryApiFailureMessage } from "../src/registry/api-client.js";
 import { CredentialsUnusable, RegistryOriginInvalid } from "../src/registry/failures.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { fetchTestClientLayer } from "./helpers/http-test-client.js";
+import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
-const listWithFetch = (input: { origin?: string; token?: string }, fetcher: typeof fetch) =>
+const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>
   listAuthorSkitsEffect(input).pipe(
-    Effect.provide(registryHttpLayer(fetchTestClientLayer(fetcher))),
+    Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
   );
 
 const input = { origin: "https://registry.test", token: "test-token" };
@@ -40,7 +41,7 @@ const classifiedFailures = Effect.fn("AuthorListTest.classifiedFailures")(functi
   const interaction = yield* makeScriptedInteraction([]);
   yield* renderCommandFailures(authorListCommand({ authState })).pipe(
     Effect.provide(interaction.layer),
-    Effect.provide(registryHttpLayer(fetchTestClientLayer(async () => response))),
+    Effect.provide(registryHttpLayer(testHttpClientLayer(() => Effect.succeed(response)))),
     Effect.provide(NodeServices.layer),
   );
   return yield* interaction.failures;
@@ -146,49 +147,45 @@ it.effect.each(["first", "later", "body"] as const)(
   "interrupting %s aborts before another page",
   (stage) =>
     Effect.gen(function* () {
-      // The fetcher is a plain callback, so it signals readiness through an unsafe completion
-      // rather than a raw Promise the test would then have to await outside the runtime.
-      const ready = Deferred.makeUnsafe<void>();
-      const reached = () => Deferred.doneUnsafe(ready, Effect.void);
+      const ready = yield* Deferred.make<void>();
       let requests = 0;
       let finalized = false;
-      const fetcher: typeof fetch = async (_url, init) => {
+      const fetcher: TestHttpHandler = (_request, _url, signal) => {
         requests++;
-        if (stage === "later" && requests === 1) return page("next");
-        const signal = init!.signal!;
-        if (stage === "body") {
-          return new Response(
-            new ReadableStream(
-              {
-                pull(controller) {
-                  signal.addEventListener(
-                    "abort",
-                    () => {
-                      finalized = true;
-                      controller.error(signal.reason);
-                    },
-                    { once: true },
-                  );
-                  reached();
+        if (stage === "later" && requests === 1) return Effect.succeed(page("next"));
+        if (stage === "body")
+          return Effect.succeed(
+            new Response(
+              new ReadableStream(
+                {
+                  // The body is pulled by the web Response, outside the runtime, so it signals
+                  // readiness through an unsafe completion.
+                  pull(controller) {
+                    signal.addEventListener(
+                      "abort",
+                      () => {
+                        finalized = true;
+                        controller.error(signal.reason);
+                      },
+                      { once: true },
+                    );
+                    Deferred.doneUnsafe(ready, Effect.void);
+                  },
                 },
-              },
-              { highWaterMark: 0 },
+                { highWaterMark: 0 },
+              ),
             ),
           );
-        }
-        return new Promise<Response>((_resolve, reject) => {
-          signal.addEventListener(
-            "abort",
-            () => {
+        return Deferred.succeed(ready, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
               finalized = true;
-              reject(signal.reason);
-            },
-            { once: true },
-          );
-          reached();
-        });
+            }),
+          ),
+        );
       };
-      const fiber = yield* Effect.forkChild(listWithFetch(input, fetcher));
+      const fiber = yield* Effect.forkChild(listWithTransport(input, fetcher));
       yield* Deferred.await(ready);
       yield* Fiber.interrupt(fiber);
       expect(finalized).toBe(true);
@@ -200,14 +197,19 @@ it.effect("request and body rejections use Effect HTTP's typed failure channel",
   Effect.forEach(["request", "body"] as const, (stage) => {
     let requests = 0;
     const rejection = new ReferenceError("request rejected");
-    return listWithFetch(input, async () => {
+    return listWithTransport(input, (request) => {
       requests++;
-      if (stage === "request") throw rejection;
+      if (stage === "request")
+        return Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request, cause: rejection }),
+          }),
+        );
       const response = page("next");
       response.arrayBuffer = async () => {
         throw rejection;
       };
-      return response;
+      return Effect.succeed(response);
     }).pipe(
       Effect.flip,
       Effect.map((failure) => {
@@ -225,16 +227,25 @@ it.effect("expected transport, contract and identity failures use declared chann
   Effect.gen(function* () {
     for (const [fetcher, kind] of [
       [
-        async () => {
-          throw new TypeError("offline");
-        },
+        (request) =>
+          Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request,
+                cause: new TypeError("offline"),
+              }),
+            }),
+          ),
         AuthorListHttpError,
       ],
-      [async () => new Response("broken"), SkitContractError],
-      [async () => Response.json(null), SkitContractError],
-      [async () => page(null, [{ ...item, skit_id: "invalid" }]), AuthorListIdentityError],
-    ] as const) {
-      const failure = yield* listWithFetch(input, fetcher).pipe(
+      [() => Effect.succeed(new Response("broken")), SkitContractError],
+      [() => Effect.succeed(Response.json(null)), SkitContractError],
+      [
+        () => Effect.succeed(page(null, [{ ...item, skit_id: "invalid" }])),
+        AuthorListIdentityError,
+      ],
+    ] satisfies ReadonlyArray<readonly [TestHttpHandler, unknown]>) {
+      const failure = yield* listWithTransport(input, fetcher).pipe(
         Effect.match({ onFailure: (error) => error, onSuccess: () => null }),
       );
       expect(failure).toBeInstanceOf(kind);
@@ -246,10 +257,12 @@ it.effect.each([false, true])("page 1000 terminal=%s retains guard position", (t
   Effect.gen(function* () {
     let requests = 0;
     const exit = yield* Effect.exit(
-      listWithFetch(input, async () => {
-        requests++;
-        return page(terminal && requests === 1000 ? null : String(requests), []);
-      }),
+      listWithTransport(input, () =>
+        Effect.sync(() => {
+          requests++;
+          return page(terminal && requests === 1000 ? null : String(requests), []);
+        }),
+      ),
     );
     expect(requests).toBe(1000);
     expect(exit._tag).toBe(terminal ? "Success" : "Failure");
@@ -260,13 +273,15 @@ it.effect.each([false, true])("item limit terminal=%s retains terminal acceptanc
   Effect.gen(function* () {
     let requests = 0;
     const exit = yield* Effect.exit(
-      listWithFetch(input, async () => {
-        requests++;
-        return page(
-          requests === 1 ? "next" : terminal ? null : "again",
-          Array.from({ length: requests === 1 ? 100000 : 1 }, () => item),
-        );
-      }),
+      listWithTransport(input, () =>
+        Effect.sync(() => {
+          requests++;
+          return page(
+            requests === 1 ? "next" : terminal ? null : "again",
+            Array.from({ length: requests === 1 ? 100000 : 1 }, () => item),
+          );
+        }),
+      ),
     );
     expect(requests).toBe(2);
     expect(exit._tag).toBe(terminal ? "Success" : "Failure");
@@ -276,10 +291,12 @@ it.effect.each([false, true])("item limit terminal=%s retains terminal acceptanc
 it.effect("later failure discards accumulated inventory", () =>
   Effect.gen(function* () {
     let requests = 0;
-    const value = yield* listWithFetch(input, async () => {
-      requests++;
-      return requests === 1 ? page("next") : new Response("broken");
-    }).pipe(Effect.match({ onFailure: (error) => error, onSuccess: (value) => value }));
+    const value = yield* listWithTransport(input, () =>
+      Effect.sync(() => {
+        requests++;
+        return requests === 1 ? page("next") : new Response("broken");
+      }),
+    ).pipe(Effect.match({ onFailure: (error) => error, onSuccess: (value) => value }));
     expect(value).toBeInstanceOf(SkitContractError);
     expect(requests).toBe(2);
   }),
@@ -297,8 +314,8 @@ it.effect.each([null, [], 3, { error: null }, { error: {} }])(
 
 it.effect("identity validation is selectively recoverable", () =>
   Effect.gen(function* () {
-    const value = yield* listWithFetch(input, async () =>
-      page(null, [{ ...item, skit_id: "invalid" }]),
+    const value = yield* listWithTransport(input, () =>
+      Effect.succeed(page(null, [{ ...item, skit_id: "invalid" }])),
     ).pipe(Effect.catchTag("AuthorListIdentityError", (error) => Effect.succeed(error.identity)));
     expect(value).toBe("invalid");
   }),
