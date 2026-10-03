@@ -167,7 +167,7 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
           inspected.skills.map((skill) => ({
             source_path: skill.verbatim_path,
             name: skill.name,
-            ...(members.find((member) => member.source_path === skill.verbatim_path) ?? {}),
+            ...members.find((member) => member.source_path === skill.verbatim_path),
           })),
         ),
       };

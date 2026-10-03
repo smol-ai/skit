@@ -1,4 +1,4 @@
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Predicate } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
@@ -30,10 +30,20 @@ import {
 } from "./descriptor.js";
 import {
   type DescriptorFailure,
-  HarnessMetadataInvalid,
-  ProjectedPathCollision,
-  SharedTargetCollision,
+  type HarnessMetadataInvalid,
+  type ProjectedPathCollision,
+  type SharedTargetCollision,
 } from "../failures.js";
+
+// These synchronous helpers throw the declared tagged failures; anything else is a defect.
+const isProjectionCollision = (
+  cause: unknown,
+): cause is SharedTargetCollision | ProjectedPathCollision =>
+  Predicate.isTagged(cause, "SharedTargetCollision") ||
+  Predicate.isTagged(cause, "ProjectedPathCollision");
+
+const isHarnessMetadataFailure = (cause: unknown): cause is HarnessMetadataInvalid =>
+  Predicate.isTagged(cause, "HarnessMetadataInvalid");
 
 export function readSkitDescriptorEffect(
   root: string,
@@ -159,14 +169,13 @@ export function validateSkitDirectoryEffect(
         options.assessmentContext === "author" || options.assessmentContext === "publish",
     });
     const files = inventoryEntries(tree);
-    const identity = yield* Effect.try({
-      try: () => releaseIdentityFromEntries(descriptor, tree, release),
-      catch: (error) => {
-        if (error instanceof SharedTargetCollision || error instanceof ProjectedPathCollision)
-          return error;
-        throw error;
-      },
-    });
+    const identity = yield* Effect.try(() =>
+      releaseIdentityFromEntries(descriptor, tree, release),
+    ).pipe(
+      Effect.catchTag("UnknownError", ({ cause }) =>
+        isProjectionCollision(cause) ? Effect.fail(cause) : Effect.die(cause),
+      ),
+    );
     const filePaths = new Set(files.map((file) => file.path));
     const diagnostics: SkitValidationDiagnostic[] = [];
     const audits: ValidatedSkit["audits"] = {};
@@ -242,17 +251,16 @@ export function validateSkitDirectoryEffect(
       const decoder = new TextDecoder();
       // assessInvocationConformance is shared with the Registry Worker, which has no `effect`
       // dependency, so it still throws HarnessMetadataInvalid rather than returning a Result.
-      const conformance = yield* Effect.try({
-        try: () =>
-          assessInvocationConformance(descriptor.skills, (path) => {
-            const content = bytes.get(path);
-            return content === undefined ? undefined : decoder.decode(content);
-          }),
-        catch: (error) => {
-          if (error instanceof HarnessMetadataInvalid) return error;
-          throw error;
-        },
-      });
+      const conformance = yield* Effect.try(() =>
+        assessInvocationConformance(descriptor.skills, (path) => {
+          const content = bytes.get(path);
+          return content === undefined ? undefined : decoder.decode(content);
+        }),
+      ).pipe(
+        Effect.catchTag("UnknownError", ({ cause }) =>
+          isHarnessMetadataFailure(cause) ? Effect.fail(cause) : Effect.die(cause),
+        ),
+      );
       for (const issue of conformance)
         diagnostics.push({
           code: "INVOCATION_METADATA_MISMATCH",
