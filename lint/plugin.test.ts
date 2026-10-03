@@ -262,6 +262,26 @@ describe("skit/no-throw-in-effect", () => {
       { code: "skit(no-throw-in-effect)", line: 3 },
     ]);
   });
+
+  test("stops at nested callback boundaries while checking nested Effect bodies", async () => {
+    expect(
+      await lint(
+        [
+          "declare const Effect: any;",
+          "export const a = Effect.gen(function* () {",
+          "  const transport = async () => { throw new TypeError('offline'); };",
+          "  const writer = () => { throw new Error('injected defect'); };",
+          "  const producer = { read() { throw new Error('invariant'); } };",
+          "  yield* Effect.gen(function* () { throw new Error('expected failure'); });",
+          "  yield* Effect.fnUntraced(function* () { throw new Error('expected failure'); })();",
+          "});",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      { code: "skit(no-throw-in-effect)", line: 6 },
+      { code: "skit(no-throw-in-effect)", line: 7 },
+    ]);
+  });
 });
 
 describe("skit/no-error-instanceof", () => {
@@ -295,6 +315,26 @@ describe("skit/no-error-instanceof", () => {
         ].join("\n"),
       ),
     ).toEqual([]);
+  });
+
+  test("allows native message formatting but still rejects prototype recovery", async () => {
+    expect(
+      await lint(
+        [
+          "declare const cause: unknown;",
+          "declare const error: unknown;",
+          "export const a = cause instanceof Error ? cause.message : String(cause);",
+          "export const b = error instanceof Error ? error.message : 'Invalid manifest';",
+          "export const c = error instanceof TypeError ? error.message : 'Invalid manifest';",
+          "export const d = error instanceof Error ? 'recover' : 'fail';",
+          "export const e = error instanceof Error ? cause.message : 'fail';",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      { code: "skit(no-error-instanceof)", line: 5 },
+      { code: "skit(no-error-instanceof)", line: 6 },
+      { code: "skit(no-error-instanceof)", line: 7 },
+    ]);
   });
 });
 
