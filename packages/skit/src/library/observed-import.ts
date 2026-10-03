@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../artifact/skit.js";
 import { InvalidLibraryState } from "../failures.js";
 import { copyLocalTreeEffect } from "../platform/copy-tree.js";
-import { writeJsonAtomicEffect } from "../platform/atomic-write.js";
+import { writeRawAtomicEffect } from "../platform/atomic-write.js";
 import {
   makeAcquisitionId,
   makeCollectionId,
@@ -55,26 +55,29 @@ const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(functio
     const document = yield* Schema.decodeUnknownEffect(MachineDocumentJson)(text);
     if (document.machineId !== undefined) return document.machineId;
     const machineId = makeMachineId();
-    yield* writeJsonAtomicEffect(
-      path,
-      yield* MachineDocumentV4.makeEffect({
-        schemaVersion: 4,
-        machineId,
-        displayName: document.displayName ?? "SKIT machine",
-        discoveryRoots: document.discoveryRoots,
-        repositories: document.repositories,
-      }),
-    );
+    const upgraded = yield* Schema.encodeEffect(
+      Schema.fromJsonString(MachineDocumentV4, { space: 2 }),
+    )({
+      schemaVersion: 4,
+      machineId,
+      displayName: document.displayName ?? "SKIT machine",
+      discoveryRoots: document.discoveryRoots,
+      repositories: document.repositories,
+    });
+    yield* writeRawAtomicEffect(path, `${upgraded}\n`);
     return machineId;
   }
   const machineId = makeMachineId();
-  yield* writeJsonAtomicEffect(path, {
+  const created = yield* Schema.encodeEffect(
+    Schema.fromJsonString(MachineDocumentV4, { space: 2 }),
+  )({
     schemaVersion: 4,
     machineId,
     displayName: "SKIT machine",
     discoveryRoots: [],
     repositories: [],
   });
+  yield* writeRawAtomicEffect(path, `${created}\n`);
   return machineId;
 });
 

@@ -18,7 +18,6 @@ import { resolveAuthForOriginEffect, type ResolvedAuth } from "../../registry/au
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
-  mapRegistryFailureCause,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
@@ -73,8 +72,8 @@ export const deleteAuthorSkitEffect = Effect.fn("deleteAuthorSkitEffect")(functi
       params: { owner: remote.namespace, slug: remote.skit },
       query: options.dryRun ? { dry_run: "true" } : {},
     })
-    .pipe((effect) =>
-      mapRegistryFailureCause(effect, (error) => {
+    .pipe(
+      Effect.mapError((error) => {
         if (isRegistryTransportError(error))
           return new AuthorDeleteHttpError({
             message: `Unable to reach Registry ${remote.origin}: ${error.message}`,

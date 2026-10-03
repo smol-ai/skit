@@ -11,7 +11,6 @@ import type { ResolvedAuth } from "../../registry/auth.js";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
-  mapRegistryFailureCause,
   registryApiFailure,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
@@ -119,9 +118,7 @@ export const listAuthorSkitsEffect = Effect.fn("listAuthorSkitsEffect")(function
   do {
     const page: AuthorSkitListResponse = yield* client.authorInventory
       .read({ query: cursor === null ? {} : { cursor } })
-      .pipe((effect) =>
-        mapRegistryFailureCause(effect, (error) => classifyListFailure(origin, error)),
-      );
+      .pipe(Effect.mapError((error) => classifyListFailure(origin, error)));
     skits.push(...page.skits);
     cursor = page.next_cursor;
     pages++;

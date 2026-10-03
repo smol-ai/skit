@@ -23,7 +23,6 @@ import { parse, type ParseError } from "jsonc-parser";
 import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
 import {
   isSuccessfulResponseDecodeFailure,
-  mapRegistryFailureCause,
   registryApiFailureMessage,
 } from "../registry/api-client.js";
 import { Renderer } from "../presentation/renderer.js";
@@ -202,7 +201,6 @@ export function bootstrapOperationsLayer(wranglerCommand = "wrangler") {
                 baseUrl: origin,
               });
               return yield* client.bootstrap.status({}).pipe(
-                (effect) => mapRegistryFailureCause(effect, (error) => error),
                 Effect.map((response) => response.needed),
                 Effect.mapError((error) => {
                   if (isRegistryTransportError(error))

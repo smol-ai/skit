@@ -1,5 +1,5 @@
 import { PrincipalAuthentication, RequestDecoding } from "@smolai/skit-core/universal/api";
-import { Cause, Effect, Layer, Result, Schema } from "effect";
+import { Layer, Schema } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/unstable/http";
 import { HttpApiMiddleware } from "effect/unstable/httpapi";
 
@@ -93,26 +93,3 @@ export const isSuccessfulResponseDecodeFailure = (
     error.response !== undefined &&
     successStatuses.includes(error.response.status) &&
     (error.reason._tag === "DecodeError" || error.reason._tag === "EmptyBodyError"));
-
-/** Collapse HttpApiClient's combined status/decode Cause to one domain failure. */
-export const mapRegistryFailureCause = <A, E, R, E2>(
-  effect: Effect.Effect<A, E, R>,
-  map: (error: E) => E2,
-): Effect.Effect<A, E2, R> =>
-  Effect.catchCause(effect, (cause) =>
-    Result.match(Cause.findError(cause), {
-      onFailure: Effect.failCause,
-      onSuccess: (error) => Effect.fail(map(error)),
-    }),
-  );
-
-export const catchRegistryFailureCause = <A, E, R, E2, R2>(
-  effect: Effect.Effect<A, E, R>,
-  recover: (error: E) => Effect.Effect<A, E | E2, R2>,
-): Effect.Effect<A, E | E2, R | R2> =>
-  Effect.catchCause(effect, (cause) =>
-    Result.match(Cause.findError(cause), {
-      onFailure: Effect.failCause,
-      onSuccess: recover,
-    }),
-  );

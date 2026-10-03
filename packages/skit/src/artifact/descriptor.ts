@@ -151,13 +151,12 @@ const validateDescriptorEffect = Effect.fn("Descriptor.validate")(function* (
   input: unknown,
   format: "json" | "yaml",
 ) {
-  const parsed = Schema.decodeUnknownResult(skitDescriptorSchema, {
+  const parsed = yield* Schema.decodeUnknownEffect(skitDescriptorSchema, {
     onExcessProperty: "error",
     errors: "all",
-  })(input);
-  if (Result.isFailure(parsed)) return yield* malformed(format, parsed.failure.message);
-  const skills = yield* normalizeSkillsEffect(parsed.success.skills);
-  const descriptor: SkitDescriptor = { ...parsed.success, skills };
+  })(input).pipe(Effect.mapError((error) => malformed(format, error.message)));
+  const skills = yield* normalizeSkillsEffect(parsed.skills);
+  const descriptor: SkitDescriptor = { ...parsed, skills };
   if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
     return yield* new DuplicateSkillNames();
   if (new Set(skills.map((skill) => skill.path)).size !== skills.length)
@@ -189,18 +188,17 @@ export const parseSkitConfigEffect = Effect.fn("Descriptor.parseConfig")(functio
   const input = yield* Schema.decodeUnknownEffect(JsonDocument)(text).pipe(
     Effect.mapError((error) => malformed("json", error.message)),
   );
-  const parsed = Schema.decodeUnknownResult(skitConfigSchema, {
+  const parsed = yield* Schema.decodeUnknownEffect(skitConfigSchema, {
     onExcessProperty: "error",
     errors: "all",
-  })(input);
-  if (Result.isFailure(parsed)) return yield* malformed("json", parsed.failure.message);
+  })(input).pipe(Effect.mapError((error) => malformed("json", error.message)));
   return yield* validateDescriptorEffect(
     {
       skit: 1,
-      slug: parsed.success.slug,
-      ...(parsed.success.sameAs ? { sameAs: parsed.success.sameAs } : {}),
-      ...(parsed.success.author ? { author: parsed.success.author } : {}),
-      skills: parsed.success.skills.map((skill) => ({
+      slug: parsed.slug,
+      ...(parsed.sameAs ? { sameAs: parsed.sameAs } : {}),
+      ...(parsed.author ? { author: parsed.author } : {}),
+      skills: parsed.skills.map((skill) => ({
         ...skill,
         default_enabled: skill.default_enabled ?? true,
       })),

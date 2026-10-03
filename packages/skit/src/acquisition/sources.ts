@@ -1,6 +1,6 @@
 import type { DescriptorFailure } from "../failures.js";
 import { semver } from "../distribution/api-contracts.js";
-import { Effect, FileSystem, Predicate, Result, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Predicate, Schema, Scope, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
@@ -898,29 +898,6 @@ function discoverRootEffect(
 
 /** Acquire in the caller's scope; closing that scope releases all temporary source state. */
 /**
- * A transport or body rejection we expect, as opposed to a defect in our own code.
- *
- * Mapping every rejection to SourcePolicyViolation hid programming errors as ordinary bad
- * sources. This is the same narrowing publication and listing use in the CLI's RegistryHttp.
- *
- * `instanceof` is correct here and stays. These are native JS errors thrown by the platform, not
- * our Data.TaggedError types, so there is no tag to match and no Effect to catchTag on -- the
- * value arrives as `unknown` from a rejected fetch. Rewriting it to a tag check would be a
- * migration in appearance only.
- */
-/* oxlint-disable skit/no-error-instanceof -- native JS errors have no tag to match. */
-function sourceTransportFailure(error: unknown): SourcePolicyViolation {
-  const expected =
-    error instanceof TypeError ||
-    error instanceof SyntaxError ||
-    error instanceof DOMException ||
-    (error instanceof Error && error.constructor === Error);
-  if (!expected) throw error;
-  return sourceTransportRejected((error as Error).message);
-}
-/* oxlint-enable skit/no-error-instanceof */
-
-/**
  * Read a response body, failing as soon as it exceeds `limit` bytes.
  *
  * The advertised Content-Length is a hint the server controls. Counting while reading means a
@@ -934,7 +911,7 @@ const readBodyWithin = Effect.fnUntraced(function* (
   const chunks: Uint8Array[] = [];
   let size = 0;
   yield* response.stream.pipe(
-    Stream.mapError(sourceTransportFailure),
+    Stream.mapError((error) => sourceTransportRejected(error.message)),
     Stream.runForEach((chunk: Uint8Array) =>
       Effect.suspend(() => {
         size += chunk.byteLength;
@@ -1003,24 +980,25 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
   }
   if (!selected)
     return yield* new SourceNotFound({ source: `${baseUrl}/.well-known/agent-skills/index.json` });
-  const marker = Schema.decodeUnknownResult(discoverySchemaMarker)(selected.document);
-  if (Result.isFailure(marker)) return yield* invalidSource("Discovery index must be an object");
-  const isV2 = marker.success.$schema !== undefined;
-  if (isV2 && marker.success.$schema !== DISCOVERY_SCHEMA_V2)
+  const marker = yield* Schema.decodeUnknownEffect(discoverySchemaMarker)(selected.document).pipe(
+    Effect.mapError(() => invalidSource("Discovery index must be an object")),
+  );
+  const isV2 = marker.$schema !== undefined;
+  if (isV2 && marker.$schema !== DISCOVERY_SCHEMA_V2)
     return yield* invalidSource("Unsupported discovery schema");
   let entries:
     | readonly { version: "0.2.0"; entry: typeof discoveryV2Entry.Type }[]
     | readonly { version: "0.1.0"; entry: typeof discoveryV1Entry.Type }[];
   if (isV2) {
-    const decoded = Schema.decodeUnknownResult(discoveryV2Index)(selected.document);
-    if (Result.isFailure(decoded))
-      return yield* invalidSource(`Invalid discovery index: ${decoded.failure.message}`);
-    entries = decoded.success.skills.map((entry) => ({ version: "0.2.0" as const, entry }));
+    const decoded = yield* Schema.decodeUnknownEffect(discoveryV2Index)(selected.document).pipe(
+      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+    );
+    entries = decoded.skills.map((entry) => ({ version: "0.2.0" as const, entry }));
   } else {
-    const decoded = Schema.decodeUnknownResult(discoveryV1Index)(selected.document);
-    if (Result.isFailure(decoded))
-      return yield* invalidSource(`Invalid discovery index: ${decoded.failure.message}`);
-    entries = decoded.success.skills.map((entry) => ({ version: "0.1.0" as const, entry }));
+    const decoded = yield* Schema.decodeUnknownEffect(discoveryV1Index)(selected.document).pipe(
+      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+    );
+    entries = decoded.skills.map((entry) => ({ version: "0.1.0" as const, entry }));
   }
   if (!entries.length || entries.length > MAX_ARCHIVE_FILES)
     return yield* sourceLimitExceeded("Discovery index has no Skills or exceeds Skill limit");
@@ -1211,10 +1189,7 @@ export function resolveSkitSourceEffect(
       return yield* sourcePinMismatch(
         `Git Entry ${sourceLocator(source)} has no recorded commit. Run skit update on the retaining device and sync it before acquiring on another device.`,
       );
-    const workspace = yield* Effect.acquireRelease(
-      fs.makeTempDirectory({ prefix: "skit-source-" }),
-      (path) => fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie),
-    );
+    const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-source-" });
     const guard = assertArchivePaths;
 
     const resolved = yield* Effect.gen(function* () {

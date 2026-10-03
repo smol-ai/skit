@@ -13,10 +13,10 @@ export const writeRawAtomicEffect = Effect.fn("Library.publishState")(function* 
     Effect.gen(function* () {
       // Acquire a real directory under the destination parent before starting interruptible
       // output. Even a late native write cannot recreate a file after this scope removes it.
-      const directory = yield* Effect.acquireRelease(
-        fs.makeTempDirectory({ directory: dirname(path), prefix: `${basename(path)}.tmp-` }),
-        (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie),
-      );
+      const directory = yield* fs.makeTempDirectoryScoped({
+        directory: dirname(path),
+        prefix: `${basename(path)}.tmp-`,
+      });
       const temporary = join(directory, "state.json");
       yield* fs.writeFileString(temporary, value, { mode, flag: "wx" });
       // Atomic replacement is the commit point. A delivered interrupt cannot undo it.

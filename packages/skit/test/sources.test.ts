@@ -599,6 +599,32 @@ describe("source contracts", () => {
     }).pipe(provide),
   );
 
+  it.effect("reports a body that breaks mid-download as a transport failure", () =>
+    Effect.gen(function* () {
+      const client = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode('{"skills": ['));
+                  controller.error(new Error("connection reset"));
+                },
+              }),
+            ),
+          ),
+        ),
+      );
+      const failure = yield* resolveSkitSourceEffect("wellknown:https://reset.example").pipe(
+        Effect.provideService(HttpClient.HttpClient, client),
+        Effect.flip,
+      );
+      expect(failure._tag).toBe("SourcePolicyViolation");
+      if (failure._tag === "SourcePolicyViolation") expect(failure.reason._tag).toBe("Transport");
+    }).pipe(provide),
+  );
+
   it.effect("canonicalizes GitHub blob SKILL.md URLs to raw content", () =>
     Effect.gen(function* () {
       // A line anchor is not a Git fragment: the page URL is still a direct document.
