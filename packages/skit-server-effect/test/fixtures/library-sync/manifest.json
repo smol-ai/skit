@@ -1,0 +1,74 @@
+{
+  "schema": "skit.library.v7",
+  "collections": [
+    {
+      "collection_id": "coll_01m3zbtrpafvnv1t4x42qh2ypz",
+      "label": "test/library",
+      "upstream": {
+        "source_identity": {
+          "kind": "registry",
+          "authority": "registry.test",
+          "namespace": "test",
+          "slug": "library"
+        },
+        "tracking": {
+          "kind": "default"
+        }
+      }
+    }
+  ],
+  "skills": [
+    {
+      "skill_id": "skill_01m3zbtrpafvnv1t5540rkvdng",
+      "collection_id": "coll_01m3zbtrpafvnv1t4x42qh2ypz",
+      "path": ".",
+      "name": "library",
+      "versions": [
+        {
+          "skill_version_id": "skv_01m3zbtrpafvnv1t5fydawp848",
+          "source_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "artifact_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "validation_identity_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "materialization_profile": "plain-skill/v1"
+        }
+      ]
+    }
+  ],
+  "retained_copies": [
+    {
+      "retained_copy_id": "ret_01m3zbtrpafvnv1t5h19j8ar3j",
+      "digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+      "copy_profile": "verbatim/v1",
+      "members": [
+        {
+          "source_path": ".",
+          "source_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "artifact_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "materialization_profile": "plain-skill/v1"
+        }
+      ]
+    }
+  ],
+  "acquisitions": [
+    {
+      "acquisition_id": "acq_01m3zbtrpafvnv1t5r1m976d2b",
+      "collection_id": "coll_01m3zbtrpafvnv1t4x42qh2ypz",
+      "kind": "source",
+      "retained_copy_id": "ret_01m3zbtrpafvnv1t5h19j8ar3j",
+      "input": {
+        "value": "private:test/library"
+      },
+      "source_identity": {
+        "kind": "registry",
+        "authority": "registry.test",
+        "namespace": "test",
+        "slug": "library"
+      },
+      "acquired_at": "2026-01-01T00:00:00.000Z",
+      "machine_id": "mach_01m3zbtrpafvnv1t60wfrkgkw3",
+      "observations": []
+    }
+  ],
+  "snapshot_digests": ["sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10"],
+  "bindings": []
+}

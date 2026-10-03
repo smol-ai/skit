@@ -1,7 +1,8 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Schema } from "effect";
 import { join } from "node:path";
 import { skitLayer, type LibraryState } from "@smolai/skit-core";
+import { LibraryApiUnreachable } from "../src/workflows/library/library-sync-api.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 it.effect("each sync publishes state with the revision it reconciled against", () =>
@@ -78,15 +79,15 @@ it.effect("a local removal after sync still removes the Collection everywhere", 
 
 it.effect("a write committed without a response leaves coherent state and converges", () =>
   Effect.gen(function* () {
-    const { fs, a, b, faults, remoteCollections } = yield* devices;
+    const { fs, a, b, inject, remoteCollections } = yield* devices;
     yield* a.retain("first");
     yield* a.sync();
     yield* b.sync();
     yield* a.retain("second");
     const stateBefore = yield* fs.readFileString(join(a.home, "state.json"));
 
-    faults.loseNextWriteResponse = true;
-    assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
+    inject({ _tag: "DropAfterCommit" });
+    assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
     assert.strictEqual(yield* fs.readFileString(join(a.home, "state.json")), stateBefore);
     const committed = yield* remoteCollections;
     assert.strictEqual(committed.length, 2);
@@ -182,7 +183,7 @@ it.effect(
   "a retry after a lost response conflicts with a later edit instead of overwriting it",
   () =>
     Effect.gen(function* () {
-      const { a, c, faults, remote } = yield* devices;
+      const { a, c, inject, remote } = yield* devices;
       yield* a.retain("first");
       yield* a.sync();
       yield* c.sync();
@@ -194,8 +195,8 @@ it.effect(
         });
 
       yield* a.edit(relabel("from-a"));
-      faults.loseNextWriteResponse = true;
-      yield* Effect.exit(a.sync());
+      inject({ _tag: "DropAfterCommit" });
+      assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
       // C saw A's committed label and deliberately replaced it.
       assert.strictEqual((yield* c.sync()).status, "merged");
       yield* c.edit(relabel("from-c"));

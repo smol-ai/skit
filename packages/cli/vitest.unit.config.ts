@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     exclude: [...subprocessTests, "test/git-revision-sync.test.ts"],
     include: ["test/**/*.test.ts"],
-    setupFiles: ["../../test-support/isolated-home.ts"],
+    setupFiles: ["../../vitest.isolated-home.ts"],
     testTimeout: 30_000,
   },
 });

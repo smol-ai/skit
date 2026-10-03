@@ -47,6 +47,43 @@ export class LibrarySync extends Context.Service<LibrarySync, LibrarySyncService
   "@skit-server-effect/LibrarySync",
 ) {}
 
+export const commitLibraryRevision = Effect.fn("LibrarySync.commitRevision")(function* (
+  library: { readonly library_id: string },
+  expected: string | null,
+  manifest: LibraryManifest,
+) {
+  const sql = yield* D1Client.D1Client;
+  const crypto = yield* NativeCrypto;
+  const clock = yield* Clock.Clock;
+  const json = JSON.stringify(manifest);
+  const id = `library_revision_${crypto.randomUUID().replaceAll("-", "")}`;
+  const now = new Date(yield* clock.currentTimeMillis).toISOString();
+  const results = yield* sql
+    .batch([
+      sql`INSERT INTO library_revisions
+               (revision_id, library_id, parent_revision_id, manifest_json, created_at)
+               SELECT ${id}, ${library.library_id}, ${expected}, ${json}, ${now}
+               WHERE EXISTS (SELECT 1 FROM libraries WHERE library_id = ${library.library_id} AND current_revision_id IS ${expected})
+               AND NOT EXISTS (
+                 SELECT 1 FROM json_each(${json}, '$.snapshot_digests') AS required
+                 LEFT JOIN library_snapshots AS snapshot
+                   ON snapshot.library_id = ${library.library_id}
+                  AND snapshot.snapshot_digest = required.value
+                  AND snapshot.status = 'ready'
+                 WHERE snapshot.snapshot_digest IS NULL
+               )
+               RETURNING revision_id`,
+      sql`UPDATE libraries SET current_revision_id = ${id}, updated_at = ${now}
+              WHERE library_id = ${library.library_id} AND current_revision_id IS ${expected}
+                AND EXISTS (SELECT 1 FROM library_revisions WHERE revision_id = ${id})
+              RETURNING library_id`,
+    ])
+    .pipe(databaseError("commit portable Library revision"));
+  if (results[0]?.length !== 1 || results[1]?.length !== 1)
+    return yield* new LibraryRevisionConflict();
+  return { library_id: library.library_id, revision_id: id, manifest };
+});
+
 export const layer = Layer.effect(
   LibrarySync,
   Effect.gen(function* () {
@@ -111,33 +148,10 @@ export const layer = Layer.effect(
         );
         if (count.n !== 1) return yield* new LibrarySnapshotMissing({ digest });
       }
-      const id = `library_revision_${crypto.randomUUID().replaceAll("-", "")}`;
-      const now = new Date(yield* clock.currentTimeMillis).toISOString();
-      const results = yield* db(
-        "commit portable Library revision",
-        sql.batch([
-          sql`INSERT INTO library_revisions
-               (revision_id, library_id, parent_revision_id, manifest_json, created_at)
-               SELECT ${id}, ${library.library_id}, ${expected}, ${json}, ${now}
-               WHERE EXISTS (SELECT 1 FROM libraries WHERE library_id = ${library.library_id} AND current_revision_id IS ${expected})
-               AND NOT EXISTS (
-                 SELECT 1 FROM json_each(${json}, '$.snapshot_digests') AS required
-                 LEFT JOIN library_snapshots AS snapshot
-                   ON snapshot.library_id = ${library.library_id}
-                  AND snapshot.snapshot_digest = required.value
-                  AND snapshot.status = 'ready'
-                 WHERE snapshot.snapshot_digest IS NULL
-               )
-               RETURNING revision_id`,
-          sql`UPDATE libraries SET current_revision_id = ${id}, updated_at = ${now}
-              WHERE library_id = ${library.library_id} AND current_revision_id IS ${expected}
-                AND EXISTS (SELECT 1 FROM library_revisions WHERE revision_id = ${id})
-              RETURNING library_id`,
-        ]),
+      return yield* commitLibraryRevision(library, expected, manifest).pipe(
+        Effect.provideService(D1Client.D1Client, sql),
+        Effect.provideService(NativeCrypto, crypto),
       );
-      if (results[0]?.length !== 1 || results[1]?.length !== 1)
-        return yield* new LibraryRevisionConflict();
-      return { library_id: library.library_id, revision_id: id, manifest };
     });
     return LibrarySync.of({ read, write });
   }),

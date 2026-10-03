@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Schema } from "effect";
 import { join } from "node:path";
 import {
   currentSkillVersion,
@@ -10,6 +10,7 @@ import {
   skitLayer,
   type SkillId,
 } from "@smolai/skit-core";
+import { LibraryApiUnreachable } from "../src/workflows/library/library-sync-api.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 const enable = (ids: readonly SkillId[]) => ({
@@ -129,7 +130,7 @@ it.effect(
   "independent imports share published identity and keep provenance, policies and native deletion",
   () =>
     Effect.gen(function* () {
-      const { fs, a, b, faults, remote } = yield* devices;
+      const { fs, a, b, inject, remote } = yield* devices;
       const first = yield* a.retain("same");
       const second = yield* b.retain("same");
       const publishedSkill = first.skills[0];
@@ -155,8 +156,8 @@ it.effect(
       const before = yield* b.state;
       assert.equal((yield* b.sync({ adopt: true, apply: false })).status, "adoption_ready");
       assert.deepEqual(yield* b.state, before);
-      faults.loseNextWriteResponse = true;
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
+      inject({ _tag: "DropAfterCommit" });
+      assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(b.sync({ adopt: true }))));
       assert.deepEqual(yield* b.state, before);
       assert.equal((yield* b.sync({ adopt: true })).status, "merged");
       const after = yield* b.state;
@@ -385,7 +386,7 @@ it.effect(
   "interrupted identity retirement remains pending across inventory and repairs on retry",
   () =>
     Effect.gen(function* () {
-      const { fs, a, b, faults, remote } = yield* devices;
+      const { fs, a, b, inject, remote } = yield* devices;
       const first = yield* a.retain("same");
       const second = yield* b.retain("same");
       const firstSkill = first.skills[0];
@@ -397,11 +398,11 @@ it.effect(
       yield* b.project();
       yield* a.sync();
       const before = yield* b.state;
-      faults.rejectNextWrite = true;
+      inject({ _tag: "RejectWrite" });
       assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
       assert.deepEqual(yield* b.state, before);
       assert.isTrue(yield* fs.exists(join(b.root, "same")));
-      faults.failNextAnchoredPublish = true;
+      inject({ _tag: "FailPublish", anchoredOnly: true });
       assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
       const interrupted = yield* b.state;
       assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);

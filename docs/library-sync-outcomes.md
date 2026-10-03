@@ -4,9 +4,26 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 
 | Coverage | Where |
 | --- | --- |
-| Rows that could lose data or block sync, with injected failures | `packages/cli/test/library-sync-crash.test.ts` |
+| Named preflight, push, pull, and merge fault rows; byte-level state and projection checks | `packages/cli/test/library-sync-outcomes.test.ts` |
+| Lost response on a later push, restored older state, ancestry, removals, and device policies | `packages/cli/test/library-sync-crash.test.ts` |
+| Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
+| Stale bases, retries of a committed manifest, and snapshot readiness/reuse, on real D1 and on the client fake | `packages/skit-server-effect/test/library-sync.test.ts`, `packages/cli/test/library-sync-server.test.ts` |
 | Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
-| A sync killed after the Registry commits, against the real Worker | `packages/skit-server-effect/test/e2e.test.ts` |
+| A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
+
+The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards, merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
+
+**Known bug characterization:** `local_bytes_changed` reports that sync stopped but the CLI exits `0`. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` belongs to the subprocess suite and asserts that current status and structured outcome with a BUG comment requiring a nonzero exit when fixed. The ordinary in-process matrix row separately checks unchanged state/projection bytes and remote storage. There is no expected-failure mask.
+
+The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes every response with the core Library sync contract schemas the Worker uses, so status codes and bodies cannot drift; its compare-and-swap rules are asserted separately against the Worker. Faults are one typed union injected per test and consumed once at the boundary they target. Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root.
+
+## Worker endpoint characterization
+
+`packages/skit-server-effect/test/library-sync.test.ts` exercises the Worker fetch handler on real D1 and R2 initialized from committed migrations. An extracted conditional commit is tested after a direct D1 head advance, bypassing the application precheck: it rejects the stale base and leaves revision rows, head, and R2 bytes unchanged. A concurrent HTTP submission test is only a smoke test; it does not prove D1 atomicity. Stale requests return `409`. A manifest requiring an unuploaded snapshot is rejected (`400`) without adding a revision. Tests inspect revision parentage, snapshot rows, stored archive bytes, and R2 metadata after accepted and rejected writes.
+
+If a committed write's response is lost, immediately retrying with its original expected revision returns `409`, including a first write with a null base. Reading the current head and submitting the identical manifest with that revision returns `200` without adding a revision or changing stored snapshots.
+
+The legacy v2 `PUT /api/library` currently shares the same Library head as `PUT /api/library/portable`. With the current revision as its CAS base, it can replace a portable manifest with a v2 manifest; the portable GET then returns that v2 head. The preceding portable revision and its snapshot bytes remain stored. This is a characterization of the existing endpoint, not endpoint retirement; the client-side `legacy_remote_conflict` guard remains necessary.
 
 ## Durable state
 
@@ -120,7 +137,9 @@ Apply:
 
 An intact projection whose previous Version is dropped by a remote Skill choice is carried into M7 with the merged selected Version, preserving its projection ID, expected digest and repository root. M8 then rewrites it under ordinary marker/hash custody checks. A reidentified Skill instead retires its old on-disk identity at M6; its old state references remain valid until M7. Pending missing copies remain pending during inventory scans and are recreated on retry. Native-deletion suppression is carried through identity alignment.
 
-## Invariants every test asserts
+## Safety invariants and their coverage
+
+These are obligations of sync, not a claim that every existing test asserts all seven. The fault matrix uses `untouched(device)` for byte-level nonmutation checks where the row forbids local writes. The concurrent-local-write rows instead compare the new writer's exact state bytes and preserve existing projection bytes. Publication and recovery rows assert ancestry and retained records. The crash, custody, version-alignment, and merge-property suites cover the additional cases listed above; generated manifest merge properties do not constitute an exhaustive model of device synchronization.
 
 1. **The loser of a CAS race changes no portable state.** `state.json` and owned projections are byte-identical to before; only orphans may appear.
 2. **Only `pushed`, `pulled`, `merged`, and `clean` replace B, and each replaces it in the same publish as the state it reconciled.**

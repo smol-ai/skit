@@ -6,8 +6,6 @@ import {
   type ManagedProjection,
   InvalidLibraryState,
   LibraryStore,
-  LibraryWriteRequest,
-  SnapshotArchive,
   deterministicTreeHashEffect,
   libraryStoreLayer,
   makeMachineId,
@@ -15,77 +13,53 @@ import {
   removeCollectionEffect,
   retainObservedCollectionEffect,
   withLibraryWriter,
-  type LibraryManifest,
-  type LibraryState,
+  LibraryState,
   type ProjectionTarget,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
-import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
-/**
- * Devices sharing one compare-and-swap Library server. `loseNextWriteResponse` commits the next
- * Library write and then answers as if it had failed, as a timeout after the commit would.
- */
+/** Devices sharing one compare-and-swap Library server, with injectable one-shot faults. */
 export const devices = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-crash-" });
-  let published: { library_id: string; revision_id: string; manifest: LibraryManifest } | null =
-    null;
-  const snapshots = new Map<string, typeof SnapshotArchive.Type>();
-  const faults = {
-    loseNextWriteResponse: false,
-    failNextAnchoredPublish: false,
-    rejectNextWrite: false,
-  };
-  let libraryId = "library_test";
-  let writes = 0;
-  const transport: TestHttpHandler = (incoming) => {
-    const path = new URL(incoming.url).pathname;
-    if (path.startsWith("/api/libraries/")) {
-      const archive = snapshots.get(decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)));
-      assert.ok(archive);
-      return Response.json(archive);
-    }
-    if (path === "/api/library/portable" && incoming.method === "GET")
-      return published === null
-        ? Response.json({ error: "library_not_found" }, { status: 404 })
-        : Response.json({ library: published });
-    if (incoming.body._tag !== "Uint8Array") assert.fail("Expected an encoded JSON body");
-    const payload: unknown = JSON.parse(new TextDecoder().decode(incoming.body.body));
-    if (path === "/api/library/snapshots") {
-      const archive = Schema.decodeUnknownSync(SnapshotArchive)(payload);
-      snapshots.set(archive.digest, archive);
-      return Response.json({
-        library_id: libraryId,
-        snapshot_digest: archive.digest,
-        reused: false,
-      });
-    }
-    if (path === "/api/library/portable" && incoming.method === "PUT") {
-      const request = Schema.decodeUnknownSync(LibraryWriteRequest)(payload);
-      if (faults.rejectNextWrite) {
-        faults.rejectNextWrite = false;
-        return Response.json({ error: "revision_conflict" }, { status: 409 });
-      }
-      if (request.expected_revision_id !== (published?.revision_id ?? null))
-        return Response.json({ error: "revision_conflict" }, { status: 409 });
-      for (const digest of request.manifest.snapshot_digests)
-        assert.isTrue(snapshots.has(digest), `Snapshot ${digest} must exist before committing`);
-      published = {
-        library_id: libraryId,
-        revision_id: `revision_${++writes}`,
-        manifest: request.manifest,
-      };
-      if (faults.loseNextWriteResponse) {
-        faults.loseNextWriteResponse = false;
-        return Response.json({ error: "storage_failure" }, { status: 503 });
-      }
-      return Response.json({ library: published });
-    }
-    assert.fail(`Unexpected request: ${incoming.method} ${path}`);
-  };
-  const http = registryHttpLayer(testHttpClientLayer(transport));
+  const faults = faultQueue();
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => assert.deepStrictEqual(faults.unconsumed(), [])),
+  );
+  const server = librarySyncServer(faults);
+  const http = registryHttpLayer(
+    Layer.succeed(
+      HttpClient.HttpClient,
+      HttpClient.make((incoming) =>
+        Effect.gen(function* () {
+          const response = yield* Effect.try(() => server.transport(incoming));
+          const change =
+            incoming.method === "GET" && new URL(incoming.url).pathname === "/api/library/portable"
+              ? faults.take("ChangeStateWhenHeadRead")
+              : undefined;
+          // The head GET is a semantic boundary between local inspection and publication.
+          if (change) {
+            yield* fs.makeDirectory(change.home, { recursive: true });
+            yield* fs.writeFileString(
+              join(change.home, "state.json"),
+              Schema.encodeSync(Schema.fromJsonString(LibraryState))(change.state),
+            );
+          }
+          return HttpClientResponse.fromWeb(incoming, response);
+        }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.TransportError({ request: incoming, cause }),
+              }),
+          ),
+        ),
+      ),
+    ),
+  );
   const device = (name: string) => {
     const home = join(workspace, name);
     const layer = Layer.effect(
@@ -94,16 +68,20 @@ export const devices = Effect.gen(function* () {
         ...store,
         publish: Effect.fn("Test.LibraryStore.publish")(function* (state: LibraryState) {
           if (
-            faults.failNextAnchoredPublish &&
-            state.sync_ancestry?.revision_id === published?.revision_id
-          ) {
-            faults.failNextAnchoredPublish = false;
+            faults.take(
+              "FailPublish",
+              (fault) =>
+                !fault.anchoredOnly ||
+                state.sync_ancestry?.revision_id === server.remote?.revision_id,
+            )
+          )
             return yield* new InvalidLibraryState({
               path: home,
               detail: "Test interruption before merged state publication",
             });
-          }
           yield* store.publish(state);
+          const obstruction = faults.take("ObstructAfterPublish", (fault) => fault.home === home);
+          if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
       })),
     ).pipe(Layer.provide(libraryStoreLayer({ home })));
@@ -112,6 +90,16 @@ export const devices = Effect.gen(function* () {
     return {
       home,
       root,
+      corruptOriginal: Effect.gen(function* () {
+        const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+          Effect.provide(layer),
+        );
+        const digest = state.retained_copies[0]!.digest.slice("sha256:".length);
+        yield* fs.writeFileString(
+          join(home, "originals", digest.slice(0, 2), digest, "SKILL.md"),
+          "corrupted original\n",
+        );
+      }),
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
       retainProjectionEdit: (projection: ManagedProjection) =>
         Effect.gen(function* () {
@@ -198,16 +186,49 @@ export const devices = Effect.gen(function* () {
     a: device("a"),
     b: device("b"),
     c: device("c"),
-    faults,
-    remote: Effect.sync(() => published),
+    inject: faults.inject,
+    server,
+    remote: Effect.sync(() => server.remote),
     /** The Registry loses the Library, as a deleted account or reset database would. */
-    resetRemote: Effect.sync(() => {
-      published = null;
-      snapshots.clear();
-      libraryId = "library_recreated";
-    }),
+    resetRemote: Effect.sync(() => server.reset()),
     remoteCollections: Effect.sync(
-      () => published?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
+      () => server.remote?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
     ),
   };
+});
+
+/** Capture state and owned projection bytes, then assert that a stopped sync leaves them intact. */
+export const untouched = Effect.fn("Test.untouched")(function* (device: {
+  home: string;
+  state: Effect.Effect<LibraryState, unknown, FileSystem.FileSystem>;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const statePath = join(device.home, "state.json");
+  const stateBytes = (yield* fs.exists(statePath))
+    ? Array.from(yield* fs.readFile(statePath))
+    : null;
+  const paths =
+    stateBytes === null ? [] : (yield* device.state).projections.map((item) => item.path);
+  const readTree = Effect.fn("Test.projectionBytes")(function* (
+    root: string,
+  ): Effect.fn.Return<Record<string, readonly number[]>, unknown, FileSystem.FileSystem> {
+    const result: Record<string, readonly number[]> = {};
+    if (!(yield* fs.exists(root))) return result;
+    for (const name of (yield* fs.readDirectory(root)).sort()) {
+      const path = join(root, name);
+      if ((yield* fs.stat(path)).type === "Directory") {
+        for (const [child, bytes] of Object.entries(yield* readTree(path)))
+          result[join(name, child)] = bytes;
+      } else result[name] = Array.from(yield* fs.readFile(path));
+    }
+    return result;
+  });
+  const before = yield* Effect.forEach(paths, readTree);
+  return Effect.gen(function* () {
+    assert.deepStrictEqual(
+      (yield* fs.exists(statePath)) ? Array.from(yield* fs.readFile(statePath)) : null,
+      stateBytes,
+    );
+    assert.deepStrictEqual(yield* Effect.forEach(paths, readTree), before);
+  });
 });
