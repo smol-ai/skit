@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Predicate } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
@@ -34,16 +34,6 @@ import {
   type ProjectedPathCollision,
   type SharedTargetCollision,
 } from "../failures.js";
-
-// These synchronous helpers throw the declared tagged failures; anything else is a defect.
-const isProjectionCollision = (
-  cause: unknown,
-): cause is SharedTargetCollision | ProjectedPathCollision =>
-  Predicate.isTagged(cause, "SharedTargetCollision") ||
-  Predicate.isTagged(cause, "ProjectedPathCollision");
-
-const isHarnessMetadataFailure = (cause: unknown): cause is HarnessMetadataInvalid =>
-  Predicate.isTagged(cause, "HarnessMetadataInvalid");
 
 export function readSkitDescriptorEffect(
   root: string,
@@ -83,23 +73,29 @@ function releaseIdentityFromEntries(
   tree: TreeEntry[],
   release: string,
   releaseContentHash?: Digest,
-): SkitReleaseIdentity {
+): Result.Result<SkitReleaseIdentity, SharedTargetCollision | ProjectedPathCollision> {
   const files = tree.flatMap((entry) =>
     entry.kind === "file"
       ? [{ path: entry.path, bytes: entry.bytes, executable: entry.mode === 0o755 }]
       : [],
   );
-  const skills = descriptor.skills.map((skill) => ({
-    name: skill.name,
-    contentHash: hashProjectedSkillFiles(files, skill.path, skill.shared),
-    enabled: skill.default_enabled,
-  }));
-  return {
-    slug: descriptor.slug,
-    release,
-    releaseContentHash: releaseContentHash ?? hashNormalizedEntries(tree),
-    skills,
-  };
+  return Result.map(
+    Result.all(
+      descriptor.skills.map((skill) =>
+        Result.map(hashProjectedSkillFiles(files, skill.path, skill.shared), (contentHash) => ({
+          name: skill.name,
+          contentHash,
+          enabled: skill.default_enabled,
+        })),
+      ),
+    ),
+    (skills) => ({
+      slug: descriptor.slug,
+      release,
+      releaseContentHash: releaseContentHash ?? hashNormalizedEntries(tree),
+      skills,
+    }),
+  );
 }
 
 const MIME: Record<string, string> = {
@@ -169,12 +165,8 @@ export function validateSkitDirectoryEffect(
         options.assessmentContext === "author" || options.assessmentContext === "publish",
     });
     const files = inventoryEntries(tree);
-    const identity = yield* Effect.try(() =>
+    const identity = yield* Effect.fromResult(
       releaseIdentityFromEntries(descriptor, tree, release),
-    ).pipe(
-      Effect.catchTag("UnknownError", ({ cause }) =>
-        isProjectionCollision(cause) ? Effect.fail(cause) : Effect.die(cause),
-      ),
     );
     const filePaths = new Set(files.map((file) => file.path));
     const diagnostics: SkitValidationDiagnostic[] = [];
@@ -249,17 +241,11 @@ export function validateSkitDirectoryEffect(
         ),
       );
       const decoder = new TextDecoder();
-      // assessInvocationConformance is shared with the Registry Worker, which has no `effect`
-      // dependency, so it still throws HarnessMetadataInvalid rather than returning a Result.
-      const conformance = yield* Effect.try(() =>
+      const conformance = yield* Effect.fromResult(
         assessInvocationConformance(descriptor.skills, (path) => {
           const content = bytes.get(path);
           return content === undefined ? undefined : decoder.decode(content);
         }),
-      ).pipe(
-        Effect.catchTag("UnknownError", ({ cause }) =>
-          isHarnessMetadataFailure(cause) ? Effect.fail(cause) : Effect.die(cause),
-        ),
       );
       for (const issue of conformance)
         diagnostics.push({

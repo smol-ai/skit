@@ -41,8 +41,8 @@ test("pins depth-first code-unit ordering for Skill Artifact digests", () => {
     bytes: new TextEncoder().encode(contents),
   }));
 
-  expect(hashProjectedSkillFiles(files, "skills/review")).toBe(
-    "sha256:8e60154df4bbfb3eb6cc8ae833518f4c6ef1c82df527ba6b00260fdfec995ad1",
+  expect(hashProjectedSkillFiles(files, "skills/review")).toEqual(
+    Result.succeed("sha256:8e60154df4bbfb3eb6cc8ae833518f4c6ef1c82df527ba6b00260fdfec995ad1"),
   );
 });
 

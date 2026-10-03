@@ -36,33 +36,32 @@ export interface InvocationConformanceIssue {
 export function assessInvocationConformance(
   skills: readonly DeclaringSkill[],
   readText: (path: string) => string | undefined,
-): InvocationConformanceIssue[] {
-  const issues: InvocationConformanceIssue[] = [];
-  for (const skill of skills) {
-    if (!skill.invocation) continue;
-    for (const harness of AUTHORED_INVOCATION_HARNESSES) {
-      const adapter = invocationMetadataAdapters[harness];
-      const path = posix.join(skill.path, adapter.file);
-      const text = readText(path);
-      if (text === undefined && adapter.required) continue;
-      const expected = expectedNativeInvocation(harness, skill.invocation);
-      // The Registry Worker calls this and has no `effect` dependency, so the failure cannot be
-      // returned as a Result without pulling Effect's types across the workerd boundary that
-      // 7fb7d77 established. This is the one place the tagged error is still thrown.
-      const actual = Result.getOrThrow(adapter.read(text, path));
-      if (actual === expected) continue;
-      issues.push({
-        skill: skill.name,
-        harness,
-        path,
-        field: adapter.field,
-        policy: skill.invocation,
-        expected,
-        actual,
-      });
+): Result.Result<InvocationConformanceIssue[], HarnessMetadataInvalid> {
+  return Result.gen(function* () {
+    const issues: InvocationConformanceIssue[] = [];
+    for (const skill of skills) {
+      if (!skill.invocation) continue;
+      for (const harness of AUTHORED_INVOCATION_HARNESSES) {
+        const adapter = invocationMetadataAdapters[harness];
+        const path = posix.join(skill.path, adapter.file);
+        const text = readText(path);
+        if (text === undefined && adapter.required) continue;
+        const expected = expectedNativeInvocation(harness, skill.invocation);
+        const actual = yield* adapter.read(text, path);
+        if (actual === expected) continue;
+        issues.push({
+          skill: skill.name,
+          harness,
+          path,
+          field: adapter.field,
+          policy: skill.invocation,
+          expected,
+          actual,
+        });
+      }
     }
-  }
-  return issues;
+    return issues;
+  });
 }
 
 export function describeInvocationConformanceIssue(issue: InvocationConformanceIssue): string {

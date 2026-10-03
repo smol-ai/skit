@@ -54,7 +54,9 @@ export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(fu
   const skills: DiscoverableSkill[] = [];
   for (const skill of descriptor.skills) {
     if (!DISCOVERABLE_NAME.test(skill.name)) continue;
-    const projected = yield* attempt(() => projectSkillFiles(entries, skill.path, skill.shared));
+    const projected = yield* Effect.fromResult(
+      projectSkillFiles(entries, skill.path, skill.shared),
+    ).pipe(Effect.mapError((cause) => new AgentSkillsArchiveInvalid({ cause })));
     const primary = projected.get("SKILL.md");
     if (!primary) continue;
     const frontmatter = yield* attempt(() => parseSkillFrontmatter(decoder.decode(primary.bytes)));

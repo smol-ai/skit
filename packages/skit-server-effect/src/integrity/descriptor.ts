@@ -63,10 +63,9 @@ export const projectSkillFiles = Effect.fn("Integrity.projectSkillFiles")(functi
   skillPath: string,
   shared: ReadonlyArray<SharedMapping> = [],
 ) {
-  return yield* Effect.try({
-    try: () => projectFiles([...files], skillPath, [...shared]),
-    catch: (cause) => projectionError(cause as SharedFailure),
-  });
+  return yield* Effect.fromResult(projectFiles([...files], skillPath, [...shared])).pipe(
+    Effect.mapError(projectionError),
+  );
 });
 
 export const hashProjectedSkillFiles = Effect.fn("Integrity.hashProjectedSkillFiles")(function* (
@@ -74,10 +73,9 @@ export const hashProjectedSkillFiles = Effect.fn("Integrity.hashProjectedSkillFi
   skillPath: string,
   shared: ReadonlyArray<SharedMapping> = [],
 ) {
-  const parts = yield* Effect.try({
-    try: () => projectedSkillHashParts([...files], skillPath, [...shared]),
-    catch: (cause) => projectionError(cause as SharedFailure),
-  });
+  const parts = yield* Effect.fromResult(
+    projectedSkillHashParts([...files], skillPath, [...shared]),
+  ).pipe(Effect.mapError(projectionError));
   return yield* sha256(encodeHashParts(parts));
 });
 
