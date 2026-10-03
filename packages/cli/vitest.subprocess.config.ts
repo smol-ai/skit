@@ -17,7 +17,7 @@ export default defineConfig({
       "test/single-machine-journey.test.ts",
       "test/source-acquisition.test.ts",
     ],
-    setupFiles: ["../../test-support/isolated-home.ts"],
+    setupFiles: ["../../vitest.isolated-home.ts"],
     testTimeout: 30_000,
   },
 });

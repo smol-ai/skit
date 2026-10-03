@@ -60,9 +60,9 @@ const cases: readonly {
     row: "Preflight: legacy_remote_conflict",
     run: (homes) =>
       Effect.gen(function* () {
-        const { a, faults, server } = homes;
+        const { a, server } = homes;
         yield* seed(homes);
-        faults.remoteManifest = { schema: "skit.library.v2", entries: [], bindings: [] };
+        server.replaceHeadWithLegacy({ schema: "skit.library.v2", entries: [], bindings: [] });
         const unchanged = yield* untouched(a);
         const before = server.stored;
         assert.strictEqual((yield* a.sync()).status, "legacy_remote_conflict");
@@ -86,11 +86,11 @@ const cases: readonly {
   },
   {
     row: "Push: before P2 (failed upload)",
-    run: ({ a, faults, server }) =>
+    run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
-        faults.failNextUpload = true;
+        inject({ _tag: "FailUpload" });
         assert.ok(Schema.is(LibraryApiRejected)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         assert.strictEqual(server.remote, null);
@@ -99,7 +99,7 @@ const cases: readonly {
   },
   {
     row: "Push: P2 loses the CAS on the first push",
-    run: ({ a, b, faults, server }) =>
+    run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("from-a");
         yield* b.retain("from-b");
@@ -109,7 +109,10 @@ const cases: readonly {
           retainedTreePath(join(b.home, "originals"), competingState.retained_copies[0]!.digest),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
-        faults.competingWrite = yield* libraryManifestFromLocalStateEffect(competingState);
+        inject({
+          _tag: "CompetingWrite",
+          manifest: yield* libraryManifestFromLocalStateEffect(competingState),
+        });
         const unchanged = yield* untouched(a);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
         yield* unchanged;
@@ -124,11 +127,11 @@ const cases: readonly {
   },
   {
     row: "Push: HTTP 500 after commit differs from a lost transport response",
-    run: ({ a, faults, server }) =>
+    run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
-        faults.failNextCommittedWriteResponse = true;
+        inject({ _tag: "ErrorAfterCommit" });
         const error = yield* Effect.flip(a.sync());
         assert.ok(Schema.is(LibraryApiRejected)(error));
         if (Schema.is(LibraryApiRejected)(error)) assert.strictEqual(error.status, 500);
@@ -139,11 +142,11 @@ const cases: readonly {
   },
   {
     row: "Push: P2 response lost before P4",
-    run: ({ a, faults, server }) =>
+    run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
-        faults.loseNextWriteResponse = true;
+        inject({ _tag: "DropAfterCommit" });
         assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         const committed = server.remote;
@@ -155,11 +158,11 @@ const cases: readonly {
   },
   {
     row: "Push: after P2 before P4 (failed local publish)",
-    run: ({ a, faults, server }) =>
+    run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
-        faults.failNextLocalPublish = true;
+        inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* unchanged;
         assert.ok(server.remote);
@@ -169,11 +172,11 @@ const cases: readonly {
   },
   {
     row: "Push: P2 response lost, then another home writes before retry",
-    run: ({ a, b, faults, server }) =>
+    run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
-        faults.loseNextWriteResponse = true;
+        inject({ _tag: "DropAfterCommit" });
         assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         yield* b.sync();
@@ -190,13 +193,13 @@ const cases: readonly {
   },
   {
     row: "Pull: before U4 (failed local publish)",
-    run: ({ a, b, faults, server }) =>
+    run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
         yield* a.sync();
         const unchanged = yield* untouched(b);
         const head = server.remote;
-        faults.failNextLocalPublish = true;
+        inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
         yield* unchanged;
         assert.deepStrictEqual(server.remote, head);
@@ -206,7 +209,7 @@ const cases: readonly {
   },
   {
     row: "Pull: U3 finds a concurrent local write (SyncLocalChanged)",
-    run: ({ fs, a, b, c, faults, server }) =>
+    run: ({ fs, a, b, c, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("remote");
         yield* a.sync();
@@ -214,7 +217,7 @@ const cases: readonly {
         const concurrent = yield* c.state;
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
-        faults.changeWhenHeadRead = { home: b.home, state: concurrent };
+        inject({ _tag: "ChangeStateWhenHeadRead", home: b.home, state: concurrent });
         const head = server.remote;
         assert.ok(Schema.is(SyncLocalChanged)(yield* Effect.flip(b.sync())));
         assert.strictEqual(
@@ -230,7 +233,7 @@ const cases: readonly {
     row: "Merge: M3 finds a concurrent local write (SyncLocalChanged)",
     run: (homes) =>
       Effect.gen(function* () {
-        const { fs, a, b, faults, server } = homes;
+        const { fs, a, b, inject, server } = homes;
         yield* seed(homes);
         yield* b.retain("remote-addition");
         yield* b.sync();
@@ -241,7 +244,7 @@ const cases: readonly {
             label: "concurrent-local",
           })),
         };
-        faults.changeWhenHeadRead = { home: a.home, state: concurrent };
+        inject({ _tag: "ChangeStateWhenHeadRead", home: a.home, state: concurrent });
         const markerBefore = yield* fs.readFile(join(a.root, "first", ".skit-ownership.json"));
         const skillBefore = yield* fs.readFile(join(a.root, "first", "SKILL.md"));
         const head = server.remote;
@@ -263,18 +266,21 @@ const cases: readonly {
     row: "Merge: M5 loses the CAS (L, B, projections unchanged)",
     run: (homes) =>
       Effect.gen(function* () {
-        const { a, b, faults, server } = homes;
+        const { a, b, inject, server } = homes;
         yield* seed(homes);
         yield* a.retain("from-a");
         yield* b.retain("from-b");
         yield* b.sync();
-        faults.competingWrite = {
-          ...server.remote!.manifest,
-          collections: server.remote!.manifest.collections.map((item) => ({
-            ...item,
-            label: "competing",
-          })),
-        };
+        inject({
+          _tag: "CompetingWrite",
+          manifest: {
+            ...server.remote!.manifest,
+            collections: server.remote!.manifest.collections.map((item) => ({
+              ...item,
+              label: "competing",
+            })),
+          },
+        });
         const unchanged = yield* untouched(a);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
         yield* unchanged;
@@ -294,13 +300,13 @@ const cases: readonly {
     row: "Merge: after M5 before M7 (failed local publish)",
     run: (homes) =>
       Effect.gen(function* () {
-        const { a, b, faults, server } = homes;
+        const { a, b, inject, server } = homes;
         yield* seed(homes);
         yield* a.retain("from-a");
         yield* b.retain("from-b");
         yield* b.sync();
         const unchanged = yield* untouched(a);
-        faults.failNextLocalPublish = true;
+        inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* unchanged;
         const committed = server.remote!;
@@ -316,14 +322,14 @@ const cases: readonly {
     row: "Merge: before M5 (failed upload after retaining remote originals)",
     run: (homes) =>
       Effect.gen(function* () {
-        const { a, b, faults, server } = homes;
+        const { a, b, inject, server } = homes;
         yield* seed(homes);
         yield* a.retain("from-a");
         yield* b.retain("from-b");
         yield* b.sync();
         const unchanged = yield* untouched(a);
         const head = server.remote;
-        faults.failNextUpload = true;
+        inject({ _tag: "FailUpload" });
         assert.ok(Schema.is(LibraryApiRejected)(yield* Effect.flip(a.sync())));
         yield* unchanged;
         assert.deepStrictEqual(server.remote, head);
@@ -387,7 +393,7 @@ const cases: readonly {
     row,
     run: (homes: Homes) =>
       Effect.gen(function* () {
-        const { fs, a, b, faults, server } = homes;
+        const { fs, a, b, inject, server } = homes;
         let device = a;
         if (row.startsWith("Push")) {
           yield* a.retain("first");
@@ -412,7 +418,7 @@ const cases: readonly {
         const expectedBytes = (yield* fs.exists(join(device.root, "first", "SKILL.md")))
           ? yield* fs.readFileString(join(device.root, "first", "SKILL.md"))
           : "first\n";
-        faults.blockProjectionAfterPublish = { home: device.home, path: blockedRoot };
+        inject({ _tag: "ObstructAfterPublish", home: device.home, path: blockedRoot });
         const first = yield* Effect.exit(
           device.sync({ rootFor: (target) => (target === "agents" ? blockedRoot : undefined) }),
         );
@@ -438,7 +444,7 @@ const cases: readonly {
     row: "Merge: after M5 before M7 (--take-remote must be repeated)",
     run: (homes) =>
       Effect.gen(function* () {
-        const { a, b, faults, server } = homes;
+        const { a, b, inject, server } = homes;
         yield* seed(homes);
         const id = (yield* a.state).collections[0]!.collection_id;
         yield* a.edit((state) => ({
@@ -453,7 +459,7 @@ const cases: readonly {
         // Force M5 to include a local-only record as well as the resolved remote label.
         yield* a.retain("local-only");
         const unchanged = yield* untouched(a);
-        faults.failNextLocalPublish = true;
+        inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(
           yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
           InvalidLibraryState,

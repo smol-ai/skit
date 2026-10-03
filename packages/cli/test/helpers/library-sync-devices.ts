@@ -19,36 +19,29 @@ import {
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
-import { librarySyncServer } from "./library-sync-server.js";
+import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
-/**
- * Devices sharing one compare-and-swap Library server. `loseNextWriteResponse` commits the next
- * Library write and then throws a transport error instead of returning the response.
- */
+/** Devices sharing one compare-and-swap Library server, with injectable one-shot faults. */
 export const devices = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-crash-" });
-  const server = librarySyncServer();
-  const faults = Object.assign(server.faults, {
-    failNextAnchoredPublish: false,
-    failNextLocalPublish: false,
-    changeWhenHeadRead: undefined as { home: string; state: LibraryState } | undefined,
-    blockProjectionAfterPublish: undefined as { home: string; path: string } | undefined,
-  });
+  const faults = faultQueue();
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => assert.deepStrictEqual(faults.unconsumed(), [])),
+  );
+  const server = librarySyncServer(faults);
   const http = registryHttpLayer(
     Layer.succeed(
       HttpClient.HttpClient,
       HttpClient.make((incoming) =>
         Effect.gen(function* () {
           const response = yield* Effect.try(() => server.transport(incoming));
-          if (
-            incoming.method === "GET" &&
-            new URL(incoming.url).pathname === "/api/library/portable" &&
-            faults.changeWhenHeadRead !== undefined
-          ) {
-            const change = faults.changeWhenHeadRead;
-            faults.changeWhenHeadRead = undefined;
-            // The head GET is a semantic boundary between local inspection and publication.
+          const change =
+            incoming.method === "GET" && new URL(incoming.url).pathname === "/api/library/portable"
+              ? faults.take("ChangeStateWhenHeadRead")
+              : undefined;
+          // The head GET is a semantic boundary between local inspection and publication.
+          if (change) {
             yield* fs.makeDirectory(change.home, { recursive: true });
             yield* fs.writeFileString(
               join(change.home, "state.json"),
@@ -75,23 +68,20 @@ export const devices = Effect.gen(function* () {
         ...store,
         publish: Effect.fn("Test.LibraryStore.publish")(function* (state: LibraryState) {
           if (
-            faults.failNextLocalPublish ||
-            (faults.failNextAnchoredPublish &&
-              state.sync_ancestry?.revision_id === server.remote?.revision_id)
-          ) {
-            faults.failNextAnchoredPublish = false;
-            faults.failNextLocalPublish = false;
+            faults.take(
+              "FailPublish",
+              (fault) =>
+                !fault.anchoredOnly ||
+                state.sync_ancestry?.revision_id === server.remote?.revision_id,
+            )
+          )
             return yield* new InvalidLibraryState({
               path: home,
               detail: "Test interruption before merged state publication",
             });
-          }
           yield* store.publish(state);
-          if (faults.blockProjectionAfterPublish?.home === home) {
-            const obstruction = faults.blockProjectionAfterPublish;
-            faults.blockProjectionAfterPublish = undefined;
-            yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
-          }
+          const obstruction = faults.take("ObstructAfterPublish", (fault) => fault.home === home);
+          if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
       })),
     ).pipe(Layer.provide(libraryStoreLayer({ home })));
@@ -196,7 +186,7 @@ export const devices = Effect.gen(function* () {
     a: device("a"),
     b: device("b"),
     c: device("c"),
-    faults,
+    inject: faults.inject,
     server,
     remote: Effect.sync(() => server.remote),
     /** The Registry loses the Library, as a deleted account or reset database would. */

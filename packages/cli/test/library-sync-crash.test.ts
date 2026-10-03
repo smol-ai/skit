@@ -79,14 +79,14 @@ it.effect("a local removal after sync still removes the Collection everywhere", 
 
 it.effect("a write committed without a response leaves coherent state and converges", () =>
   Effect.gen(function* () {
-    const { fs, a, b, faults, remoteCollections } = yield* devices;
+    const { fs, a, b, inject, remoteCollections } = yield* devices;
     yield* a.retain("first");
     yield* a.sync();
     yield* b.sync();
     yield* a.retain("second");
     const stateBefore = yield* fs.readFileString(join(a.home, "state.json"));
 
-    faults.loseNextWriteResponse = true;
+    inject({ _tag: "DropAfterCommit" });
     assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
     assert.strictEqual(yield* fs.readFileString(join(a.home, "state.json")), stateBefore);
     const committed = yield* remoteCollections;
@@ -183,7 +183,7 @@ it.effect(
   "a retry after a lost response conflicts with a later edit instead of overwriting it",
   () =>
     Effect.gen(function* () {
-      const { a, c, faults, remote } = yield* devices;
+      const { a, c, inject, remote } = yield* devices;
       yield* a.retain("first");
       yield* a.sync();
       yield* c.sync();
@@ -195,7 +195,7 @@ it.effect(
         });
 
       yield* a.edit(relabel("from-a"));
-      faults.loseNextWriteResponse = true;
+      inject({ _tag: "DropAfterCommit" });
       assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
       // C saw A's committed label and deliberately replaced it.
       assert.strictEqual((yield* c.sync()).status, "merged");

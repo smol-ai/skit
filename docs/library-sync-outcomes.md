@@ -7,7 +7,7 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 | Named preflight, push, pull, and merge fault rows; byte-level state and projection checks | `packages/cli/test/library-sync-outcomes.test.ts` |
 | Lost response on a later push, restored older state, ancestry, removals, and device policies | `packages/cli/test/library-sync-crash.test.ts` |
 | Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
-| Shared sequential HTTP request steps and response expectations for stale bases, retries, and snapshot readiness/reuse | `test-support/library-sync-cas.mjs`, `packages/cli/test/library-sync-server.test.ts`, `packages/skit-server-effect/test/library-sync.test.ts` |
+| Stale bases, retries of a committed manifest, and snapshot readiness/reuse, on real D1 and on the client fake | `packages/skit-server-effect/test/library-sync.test.ts`, `packages/cli/test/library-sync-server.test.ts` |
 | Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
 | A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
 
@@ -15,7 +15,7 @@ The outcome matrix checks stopped operations against the row's permitted durable
 
 **Known bug characterization:** `local_bytes_changed` reports that sync stopped but the CLI exits `0`. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` belongs to the subprocess suite and asserts that current status and structured outcome with a BUG comment requiring a nonzero exit when fixed. The ordinary in-process matrix row separately checks unchanged state/projection bytes and remote storage. There is no expected-failure mask.
 
-Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root.
+The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes every response with the core Library sync contract schemas the Worker uses, so status codes and bodies cannot drift; its compare-and-swap rules are asserted separately against the Worker. Faults are one typed union injected per test and consumed once at the boundary they target. Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root.
 
 ## Worker endpoint characterization
 
