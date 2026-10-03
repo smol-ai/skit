@@ -59,43 +59,39 @@ function emptyDocument(document: Document): boolean {
 }
 
 const CLAUDE_FRONTMATTER = /^---\r?\n([\s\S]*?)^---(?=\r?\n|$)/m;
+const CLAUDE_FIELD = "disable-model-invocation";
 
 const claudeAdapter: InvocationMetadataAdapter = {
   harness: "claude-code",
-  field: "disable-model-invocation",
+  field: CLAUDE_FIELD,
   file: "SKILL.md",
   required: true,
-  read(text, path) {
-    if (text === undefined) return Result.succeed(undefined);
-    const match = text.match(CLAUDE_FRONTMATTER);
-    if (!match) return Result.succeed(undefined);
-    const parsed = claudeDocumentResult(match[1], path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const value = parsed.success.get("disable-model-invocation");
-    return Result.succeed(typeof value === "boolean" ? value : undefined);
-  },
-  write(text, value, path) {
-    const body = text ?? "";
-    const newline = body.includes("\r\n") ? "\r\n" : "\n";
-    const match = body.match(CLAUDE_FRONTMATTER);
-    if (!match)
-      return Result.succeed(
-        value === undefined
+  read: (text, path) =>
+    Result.gen(function* () {
+      const match = text?.match(CLAUDE_FRONTMATTER);
+      if (!match) return undefined;
+      const value = (yield* claudeDocumentResult(match[1], path)).get(CLAUDE_FIELD);
+      return typeof value === "boolean" ? value : undefined;
+    }),
+  write: (text, value, path) =>
+    Result.gen(function* () {
+      const body = text ?? "";
+      const newline = body.includes("\r\n") ? "\r\n" : "\n";
+      const match = body.match(CLAUDE_FRONTMATTER);
+      if (!match)
+        return value === undefined
           ? body
-          : `---${newline}${this.field}: ${value}${newline}---${newline}${body}`,
-      );
-    const parsed = claudeDocumentResult(match[1], path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const document = parsed.success;
-    if (value === undefined) {
-      if (document.get(this.field) === undefined) return Result.succeed(body);
-      document.delete(this.field);
-    } else document.set(this.field, value);
-    const serialized = emptyDocument(document)
-      ? ""
-      : document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
-    return Result.succeed(`---${newline}${serialized}---${body.slice(match[0].length)}`);
-  },
+          : `---${newline}${CLAUDE_FIELD}: ${value}${newline}---${newline}${body}`;
+      const document = yield* claudeDocumentResult(match[1], path);
+      if (value === undefined) {
+        if (document.get(CLAUDE_FIELD) === undefined) return body;
+        document.delete(CLAUDE_FIELD);
+      } else document.set(CLAUDE_FIELD, value);
+      const serialized = emptyDocument(document)
+        ? ""
+        : document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
+      return `---${newline}${serialized}---${body.slice(match[0].length)}`;
+    }),
 };
 
 const CODEX_FIELD = ["policy", "allow_implicit_invocation"] as const;
@@ -125,44 +121,39 @@ const codexAdapter: InvocationMetadataAdapter = {
   field: "policy.allow_implicit_invocation",
   file: "agents/openai.yaml",
   required: false,
-  read(text, path) {
-    if (text === undefined) return Result.succeed(undefined);
-    const parsed = codexDocumentResult(text, path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const value = parsed.success.getIn([...CODEX_FIELD]);
-    return Result.succeed(typeof value === "boolean" ? value : undefined);
-  },
-  write(text, value, path) {
-    const parsed = codexDocumentResult(text ?? "", path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const document = parsed.success;
-    if (value === undefined) {
-      if (text === undefined) return Result.succeed(null);
-      if (document.getIn([...CODEX_FIELD]) === undefined) return Result.succeed(text);
-      document.deleteIn([...CODEX_FIELD]);
-      const policy = document.get("policy") as { items?: unknown[] } | undefined;
-      if (policy && Array.isArray(policy.items) && policy.items.length === 0)
-        document.delete("policy");
-      return Result.succeed(emptyDocument(document) ? null : document.toString());
-    }
-    document.setIn([...CODEX_FIELD], value);
-    return Result.succeed(document.toString());
-  },
+  read: (text, path) =>
+    Result.gen(function* () {
+      if (text === undefined) return undefined;
+      const value = (yield* codexDocumentResult(text, path)).getIn([...CODEX_FIELD]);
+      return typeof value === "boolean" ? value : undefined;
+    }),
+  write: (text, value, path) =>
+    Result.gen(function* () {
+      const document = yield* codexDocumentResult(text ?? "", path);
+      if (value === undefined) {
+        if (text === undefined) return null;
+        if (document.getIn([...CODEX_FIELD]) === undefined) return text;
+        document.deleteIn([...CODEX_FIELD]);
+        const policy = document.get("policy") as { items?: unknown[] } | undefined;
+        if (policy && Array.isArray(policy.items) && policy.items.length === 0)
+          document.delete("policy");
+        return emptyDocument(document) ? null : document.toString();
+      }
+      document.setIn([...CODEX_FIELD], value);
+      return document.toString();
+    }),
 };
 
 const OPENCODE_FIELD = ["metadata", "opencode/autoinvoke"] as const;
 
-const opencodeDocumentResult = (
-  frontmatter: string,
-  path: string,
-): Result.Result<Document, HarnessMetadataInvalid> => {
-  const parsed = claudeDocumentResult(frontmatter, path);
-  if (Result.isFailure(parsed)) return parsed;
-  const metadata = parsed.success.get("metadata", true);
-  return metadata === undefined || isMap(metadata)
-    ? parsed
-    : Result.fail(new HarnessMetadataInvalid({ path, kind: "OpenCode metadata" }));
-};
+const opencodeDocumentResult = (frontmatter: string, path: string) =>
+  Result.gen(function* () {
+    const document = yield* claudeDocumentResult(frontmatter, path);
+    const metadata = document.get("metadata", true);
+    if (metadata !== undefined && !isMap(metadata))
+      return yield* Result.fail(new HarnessMetadataInvalid({ path, kind: "OpenCode metadata" }));
+    return document;
+  });
 
 /**
  * OpenCode V2 reads `opencode/autoinvoke` from the portable Agent Skills metadata map. V1
@@ -174,46 +165,37 @@ const opencodeAdapter: InvocationMetadataAdapter = {
   field: "metadata.opencode/autoinvoke",
   file: "SKILL.md",
   required: true,
-  read(text, path) {
-    if (text === undefined) return Result.succeed(undefined);
-    const match = text.match(CLAUDE_FRONTMATTER);
-    if (!match) return Result.succeed(undefined);
-    const parsed = claudeDocumentResult(match[1], path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const metadata = parsed.success.get("metadata", true);
-    if (!isMap(metadata)) return Result.succeed(undefined);
-    const value = parsed.success.getIn([...OPENCODE_FIELD]);
-    if (typeof value === "boolean") return Result.succeed(value);
-    if (typeof value !== "string") return Result.succeed(undefined);
-    const normalized = value.toLowerCase();
-    return Result.succeed(
-      normalized === "true" ? true : normalized === "false" ? false : undefined,
-    );
-  },
-  write(text, value, path) {
-    const body = text ?? "";
-    const newline = body.includes("\r\n") ? "\r\n" : "\n";
-    const match = body.match(CLAUDE_FRONTMATTER);
-    if (!match)
-      return Result.succeed(
-        value === undefined
+  read: (text, path) =>
+    Result.gen(function* () {
+      const match = text?.match(CLAUDE_FRONTMATTER);
+      if (!match) return undefined;
+      const document = yield* claudeDocumentResult(match[1], path);
+      if (!isMap(document.get("metadata", true))) return undefined;
+      const value = document.getIn([...OPENCODE_FIELD]);
+      if (typeof value === "boolean") return value;
+      if (typeof value !== "string") return undefined;
+      const normalized = value.toLowerCase();
+      return normalized === "true" ? true : normalized === "false" ? false : undefined;
+    }),
+  write: (text, value, path) =>
+    Result.gen(function* () {
+      const body = text ?? "";
+      const newline = body.includes("\r\n") ? "\r\n" : "\n";
+      const match = body.match(CLAUDE_FRONTMATTER);
+      if (!match)
+        return value === undefined
           ? body
-          : `---${newline}metadata:${newline}  opencode/autoinvoke: "${value}"${newline}---${newline}${body}`,
-      );
-    const parsed = opencodeDocumentResult(match[1], path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const document = parsed.success;
-    if (value === undefined) {
-      if (document.getIn([...OPENCODE_FIELD]) === undefined) return Result.succeed(body);
-      document.deleteIn([...OPENCODE_FIELD]);
-      const metadata = document.get("metadata", true);
-      if (isMap(metadata) && metadata.items.length === 0) document.delete("metadata");
-    } else document.setIn([...OPENCODE_FIELD], String(value));
-    const serialized = document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
-    return Result.succeed(
-      `---${newline}${emptyDocument(document) ? "" : serialized}---${body.slice(match[0].length)}`,
-    );
-  },
+          : `---${newline}metadata:${newline}  opencode/autoinvoke: "${value}"${newline}---${newline}${body}`;
+      const document = yield* opencodeDocumentResult(match[1], path);
+      if (value === undefined) {
+        if (document.getIn([...OPENCODE_FIELD]) === undefined) return body;
+        document.deleteIn([...OPENCODE_FIELD]);
+        const metadata = document.get("metadata", true);
+        if (isMap(metadata) && metadata.items.length === 0) document.delete("metadata");
+      } else document.setIn([...OPENCODE_FIELD], String(value));
+      const serialized = document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
+      return `---${newline}${emptyDocument(document) ? "" : serialized}---${body.slice(match[0].length)}`;
+    }),
 };
 
 const DEVIN_FIELD = "triggers";
@@ -230,35 +212,31 @@ const devinAdapter: InvocationMetadataAdapter = {
   field: DEVIN_FIELD,
   file: "SKILL.md",
   required: true,
-  read(text, path) {
-    if (text === undefined) return Result.succeed(undefined);
-    const match = text.match(CLAUDE_FRONTMATTER);
-    if (!match) return Result.succeed(undefined);
-    const parsed = claudeDocumentResult(match[1], path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const value = parsed.success.get(DEVIN_FIELD, true) as { toJSON?: () => unknown } | undefined;
-    const triggers = value?.toJSON?.() ?? value;
-    if (!Array.isArray(triggers)) return Result.succeed(undefined);
-    return Result.succeed(triggers.includes(DEVIN_MODEL_TRIGGER));
-  },
-  write(text, value, path) {
-    const body = text ?? "";
-    // `host-policy` defers to Devin, and Devin's default is whatever `triggers` already says.
-    if (value === undefined) return Result.succeed(body);
-    const triggers = value ? [DEVIN_USER_TRIGGER, DEVIN_MODEL_TRIGGER] : [DEVIN_USER_TRIGGER];
-    const newline = body.includes("\r\n") ? "\r\n" : "\n";
-    const match = body.match(CLAUDE_FRONTMATTER);
-    if (!match)
-      return Result.succeed(
-        `---${newline}${DEVIN_FIELD}: [${triggers.join(", ")}]${newline}---${newline}${body}`,
-      );
-    const parsed = claudeDocumentResult(match[1], path);
-    if (Result.isFailure(parsed)) return Result.fail(parsed.failure);
-    const document = parsed.success;
-    document.set(DEVIN_FIELD, document.createNode(triggers, { flow: true }));
-    const serialized = document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
-    return Result.succeed(`---${newline}${serialized}---${body.slice(match[0].length)}`);
-  },
+  read: (text, path) =>
+    Result.gen(function* () {
+      const match = text?.match(CLAUDE_FRONTMATTER);
+      if (!match) return undefined;
+      const value = (yield* claudeDocumentResult(match[1], path)).get(DEVIN_FIELD, true) as
+        | { toJSON?: () => unknown }
+        | undefined;
+      const triggers = value?.toJSON?.() ?? value;
+      return Array.isArray(triggers) ? triggers.includes(DEVIN_MODEL_TRIGGER) : undefined;
+    }),
+  write: (text, value, path) =>
+    Result.gen(function* () {
+      const body = text ?? "";
+      // `host-policy` defers to Devin, and Devin's default is whatever `triggers` already says.
+      if (value === undefined) return body;
+      const triggers = value ? [DEVIN_USER_TRIGGER, DEVIN_MODEL_TRIGGER] : [DEVIN_USER_TRIGGER];
+      const newline = body.includes("\r\n") ? "\r\n" : "\n";
+      const match = body.match(CLAUDE_FRONTMATTER);
+      if (!match)
+        return `---${newline}${DEVIN_FIELD}: [${triggers.join(", ")}]${newline}---${newline}${body}`;
+      const document = yield* claudeDocumentResult(match[1], path);
+      document.set(DEVIN_FIELD, document.createNode(triggers, { flow: true }));
+      const serialized = document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
+      return `---${newline}${serialized}---${body.slice(match[0].length)}`;
+    }),
 };
 
 export const invocationMetadataAdapters: Record<InvocationHarness, InvocationMetadataAdapter> = {

@@ -35,7 +35,6 @@ import {
 } from "../../registry/registry-http.js";
 import {
   authenticatedApiMiddleware,
-  catchRegistryFailureCause,
   isSuccessfulResponseDecodeFailure,
   registryApiFailure,
   registryApiFailureMessage,
@@ -175,13 +174,15 @@ export const publishEffect = Effect.fn("publishEffect")(function* (
     httpClient: HttpClient.mapRequest(transport, HttpClientRequest.setUrl(publishUrl)),
   }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
   return yield* client.publication.publish({ params: { owner, slug }, payload: body }).pipe(
-    (effect) =>
-      catchRegistryFailureCause(effect, (error) => {
-        if (
-          HttpClientError.isHttpClientError(error) &&
-          error.response !== undefined &&
-          error.response.status !== 201
-        ) {
+    Effect.catchTag(
+      "HttpClientError",
+      (
+        error,
+      ): Effect.Effect<
+        never,
+        HttpClientError.HttpClientError | RegistryRejectedWrite | PublicationResponseError
+      > => {
+        if (error.response !== undefined && error.response.status !== 201) {
           const response = error.response;
           return response.text.pipe(
             Effect.orElseSucceed(() => ""),
@@ -196,7 +197,8 @@ export const publishEffect = Effect.fn("publishEffect")(function* (
           );
         }
         return Effect.fail(error);
-      }),
+      },
+    ),
     Effect.mapError((error) => {
       if (
         Predicate.isTagged(error, "PublicationResponseError") ||

@@ -61,10 +61,10 @@ export const retainLocalTreeEffect = Effect.fn("Retention.retainTree")(function*
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   yield* Effect.scoped(
     Effect.gen(function* () {
-      const directory = yield* Effect.acquireRelease(
-        fs.makeTempDirectory({ directory: dirname(path), prefix: "retain.tmp-" }),
-        (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie),
-      );
+      const directory = yield* fs.makeTempDirectoryScoped({
+        directory: dirname(path),
+        prefix: "retain.tmp-",
+      });
       const temporary = join(directory, "tree");
       if (verbatim)
         yield* copyLocalTreeEffect(

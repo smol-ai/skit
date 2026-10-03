@@ -344,6 +344,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       const downloaded = yield* Effect.forEach(
         required.filter((digest) => snapshotSet.has(digest)),
         (digest) => api.download(remote.library_id, digest),
+        // Nothing is written until every archive arrives, so a failed download aborts cleanly.
+        { concurrency: 4 },
       );
       const archives = yield* completeRestoreArchivesEffect(desired, downloaded, (digest) =>
         reacquireSourceArchiveEffect(desired, digest, options),
@@ -499,6 +501,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const downloaded = yield* Effect.forEach(
       missing.filter((digest) => snapshotSet.has(digest)),
       (digest) => api.download(remote.library_id, digest),
+      // Nothing is written until every archive arrives, so a failed download aborts cleanly.
+      { concurrency: 4 },
     );
     const archives = yield* completeRestoreArchivesEffect(
       merged.manifest,

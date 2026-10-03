@@ -5,7 +5,7 @@ import { Clock, Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
-import { writeJsonAtomicEffect } from "../../platform/atomic-write.js";
+import { writeJsonAtomicEffect, writeRawAtomicEffect } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
   CURRENT_LIBRARY_STATE_VERSION,
@@ -181,10 +181,13 @@ export const publishLibraryStateEffect = Effect.fn("Library.publishState")(funct
   home: string,
   state: LibraryState,
 ) {
-  const valid = yield* LibraryState.makeEffect(state).pipe(
+  // Encoding validates the state and serialises exactly what the loader decodes.
+  const text = yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState, { space: 2 }))(
+    state,
+  ).pipe(
     Effect.mapError(
       () => new InvalidLibraryState({ path: home, detail: "refusing invalid Library state" }),
     ),
   );
-  yield* writeJsonAtomicEffect(join(resolve(home), "state.json"), valid);
+  yield* writeRawAtomicEffect(join(resolve(home), "state.json"), `${text}\n`);
 });

@@ -18,7 +18,6 @@ import {
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
-  mapRegistryFailureCause,
   registryApiFailure,
 } from "../../registry/api-client.js";
 import {
@@ -79,7 +78,6 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
   };
   const read = Effect.fn("Library.librarySyncApi.read")(function* () {
     return yield* client.librarySync.read({}).pipe(
-      (effect) => mapRegistryFailureCause(effect, (error) => error),
       Effect.catch((error) => {
         return Schema.is(LibraryNotFoundResponse)(error)
           ? Effect.succeed(null)
@@ -96,10 +94,9 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
     );
   });
   const upload = Effect.fn("Library.librarySyncApi.upload")(function* (archive: SnapshotArchive) {
-    return yield* client.librarySnapshots.upload({ payload: archive }).pipe(
-      (effect) => mapRegistryFailureCause(effect, (error) => error),
-      Effect.mapError((error) => mapGeneratedFailure("upload private snapshot", error)),
-    );
+    return yield* client.librarySnapshots
+      .upload({ payload: archive })
+      .pipe(Effect.mapError((error) => mapGeneratedFailure("upload private snapshot", error)));
   });
   const write = Effect.fn("Library.librarySyncApi.write")(function* (
     expected_revision_id: string | null,
@@ -110,7 +107,6 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
       manifest,
     }).pipe(Effect.mapError(() => new LibraryApiInvalidRequest()));
     return yield* client.librarySync.write({ payload: request }).pipe(
-      (effect) => mapRegistryFailureCause(effect, (error) => error),
       Effect.map((response) => response.library),
       Effect.mapError((error) => {
         return Schema.is(RevisionConflictResponse)(error)
@@ -127,10 +123,7 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
       .download({
         params: { library_id: libraryId, digest },
       })
-      .pipe(
-        (effect) => mapRegistryFailureCause(effect, (error) => error),
-        Effect.mapError((error) => mapGeneratedFailure("download private snapshot", error)),
-      );
+      .pipe(Effect.mapError((error) => mapGeneratedFailure("download private snapshot", error)));
   });
   return { read, upload, write, download };
 });

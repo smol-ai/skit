@@ -13,7 +13,6 @@ import { homedir } from "node:os";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
-  mapRegistryFailureCause,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
@@ -435,9 +434,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const localDescriptor = validation.descriptor;
   const wireDescriptor = { ...localDescriptor, id: `${owner}/${slug}` };
   const locator = skitLocator(remote);
-  const read = yield* client.drafts
-    .read({ params: { owner, slug } })
-    .pipe((effect) => mapRegistryFailureCause(effect, (error) => error), Effect.result);
+  const read = yield* client.drafts.read({ params: { owner, slug } }).pipe(Effect.result);
   if (Result.isFailure(read) && Schema.is(DraftNotFoundResponse)(read.failure)) {
     if (storedRemote) return yield* new RemoteDraftUnavailable({ identity: locator });
     if (!storedRemote && !options.apply)
@@ -469,9 +466,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
           source_kind: "local",
         }),
       })
-      .pipe((effect) =>
-        mapRegistryFailureCause(effect, (error) => mapAuthorFailure("draft create", 201, error)),
-      );
+      .pipe(Effect.mapError((error) => mapAuthorFailure("draft create", 201, error)));
     const state = yield* readState(options.home);
     state[locator] = {
       skitId: `${owner}/${slug}`,
@@ -548,10 +543,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   if (!sameFiles(yield* readTree(root), local)) return yield* new LocalFilesChangedDuringSync();
 
   // The staging tree is scoped: an interrupted merge releases it without a `finally`.
-  const staging = yield* Effect.acquireRelease(
-    fs.makeTempDirectory({ prefix: "skit-sync-stage-" }),
-    (directory) => Effect.orDie(fs.remove(directory, { recursive: true, force: true })),
-  );
+  const staging = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-stage-" });
   for (const [path, file] of Object.entries(plan.files)) {
     const staged = join(staging, ...path.split("/"));
     yield* fs.makeDirectory(dirname(staged), { recursive: true });
@@ -579,7 +571,6 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     source_kind: "local",
   });
   const updated = yield* client.drafts.update({ params: { owner, slug }, payload: body }).pipe(
-    (effect) => mapRegistryFailureCause(effect, (error) => error),
     Effect.mapError((error) => {
       const failure = mapAuthorFailure("draft update", 200, error);
       return Predicate.isTagged(failure, "SyncRejected")

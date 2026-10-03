@@ -27,7 +27,6 @@ import {
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
-  mapRegistryFailureCause,
   registryApiFailureMessage,
   sessionApiMiddleware,
 } from "./api-client.js";
@@ -705,7 +704,6 @@ export const loginEffect = Effect.fn("Auth.login")(function* (input: {
           },
         })
         .pipe(
-          (effect) => mapRegistryFailureCause(effect, (error) => error),
           Effect.mapError((error) =>
             Schema.is(UnauthorizedResponse)(error)
               ? new SignInRejected({ context: "Credential creation" })
