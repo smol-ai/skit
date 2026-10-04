@@ -1,3 +1,4 @@
+import { existsSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
@@ -283,6 +284,9 @@ describe("server deployment configuration", () => {
 
 describe("server deployment execution", () => {
   const configuration = withApplicationHosting({ name: "test-server" });
+  const rejectWrite = async () => {
+    throw new Error("Unexpected configuration write in deployment test");
+  };
   const build = { kind: "release", version: "0.2.0", commit: "abc123", buildId: "build-1" };
   it("does not migrate or deploy when the build fails", async () => {
     const calls = [];
@@ -291,6 +295,7 @@ describe("server deployment execution", () => {
         {},
         {
           read: async () => configuration,
+          write: rejectWrite,
           build: async () => {
             calls.push("build");
             throw new Error("build failed");
@@ -309,6 +314,7 @@ describe("server deployment execution", () => {
       {},
       {
         read: async () => configuration,
+        write: rejectWrite,
         build: async () => {
           calls.push("build");
           return { configPath: "built-wrangler.json", build };
@@ -332,6 +338,7 @@ describe("server deployment execution", () => {
         {},
         {
           read: async () => configuration,
+          write: rejectWrite,
           build: async () => ({ configPath: "built-wrangler.json", build }),
           run: (args) => {
             calls.push(args);
@@ -344,5 +351,46 @@ describe("server deployment execution", () => {
     );
     assert.equal(calls.length, 1);
     assert.equal(calls[0][0], "d1");
+  });
+  it("does not announce success for an unexpected setup target and removes temporary secrets", async () => {
+    const calls = [];
+    const messages = [];
+    let secretFile;
+    let outputFile;
+    await assert.rejects(
+      deploy(
+        { installSecret: true, expectedOrigin: "https://expected.workers.dev" },
+        {
+          read: async () => configuration,
+          write: rejectWrite,
+          build: async () => ({ configPath: "built-wrangler.json", build }),
+          run: (args, options) => {
+            calls.push(args);
+            if (args[0] === "deploy") {
+              assert.equal(args[1], "--secrets-file");
+              secretFile = args[2];
+              assert.ok(existsSync(secretFile));
+              outputFile = options.env.WRANGLER_OUTPUT_FILE_PATH;
+              writeFileSync(
+                outputFile,
+                JSON.stringify({
+                  type: "deploy",
+                  version: 1,
+                  targets: ["https://other.workers.dev"],
+                }) + "\n",
+              );
+            }
+          },
+          log: (message) => messages.push(message),
+        },
+      ),
+      /unexpected target/,
+    );
+    assert.equal(calls[0][0], "d1");
+    assert.equal(calls[1][0], "deploy");
+    assert.deepEqual(messages, []);
+    assert.ok(secretFile);
+    assert.equal(existsSync(secretFile), false);
+    assert.equal(existsSync(outputFile), false);
   });
 });

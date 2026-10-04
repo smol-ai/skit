@@ -65,7 +65,7 @@ pnpm --filter @smolai/skit-server-effect deploy:setup -- \
 The generated deployment configuration is deliberately gitignored because it contains account-specific D1 identifiers. Subsequent code deployments reuse the same resources and secret:
 
 ```sh
-pnpm --filter @smolai/skit-server-effect deploy
+pnpm --filter @smolai/skit-server-effect run deploy
 ```
 
 After the first deployment, complete the one-time operator ceremony at the origin printed by the command:
@@ -203,7 +203,7 @@ Complete the printed bootstrap command and verify all of the following:
 5. replaying an already-used link is harmless.
 
 To test ordinary account onboarding, deliberately change `ACCOUNT_REGISTRATION_MODE` to `open` in
-that isolated `wrangler.jsonc`, run `pnpm --filter @smolai/skit-server-effect deploy`, and create a
+that isolated `wrangler.jsonc`, run `pnpm --filter @smolai/skit-server-effect run deploy`, and create a
 new account. Signup must not claim a Registry username. After verification, the browser must show
 the username-claim form; only a successful claim creates the Principal and personal Namespace.
 Return registration to `closed` or retire the test deployment when finished. This live test must

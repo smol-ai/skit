@@ -169,7 +169,7 @@ git fetch origin --tags
 git tag --list '@smolai/skit-server-effect@*'
 git switch --detach '@smolai/skit-server-effect@X.Y.Z'
 pnpm install --frozen-lockfile
-SKIT_RELEASE=1 pnpm --filter @smolai/skit-server-effect deploy
+SKIT_RELEASE=1 pnpm --filter @smolai/skit-server-effect run deploy
 ```
 
 Replace `X.Y.Z` with the selected release version. Release builds require a clean
@@ -196,7 +196,8 @@ SKIT_EXPECTED_SERVER_COMMIT="$(git rev-parse HEAD)" \
 pnpm --filter @smolai/skit-server-effect verify:deployment
 ```
 
-Verification prints the running build and fails if its version or commit differs
+`SKIT_EXPECTED_SERVER_COMMIT` requires the full SHA, as returned by
+`git rev-parse HEAD`. Verification prints the running build and fails if its version or commit differs
 from the requested values. Without expectations it still reports liveness, build
 identity, and operator readiness. Git tags identify available releases; `/health`
 and discovery identify the running release. There is no automatic server update
