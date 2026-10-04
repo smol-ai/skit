@@ -26,9 +26,3 @@ export class CommandRequired extends Data.TaggedError("CommandRequired")<{}> {
     return "A command is required";
   }
 }
-
-export class PackageMetadataUnavailable extends Data.TaggedError("PackageMetadataUnavailable")<{}> {
-  get message(): string {
-    return "Unable to locate valid CLI package metadata";
-  }
-}

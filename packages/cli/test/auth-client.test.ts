@@ -13,7 +13,8 @@ import {
   resolveAuthForOriginEffect,
   resolveLoginTargetEffect,
 } from "../src/registry/auth.js";
-import { registryHttpLayer } from "../src/registry/registry-http.js";
+import { cliBuild } from "../src/build-info.js";
+import { RegistryHttp, registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { authLoginCommand } from "../src/handlers/auth/login.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -795,3 +796,25 @@ describe("CLI authentication journey", () => {
     }).pipe(Effect.provide(skitLayer)),
   );
 });
+
+it.effect("attaches artifact identity to Registry requests", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const registry = yield* RegistryHttp;
+      const client = yield* registry.client;
+      yield* client.get("https://registry.test/identity");
+    }),
+  ).pipe(
+    Effect.provide(
+      registryHttpLayer(
+        testHttpClientLayer((request) => {
+          expect(request.headers["user-agent"]).toBe(`skit/${cliBuild.version}`);
+          expect(request.headers["skit-client"]).toBe(
+            `skit/${cliBuild.version}; kind=${cliBuild.kind}`,
+          );
+          return Effect.succeed(new Response("{}"));
+        }),
+      ),
+    ),
+  ),
+);

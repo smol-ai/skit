@@ -1,4 +1,3 @@
-import { BuildInfo } from "../build-info.js";
 import { Schema } from "effect";
 import { Digest, HarnessName } from "../library/store/state-schema.js";
 import {
@@ -45,7 +44,8 @@ export type Release = typeof releaseSchema.Type;
 
 export const serverDiscoverySchema = Schema.Struct({
   schema: Schema.Literal("skit.server.v1"),
-  build: Schema.optionalKey(BuildInfo),
+  // Diagnostic metadata must not prevent discovery of future server builds.
+  build: Schema.optionalKey(Schema.Unknown),
   authorSkits: Schema.optionalKey(Schema.String),
   skit: Schema.optionalKey(Schema.String),
   createDraft: Schema.optionalKey(Schema.String),

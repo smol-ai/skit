@@ -1,10 +1,15 @@
 import { Clock, Config, Context, Effect, FileSystem, Layer, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { gt, prerelease, valid } from "semver";
 import { BuildInfo } from "@smolai/skit-core";
+
+class UpdateCheckTimedOut extends Schema.TaggedError<UpdateCheckTimedOut>()(
+  "UpdateCheckTimedOut",
+  {},
+) {}
 
 const DAY = 86_400_000;
 export const DistTags = Schema.Record(Schema.String, Schema.String);
@@ -136,6 +141,17 @@ export const releaseCheckerLayer = Layer.effect(
       const cache = yield* read;
       if (!fresh && cache && cache.attemptedAt <= now && now - cache.attemptedAt < DAY)
         return { cache, now, reason: undefined };
+      // Passive checks require writable persistence; otherwise every invocation would
+      // repeat the network delay and notice. Explicit checks remain available.
+      if (!fresh) {
+        const writable = yield* write(
+          cache ?? { schema: "skit.release-cache.v1", source, attemptedAt: now - DAY, tags: {} },
+        ).pipe(
+          Effect.as(true),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+        if (!writable) return { cache: undefined, now, reason: "Update cache is not writable." };
+      }
       const fetched = yield* Effect.scoped(
         http
           .get(source)
@@ -146,7 +162,7 @@ export const releaseCheckerLayer = Layer.effect(
       ).pipe(
         Effect.timeoutOrElse({
           duration: "1500 millis",
-          orElse: () => Effect.fail(new Error("Update check timed out.")),
+          orElse: () => Effect.fail(new UpdateCheckTimedOut()),
         }),
         Effect.map((tags) => ({ tags, reason: undefined })),
         Effect.catch((error) => Effect.succeed({ tags: undefined, reason: String(error) })),
@@ -202,12 +218,20 @@ export const releaseCheckerLayer = Layer.effect(
           now - cache.notifiedAt < DAY
         )
           return undefined;
-        if (cache)
-          yield* write({ ...cache, notifiedVersion: checked.available, notifiedAt: now }).pipe(
-            Effect.ignore,
-          );
+        if (!cache) return undefined;
+        const saved = yield* write({
+          ...cache,
+          notifiedVersion: checked.available,
+          notifiedAt: now,
+        }).pipe(
+          Effect.as(true),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+        if (!saved) return undefined;
         return checked;
       }),
     });
   }),
 );
+
+export const releaseCheckerLive = releaseCheckerLayer.pipe(Layer.provide(FetchHttpClient.layer));

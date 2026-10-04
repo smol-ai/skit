@@ -12,6 +12,8 @@ const cleanEnvironment = (cache) => ({
     ),
   ),
   npm_config_cache: cache,
+  XDG_STATE_HOME: join(cache, "state"),
+  SKIT_NPM_REGISTRY: "http://127.0.0.1:1",
 });
 
 test("the packed CLI installs and runs without workspace dependencies", () => {

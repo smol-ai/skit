@@ -1,8 +1,6 @@
-import { FetchHttpClient } from "effect/unstable/http";
-import { Layer } from "effect";
 import { Effect } from "effect";
 import { cliBuild } from "../build-info.js";
-import { ReleaseChecker, releaseCheckerLayer } from "../releases/checker.js";
+import { ReleaseChecker, releaseCheckerLive } from "../releases/checker.js";
 import { Command } from "effect/unstable/cli";
 import { handleReadOnlyCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
@@ -10,8 +8,6 @@ import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag } from "../commands/parameters.js";
 import { Renderer } from "../presentation/renderer.js";
 import { result } from "./contracts.js";
-
-export const versionCommand = () => Effect.succeed(cliBuild.version);
 
 export const versionCliCommand = Command.make("version", { json: jsonFlag }, () =>
   handleReadOnlyCommand(
@@ -26,13 +22,13 @@ export const versionCliCommand = Command.make("version", { json: jsonFlag }, () 
           update,
         }),
       );
-    }).pipe(Effect.provide(releaseCheckerLayer.pipe(Layer.provide(FetchHttpClient.layer)))),
+    }).pipe(Effect.provide(releaseCheckerLive)),
   ),
 ).pipe(
   Command.withDescription("Show build details and check npm for an upgrade."),
   Command.withExamples([{ command: "skit version" }]),
   Command.annotate(CommandMetadata, {
-    outputSchemas: [outputContracts.version, outputContracts.versionReport],
+    outputSchemas: [outputContracts.versionReport],
     exitCodes: [0],
     interactive: false,
   }),

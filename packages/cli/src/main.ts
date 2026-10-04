@@ -1,5 +1,4 @@
-import { FetchHttpClient } from "effect/unstable/http";
-import { Layer } from "effect";
+import { passiveCheckEnabled } from "./releases/policy.js";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { LibraryActor } from "@smolai/skit-core";
 import { Effect, Fiber, Runtime } from "effect";
@@ -10,19 +9,19 @@ import { runCommandTree } from "./commands/runtime.js";
 import { consoleRendererLayer } from "./presentation/renderer.js";
 
 import { cliBuild } from "./build-info.js";
-import { ReleaseChecker, releaseCheckerLayer } from "./releases/checker.js";
+import { ReleaseChecker, releaseCheckerLive } from "./releases/checker.js";
 import { Renderer } from "./presentation/renderer.js";
 
 const argv = process.argv.slice(2);
 const json = jsonRequested(argv);
 const command = runCommandTree(skitCommand, argv, cliBuild.version);
-const passive =
-  cliBuild.kind === "release" &&
-  process.stderr.isTTY &&
-  !json &&
-  !process.env.CI &&
-  !process.env.SKIT_NO_UPDATE_CHECK &&
-  !argv.some((arg) => ["version", "--version", "-v", "--help", "-h"].includes(arg));
+const passive = passiveCheckEnabled(cliBuild, {
+  tty: process.stderr.isTTY === true,
+  json,
+  ci: Boolean(process.env.CI),
+  disabled: Boolean(process.env.SKIT_NO_UPDATE_CHECK),
+  argv,
+});
 const program = (
   passive
     ? Effect.scoped(
@@ -39,7 +38,7 @@ const program = (
             );
           }
         }),
-      ).pipe(Effect.provide(releaseCheckerLayer.pipe(Layer.provide(FetchHttpClient.layer))))
+      ).pipe(Effect.provide(releaseCheckerLive))
     : command
 ).pipe(
   Effect.provideService(LibraryActor, commandActor(skitCommand, argv)),

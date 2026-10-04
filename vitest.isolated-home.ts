@@ -11,3 +11,6 @@ process.env.HOME = home;
 process.env.XDG_CONFIG_HOME = join(home, ".config");
 delete process.env.CODEX_HOME;
 delete process.env.SKIT_HOME;
+
+process.env.XDG_STATE_HOME = join(home, ".local", "state");
+process.env.SKIT_NPM_REGISTRY = "http://127.0.0.1:1";

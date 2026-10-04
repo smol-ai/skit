@@ -2284,7 +2284,6 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.version.v1",
         "skit.version.v2"
       ],
       "exitCodes": [
