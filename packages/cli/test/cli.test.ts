@@ -263,9 +263,13 @@ describe("CLI contracts", () => {
     expect(expected).toMatch(
       /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/,
     );
-    expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.version.v1",
-      data: { version: expected },
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      schema: "skit.version.v2",
+      data: {
+        version: expected,
+        build: { version: expected, kind: "dev" },
+        update: { status: expect.any(String) },
+      },
     });
     expect(result.stderr).toBe("");
   });

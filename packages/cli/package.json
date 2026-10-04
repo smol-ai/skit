@@ -1,6 +1,6 @@
 {
   "name": "@smolai/skit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Install, manage, author, and publish agent skills.",
   "license": "MIT",
   "repository": {
@@ -43,10 +43,12 @@
     "@effect/vitest": "4.0.0-rc.112",
     "@smolai/skit-core": "workspace:*",
     "@types/node": "24.10.1",
+    "@types/semver": "^7.8.0",
     "effect": "4.0.0-rc.112",
     "esbuild": "0.28.1",
     "jsonc-parser": "3.3.1",
     "picocolors": "^1.1.1",
+    "semver": "7.8.5",
     "slice-ansi": "7.1.2",
     "string-width": "7.2.0",
     "vitest": "4.1.10",

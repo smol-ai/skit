@@ -1,3 +1,4 @@
+import { serverBuild } from "./build-info.js";
 import {
   serverDiscoverySchema,
   type ServerDiscovery as ServerDiscoveryDocument,
@@ -16,6 +17,7 @@ export interface ServerCapabilities {
 export const makeServerDiscovery = (capabilities: ServerCapabilities) =>
   serverDiscoverySchema.make({
     schema: "skit.server.v1",
+    build: serverBuild,
     download: "/api/skits/{owner}/{slug}/releases/{version}/download",
     scopes: [
       ...(capabilities.library ? ["library:sync"] : []),

@@ -11,6 +11,7 @@ describe("Health", () => {
       expect(encoded).toEqual({
         schema: "skit.server.health.v1",
         status: "ok",
+        build: { kind: "dev", version: "0.0.0-dev" },
       });
     }),
   );

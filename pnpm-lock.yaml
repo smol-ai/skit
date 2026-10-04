@@ -38,6 +38,9 @@ importers:
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       effect:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
@@ -50,6 +53,9 @@ importers:
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
       slice-ansi:
         specifier: 7.1.2
         version: 7.1.2
@@ -1677,6 +1683,9 @@ packages:
 
   '@types/node@24.10.1':
     resolution: {integrity: sha512-GNWcUTRBgIRJD5zj+Tq0fKOJ5XZajIiBroOF0yvj2bSU1WvNdYS/dn9UxwsujGW4JX06dnHyjV2y9rRaybH0iQ==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -3676,6 +3685,8 @@ snapshots:
   '@types/node@24.10.1':
     dependencies:
       undici-types: 7.16.0
+
+  '@types/semver@7.8.0': {}
 
   '@types/ws@8.18.1':
     dependencies:

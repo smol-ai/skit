@@ -44,6 +44,8 @@ export type Release = typeof releaseSchema.Type;
 
 export const serverDiscoverySchema = Schema.Struct({
   schema: Schema.Literal("skit.server.v1"),
+  // Diagnostic metadata must not prevent discovery of future server builds.
+  build: Schema.optionalKey(Schema.Unknown),
   authorSkits: Schema.optionalKey(Schema.String),
   skit: Schema.optionalKey(Schema.String),
   createDraft: Schema.optionalKey(Schema.String),

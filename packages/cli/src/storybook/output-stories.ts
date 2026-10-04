@@ -63,6 +63,16 @@ const emptyAssessment = {
 };
 
 export const outputStories: ReadonlyArray<OutputStory> = [
+  resultStory("version", "build-report", outputContracts.versionReport, {
+    version: "0.2.0",
+    build: { kind: "release", version: "0.2.0", commit: "0123456789abcdef" },
+    update: {
+      status: "current",
+      channel: "latest",
+      source: "https://registry.npmjs.org/-/package/@smolai/skit/dist-tags",
+      available: "0.2.0",
+    },
+  }),
   resultStory("version", "current", outputContracts.version, { version: "0.1.0" }),
   resultStory("library-history", "change", outputContracts.libraryHistory, {
     events: [

@@ -1,3 +1,4 @@
+import { serverBuild } from "../src/build-info.js";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -18,6 +19,7 @@ describe("server discovery", () => {
   it("represents a release-download-only server without write capabilities", () => {
     expect(makeServerDiscovery({})).toEqual({
       schema: "skit.server.v1",
+      build: serverBuild,
       download: "/api/skits/{owner}/{slug}/releases/{version}/download",
       scopes: [],
     });

@@ -1,3 +1,4 @@
+import { buildInfo } from "../../../scripts/build-info.mjs";
 import { build } from "esbuild";
 import { builtinModules } from "node:module";
 import { readFile } from "node:fs/promises";
@@ -17,7 +18,7 @@ const result = await build({
     "jsonc-parser": jsoncParserEsm,
   },
   define: {
-    __SKIT_VERSION__: JSON.stringify(packageMetadata.version),
+    __SKIT_BUILD__: JSON.stringify(buildInfo(packageMetadata)),
   },
   legalComments: "external",
   metafile: true,

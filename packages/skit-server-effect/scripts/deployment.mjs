@@ -1,3 +1,5 @@
+import { buildInfo } from "../../../scripts/build-info.mjs";
+import { buildEnvironment, describeBuild } from "./build.mjs";
 import { randomBytes } from "node:crypto";
 import { access, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -217,8 +219,8 @@ export const setupPlan = ({ databaseName, bucketName }) => ({
       "SKIT_BLOBS",
       "--update-config",
     ],
-    ["wrangler", "d1", "migrations", "apply", "DB", "--remote"],
     ["pnpm", "build"],
+    ["wrangler", "d1", "migrations", "apply", "DB", "--remote"],
     ["wrangler", "deploy", "--secrets-file", "<temporary-secret-file>"],
   ],
 });
@@ -314,15 +316,27 @@ const runWrangler = (args, options = {}) => {
     throw new Error(`wrangler ${args.join(" ")} failed with exit code ${result.status}`);
 };
 
-const buildDeployment = (configuration) => {
+const buildDeployment = async (configuration) => {
+  const environment = buildEnvironment(process.env);
+  const metadata = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  const build = { ...buildInfo(metadata, environment), buildId: environment.FOLDKIT_BUILD_ID };
   const result = spawnSync("pnpm", ["build"], {
     cwd: packageRoot,
     stdio: "inherit",
-    env: { ...process.env, CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath },
+    env: { ...environment, CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath },
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`pnpm build failed with exit code ${result.status}`);
-  return join(packageRoot, "web", "dist", configuration.name.replaceAll("-", "_"), "wrangler.json");
+  return {
+    configPath: join(
+      packageRoot,
+      "web",
+      "dist",
+      configuration.name.replaceAll("-", "_"),
+      "wrangler.json",
+    ),
+    build,
+  };
 };
 
 const inspectWrangler = (args, { withConfig = true } = {}) => {
@@ -429,15 +443,26 @@ const findBucket = (name) => {
   return lookup === "exists";
 };
 
-const deploy = async ({ installSecret = false, expectedOrigin } = {}) => {
-  const currentConfiguration = await readConfiguration();
+export const deploy = async (
+  { installSecret = false, expectedOrigin } = {},
+  {
+    read = readConfiguration,
+    write = writeConfiguration,
+    build = buildDeployment,
+    run = runWrangler,
+    log = console.log,
+  } = {},
+) => {
+  const currentConfiguration = await read();
   const configuration = withApplicationHosting(currentConfiguration);
   if (JSON.stringify(configuration) !== JSON.stringify(currentConfiguration))
-    await writeConfiguration(configuration);
-  runWrangler(["d1", "migrations", "apply", "DB", "--remote"]);
-  const deploymentConfigPath = buildDeployment(configuration);
+    await write(configuration);
+  const deployment = await build(configuration);
+  const deploymentConfigPath = deployment.configPath;
+  run(["d1", "migrations", "apply", "DB", "--remote"]);
   if (!installSecret) {
-    runWrangler(["deploy"], { configPath: deploymentConfigPath });
+    run(["deploy"], { configPath: deploymentConfigPath });
+    log(`Deployed SKIT server ${describeBuild(deployment.build)}`);
     return;
   }
 
@@ -448,13 +473,14 @@ const deploy = async ({ installSecret = false, expectedOrigin } = {}) => {
     await writeFile(secretFile, `BETTER_AUTH_SECRET=${randomBytes(32).toString("base64url")}\n`, {
       mode: 0o600,
     });
-    runWrangler(["deploy", "--secrets-file", secretFile], {
+    run(["deploy", "--secrets-file", secretFile], {
       configPath: deploymentConfigPath,
       env: { WRANGLER_OUTPUT_FILE_PATH: outputFile },
     });
     const targets = deployTargets(await readFile(outputFile, "utf8"));
     if (expectedOrigin && !targets.includes(expectedOrigin))
       throw new Error(`Wrangler deployed unexpected target(s): ${targets.join(", ") || "none"}`);
+    log(`Deployed SKIT server ${describeBuild(deployment.build)}`);
     return targets;
   } finally {
     await rm(secretDirectory, { recursive: true, force: true });

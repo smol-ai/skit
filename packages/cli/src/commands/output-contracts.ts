@@ -1,3 +1,4 @@
+import { VersionReport } from "../releases/checker.js";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
@@ -52,6 +53,7 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
+  versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(
     "skit.init.v1",
