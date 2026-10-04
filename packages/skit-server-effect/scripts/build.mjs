@@ -24,3 +24,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 1;
   }
 }
+
+export const describeBuild = (build) =>
+  [
+    `${build.version} (${build.kind})`,
+    `commit ${build.commit ?? "unknown"}`,
+    ...(build.buildId ? [`build ${build.buildId}`] : []),
+  ].join(" · ");

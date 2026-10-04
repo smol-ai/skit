@@ -155,6 +155,68 @@ authority with its own origin, accounts, namespaces, data, and credentials.
 The CLI does not silently substitute one Registry for another. Authenticate against the
 intended origin with `skit auth login <origin>` and configure aliases/defaults explicitly.
 
+## Releases and upgrades
+
+A server release is an immutable Git tag, `@smolai/skit-server-effect@<version>`,
+matching this package’s version on a validated commit. The server is deployed from
+source; no server npm package is required. The hosted Registry uses the same
+upgrade procedure as a self-hosted Registry.
+
+From your existing configured checkout, choose a released server tag:
+
+```sh
+git fetch origin --tags
+git tag --list '@smolai/skit-server-effect@*'
+git switch --detach '@smolai/skit-server-effect@X.Y.Z'
+pnpm install --frozen-lockfile
+SKIT_RELEASE=1 pnpm --filter @smolai/skit-server-effect deploy
+```
+
+Replace `X.Y.Z` with the selected release version. Release builds require a clean
+working tree and the matching server tag at HEAD. Local `wrangler.jsonc` is
+Git-ignored and survives checkout; secrets remain in Cloudflare. Keep using your
+existing resource bindings. `deploy:setup` provisions resources and installs an
+authentication secret; use ordinary `deploy` when upgrading an existing Registry.
+
+Deployment builds the configured Worker and assets first, then applies D1
+migrations, then deploys. A build failure leaves the remote database untouched.
+Successful deployment prints the artifact’s version, kind, commit, and build ID.
+This reports the artifact submitted to Wrangler; verify the running server:
+
+```sh
+curl --fail https://your-registry.example/health
+```
+
+For authenticated readiness and identity verification, export `SKIT_SERVER_URL`
+and your operator’s `SKIT_SESSION_COOKIE`, then run:
+
+```sh
+SKIT_EXPECTED_SERVER_VERSION=X.Y.Z \
+SKIT_EXPECTED_SERVER_COMMIT="$(git rev-parse HEAD)" \
+pnpm --filter @smolai/skit-server-effect verify:deployment
+```
+
+Verification prints the running build and fails if its version or commit differs
+from the requested values. Without expectations it still reports liveness, build
+identity, and operator readiness. Git tags identify available releases; `/health`
+and discovery identify the running release. There is no automatic server update
+check or updater.
+
+### Migration and rollback contract
+
+Release migrations must be expand-only relative to the previous supported
+release: preserve the schema and behavior the previous Worker needs. The old
+Worker continues serving while migrations run and until the new Worker deploys.
+Adding a schema element is insufficient if its constraints break old writes.
+
+A code rollback redeploys the older tag against the already migrated database.
+It does **not** reverse migrations. Validate that combination before relying on
+it; if migration succeeds but deployment fails, the old Worker remains against
+the new schema. The current readiness check requires the applied migration list
+to exactly match the running build’s list, so an older build can report not-ready
+after rollback even if its operations remain compatible. Database restore is a
+separate recovery operation.
+
 ## Development and verification
 
 ```sh

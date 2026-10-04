@@ -12,7 +12,7 @@
     "generate:migrations": "node scripts/generate-migration-manifest.mjs",
     "test": "pnpm test:deployment && vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:deployment": "node scripts/generate-migration-manifest.mjs --check && node --test scripts/deployment.test.mjs",
+    "test:deployment": "node scripts/generate-migration-manifest.mjs --check && node --test scripts/deployment.test.mjs scripts/verify-deployment.test.mjs",
     "typecheck": "node scripts/generate-migration-manifest.mjs --check && tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
     "types:generate": "wrangler types --config wrangler.example.jsonc",
     "types:check": "wrangler types --check --config wrangler.example.jsonc",

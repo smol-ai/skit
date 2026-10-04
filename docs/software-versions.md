@@ -55,3 +55,11 @@ point at prereleases during initial publication; clients handle both safely.
 There is no self-updater or version-floor enforcement yet. API payload schema
 validation continues to establish wire compatibility independently of software
 release versions. CLI and server releases can advance independently.
+
+## Server releases
+
+Server upgrades use a tagged source checkout and the existing deployment command,
+with independent `@smolai/skit-server-effect@<version>` tags. See the
+[server upgrade procedure](../packages/skit-server-effect/README.md#releases-and-upgrades)
+for identity verification, configuration preservation, and migration constraints.
+No server npm package or automated server release workflow is needed.
