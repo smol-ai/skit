@@ -1,3 +1,4 @@
+export * from "./build-info.js";
 // Runtime-agnostic contracts and Artifact behavior required by Registry consumer capabilities.
 export * from "./distribution/api-contracts.js";
 export * from "./library/library-contracts.js";

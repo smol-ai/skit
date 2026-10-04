@@ -1,3 +1,4 @@
+import { serverBuild } from "../src/build-info.js";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpServer } from "effect/unstable/http";
@@ -17,6 +18,7 @@ layer(handlers)("SystemApi", (it) => {
       expect(yield* client.system.health()).toEqual({
         schema: "skit.server.health.v1",
         status: "ok",
+        build: serverBuild,
       });
       expect(yield* client.system.agentSkillsDiscovery()).toEqual(serverDiscovery);
       expect(yield* client.system.skitDiscovery()).toEqual(serverDiscovery);

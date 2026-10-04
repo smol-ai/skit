@@ -1,20 +1,11 @@
 import { assert, it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
-import { Effect, FileSystem } from "effect";
-import { join } from "node:path";
+import { Effect } from "effect";
 import { versionCommand } from "../src/handlers/version.js";
+import { cliBuild } from "../src/build-info.js";
 
-it.effect("decodes version metadata through Effect Schema", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-version-" });
-      const path = join(root, "package.json");
-      yield* fs.writeFileString(path, '{"version":"1.2.3"}');
-      assert.strictEqual(yield* versionCommand([path]), "1.2.3");
-      yield* fs.writeFileString(path, "{}");
-      const failure = yield* versionCommand([path]).pipe(Effect.flip);
-      assert.strictEqual(failure._tag, "PackageMetadataUnavailable");
-    }),
-  ).pipe(Effect.provide(skitLayer)),
+it.effect("uses the same artifact identity as --version without filesystem access", () =>
+  Effect.gen(function* () {
+    assert.strictEqual(yield* versionCommand(), cliBuild.version);
+    assert.strictEqual(cliBuild.kind, "dev");
+  }),
 );

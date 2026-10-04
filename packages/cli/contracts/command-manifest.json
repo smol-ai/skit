@@ -2279,12 +2279,13 @@
         "version"
       ],
       "stability": "stable",
-      "summary": "Print the installed CLI version.",
+      "summary": "Show build details and check npm for an upgrade.",
       "effects": {
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.version.v1"
+        "skit.version.v1",
+        "skit.version.v2"
       ],
       "exitCodes": [
         0

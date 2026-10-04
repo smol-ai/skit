@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { buildInfo } from "../../scripts/build-info.mjs";
 import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { foldkit } from "@foldkit/vite-plugin";
@@ -15,6 +17,12 @@ export default defineConfig(({ command }) => {
   if (command === "build" && buildId === undefined)
     throw new Error("FOLDKIT_BUILD_ID is required; run the package build script");
   return {
+    define: {
+      __SKIT_SERVER_BUILD__: JSON.stringify({
+        ...buildInfo(createRequire(import.meta.url)("./package.json")),
+        ...(buildId ? { buildId } : {}),
+      }),
+    },
     root: fileURLToPath(new URL("./web", import.meta.url)),
     plugins: [
       tailwindcss(),

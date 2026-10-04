@@ -864,6 +864,22 @@ function renderSetup(data: ContractDataForId<"skit.setup.v5">): string {
 }
 
 const contractPresenters: ContractPresenters = {
+  [outputContracts.versionReport.id]: (data) =>
+    [
+      `${data.version} (${data.build.kind})`,
+      ...(data.build.commit ? [`Commit: ${data.build.commit}`] : []),
+      data.update.status === "update-available"
+        ? `Update available: ${data.update.available}\n${data.update.upgrade}`
+        : data.update.status === "check-unavailable"
+          ? "Update check unavailable."
+          : data.update.status === "development-build"
+            ? "Development build; release versions are not compared."
+            : data.update.status === "channel-unavailable"
+              ? `No usable release on ${data.update.channel}.`
+              : data.update.status === "ahead"
+                ? `Ahead of ${data.update.channel} (${data.update.available}).`
+                : `Up to date on ${data.update.channel}.`,
+    ].join("\n"),
   [outputContracts.version.id]: (data) => data.version,
   [outputContracts.init.id]: renderAuthorInit,
   [outputContracts.authorInvocation.id]: renderAuthorInvocation,

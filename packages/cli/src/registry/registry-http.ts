@@ -1,5 +1,11 @@
+import { cliBuild } from "../build-info.js";
 import { Context, Data, Effect, Layer, Predicate, Scope } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientError } from "effect/unstable/http";
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+} from "effect/unstable/http";
 
 export class RegistryTransportError extends Data.TaggedError("RegistryTransportError")<{
   cause: Error;
@@ -43,7 +49,17 @@ export function registryHttpLayer(
     Effect.gen(function* () {
       // Use Effect's transport, request model and cancellation machinery. No status filtering or
       // retries: workflows interpret Registry statuses, and a write must never be retried implicitly.
-      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient).pipe(
+        HttpClient.mapRequest((request) =>
+          request.pipe(
+            HttpClientRequest.setHeader("user-agent", `skit/${cliBuild.version}`),
+            HttpClientRequest.setHeader(
+              "skit-client",
+              `skit/${cliBuild.version}; kind=${cliBuild.kind}`,
+            ),
+          ),
+        ),
+      );
       return RegistryHttp.of({
         client: Effect.gen(function* () {
           const scope = yield* Effect.scope;

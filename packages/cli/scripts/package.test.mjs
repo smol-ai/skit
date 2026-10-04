@@ -70,7 +70,17 @@ test("the packed CLI installs and runs without workspace dependencies", () => {
       encoding: "utf8",
       env: cleanEnvironment(join(root, "runtime-npm-cache")),
     });
-    assert.deepEqual(JSON.parse(output), {
+    const report = JSON.parse(output);
+    assert.equal(report.schema, "skit.version.v2");
+    assert.equal(report.data.version, packed.version);
+    assert.equal(report.data.build.version, packed.version);
+    assert.equal(report.data.build.kind, "dev");
+    const local = execFileSync(process.execPath, [installedEntrypoint, "--version", "--json"], {
+      cwd: root,
+      encoding: "utf8",
+      env: cleanEnvironment(join(root, "runtime-npm-cache")),
+    });
+    assert.deepEqual(JSON.parse(local), {
       schema: "skit.version.v1",
       data: { version: packed.version },
     });

@@ -1,0 +1,129 @@
+{
+  "$id": "skit.version.v2",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "build": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "release"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commit": {
+              "type": "string",
+              "minLength": 1
+            },
+            "buildId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "commit"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "dev"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commit": {
+              "type": "string",
+              "minLength": 1
+            },
+            "buildId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "version"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "update": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "current",
+            "update-available",
+            "ahead",
+            "channel-unavailable",
+            "check-unavailable",
+            "development-build"
+          ]
+        },
+        "channel": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "available": {
+          "type": "string"
+        },
+        "checkedAt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "Infinity",
+                "-Infinity",
+                "NaN"
+              ]
+            }
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "upgrade": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "channel",
+        "source"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "version",
+    "build",
+    "update"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
