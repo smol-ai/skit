@@ -1,3 +1,4 @@
+import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
 type SyncData = ContractDataForId<"skit.library.sync.v7">;
@@ -13,22 +14,24 @@ const skillLine = (marker: string, names: readonly string[]) =>
           : `        ${marker} ${names.length} Skills`,
       ];
 
-export function renderLibrarySyncPlan(plan: SyncPlan): string {
+export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false)): string {
+  const markerFor = (action: "add" | "update" | "remove") =>
+    ({ add: color.green("+"), update: color.yellow("~"), remove: color.red("-") })[action];
   // Collections that differ only in fetch records change nothing a person chose or uses.
   const shown = (changes: SyncPlan["local"]) =>
     changes.filter((change) => change.kind !== "collection" || !change.evidence_only);
-  const lines = ["Library sync plan"];
+  const lines = [color.bold("Library sync plan")];
   for (const [title, changes] of [
     ["This device", shown(plan.local)],
     ["Remote Library", shown(plan.remote)],
   ] as const) {
-    lines.push("", title);
-    if (changes.length === 0) lines.push("  No changes.");
+    lines.push("", color.cyan(color.bold(title)));
+    if (changes.length === 0) lines.push(color.dim("  No changes."));
     const collections = changes.filter((change) => change.kind === "collection");
     const bindings = changes.filter((change) => change.kind === "binding");
     if (collections.length) lines.push("  Collections");
     for (const change of collections) {
-      const marker = { add: "+", update: "~", remove: "-" }[change.action];
+      const marker = markerFor(change.action);
       const identity =
         change.label_before && change.label_after && change.label_before !== change.label_after
           ? `${change.label_before} → ${change.label_after}`
@@ -36,9 +39,9 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
       lines.push(`    ${marker} ${identity}`);
       if (change.action === "update")
         lines.push(
-          ...skillLine("+", change.skills_added),
-          ...skillLine("~", change.skills_changed),
-          ...skillLine("-", change.skills_removed),
+          ...skillLine(markerFor("add"), change.skills_added),
+          ...skillLine(markerFor("update"), change.skills_changed),
+          ...skillLine(markerFor("remove"), change.skills_removed),
         );
       else if (change.action === "add")
         lines.push(
@@ -47,10 +50,12 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
     }
     if (bindings.length) lines.push("  Bindings");
     for (const change of bindings) {
-      const marker = { add: "+", update: "~", remove: "-" }[change.action];
+      const marker = markerFor(change.action);
       lines.push(`    ${marker} Enabled Skills`);
-      for (const entry of change.entries_added) lines.push(`        + ${entry.label}`);
-      for (const entry of change.entries_removed) lines.push(`        - ${entry.label}`);
+      for (const entry of change.entries_added)
+        lines.push(`        ${markerFor("add")} ${entry.label}`);
+      for (const entry of change.entries_removed)
+        lines.push(`        ${markerFor("remove")} ${entry.label}`);
     }
   }
   const changes = [...shown(plan.local), ...shown(plan.remote)];
@@ -62,7 +67,7 @@ export function renderLibrarySyncPlan(plan: SyncPlan): string {
   return lines.join("\n");
 }
 
-export function renderLibrarySync(data: SyncData): string {
+export function renderLibrarySync(data: SyncData, color = createColors(false)): string {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
   // What syncing did to this device, when it did anything worth knowing.
   const notes = [
@@ -77,12 +82,12 @@ export function renderLibrarySync(data: SyncData): string {
   ];
   const withNotes = (message: string) =>
     notes.length ? `${message}\n\n${notes.join("\n")}` : message;
-  const plan = data.plan ? `${renderLibrarySyncPlan(data.plan)}\n\n` : "";
+  const plan = data.plan ? `${renderLibrarySyncPlan(data.plan, color)}\n\n` : "";
   const unapplied = (command: string) =>
     `${plan}${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
   switch (data.status) {
     case "clean":
-      return withNotes("Library is already in sync.");
+      return withNotes(color.green("Library is already in sync."));
     case "push_ready":
     case "pull_ready":
     case "merge_ready":
@@ -93,7 +98,7 @@ export function renderLibrarySync(data: SyncData): string {
     case "pulled":
     case "merged":
     case "upgraded":
-      return withNotes("Library synced.");
+      return withNotes(color.green("Library synced."));
     case "upgrade_ready":
       return "The remote Library uses an older sync format. Run skit sync --apply to upgrade it.";
     case "legacy_remote_conflict":

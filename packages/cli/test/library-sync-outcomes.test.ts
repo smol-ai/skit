@@ -485,3 +485,41 @@ for (const scenario of cases)
       yield* scenario.run(yield* devices);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect(
+  "fresh-device sync reports completed transfers after the plan and before restoration",
+  () =>
+    Effect.gen(function* () {
+      const { a, b } = yield* devices;
+      yield* a.retain("first");
+      yield* a.retain("second");
+      yield* a.sync();
+      const events: string[] = [];
+      const result = yield* b.sync({
+        onPlan: () =>
+          Effect.sync(() => {
+            events.push("plan");
+          }),
+        onProgress: (message) =>
+          Effect.sync(() => {
+            events.push(message);
+          }),
+      });
+      assert.strictEqual(result.status, "pulled");
+      assert.deepStrictEqual(
+        events.filter((event) => event.startsWith("Downloading")),
+        [
+          "Downloading Skill copies · 0/2",
+          "Downloading Skill copies · 1/2",
+          "Downloading Skill copies · 2/2",
+        ],
+      );
+      assert.ok(events.indexOf("plan") < events.indexOf("Downloading Skill copies · 0/2"));
+      assert.ok(
+        events.indexOf("Downloading Skill copies · 2/2") <
+          events.indexOf("Restoring retained Skill copies"),
+      );
+      assert.strictEqual(events.at(-1), "Enabling synced Skills");
+      assert.strictEqual((yield* b.state).collections.length, 2);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

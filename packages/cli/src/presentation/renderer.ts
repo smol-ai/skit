@@ -62,9 +62,18 @@ export function consoleRenderer(json: boolean): RendererShape {
 
   const note = (body: string, title: string) => {
     const frame = renderNoteFrame(body, title, format);
-    return frame.stderr
-      ? clearStatus.pipe(Effect.andThen(write(process.stderr, frame.stderr)))
-      : Effect.void;
+    return Effect.suspend(() => {
+      if (!frame.stderr) return Effect.void;
+      const resumeStatus = statusVisible;
+      return clearStatus.pipe(
+        Effect.andThen(write(process.stderr, frame.stderr)),
+        Effect.tap(() =>
+          Effect.sync(() => {
+            statusVisible = resumeStatus;
+          }),
+        ),
+      );
+    });
   };
 
   return {

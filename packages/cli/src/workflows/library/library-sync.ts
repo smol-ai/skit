@@ -213,7 +213,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       rootFor: (target: ProjectionTarget) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
+    onProgress?: (message: string) => Effect.Effect<void>;
   }) {
+    const progress = (message: string) => options.onProgress?.(message) ?? Effect.void;
+    yield* progress("Inspecting this device’s Library");
     const store = yield* LibraryStore;
     const projectionOptions = {
       home: store.home,
@@ -227,7 +230,11 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const snapshots: SnapshotArchive[] = [];
     if (local.present) {
       manifest = yield* libraryManifestFromLocalStateEffect(local.state);
+      let verified = 0;
       for (const tree of local.state.retained_copies) {
+        yield* progress(
+          `Verifying retained copies · ${verified}/${local.state.retained_copies.length}`,
+        );
         const archive = yield* captureSnapshotArchiveEffect(
           retainedTreePath(store.originalsPath, tree.digest),
         );
@@ -240,9 +247,38 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           !snapshots.some((candidate) => candidate.digest === archive.digest)
         )
           snapshots.push(archive);
+        verified++;
       }
     }
+    yield* progress("Reading remote Library");
     const remote = yield* api.read();
+    yield* progress("Planning Library sync");
+    const downloadArchives = (digests: readonly string[], libraryId: string) =>
+      Effect.gen(function* () {
+        let completed = 0;
+        if (digests.length) yield* progress(`Downloading Skill copies · 0/${digests.length}`);
+        return yield* Effect.forEach(
+          digests,
+          (digest) =>
+            api
+              .download(libraryId, digest)
+              .pipe(
+                Effect.tap(() =>
+                  progress(`Downloading Skill copies · ${++completed}/${digests.length}`),
+                ),
+              ),
+          // Nothing is written until every archive arrives, so a failed download aborts cleanly.
+          { concurrency: 4 },
+        );
+      });
+    const uploadArchives = (archives: readonly SnapshotArchive[]) =>
+      Effect.gen(function* () {
+        for (const [index, archive] of archives.entries()) {
+          yield* progress(`Uploading Skill copies · ${index}/${archives.length}`);
+          yield* api.upload(archive);
+          yield* progress(`Uploading Skill copies · ${index + 1}/${archives.length}`);
+        }
+      });
     const ancestry = local.present ? local.state.sync_ancestry : undefined;
     const mismatched =
       ancestry !== undefined &&
@@ -296,7 +332,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         return { status: "push_ready" as const, snapshots: snapshots.length, plan };
       if (options.onPlan) yield* options.onPlan(plan);
       // The writer lock held for the whole sync keeps `local.state` the state this plan describes.
-      for (const archive of snapshots) yield* api.upload(archive);
+      yield* uploadArchives(snapshots);
+      yield* progress("Saving remote Library");
       const saved = yield* api.write(null, desired);
       const retired = yield* retireSyncProjectionsEffect(
         devicePlan,
@@ -318,6 +355,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           desired,
         ),
       );
+      yield* progress("Enabling synced Skills");
       const projections = projectionCounts(
         yield* reconcileLibraryProjections({
           ...projectionOptions,
@@ -356,12 +394,11 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         };
       if (options.onPlan) yield* options.onPlan(plan);
       const snapshotSet = new Set(remoteManifest.snapshot_digests);
-      const downloaded = yield* Effect.forEach(
+      const downloaded = yield* downloadArchives(
         required.filter((digest) => snapshotSet.has(digest)),
-        (digest) => api.download(remote.library_id, digest),
-        // Nothing is written until every archive arrives, so a failed download aborts cleanly.
-        { concurrency: 4 },
+        remote.library_id,
       );
+      yield* progress("Restoring retained Skill copies");
       const archives = yield* completeRestoreArchivesEffect(desired, downloaded, (digest) =>
         reacquireSourceArchiveEffect(desired, digest, options),
       );
@@ -372,7 +409,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       const saved = same(desired, remoteManifest)
         ? remote
         : yield* api.write(remote.revision_id, desired);
+      yield* progress("Saving this device’s Library");
       yield* store.publish(anchored(restored.state, saved.library_id, saved.revision_id, desired));
+      yield* progress("Enabling synced Skills");
       const projections = projectionCounts(
         yield* reconcileLibraryProjections({
           ...projectionOptions,
@@ -411,6 +450,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         yield* store.publish(
           anchored(local.state, remote.library_id, remote.revision_id, remoteManifest),
         );
+      if (options.apply) yield* progress("Checking enabled Skills");
       const projections = options.apply
         ? projectionCounts(
             yield* reconcileLibraryProjections({
@@ -513,12 +553,11 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         plan,
       };
     if (options.onPlan) yield* options.onPlan(plan);
-    const downloaded = yield* Effect.forEach(
+    const downloaded = yield* downloadArchives(
       missing.filter((digest) => snapshotSet.has(digest)),
-      (digest) => api.download(remote.library_id, digest),
-      // Nothing is written until every archive arrives, so a failed download aborts cleanly.
-      { concurrency: 4 },
+      remote.library_id,
     );
+    yield* progress("Restoring retained Skill copies");
     const archives = yield* completeRestoreArchivesEffect(
       merged.manifest,
       [...localArchiveByDigest.values(), ...downloaded],
@@ -530,13 +569,15 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const fresh = yield* store.inspect;
     if (!fresh.present || !same(yield* libraryManifestFromLocalStateEffect(fresh.state), manifest))
       return yield* new SyncLocalChanged();
-    for (const archive of localArchiveByDigest.values())
-      if (
-        required.includes(archive.digest) &&
-        merged.manifest.snapshot_digests.includes(archive.digest) &&
-        !remoteManifest.snapshot_digests.includes(archive.digest)
-      )
-        yield* api.upload(archive);
+    yield* uploadArchives(
+      [...localArchiveByDigest.values()].filter(
+        (archive) =>
+          required.includes(archive.digest) &&
+          merged.manifest.snapshot_digests.includes(archive.digest) &&
+          !remoteManifest.snapshot_digests.includes(archive.digest),
+      ),
+    );
+    yield* progress("Saving Library sync");
     const saved = same(merged.manifest, remoteManifest)
       ? remote
       : yield* api.write(remote.revision_id, merged.manifest);
@@ -557,6 +598,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       restored.state,
     );
     yield* store.publish(anchored(blended, saved.library_id, saved.revision_id, merged.manifest));
+    yield* progress("Enabling synced Skills");
     const projections = projectionCounts(
       yield* reconcileLibraryProjections({
         ...projectionOptions,
