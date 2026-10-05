@@ -20,7 +20,6 @@ const harness = await createTestRenderer({ width: 130, height: 40, kittyKeyboard
 const app = mountStorybook(harness.renderer, {
   animate: false,
   palette: hostPalette,
-  colorAllowed: true,
 });
 const settle = async () => {
   await harness.flush();
@@ -120,26 +119,37 @@ try {
 }
 
 for (const options of [
-  { palette: hostPalette, colorAllowed: false },
-  { palette: undefined, colorAllowed: true },
+  { palette: undefined },
+  { palette: { ...hostPalette, palette: ["#123456", null] } },
 ]) {
   const harness = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true });
   try {
     const app = mountStorybook(harness.renderer, { animate: false, ...options });
     await harness.flush();
     await app.settled();
-    assert.equal(app.state().colorAvailable, false);
+    assert.equal(app.state().color, false);
+    assert.equal(app.state().paletteSource, options.palette ? "mixed" : "fallback");
     harness.mockInput.pressKey("l", { ctrl: true });
+    await harness.flush();
+    await app.settled();
     await harness.flush();
     assert.equal(
       app.state().color,
-      false,
-      "respect terminal colour policy and incomplete palette detection",
+      true,
+      "explicit colour toggle must work with incomplete detection",
     );
+    assert.match(
+      harness.captureCharFrame(),
+      options.palette ? /mixed palette/ : /fallback palette/,
+    );
+    harness.mockInput.pressKey("l", { ctrl: true });
+    await harness.flush();
+    await app.settled();
+    assert.equal(app.state().color, false);
   } finally {
     harness.renderer.destroy();
   }
 }
 console.log(
-  "Storybook colour smoke passed: neutral default, host palette, toggle, policy, detection fallback.",
+  "Storybook colour smoke passed: neutral default, host palette, toggle, partial and missing detection.",
 );

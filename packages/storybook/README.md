@@ -26,11 +26,14 @@ workflow with an in-memory Registry and disposable Library/installation roots.
 Prompts show their recorded choices and scripted answers; playback does not ask
 for new answers. Playback timing is illustrative, not a performance measurement.
 
-Preview colour is off by default and follows the CLI terminal colour policy
-(`NO_COLOR`, `TERM=dumb`, and `FORCE_COLOR=0` disable it). When colour is enabled,
-the embedded terminal uses the detected host ANSI palette and default foreground
-and background. If detection is incomplete, colour remains unavailable; the
-neutral preview uses detected defaults or the existing storybook text/canvas colours.
+Preview colour is off by default. **Ctrl+L** explicitly enables or disables it,
+even when automatic palette detection is incomplete. This preview override does
+not change the real CLI's terminal colour policy.
+
+The embedded terminal uses detected host colours where available. Missing ANSI
+slots use OpenTUI's fallback palette; missing foreground/background colours use
+the existing storybook text/canvas colours. The header labels the palette as
+**host**, **mixed**, or **fallback** when colour is on.
 The storybook controls retain their existing UI palette.
 
 Run the terminal/key-input smoke check with `pnpm --filter @smolai/skit-storybook test:preview`.

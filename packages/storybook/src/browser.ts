@@ -24,7 +24,6 @@ import {
   CLEAR_STATUS_LINE,
   renderStatusLine,
   type RecordedJourney,
-  terminalColorEnabled,
 } from "../../cli/src/front-end";
 import { stripVTControlCharacters } from "node:util";
 import { previewPalette } from "./preview-palette";
@@ -33,7 +32,7 @@ import { catalog, filterCatalog, renderOutput, type CatalogItem } from "./model"
 
 export function mountStorybook(
   renderer: CliRenderer,
-  options: { animate?: boolean; palette?: TerminalColors; colorAllowed?: boolean } = {},
+  options: { animate?: boolean; palette?: TerminalColors } = {},
 ) {
   const colors = {
     canvas: "#09090b",
@@ -49,7 +48,6 @@ export function mountStorybook(
     foreground: colors.text,
     background: colors.canvas,
   });
-  const colorAvailable = palette.colorAvailable && (options.colorAllowed ?? terminalColorEnabled());
   let previewColor = false;
   let header: TextRenderable;
   let items: ReadonlyArray<CatalogItem> = catalog;
@@ -226,7 +224,7 @@ export function mountStorybook(
   }
 
   function updateChrome(): void {
-    header.content = ` SKIT OUTPUTS · ${items.length} stories · ${format.toUpperCase()} / ${detail.toUpperCase()} · colour ${previewColor ? "ON" : colorAvailable ? "OFF (ctrl+l)" : "UNAVAILABLE"}`;
+    header.content = ` SKIT OUTPUTS · ${items.length} stories · ${format.toUpperCase()} / ${detail.toUpperCase()} · colour ${previewColor ? `ON (${palette.source} palette)` : "OFF (ctrl+l)"}`;
     const step = playback ? ` · ${playback.index + 1}/${playback.frames.length}` : "";
     previewBox.title = ` ${transcript ? "TRANSCRIPT" : "PREVIEW"}${step} `;
     footer.content =
@@ -335,10 +333,8 @@ export function mountStorybook(
       requestPreview();
     } else if (key.ctrl && key.name === "l") {
       key.preventDefault();
-      if (colorAvailable) {
-        previewColor = !previewColor;
-        requestPreview();
-      }
+      previewColor = !previewColor;
+      requestPreview();
     } else if (key.ctrl && key.name === "d") {
       key.preventDefault();
       detail = detail === "summary" ? "full" : "summary";
@@ -397,7 +393,7 @@ export function mountStorybook(
       focus,
       transcript,
       color: previewColor,
-      colorAvailable,
+      paletteSource: palette.source,
       index: playback?.index,
       count: playback?.frames.length,
       playing: playback?.playing,
