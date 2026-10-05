@@ -152,12 +152,27 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(f
           digest,
           detail: "acquisition has no restorable source identity",
         });
+      const profiles = new Set(copy.members.map((member) => member.materialization_profile));
+      if (profiles.size !== 1)
+        return yield* new SyncSourceRestoreInvalid({
+          digest,
+          detail: "retained copy has no single materialization profile",
+        });
       const resolved = yield* resolveSkitSourceEffect(source, {
         registryBaseUrl: options.origin,
         ...(options.token === undefined ? {} : { registryToken: options.token }),
         ...(git === undefined ? {} : { git, requireGitRevision: true }),
         verbatimOnly: true,
       });
+      // Declared imports retain the whole resolved SKIT root, including shared and non-Skill files.
+      if (profiles.has("declared-skit-skill/v1")) {
+        if (resolved.descriptorKind !== "declared")
+          return yield* new SyncSourceRestoreInvalid({
+            digest,
+            detail: "declared retained copy source has no declared Descriptor",
+          });
+        return yield* captureSnapshotArchiveEffect(resolved.root);
+      }
       const prepared = yield* prepareObservedCollectionEffect(
         yield* Effect.forEach(copy.members, (member) =>
           Effect.gen(function* () {
@@ -180,7 +195,7 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(f
   if (archive.digest !== digest)
     return yield* new SyncSourceRestoreInvalid({
       digest,
-      detail: `source returned ${archive.digest}`,
+      detail: `source returned ${archive.digest}; expected ${digest}`,
     });
   return archive;
 });
