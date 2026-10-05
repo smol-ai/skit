@@ -235,3 +235,130 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual(disabled.local_bindings, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("bare disable asks before changing a global Binding spanning Collections", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-single-" });
+    const home = yield* libraryHome({ home: join(root, "home") });
+    yield* initializeLibraryMachine(home.home);
+    const source = join(root, "show-me");
+    yield* fs.makeDirectory(source);
+    yield* fs.writeFileString(join(source, "SKILL.md"), "Show the current topic visually.\n");
+    yield* home.owned(
+      writingTo(
+        home.home,
+        retainObservedIn(home.home)({
+          source: { type: "local", path: source },
+          input: source,
+          retainedAt: "2026-10-06T00:00:00.000Z",
+          skills: [
+            {
+              name: "show-me",
+              sourcePath: source,
+              relativePath: ".",
+              observedHash: yield* deterministicTreeHashEffect(source),
+            },
+          ],
+          observations: [],
+        }),
+      ),
+    );
+    const other = join(root, "effect");
+    yield* fs.makeDirectory(other);
+    yield* fs.writeFileString(join(other, "SKILL.md"), "Effect reference.\n");
+    yield* home.owned(
+      writingTo(
+        home.home,
+        retainObservedIn(home.home)({
+          source: { type: "local", path: other },
+          input: other,
+          retainedAt: "2026-10-06T00:00:00.000Z",
+          skills: [
+            {
+              name: "effect",
+              sourcePath: other,
+              relativePath: ".",
+              observedHash: yield* deterministicTreeHashEffect(other),
+            },
+          ],
+          observations: [],
+        }),
+      ),
+    );
+    const retained = yield* home.durable;
+    const state = {
+      ...retained,
+      global_bindings: [
+        {
+          scope: { kind: "global" as const },
+          entries: retained.skills.map((skill) => ({
+            kind: "skill" as const,
+            skill_id: skill.skill_id,
+          })),
+        },
+      ],
+    };
+    yield* home.owned(LibraryStore.use((store) => store.publish(state)));
+    const configuration = yield* libraryCommandConfiguration({
+      home: Option.some(home.home),
+      codexRoot: Option.none(),
+      claudeRoot: Option.none(),
+      opencodeRoot: Option.none(),
+      devinRoot: [],
+    });
+    const interaction = yield* makeScriptedInteraction(["cancel"]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        enabled: false,
+        cwd: root,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        configuration,
+      }).pipe(Effect.provide(interaction.layer)),
+    );
+    const prompts = yield* interaction.prompts;
+    assert.strictEqual(prompts.length, 1);
+    assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
+    assert.ok(prompts[0]?.choices.some((choice) => choice.hint?.includes("show-me")));
+    assert.deepStrictEqual(yield* home.durable, state);
+    assert.strictEqual((yield* interaction.results).length, 0);
+    assert.strictEqual(prompts[0]?.choices.length, 2);
+    const effectChoice = prompts[0]?.choices.find((choice) => choice.hint === "effect");
+    assert.ok(effectChoice);
+    const selection = yield* makeScriptedInteraction([effectChoice.value, ["effect"]]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        enabled: false,
+        cwd: root,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        configuration,
+      }).pipe(Effect.provide(selection.layer)),
+    );
+    const after = yield* home.durable;
+    const showMe = retained.skills.find((skill) => skill.name === "show-me");
+    assert.ok(showMe);
+    assert.deepStrictEqual(after.global_bindings[0]?.entries, [
+      { kind: "skill", skill_id: showMe.skill_id },
+    ]);
+    const single = yield* makeScriptedInteraction(["cancel"]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        enabled: false,
+        cwd: root,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        configuration,
+      }).pipe(Effect.provide(single.layer)),
+    );
+    assert.strictEqual((yield* single.prompts).length, 1);
+    assert.deepStrictEqual(yield* home.durable, after);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

@@ -156,26 +156,25 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         });
         if (skills.length === 0) return [];
         const collectionIds = [...new Set(skills.map((skill) => skill.collection_id))];
-        const collection =
-          collectionIds.length === 1 && collectionIds[0] !== undefined
-            ? state.collections.find((candidate) => candidate.collection_id === collectionIds[0])
-            : undefined;
-        const subjectId = collection?.collection_id ?? skills[0]!.skill_id;
         const location =
           binding.scope.kind === "global" ? "global" : `repository ${binding.scope.root}`;
-        return [
-          {
-            value: String(index),
-            label: `${collection?.label ?? skills.map((skill) => skill.name).join(", ")} — ${location}`,
-            hint: skills.map((skill) => skill.name).join(", "),
+        return collectionIds.map((collectionId) => {
+          const collection = state.collections.find(
+            (candidate) => candidate.collection_id === collectionId,
+          );
+          const members = skills.filter((skill) => skill.collection_id === collectionId);
+          return {
+            value: `${index}:${collectionId}`,
+            label: `${collection?.label ?? members.map((skill) => skill.name).join(", ")} — ${location}`,
+            hint: members.map((skill) => skill.name).join(", "),
             target: {
-              collectionId: subjectId,
+              collectionId,
               scope: binding.scope,
-              skillIds,
+              skillIds: members.map((skill) => skill.skill_id),
               location,
             },
-          },
-        ];
+          };
+        });
       });
     if (bindings.length === 0)
       return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
@@ -205,15 +204,12 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         targets: [target],
       })),
     ];
-    const selectedValue =
-      bindings.length === 1
-        ? bindings[0]!.value
-        : yield* prompter
-            .autocomplete(
-              "Select where to disable Skills",
-              choices.map(({ value, label, hint }) => ({ value, label, hint })),
-            )
-            .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
+    const selectedValue = yield* prompter
+      .autocomplete(
+        "Select where to disable Skills",
+        choices.map(({ value, label, hint }) => ({ value, label, hint })),
+      )
+      .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
     if (selectedValue === DONE) return;
     selectedBindings = choices.find((choice) => choice.value === selectedValue)?.targets;
     if (selectedBindings === undefined || selectedBindings.length === 0) return;
