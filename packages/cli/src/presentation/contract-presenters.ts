@@ -887,7 +887,8 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.publish.id]: (data) =>
     `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,
   [outputContracts.sync.id]: renderAuthorSync,
-  [outputContracts.librarySync.id]: renderLibrarySync,
+  [outputContracts.librarySync.id]: (data, context) =>
+    renderLibrarySync(data, createColors(context.color)),
   [outputContracts.libraryHistory.id]: (data) =>
     data.events.length
       ? data.events.map(renderLibraryHistoryEvent).join("\n")

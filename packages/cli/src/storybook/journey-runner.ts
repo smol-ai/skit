@@ -32,7 +32,7 @@ function renderEvent(
       ].join("\n"),
     PromptAnswered: ({ answer }) =>
       `answered ${Array.isArray(answer) ? answer.join(", ") : String(answer)}`,
-    Note: ({ title, body }) => `${title}\n${body}`,
+    Note: ({ title, body, renderBody }) => `${title}\n${renderBody?.(environment.color) ?? body}`,
     Step: ({ index, total, title, body }) => `Step ${index} of ${total} · ${title}\n${body}`,
     StatusStarted: ({ message }) => `${message}…`,
     StatusUpdated: ({ message }) => `${message}…`,
@@ -51,25 +51,49 @@ function renderEvent(
   return `${index + 1}. ${body}`;
 }
 
+export interface RecordedJourney {
+  readonly name: string;
+  readonly initialState: string;
+  readonly events: ReadonlyArray<Event>;
+  readonly finalState: string;
+}
+
+export const recordJourney = Effect.fn("Storybook.recordJourney")(function* <A, E, R>(
+  story: JourneyStory<A, E, R>,
+) {
+  const interaction = yield* makeScriptedInteraction(story.answers);
+  const outcome = yield* Effect.exit(story.run.pipe(Effect.provide(interaction.layer)));
+  return {
+    name: story.name,
+    initialState: story.initialState,
+    events: yield* interaction.events,
+    finalState: Exit.isSuccess(outcome)
+      ? story.finalState(outcome.value)
+      : `${story.expectedOutcome === "failure" ? "expected failure" : "failed"}: ${Cause.pretty(outcome.cause)}`,
+  };
+});
+
+export function renderRecordedJourney(
+  journey: RecordedJourney,
+  environment: TerminalEnvironment,
+  cwd: string,
+): string {
+  return [
+    `\u001b[1mjourney/${journey.name}\u001b[0m`,
+    `initial: ${journey.initialState}`,
+    "",
+    ...journey.events.map((event, index) => renderEvent(event, index, environment, cwd)),
+    "",
+    `final: ${journey.finalState}`,
+  ].join("\n");
+}
+
 export const renderJourney = Effect.fn("Storybook.renderJourney")(function* <A, E, R>(
   story: JourneyStory<A, E, R>,
   environment: TerminalEnvironment,
   cwd: string,
 ) {
-  const interaction = yield* makeScriptedInteraction(story.answers);
-  const outcome = yield* Effect.exit(story.run.pipe(Effect.provide(interaction.layer)));
-  const events = yield* interaction.events;
-  const finalState = Exit.isSuccess(outcome)
-    ? story.finalState(outcome.value)
-    : `${story.expectedOutcome === "failure" ? "expected failure" : "failed"}: ${Cause.pretty(outcome.cause)}`;
-  return [
-    `\u001b[1mjourney/${story.name}\u001b[0m`,
-    `initial: ${story.initialState}`,
-    "",
-    ...events.map((event, index) => renderEvent(event, index, environment, cwd)),
-    "",
-    `final: ${finalState}`,
-  ].join("\n");
+  return renderRecordedJourney(yield* recordJourney(story), environment, cwd);
 });
 
 export const runJourneyStories = Effect.fn("Storybook.runJourneyStories")(function* (

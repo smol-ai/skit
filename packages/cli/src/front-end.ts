@@ -52,6 +52,17 @@ export {
   renderResultFrame,
   type TerminalEnvironment,
 } from "./presentation/output-frame.js";
-export { renderJourney } from "./storybook/journey-runner.js";
+export {
+  recordJourney,
+  renderRecordedJourney,
+  renderJourney,
+  type RecordedJourney,
+} from "./storybook/journey-runner.js";
+export { journeyFrames, renderReplayFrame, type ReplayFrame } from "./storybook/journey-replay.js";
+export {
+  STATUS_FRAME_MS,
+  CLEAR_STATUS_LINE,
+  renderStatusLine,
+} from "./presentation/terminal-status.js";
 export { journeyStories } from "./storybook/journey-stories.js";
 export { OutputStory, outputStories, outputStoryKey } from "./storybook/output-stories.js";

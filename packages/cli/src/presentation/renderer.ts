@@ -20,7 +20,11 @@ export interface RendererShape {
   readonly failure: (failure: CommandFailure) => Effect.Effect<void>;
   readonly help: (text: string) => Effect.Effect<void>;
   /** An aside during an interactive flow. Suppressed when the caller asked for JSON. */
-  readonly note: (body: string, title: string) => Effect.Effect<void>;
+  readonly note: (
+    body: string,
+    title: string,
+    options?: { readonly renderBody: (color: boolean) => string },
+  ) => Effect.Effect<void>;
   /** One numbered step of a guided flow, announced before its question. Suppressed like a note. */
   readonly step: (
     step: { readonly index: number; readonly total: number; readonly title: string },
@@ -42,8 +46,7 @@ export interface RendererShape {
 
 export class Renderer extends Context.Service<Renderer, RendererShape>()("skit/Renderer") {}
 
-const CLEAR_STATUS_LINE = "\r\u001b[2K";
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "./terminal-status.js";
 
 const write = (stream: NodeJS.WriteStream, body: string) =>
   Effect.callback<void>((resume) => {
@@ -62,9 +65,18 @@ export function consoleRenderer(json: boolean): RendererShape {
 
   const note = (body: string, title: string) => {
     const frame = renderNoteFrame(body, title, format);
-    return frame.stderr
-      ? clearStatus.pipe(Effect.andThen(write(process.stderr, frame.stderr)))
-      : Effect.void;
+    return Effect.suspend(() => {
+      if (!frame.stderr) return Effect.void;
+      const resumeStatus = statusVisible;
+      return clearStatus.pipe(
+        Effect.andThen(write(process.stderr, frame.stderr)),
+        Effect.tap(() =>
+          Effect.sync(() => {
+            statusVisible = resumeStatus;
+          }),
+        ),
+      );
+    });
   };
 
   return {
@@ -87,7 +99,8 @@ export function consoleRenderer(json: boolean): RendererShape {
         process.exitCode = frame.exitCode;
       }),
     help: (text) => write(process.stdout, renderHelpFrame(text, format).stdout),
-    note: (body, title) => note(body, terminalColors().bold(title)),
+    note: (body, title, options) =>
+      note(options?.renderBody(terminalColorEnabled()) ?? body, terminalColors().bold(title)),
     step: ({ index, total, title }, body) => {
       const color = terminalColors();
       return note(body, `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`);
@@ -109,9 +122,9 @@ export function consoleRenderer(json: boolean): RendererShape {
                 Effect.suspend(() =>
                   write(
                     process.stderr,
-                    `${CLEAR_STATUS_LINE}${SPINNER_FRAMES[frame++ % SPINNER_FRAMES.length]} ${statusMessage}`,
+                    `${CLEAR_STATUS_LINE}${renderStatusLine(statusMessage, frame++)}`,
                   ),
-                ).pipe(Effect.andThen(Effect.sleep(80))),
+                ).pipe(Effect.andThen(Effect.sleep(STATUS_FRAME_MS))),
               ).pipe(Effect.forkScoped);
               return yield* operation.pipe(
                 Effect.onExit((exit) =>

@@ -162,6 +162,8 @@ export const devices = Effect.gen(function* () {
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       sync: (
         options: {
+          onProgress?: (message: string) => Effect.Effect<void>;
+          onPlan?: Parameters<typeof syncLibraryEffect>[0]["onPlan"];
           apply?: boolean;
           adopt?: boolean;
           takeRemote?: readonly string[];

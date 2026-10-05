@@ -10,6 +10,7 @@ import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
 import { NoStoredCredentials } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
+import { createColors } from "picocolors";
 import { result } from "../contracts.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 
@@ -25,21 +26,27 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   if (auth.origin === undefined) return yield* new NoStoredCredentials();
   const renderer = yield* Renderer;
   return yield* Effect.scoped(
-    syncLibraryEffect({
-      origin: auth.origin,
-      ...(auth.token === undefined ? {} : { token: auth.token }),
-      apply: options.apply,
-      adopt: options.adopt,
-      ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
-      ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
-      projection: options.projection,
-      ...(options.apply
-        ? {
-            onPlan: (plan) =>
-              renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan"),
-          }
-        : {}),
-    }),
+    renderer.withStatus(
+      "Preparing Library sync",
+      syncLibraryEffect({
+        origin: auth.origin,
+        ...(auth.token === undefined ? {} : { token: auth.token }),
+        apply: options.apply,
+        adopt: options.adopt,
+        ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+        ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
+        projection: options.projection,
+        onProgress: renderer.updateStatus,
+        ...(options.apply
+          ? {
+              onPlan: (plan) =>
+                renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
+                  renderBody: (color) => renderLibrarySyncPlan(plan, createColors(color)),
+                }),
+            }
+          : {}),
+      }),
+    ),
   );
 });
 
