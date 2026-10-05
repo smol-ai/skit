@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { ReadinessInspector } from "../readiness/service.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "./authenticated.js";

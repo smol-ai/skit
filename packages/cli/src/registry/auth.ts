@@ -1,7 +1,7 @@
 import { Clock, Effect, FileSystem, Result, Schema } from "effect";
-import { Cookies, HttpClientRequest } from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
-import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
+import { Cookies, HttpClientRequest } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
+import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import { homedir, hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { isErrno } from "../platform/errno.js";

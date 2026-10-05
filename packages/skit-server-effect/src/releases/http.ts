@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   Authentication,
   type AuthenticationService,

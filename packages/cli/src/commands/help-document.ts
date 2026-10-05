@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
-import { CliOutput, Command } from "effect/unstable/cli";
-import type { HelpDoc } from "effect/unstable/cli";
+import { CliOutput, Command } from "effect/cli";
+import type { HelpDoc } from "effect/cli";
 
 export class HelpDocumentMissing extends Schema.TaggedError<HelpDocumentMissing>()(
   "CLI.HelpDocumentMissing",

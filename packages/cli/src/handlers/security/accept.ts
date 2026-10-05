@@ -1,6 +1,6 @@
 import type { Digest } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { FindingFingerprintInvalid } from "../../audit/failures.js";
 import { MissingRequirement } from "../failures.js";
@@ -13,7 +13,7 @@ import { result } from "../contracts.js";
 
 const FindingFingerprint = Schema.TemplateLiteral([
   "sha256:",
-  Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
 ]);
 
 export interface SecurityAcceptLibrary<Review, AcceptError, AcceptServices> {
@@ -62,17 +62,17 @@ export const securityAcceptCommand = Effect.fn("CLI.securityAccept")(function* <
   });
 });
 
-const skill = Argument.string("skill");
-const finding = Flag.string("finding").pipe(
+const skill = Argument.String("skill");
+const finding = Flag.String("finding").pipe(
   Flag.withDescription("Accept this exact finding fingerprint."),
 );
-const principal = Flag.string("principal").pipe(
+const principal = Flag.String("principal").pipe(
   Flag.withDescription("Record the Principal granting acceptance."),
 );
-const rationale = Flag.string("rationale").pipe(
+const rationale = Flag.String("rationale").pipe(
   Flag.withDescription("Record why this finding is accepted."),
 );
-const expiresAt = Flag.string("expires-at").pipe(
+const expiresAt = Flag.String("expires-at").pipe(
   Flag.withDescription("Expire acceptance at this canonical ISO instant."),
   Flag.optional,
 );

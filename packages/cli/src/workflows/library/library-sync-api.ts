@@ -8,7 +8,7 @@ import {
   type SnapshotArchive,
 } from "@smolai/skit-core/universal/api";
 import { Effect, Schema } from "effect";
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { HttpApiClient } from "effect/http-api";
 import { LibraryWriteRequest } from "@smolai/skit-core/universal/consumer";
 import {
   AuthenticationRequired,

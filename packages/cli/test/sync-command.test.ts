@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { LibraryStore, skitLayer } from "@smolai/skit-core";
 import { Effect, Result } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 import { authorSyncCommand } from "../src/handlers/author/sync.js";
 import { librarySyncCommand } from "../src/handlers/library/sync.js";
 import { CredentialsUnusable } from "../src/registry/failures.js";

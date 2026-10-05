@@ -1,7 +1,7 @@
 import { PrincipalAuthentication, RequestDecoding } from "@smolai/skit-core/universal/api";
 import { Layer, Schema } from "effect";
-import { HttpClientError, HttpClientRequest } from "effect/unstable/http";
-import { HttpApiMiddleware } from "effect/unstable/httpapi";
+import { HttpClientError, HttpClientRequest } from "effect/http";
+import { HttpApiMiddleware } from "effect/http-api";
 
 const requestDecodingClient = HttpApiMiddleware.layerClient(RequestDecoding, ({ next, request }) =>
   next(request),

@@ -3,7 +3,7 @@
 
 import { Layer } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { TreeHasher, treeHasherLayer } from "../artifact/tree-hasher.js";
 import { linkStatLayer, LinkStat } from "./link-stat.js";
 import { sourceProcessLayer, SourceProcess } from "./source-process.js";

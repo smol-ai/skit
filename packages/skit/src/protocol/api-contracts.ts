@@ -37,20 +37,16 @@ export const apiBase64Schema = Schema.String.check(
 );
 export const apiNonEmptyString = Schema.NonEmptyString;
 export const apiSkitSlugSchema = registrySkitSlugSchema;
-export const apiSemverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+export const apiSemverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 export const semver = Schema.String.check(Schema.isPattern(apiSemverPattern));
 
 export function parseWireDescriptor(value: unknown): SkitWireDescriptor | null {
-  const result = Schema.decodeUnknownResult(skitDescriptorWireSchema, {
-    onExcessProperty: "preserve",
-  })(value);
+  const result = Schema.decodeUnknownResult(skitDescriptorWireSchema)(value);
   return Result.isSuccess(result) ? { ...result.success } : null;
 }
 export type { SkitWireDescriptor };
 export const skitValidationDiagnosticsSchema = Schema.Array(skitValidationDiagnosticSchema);
-export const skitDescriptorRequestSchema = skitDescriptorWireSchema.annotate({
-  parseOptions: { onExcessProperty: "preserve" },
-});
+export const skitDescriptorRequestSchema = skitDescriptorWireSchema;
 export const skitApiErrorSchema = Schema.Struct({
   error: apiNonEmptyString,
   request_id: Schema.optional(Schema.String),

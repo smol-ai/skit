@@ -8,6 +8,7 @@ import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
 import { writeJsonAtomicEffect, writeRawAtomicEffect } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
+  encodeLibraryState,
   CURRENT_LIBRARY_STATE_VERSION,
   LibraryState,
   libraryManifestFromLocalStateEffect,
@@ -72,9 +73,9 @@ const currentFromLegacyState = Effect.fn("Library.currentFromLegacyState")(funct
       };
     case 6:
       return migrateLibraryStateFromV6(
-        yield* Schema.decodeUnknownEffect(LibraryStateV6, { onExcessProperty: "preserve" })(
-          value,
-        ).pipe(
+        yield* Schema.decodeUnknownEffect(
+          Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryStateV6))),
+        )(value).pipe(
           Effect.mapError(
             () => new InvalidLibraryState({ path, detail: "invalid v6 Library state" }),
           ),
@@ -83,9 +84,9 @@ const currentFromLegacyState = Effect.fn("Library.currentFromLegacyState")(funct
     case 5:
       return migrateLibraryStateFromV6(
         migrateLibraryStateFromV5(
-          yield* Schema.decodeUnknownEffect(LibraryStateV5, { onExcessProperty: "preserve" })(
-            value,
-          ).pipe(
+          yield* Schema.decodeUnknownEffect(
+            Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryStateV5))),
+          )(value).pipe(
             Effect.mapError(
               () => new InvalidLibraryState({ path, detail: "invalid v5 Library state" }),
             ),
@@ -96,9 +97,9 @@ const currentFromLegacyState = Effect.fn("Library.currentFromLegacyState")(funct
       return migrateLibraryStateFromV6(
         migrateLibraryStateFromV5(
           migrateLibraryStateFromV4(
-            yield* Schema.decodeUnknownEffect(LibraryStateV4, { onExcessProperty: "preserve" })(
-              value,
-            ).pipe(
+            yield* Schema.decodeUnknownEffect(
+              Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryStateV4))),
+            )(value).pipe(
               Effect.mapError(
                 () => new InvalidLibraryState({ path, detail: "invalid v4 Library state" }),
               ),
@@ -182,9 +183,7 @@ export const publishLibraryStateEffect = Effect.fn("Library.publishState")(funct
   state: LibraryState,
 ) {
   // Encoding validates the state and serialises exactly what the loader decodes.
-  const text = yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState, { space: 2 }))(
-    state,
-  ).pipe(
+  const text = yield* encodeLibraryState(state).pipe(
     Effect.mapError(
       () => new InvalidLibraryState({ path: home, detail: "refusing invalid Library state" }),
     ),

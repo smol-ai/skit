@@ -13,10 +13,10 @@ import type { SetupRepositoryConfig } from "./setup-contract.js";
 const MACHINE_CONFIG_FILE = "machine.json";
 
 const RepositoryRelativeGlob = Schema.String.check(
-  Schema.isPattern(/^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))(?!!).+$/),
+  Schema.isPattern(/^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))(?!!).+$/u),
 );
 const RepositoryRelativeDirectory = Schema.String.check(
-  Schema.isPattern(/^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]{}!]+$/),
+  Schema.isPattern(/^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))[^*?[\]{}!]+$/u),
 );
 const RepositoryConfigHeader = Schema.fromJsonString(Schema.Struct({ schema: Schema.String }));
 const RepositoryConfigDocument = Schema.fromJsonString(

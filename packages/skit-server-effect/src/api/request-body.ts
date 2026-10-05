@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect";
-import type { HttpServerRequest } from "effect/unstable/http";
+import type { HttpServerRequest } from "effect/http";
 
 export class RequestBodyTooLarge extends Schema.TaggedError<RequestBodyTooLarge>()(
   "Http.RequestBodyTooLarge",

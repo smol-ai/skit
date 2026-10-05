@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { ServerConfiguration } from "../configuration.js";
 import { Teams } from "../teams/service.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";

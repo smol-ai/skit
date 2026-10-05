@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import {
   currentSkillVersion,
   LibraryStore,

@@ -1,7 +1,7 @@
 import { readLibrarySkillMetadata } from "../../workflows/library/skill-metadata.js";
 import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";

@@ -12,10 +12,10 @@ import {
   Stream,
   Option,
 } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { BootstrapApi } from "@smolai/skit-core/universal/api";
-import { HttpApiClient } from "effect/unstable/httpapi";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { HttpApiClient } from "effect/http-api";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { randomBytes } from "node:crypto";
 import { platform } from "node:os";
 import { resolve } from "node:path";

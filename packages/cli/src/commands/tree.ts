@@ -1,4 +1,4 @@
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { checkCliCommand } from "../handlers/library/check.js";
 import { serverBootstrapCliCommand } from "../bootstrap/server-bootstrap.js";
 import { authLogoutCliCommand } from "../handlers/auth/logout.js";

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { cliBuild } from "../build-info.js";
 import { ReleaseChecker, releaseCheckerLive } from "../releases/checker.js";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { handleReadOnlyCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";

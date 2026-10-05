@@ -12,7 +12,7 @@
 
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import { parseSkitSourceEffect, resolveSkitSourceEffect } from "../src/acquisition/sources.js";
 import { skitLayer } from "../src/platform/layer.js";

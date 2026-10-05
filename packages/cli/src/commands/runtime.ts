@@ -1,6 +1,6 @@
 import { Console, Effect } from "effect";
-import { CliError, CliOutput, Command } from "effect/unstable/cli";
-import type { HelpDoc } from "effect/unstable/cli";
+import { CliError, CliOutput, Command } from "effect/cli";
+import type { HelpDoc } from "effect/cli";
 import { InvalidArgument } from "../presentation/command-errors.js";
 import { renderCommandFailures } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";

@@ -27,28 +27,38 @@ const typeIdFilter = <const Prefix extends string>(prefix: Prefix) =>
     { message: `Expected a canonical ${prefix} TypeID` },
   );
 
-const entityId = <const Prefix extends string, const Brand extends string>(
-  prefix: Prefix,
-  brand: Brand,
-) => Schema.String.check(typeIdFilter(prefix)).pipe(Schema.brand(brand));
+const entityId = <const Prefix extends string>(prefix: Prefix) =>
+  Schema.String.check(typeIdFilter(prefix));
 
-export const CollectionId = entityId(EntityIdPrefixes.collection, "CollectionId");
+export const CollectionId = entityId(EntityIdPrefixes.collection).pipe(
+  Schema.brand("CollectionId"),
+);
 export type CollectionId = typeof CollectionId.Type;
-export const SkillId = entityId(EntityIdPrefixes.skill, "SkillId");
+export const SkillId = entityId(EntityIdPrefixes.skill).pipe(Schema.brand("SkillId"));
 export type SkillId = typeof SkillId.Type;
-export const SkillVersionId = entityId(EntityIdPrefixes.skillVersion, "SkillVersionId");
+export const SkillVersionId = entityId(EntityIdPrefixes.skillVersion).pipe(
+  Schema.brand("SkillVersionId"),
+);
 export type SkillVersionId = typeof SkillVersionId.Type;
-export const RetainedCopyId = entityId(EntityIdPrefixes.retainedCopy, "RetainedCopyId");
+export const RetainedCopyId = entityId(EntityIdPrefixes.retainedCopy).pipe(
+  Schema.brand("RetainedCopyId"),
+);
 export type RetainedCopyId = typeof RetainedCopyId.Type;
-export const AcquisitionId = entityId(EntityIdPrefixes.acquisition, "AcquisitionId");
+export const AcquisitionId = entityId(EntityIdPrefixes.acquisition).pipe(
+  Schema.brand("AcquisitionId"),
+);
 export type AcquisitionId = typeof AcquisitionId.Type;
-export const ProjectionId = entityId(EntityIdPrefixes.projection, "ProjectionId");
+export const ProjectionId = entityId(EntityIdPrefixes.projection).pipe(
+  Schema.brand("ProjectionId"),
+);
 export type ProjectionId = typeof ProjectionId.Type;
-export const MachineId = entityId(EntityIdPrefixes.machine, "MachineId");
+export const MachineId = entityId(EntityIdPrefixes.machine).pipe(Schema.brand("MachineId"));
 export type MachineId = typeof MachineId.Type;
-export const OperationId = entityId(EntityIdPrefixes.operation, "OperationId");
+export const OperationId = entityId(EntityIdPrefixes.operation).pipe(Schema.brand("OperationId"));
 export type OperationId = typeof OperationId.Type;
-export const AdoptionReceiptId = entityId(EntityIdPrefixes.adoptionReceipt, "AdoptionReceiptId");
+export const AdoptionReceiptId = entityId(EntityIdPrefixes.adoptionReceipt).pipe(
+  Schema.brand("AdoptionReceiptId"),
+);
 export type AdoptionReceiptId = typeof AdoptionReceiptId.Type;
 
 export const makeCollectionId = (): CollectionId =>

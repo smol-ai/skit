@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { Clock, Effect, FileSystem, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import {
   LibraryStore,
   RetainedContentInvalid,
@@ -167,8 +167,8 @@ export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   return { initialized, entry: result.entry };
 });
 
-const path = Argument.string("path").pipe(Argument.optional);
-const register = Flag.boolean("register").pipe(
+const path = Argument.String("path").pipe(Argument.optional);
+const register = Flag.Boolean("register").pipe(
   Flag.withDescription("Re-register a previously removed Author Workspace Library Entry."),
   Flag.withDefault(false),
 );

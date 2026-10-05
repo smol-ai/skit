@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Schedule, Schema, Stream } from "effect";
 import { randomBytes } from "node:crypto";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 export class OpenCodeDiscoveryFailure extends Schema.TaggedError<OpenCodeDiscoveryFailure>()(
   "OpenCodeDiscoveryFailure",

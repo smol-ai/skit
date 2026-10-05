@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { LibraryStore } from "@smolai/skit-core";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -10,7 +10,7 @@ import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { updateSubjectsEffect } from "../../workflows/library/update.js";
 
-const subject = Argument.string("skit-or-skill");
+const subject = Argument.String("skit-or-skill");
 
 export const pullCliCommand = Command.make("pull", { subject, ...localFlags }, (input) =>
   handleCommand(

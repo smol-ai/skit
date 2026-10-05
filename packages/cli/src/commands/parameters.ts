@@ -1,16 +1,16 @@
 import { Option } from "effect";
-import { Flag, GlobalFlag } from "effect/unstable/cli";
+import { Flag, GlobalFlag } from "effect/cli";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-export const jsonFlag = Flag.boolean("json").pipe(
+export const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit structured JSON."),
   Flag.withDefault(false),
 );
 
 // Effect CLI only accepts flags on an intermediate command path when they are declared global.
 // The entrypoint still owns the value because it must select a renderer before parsing can fail.
-export const JsonOutputFlag = GlobalFlag.setting("json-output")({ flag: jsonFlag });
+export const JsonOutputFlag = GlobalFlag.Setting("json-output")({ flag: jsonFlag });
 
 export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): boolean => {
   const boundary = argv.indexOf("--");
@@ -18,7 +18,7 @@ export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): 
 };
 
 export const optionalString = (name: string, description: string) =>
-  Flag.string(name).pipe(Flag.withDescription(description), Flag.optional);
+  Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
 
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
 export const codexRootFlag = optionalString(
@@ -33,7 +33,7 @@ export const opencodeRootFlag = optionalString(
   "opencode-root",
   "Scan an OpenCode skills root for inventory; SKIT does not project there.",
 );
-export const devinRootFlag = Flag.string("devin-root").pipe(
+export const devinRootFlag = Flag.String("devin-root").pipe(
   Flag.withDescription(
     "Scan additional Devin skills roots for inventory without changing projection targets.",
   ),

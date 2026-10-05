@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { LibraryStore } from "@smolai/skit-core";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -15,12 +15,12 @@ import {
   ProjectionRetentionMissing,
 } from "../../workflows/library/projection-retention.js";
 
-const subject = Argument.string("skit-or-skill").pipe(Argument.optional);
-const dryRun = Flag.boolean("dry-run").pipe(
+const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
+const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report changes without applying them."),
   Flag.withDefault(false),
 );
-const fromProjection = Flag.string("from-projection").pipe(
+const fromProjection = Flag.String("from-projection").pipe(
   Flag.withDescription("Retain changed bytes from this Projection ID, Harness, or path."),
   Flag.optional,
 );

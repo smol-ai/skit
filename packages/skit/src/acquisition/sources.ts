@@ -1,7 +1,7 @@
 import type { DescriptorFailure } from "../failures.js";
 import { semver } from "../distribution/api-contracts.js";
 import { Effect, FileSystem, Predicate, Schema, Scope, Stream } from "effect";
-import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, relative, resolve } from "node:path";

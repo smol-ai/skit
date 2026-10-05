@@ -1,7 +1,23 @@
-import { DeviceBinding, ProjectionTarget, RepositoryBinding } from "@smolai/skit-core";
+import {
+  DeviceBinding,
+  InvocationPolicy,
+  ProjectionTarget,
+  RepositoryBinding,
+} from "@smolai/skit-core";
 import { Schema } from "effect";
 
 import { HarnessShadow, ShadowObservationError } from "../../projection/harness-shadows.js";
+
+// The published output contract constrains every map value. Use string keys for this
+// wire view: Effect 4's JSON Schema exporter otherwise opens records whose custom
+// TypeID key check cannot be represented, dropping the value constraint as well.
+const invocationPolicies = Schema.optionalKey(Schema.Record(Schema.String, InvocationPolicy));
+const deviceBindingOutput = DeviceBinding.pipe(
+  Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
+);
+const repositoryBindingOutput = RepositoryBinding.pipe(
+  Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
+);
 
 export const SetEnabledPlan = Schema.Struct({
   subject_id: Schema.String,
@@ -12,7 +28,7 @@ export const SetEnabledPlan = Schema.Struct({
   changed: Schema.Boolean,
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
   warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
-  bindings: Schema.Array(Schema.Union([DeviceBinding, RepositoryBinding])),
+  bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
 });
 export type SetEnabledPlan = typeof SetEnabledPlan.Type;
 

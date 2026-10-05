@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 import { auditLocalCapabilitiesV1Alpha4Effect, type AuditOptions } from "../audit/local.js";
 import { handleCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
@@ -24,11 +24,11 @@ const auditSubprocesses = [
 
 const auditHome = optionalString("home", "Override the audited home directory.");
 const auditCwd = optionalString("cwd", "Evaluate project state from this directory.");
-const verbose = Flag.boolean("verbose").pipe(
+const verbose = Flag.Boolean("verbose").pipe(
   Flag.withDescription("Show complete inventory tables."),
   Flag.withDefault(false),
 );
-const probe = Flag.choice("probe", ["claude", "codex"]).pipe(
+const probe = Flag.Literals("probe", ["claude", "codex"]).pipe(
   Flag.withDescription("Run a bounded Claude or Codex reconciliation probe."),
   Flag.atLeast(0),
 );

@@ -1,6 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Schema } from "effect";
-import { FastCheck } from "effect/testing";
+import { Arbitrary, Schema } from "effect";
 import {
   canonicalJson,
   currentLibraryManifest,
@@ -80,17 +79,16 @@ const pool = Array.from({ length: 4 }, (_, index) => {
 });
 
 /** Per pool entry: absent, or present with a label variant and a Binding choice. */
-const side = FastCheck.array(
-  FastCheck.option(
-    FastCheck.record({
-      label: FastCheck.integer({ min: 0, max: 1 }),
-      binding: FastCheck.constantFrom("none", "skill", "collection"),
+const side = Schema.Array(
+  Schema.Union([
+    Schema.Undefined,
+    Schema.Struct({
+      label: Schema.Literals([0, 1]),
+      binding: Schema.Literals(["none", "skill", "collection"]),
     }),
-    { nil: undefined },
-  ),
-  { minLength: pool.length, maxLength: pool.length },
-);
-type Side = typeof side extends FastCheck.Arbitrary<infer A> ? A : never;
+  ]),
+).check(Schema.isBetweenLength(pool.length, pool.length));
+type Side = typeof side.Type;
 
 const manifestOf = (choices: Side): LibraryManifest => {
   const present = pool.flatMap((entry, index) => {
@@ -124,6 +122,20 @@ const same = (left: LibraryManifest, right: LibraryManifest) =>
 const collectionIds = (manifest: LibraryManifest) =>
   new Set<string>(manifest.collections.map((item) => item.collection_id));
 
+// Generate only cases within these two laws' conflict-free precondition, including while
+// shrinking, rather than counting rejected cases as successful property runs.
+const conflictFreeSides = Arbitrary.all([
+  Arbitrary.schema(side),
+  Arbitrary.schema(side),
+  Arbitrary.schema(side),
+]).pipe(
+  Arbitrary.filter(
+    ([base, local, remote]) =>
+      mergeLibraryManifests(manifestOf(base), manifestOf(local), manifestOf(remote)).conflicts
+        .length === 0,
+  ),
+);
+
 it.prop("an unchanged side yields the other side", [side, side], ([base, changed]) => {
   const before = manifestOf(base);
   const after = manifestOf(changed);
@@ -145,10 +157,9 @@ it.prop("identical changes on both sides merge to that change", [side, side], ([
 
 it.prop(
   "a conflict-free merge is valid and independent of which side is local",
-  [side, side, side],
-  ([base, local, remote]) => {
+  [conflictFreeSides],
+  ([[base, local, remote]]) => {
     const merged = mergeLibraryManifests(manifestOf(base), manifestOf(local), manifestOf(remote));
-    FastCheck.pre(merged.conflicts.length === 0);
     assert.isTrue(Schema.is(LibraryManifest)(merged.manifest));
     const swapped = mergeLibraryManifests(manifestOf(base), manifestOf(remote), manifestOf(local));
     assert.deepStrictEqual(swapped.conflicts, []);
@@ -158,13 +169,12 @@ it.prop(
 
 it.prop(
   "a Collection either side holds is removed only when the base held it",
-  [side, side, side],
-  ([base, local, remote]) => {
+  [conflictFreeSides],
+  ([[base, local, remote]]) => {
     const before = manifestOf(base);
     const mine = manifestOf(local);
     const theirs = manifestOf(remote);
     const merged = mergeLibraryManifests(before, mine, theirs);
-    FastCheck.pre(merged.conflicts.length === 0);
     const kept = collectionIds(merged.manifest);
     const held = collectionIds(before);
     for (const collectionId of [...collectionIds(mine), ...collectionIds(theirs)])

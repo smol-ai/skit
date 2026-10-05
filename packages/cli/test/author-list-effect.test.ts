@@ -1,6 +1,6 @@
 import { Deferred, Effect, Fiber, Result } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { HttpClientError } from "effect/unstable/http";
+import { HttpClientError } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
 import {

@@ -18,7 +18,7 @@ import {
   Stream,
   Terminal,
 } from "effect";
-import { Prompt } from "effect/unstable/cli";
+import { Prompt } from "effect/cli";
 import { terminalColors } from "./terminal-style.js";
 import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
 
@@ -190,7 +190,7 @@ const filterableMultiSelect = <Value extends string>(
   let renderedCount = 1;
   let previewPageSize = 10;
   let previewOffset = 0;
-  return Prompt.custom(initial, {
+  return Prompt.Custom(initial, {
     render: (state, action) => {
       if (action._tag === "Beep") return Effect.succeed("\u0007");
       if (action._tag === "Submit") {
@@ -427,21 +427,21 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
       });
 
     return Prompter.of({
-      select: (message, items) => ask(message, Prompt.select({ message, choices: choices(items) })),
+      select: (message, items) => ask(message, Prompt.Select({ message, choices: choices(items) })),
       autocomplete: (message, items) =>
         ask(
           message,
-          Prompt.autoComplete({
+          Prompt.AutoComplete({
             message,
             choices: choices(items),
             maxPerPage: AUTOCOMPLETE_MAX_ITEMS,
           }),
         ),
       multiselect: (message, items) => ask(message, filterableMultiSelect(message, items)),
-      confirm: (message) => ask(message, Prompt.confirm({ message })),
-      text: (message) => ask(message, Prompt.text({ message })),
+      confirm: (message) => ask(message, Prompt.Confirm({ message })),
+      text: (message) => ask(message, Prompt.String({ message })),
       password: (message) =>
-        ask(message, Prompt.password({ message })).pipe(Effect.map(Redacted.value)),
+        ask(message, Prompt.Password({ message })).pipe(Effect.map(Redacted.value)),
     });
   }),
 );

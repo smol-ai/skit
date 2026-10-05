@@ -41,7 +41,7 @@ export const safePathSchema = Schema.String.check(
     message: "Path must be NFC normalised",
   }),
 );
-export const kebabNameSchema = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/));
+export const kebabNameSchema = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u));
 export const registryNamespaceSchema = Schema.String.check(
   Schema.makeFilter((value) => normalizeRegistryNamespace(value) === value, {
     message: "Namespace must be canonical",
@@ -160,20 +160,40 @@ export const skillExampleSchema = Schema.Struct({
 });
 export type SkillExampleManifest = typeof skillExampleSchema.Type;
 
-const wireSkill = Schema.Struct({
-  name: Schema.mutableKey(kebabNameSchema),
-  path: Schema.mutableKey(safePathSchema),
-  default_enabled: Schema.mutableKey(Schema.Boolean),
-  shared: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(sharedMappingSchema)))),
-});
-export const skitDescriptorWireSchema = Schema.Struct({
-  skit: Schema.mutableKey(Schema.Literal(SKIT_DESCRIPTOR_VERSION)),
-  id: Schema.mutableKey(registrySkitIdSchema),
-  slug: Schema.mutableKey(kebabNameSchema),
-  sameAs: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(url)))),
-  author: Schema.mutableKey(Schema.optional(author)),
-  skills: Schema.mutableKey(Schema.mutable(Schema.Array(wireSkill)).check(Schema.isMinLength(1))),
-});
+const wireSkill = Schema.StructWithRest(
+  Schema.Struct({
+    name: Schema.mutableKey(kebabNameSchema),
+    path: Schema.mutableKey(safePathSchema),
+    default_enabled: Schema.mutableKey(Schema.Boolean),
+    shared: Schema.mutableKey(
+      Schema.optional(
+        Schema.mutable(
+          Schema.Array(
+            Schema.StructWithRest(sharedMappingSchema, [
+              Schema.Record(Schema.String, Schema.Unknown),
+            ]),
+          ),
+        ),
+      ),
+    ),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+export const skitDescriptorWireSchema = Schema.StructWithRest(
+  Schema.Struct({
+    skit: Schema.mutableKey(Schema.Literal(SKIT_DESCRIPTOR_VERSION)),
+    id: Schema.mutableKey(registrySkitIdSchema),
+    slug: Schema.mutableKey(kebabNameSchema),
+    sameAs: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(url)))),
+    author: Schema.mutableKey(
+      Schema.optional(
+        Schema.StructWithRest(author, [Schema.Record(Schema.String, Schema.Unknown)]),
+      ),
+    ),
+    skills: Schema.mutableKey(Schema.mutable(Schema.Array(wireSkill)).check(Schema.isMinLength(1))),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
 export type SkitWireDescriptor = typeof skitDescriptorWireSchema.Type;
 export const skitDescriptorSchema = Schema.Struct({
   skit: Schema.Literal(SKIT_DESCRIPTOR_VERSION),

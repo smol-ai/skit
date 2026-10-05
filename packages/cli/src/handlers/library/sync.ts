@@ -1,5 +1,5 @@
 import { Effect, Result } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
@@ -43,24 +43,24 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   );
 });
 
-const apply = Flag.boolean("apply").pipe(
+const apply = Flag.Boolean("apply").pipe(
   Flag.withDescription("Apply the current Library reconciliation plan."),
   Flag.withDefault(false),
 );
-const adopt = Flag.boolean("adopt").pipe(
+const adopt = Flag.Boolean("adopt").pipe(
   Flag.withDescription(
     "Explicitly adopt the current remote Library, setting aside ancestry from another Library.",
   ),
   Flag.withDefault(false),
 );
-const takeRemote = Flag.string("take-remote").pipe(
+const takeRemote = Flag.String("take-remote").pipe(
   Flag.withDescription(
     "Resolve a named Collection or Binding conflict from the current remote Library.",
   ),
   Flag.atLeast(0),
 );
 const registry = optionalString("registry", "Select the Registry to synchronize.");
-const keepEnabled = Flag.string("keep-enabled").pipe(
+const keepEnabled = Flag.String("keep-enabled").pipe(
   Flag.withDescription(
     "Resolve a destination collision by keeping this Skill ID enabled; retain the other Skills without enabling them.",
   ),

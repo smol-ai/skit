@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
-import { HttpClientResponse } from "effect/unstable/http";
+import { HttpClientResponse } from "effect/http";
 import { skitLayer } from "@smolai/skit-core";
 import {
   addRegistryRemoteEffect,

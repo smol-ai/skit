@@ -12,7 +12,7 @@ import {
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
 // the schema records exactly which parts of a snapshot the reconciler is allowed to touch.
 // Schema.optional retains existing candidate undefined values; JSON omits those keys.
-export const Digest = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/));
+export const Digest = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
 export type Digest = typeof Digest.Type;
 export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
 export type HarnessName = typeof HarnessName.Type;

@@ -4,8 +4,8 @@ import {
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
 import { Data, Effect, Option, Result, Schema, Scope } from "effect";
-import { HttpApiClient } from "effect/unstable/httpapi";
-import { Command } from "effect/unstable/cli";
+import { HttpApiClient } from "effect/http-api";
+import { Command } from "effect/cli";
 import { SkitContractError, type AuthorSkitListResponse } from "@smolai/skit-core";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import {

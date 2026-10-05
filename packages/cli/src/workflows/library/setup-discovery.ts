@@ -73,18 +73,21 @@ const PROJECT_COLLECTION_ROOTS = [
   "skills/.system",
 ] as const;
 
-const SkillsLockEntry = Schema.Struct({
-  source: Schema.String,
-  sourceType: Schema.String,
-  sourceUrl: Schema.optionalKey(Schema.String),
-  sourceBaseUrl: Schema.optionalKey(Schema.String),
-  ref: Schema.optionalKey(Schema.String),
-  updatedAt: Schema.optionalKey(Schema.String),
-  skillPath: Schema.optionalKey(Schema.String),
-  computedHash: Schema.optionalKey(Schema.String),
-  skillFolderHash: Schema.optionalKey(Schema.String),
-  wellKnownDigest: Schema.optionalKey(Schema.String),
-});
+const SkillsLockEntry = Schema.StructWithRest(
+  Schema.Struct({
+    source: Schema.String,
+    sourceType: Schema.String,
+    sourceUrl: Schema.optionalKey(Schema.String),
+    sourceBaseUrl: Schema.optionalKey(Schema.String),
+    ref: Schema.optionalKey(Schema.String),
+    updatedAt: Schema.optionalKey(Schema.String),
+    skillPath: Schema.optionalKey(Schema.String),
+    computedHash: Schema.optionalKey(Schema.String),
+    skillFolderHash: Schema.optionalKey(Schema.String),
+    wellKnownDigest: Schema.optionalKey(Schema.String),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
 
 const SkillsLockDocument = Schema.fromJsonString(
   Schema.Struct({
@@ -408,9 +411,7 @@ const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
   if (text === undefined) return undefined;
-  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text, {
-    onExcessProperty: "preserve",
-  });
+  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text);
   if (Result.isFailure(decoded)) return { scope, path, status: "malformed" as const, entries: [] };
   const expected = scope === "project" ? 1 : 3;
   if (decoded.success.version !== expected)

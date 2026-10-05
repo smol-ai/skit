@@ -2,7 +2,7 @@ import * as TestClock from "effect/testing/TestClock";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, ConfigProvider, Layer, Deferred, Fiber } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import {
   defaultChannel,
   decideRelease,

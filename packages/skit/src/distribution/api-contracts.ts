@@ -38,7 +38,7 @@ export const releaseSchema = Schema.Struct({
   version: Schema.String.check(Schema.isPattern(apiSemverPattern)),
   revision_id: Schema.optionalKey(Schema.NonEmptyString),
   archive_digest: Digest,
-  download_path: Schema.String.check(Schema.isStartsWith("/api/skits/")),
+  download_path: Schema.String.check(Schema.isStartingWith("/api/skits/")),
 });
 export type Release = typeof releaseSchema.Type;
 
@@ -61,7 +61,7 @@ export type ServerDiscovery = typeof serverDiscoverySchema.Type;
 export const LegacyLibraryRevisionV2 = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("git"),
-    commit: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)),
+    commit: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u)),
     tracking_ref: Schema.NullOr(Schema.NonEmptyString),
   }),
   Schema.Struct({ kind: Schema.Literal("release"), version: Schema.NonEmptyString }),

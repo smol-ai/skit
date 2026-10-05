@@ -1,5 +1,5 @@
 import { Effect, Option, Result } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import { resolveAuthForOriginEffect } from "../../registry/auth.js";
 import { AuthenticationRequired } from "../../registry/failures.js";
@@ -62,13 +62,13 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   );
 });
 
-const path = Argument.string("path").pipe(Argument.optional);
+const path = Argument.String("path").pipe(Argument.optional);
 const to = optionalString("to", "Select the first remote SKIT destination.");
-const visibility = Flag.choice("visibility", ["private", "unlisted", "public"] as const).pipe(
+const visibility = Flag.Literals("visibility", ["private", "unlisted", "public"] as const).pipe(
   Flag.withDescription("Set visibility when creating the remote SKIT."),
   Flag.optional,
 );
-const apply = Flag.boolean("apply").pipe(
+const apply = Flag.Boolean("apply").pipe(
   Flag.withDescription("Apply a conflict-free merge."),
   Flag.withDefault(false),
 );

@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { authLogoutCommand } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -8,7 +8,7 @@ import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
-const origin = Argument.string("origin").pipe(Argument.optional);
+const origin = Argument.String("origin").pipe(Argument.optional);
 
 export const authLogoutCliCommand = Command.make(
   "logout",

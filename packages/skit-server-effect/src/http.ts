@@ -1,7 +1,7 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
+import { HttpApiBuilder } from "effect/http-api";
 import { applicationLayers, authenticationConfiguration } from "./application.js";
 import { principalAuthenticationLayer } from "./api/authentication.js";
 import {

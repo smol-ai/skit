@@ -6,8 +6,8 @@ import {
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
 import { Data, Effect, Result, Schema, Scope } from "effect";
-import { HttpApiClient } from "effect/unstable/httpapi";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { HttpApiClient } from "effect/http-api";
+import { Argument, Command, Flag } from "effect/cli";
 import { AuthorSkitDeleteResponse, SkitContractError } from "@smolai/skit-core";
 import type { AuthorRemoteHome } from "./sync.js";
 import { parseAuthorDestinationEffect } from "./sync.js";
@@ -126,8 +126,8 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
   );
 });
 
-const skit = Argument.string("skit");
-const dryRun = Flag.boolean("dry-run").pipe(
+const skit = Argument.String("skit");
+const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Preview the private Draft and Releases that would be deleted."),
   Flag.withDefault(false),
 );

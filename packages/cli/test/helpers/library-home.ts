@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, type HttpClient } from "effect/http";
 import {
   createSkitArchiveEffect,
   deterministicTreeHashEffect,

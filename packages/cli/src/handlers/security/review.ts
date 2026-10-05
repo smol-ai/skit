@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -25,7 +25,7 @@ export const securityReviewCommand = Effect.fn("CLI.securityReview")(function* <
   return yield* library.securityReviewEffect(query);
 });
 
-const skill = Argument.string("skill");
+const skill = Argument.String("skill");
 
 export const securityReviewCliCommand = Command.make(
   "review",

@@ -7,7 +7,7 @@
 
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
 import { skitLayer } from "../src/platform/layer.js";
 

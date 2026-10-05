@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
 import { handleCommand } from "../../application.js";
@@ -9,7 +9,7 @@ import { homePath, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 
-const subject = Argument.string("skit-or-skill").pipe(Argument.optional);
+const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
 
 export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) => {
   const selectedHome = homePath(input.home);

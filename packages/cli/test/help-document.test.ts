@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Context, Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { expect } from "vitest";
 import { commandApplicationLayer } from "../src/application.js";
 import { helpDocument } from "../src/commands/help-document.js";
@@ -12,8 +12,8 @@ const Contract = Context.Service<never, string>("test/Contract");
 
 it.effect("captures Effect CLI's structured command model", () => {
   const add = Command.make("add", {
-    source: Argument.string("source"),
-    version: Flag.string("version").pipe(
+    source: Argument.String("source"),
+    version: Flag.String("version").pipe(
       Flag.withDescription("Select a source version."),
       Flag.optional,
     ),

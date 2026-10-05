@@ -13,7 +13,7 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { currentSkillVersion } from "../src/library/library-contracts.js";
-import { inspectLibrary } from "./helpers/library-store.js";
+import { inspectLibrary, publishLibrary } from "./helpers/library-store.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
@@ -481,5 +481,46 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
     if (!migrated.present) return;
     assert.deepStrictEqual(migrated.state, current.state);
     assert.notProperty(migrated.state, "sync_ancestry");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("state load and publication retain nested extensions without skipping validation", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-state-extensions-" });
+    const path = join(home, "state.json");
+    yield* fs.writeFileString(
+      path,
+      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+    );
+    const current = yield* inspectLibrary(home);
+    assert.strictEqual(current.present, true);
+    if (!current.present) return;
+    const value = {
+      ...current.state,
+      extension: { retained: true },
+      collections: current.state.collections.map((collection) => ({
+        ...collection,
+        extension: { retained: "collection" },
+      })),
+    };
+    const original = JSON.stringify(value);
+    yield* fs.writeFileString(path, original);
+    const reopened = yield* inspectLibrary(home);
+    assert.deepStrictEqual(reopened, { present: true, state: value });
+    assert.strictEqual(yield* fs.readFileString(path), original);
+
+    yield* fs.writeFileString(
+      path,
+      JSON.stringify({
+        ...value,
+        collections: value.collections.map((collection) => ({
+          ...collection,
+          collection_id: "bad-id",
+        })),
+      }),
+    );
+    const failure = yield* Effect.flip(inspectLibrary(home));
+    assert.strictEqual(failure._tag, "InvalidLibraryState");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

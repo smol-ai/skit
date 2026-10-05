@@ -1,6 +1,6 @@
 import { bindingSkillIds, LibraryStore, type SkitBindingScope as Scope } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { handleCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
@@ -17,23 +17,23 @@ import { promptForScope } from "../../presentation/scope-prompt.js";
 import { result } from "../contracts.js";
 import { applyLibraryBindings } from "../../workflows/library/set-enabled.js";
 
-const subject = Argument.string("skill-or-collection").pipe(Argument.optional);
+const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");
-const all = Flag.boolean("all").pipe(
+const all = Flag.Boolean("all").pipe(
   Flag.withDescription("Select every eligible skill in the collection."),
   Flag.withDefault(false),
 );
-const invocation = Flag.choice("invocation", invocationOptions).pipe(
+const invocation = Flag.Literals("invocation", invocationOptions).pipe(
   Flag.withDescription(
     "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers.",
   ),
   Flag.optional,
 );
-const dryRun = Flag.boolean("dry-run").pipe(
+const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report projection changes without applying them."),
   Flag.withDefault(false),
 );
-const allowDuplicate = Flag.boolean("allow-duplicate").pipe(
+const allowDuplicate = Flag.Boolean("allow-duplicate").pipe(
   Flag.withDescription(
     "Explicitly allow another same-scope copy of a skill already discoverable by an agent.",
   ),

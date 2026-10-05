@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import {
   type Digest,

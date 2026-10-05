@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
 import { handleCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
@@ -13,7 +13,7 @@ import {
 } from "../workflows/library/setup.js";
 import { result } from "./contracts.js";
 
-const path = Argument.string("path");
+const path = Argument.String("path");
 const flags = { home: homeFlag, json: jsonFlag };
 
 const mutate = (name: "watch" | "ignore" | "forget") =>

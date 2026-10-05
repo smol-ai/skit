@@ -269,9 +269,9 @@ export const layer = Layer.effect(
           };
         }),
       );
-      const descriptor = yield* Schema.decodeUnknownEffect(StoredDescriptor, {
-        onExcessProperty: "preserve",
-      })(draft.descriptor_json).pipe(
+      const descriptor = yield* Schema.decodeUnknownEffect(StoredDescriptor)(
+        draft.descriptor_json,
+      ).pipe(
         Effect.mapError(
           (cause) => new DatabaseError({ operation: "decode stored draft descriptor", cause }),
         ),

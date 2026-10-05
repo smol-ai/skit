@@ -1,5 +1,5 @@
 import { Clock, Config, Context, Effect, FileSystem, Layer, Schema } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -112,11 +112,11 @@ export const releaseCheckerLayer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const http = yield* HttpClient.HttpClient;
-    const registry = yield* Config.string("SKIT_NPM_REGISTRY").pipe(
+    const registry = yield* Config.String("SKIT_NPM_REGISTRY").pipe(
       Config.withDefault("https://registry.npmjs.org"),
     );
-    const override = yield* Config.string("SKIT_RELEASE_CHANNEL").pipe(Config.withDefault(""));
-    const state = yield* Config.string("XDG_STATE_HOME").pipe(
+    const override = yield* Config.String("SKIT_RELEASE_CHANNEL").pipe(Config.withDefault(""));
+    const state = yield* Config.String("XDG_STATE_HOME").pipe(
       Config.withDefault(join(homedir(), ".local", "state")),
     );
     const source = `${registry.replace(/\/$/, "")}/-/package/@smolai/skit/dist-tags`;

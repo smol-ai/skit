@@ -10,7 +10,7 @@ import type { InventoryRootOptions } from "../../projection/roots.js";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type LibraryState } from "@smolai/skit-core";
 import { probeHarnessEffect } from "../../harness/probe.js";
 

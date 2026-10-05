@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";

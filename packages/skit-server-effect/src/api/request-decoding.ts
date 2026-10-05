@@ -1,6 +1,6 @@
 import { RequestDecoding } from "@smolai/skit-core/universal/api";
 import { Effect } from "effect";
-import { HttpApiMiddleware } from "effect/unstable/httpapi";
+import { HttpApiMiddleware } from "effect/http-api";
 import { invalidRequestResponse } from "./errors.js";
 
 export { RequestDecoding };

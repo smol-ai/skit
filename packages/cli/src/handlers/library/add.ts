@@ -1,6 +1,6 @@
 import { Effect, Option, Result } from "effect";
 import { sourceInputWithVersionEffect } from "@smolai/skit-core";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -12,10 +12,10 @@ import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-servi
 import { addLibrarySourceEffect, previewLibrarySourceEffect } from "../../workflows/library/add.js";
 import { rejectDedicatedInstallerSourceEffect } from "../../workflows/library/dedicated-installer-catalog.js";
 
-const source = Argument.string("source");
+const source = Argument.String("source");
 const version = optionalString("version", "Select a source version.");
 const registry = optionalString("registry", "Resolve a Registry source through a name or URL.");
-const preview = Flag.boolean("list").pipe(
+const preview = Flag.Boolean("list").pipe(
   Flag.withDescription("Preview discovered contents without adding them."),
   Flag.withDefault(false),
 );

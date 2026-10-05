@@ -5,7 +5,7 @@ import {
 } from "../../projection/harness-shadows.js";
 import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
 import { Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import {
   libraryDoctorReport,
   LibraryStore,

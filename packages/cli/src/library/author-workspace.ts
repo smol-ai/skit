@@ -14,7 +14,7 @@ export interface AuthorWorkspaceMetadata {
 const AuthorWorkspaceDocument = Schema.fromJsonString(
   Schema.Struct({
     schema: Schema.Literal(AUTHOR_WORKSPACE_SCHEMA),
-    workspace_id: Schema.String.check(Schema.isPattern(/^workspace_[a-f0-9]{32}$/)),
+    workspace_id: Schema.String.check(Schema.isPattern(/^workspace_[a-f0-9]{32}$/u)),
     registration: Schema.optionalKey(Schema.Literals(["registered", "removed"])),
   }),
 );

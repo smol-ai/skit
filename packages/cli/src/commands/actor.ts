@@ -1,4 +1,4 @@
-import type { Command } from "effect/unstable/cli";
+import type { Command } from "effect/cli";
 
 /**
  * The command a person invoked, as the Library's history names it: the longest run of leading

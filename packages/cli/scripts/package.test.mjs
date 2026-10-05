@@ -30,9 +30,13 @@ test("the packed CLI installs and runs without workspace dependencies", () => {
     const [packed] = JSON.parse(packOutput);
     assert.ok(packed);
     const packedPaths = packed.files.map(({ path }) => path).sort();
+    const runtimeFiles = ["LICENSE", "bin/skit.js", "dist/src/main.js", "package.json"];
+    // esbuild emits this file only when bundled dependencies contain legal comments.
+    // Effect 4 no longer bundles fast-check, so its notices may be absent.
+    if (existsSync("dist/src/main.js.LEGAL.txt")) runtimeFiles.push("dist/src/main.js.LEGAL.txt");
     assert.deepEqual(
       packedPaths.filter((path) => !path.startsWith("contracts/")),
-      ["LICENSE", "bin/skit.js", "dist/src/main.js", "dist/src/main.js.LEGAL.txt", "package.json"],
+      runtimeFiles.sort(),
     );
     assert.ok(packedPaths.includes("contracts/command-manifest.json"));
     assert.ok(packedPaths.includes("contracts/skit.version.v1.json"));

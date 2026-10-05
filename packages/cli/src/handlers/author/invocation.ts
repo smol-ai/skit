@@ -1,7 +1,7 @@
 import { generateInvocationMetadataEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -18,8 +18,8 @@ export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(functio
   return { root, dryRun, generated };
 });
 
-const path = Argument.string("path").pipe(Argument.optional);
-const dryRunFlag = Flag.boolean("dry-run").pipe(
+const path = Argument.String("path").pipe(Argument.optional);
+const dryRunFlag = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report the metadata that would change without writing it."),
   Flag.withDefault(false),
 );

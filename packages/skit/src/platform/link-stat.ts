@@ -2,7 +2,7 @@
 // NFS.stat and follows links — but rejecting symlinks is a security property of tree walking and
 // path identity, so the service is extended with the one operation the platform omits.
 
-import { Context, Effect, FileSystem, Layer, Option } from "effect";
+import { ByteSize, Context, Effect, FileSystem, Layer, Option } from "effect";
 import { PlatformError, systemError, type SystemErrorTag } from "effect/PlatformError";
 import {
   accessSync,
@@ -94,8 +94,8 @@ function fileInfo(stats: Stats): FileSystem.File.Info {
     nlink: Option.fromNullishOr(stats.nlink),
     uid: Option.fromNullishOr(stats.uid),
     gid: Option.fromNullishOr(stats.gid),
-    size: FileSystem.Size(stats.size),
-    blksize: Option.some(FileSystem.Size(stats.blksize)),
+    size: ByteSize.bytes(stats.size),
+    blksize: Option.some(ByteSize.bytes(stats.blksize)),
     blocks: Option.fromNullishOr(stats.blocks),
   };
 }

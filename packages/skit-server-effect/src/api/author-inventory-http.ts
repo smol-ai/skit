@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { AuthorInventory } from "../author-inventory/service.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { AuthoringAuthenticatedApi } from "./authenticated.js";

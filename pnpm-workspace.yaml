@@ -6,3 +6,22 @@ allowBuilds:
   msgpackr-extract: false
   sharp: false
   workerd: true
+
+# Backport Vitest 5 support until Cloudflare releases workers-sdk#15500.
+# Adapted from AdiRishi/pakshi#14 at 1d9fecfb65d419a5b255752bf2e41a775dda3433.
+patchedDependencies:
+  # Vitest is an optional peer used only by better-auth/test-utils (not imported here).
+  # Backport the peer range from 1.7.7 without its unrelated auth schema migration.
+  "better-auth@1.7.1": patches/better-auth@1.7.1.patch
+  "@cloudflare/vitest-plugin@1.3.5": patches/@cloudflare__vitest-plugin@1.3.5.patch
+
+# pnpm resolves peers from registry metadata before applying the package patch.
+peerDependencyRules:
+  allowedVersions:
+    "@cloudflare/vitest-plugin@1.3.5>vitest": "5"
+    "better-auth@1.7.1>vitest": "5"
+
+# Keep transitive Effect packages on the same stable release as our direct pins.
+overrides:
+  effect: 4.0.0
+  "@effect/platform-node-shared": 4.0.0

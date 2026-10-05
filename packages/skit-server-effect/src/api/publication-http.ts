@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { Authorization } from "../authorization/service.js";
 import { credentialOriginAllowed } from "../auth/request-context.js";
 import { ServerConfiguration } from "../configuration.js";

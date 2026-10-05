@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 import { serverDiscovery, type ServerDiscovery as ServerDiscoveryDocument } from "../discovery.js";
 import { inspectHealth } from "../health.js";
 import { noStore } from "./response.js";

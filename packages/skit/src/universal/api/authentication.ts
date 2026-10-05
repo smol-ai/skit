@@ -1,5 +1,5 @@
 import { Context, Schema } from "effect";
-import { HttpApiMiddleware } from "effect/unstable/httpapi";
+import { HttpApiMiddleware } from "effect/http-api";
 import { InvalidRequestResponse, StorageFailureResponse, UnauthorizedResponse } from "./errors.js";
 
 export const Scope = Schema.Literals(["library:sync", "authoring:write", "publication:write"]);

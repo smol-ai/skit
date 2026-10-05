@@ -1,7 +1,7 @@
 import { validateSkitDirectoryEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -29,8 +29,8 @@ export const validateCommand = Effect.fn("CLI.validate")(function* (
   return { value, status };
 });
 
-const path = Argument.string("path").pipe(Argument.optional);
-const assessmentContext = Flag.choice("assessment-context", ["author", "publish"] as const).pipe(
+const path = Argument.String("path").pipe(Argument.optional);
+const assessmentContext = Flag.Literals("assessment-context", ["author", "publish"] as const).pipe(
   Flag.withDescription(
     "Evaluate authoring warnings or strict publication policy (default: author).",
   ),

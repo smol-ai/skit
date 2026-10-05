@@ -1,6 +1,6 @@
 import { Context, Data, Effect, Layer, Stream } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_STDOUT_BYTES = 4_000_000;

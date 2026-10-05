@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import { HttpServerRequest } from "effect/http";
 import type { RuntimeEnv } from "../platform/cloudflare.js";
 import { Authentication, type Principal } from "./authentication.js";
 

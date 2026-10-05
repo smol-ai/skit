@@ -1,6 +1,6 @@
 import { Cause, Deferred, Effect, Fiber, FileSystem, Layer, Result, Stream } from "effect";
 import { it } from "@effect/vitest";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { skitLayer, sourceProcessLayer, validateSkitDirectoryEffect } from "../src/index.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";

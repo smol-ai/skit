@@ -1,6 +1,6 @@
 import { LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -14,8 +14,8 @@ import {
 } from "../../library/author-workspace.js";
 import { result } from "../contracts.js";
 
-const subject = Argument.string("skit-or-skill");
-const dryRun = Flag.boolean("dry-run").pipe(
+const subject = Argument.String("skit-or-skill");
+const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report removals without applying them."),
   Flag.withDefault(false),
 );

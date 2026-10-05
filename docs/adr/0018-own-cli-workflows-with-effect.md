@@ -579,9 +579,10 @@ Reading such an Entry preserves retained content and never acquires a commit fro
 Portable export retains its existing `NoPortableGitRevision` conflict and explicit
 `skit update <collection-ref>` remediation. Only explicit acquisition records new evidence.
 
-Unknown extension keys are preserved recursively during both load and publication using
-`onExcessProperty: "preserve"`. Preservation is not permission to override validation of known
-fields, and a future top-level version is rejected even if its fields otherwise look current.
+Unknown extension keys are preserved recursively during both load and publication by
+validating the original JSON value against the identity-only state schema. Preservation is not
+permission to override validation of known fields, and a future top-level version is rejected
+even if its fields otherwise look current.
 Unsupported versions and malformed files are left untouched. The decoder reports validation
 failure, never an empty replacement ledger or advice to discard custody evidence.
 
@@ -604,7 +605,10 @@ transformations will live only at the storage boundary.
 
 The primitives this relies on are `Schema.decodeUnknownEffect`/`encodeUnknownEffect`, the
 template-literal Digest type, `Schema.mutableKey` and `Schema.mutable` for the revised fields and
-arrays, and the `onExcessProperty` decoder policy. All are present in the installed `4.0.0-rc.112`.
+arrays, and explicit excess-field handling. Descriptor structs retain extension fields with
+`Schema.StructWithRest`; identity-only state schemas validate the original value with
+`Schema.refine(Schema.is(...))` so loads retain unknown fields at every depth. These APIs are
+present in the installed `4.0.0`.
 Line references into an Effect checkout are deliberately not recorded here: the pin moves, and a
 stale coordinate is worse than none.
 
@@ -684,7 +688,7 @@ real boundaries.
 The upstream documentation entry point is
 [Effect LLMS.md](https://github.com/Effect-TS/effect/blob/main/LLMS.md), with examples
 under `ai-docs/src` for functions, services, running, resources and HTTP.
-The installed `4.0.0-rc.112` source and types are authoritative for APIs used here.
+The installed `4.0.0` source and types are authoritative for APIs used here.
 
 ## Author initialization commit protocol (issue 13)
 

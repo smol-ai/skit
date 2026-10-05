@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { authStatusCommand } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";

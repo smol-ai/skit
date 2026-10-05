@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import { HttpServerRequest } from "effect/http";
 import { schemaBodyJsonLimited } from "../src/api/request-body.js";
 
 const Payload = Schema.Struct({ value: Schema.String });

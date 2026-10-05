@@ -1,6 +1,6 @@
 import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
 import { Effect, FileSystem, Option } from "effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";
 import { handleCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
@@ -55,7 +55,7 @@ const workDirFlag = optionalString(
   "work-dir",
   "Repository root to remember for this machine and scan.",
 );
-const dryRun = Flag.boolean("dry-run").pipe(
+const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Observe without updating machine configuration."),
   Flag.withDefault(false),
 );

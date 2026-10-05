@@ -34,4 +34,4 @@ replacing it.
 
 `Effect.acquireUseRelease` guarantees uninterruptible acquisition and release around a use phase.
 `FileSystem.makeTempDirectoryScoped` supplies a random temporary directory and removes it when the
-scope closes. The installed `4.0.0-rc.112` source and types are authoritative for these APIs.
+scope closes. The installed `4.0.0` source and types are authoritative for these APIs.

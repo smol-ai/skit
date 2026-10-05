@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem, Ref } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";

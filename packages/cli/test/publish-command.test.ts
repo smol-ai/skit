@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 import { MissingRequirement } from "../src/handlers/failures.js";
 import { publishCommand } from "../src/handlers/author/publish.js";
 import { RegistryHttp, registryClient } from "../src/registry/registry-http.js";

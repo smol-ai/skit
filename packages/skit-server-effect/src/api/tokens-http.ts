@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { HttpEffect, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpEffect, HttpServerResponse } from "effect/http";
+import { HttpApiBuilder } from "effect/http-api";
 import { Authentication } from "../auth/authentication.js";
 import { credentialOriginAllowed } from "../auth/request-context.js";
 import { ServerConfiguration } from "../configuration.js";

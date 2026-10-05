@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import {

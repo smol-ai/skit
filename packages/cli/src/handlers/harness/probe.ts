@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -8,7 +8,7 @@ import { probeRequestedHarnessesEffect } from "../../harness/probe.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
-const harness = Argument.string("harness").pipe(Argument.optional);
+const harness = Argument.String("harness").pipe(Argument.optional);
 
 export const harnessProbeCliCommand = Command.make(
   "probe",

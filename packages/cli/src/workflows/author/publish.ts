@@ -1,8 +1,8 @@
 import type { PlatformError } from "effect/PlatformError";
 import { parseOrigin } from "../../registry/auth.js";
 import { Data, Effect, FileSystem, Predicate, Schema, Scope } from "effect";
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
 import { join, resolve } from "node:path";
 import {
   createSkitArchiveEffect,

@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import type { HttpClientRequest } from "effect/unstable/http";
+import type { HttpClientRequest } from "effect/http";
 import { join } from "node:path";
 import { skitLayer } from "@smolai/skit-core";
 import { authLogoutCommand } from "../src/registry/auth.js";

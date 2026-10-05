@@ -1,7 +1,7 @@
 import { HarnessShadow } from "../../projection/harness-shadows.js";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type LibraryState, LibraryDoctorReport, SourceProcess } from "@smolai/skit-core";
 import { probeHarnessEffect, type ProbeableHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck } from "./doctor-codex.js";

@@ -1,8 +1,8 @@
 import { serverBuild } from "../src/build-info.js";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { HttpServer } from "effect/unstable/http";
-import { HttpApiTest } from "effect/unstable/httpapi";
+import { HttpServer } from "effect/http";
+import { HttpApiTest } from "effect/http-api";
 import { systemHandlers } from "../src/api/system-http.js";
 import { SkitApi } from "../src/api/system.js";
 import { serverDiscovery } from "../src/discovery.js";

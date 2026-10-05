@@ -1,6 +1,6 @@
 import { assert } from "@effect/vitest";
 import { Schema, SchemaAST } from "effect";
-import type { HttpClientRequest } from "effect/unstable/http";
+import type { HttpClientRequest } from "effect/http";
 import { LegacyLibraryManifestV2, type LibraryState } from "@smolai/skit-core";
 import {
   InvalidRequestResponse,

@@ -131,9 +131,13 @@ export const LibraryInventory = LibraryState.mapFields(
 );
 export type LibraryInventory = typeof LibraryInventory.Type;
 
-export const decodeLibraryState = Schema.decodeUnknownEffect(LibraryState, {
-  onExcessProperty: "preserve",
-});
+// State schemas validate JSON without transformations. Refining the original value keeps
+// unknown fields at every depth now that Effect no longer offers `preserve` parsing.
+const libraryStateDocument = Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState)));
+export const decodeLibraryState = Schema.decodeUnknownEffect(libraryStateDocument);
+export const encodeLibraryState = Schema.encodeEffect(
+  Schema.fromJsonString(libraryStateDocument, { space: 2 }),
+);
 
 export const libraryManifestFromLocalStateEffect = Effect.fn(
   "Library.libraryManifestFromLocalState",

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { HttpApiSchema } from "effect/unstable/httpapi";
+import { HttpApiSchema } from "effect/http-api";
 
 const errorResponse = <const Code extends string>(code: Code, status: number) =>
   Schema.Struct({ error: Schema.Literal(code) }).pipe(HttpApiSchema.status(status));

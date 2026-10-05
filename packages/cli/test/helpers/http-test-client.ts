@@ -5,8 +5,8 @@ import {
   HttpClientRequest,
   HttpClientResponse,
   HttpServer,
-} from "effect/unstable/http";
-import { FetchHttpClient } from "effect/unstable/http";
+} from "effect/http";
+import { FetchHttpClient } from "effect/http";
 
 export type TestHttpHandler = (
   request: HttpClientRequest.HttpClientRequest,

@@ -7,7 +7,7 @@ import {
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
 import { Data, Effect, FileSystem, Predicate, Result, Schema } from "effect";
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { HttpApiClient } from "effect/http-api";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import {

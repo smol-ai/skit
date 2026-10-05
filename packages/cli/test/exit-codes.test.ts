@@ -4,7 +4,7 @@
 import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect, test } from "vitest";
 import { resolveSkitSourceEffect, skitLayer } from "@smolai/skit-core";

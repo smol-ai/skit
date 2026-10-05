@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { handleCommand } from "../../application.js";
 import { loginEffect, resolveLoginTargetEffect, reuseLoginEffect } from "../../registry/auth.js";
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
@@ -70,16 +70,16 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
   Effect.catchTag("PromptCancelled", () => new SelectionCancelled({ subject: "Login" })),
 );
 
-const registry = Argument.string("registry").pipe(Argument.optional);
-const relogin = Flag.boolean("relogin").pipe(
+const registry = Argument.String("registry").pipe(Argument.optional);
+const relogin = Flag.Boolean("relogin").pipe(
   Flag.withDescription("Replace the saved credential even if it is still valid."),
   Flag.withDefault(false),
 );
-const alias = Flag.string("as").pipe(
+const alias = Flag.String("as").pipe(
   Flag.withDescription("Name this Registry for device-local routing."),
   Flag.optional,
 );
-const scopes = Flag.string("scopes").pipe(
+const scopes = Flag.String("scopes").pipe(
   Flag.withDescription("Request comma-separated credential scopes."),
   Flag.map((value) => value.split(",").filter(Boolean)),
   Flag.optional,

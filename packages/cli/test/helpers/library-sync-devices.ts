@@ -18,7 +18,7 @@ import {
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
 /** Devices sharing one compare-and-swap Library server, with injectable one-shot faults. */

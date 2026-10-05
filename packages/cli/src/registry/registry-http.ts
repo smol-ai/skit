@@ -1,11 +1,6 @@
 import { cliBuild } from "../build-info.js";
 import { Context, Data, Effect, Layer, Predicate, Scope } from "effect";
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientError,
-  HttpClientRequest,
-} from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 
 export class RegistryTransportError extends Data.TaggedError("RegistryTransportError")<{
   cause: Error;

@@ -1,6 +1,6 @@
 import { readSkitDescriptorEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { resolveAuthForOriginEffect } from "../../registry/auth.js";
 import { MissingRequirement } from "../failures.js";
@@ -52,8 +52,8 @@ export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   );
 });
 
-const path = Argument.string("path").pipe(Argument.optional);
-const version = Flag.string("version").pipe(
+const path = Argument.String("path").pipe(Argument.optional);
+const version = Flag.String("version").pipe(
   Flag.withMetavar("semver"),
   Flag.withDescription("Release version (required)."),
 );

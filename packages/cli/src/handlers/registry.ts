@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { handleCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
@@ -13,8 +13,8 @@ import {
 import { Renderer } from "../presentation/renderer.js";
 import { result } from "./contracts.js";
 
-const name = Argument.string("name");
-const origin = Argument.string("origin");
+const name = Argument.String("name");
+const origin = Argument.String("origin");
 
 export const registryAddCliCommand = Command.make(
   "add",

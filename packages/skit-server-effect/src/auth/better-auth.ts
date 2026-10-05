@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { D1Client } from "@effect/sql-d1";
 import { Context, Effect, Layer, Option, Schema } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { schemaBodyJsonLimited } from "../api/request-body.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import {
