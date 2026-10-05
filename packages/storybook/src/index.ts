@@ -7,4 +7,5 @@ const renderer = await createCliRenderer({
   screenMode: "alternate-screen",
   useMouse: true,
 });
-mountStorybook(renderer);
+const palette = await renderer.getPalette({ size: 16, timeout: 250 }).catch(() => undefined);
+mountStorybook(renderer, { palette });

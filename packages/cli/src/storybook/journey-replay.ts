@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { createColors } from "picocolors";
 import {
   InteractionEvent,
@@ -36,7 +37,7 @@ export function journeyFrames(
           `${color.cyan("?")} ${color.bold(prompt.message)}`,
           ...prompt.choices.map(
             (choice, index) =>
-              `  ${index === 0 ? color.cyan("❯") : " "} ${choice.selected ? color.green("☒") : color.dim("☐")} ${choice.label}${choice.hint ? color.dim(` · ${choice.hint}`) : ""}`,
+              `  ${index === 0 ? color.cyan("❯") : " "} ${choice.selected && !choice.disabled ? color.green("☒") : color.dim("☐")} ${choice.disabled ? color.dim(choice.label) : index === 0 ? color.bold(choice.label) : choice.label}${choice.hint ? color.dim(` · ${choice.hint}`) : ""}`,
           ),
         ].join("\n");
   for (const [index, event] of journey.events.entries()) {
@@ -54,14 +55,18 @@ export function journeyFrames(
         status = undefined;
         label = "Status cleared";
       },
-      Note: ({ body, title }) => {
-        output += renderNoteFrame(body, title, environment.format).stderr;
+      Note: ({ body, title, renderBody }) => {
+        output += renderNoteFrame(
+          renderBody?.(environment.color) ?? body,
+          color.bold(title),
+          environment.format,
+        ).stderr;
         label = title;
       },
       Step: ({ index, total, title, body }) => {
         output += renderNoteFrame(
           body,
-          `Step ${index} of ${total} · ${title}`,
+          `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`,
           environment.format,
         ).stderr;
         label = title;
@@ -104,6 +109,7 @@ export function journeyFrames(
       ["StatusStarted", "StatusUpdated", "StatusEnded", "Note", "Step"].includes(event._tag)
     )
       continue;
+    if (!environment.color) output = stripVTControlCharacters(output);
     frames.push({
       label,
       output,
@@ -114,14 +120,10 @@ export function journeyFrames(
   return frames;
 }
 
-export function renderReplayFrame(
-  frame: ReplayFrame,
-  spinnerFrame: number,
-  color: boolean,
-): string {
+export function renderReplayFrame(frame: ReplayFrame, spinnerFrame: number): string {
   return (
     frame.output +
     (frame.prompt ? `${frame.prompt}\n` : "") +
-    (frame.status ? renderStatusLine(frame.status, spinnerFrame, color) : "")
+    (frame.status ? renderStatusLine(frame.status, spinnerFrame) : "")
   );
 }

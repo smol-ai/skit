@@ -8,6 +8,7 @@ import {
   TextRenderable,
   EmbeddedTerminalRenderable,
   type CliRenderer,
+  type TerminalColors,
   type KeyEvent,
 } from "@opentui/core";
 import { NodeServices } from "@effect/platform-node";
@@ -23,12 +24,17 @@ import {
   CLEAR_STATUS_LINE,
   renderStatusLine,
   type RecordedJourney,
+  terminalColorEnabled,
 } from "../../cli/src/front-end";
 import { stripVTControlCharacters } from "node:util";
+import { previewPalette } from "./preview-palette";
 import { JourneyPlayback } from "./playback";
 import { catalog, filterCatalog, renderOutput, type CatalogItem } from "./model";
 
-export function mountStorybook(renderer: CliRenderer, options: { animate?: boolean } = {}) {
+export function mountStorybook(
+  renderer: CliRenderer,
+  options: { animate?: boolean; palette?: TerminalColors; colorAllowed?: boolean } = {},
+) {
   const colors = {
     canvas: "#09090b",
     panel: "#18181b",
@@ -39,6 +45,13 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
     selected: "#0ea5e9",
   };
 
+  const palette = previewPalette(options.palette, {
+    foreground: colors.text,
+    background: colors.canvas,
+  });
+  const colorAvailable = palette.colorAvailable && (options.colorAllowed ?? terminalColorEnabled());
+  let previewColor = false;
+  let header: TextRenderable;
   let items: ReadonlyArray<CatalogItem> = catalog;
   let selected = 0;
   let format: "human" | "json" = "human";
@@ -65,7 +78,7 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
     ...defaultTerminalEnvironment,
     format,
     detail,
-    color: true,
+    color: previewColor,
   });
 
   const text = (id: string, content: string, options = {}) =>
@@ -87,13 +100,8 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
       flexDirection: "column",
       backgroundColor: colors.canvas,
     });
-    root.add(
-      text(
-        "header",
-        ` SKIT OUTPUTS · SLOP DEVTOOL   ${items.length} stories   ${format.toUpperCase()} / ${detail.toUpperCase()}`,
-        { height: 2, fg: colors.accent },
-      ),
-    );
+    header = text("header", "", { height: 2, fg: colors.accent });
+    root.add(header);
     search = new InputRenderable(renderer, {
       id: "search",
       width: "100%",
@@ -182,6 +190,7 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
       maxScrollback: 2000,
       visible: false,
     });
+    previewTerminal.write(palette.sequence);
     previewBox.add(previewTerminal);
     body.add(sidebar);
     body.add(previewBox);
@@ -217,14 +226,15 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
   }
 
   function updateChrome(): void {
+    header.content = ` SKIT OUTPUTS · ${items.length} stories · ${format.toUpperCase()} / ${detail.toUpperCase()} · colour ${previewColor ? "ON" : colorAvailable ? "OFF (ctrl+l)" : "UNAVAILABLE"}`;
     const step = playback ? ` · ${playback.index + 1}/${playback.frames.length}` : "";
     previewBox.title = ` ${transcript ? "TRANSCRIPT" : "PREVIEW"}${step} `;
     footer.content =
       focus === "catalog"
-        ? " ↑↓/wheel browse · type search · tab preview · ctrl+f format · ctrl+d detail · esc clear · ctrl+c quit"
+        ? " ↑↓/wheel browse · type search · tab preview · ctrl+f format · ctrl+d detail · ctrl+l colour · esc clear · ctrl+c quit"
         : !playback
-          ? " tab search · ctrl+f format · ctrl+d detail · ↑↓ scroll JSON"
-          : ` ← prev · →/enter next · space ${playback?.playing ? "pause" : "play"} · home restart · t ${transcript ? "preview" : "transcript"} · tab search\n ${playback?.frame?.label ?? selectedItem()?.key ?? ""} · ${recorded?.initialState ?? ""}${playback && playback.index === playback.frames.length - 1 ? ` · ${recorded?.finalState ?? ""}` : ""}`;
+          ? " tab search · ctrl+f format · ctrl+d detail · ctrl+l colour · ↑↓ scroll JSON"
+          : ` ← prev · →/enter next · space ${playback?.playing ? "pause" : "play"} · home restart · t ${transcript ? "preview" : "transcript"} · ctrl+l colour · tab search\n ${playback?.frame?.label ?? selectedItem()?.key ?? ""} · ${recorded?.initialState ?? ""}${playback && playback.index === playback.frames.length - 1 ? ` · ${recorded?.finalState ?? ""}` : ""}`;
     previewBox.borderColor = focus === "preview" ? colors.accent : colors.border;
   }
 
@@ -247,13 +257,13 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
       const prefix = frame ? frame.output + (frame.prompt ? `${frame.prompt}\n` : "") : "";
       if (frame?.status && terminalPrefix === prefix) {
         previewTerminal.write(
-          CLEAR_STATUS_LINE + renderStatusLine(frame.status, playback.spinnerFrame, true),
+          CLEAR_STATUS_LINE + renderStatusLine(frame.status, playback.spinnerFrame),
         );
       } else {
         previewTerminal.write(
           "\u001b[2J\u001b[H\u001b[?25l" +
             (frame
-              ? renderReplayFrame(frame, playback.spinnerFrame, true).replace(/\r?\n/g, "\r\n")
+              ? renderReplayFrame(frame, playback.spinnerFrame).replace(/\r?\n/g, "\r\n")
               : ""),
         );
       }
@@ -323,6 +333,12 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
       key.preventDefault();
       format = format === "human" ? "json" : "human";
       requestPreview();
+    } else if (key.ctrl && key.name === "l") {
+      key.preventDefault();
+      if (colorAvailable) {
+        previewColor = !previewColor;
+        requestPreview();
+      }
     } else if (key.ctrl && key.name === "d") {
       key.preventDefault();
       detail = detail === "summary" ? "full" : "summary";
@@ -380,6 +396,8 @@ export function mountStorybook(renderer: CliRenderer, options: { animate?: boole
       key: selectedItem()?.key,
       focus,
       transcript,
+      color: previewColor,
+      colorAvailable,
       index: playback?.index,
       count: playback?.frames.length,
       playing: playback?.playing,

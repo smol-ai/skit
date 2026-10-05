@@ -16,7 +16,7 @@ const skillLine = (marker: string, names: readonly string[]) =>
 
 export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false)): string {
   const markerFor = (action: "add" | "update" | "remove") =>
-    ({ add: color.green("+"), update: color.yellow("~"), remove: color.red("-") })[action];
+    ({ add: "+", update: "~", remove: "-" })[action];
   // Collections that differ only in fetch records change nothing a person chose or uses.
   const shown = (changes: SyncPlan["local"]) =>
     changes.filter((change) => change.kind !== "collection" || !change.evidence_only);
@@ -87,7 +87,7 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
     `${plan}${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
   switch (data.status) {
     case "clean":
-      return withNotes(color.green("Library is already in sync."));
+      return withNotes("Library is already in sync.");
     case "push_ready":
     case "pull_ready":
     case "merge_ready":
@@ -98,7 +98,7 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
     case "pulled":
     case "merged":
     case "upgraded":
-      return withNotes(color.green("Library synced."));
+      return withNotes("Library synced.");
     case "upgrade_ready":
       return "The remote Library uses an older sync format. Run skit sync --apply to upgrade it.";
     case "legacy_remote_conflict":

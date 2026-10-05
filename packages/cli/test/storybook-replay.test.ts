@@ -18,10 +18,17 @@ it.effect("replays a real fresh-device sync from a single captured run", () =>
     if (!download) return;
     expect(download.output).toContain("Library sync plan");
     expect(download.output).not.toContain("Library synced.");
-    expect(renderReplayFrame(download, 0, false)).not.toBe(renderReplayFrame(download, 1, false));
+    expect(renderReplayFrame(download, 0)).not.toBe(renderReplayFrame(download, 1));
+    const coloured = journeyFrames(recording, { ...defaultTerminalEnvironment, color: true });
+    const colouredDownload = coloured.find((frame) => frame.status === download.status);
+    expect(colouredDownload?.output).toContain("\u001b[36m");
+    expect(download.output).not.toContain("\u001b[");
+    expect(renderReplayFrame(download, 0)).not.toContain("\u001b[");
     const final = frames.at(-1);
     expect(final?.status).toBeUndefined();
     expect(final?.output).toContain("Library synced.");
+    expect(coloured.at(-1)?.output).toContain("Library synced.");
+    expect(coloured.at(-1)?.output).not.toContain("\u001b[32mLibrary synced.");
     expect(journeyFrames(recording, defaultTerminalEnvironment)).toEqual(frames);
     const json = journeyFrames(recording, { ...defaultTerminalEnvironment, format: "json" });
     expect(json).toHaveLength(2);

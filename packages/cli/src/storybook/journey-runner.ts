@@ -32,7 +32,7 @@ function renderEvent(
       ].join("\n"),
     PromptAnswered: ({ answer }) =>
       `answered ${Array.isArray(answer) ? answer.join(", ") : String(answer)}`,
-    Note: ({ title, body }) => `${title}\n${body}`,
+    Note: ({ title, body, renderBody }) => `${title}\n${renderBody?.(environment.color) ?? body}`,
     Step: ({ index, total, title, body }) => `Step ${index} of ${total} · ${title}\n${body}`,
     StatusStarted: ({ message }) => `${message}…`,
     StatusUpdated: ({ message }) => `${message}…`,

@@ -1,9 +1,27 @@
 import assert from "node:assert/strict";
+import type { TerminalColors } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { mountStorybook } from "../src/browser";
 
+const hostPalette: TerminalColors = {
+  palette: Array.from({ length: 16 }, (_, index) => (index === 6 ? "#123456" : "#aabbcc")),
+  defaultForeground: "#d0d1d2",
+  defaultBackground: "#101112",
+  cursorColor: null,
+  mouseForeground: null,
+  mouseBackground: null,
+  tekForeground: null,
+  tekBackground: null,
+  highlightBackground: null,
+  highlightForeground: null,
+};
+
 const harness = await createTestRenderer({ width: 130, height: 40, kittyKeyboard: true });
-const app = mountStorybook(harness.renderer, { animate: false });
+const app = mountStorybook(harness.renderer, {
+  animate: false,
+  palette: hostPalette,
+  colorAllowed: true,
+});
 const settle = async () => {
   await harness.flush();
   await app.settled();
@@ -20,6 +38,30 @@ try {
   assert.equal(app.state().focus, "preview");
   while (!app.state().status?.startsWith("Downloading")) harness.mockInput.pressKey("ARROW_RIGHT");
   await harness.flush();
+  const headingSpan = () =>
+    harness
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((span) => span.text.includes("This device"));
+  assert.equal(app.state().color, false);
+  assert.deepEqual(headingSpan()?.fg.toInts().slice(0, 3), [208, 209, 210]);
+  assert.deepEqual(headingSpan()?.bg.toInts().slice(0, 3), [16, 17, 18]);
+  harness.mockInput.pressKey("l", { ctrl: true });
+  await settle();
+  assert.equal(app.state().color, true);
+  assert.deepEqual(
+    headingSpan()?.fg.toInts().slice(0, 3),
+    [18, 52, 86],
+    "ANSI cyan must use the host palette",
+  );
+  harness.mockInput.pressKey("l", { ctrl: true });
+  await settle();
+  assert.equal(app.state().color, false);
+  assert.deepEqual(
+    headingSpan()?.fg.toInts().slice(0, 3),
+    [208, 209, 210],
+    "turning colour off must remove recorded plan styling",
+  );
   const pausedIndex = app.state().index;
   const before = app.screen().text;
   app.tick();
@@ -76,3 +118,28 @@ try {
 } finally {
   harness.renderer.destroy();
 }
+
+for (const options of [
+  { palette: hostPalette, colorAllowed: false },
+  { palette: undefined, colorAllowed: true },
+]) {
+  const harness = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true });
+  try {
+    const app = mountStorybook(harness.renderer, { animate: false, ...options });
+    await harness.flush();
+    await app.settled();
+    assert.equal(app.state().colorAvailable, false);
+    harness.mockInput.pressKey("l", { ctrl: true });
+    await harness.flush();
+    assert.equal(
+      app.state().color,
+      false,
+      "respect terminal colour policy and incomplete palette detection",
+    );
+  } finally {
+    harness.renderer.destroy();
+  }
+}
+console.log(
+  "Storybook colour smoke passed: neutral default, host palette, toggle, policy, detection fallback.",
+);

@@ -10,7 +10,7 @@ import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
 import { NoStoredCredentials } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { terminalColors } from "../../presentation/terminal-style.js";
+import { createColors } from "picocolors";
 import { result } from "../contracts.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 
@@ -40,10 +40,9 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
         ...(options.apply
           ? {
               onPlan: (plan) =>
-                renderer.note(
-                  renderLibrarySyncPlan(plan, terminalColors()),
-                  "Applying Library sync plan",
-                ),
+                renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
+                  renderBody: (color) => renderLibrarySyncPlan(plan, createColors(color)),
+                }),
             }
           : {}),
       }),

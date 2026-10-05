@@ -25,7 +25,11 @@ export type InteractionEvent = Data.TaggedEnum<{
     readonly choices: ReadonlyArray<Choice<string>>;
   };
   PromptAnswered: { readonly answer: ScriptedAnswer | "<redacted>" };
-  Note: { readonly title: string; readonly body: string };
+  Note: {
+    readonly title: string;
+    readonly body: string;
+    readonly renderBody?: (color: boolean) => string;
+  };
   Step: {
     readonly index: number;
     readonly total: number;
@@ -180,7 +184,8 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
       record(InteractionEvent.Result({ result: { schema, data, encodedData, exitCode } })),
     failure: (failure) => record(InteractionEvent.Failure({ failure })),
     help: (text) => record(InteractionEvent.Help({ text })),
-    note: (body, title) => record(InteractionEvent.Note({ title, body })),
+    note: (body, title, options) =>
+      record(InteractionEvent.Note({ title, body, ...(options === undefined ? {} : options) })),
     step: (step, body) => record(InteractionEvent.Step({ ...step, body })),
     updateStatus: (message) => record(InteractionEvent.StatusUpdated({ message })),
     withStatus: (status, operation) =>

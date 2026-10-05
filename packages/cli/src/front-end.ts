@@ -66,3 +66,5 @@ export {
 } from "./presentation/terminal-status.js";
 export { journeyStories } from "./storybook/journey-stories.js";
 export { OutputStory, outputStories, outputStoryKey } from "./storybook/output-stories.js";
+
+export { terminalColorEnabled } from "./presentation/terminal-style.js";
