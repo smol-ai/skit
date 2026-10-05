@@ -1,3 +1,4 @@
+import { syncJourney } from "./sync-journey.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import {
   LibraryState,
@@ -17,7 +18,7 @@ import { presentSetEnabled } from "../handlers/library/set-enabled.js";
 import type { Prompter } from "../presentation/prompter.js";
 import type { Renderer } from "../presentation/renderer.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
-import { openLibrarySession, type LibrarySessionState } from "../workflows/library/session.js";
+import { openLibrarySession } from "../workflows/library/session.js";
 
 export interface JourneyStory<A, E, R> {
   readonly name: string;
@@ -132,15 +133,32 @@ const previewEnable = Effect.scoped(
   }),
 ).pipe(Effect.provide(skitLayer));
 
-export const journeyStories: ReadonlyArray<
-  JourneyStory<LibrarySessionState, unknown, Prompter | Renderer>
-> = [
+export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
   {
     name: "preview-enable-portable-collection",
     initialState: "1 Collection · 1 Skill · 0 Bindings",
     answers: [collectionId, "global"],
-    run: previewEnable,
-    finalState: (state: LibrarySessionState) =>
-      `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.bindings).length} Bindings`,
+    run: previewEnable.pipe(
+      Effect.map(
+        (state) =>
+          `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.bindings).length} Bindings`,
+      ),
+    ),
+    finalState: (state) => state,
+  },
+  {
+    name: "library-sync/fresh-device",
+    initialState: "Empty fixture device · remote has 3 Collections and 3 enabled Skills",
+    answers: [],
+    run: syncJourney(false),
+    finalState: (state) => state,
+  },
+  {
+    name: "library-sync/download-failed",
+    expectedOutcome: "failure",
+    initialState: "Empty fixture device · Registry rejects the second download",
+    answers: [],
+    run: syncJourney(true),
+    finalState: (state) => state,
   },
 ];

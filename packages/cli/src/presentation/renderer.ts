@@ -42,8 +42,7 @@ export interface RendererShape {
 
 export class Renderer extends Context.Service<Renderer, RendererShape>()("skit/Renderer") {}
 
-const CLEAR_STATUS_LINE = "\r\u001b[2K";
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "./terminal-status.js";
 
 const write = (stream: NodeJS.WriteStream, body: string) =>
   Effect.callback<void>((resume) => {
@@ -118,9 +117,9 @@ export function consoleRenderer(json: boolean): RendererShape {
                 Effect.suspend(() =>
                   write(
                     process.stderr,
-                    `${CLEAR_STATUS_LINE}${SPINNER_FRAMES[frame++ % SPINNER_FRAMES.length]} ${statusMessage}`,
+                    `${CLEAR_STATUS_LINE}${renderStatusLine(statusMessage, frame++, terminalColorEnabled(process.stderr))}`,
                   ),
-                ).pipe(Effect.andThen(Effect.sleep(80))),
+                ).pipe(Effect.andThen(Effect.sleep(STATUS_FRAME_MS))),
               ).pipe(Effect.forkScoped);
               return yield* operation.pipe(
                 Effect.onExit((exit) =>
