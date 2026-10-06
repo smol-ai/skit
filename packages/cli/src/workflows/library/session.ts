@@ -1,14 +1,23 @@
 import { ProjectionWouldDuplicate } from "../../projection/harness-shadows.js";
-import { readLibrarySkillMetadata, type SkillMetadata } from "./skill-metadata.js";
+import {
+  readLibrarySkillMetadata,
+  sourceIdentityLabel,
+  type SkillMetadata,
+} from "./skill-metadata.js";
 import {
   bindingSkillIds,
   currentSkillVersion,
+  retainedTreePath,
+  versionBacking,
   LibraryStore,
   withLibraryWriter,
   type LibraryState,
+  type SourceIdentity,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
-import { Effect, Result } from "effect";
+import { Effect, FileSystem, Result } from "effect";
+import { join } from "node:path";
+import { LibrarySubjectNotFound, resolveLibrarySubject } from "./subject-resolution.js";
 import type { InvocationOption } from "../../invocation/policy.js";
 import { invocationReadModel, type InvocationReadModel } from "../../invocation/read-model.js";
 import { bindingRowLabel, destinationLabel, scopeKey } from "../../library/read-model.js";
@@ -35,6 +44,7 @@ export interface LibrarySkillRow extends SkillMetadata {
   readonly skillVersionId: string;
   readonly collectionId: string;
   readonly heading: string;
+  readonly collectionSource?: { readonly kind: SourceIdentity["kind"]; readonly locator: string };
   readonly bindings: readonly LibraryBindingRow[];
 }
 
@@ -104,6 +114,10 @@ const skillRows = (
       (candidate) => candidate.collection_id === skill.collection_id,
     );
     const heading = collection?.label ?? skill.name;
+    const collectionSource =
+      collection?.upstream?.source_identity ??
+      state.acquisitions.find((acquisition) => acquisition.collection_id === skill.collection_id)
+        ?.source_identity;
     const version = currentSkillVersion(state, skill);
     if (version === undefined) return [];
     return [
@@ -113,6 +127,14 @@ const skillRows = (
         skillVersionId: version.skill_version_id,
         collectionId: collection?.collection_id ?? skill.skill_id,
         heading,
+        ...(collectionSource === undefined
+          ? {}
+          : {
+              collectionSource: {
+                kind: collectionSource.kind,
+                locator: sourceIdentityLabel(collectionSource),
+              },
+            }),
         bindings: bindingRows(state, skill.skill_id, skill.name),
       },
     ];
@@ -123,6 +145,29 @@ export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () 
   const state = yield* store.load;
   const metadata = yield* readLibrarySkillMetadata(state, store.originalsPath);
   return { skills: skillRows(state, metadata) } satisfies LibrarySessionState;
+});
+
+/** Read the exact retained version selected by the front end, never a native Projection. */
+export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillContent")(function* (
+  skillVersionId: string,
+) {
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  const subject = yield* resolveLibrarySubject(state, skillVersionId);
+  if (subject.kind !== "skill") return yield* new LibrarySubjectNotFound({ query: skillVersionId });
+  const version = subject.skill.versions.find(
+    (candidate) => candidate.skill_version_id === skillVersionId,
+  );
+  const backing = version === undefined ? undefined : versionBacking(state, subject.skill, version);
+  if (!backing) return yield* new LibrarySubjectNotFound({ query: skillVersionId });
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.readFileString(
+    join(
+      retainedTreePath(store.originalsPath, backing.copy.digest),
+      backing.member.source_path,
+      "SKILL.md",
+    ),
+  );
 });
 
 export const refreshLibrarySession = Effect.fn("LibrarySession.refresh")(function* (

@@ -10,6 +10,7 @@ import {
 import {
   confirmLibraryChange,
   openLibrarySession,
+  readLibrarySkillContent,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
 } from "../src/workflows/library/session.js";
@@ -111,6 +112,17 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const collectionId = (yield* home.durable).collections[0]!.collection_id;
     assert.strictEqual(session.skills.length, 2);
     assert.ok(session.skills.every((row) => row.collectionId === collectionId));
+    assert.ok(
+      session.skills.every(
+        (row) => row.collectionSource?.kind === "local" && row.collectionSource.locator === source,
+      ),
+    );
+    yield* fs.writeFileString(join(source, "alpha", "SKILL.md"), "changed native source\n");
+    const alpha = session.skills.find((row) => row.name === "alpha")!;
+    assert.strictEqual(
+      yield* home.owned(readLibrarySkillContent(alpha.skillVersionId)),
+      "# alpha\n",
+    );
     const scopes = [{ kind: "global" } as const];
     const proposed = yield* home.owned(
       proposeLibraryCollectionChange(session, home.bindings, collectionId, true, scopes),
