@@ -22,6 +22,7 @@ import {
   confirmLibraryChange,
   proposeLibraryDisable,
   proposeLibraryEnable,
+  proposeLibraryCollectionChange,
   proposeLibraryInvocation,
   type LibraryBindingRow,
   type LibrarySessionState,
@@ -36,6 +37,8 @@ const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";
 const BACK_TO_SKILLS = "Back to skills";
 const ALL_BINDINGS = "all";
+const ENABLE_COLLECTION = "Enable whole collection";
+const DISABLE_COLLECTION = "Disable whole collection";
 
 const abandonOnCancel = <E, R>(
   effect: Effect.Effect<LibrarySessionState, E | PromptCancelled, R>,
@@ -48,6 +51,13 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
       const policy = pending.policies[index] ?? pending.policies[0];
       return [
         `  ${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")}`,
+        ...(fact.wholeCollection
+          ? [
+              fact.action === "enable"
+                ? "    collection follows future Source additions and removals"
+                : "    collection following ends; all its Skills are disabled",
+            ]
+          : []),
         "    agents     every agent",
         `    applies to ${fact.destination}`,
         ...(fact.action === "enable" && policy
@@ -217,6 +227,16 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
       const rows = session.skills.filter((row) => row.collectionId === collectionId);
       const skillId = yield* prompter
         .autocomplete("Select a Skill", [
+          {
+            value: ENABLE_COLLECTION,
+            label: ENABLE_COLLECTION,
+            hint: "Follow future Source additions and removals",
+          },
+          {
+            value: DISABLE_COLLECTION,
+            label: DISABLE_COLLECTION,
+            hint: "End collection following and disable all its Skills",
+          },
           ...rows.map((row) => ({
             value: row.skillVersionId,
             label: row.bindings.length > 0 ? `${row.name} · enabled` : row.name,
@@ -226,6 +246,27 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
         ])
         .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(BACK_TO_COLLECTIONS)));
       if (skillId === BACK_TO_COLLECTIONS) break;
+      if (skillId === ENABLE_COLLECTION || skillId === DISABLE_COLLECTION) {
+        session = yield* abandonOnCancel(
+          Effect.gen(function* () {
+            const scope = yield* promptForScope(resolve(process.cwd()));
+            const proposed = yield* proposeLibraryCollectionChange(
+              session,
+              configuration,
+              collectionId,
+              skillId === ENABLE_COLLECTION,
+              [scope],
+            );
+            return yield* applyWithConfirmation(
+              proposed,
+              configuration,
+              "Updating Collection Projections",
+            );
+          }),
+          session,
+        );
+        continue;
+      }
       while (true) {
         const row = session.skills.find((candidate) => candidate.skillVersionId === skillId);
         if (row === undefined) break;

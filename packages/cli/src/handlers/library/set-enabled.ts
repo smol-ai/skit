@@ -154,8 +154,14 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
           return skill === undefined ? [] : [skill];
         });
-        if (skills.length === 0) return [];
-        const collectionIds = [...new Set(skills.map((skill) => skill.collection_id))];
+        const collectionIds = [
+          ...new Set([
+            ...skills.map((skill) => skill.collection_id),
+            ...binding.entries.flatMap((entry) =>
+              entry.kind === "collection" ? [entry.collection_id] : [],
+            ),
+          ]),
+        ];
         const location =
           binding.scope.kind === "global" ? "global" : `repository ${binding.scope.root}`;
         return collectionIds.map((collectionId) => {
@@ -245,10 +251,27 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             selectedBindings.some((binding) => binding.skillIds.includes(skill.skill_id))),
       )
     : undefined;
+  let wholeCollection = input.all;
+  if (input.interactive && collection !== undefined && !wholeCollection) {
+    const selection = yield* prompter
+      .select("What would you like to " + input.action + "?", [
+        {
+          value: "collection",
+          label: input.enabled ? "Enable whole collection" : "Disable whole collection",
+          hint: input.enabled
+            ? "Follow future Source additions and removals"
+            : "End collection following and disable all its Skills",
+        },
+        { value: "skills", label: "Select individual Skills", hint: "Only the selected Skills" },
+      ])
+      .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
+    if (selection === DONE) return;
+    wholeCollection = selection === "collection";
+  }
   let selectedSkills: string[] | undefined;
   if (
     input.interactive &&
-    !input.all &&
+    !wholeCollection &&
     selected &&
     (selected.length > 1 || selectedBindings !== undefined)
   ) {
@@ -285,13 +308,14 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           );
           return skill !== undefined && binding.skillIds.includes(skill.skill_id);
         });
-        if (names === undefined || names.length === 0) return Effect.succeed(undefined);
+        if (!wholeCollection && (names === undefined || names.length === 0))
+          return Effect.succeed(undefined);
         return store.load.pipe(
           Effect.flatMap((current) =>
             applyLibraryBindings(current, {
               query: binding.collectionId,
-              all: false,
-              selectedSkills: names,
+              all: wholeCollection,
+              ...(wholeCollection ? {} : { selectedSkills: names }),
               invocation: {
                 subjects: [binding.collectionId],
                 scope: binding.scope,
@@ -337,7 +361,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         : "Removing retained Projections",
     applyLibraryBindings(state, {
       query,
-      all: input.all,
+      all: wholeCollection,
       allowDuplicate: input.allowDuplicate,
       ...(selectedSkills === undefined ? {} : { selectedSkills }),
       invocation: {

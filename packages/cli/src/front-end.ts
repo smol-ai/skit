@@ -24,6 +24,7 @@ export {
   openLibrarySession,
   refreshLibrarySession,
   proposeLibraryEnable,
+  proposeLibraryCollectionChange,
   proposeLibraryDisable,
   proposeLibraryInvocation,
   confirmLibraryChange,

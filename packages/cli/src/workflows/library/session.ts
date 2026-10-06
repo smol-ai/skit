@@ -45,9 +45,11 @@ export interface PreviewFacts {
   readonly destination: string;
   readonly invocation?: InvocationOption;
   readonly writes: "projection created" | "projection removed";
+  readonly wholeCollection?: boolean;
 }
 
 interface PendingOperation {
+  readonly all?: boolean;
   readonly query: string;
   readonly invocation: SetEnabledInvocation;
 }
@@ -165,11 +167,11 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
       const current = yield* (yield* LibraryStore).load;
       return {
         libraryRevision: libraryStateRevision(current),
-        plans: yield* Effect.forEach(operations, ({ query, invocation }) =>
+        plans: yield* Effect.forEach(operations, ({ query, invocation, all }) =>
           Effect.gen(function* () {
             const plan = yield* previewLibraryBindings(current, {
               query,
-              all: false,
+              all: all ?? false,
               invocation,
               roots: configuration,
               variantsPath: configuration.variantsPath,
@@ -190,7 +192,10 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     } satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
   const pending: PendingLibraryChange = {
     operations,
-    facts: attempted.success.plans.map(factFromPlan),
+    facts: attempted.success.plans.map((plan, index) => ({
+      ...factFromPlan(plan),
+      ...(operations[index]?.all ? { wholeCollection: true } : {}),
+    })),
     policies,
     libraryRevision: attempted.success.libraryRevision,
   };
@@ -243,6 +248,26 @@ export function proposeLibraryDisable(
         enabled: false,
         dryRun: false,
       },
+    })),
+  );
+}
+
+/** Whole-Collection intent follows future Source membership changes. */
+export function proposeLibraryCollectionChange(
+  state: LibrarySessionState,
+  configuration: ProjectionOptions,
+  collectionId: string,
+  enabled: boolean,
+  scopes: readonly Scope[],
+) {
+  const uniqueScopes = new Map(scopes.map((scope) => [scopeKey(scope), scope]));
+  return proposeLibraryChange(
+    state,
+    configuration,
+    [...uniqueScopes.values()].map((scope) => ({
+      query: collectionId,
+      all: true,
+      invocation: { subjects: [collectionId], scope, enabled, dryRun: false },
     })),
   );
 }
@@ -300,12 +325,12 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
           return yield* new SetEnabledStale({
             message: "Library changed after this Binding change was previewed",
           });
-        yield* Effect.forEach(pending.operations, ({ query, invocation }) =>
+        yield* Effect.forEach(pending.operations, ({ query, invocation, all }) =>
           Effect.gen(function* () {
             const current = yield* (yield* LibraryStore).load;
             yield* applyLibraryBindings(current, {
               query,
-              all: false,
+              all: all ?? false,
               invocation,
               roots: configuration,
               variantsPath: configuration.variantsPath,

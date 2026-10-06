@@ -28,6 +28,7 @@ import {
   openLibrarySession,
   refreshLibrarySession,
   proposeLibraryEnable,
+  proposeLibraryCollectionChange,
   proposeLibraryDisable,
   proposeLibraryInvocation,
   confirmLibraryChange,
@@ -1171,6 +1172,17 @@ function openConfirm(): void {
                 ),
               ]
             : []),
+          ...(fact.wholeCollection
+            ? [
+                kv(
+                  "collection",
+                  fact.action === "enable"
+                    ? "follows future Source additions and removals"
+                    : "following ends; all its Skills are disabled",
+                  14,
+                ),
+              ]
+            : []),
           kv("writes", fact.writes, 14),
         ]),
       ),
@@ -1218,38 +1230,81 @@ function bindingChooserOptions(bindings: readonly LibraryBindingRow[]): ChooserO
 
 function startEnable(): void {
   const row = selectedLibraryRow();
-  const session = libraryHost.state;
-  if (!row || !session) return;
-  chooseScopeThen(async (scope) =>
-    afterProposal(
-      await transitionLibrary((state) =>
-        proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
+  if (!row || !libraryHost.state) return;
+  openChooser({
+    title: "What would you like to enable?",
+    options: [
+      {
+        value: "collection",
+        label: `Enable whole collection · ${row.heading}`,
+        hint: "Follow future Source additions and removals",
+      },
+      { value: "skill", label: `Enable ${row.name}`, hint: "Only this Skill" },
+    ],
+    choose: (value) =>
+      chooseScopeThen(async (scope) =>
+        afterProposal(
+          await transitionLibrary((state) =>
+            value === "collection"
+              ? proposeLibraryCollectionChange(
+                  state,
+                  libraryConfiguration,
+                  row.collectionId,
+                  true,
+                  [scope],
+                )
+              : proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
+          ),
+        ),
       ),
-    ),
-  );
+  });
 }
 
 function startDisable(): void {
   const row = selectedLibraryRow();
-  const session = libraryHost.state;
-  if (!row || !session || !row.bindings.length) return;
-  const disable = async (bindings: readonly LibraryBindingRow[]) =>
-    afterProposal(
-      await transitionLibrary((state) =>
-        proposeLibraryDisable(state, libraryConfiguration, row, bindings),
-      ),
-    );
-  if (row.bindings.length === 1) void disable(row.bindings);
-  else
-    openChooser({
-      title: DESTINATION_QUESTION,
-      options: [
-        { value: ALL_BINDINGS, label: "All shown" },
-        ...bindingChooserOptions(row.bindings),
-      ],
-      choose: (value) =>
-        disable(value === ALL_BINDINGS ? row.bindings : [row.bindings[Number(value)]!]),
-    });
+  if (!row || !libraryHost.state) return;
+  openChooser({
+    title: "What would you like to disable?",
+    options: [
+      {
+        value: "collection",
+        label: `Disable whole collection · ${row.heading}`,
+        hint: "End collection following and disable all its Skills",
+      },
+      ...(row.bindings.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
+    ],
+    choose: (value) => {
+      if (value === "collection") {
+        chooseScopeThen(async (scope) =>
+          afterProposal(
+            await transitionLibrary((state) =>
+              proposeLibraryCollectionChange(state, libraryConfiguration, row.collectionId, false, [
+                scope,
+              ]),
+            ),
+          ),
+        );
+        return;
+      }
+      const disable = async (bindings: readonly LibraryBindingRow[]) =>
+        afterProposal(
+          await transitionLibrary((state) =>
+            proposeLibraryDisable(state, libraryConfiguration, row, bindings),
+          ),
+        );
+      if (row.bindings.length === 1) void disable(row.bindings);
+      else
+        openChooser({
+          title: DESTINATION_QUESTION,
+          options: [
+            { value: ALL_BINDINGS, label: "All shown" },
+            ...bindingChooserOptions(row.bindings),
+          ],
+          choose: (chosen) =>
+            disable(chosen === ALL_BINDINGS ? row.bindings : [row.bindings[Number(chosen)]!]),
+        });
+    },
+  });
 }
 
 function startInvocation(): void {
@@ -1494,6 +1549,7 @@ if (process.env.SKIT_TUI_SNAPSHOT_DOCUMENT === "1") {
 
 if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY && sections[variant]?.key === "library") {
   if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "enable") startEnable();
+  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "disable") startDisable();
   if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "confirm") {
     const row = selectedLibraryRow();
     if (row && libraryHost.state)
