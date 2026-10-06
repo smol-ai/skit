@@ -259,8 +259,8 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           value: "collection",
           label: input.enabled ? "Enable whole collection" : "Disable whole collection",
           hint: input.enabled
-            ? "Follow future Source additions and removals"
-            : "End collection following and disable all its Skills",
+            ? "Include new skills and remove deleted ones when you update"
+            : "Disable every skill in this collection",
         },
         { value: "skills", label: "Select individual Skills", hint: "Only the selected Skills" },
       ])

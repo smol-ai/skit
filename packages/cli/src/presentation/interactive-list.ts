@@ -54,8 +54,8 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
         ...(fact.wholeCollection
           ? [
               fact.action === "enable"
-                ? "    collection follows future Source additions and removals"
-                : "    collection following ends; all its Skills are disabled",
+                ? "    collection includes new skills and removes deleted ones when you update"
+                : "    collection every skill is disabled",
             ]
           : []),
         "    agents     every agent",
@@ -230,12 +230,12 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
           {
             value: ENABLE_COLLECTION,
             label: ENABLE_COLLECTION,
-            hint: "Follow future Source additions and removals",
+            hint: "Include new skills and remove deleted ones when you update",
           },
           {
             value: DISABLE_COLLECTION,
             label: DISABLE_COLLECTION,
-            hint: "End collection following and disable all its Skills",
+            hint: "Disable every skill in this collection",
           },
           ...rows.map((row) => ({
             value: row.skillVersionId,

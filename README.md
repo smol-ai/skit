@@ -84,12 +84,12 @@ skit disable
 
 Enabled skills are available to every agent. SKIT writes one copy into `.agents/skills`, which Codex, OpenCode, Devin, Cursor and Pi read, and, when Claude Code is installed, one into `.claude/skills`.
 
-Interactive `skit enable`, `skit disable`, `skit list`, and the TUI offer whole-collection actions as well as individual Skill selection. Whole-collection enablement follows future Source membership changes; selecting individual Skills applies only to those Skills.
+Interactive `skit enable`, `skit disable`, `skit list`, and the TUI offer whole-collection actions as well as individual Skill selection. When you enable a whole collection, `skit update` enables new skills added to it and disables skills removed from it. Selecting individual skills enables only those skills.
 
 Alternatively, you can supply these flags:
 
 - `--repo [path]` to enable in a single repo
-- `--all` to enable a whole collection and follow future Source additions and removals
+- `--all` to enable a whole collection, including new skills added when you update
 - `--invocation [declared, explicit, implicit, host-policy]` to control whether an agent can invoke the skill automatically
 
 Before enabling a new skill, SKIT checks the same-scope directories readable by each agent. An existing copy blocks enable, including an identical copy reached through a symlink. `skit enable --dry-run` shows the conflict; `--allow-duplicate` explicitly permits it. Existing Bindings can still change invocation policy. `skit doctor` shows duplicate symlink locations and their resolved targets.

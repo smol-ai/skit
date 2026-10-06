@@ -1177,8 +1177,8 @@ function openConfirm(): void {
                 kv(
                   "collection",
                   fact.action === "enable"
-                    ? "follows future Source additions and removals"
-                    : "following ends; all its Skills are disabled",
+                    ? "includes new skills and removes deleted ones when you update"
+                    : "every skill is disabled",
                   14,
                 ),
               ]
@@ -1237,7 +1237,7 @@ function startEnable(): void {
       {
         value: "collection",
         label: `Enable whole collection · ${row.heading}`,
-        hint: "Follow future Source additions and removals",
+        hint: "Include new skills and remove deleted ones when you update",
       },
       { value: "skill", label: `Enable ${row.name}`, hint: "Only this Skill" },
     ],
@@ -1269,7 +1269,7 @@ function startDisable(): void {
       {
         value: "collection",
         label: `Disable whole collection · ${row.heading}`,
-        hint: "End collection following and disable all its Skills",
+        hint: "Disable every skill in this collection",
       },
       ...(row.bindings.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
     ],
