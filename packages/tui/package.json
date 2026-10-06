@@ -12,7 +12,9 @@
   "dependencies": {
     "@opentui/core": "0.5.9",
     "@opentui/keymap": "^0.5.9",
-    "effect": "4.0.0"
+    "@smolai/skit-core": "workspace:*",
+    "effect": "4.0.0",
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@effect/vitest": "4.0.0",

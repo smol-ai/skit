@@ -87,6 +87,15 @@ const OPENCODE_V1_FIELDS = [
 const harnessProfiles = {
   codex: defineHarnessProfile({
     id: "codex",
+    skillListing: {
+      fraction: 0.02,
+      fallbackCharacters: 8000,
+      descriptionCap: 1024,
+      descriptionFields: ["description"],
+      overflow: "round-robin-prefix",
+      namesRetained: false,
+      sourceIds: ["openai-codex-skills"],
+    },
     profile: { id: "skit/harness/codex", version: "2026-08-25", verifiedAt: VERIFIED_AT },
     roots: [
       {
@@ -184,6 +193,20 @@ const harnessProfiles = {
   }),
   "claude-code": defineHarnessProfile({
     id: "claude-code",
+    skillListing: {
+      fraction: 0.01,
+      contextConversion: {
+        charactersPerToken: 4,
+        fallbackContextWindow: 200000,
+        clientVersion: "2.1.292",
+      },
+      fallbackCharacters: 8000,
+      descriptionCap: 1536,
+      descriptionFields: ["description", "when_to_use"],
+      overflow: "drop-descriptions-by-usage",
+      namesRetained: true,
+      sourceIds: ["claude-code-skills"],
+    },
     profile: { id: "skit/harness/claude-code", version: "2026-08-25", verifiedAt: VERIFIED_AT },
     roots: [
       {

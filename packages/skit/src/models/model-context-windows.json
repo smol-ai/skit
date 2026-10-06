@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-06T22:34:25.109258Z",
+  "models": [
+    {
+      "id": "gpt-6.1-sol",
+      "contextWindow": 373000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-6-astra",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-6-sol",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-6-luna",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-reserve",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "gpt-5.5",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "id": "codex-auto-review",
+      "contextWindow": 272000,
+      "provider": "openai",
+      "aliases": []
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-fable-5",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-fable-5-1",
+      "aliases": ["fable", "fable[1m]"],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-haiku-4-5",
+      "aliases": ["haiku"],
+      "contextWindow": 200000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-haiku-4-5-20251001",
+      "aliases": [],
+      "contextWindow": 200000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-5",
+      "aliases": [],
+      "contextWindow": 200000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-5-20251101",
+      "aliases": [],
+      "contextWindow": 200000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-6",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-7",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-8",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-5",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-5-5",
+      "aliases": ["opus", "opus[1m]"],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-4-5",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-4-5-20250929",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-4-6",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-5",
+      "aliases": [],
+      "contextWindow": 1000000
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-5-5",
+      "aliases": ["sonnet", "sonnet[1m]"],
+      "contextWindow": 1000000
+    }
+  ],
+  "sources": {
+    "openai": {
+      "kind": "model-catalog",
+      "clientVersion": "0.160.1",
+      "observedAt": "2026-10-06T18:25:09.741359Z"
+    },
+    "anthropic": {
+      "kind": "model-catalog",
+      "url": "https://models.dev/api.json",
+      "observedAt": "2026-10-06T22:34:25.109258Z",
+      "aliasReference": "https://code.claude.com/docs/en/model-config"
+    }
+  }
+}
