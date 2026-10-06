@@ -30,6 +30,7 @@ import {
   refreshLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
+  libraryCollectionScopes,
   proposeLibraryDisable,
   proposeLibraryInvocation,
   confirmLibraryChange,
@@ -616,11 +617,12 @@ function libraryRows(): (LibraryRow | LibraryCollectionRow)[] {
     return skills.filter((row) => row.collectionId === libraryCollectionId).map(libraryRow);
   const collections = new Map<string, LibrarySkillRow[]>();
   for (const row of skills) {
+    if (row.hasCollection === false) continue;
     const members = collections.get(row.collectionId) ?? [];
     members.push(row);
     collections.set(row.collectionId, members);
   }
-  return [...collections]
+  const grouped = [...collections]
     .sort(([, left], [, right]) =>
       left[0]!.heading.localeCompare(right[0]!.heading, undefined, { sensitivity: "base" }),
     )
@@ -640,6 +642,9 @@ function libraryRows(): (LibraryRow | LibraryCollectionRow)[] {
         agents: [],
       };
     });
+  return [...grouped, ...skills.filter((row) => row.hasCollection === false).map(libraryRow)].sort(
+    (left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+  );
 }
 
 function currentSectionItems(): InventoryItem[] {
@@ -677,6 +682,7 @@ function changeSummary(pending: PendingLibraryChange): string {
 }
 
 function inventoryView(): BoxRenderable {
+  detailsScroll = null;
   const section = sections[variant]!;
   const sectionItems = currentSectionItems();
   selectedItem = Math.min(selectedItem, Math.max(0, sectionItems.length - 1));
@@ -699,6 +705,14 @@ function inventoryView(): BoxRenderable {
     ),
   );
 
+  if (section.key === "library" && showNoChangeNotice)
+    root.add(
+      text("library-no-change", "Already set this way. Nothing to change.", {
+        height: 1,
+        paddingLeft: 1,
+        fg: ink.faint,
+      }),
+    );
   const body = box("inventory-body", {
     flexGrow: 1,
     flexDirection: "row",
@@ -1013,6 +1027,7 @@ function render(): void {
 }
 
 function switchVariant(next: number): void {
+  showNoChangeNotice = false;
   variant = (next + sections.length) % sections.length;
   skillNavigation = { view: "groups" };
   libraryCollectionId = undefined;
@@ -1284,6 +1299,9 @@ let chooserSelect: SelectRenderable | null = null;
 let confirmView: BoxRenderable | null = null;
 let confirmScroll: ScrollBoxRenderable | null = null;
 let confirmShowSkills = false;
+let showNoChangeNotice = false;
+let confirmReceipt: TextRenderable | null = null;
+let confirmHelp: TextRenderable | null = null;
 
 function closeChooser(): void {
   if (!chooserView) return;
@@ -1356,7 +1374,46 @@ function closeConfirm(): void {
   confirmView.destroyRecursively();
   confirmView = null;
   confirmScroll = null;
+  confirmReceipt = null;
+  confirmHelp = null;
   render();
+}
+
+function confirmationReceiptContent(pending: PendingLibraryChange) {
+  return receipt(
+    pending.facts.flatMap((fact, index) => [
+      ...(confirmationCollection(pending, index) === undefined
+        ? [kv("skills", fact.skills.join(", "), 14)]
+        : [
+            kv("collection", confirmationCollection(pending, index)!, 14),
+            kv("skills", String(fact.skills.length), 14),
+            ...(confirmShowSkills ? [kv("included", fact.skills.join(", "), 14)] : []),
+          ]),
+      kv("agents", "every agent", 14),
+      kv("applies to", fact.destination, 14),
+      ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
+        ? [
+            kv(
+              "behaviour",
+              invocationRowSummary((pending.policies[index] ?? pending.policies[0])!),
+              14,
+            ),
+          ]
+        : []),
+      ...(fact.wholeCollection
+        ? [
+            kv(
+              "updates",
+              fact.action === "enable"
+                ? "includes new skills and removes deleted ones when you update"
+                : "every skill is disabled",
+              14,
+            ),
+          ]
+        : []),
+      kv("writes", fact.writes, 14),
+    ]),
+  );
 }
 
 /** Every Library write passes through this preview before it is applied. */
@@ -1388,60 +1445,25 @@ function openConfirm(): void {
     contentOptions: { gap: 1, flexShrink: 0 },
   });
   scroll.add(text("library-confirm-summary", changeSummary(pending), { fg: ink.strong }));
-  scroll.add(
-    new TextRenderable(renderer, {
-      id: "library-confirm-receipt",
-      content: receipt(
-        pending.facts.flatMap((fact, index) => [
-          ...(confirmationCollection(pending, index) === undefined
-            ? [kv("skills", fact.skills.join(", "), 14)]
-            : [
-                kv("collection", confirmationCollection(pending, index)!, 14),
-                kv("skills", String(fact.skills.length), 14),
-                ...(confirmShowSkills ? [kv("included", fact.skills.join(", "), 14)] : []),
-              ]),
-          kv("agents", "every agent", 14),
-          kv("applies to", fact.destination, 14),
-          ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
-            ? [
-                kv(
-                  "behaviour",
-                  invocationRowSummary((pending.policies[index] ?? pending.policies[0])!),
-                  14,
-                ),
-              ]
-            : []),
-          ...(fact.wholeCollection
-            ? [
-                kv(
-                  "updates",
-                  fact.action === "enable"
-                    ? "includes new skills and removes deleted ones when you update"
-                    : "every skill is disabled",
-                  14,
-                ),
-              ]
-            : []),
-          kv("writes", fact.writes, 14),
-        ]),
-      ),
-    }),
-  );
+  confirmReceipt = new TextRenderable(renderer, {
+    id: "library-confirm-receipt",
+    content: confirmationReceiptContent(pending),
+  });
+  scroll.add(confirmReceipt);
   overlay.add(scroll);
-  overlay.add(
-    text(
-      "library-confirm-help",
-      pending.operations.some((operation) => operation.all)
-        ? `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`
-        : isCompact()
-          ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
-          : "enter apply   esc cancel — nothing is written until you apply",
-      {
-        fg: ink.faint,
-        flexShrink: 0,
-      },
-    ),
+  confirmHelp = text(
+    "library-confirm-help",
+    pending.operations.some((operation) => operation.all)
+      ? `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`
+      : isCompact()
+        ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
+        : "enter apply   esc cancel — nothing is written until you apply",
+    {
+      fg: ink.faint,
+      flexShrink: 0,
+    },
   );
+  overlay.add(confirmHelp);
   confirmView = overlay;
   confirmScroll = scroll;
   renderer.root.add(overlay);
@@ -1450,6 +1472,7 @@ function openConfirm(): void {
 
 function afterProposal(outcome: LibraryActionOutcome | undefined): void {
   if (!outcome) return;
+  showNoChangeNotice = outcome.kind === "unchanged";
   render();
   if (outcome.kind === "preview") {
     confirmShowSkills = false;
@@ -1511,11 +1534,15 @@ function startEnable(): void {
   openChooser({
     title: "What would you like to enable?",
     options: [
-      {
-        value: "collection",
-        label: `Enable whole collection · ${row.heading}`,
-        hint: "Include new skills and remove deleted ones when you update",
-      },
+      ...(row.hasCollection === false
+        ? []
+        : [
+            {
+              value: "collection",
+              label: `Enable whole collection · ${row.heading}`,
+              hint: "Include new skills and remove deleted ones when you update",
+            },
+          ]),
       { value: "skill", label: `Enable ${row.name}`, hint: "Only this Skill" },
     ],
     choose: (value) =>
@@ -1537,67 +1564,64 @@ function startEnable(): void {
   });
 }
 
+function disableCollection(collectionId: string): void {
+  if (!libraryHost.state) return;
+  const scopes = libraryCollectionScopes(libraryHost.state, collectionId);
+  if (!scopes.length) return;
+  const disable = async (selectedScopes: readonly Scope[]) =>
+    afterProposal(
+      await transitionLibrary((state) =>
+        proposeLibraryCollectionChange(
+          state,
+          libraryConfiguration,
+          collectionId,
+          false,
+          selectedScopes,
+        ),
+      ),
+    );
+  if (scopes.length === 1) void disable(scopes);
+  else
+    openChooser({
+      title: DESTINATION_QUESTION,
+      options: [
+        { value: ALL_BINDINGS, label: "All shown" },
+        ...scopes.map((scope, index) => ({
+          value: String(index),
+          label: destinationLabel(scope),
+        })),
+      ],
+      choose: (value) => disable(value === ALL_BINDINGS ? scopes : [scopes[Number(value)]!]),
+    });
+}
+
 function startDisable(): void {
   const collection = selectedLibraryCollection();
-  if (collection && libraryHost.state) {
-    const byDestination = new Map(
-      libraryHost.state.skills
-        .filter((row) => row.collectionId === collection.collectionId)
-        .flatMap((row) => row.bindings)
-        .map((binding) => [destinationLabel(binding.scope), binding.scope]),
-    );
-    const scopes = [...byDestination.values()];
-    if (!scopes.length) return;
-    const disable = async (selectedScopes: readonly Scope[]) =>
-      afterProposal(
-        await transitionLibrary((state) =>
-          proposeLibraryCollectionChange(
-            state,
-            libraryConfiguration,
-            collection.collectionId,
-            false,
-            selectedScopes,
-          ),
-        ),
-      );
-    if (scopes.length === 1) void disable(scopes);
-    else
-      openChooser({
-        title: DESTINATION_QUESTION,
-        options: [
-          { value: ALL_BINDINGS, label: "All shown" },
-          ...scopes.map((scope, index) => ({
-            value: String(index),
-            label: destinationLabel(scope),
-          })),
-        ],
-        choose: (value) => disable(value === ALL_BINDINGS ? scopes : [scopes[Number(value)]!]),
-      });
+  if (collection) {
+    disableCollection(collection.collectionId);
     return;
   }
   const row = selectedLibraryRow();
   if (!row || !libraryHost.state) return;
+  const scopes = libraryCollectionScopes(libraryHost.state, row.collectionId);
+  if (!scopes.length) return;
   openChooser({
     title: "What would you like to disable?",
     options: [
-      {
-        value: "collection",
-        label: `Disable whole collection · ${row.heading}`,
-        hint: "Disable every skill in this collection",
-      },
+      ...(row.hasCollection === false
+        ? []
+        : [
+            {
+              value: "collection",
+              label: `Disable whole collection · ${row.heading}`,
+              hint: "Disable every skill in this collection",
+            },
+          ]),
       ...(row.bindings.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
     ],
     choose: (value) => {
       if (value === "collection") {
-        chooseScopeThen(async (scope) =>
-          afterProposal(
-            await transitionLibrary((state) =>
-              proposeLibraryCollectionChange(state, libraryConfiguration, row.collectionId, false, [
-                scope,
-              ]),
-            ),
-          ),
-        );
+        disableCollection(row.collectionId);
         return;
       }
       const disable = async (bindings: readonly LibraryBindingRow[]) =>
@@ -1786,7 +1810,10 @@ function handleGlobalKey(key: KeyEvent): void {
       key.preventDefault();
       key.stopPropagation();
       confirmShowSkills = !confirmShowSkills;
-      openConfirm();
+      const pending = libraryHost.state?.pending;
+      if (pending && confirmReceipt) confirmReceipt.content = confirmationReceiptContent(pending);
+      if (confirmHelp)
+        confirmHelp.content = `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`;
     } else if (["pageup", "pagedown", "home", "end"].includes(key.name)) {
       key.preventDefault();
       if (key.name === "home") confirmScroll?.scrollTo(0);

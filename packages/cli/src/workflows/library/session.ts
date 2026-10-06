@@ -6,6 +6,7 @@ import {
 } from "./skill-metadata.js";
 import {
   bindingSkillIds,
+  deterministicTreeHashEffect,
   currentSkillVersion,
   retainedTreePath,
   versionBacking,
@@ -17,6 +18,7 @@ import {
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
+import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
 import { LibrarySubjectNotFound, resolveLibrarySubject } from "./subject-resolution.js";
 import type { InvocationOption } from "../../invocation/policy.js";
 import { invocationReadModel, type InvocationReadModel } from "../../invocation/read-model.js";
@@ -44,6 +46,7 @@ export interface LibrarySkillRow extends SkillMetadata {
   readonly skillVersionId: string;
   readonly collectionId: string;
   readonly heading: string;
+  readonly hasCollection?: boolean;
   readonly collectionSource?: { readonly kind: SourceIdentity["kind"]; readonly locator: string };
   readonly bindings: readonly LibraryBindingRow[];
 }
@@ -54,7 +57,11 @@ export interface PreviewFacts {
   readonly scope: Scope;
   readonly destination: string;
   readonly invocation?: InvocationOption;
-  readonly writes: "projection created" | "projection removed";
+  readonly writes:
+    | "projection created"
+    | "projection removed"
+    | "nothing to change"
+    | "copies checked for repair";
   readonly wholeCollection?: boolean;
 }
 
@@ -74,6 +81,7 @@ export interface PendingLibraryChange {
 export type LibraryActionOutcome =
   | { readonly kind: "preview"; readonly pending: PendingLibraryChange }
   | { readonly kind: "applied"; readonly pending: PendingLibraryChange }
+  | { readonly kind: "unchanged"; readonly pending: PendingLibraryChange }
   | { readonly kind: "cancelled"; readonly pending?: PendingLibraryChange }
   | { readonly kind: "failed"; readonly failure: ClassifiedFailure };
 
@@ -127,6 +135,7 @@ const skillRows = (
         skillVersionId: version.skill_version_id,
         collectionId: collection?.collection_id ?? skill.skill_id,
         heading,
+        hasCollection: collection !== undefined,
         ...(collectionSource === undefined
           ? {}
           : {
@@ -198,7 +207,11 @@ const factFromPlan = (
   scope: plan.scope,
   destination: destinationLabel(plan.scope),
   ...(plan.invocation === undefined ? {} : { invocation: plan.invocation }),
-  writes: plan.enabled ? "projection created" : "projection removed",
+  writes: !plan.changed
+    ? "nothing to change"
+    : plan.enabled
+      ? "projection created"
+      : "projection removed",
 });
 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
@@ -223,7 +236,59 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
             });
             if (plan.shadows?.length)
               return yield* new ProjectionWouldDuplicate({ shadows: plan.shadows });
-            return plan;
+            let needsReconciliation = false;
+            if (plan.enabled && !plan.changed) {
+              const fs = yield* FileSystem.FileSystem;
+              const targets = yield* activeProjectionTargetsEffect(configuration);
+              const subject = yield* resolveLibrarySubject(current, query);
+              for (const target of targets) {
+                const root = bindingRoot(target, invocation.scope, configuration);
+                if (root === undefined) continue;
+                for (const skill of subject.skills.filter((skill) =>
+                  plan.skills.includes(skill.name),
+                )) {
+                  const projection = current.projections.find(
+                    (candidate) =>
+                      candidate.root === root &&
+                      candidate.skill_id === skill.skill_id &&
+                      candidate.target === target,
+                  );
+                  if (
+                    !projection ||
+                    projection.status !== "installed" ||
+                    !(yield* fs.exists(projection.path))
+                  ) {
+                    needsReconciliation = true;
+                    continue;
+                  }
+                  if (
+                    (yield* deterministicTreeHashEffect(projection.path)) !==
+                    projection.expected_digest
+                  )
+                    needsReconciliation = true;
+                }
+              }
+            }
+            if (!plan.enabled && !plan.changed) {
+              const fs = yield* FileSystem.FileSystem;
+              const targets = yield* activeProjectionTargetsEffect(configuration);
+              for (const binding of plan.bindings) {
+                const boundIds = new Set(bindingSkillIds(current, binding));
+                for (const target of targets) {
+                  const root = bindingRoot(target, binding.scope, configuration);
+                  if (root === undefined) continue;
+                  for (const projection of current.projections.filter(
+                    (projection) =>
+                      projection.root === root &&
+                      projection.target === target &&
+                      !boundIds.has(projection.skill_id),
+                  )) {
+                    if (yield* fs.exists(projection.path)) needsReconciliation = true;
+                  }
+                }
+              }
+            }
+            return { ...plan, needsReconciliation };
           }),
         ),
       };
@@ -239,11 +304,24 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     operations,
     facts: attempted.success.plans.map((plan, index) => ({
       ...factFromPlan(plan),
+      ...(plan.needsReconciliation
+        ? {
+            writes: plan.enabled
+              ? ("copies checked for repair" as const)
+              : ("projection removed" as const),
+          }
+        : {}),
       ...(operations[index]?.all ? { wholeCollection: true } : {}),
     })),
     policies,
     libraryRevision: attempted.success.libraryRevision,
   };
+  if (attempted.success.plans.every((plan) => !plan.changed && !plan.needsReconciliation))
+    return {
+      ...state,
+      pending: undefined,
+      outcome: { kind: "unchanged", pending },
+    } satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
   return {
     ...state,
     pending,
@@ -295,6 +373,17 @@ export function proposeLibraryDisable(
       },
     })),
   );
+}
+
+export function libraryCollectionScopes(state: LibrarySessionState, collectionId: string): Scope[] {
+  return [
+    ...new Map(
+      state.skills
+        .filter((row) => row.collectionId === collectionId)
+        .flatMap((row) => row.bindings)
+        .map((binding) => [scopeKey(binding.scope), binding.scope]),
+    ).values(),
+  ];
 }
 
 /** Whole-Collection intent follows future Source membership changes. */
@@ -361,7 +450,8 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
   configuration: ProjectionOptions,
 ) {
   const pending = state.pending;
-  if (pending === undefined) return cancelLibraryChange(state);
+  if (pending === undefined)
+    return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
   const applied = yield* Effect.result(
     withLibraryWriter(
       Effect.gen(function* () {

@@ -253,6 +253,21 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     assert.ok(!(yield* enable.prompts).some((prompt) => prompt.kind === "multiselect"));
 
+    const unchangedBrowse = yield* makeScriptedInteraction([
+      collectionId,
+      "Enable whole collection",
+      "global",
+      "Back to collections",
+      "Done",
+    ]);
+    yield* home.owned(
+      browseLibraryEffect(yield* home.owned(openLibrarySession()), {
+        ...home.bindings,
+        ...configuration.inventory,
+      }).pipe(Effect.provide(unchangedBrowse.layer)),
+    );
+    assert.ok(!(yield* unchangedBrowse.prompts).some((prompt) => prompt.kind === "confirm"));
+    assert.ok((yield* unchangedBrowse.notes).some((note) => note.title === "No change"));
     const beforeCancel = yield* home.durable;
     yield* home.owned(
       presentSetEnabled({
@@ -272,7 +287,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const browseCancel = yield* makeScriptedInteraction([
       collectionId,
       "Disable whole collection",
-      "global",
       false,
       "Back to collections",
       "Done",
@@ -286,7 +300,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const browseDisable = yield* makeScriptedInteraction([
       collectionId,
       "Disable whole collection",
-      "global",
       true,
       "Back to collections",
       "Done",
@@ -297,6 +310,35 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       ),
     );
     assert.deepStrictEqual((yield* home.durable).global_bindings, []);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "enable",
+        enabled: true,
+        subject: collectionId,
+        cwd: root,
+        all: true,
+        dryRun: false,
+        interactive: false,
+        scope: { kind: "repository", root },
+        configuration,
+      }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
+    );
+    const directDisable = yield* makeScriptedInteraction(["collection"]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        enabled: false,
+        subject: collectionId,
+        cwd: home.home,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        configuration,
+      }).pipe(Effect.provide(directDisable.layer)),
+    );
+    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.strictEqual(yield* directDisable.remaining, 0);
+    assert.strictEqual((yield* directDisable.prompts).length, 1);
     for (const scope of [{ kind: "global" } as const, { kind: "repository", root } as const]) {
       yield* home.owned(
         presentSetEnabled({
@@ -312,10 +354,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
       );
     }
-    const disableEverywhere = yield* makeScriptedInteraction([`all:${collectionId}`, "collection"]);
+    const disableEverywhere = yield* makeScriptedInteraction(["collection", "all"]);
     yield* home.owned(
       presentSetEnabled({
         action: "disable",
+        subject: collectionId,
         enabled: false,
         cwd: root,
         all: false,

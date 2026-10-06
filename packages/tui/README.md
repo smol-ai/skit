@@ -16,7 +16,7 @@ The TUI opens on your Library, grouped by collection. Collections and their skil
 
 Press `e` or `d` on a collection to enable or disable the whole collection; on a skill, choose that skill or its whole collection. Whole-collection enablement includes new skills and removes deleted ones when you update. Review the destination and changes, then press `Enter` to apply or `Esc` to cancel. Press `s` in a collection confirmation to show or hide the included skills.
 
-Switch views with `1`–`6`: Library, Harnesses, Skills, Claude plugins, Codex plugins, and MCPs. Use `[` or `]` to cycle views, `Ctrl-P` for the command menu, and `q` or `Ctrl-C` to quit. On narrow terminals, details open as a separate screen; `Esc` returns to the list. Use `PgUp`/`PgDn` to scroll details and confirmations.
+Switch views with `1`–`6`: Library, Harnesses, Skills, Claude plugins, Codex plugins, and MCPs. Use `[` or `]` to cycle views, `Ctrl-P` for the command menu, and `q` or `Ctrl-C` to quit. On narrow terminals, skill details open as a separate screen; `Esc` returns to the list. Collection locations are shown in the details pane on wider terminals. Use `PgUp`/`PgDn` to scroll details and confirmations.
 
 Drag across text with the mouse, then press `y` to copy (yank) the selection.
 `Ctrl-C` remains an unambiguous quit shortcut.

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   deterministicTreeHashEffect,
   LibraryActor,
+  LibraryStore,
   LibraryAuditLog,
   skitLayer,
 } from "@smolai/skit-core";
@@ -12,7 +13,9 @@ import {
   openLibrarySession,
   readLibrarySkillContent,
   proposeLibraryEnable,
+  proposeLibraryDisable,
   proposeLibraryCollectionChange,
+  libraryCollectionScopes,
 } from "../src/workflows/library/session.js";
 import {
   initializeLibraryMachine,
@@ -138,6 +141,56 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
       { kind: "collection", collection_id: collectionId },
     ]);
+    const unchanged = yield* home.owned(
+      proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
+    );
+    assert.strictEqual(unchanged.outcome.kind, "unchanged");
+    assert.strictEqual(unchanged.pending, undefined);
+    if (unchanged.outcome.kind === "unchanged")
+      assert.strictEqual(unchanged.outcome.pending.facts[0]?.writes, "nothing to change");
+    assert.deepStrictEqual(libraryCollectionScopes(enabled, collectionId), scopes);
+    const beforeRepair = yield* home.durable;
+    const projection = beforeRepair.projections[0]!;
+    yield* fs.remove(projection.path, { recursive: true });
+    const repair = yield* home.owned(
+      proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
+    );
+    assert.strictEqual(repair.outcome.kind, "preview");
+    const repaired = yield* home.owned(confirmLibraryChange(repair, home.bindings));
+    assert.strictEqual(repaired.outcome?.kind, "applied");
+    assert.ok(yield* fs.exists(projection.path));
+
+    const withLeftover = yield* home.durable;
+    const beta = withLeftover.skills.find((skill) => skill.name === "beta")!;
+    yield* home.owned(
+      writingTo(
+        home.home,
+        LibraryStore.use((store) =>
+          store.publish({
+            ...withLeftover,
+            global_bindings: [
+              { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: beta.skill_id }] },
+            ],
+          }),
+        ),
+      ),
+    );
+    const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
+    const cleanup = yield* home.owned(
+      proposeLibraryDisable(repaired, home.bindings, alphaRow, alphaRow.bindings),
+    );
+    assert.strictEqual(cleanup.outcome.kind, "preview");
+    const cleaned = yield* home.owned(confirmLibraryChange(cleanup, home.bindings));
+    assert.strictEqual(cleaned.outcome?.kind, "applied");
+    assert.ok(
+      !(yield* fs.exists(
+        withLeftover.projections.find(
+          (copy) =>
+            copy.skill_id === withLeftover.skills.find((skill) => skill.name === "alpha")!.skill_id,
+        )!.path,
+      )),
+    );
+
     const removal = yield* home.owned(
       proposeLibraryCollectionChange(enabled, home.bindings, collectionId, false, scopes),
     );

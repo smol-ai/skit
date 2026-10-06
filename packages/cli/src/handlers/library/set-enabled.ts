@@ -10,7 +10,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
 import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
-import { scopeChoices } from "../../library/read-model.js";
+import { destinationLabel, scopeChoices } from "../../library/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
@@ -262,7 +262,15 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             ? "Include new skills and remove deleted ones when you update"
             : "Disable every skill in this collection",
         },
-        { value: "skills", label: "Select individual Skills", hint: "Only the selected Skills" },
+        ...(selected?.length
+          ? [
+              {
+                value: "skills",
+                label: "Select individual Skills",
+                hint: "Only the selected Skills",
+              },
+            ]
+          : []),
       ])
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
     if (selection === DONE) return;
@@ -296,6 +304,49 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       )
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
     if (selectedSkills.length === 0) return;
+  }
+  if (
+    input.interactive &&
+    !input.enabled &&
+    wholeCollection &&
+    collection !== undefined &&
+    input.scope === undefined &&
+    selectedBindings === undefined
+  ) {
+    const targets = [...state.global_bindings, ...state.local_bindings]
+      .filter(
+        (binding) =>
+          binding.entries.some(
+            (entry) =>
+              entry.kind === "collection" && entry.collection_id === collection.collection_id,
+          ) ||
+          bindingSkillIds(state, binding).some((id) =>
+            state.skills.some(
+              (skill) => skill.skill_id === id && skill.collection_id === collection.collection_id,
+            ),
+          ),
+      )
+      .map((binding) => ({
+        collectionId: collection.collection_id,
+        scope: binding.scope,
+        skillIds: bindingSkillIds(state, binding),
+        location: destinationLabel(binding.scope),
+      }));
+    if (!targets.length) {
+      yield* renderer.note("This collection is not enabled anywhere.", "Nothing to change");
+      return;
+    }
+    const chosen =
+      targets.length === 1
+        ? "0"
+        : yield* prompter
+            .autocomplete("Select where to disable Skills", [
+              { value: "all", label: "All shown" },
+              ...targets.map((target, index) => ({ value: String(index), label: target.location })),
+            ])
+            .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
+    if (chosen === DONE) return;
+    selectedBindings = chosen === "all" ? targets : [targets[Number(chosen)]!];
   }
   if (selectedBindings !== undefined && selectedBindings.length > 1) {
     const outcomes = yield* renderer.withStatus(
