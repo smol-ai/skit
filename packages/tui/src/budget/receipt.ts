@@ -1,6 +1,6 @@
 import { fg, StyledText } from "@opentui/core";
 import { ink, tone } from "../theme";
-import type { ListingBudget } from "./contracts";
+import type { ListingBudget } from "@smolai/skit-core";
 
 const amount = (value: number) => value.toLocaleString("en-US");
 

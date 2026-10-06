@@ -1,16 +1,18 @@
 import { Config, Effect, FileSystem, Option, Schema } from "effect";
 import { basename, dirname, join, resolve } from "node:path";
 import { platform } from "node:os";
-import {
-  harnessProfile,
-  modelContextWindow,
-  parseSkillFrontmatter,
-  type LibraryState,
-  type YamlMapping,
-} from "@smolai/skit-core";
+import { harnessProfile, resolveHarnessRoot } from "../catalog.js";
+import { parseSkillFrontmatter } from "../frontmatter.js";
+import { modelContextWindow } from "../../models/model-context-windows.js";
+import type { LibraryState } from "../../library/library-state.js";
+import type { YamlMapping } from "../../shared/json.js";
 import { ListingReadFailure, type ListingBudget, type ListingEntry } from "./contracts.js";
-import { readableHarnessRoots } from "../../../cli/src/projection/harness-shadows.js";
-import { type InventoryRootOptions } from "../../../cli/src/projection/roots.js";
+export interface ClaudeListingOptions {
+  readonly cwd: string;
+  readonly home: string;
+  readonly configHome: string;
+  readonly overrides: { readonly claude?: string };
+}
 
 const Settings = Schema.Struct({
   model: Schema.optionalKey(Schema.String),
@@ -175,7 +177,7 @@ export function claudeEntry(
 
 export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(function* (
   state: LibraryState,
-  options: InventoryRootOptions & { readonly cwd: string },
+  options: ClaudeListingOptions,
 ) {
   return yield* Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -291,21 +293,20 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       "Identical named descriptions are counted once across copies; native precedence for differing descriptions is not predicted.",
       "Built-in skills, legacy commands, remote/synced and dynamically loaded nested skills may add demand. This is a partial filesystem estimate; full instructions loaded later are additional.",
     ];
-    const roots: { root: string; namespace?: string }[] = readableHarnessRoots(
-      {
-        ...options,
-        overrides: {
-          ...options.overrides,
-          claude: options.overrides.claude ?? join(configDir, "skills"),
-        },
-      },
-      { kind: "global" },
-    ).filter((r) => r.harness === "claude-code");
+    const roots: { root: string; namespace?: string }[] = [
+      { root: resolve(options.overrides.claude ?? join(configDir, "skills")) },
+    ];
     for (let current = resolve(options.cwd); current !== options.home; current = dirname(current)) {
       roots.push(
-        ...readableHarnessRoots(options, { kind: "repository", root: current }).filter(
-          (r) => r.harness === "claude-code",
-        ),
+        ...harnessProfile("claude-code")
+          .roots.filter((root) => root.readable && root.scope === "project")
+          .map((root) => ({
+            root: resolveHarnessRoot(root, {
+              home: options.home,
+              configHome: options.configHome,
+              repository: current,
+            }),
+          })),
       );
       if (current === dirname(current)) break;
     }

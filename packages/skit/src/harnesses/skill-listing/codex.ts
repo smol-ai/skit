@@ -1,8 +1,8 @@
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { parseDocument } from "yaml";
-import { modelContextWindow, type LibraryState } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../../../cli/src/harness/probe.js";
+import { modelContextWindow } from "../../models/model-context-windows.js";
+import type { LibraryState } from "../../library/library-state.js";
 import {
   CodexListingBudget,
   estimateCodexListing,
@@ -72,10 +72,7 @@ export const readLibraryCodexListingSnapshot = Effect.fn("Library.codexListingSn
   if (options.overrideRoot !== undefined)
     return unavailable("A custom Codex root does not describe native discovery.");
   return yield* Effect.gen(function* () {
-    const probe = executable === undefined ? yield* probeHarnessEffect("codex") : undefined;
-    const command = executable ?? probe?.executablePath;
-    if (command == null || (probe !== undefined && probe.status !== "installed"))
-      return unavailable(probe?.error ?? "Codex CLI is unavailable.");
+    const command = executable ?? "codex";
     const discovery =
       suppliedDiscovery ?? (yield* readCodexSkills(command, options.cwd, undefined, true));
     if (discovery.configError !== undefined) return unavailable(discovery.configError);

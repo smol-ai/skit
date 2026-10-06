@@ -53,9 +53,7 @@ import {
   type Scope,
   type InvocationOption,
 } from "../../cli/src/front-end";
-import { LibraryStore } from "@smolai/skit-core";
-import { readListingBudgets } from "./budget/discovery";
-import type { ListingBudget } from "./budget/contracts";
+import { LibraryStore, readListingBudgets, type ListingBudget } from "@smolai/skit-core";
 import { budgetReceipt } from "./budget/receipt";
 import { createLibraryHost } from "./library-host";
 import { createRenderer, writeFrame } from "./snapshot";

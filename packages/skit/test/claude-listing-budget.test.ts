@@ -1,10 +1,10 @@
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
-import { LibraryStore } from "@smolai/skit-core";
+import { LibraryStore } from "../src/index.js";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { readClaudeListingSnapshot } from "../src/budget/claude.js";
-import { NativeLibraryFixture, nativeLibraryLayer } from "../../cli/test/helpers/native-library.js";
+import { readClaudeListingSnapshot } from "../src/harnesses/skill-listing/claude.js";
+import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
 
 it.effect(
   "Claude discovery reads settings once, follows scope, excludes explicit-only and remains independent of native CLI",

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { harnessProfile } from "@smolai/skit-core";
+import { harnessProfile } from "../catalog.js";
 
 const Contribution = Schema.Struct({
   collectionId: Schema.String,

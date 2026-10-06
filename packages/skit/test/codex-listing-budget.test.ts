@@ -10,13 +10,13 @@ import {
   makeSkillVersionId,
   Digest,
   AbsoluteDevicePath,
-} from "@smolai/skit-core";
+} from "../src/index.js";
 import {
   estimateCodexListingBudget,
   type CodexListingSkill,
-} from "../src/budget/codex-allocation.js";
-import { readLibraryCodexListingBudget } from "../src/budget/codex.js";
-import { NativeLibraryFixture, nativeLibraryLayer } from "../../cli/test/helpers/native-library.js";
+} from "../src/harnesses/skill-listing/codex-allocation.js";
+import { readLibraryCodexListingBudget } from "../src/harnesses/skill-listing/codex.js";
+import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
 
 const skill = (name: string, description = "Review code."): CodexListingSkill => ({
   name,

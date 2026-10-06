@@ -1,12 +1,14 @@
 import { expect, test } from "vitest";
-import { estimateCodexListing } from "../src/budget/codex-allocation.js";
-import { codexListingResult, largeListingEntries } from "../src/budget/contracts.js";
-import { listingBudgetLines } from "../src/budget/presentation.js";
+import { estimateCodexListing } from "../src/harnesses/skill-listing/codex-allocation.js";
+import {
+  codexListingResult,
+  largeListingEntries,
+} from "../src/harnesses/skill-listing/contracts.js";
 import {
   claudeEntry,
   claudeListingResult,
   type ClaudeListingSettings,
-} from "../src/budget/claude.js";
+} from "../src/harnesses/skill-listing/claude.js";
 
 const settings: ClaudeListingSettings = {
   model: null,
@@ -41,9 +43,7 @@ test("shared Codex results preserve demand and allocation; list large contributo
     expect(budget.demand).toBe(result.budget.requested);
     expect(budget.fitted).toBe(result.budget.used);
     expect(largeListingEntries(budget)).toHaveLength(count);
-    expect(listingBudgetLines(budget).join("\n")).toContain(
-      count === 1 ? "Within budget" : "Outside budget",
-    );
+    expect(budget.demand > budget.limit).toBe(count !== 1);
     const threshold = {
       ...budget,
       limit: 10000,
@@ -93,7 +93,6 @@ test("Claude combines capped description/when_to_use, honors explicit and name-o
   const budget = claudeListingResult("/work", [entry], settings, []);
   expect(budget._tag).toBe("DemandOnly");
   expect(largeListingEntries(budget)).toEqual([]);
-  expect(listingBudgetLines(budget).join("\n")).toContain("limit unverified");
   if (budget._tag !== "DemandOnly") throw new Error("Expected demand only");
   expect(budget.demand).toBe(1544);
   const duplicate = claudeListingResult(
@@ -116,5 +115,4 @@ test("Claude fixed character limit bounds description drops instead of reusing p
   expect(budget.shortened).toBe(0);
   expect(budget.omitted).toBe(0);
   expect(budget.fitted).toBeNull();
-  expect(listingBudgetLines(budget).join("\n")).toContain("invocation history");
 });

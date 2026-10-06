@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { join } from "node:path";
-import type { LibraryState } from "@smolai/skit-core";
+import type { LibraryState } from "../../library/library-state.js";
 import { codexListingResult, type ListingBudget } from "./contracts.js";
 import { readLibraryCodexListingSnapshot, type CodexListingSnapshot } from "./codex.js";
 import { readClaudeListingSnapshot, type ClaudeListingSnapshot } from "./claude.js";
