@@ -26,8 +26,8 @@ export const chip = (label: string, color: string): TextChunk =>
 
 export const sep = (): TextChunk => fg(surface.hairline)("  //  ");
 
-export const panelTitle = (n: number, name: string): string =>
-  ` ${String(n).padStart(2, "0")} ${name.toUpperCase()} `;
+export const panelTitle = (name: string, preserveCase = false): string =>
+  ` ${preserveCase ? name : name.charAt(0).toUpperCase() + name.slice(1)} `;
 
 export const panelColors = (focused: boolean) => ({
   borderColor: focused ? tone.accent : surface.hairline,

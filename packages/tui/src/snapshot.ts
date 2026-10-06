@@ -20,6 +20,7 @@ export async function createRenderer(snapshot?: string, size?: string): Promise<
   ).createTestRenderer({
     width: width || 140,
     height: height || 38,
+    kittyKeyboard: true,
   });
   return { renderer: test.renderer, test };
 }

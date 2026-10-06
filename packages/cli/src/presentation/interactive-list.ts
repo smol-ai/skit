@@ -22,6 +22,8 @@ import {
   confirmLibraryChange,
   proposeLibraryDisable,
   proposeLibraryEnable,
+  proposeLibraryCollectionChange,
+  libraryCollectionScopes,
   proposeLibraryInvocation,
   type LibraryBindingRow,
   type LibrarySessionState,
@@ -36,6 +38,8 @@ const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";
 const BACK_TO_SKILLS = "Back to skills";
 const ALL_BINDINGS = "all";
+const ENABLE_COLLECTION = "Enable whole collection";
+const DISABLE_COLLECTION = "Disable whole collection";
 
 const abandonOnCancel = <E, R>(
   effect: Effect.Effect<LibrarySessionState, E | PromptCancelled, R>,
@@ -48,6 +52,13 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
       const policy = pending.policies[index] ?? pending.policies[0];
       return [
         `  ${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")}`,
+        ...(fact.wholeCollection
+          ? [
+              fact.action === "enable"
+                ? "    collection includes new skills and removes deleted ones when you update"
+                : "    collection every skill is disabled",
+            ]
+          : []),
         "    agents     every agent",
         `    applies to ${fact.destination}`,
         ...(fact.action === "enable" && policy
@@ -73,6 +84,10 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   if (proposed === undefined) return session;
   if (proposed.kind === "failed") {
     yield* renderer.note(proposed.failure.message, "Unable to preview change");
+    return session;
+  }
+  if (proposed.kind === "unchanged") {
+    yield* renderer.note("Already set this way. Nothing to change.", "No change");
     return session;
   }
   if (proposed.kind !== "preview") return session;
@@ -217,6 +232,20 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
       const rows = session.skills.filter((row) => row.collectionId === collectionId);
       const skillId = yield* prompter
         .autocomplete("Select a Skill", [
+          {
+            value: ENABLE_COLLECTION,
+            label: ENABLE_COLLECTION,
+            hint: "Include new skills and remove deleted ones when you update",
+          },
+          ...(libraryCollectionScopes(session, collectionId).length
+            ? [
+                {
+                  value: DISABLE_COLLECTION,
+                  label: DISABLE_COLLECTION,
+                  hint: "Disable every skill in this collection",
+                },
+              ]
+            : []),
           ...rows.map((row) => ({
             value: row.skillVersionId,
             label: row.bindings.length > 0 ? `${row.name} · enabled` : row.name,
@@ -226,6 +255,45 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
         ])
         .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(BACK_TO_COLLECTIONS)));
       if (skillId === BACK_TO_COLLECTIONS) break;
+      if (skillId === ENABLE_COLLECTION || skillId === DISABLE_COLLECTION) {
+        session = yield* abandonOnCancel(
+          Effect.gen(function* () {
+            const enabledScopes = libraryCollectionScopes(session, collectionId);
+            const choice =
+              skillId === ENABLE_COLLECTION
+                ? undefined
+                : enabledScopes.length === 1
+                  ? "0"
+                  : yield* prompter.autocomplete(DESTINATION_QUESTION, [
+                      { value: ALL_BINDINGS, label: "All shown" },
+                      ...enabledScopes.map((scope, index) => ({
+                        value: String(index),
+                        label: destinationLabel(scope),
+                      })),
+                    ]);
+            const scopes =
+              skillId === ENABLE_COLLECTION
+                ? [yield* promptForScope(resolve(process.cwd()))]
+                : choice === ALL_BINDINGS
+                  ? enabledScopes
+                  : [enabledScopes[Number(choice)]!];
+            const proposed = yield* proposeLibraryCollectionChange(
+              session,
+              configuration,
+              collectionId,
+              skillId === ENABLE_COLLECTION,
+              scopes,
+            );
+            return yield* applyWithConfirmation(
+              proposed,
+              configuration,
+              "Updating Collection Projections",
+            );
+          }),
+          session,
+        );
+        continue;
+      }
       while (true) {
         const row = session.skills.find((candidate) => candidate.skillVersionId === skillId);
         if (row === undefined) break;

@@ -200,6 +200,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     });
     const interaction = yield* makeScriptedInteraction([
       `all:${collection.collection?.collection_id}`,
+      "skills",
       ["review"],
     ]);
     yield* home.owned(
@@ -214,15 +215,15 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       }).pipe(Effect.provide(interaction.layer)),
     );
     const prompts = yield* interaction.prompts;
-    assert.strictEqual(prompts.length, 2);
+    assert.strictEqual(prompts.length, 3);
     assert.strictEqual(prompts[0]?.message, "Select where to disable Skills");
     assert.deepStrictEqual(prompts[0]?.choices[0], {
       value: `all:${collection.collection?.collection_id}`,
       label: `${collection.collection?.label} — everywhere enabled`,
       hint: `global, repository ${root}`,
     });
-    assert.strictEqual(prompts[1]?.message, "Select Skills to disable");
-    assert.deepStrictEqual(prompts[1]?.choices, [
+    assert.strictEqual(prompts[2]?.message, "Select Skills to disable");
+    assert.deepStrictEqual(prompts[2]?.choices, [
       {
         value: "review",
         label: "review",
@@ -233,6 +234,142 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const disabled = yield* home.durable;
     assert.deepStrictEqual(disabled.global_bindings, []);
     assert.deepStrictEqual(disabled.local_bindings, []);
+    const collectionId = collection.collection!.collection_id;
+    const enable = yield* makeScriptedInteraction([collectionId, "collection"]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "enable",
+        enabled: true,
+        cwd: root,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        scope: { kind: "global" },
+        configuration,
+      }).pipe(Effect.provide(enable.layer)),
+    );
+    assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
+      { kind: "collection", collection_id: collectionId },
+    ]);
+    assert.ok(!(yield* enable.prompts).some((prompt) => prompt.kind === "multiselect"));
+
+    const unchangedBrowse = yield* makeScriptedInteraction([
+      collectionId,
+      "Enable whole collection",
+      "global",
+      "Back to collections",
+      "Done",
+    ]);
+    yield* home.owned(
+      browseLibraryEffect(yield* home.owned(openLibrarySession()), {
+        ...home.bindings,
+        ...configuration.inventory,
+      }).pipe(Effect.provide(unchangedBrowse.layer)),
+    );
+    assert.ok(!(yield* unchangedBrowse.prompts).some((prompt) => prompt.kind === "confirm"));
+    assert.ok((yield* unchangedBrowse.notes).some((note) => note.title === "No change"));
+    const beforeCancel = yield* home.durable;
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        enabled: false,
+        subject: collectionId,
+        cwd: root,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        scope: { kind: "global" },
+        configuration,
+      }).pipe(Effect.provide((yield* makeScriptedInteraction(["cancel"])).layer)),
+    );
+    assert.deepStrictEqual(yield* home.durable, beforeCancel);
+
+    const browseCancel = yield* makeScriptedInteraction([
+      collectionId,
+      "Disable whole collection",
+      false,
+      "Back to collections",
+      "Done",
+    ]);
+    yield* home.owned(
+      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+        Effect.provide(browseCancel.layer),
+      ),
+    );
+    assert.deepStrictEqual(yield* home.durable, beforeCancel);
+    const browseDisable = yield* makeScriptedInteraction([
+      collectionId,
+      "Disable whole collection",
+      true,
+      "Back to collections",
+      "Done",
+    ]);
+    yield* home.owned(
+      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+        Effect.provide(browseDisable.layer),
+      ),
+    );
+    assert.deepStrictEqual((yield* home.durable).global_bindings, []);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "enable",
+        enabled: true,
+        subject: collectionId,
+        cwd: root,
+        all: true,
+        dryRun: false,
+        interactive: false,
+        scope: { kind: "repository", root },
+        configuration,
+      }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
+    );
+    const directDisable = yield* makeScriptedInteraction(["collection"]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        enabled: false,
+        subject: collectionId,
+        cwd: home.home,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        configuration,
+      }).pipe(Effect.provide(directDisable.layer)),
+    );
+    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.strictEqual(yield* directDisable.remaining, 0);
+    assert.strictEqual((yield* directDisable.prompts).length, 1);
+    for (const scope of [{ kind: "global" } as const, { kind: "repository", root } as const]) {
+      yield* home.owned(
+        presentSetEnabled({
+          action: "enable",
+          enabled: true,
+          subject: collectionId,
+          cwd: root,
+          all: true,
+          dryRun: false,
+          interactive: false,
+          scope,
+          configuration,
+        }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
+      );
+    }
+    const disableEverywhere = yield* makeScriptedInteraction(["collection", "all"]);
+    yield* home.owned(
+      presentSetEnabled({
+        action: "disable",
+        subject: collectionId,
+        enabled: false,
+        cwd: root,
+        all: false,
+        dryRun: false,
+        interactive: true,
+        configuration,
+      }).pipe(Effect.provide(disableEverywhere.layer)),
+    );
+    assert.deepStrictEqual((yield* home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.strictEqual(yield* disableEverywhere.remaining, 0);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -328,7 +465,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     assert.strictEqual(prompts[0]?.choices.length, 2);
     const effectChoice = prompts[0]?.choices.find((choice) => choice.hint === "effect");
     assert.ok(effectChoice);
-    const selection = yield* makeScriptedInteraction([effectChoice.value, ["effect"]]);
+    const selection = yield* makeScriptedInteraction([effectChoice.value, "skills", ["effect"]]);
     yield* home.owned(
       presentSetEnabled({
         action: "disable",

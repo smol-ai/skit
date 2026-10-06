@@ -26,8 +26,11 @@ import {
   auditLocalCapabilitiesV1Alpha4Effect,
   probeHarnessEffect,
   openLibrarySession,
+  readLibrarySkillContent,
   refreshLibrarySession,
   proposeLibraryEnable,
+  proposeLibraryCollectionChange,
+  libraryCollectionScopes,
   proposeLibraryDisable,
   proposeLibraryInvocation,
   confirmLibraryChange,
@@ -108,7 +111,14 @@ type LibraryRow = Omit<AuditItem, "kind"> & {
   row: LibrarySkillRow;
 };
 
-type InventoryItem = AuditItem | SkillGroupRow | LibraryRow;
+type LibraryCollectionRow = Omit<AuditItem, "kind"> & {
+  kind: "library-collection";
+  collectionId: string;
+  source?: LibrarySkillRow["collectionSource"];
+};
+type InventoryItem = AuditItem | SkillGroupRow | LibraryRow | LibraryCollectionRow;
+let libraryCollectionId: string | undefined;
+
 type SkillNavigation = { view: "groups" } | { view: "skills"; group: SkillGroup<SkillItem> };
 
 const args = process.argv.slice(2);
@@ -342,6 +352,13 @@ function groupRow(group: SkillGroup<SkillItem>): SkillGroupRow {
 
 const sections = [
   {
+    key: "library",
+    title: "Library",
+    subtitle: "Enable, disable, and choose when agents may use a skill",
+    items: [] as AuditItem[],
+  },
+
+  {
     key: "harnesses",
     title: "Harnesses",
     subtitle: "Detected agent harnesses",
@@ -370,12 +387,6 @@ const sections = [
     title: "MCPs",
     subtitle: "MCP registrations across all harnesses",
     items: items.filter((item) => item.kind === "mcp-server"),
-  },
-  {
-    key: "library",
-    title: "Library",
-    subtitle: "Enable, disable, and choose when agents may use a skill",
-    items: [] as AuditItem[],
   },
 ] as const;
 
@@ -409,11 +420,26 @@ const requestedItemIndex =
       )?.findIndex((item) => item.name === requestedItem);
 let selectedItem =
   requestedItemIndex !== undefined && requestedItemIndex >= 0 ? requestedItemIndex : 0;
+if (sections[variant]?.key === "library" && requestedItem) {
+  const rows = libraryRows();
+  const collectionIndex = rows.findIndex((row) => row.name === requestedItem);
+  if (collectionIndex >= 0) selectedItem = collectionIndex;
+  else {
+    const skill = libraryHost.state?.skills.find((row) => row.name === requestedItem);
+    if (skill) {
+      libraryCollectionId = skill.collectionId;
+      selectedItem = libraryRows().findIndex(
+        (row) => row.kind === "library-skill" && row.row.skillVersionId === skill.skillVersionId,
+      );
+    }
+  }
+}
 let currentView: BoxRenderable | null = null;
 let paletteView: BoxRenderable | null = null;
 let paletteSelect: SelectRenderable | null = null;
 let documentView: BoxRenderable | null = null;
 let documentScroll: ScrollBoxRenderable | null = null;
+let pendingSkillPreview: Promise<void> | undefined;
 
 function box(
   id: string,
@@ -462,6 +488,20 @@ function abbreviatedHash(hash: string): string {
   return hash.length > 24 ? `${hash.slice(0, 23)}…` : hash;
 }
 
+let narrowDetails = false;
+let detailsScroll: ScrollBoxRenderable | null = null;
+const isNarrow = () => renderer.width < 80;
+const isCompact = () => renderer.width < 110;
+function modalWidth() {
+  return isCompact()
+    ? { left: 1, width: Math.max(1, renderer.width - 2) }
+    : { left: "16%" as const, width: "68%" as const };
+}
+function fitLabel(value: string, width: number): string {
+  const chars = Array.from(value);
+  return chars.length <= width ? value : `${chars.slice(0, Math.max(0, width - 1)).join("")}…`;
+}
+
 function header(title: string, subtitle: string): BoxRenderable {
   const result = box(`header-${variant}`, {
     width: "100%",
@@ -473,17 +513,20 @@ function header(title: string, subtitle: string): BoxRenderable {
   result.add(
     new TextRenderable(renderer, {
       id: `title-${variant}`,
-      content: new StyledText([
-        fg(ink.strong)("SKIT"),
-        sep(),
-        fg(ink.muted)("AUDIT"),
-        sep(),
-        fg(tone.accent)(title.toUpperCase()),
-      ]),
+      content: isCompact()
+        ? `SKIT / ${title}`
+        : new StyledText([
+            fg(ink.strong)("SKIT"),
+            sep(),
+            fg(ink.muted)(sections[variant]?.key === "library" ? "Skills" : "Audit"),
+            sep(),
+            fg(tone.accent)(title),
+          ]),
       marginLeft: 1,
     }),
   );
-  result.add(text(`subtitle-${variant}`, subtitle, { fg: ink.faint, marginRight: 1 }));
+  if (!isCompact())
+    result.add(text(`subtitle-${variant}`, subtitle, { fg: ink.faint, marginRight: 1 }));
   return result;
 }
 
@@ -497,32 +540,54 @@ function footer(label: string): BoxRenderable {
   result.add(
     new TextRenderable(renderer, {
       id: `footer-text-${variant}`,
-      content: keybar([
-        ["↑↓", "browse"],
-        ...(sections[variant]!.key === "harnesses"
-          ? [["p", "probe"] as [string, string], ["P", "probe all"] as [string, string]]
-          : []),
-        ...(sections[variant]!.key === "library"
+      content: keybar(
+        isCompact()
           ? [
-              ["e", "enable"] as [string, string],
-              ["d", "disable"] as [string, string],
-              ["i", "when used"] as [string, string],
-              ["r", "refresh"] as [string, string],
+              ["enter", "open"],
+              ["esc", "back"],
+              ...(sections[variant]?.key === "library" ? [["e/d", ""] as [string, string]] : []),
+              ["^P", "menu"],
             ]
-          : []),
-        ...(sections[variant]!.key === "skills"
-          ? skillNavigation.view === "groups"
-            ? [["enter", "open"] as [string, string]]
-            : [["enter", "read"] as [string, string], ["esc", "collections"] as [string, string]]
-          : []),
-        ["[ ]", "view"],
-        ["1–6", "jump"],
-        ["^P", "commands"],
-        ["q", "quit"],
-      ]),
+          : [
+              ["↑↓", "browse"],
+              ...(sections[variant]!.key === "harnesses"
+                ? [["p", "probe"] as [string, string], ["P", "probe all"] as [string, string]]
+                : []),
+              ...(sections[variant]!.key === "library"
+                ? [
+                    ...(libraryCollectionId === undefined
+                      ? [
+                          ["enter", "open collection"] as [string, string],
+                          ["e", "enable"] as [string, string],
+                          ["d", "disable"] as [string, string],
+                        ]
+                      : [
+                          ["esc", "collections"] as [string, string],
+                          ["e", "enable"] as [string, string],
+                          ["d", "disable"] as [string, string],
+                          ["i", "when used"] as [string, string],
+                        ]),
+                    ["r", "refresh"] as [string, string],
+                  ]
+                : []),
+              ...(sections[variant]!.key === "skills"
+                ? skillNavigation.view === "groups"
+                  ? [["enter", "open"] as [string, string]]
+                  : [
+                      ["enter", "read"] as [string, string],
+                      ["esc", "collections"] as [string, string],
+                    ]
+                : []),
+              ["[ ]", "view"],
+              ["1–6", "jump"],
+              ["^P", "commands"],
+              ["q", "quit"],
+            ],
+      ),
     }),
   );
-  result.add(text(`footer-label-${variant}`, label, { fg: ink.faint, marginLeft: 1 }));
+  if (!isCompact())
+    result.add(text(`footer-label-${variant}`, label, { fg: ink.faint, marginLeft: 1 }));
   return result;
 }
 
@@ -544,8 +609,42 @@ function libraryRow(row: LibrarySkillRow): LibraryRow {
   };
 }
 
-function libraryRows(): LibraryRow[] {
-  return (libraryHost.state?.skills ?? []).map(libraryRow);
+function libraryRows(): (LibraryRow | LibraryCollectionRow)[] {
+  const skills = [...(libraryHost.state?.skills ?? [])].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+  );
+  if (libraryCollectionId !== undefined)
+    return skills.filter((row) => row.collectionId === libraryCollectionId).map(libraryRow);
+  const collections = new Map<string, LibrarySkillRow[]>();
+  for (const row of skills) {
+    if (row.hasCollection === false) continue;
+    const members = collections.get(row.collectionId) ?? [];
+    members.push(row);
+    collections.set(row.collectionId, members);
+  }
+  const grouped = [...collections]
+    .sort(([, left], [, right]) =>
+      left[0]!.heading.localeCompare(right[0]!.heading, undefined, { sensitivity: "base" }),
+    )
+    .map(([collectionId, members]): LibraryCollectionRow => {
+      const enabled = members.filter((row) => row.bindings.length > 0).length;
+      return {
+        kind: "library-collection",
+        collectionId,
+        source: members[0]?.collectionSource,
+        name: members[0]!.heading,
+        location: collectionId,
+        status: "clear",
+        summary: `${members.length} Skill${members.length === 1 ? "" : "s"} · ${enabled} enabled`,
+        evidence: members.map(
+          (row) => `${row.name} · ${row.bindings.length ? "enabled" : "not enabled"}`,
+        ),
+        agents: [],
+      };
+    });
+  return [...grouped, ...skills.filter((row) => row.hasCollection === false).map(libraryRow)].sort(
+    (left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+  );
 }
 
 function currentSectionItems(): InventoryItem[] {
@@ -563,36 +662,27 @@ function selectedLibraryRow(): LibrarySkillRow | undefined {
   return item?.kind === "library-skill" ? item.row : undefined;
 }
 
+function confirmationCollection(pending: PendingLibraryChange, index: number): string | undefined {
+  const operation = pending.operations[index];
+  if (!operation?.all) return;
+  return (
+    libraryHost.state?.skills.find((row) => row.collectionId === operation.query)?.heading ??
+    operation.query
+  );
+}
+
 /** The TUI writes its own copy from structured facts rather than reusing CLI output prose. */
 function changeSummary(pending: PendingLibraryChange): string {
   return pending.facts
     .map(
-      (fact) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.skills.join(", ")} for every agent (${fact.destination})`,
+      (fact, index) =>
+        `${fact.action === "enable" ? "Enable" : "Disable"} ${confirmationCollection(pending, index) ?? fact.skills.join(", ")} for every agent (${fact.destination})`,
     )
     .join("; ");
 }
 
-function libraryOutcomeText(): { text: string; failed: boolean } {
-  if (libraryOpenError) return { text: `Library unavailable\n· ${libraryOpenError}`, failed: true };
-  const outcome = libraryHost.state?.outcome;
-  if (!outcome) return { text: "No Library action yet.", failed: false };
-  if (outcome.kind === "failed")
-    return {
-      text: `${outcome.failure.code}\n· ${outcome.failure.message}\n· ${outcome.failure.remediation}`,
-      failed: true,
-    };
-  if (outcome.kind === "preview")
-    return { text: `Awaiting confirmation · ${changeSummary(outcome.pending)}`, failed: false };
-  if (outcome.kind === "cancelled")
-    return {
-      text: outcome.pending ? `Cancelled · ${changeSummary(outcome.pending)}` : "Nothing to cancel",
-      failed: false,
-    };
-  return { text: `Applied · ${changeSummary(outcome.pending)}`, failed: false };
-}
-
 function inventoryView(): BoxRenderable {
+  detailsScroll = null;
   const section = sections[variant]!;
   const sectionItems = currentSectionItems();
   selectedItem = Math.min(selectedItem, Math.max(0, sectionItems.length - 1));
@@ -605,12 +695,24 @@ function inventoryView(): BoxRenderable {
   root.add(
     header(
       section.title,
-      section.key === "skills" && skillNavigation.view === "skills"
-        ? `${skillNavigation.group.label} · ${sectionItems.length} entries · ${report.summary.findings} findings`
-        : `${section.subtitle} · ${sectionItems.length} entries · ${report.summary.findings} findings`,
+      section.key === "library"
+        ? libraryCollectionId === undefined
+          ? `${sectionItems.length} Collections · ${libraryHost.state?.skills.length ?? 0} Skills`
+          : `${libraryHost.state?.skills.find((row) => row.collectionId === libraryCollectionId)?.heading ?? "Collection"} · ${sectionItems.length} Skills`
+        : section.key === "skills" && skillNavigation.view === "skills"
+          ? `${skillNavigation.group.label} · ${sectionItems.length} entries · ${report.summary.findings} findings`
+          : `${section.subtitle} · ${sectionItems.length} entries · ${report.summary.findings} findings`,
     ),
   );
 
+  if (section.key === "library" && showNoChangeNotice)
+    root.add(
+      text("library-no-change", "Already set this way. Nothing to change.", {
+        height: 1,
+        paddingLeft: 1,
+        fg: ink.faint,
+      }),
+    );
   const body = box("inventory-body", {
     flexGrow: 1,
     flexDirection: "row",
@@ -618,19 +720,32 @@ function inventoryView(): BoxRenderable {
     padding: 1,
     backgroundColor: "transparent",
   });
+  const listWidth = isNarrow()
+    ? Math.max(1, renderer.width - 2)
+    : isCompact()
+      ? 30
+      : Math.min(52, Math.floor(renderer.width * 0.35));
   const listPanel = box("inventory-list-panel", {
-    width: 52,
-    minWidth: 52,
-    maxWidth: 52,
+    width: listWidth,
+    minWidth: listWidth,
+    maxWidth: listWidth,
     flexShrink: 0,
     height: "100%",
     border: true,
     ...panelColors(true),
     title: panelTitle(
-      1,
-      section.key === "skills" && skillNavigation.view === "skills"
-        ? `skills / ${skillNavigation.group.label} · ${sectionItems.length}`
-        : `${section.key} · ${sectionItems.length}`,
+      fitLabel(
+        section.key === "library"
+          ? libraryCollectionId === undefined
+            ? "collections"
+            : (libraryHost.state?.skills.find((row) => row.collectionId === libraryCollectionId)
+                ?.heading ?? "collection")
+          : section.key === "skills" && skillNavigation.view === "skills"
+            ? `skills / ${skillNavigation.group.label} · ${sectionItems.length}`
+            : `${section.key} · ${sectionItems.length}`,
+        listWidth - 4,
+      ),
+      section.key === "library" && libraryCollectionId !== undefined,
     ),
   });
   const select = new SelectRenderable(renderer, {
@@ -638,12 +753,19 @@ function inventoryView(): BoxRenderable {
     width: "100%",
     height: "100%",
     selectedIndex: selectedItem,
+    showDescription: !(section.key === "library" && libraryCollectionId !== undefined),
+    itemSpacing: 0,
     options: sectionItems.map((item, index) => ({
-      name: `${statusMark(item.status)} ${item.name}`,
+      name: fitLabel(
+        section.key === "library" ? item.name : `${statusMark(item.status)} ${item.name}`,
+        listWidth - 6,
+      ),
       description:
-        item.kind === "library-skill"
-          ? `LIBRARY SKILL  ${item.row.bindings.length ? `active in ${item.row.bindings.length} place${item.row.bindings.length === 1 ? "" : "s"}` : "not enabled"}`
-          : `${(item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind).toUpperCase()}  ${findingLabel(item).toLowerCase()}`,
+        item.kind === "library-collection"
+          ? item.summary
+          : item.kind === "library-skill"
+            ? ""
+            : `${(item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind).toUpperCase()}  ${findingLabel(item).toLowerCase()}`,
       value: `${item.kind}:${index}`,
     })),
     textColor: ink.DEFAULT,
@@ -655,13 +777,21 @@ function inventoryView(): BoxRenderable {
   });
   select.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
     selectedItem = index;
-    render();
+    const item = sectionItems[index];
+    if (detailsScroll && item) populateDetails(detailsScroll, item);
+    else if (!isNarrow() || narrowDetails) render();
   });
   select.on(SelectRenderableEvents.ITEM_SELECTED, () => openSelectedSkill());
   listPanel.add(select);
-  select.focus();
+  if (!(isNarrow() && narrowDetails)) select.focus();
 
   const item = sectionItems[selectedItem];
+  if (item && isNarrow() && !narrowDetails) {
+    body.add(listPanel);
+    root.add(body);
+    root.add(footer(section.title));
+    return root;
+  }
   if (!item) {
     const empty = box("inventory-empty", {
       flexGrow: 1,
@@ -669,128 +799,222 @@ function inventoryView(): BoxRenderable {
       height: "100%",
       border: true,
       ...panelColors(false),
-      title: panelTitle(2, "details"),
+      title: panelTitle("details"),
       padding: 2,
     });
     empty.add(
-      text("inventory-empty-text", `No ${section.title.toLowerCase()} detected.`, {
-        fg: ink.faint,
-      }),
+      text(
+        "inventory-empty-text",
+        section.key === "library"
+          ? libraryOpenError
+            ? `Library unavailable\n${libraryOpenError}`
+            : "Your Library is empty. Add a source with skit add <source>."
+          : `No ${section.title.toLowerCase()} detected.`,
+        {
+          fg: ink.faint,
+        },
+      ),
     );
-    body.add(listPanel);
+    if (!isNarrow()) body.add(listPanel);
     body.add(empty);
     root.add(body);
     root.add(footer(`${variant + 1} / ${section.title.toLowerCase()}`));
     return root;
   }
-  const details = box("inventory-details", {
+  const details = new ScrollBoxRenderable(renderer, {
+    id: "inventory-details",
+    scrollY: true,
+    scrollX: false,
+    verticalScrollbarOptions: { visible: true },
+    horizontalScrollbarOptions: { visible: false },
+    contentOptions: { flexDirection: "column", gap: 1, flexShrink: 0 },
     flexGrow: 1,
     minWidth: 0,
     height: "100%",
     border: true,
     ...panelColors(false),
-    title: panelTitle(2, "evidence"),
-    flexDirection: "column",
-    padding: 2,
-    gap: 1,
+    title:
+      item.kind === "library-collection" || item.kind === "library-skill"
+        ? ` ${item.name} `
+        : panelTitle(section.key === "library" ? "details" : "evidence"),
+    titleColor: section.key === "library" ? tone.accent : ink.faint,
+    padding: isCompact() ? 1 : 2,
   });
-  details.add(text("detail-name", item.name, { fg: statusColor(item.status) }));
-  details.add(
-    new TextRenderable(renderer, {
-      id: "detail-receipt",
-      content: receipt([
-        kv(
-          "kind",
-          item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind,
-          14,
-        ),
-        kv("findings", chip(findingLabel(item), statusColor(item.status)), 14),
-        kv(
-          item.kind === "mcp-server"
-            ? "configured in"
-            : item.kind === "harness"
-              ? "executable"
-              : "location",
-          item.kind === "harness"
-            ? (item.harnessProbe?.executablePath ?? "not probed · press p")
-            : item.location,
-          14,
-        ),
-        kv(
-          item.kind === "harness" ? "harness id" : "harnesses",
-          item.agents.join(", ") || "n/a",
-          14,
-        ),
-        ...(item.harnessProbe
-          ? [
-              kv("probe status", item.harnessProbe.status, 14),
-              kv("version", item.harnessProbe.version ?? "unknown", 14),
-              ...(item.harnessProbe.resolvedPath
-                ? [kv("resolved", item.harnessProbe.resolvedPath, 14)]
-                : []),
-            ]
-          : []),
-        ...(item.provenance
-          ? [
-              kv("source", item.provenance.source ?? "unknown", 14),
-              kv("confidence", item.provenance.confidence, 14),
-              ...(item.provenance.collectionId
-                ? [kv("collection", item.provenance.collectionId, 14)]
-                : []),
-              ...(item.provenance.skillId ? [kv("origin", item.provenance.skillId, 14)] : []),
-              ...(item.provenance.expectedHash
-                ? [kv("expected hash", abbreviatedHash(item.provenance.expectedHash), 14)]
-                : []),
-            ]
-          : []),
-        ...(item.mcp
-          ? [
-              kv("transport", item.mcp.transport, 14),
-              ...(item.mcp.command ? [kv("command", item.mcp.command, 14)] : []),
-              ...(item.mcp.args.length ? [kv("arguments", item.mcp.args.join(" "), 14)] : []),
-              ...(item.mcp.cwd ? [kv("working dir", item.mcp.cwd, 14)] : []),
-              ...(item.mcp.url ? [kv("url", item.mcp.url, 14)] : []),
-            ]
-          : []),
-      ]),
-    }),
-  );
-  details.add(text("detail-summary", item.summary));
-  details.add(text("detail-evidence-title", "EVIDENCE", { fg: tone.accentSoft }));
-  details.add(text("detail-evidence", item.evidence.map((line) => `· ${line}`).join("\n")));
-  details.add(text("detail-action-title", "NEXT ACTION", { fg: tone.accentSoft }));
-  details.add(
-    text(
-      "detail-action",
-      item.status === "clear"
-        ? item.riskFlagCount
-          ? "Review inferred capabilities and risk signals"
-          : "No audit findings"
-        : item.status === "error"
-          ? item.findingCodes?.some((code) =>
-              ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
-            )
-            ? "Inspect custody evidence; this legacy marker does not authorize removal"
-            : "Disable projection and inspect content"
-          : "Inspect the warnings listed above",
-    ),
-  );
+  detailsScroll = details;
+  if (isNarrow()) details.focus();
+  populateDetails(details, item);
 
-  if (item.kind === "library-skill") {
-    const outcome = libraryOutcomeText();
-    details.add(text("detail-outcome-title", "LAST ACTION", { fg: tone.accentSoft }));
-    details.add(
-      text("detail-outcome", outcome.text, {
-        fg: outcome.failed ? tone.danger : ink.DEFAULT,
-      }),
-    );
-  }
-
-  body.add(listPanel);
+  if (!isNarrow()) body.add(listPanel);
   body.add(details);
   root.add(body);
   root.add(footer(`${variant + 1} / ${section.title.toLowerCase()}`));
   return root;
+}
+
+let detailRevision = 0;
+function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): void {
+  const section = sections[variant]!;
+  const revision = ++detailRevision;
+  details.title =
+    item.kind === "library-collection" || item.kind === "library-skill"
+      ? ` ${item.name} `
+      : panelTitle(section.key === "library" ? "details" : "evidence");
+  for (const child of details.content.getChildren()) {
+    details.remove(child);
+    child.destroyRecursively();
+  }
+  details.scrollTo(0);
+  if (item.kind === "library-skill") {
+    const content = text("library-skill-content", "Loading…", { width: "100%" });
+    details.add(content);
+    pendingSkillPreview = libraryHost.run(readLibrarySkillContent(item.row.skillVersionId)).then(
+      (value) => {
+        if (detailsScroll === details && revision === detailRevision) content.content = value;
+      },
+      (error: unknown) => {
+        if (detailsScroll === details && revision === detailRevision)
+          content.content = `Unable to read retained Skill\n${errorMessage(error)}`;
+      },
+    );
+    return;
+  }
+  if (item.kind === "library-collection") {
+    const sourceNames = {
+      github: "GitHub",
+      git: "Git",
+      registry: "SKIT registry",
+      url: "URL",
+      archive: "Archive",
+      local: "Local",
+      "authored-workspace": "Authored workspace",
+      "well-known": "Well-known endpoint",
+    };
+    details.add(text("collection-source-title", "Source", { fg: tone.accentSoft }));
+    details.add(
+      text(
+        "collection-source",
+        item.source ? `${sourceNames[item.source.kind]}\n${item.source.locator}` : "Unknown",
+      ),
+    );
+  } else {
+    details.add(text("detail-name", item.name, { fg: statusColor(item.status) }));
+    details.add(
+      new TextRenderable(renderer, {
+        id: "detail-receipt",
+        content: receipt([
+          kv(
+            "kind",
+            item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind,
+            14,
+          ),
+          ...(section.key === "library"
+            ? []
+            : [kv("findings", chip(findingLabel(item), statusColor(item.status)), 14)]),
+          kv(
+            item.kind === "mcp-server"
+              ? "configured in"
+              : item.kind === "harness"
+                ? "executable"
+                : "location",
+            item.kind === "harness"
+              ? (item.harnessProbe?.executablePath ?? "not probed · press p")
+              : item.location,
+            14,
+          ),
+          ...(section.key === "library"
+            ? []
+            : [
+                kv(
+                  item.kind === "harness" ? "harness id" : "harnesses",
+                  item.agents.join(", ") || "n/a",
+                  14,
+                ),
+              ]),
+          ...(item.harnessProbe
+            ? [
+                kv("probe status", item.harnessProbe.status, 14),
+                kv("version", item.harnessProbe.version ?? "unknown", 14),
+                ...(item.harnessProbe.resolvedPath
+                  ? [kv("resolved", item.harnessProbe.resolvedPath, 14)]
+                  : []),
+              ]
+            : []),
+          ...(item.provenance
+            ? [
+                kv("source", item.provenance.source ?? "unknown", 14),
+                kv("confidence", item.provenance.confidence, 14),
+                ...(item.provenance.collectionId
+                  ? [kv("collection", item.provenance.collectionId, 14)]
+                  : []),
+                ...(item.provenance.skillId ? [kv("origin", item.provenance.skillId, 14)] : []),
+                ...(item.provenance.expectedHash
+                  ? [kv("expected hash", abbreviatedHash(item.provenance.expectedHash), 14)]
+                  : []),
+              ]
+            : []),
+          ...(item.mcp
+            ? [
+                kv("transport", item.mcp.transport, 14),
+                ...(item.mcp.command ? [kv("command", item.mcp.command, 14)] : []),
+                ...(item.mcp.args.length ? [kv("arguments", item.mcp.args.join(" "), 14)] : []),
+                ...(item.mcp.cwd ? [kv("working dir", item.mcp.cwd, 14)] : []),
+                ...(item.mcp.url ? [kv("url", item.mcp.url, 14)] : []),
+              ]
+            : []),
+        ]),
+      }),
+    );
+  }
+  details.add(text("detail-summary", item.summary));
+  const addEvidence = () => {
+    details.add(
+      text("detail-evidence-title", item.kind === "library-collection" ? "Skills" : "Evidence", {
+        fg: tone.accentSoft,
+      }),
+    );
+    details.add(text("detail-evidence", item.evidence.map((line) => `· ${line}`).join("\n")));
+  };
+  if (item.kind !== "library-collection") addEvidence();
+  details.add(text("detail-action-title", "Actions", { fg: tone.accentSoft }));
+  const shortcuts: [string, string][] =
+    item.kind === "library-collection"
+      ? [
+          ["enter", "browse Skills"],
+          ["e", "enable Collection"],
+          ["d", "disable Collection"],
+        ]
+      : [];
+  if (shortcuts.length) {
+    const actions = box("detail-actions", { flexDirection: "column", gap: 0, flexShrink: 0 });
+    for (const [index, shortcut] of shortcuts.entries()) {
+      actions.add(
+        new TextRenderable(renderer, {
+          id: `detail-action-${index}`,
+          content: keybar([shortcut]),
+        }),
+      );
+    }
+    details.add(actions);
+  } else {
+    details.add(
+      text(
+        "detail-action",
+        item.status === "clear"
+          ? item.riskFlagCount
+            ? "Review inferred capabilities and risk signals"
+            : "No audit findings"
+          : item.status === "error"
+            ? item.findingCodes?.some((code) =>
+                ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
+              )
+              ? "Inspect custody evidence; this legacy marker does not authorize removal"
+              : "Disable projection and inspect content"
+            : "Inspect the warnings listed above",
+      ),
+    );
+  }
+
+  if (item.kind === "library-collection") addEvidence();
 }
 
 function render(): void {
@@ -803,20 +1027,23 @@ function render(): void {
 }
 
 function switchVariant(next: number): void {
+  showNoChangeNotice = false;
   variant = (next + sections.length) % sections.length;
   skillNavigation = { view: "groups" };
+  libraryCollectionId = undefined;
+  narrowDetails = false;
   selectedItem = 0;
   render();
 }
 
 const keymap = createDefaultOpenTuiKeymap(renderer);
 const viewCommandNames = [
+  "view.library",
   "view.harnesses",
   "view.skills",
   "view.claude-plugins",
   "view.codex-plugins",
   "view.mcps",
-  "view.library",
 ] as const;
 
 const paletteCommands = [
@@ -824,49 +1051,49 @@ const paletteCommands = [
     name: "view.harnesses",
     title: "Open Harnesses",
     description: "Browse agent harnesses detected on this system",
-    shortcut: "1",
+    shortcut: "2",
     keywords: "agents adapters detected",
-    run: () => switchVariant(0),
+    run: () => switchVariant(1),
   },
   {
     name: "view.skills",
     title: "Open Skills",
     description: "Browse all discovered Skills",
-    shortcut: "2",
+    shortcut: "3",
     keywords: "instructions capabilities audit",
-    run: () => switchVariant(1),
+    run: () => switchVariant(2),
   },
   {
     name: "view.claude-plugins",
     title: "Open Claude plugins",
     description: "Browse plugins installed for Claude Code",
-    shortcut: "3",
+    shortcut: "4",
     keywords: "claude code extensions",
-    run: () => switchVariant(2),
+    run: () => switchVariant(3),
   },
   {
     name: "view.codex-plugins",
     title: "Open Codex plugins",
     description: "Browse plugins installed for Codex",
-    shortcut: "4",
+    shortcut: "5",
     keywords: "codex extensions",
-    run: () => switchVariant(3),
+    run: () => switchVariant(4),
   },
   {
     name: "view.mcps",
     title: "Open MCPs",
     description: "Browse MCP registrations across all harnesses",
-    shortcut: "5",
+    shortcut: "6",
     keywords: "mcp server transport tools",
-    run: () => switchVariant(4),
+    run: () => switchVariant(5),
   },
   {
     name: "view.library",
     title: "Open Library",
     description: "Enable, disable, and choose when agents may use Library skills",
-    shortcut: "6",
+    shortcut: "1",
     keywords: "library enable disable invocation binding projection",
-    run: () => switchVariant(5),
+    run: () => switchVariant(0),
   },
   {
     name: "app.quit",
@@ -914,11 +1141,27 @@ function closeDocument(): void {
 }
 
 function openSelectedSkill(): void {
-  if (documentView || sections[variant]?.key !== "skills") return;
+  if (
+    documentView ||
+    (!isNarrow() && !(sections[variant]?.key === "library" || sections[variant]?.key === "skills"))
+  )
+    return;
   const item = currentSectionItems()[selectedItem];
+  if (item?.kind === "library-collection") {
+    libraryCollectionId = item.collectionId;
+    narrowDetails = false;
+    selectedItem = 0;
+    render();
+    return;
+  }
   if (item?.kind === "skill-group") {
     skillNavigation = { view: "skills", group: item.group };
     selectedItem = 0;
+    render();
+    return;
+  }
+  if (item && isNarrow() && !narrowDetails) {
+    narrowDetails = true;
     render();
     return;
   }
@@ -948,7 +1191,7 @@ function showDocument(name: string, location: string, content: string): void {
     border: true,
     backgroundColor: surface.canvas,
     ...panelColors(true),
-    title: panelTitle(0, `SKILL.md · ${name}`),
+    title: panelTitle(`SKILL.md · ${name}`),
     flexDirection: "column",
     padding: 1,
   });
@@ -1054,6 +1297,11 @@ interface Chooser {
 let chooserView: BoxRenderable | null = null;
 let chooserSelect: SelectRenderable | null = null;
 let confirmView: BoxRenderable | null = null;
+let confirmScroll: ScrollBoxRenderable | null = null;
+let confirmShowSkills = false;
+let showNoChangeNotice = false;
+let confirmReceipt: TextRenderable | null = null;
+let confirmHelp: TextRenderable | null = null;
 
 function closeChooser(): void {
   if (!chooserView) return;
@@ -1068,18 +1316,14 @@ function openChooser(chooser: Chooser): void {
   closeChooser();
   const overlay = box("library-chooser", {
     position: "absolute",
-    left: "16%",
-    top: 5,
-    width: "68%",
-    height: Math.min(
-      22,
-      chooser.options.length * 2 + 6 + (chooser.briefing?.split("\n").length ?? 0),
-    ),
+    ...modalWidth(),
+    top: "15%",
+    height: "70%",
     zIndex: 110,
     border: true,
     backgroundColor: surface.canvas,
     ...panelColors(true),
-    title: panelTitle(0, chooser.title),
+    title: panelTitle(chooser.title),
     flexDirection: "column",
     padding: 1,
     gap: 1,
@@ -1129,7 +1373,47 @@ function closeConfirm(): void {
   renderer.root.remove(confirmView);
   confirmView.destroyRecursively();
   confirmView = null;
+  confirmScroll = null;
+  confirmReceipt = null;
+  confirmHelp = null;
   render();
+}
+
+function confirmationReceiptContent(pending: PendingLibraryChange) {
+  return receipt(
+    pending.facts.flatMap((fact, index) => [
+      ...(confirmationCollection(pending, index) === undefined
+        ? [kv("skills", fact.skills.join(", "), 14)]
+        : [
+            kv("collection", confirmationCollection(pending, index)!, 14),
+            kv("skills", String(fact.skills.length), 14),
+            ...(confirmShowSkills ? [kv("included", fact.skills.join(", "), 14)] : []),
+          ]),
+      kv("agents", "every agent", 14),
+      kv("applies to", fact.destination, 14),
+      ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
+        ? [
+            kv(
+              "behaviour",
+              invocationRowSummary((pending.policies[index] ?? pending.policies[0])!),
+              14,
+            ),
+          ]
+        : []),
+      ...(fact.wholeCollection
+        ? [
+            kv(
+              "updates",
+              fact.action === "enable"
+                ? "includes new skills and removes deleted ones when you update"
+                : "every skill is disabled",
+              14,
+            ),
+          ]
+        : []),
+      kv("writes", fact.writes, 14),
+    ]),
+  );
 }
 
 /** Every Library write passes through this preview before it is applied. */
@@ -1140,55 +1424,60 @@ function openConfirm(): void {
   const enabling = pending.facts.every((fact) => fact.action === "enable");
   const overlay = box("library-confirm", {
     position: "absolute",
-    left: "16%",
-    top: 5,
-    width: "68%",
-    height: 16,
+    ...modalWidth(),
+    top: "15%",
+    height: "70%",
     zIndex: 120,
     border: true,
     backgroundColor: surface.canvas,
     ...panelColors(true),
-    title: panelTitle(0, enabling ? "confirm enable" : "confirm disable"),
+    title: panelTitle(enabling ? "confirm enable" : "confirm disable"),
     flexDirection: "column",
     padding: 1,
     gap: 1,
   });
-  overlay.add(text("library-confirm-summary", changeSummary(pending), { fg: ink.strong }));
-  overlay.add(
-    new TextRenderable(renderer, {
-      id: "library-confirm-receipt",
-      content: receipt(
-        pending.facts.flatMap((fact, index) => [
-          kv("skills", fact.skills.join(", "), 14),
-          kv("agents", "every agent", 14),
-          kv("applies to", fact.destination, 14),
-          ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
-            ? [
-                kv(
-                  "behaviour",
-                  invocationRowSummary((pending.policies[index] ?? pending.policies[0])!),
-                  14,
-                ),
-              ]
-            : []),
-          kv("writes", fact.writes, 14),
-        ]),
-      ),
-    }),
-  );
-  overlay.add(
-    text("library-confirm-help", "enter apply   esc cancel — nothing is written until you apply", {
+  const scroll = new ScrollBoxRenderable(renderer, {
+    id: "library-confirm-scroll",
+    width: "100%",
+    flexGrow: 1,
+    scrollY: true,
+    scrollX: false,
+    contentOptions: { gap: 1, flexShrink: 0 },
+  });
+  scroll.add(text("library-confirm-summary", changeSummary(pending), { fg: ink.strong }));
+  confirmReceipt = new TextRenderable(renderer, {
+    id: "library-confirm-receipt",
+    content: confirmationReceiptContent(pending),
+  });
+  scroll.add(confirmReceipt);
+  overlay.add(scroll);
+  confirmHelp = text(
+    "library-confirm-help",
+    pending.operations.some((operation) => operation.all)
+      ? `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`
+      : isCompact()
+        ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
+        : "enter apply   esc cancel — nothing is written until you apply",
+    {
       fg: ink.faint,
-    }),
+      flexShrink: 0,
+    },
   );
+  overlay.add(confirmHelp);
   confirmView = overlay;
+  confirmScroll = scroll;
   renderer.root.add(overlay);
+  scroll.focus();
 }
 
 function afterProposal(outcome: LibraryActionOutcome | undefined): void {
   if (!outcome) return;
+  showNoChangeNotice = outcome.kind === "unchanged";
   render();
-  if (outcome.kind === "preview") openConfirm();
+  if (outcome.kind === "preview") {
+    confirmShowSkills = false;
+    openConfirm();
+  }
 }
 
 function chooseScopeThen(next: (scope: Scope) => void | Promise<void>): void {
@@ -1216,40 +1505,144 @@ function bindingChooserOptions(bindings: readonly LibraryBindingRow[]): ChooserO
   }));
 }
 
-function startEnable(): void {
-  const row = selectedLibraryRow();
-  const session = libraryHost.state;
-  if (!row || !session) return;
-  chooseScopeThen(async (scope) =>
-    afterProposal(
-      await transitionLibrary((state) =>
-        proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
-      ),
-    ),
-  );
+function selectedLibraryCollection(): LibraryCollectionRow | undefined {
+  if (sections[variant]?.key !== "library") return;
+  const item = currentSectionItems()[selectedItem];
+  return item?.kind === "library-collection" ? item : undefined;
 }
 
-function startDisable(): void {
-  const row = selectedLibraryRow();
-  const session = libraryHost.state;
-  if (!row || !session || !row.bindings.length) return;
-  const disable = async (bindings: readonly LibraryBindingRow[]) =>
-    afterProposal(
-      await transitionLibrary((state) =>
-        proposeLibraryDisable(state, libraryConfiguration, row, bindings),
+function startEnable(): void {
+  const collection = selectedLibraryCollection();
+  if (collection && libraryHost.state) {
+    chooseScopeThen(async (scope) =>
+      afterProposal(
+        await transitionLibrary((state) =>
+          proposeLibraryCollectionChange(
+            state,
+            libraryConfiguration,
+            collection.collectionId,
+            true,
+            [scope],
+          ),
+        ),
       ),
     );
-  if (row.bindings.length === 1) void disable(row.bindings);
+    return;
+  }
+  const row = selectedLibraryRow();
+  if (!row || !libraryHost.state) return;
+  openChooser({
+    title: "What would you like to enable?",
+    options: [
+      ...(row.hasCollection === false
+        ? []
+        : [
+            {
+              value: "collection",
+              label: `Enable whole collection · ${row.heading}`,
+              hint: "Include new skills and remove deleted ones when you update",
+            },
+          ]),
+      { value: "skill", label: `Enable ${row.name}`, hint: "Only this Skill" },
+    ],
+    choose: (value) =>
+      chooseScopeThen(async (scope) =>
+        afterProposal(
+          await transitionLibrary((state) =>
+            value === "collection"
+              ? proposeLibraryCollectionChange(
+                  state,
+                  libraryConfiguration,
+                  row.collectionId,
+                  true,
+                  [scope],
+                )
+              : proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
+          ),
+        ),
+      ),
+  });
+}
+
+function disableCollection(collectionId: string): void {
+  if (!libraryHost.state) return;
+  const scopes = libraryCollectionScopes(libraryHost.state, collectionId);
+  if (!scopes.length) return;
+  const disable = async (selectedScopes: readonly Scope[]) =>
+    afterProposal(
+      await transitionLibrary((state) =>
+        proposeLibraryCollectionChange(
+          state,
+          libraryConfiguration,
+          collectionId,
+          false,
+          selectedScopes,
+        ),
+      ),
+    );
+  if (scopes.length === 1) void disable(scopes);
   else
     openChooser({
       title: DESTINATION_QUESTION,
       options: [
         { value: ALL_BINDINGS, label: "All shown" },
-        ...bindingChooserOptions(row.bindings),
+        ...scopes.map((scope, index) => ({
+          value: String(index),
+          label: destinationLabel(scope),
+        })),
       ],
-      choose: (value) =>
-        disable(value === ALL_BINDINGS ? row.bindings : [row.bindings[Number(value)]!]),
+      choose: (value) => disable(value === ALL_BINDINGS ? scopes : [scopes[Number(value)]!]),
     });
+}
+
+function startDisable(): void {
+  const collection = selectedLibraryCollection();
+  if (collection) {
+    disableCollection(collection.collectionId);
+    return;
+  }
+  const row = selectedLibraryRow();
+  if (!row || !libraryHost.state) return;
+  const scopes = libraryCollectionScopes(libraryHost.state, row.collectionId);
+  if (!scopes.length) return;
+  openChooser({
+    title: "What would you like to disable?",
+    options: [
+      ...(row.hasCollection === false
+        ? []
+        : [
+            {
+              value: "collection",
+              label: `Disable whole collection · ${row.heading}`,
+              hint: "Disable every skill in this collection",
+            },
+          ]),
+      ...(row.bindings.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
+    ],
+    choose: (value) => {
+      if (value === "collection") {
+        disableCollection(row.collectionId);
+        return;
+      }
+      const disable = async (bindings: readonly LibraryBindingRow[]) =>
+        afterProposal(
+          await transitionLibrary((state) =>
+            proposeLibraryDisable(state, libraryConfiguration, row, bindings),
+          ),
+        );
+      if (row.bindings.length === 1) void disable(row.bindings);
+      else
+        openChooser({
+          title: DESTINATION_QUESTION,
+          options: [
+            { value: ALL_BINDINGS, label: "All shown" },
+            ...bindingChooserOptions(row.bindings),
+          ],
+          choose: (chosen) =>
+            disable(chosen === ALL_BINDINGS ? row.bindings : [row.bindings[Number(chosen)]!]),
+        });
+    },
+  });
 }
 
 function startInvocation(): void {
@@ -1316,15 +1709,14 @@ function openPalette(): void {
 
   const overlay = box("command-palette", {
     position: "absolute",
-    left: "16%",
-    top: 4,
-    width: "68%",
-    height: 19,
+    ...modalWidth(),
+    top: "15%",
+    height: "70%",
     zIndex: 100,
     border: true,
     backgroundColor: surface.canvas,
     ...panelColors(true),
-    title: panelTitle(0, "command palette"),
+    title: panelTitle("command palette"),
     flexDirection: "column",
     padding: 1,
     gap: 1,
@@ -1411,6 +1803,22 @@ function handleGlobalKey(key: KeyEvent): void {
       key.preventDefault();
       key.stopPropagation();
       void applyPending();
+    } else if (
+      key.name === "s" &&
+      libraryHost.state?.pending?.operations.some((operation) => operation.all)
+    ) {
+      key.preventDefault();
+      key.stopPropagation();
+      confirmShowSkills = !confirmShowSkills;
+      const pending = libraryHost.state?.pending;
+      if (pending && confirmReceipt) confirmReceipt.content = confirmationReceiptContent(pending);
+      if (confirmHelp)
+        confirmHelp.content = `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`;
+    } else if (["pageup", "pagedown", "home", "end"].includes(key.name)) {
+      key.preventDefault();
+      if (key.name === "home") confirmScroll?.scrollTo(0);
+      else if (key.name === "end") confirmScroll?.scrollTo(confirmScroll.scrollHeight);
+      else confirmScroll?.scrollBy(key.name === "pageup" ? -1 : 1, "viewport");
     }
     return;
   }
@@ -1441,7 +1849,21 @@ function handleGlobalKey(key: KeyEvent): void {
     }
     return;
   }
-  if (
+  if (isNarrow() && narrowDetails && key.name === "escape") {
+    key.preventDefault();
+    key.stopPropagation();
+    narrowDetails = false;
+    render();
+  } else if (detailsScroll !== null && ["pageup", "pagedown", "home", "end"].includes(key.name)) {
+    key.preventDefault();
+    const scroll = detailsScroll;
+    if (key.name === "home") scroll?.scrollTo(0);
+    else if (key.name === "end") scroll?.scrollTo(scroll.scrollHeight);
+    else scroll?.scrollBy(key.name === "pageup" ? -1 : 1, "viewport");
+  } else if (isNarrow() && narrowDetails && ["return", "enter"].includes(key.name)) {
+    key.preventDefault();
+    openSelectedSkill();
+  } else if (
     key.name === "escape" &&
     sections[variant]?.key === "skills" &&
     skillNavigation.view === "skills"
@@ -1449,6 +1871,18 @@ function handleGlobalKey(key: KeyEvent): void {
     key.preventDefault();
     skillNavigation = { view: "groups" };
     selectedItem = 0;
+    render();
+  } else if (
+    key.name === "escape" &&
+    sections[variant]?.key === "library" &&
+    libraryCollectionId !== undefined
+  ) {
+    const previous = libraryCollectionId;
+    libraryCollectionId = undefined;
+    selectedItem = libraryRows().findIndex(
+      (row) => row.kind === "library-collection" && row.collectionId === previous,
+    );
+    key.preventDefault();
     render();
   } else if (key.ctrl && key.name === "p") {
     key.preventDefault();
@@ -1479,6 +1913,25 @@ function handleGlobalKey(key: KeyEvent): void {
 }
 
 renderer.keyInput.on("keypress", handleGlobalKey);
+renderer.on("resize", () => {
+  const scrollTop = detailsScroll?.scrollTop;
+  render();
+  if (scrollTop !== undefined) detailsScroll?.scrollTo(scrollTop);
+  for (const modal of [chooserView, confirmView, paletteView]) {
+    if (!modal) continue;
+    const dimensions = modalWidth();
+    modal.left = dimensions.left;
+    modal.width = dimensions.width;
+  }
+  if (documentView) documentScroll?.focus();
+  else if (paletteView) {
+    // Their input retains focus when the underlying list is rerendered.
+    renderer.root.findDescendantById("command-palette-input")?.focus();
+  } else if (chooserView) chooserSelect?.focus();
+  else if (confirmView) confirmScroll?.focus();
+});
+
+if (process.env.SKIT_TUI_SNAPSHOT_DETAILS === "1") narrowDetails = true;
 render();
 
 if (process.env.SKIT_TUI_SNAPSHOT_HARNESS_PROBE === "1") probeSelectedHarness(true);
@@ -1494,7 +1947,21 @@ if (process.env.SKIT_TUI_SNAPSHOT_DOCUMENT === "1") {
 
 if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY && sections[variant]?.key === "library") {
   if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "enable") startEnable();
+  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "disable") startDisable();
   if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "confirm") {
+    const collection = selectedLibraryCollection();
+    if (collection && libraryHost.state)
+      afterProposal(
+        await transitionLibrary((state) =>
+          proposeLibraryCollectionChange(
+            state,
+            libraryConfiguration,
+            collection.collectionId,
+            true,
+            [{ kind: "global" }],
+          ),
+        ),
+      );
     const row = selectedLibraryRow();
     if (row && libraryHost.state)
       afterProposal(
@@ -1506,6 +1973,20 @@ if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY && sections[variant]?.key === "library
 }
 
 if (test && snapshotPath) {
+  await test.flush();
+  if (process.env.SKIT_TUI_SNAPSHOT_KEYS) {
+    for (const key of process.env.SKIT_TUI_SNAPSHOT_KEYS.split(",")) {
+      const leavingDetails = key === "ESCAPE" && isNarrow() && narrowDetails;
+      await test.mockInput.pressKey(key);
+      if (leavingDetails) await test.waitFor(() => !narrowDetails);
+      await test.flush();
+    }
+  }
+  if (process.env.SKIT_TUI_SNAPSHOT_RESIZE) {
+    const [width, height] = process.env.SKIT_TUI_SNAPSHOT_RESIZE.split("x").map(Number);
+    if (width && height) test.resize(width, height);
+  }
+  await pendingSkillPreview;
   await writeFrame(test, snapshotPath);
   await libraryHost.dispose();
   renderer.destroy();

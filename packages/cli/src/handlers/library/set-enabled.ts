@@ -10,7 +10,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
 import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
-import { scopeChoices } from "../../library/read-model.js";
+import { destinationLabel, scopeChoices } from "../../library/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
@@ -154,8 +154,14 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
           return skill === undefined ? [] : [skill];
         });
-        if (skills.length === 0) return [];
-        const collectionIds = [...new Set(skills.map((skill) => skill.collection_id))];
+        const collectionIds = [
+          ...new Set([
+            ...skills.map((skill) => skill.collection_id),
+            ...binding.entries.flatMap((entry) =>
+              entry.kind === "collection" ? [entry.collection_id] : [],
+            ),
+          ]),
+        ];
         const location =
           binding.scope.kind === "global" ? "global" : `repository ${binding.scope.root}`;
         return collectionIds.map((collectionId) => {
@@ -245,10 +251,35 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             selectedBindings.some((binding) => binding.skillIds.includes(skill.skill_id))),
       )
     : undefined;
+  let wholeCollection = input.all;
+  if (input.interactive && collection !== undefined && !wholeCollection) {
+    const selection = yield* prompter
+      .select("What would you like to " + input.action + "?", [
+        {
+          value: "collection",
+          label: input.enabled ? "Enable whole collection" : "Disable whole collection",
+          hint: input.enabled
+            ? "Include new skills and remove deleted ones when you update"
+            : "Disable every skill in this collection",
+        },
+        ...(selected?.length
+          ? [
+              {
+                value: "skills",
+                label: "Select individual Skills",
+                hint: "Only the selected Skills",
+              },
+            ]
+          : []),
+      ])
+      .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
+    if (selection === DONE) return;
+    wholeCollection = selection === "collection";
+  }
   let selectedSkills: string[] | undefined;
   if (
     input.interactive &&
-    !input.all &&
+    !wholeCollection &&
     selected &&
     (selected.length > 1 || selectedBindings !== undefined)
   ) {
@@ -274,6 +305,49 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
     if (selectedSkills.length === 0) return;
   }
+  if (
+    input.interactive &&
+    !input.enabled &&
+    wholeCollection &&
+    collection !== undefined &&
+    input.scope === undefined &&
+    selectedBindings === undefined
+  ) {
+    const targets = [...state.global_bindings, ...state.local_bindings]
+      .filter(
+        (binding) =>
+          binding.entries.some(
+            (entry) =>
+              entry.kind === "collection" && entry.collection_id === collection.collection_id,
+          ) ||
+          bindingSkillIds(state, binding).some((id) =>
+            state.skills.some(
+              (skill) => skill.skill_id === id && skill.collection_id === collection.collection_id,
+            ),
+          ),
+      )
+      .map((binding) => ({
+        collectionId: collection.collection_id,
+        scope: binding.scope,
+        skillIds: bindingSkillIds(state, binding),
+        location: destinationLabel(binding.scope),
+      }));
+    if (!targets.length) {
+      yield* renderer.note("This collection is not enabled anywhere.", "Nothing to change");
+      return;
+    }
+    const chosen =
+      targets.length === 1
+        ? "0"
+        : yield* prompter
+            .autocomplete("Select where to disable Skills", [
+              { value: "all", label: "All shown" },
+              ...targets.map((target, index) => ({ value: String(index), label: target.location })),
+            ])
+            .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
+    if (chosen === DONE) return;
+    selectedBindings = chosen === "all" ? targets : [targets[Number(chosen)]!];
+  }
   if (selectedBindings !== undefined && selectedBindings.length > 1) {
     const outcomes = yield* renderer.withStatus(
       input.dryRun ? "Planning Collection Bindings" : "Removing retained Projections",
@@ -285,13 +359,14 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           );
           return skill !== undefined && binding.skillIds.includes(skill.skill_id);
         });
-        if (names === undefined || names.length === 0) return Effect.succeed(undefined);
+        if (!wholeCollection && (names === undefined || names.length === 0))
+          return Effect.succeed(undefined);
         return store.load.pipe(
           Effect.flatMap((current) =>
             applyLibraryBindings(current, {
               query: binding.collectionId,
-              all: false,
-              selectedSkills: names,
+              all: wholeCollection,
+              ...(wholeCollection ? {} : { selectedSkills: names }),
               invocation: {
                 subjects: [binding.collectionId],
                 scope: binding.scope,
@@ -337,7 +412,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         : "Removing retained Projections",
     applyLibraryBindings(state, {
       query,
-      all: input.all,
+      all: wholeCollection,
       allowDuplicate: input.allowDuplicate,
       ...(selectedSkills === undefined ? {} : { selectedSkills }),
       invocation: {

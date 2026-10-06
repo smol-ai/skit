@@ -22,8 +22,11 @@ export {
 } from "./harness/probe.js";
 export {
   openLibrarySession,
+  readLibrarySkillContent,
   refreshLibrarySession,
   proposeLibraryEnable,
+  proposeLibraryCollectionChange,
+  libraryCollectionScopes,
   proposeLibraryDisable,
   proposeLibraryInvocation,
   confirmLibraryChange,
