@@ -87,7 +87,23 @@ export interface HarnessRoot {
   evidence: HarnessEvidence;
 }
 
+export interface SkillListingContract {
+  readonly fraction: number;
+  readonly contextConversion?: {
+    readonly charactersPerToken: number;
+    readonly fallbackContextWindow: number;
+    readonly clientVersion: string;
+  };
+  readonly fallbackCharacters: number | null;
+  readonly descriptionCap: number;
+  readonly descriptionFields: readonly string[];
+  readonly overflow: "round-robin-prefix" | "drop-descriptions-by-usage";
+  readonly namesRetained: boolean;
+  readonly sourceIds: readonly string[];
+}
+
 export interface HarnessProfile {
+  readonly skillListing?: SkillListingContract;
   id: HarnessName;
   profile: {
     id: `skit/harness/${string}`;

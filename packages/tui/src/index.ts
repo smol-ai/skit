@@ -53,6 +53,8 @@ import {
   type Scope,
   type InvocationOption,
 } from "../../cli/src/front-end";
+import { LibraryStore, readListingBudgets, type ListingBudget } from "@smolai/skit-core";
+import { budgetReceipt } from "./budget/receipt";
 import { createLibraryHost } from "./library-host";
 import { createRenderer, writeFrame } from "./snapshot";
 import { copySelectedText, isCopySelectionKey } from "./selection-copy";
@@ -155,9 +157,29 @@ const report = await libraryHost.run(
     probes: [],
   }),
 );
-const transitionLibrary = libraryHost.transition;
+let listingBudgets: readonly ListingBudget[] = [];
+async function refreshListingBudgets(): Promise<void> {
+  listingBudgets = await libraryHost.run(
+    Effect.gen(function* () {
+      const state = yield* (yield* LibraryStore).load;
+      return yield* readListingBudgets(state, {
+        cwd: flag("--cwd") ?? process.cwd(),
+        home: libraryConfiguration.home,
+        configHome: libraryConfiguration.configHome,
+        overrideRoot: libraryConfiguration.overrides.codex,
+        claudeRoot: libraryConfiguration.overrides.claude,
+      });
+    }),
+  );
+}
+const transitionLibrary: typeof libraryHost.transition = async (update) => {
+  const outcome = await libraryHost.transition(update);
+  if (outcome?.kind === "applied") await refreshListingBudgets();
+  return outcome;
+};
 try {
   await libraryHost.open();
+  await refreshListingBudgets();
 } catch (error) {
   libraryOpenError = errorMessage(error);
 }
@@ -966,6 +988,20 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
     );
   }
   details.add(text("detail-summary", item.summary));
+  if (item.kind === "harness") {
+    const budget = listingBudgets.find((budget) => budget.harness === item.name);
+    if (budget) {
+      details.add(
+        text("harness-listing-budget-title", "Skill listing budget", { fg: tone.accentSoft }),
+      );
+      details.add(
+        new TextRenderable(renderer, {
+          id: "harness-listing-budget",
+          content: budgetReceipt(budget),
+        }),
+      );
+    }
+  }
   const addEvidence = () => {
     details.add(
       text("detail-evidence-title", item.kind === "library-collection" ? "Skills" : "Evidence", {
@@ -1701,6 +1737,7 @@ async function cancelPending(): Promise<void> {
 async function refreshLibrary(): Promise<void> {
   if (!libraryHost.state) return;
   await transitionLibrary((state) => refreshLibrarySession(state));
+  await refreshListingBudgets();
   render();
 }
 

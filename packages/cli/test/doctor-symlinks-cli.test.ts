@@ -1,3 +1,4 @@
+import { largeListingEntries } from "@smolai/skit-core";
 import { it } from "@effect/vitest";
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
@@ -51,10 +52,11 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
     if (!request.params.forceReload || request.params.cwds.length !== 1) process.exit(1);
     const skills = ['.codex', '.agents'].map(directory => {
       const document = path.join(process.env.HOME, directory, 'skills', ${JSON.stringify(name)}, 'SKILL.md');
-      return {name: ${JSON.stringify(name)}, path: process.env.DOCTOR_FIXTURE_CANONICAL === 'true' ? fs.realpathSync(document) : document, scope: 'user', enabled: true};
+      return {name: ${JSON.stringify(name)}, path: process.env.DOCTOR_FIXTURE_CANONICAL === 'true' ? fs.realpathSync(document) : document, scope: 'user', enabled: true, description: 'x'.repeat(800)};
     });
     console.log(JSON.stringify({id: request.id, result: {data: [{cwd: request.params.cwds[0], skills, errors: []}]}}));
-  } else if (request.method !== 'initialized') process.exit(1);
+  } else if (request.method === 'config/read') console.log(JSON.stringify({id: request.id, result: {config: {model: 'gpt-6.1-sol'}}}));
+  else if (request.method !== 'initialized') process.exit(1);
 });
 `,
         );
@@ -102,11 +104,16 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
       expect(yield* fs.readLink(alias)).toBe(source);
       expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(document);
       if (!nativeExecutable) {
+        const budget = report.listing_budgets.find((budget) => budget.harness === "codex");
+        expect(budget).toMatchObject({ _tag: "Estimated", limit: 7460, unit: "budget-tokens" });
+        if (!budget) return yield* Effect.die("Missing Codex budget");
+        expect(largeListingEntries(budget)).toHaveLength(2);
         const calls = (yield* fs.readFileString(requests))
           .trim()
           .split("\n")
           .map((line) => JSON.parse(line));
         expect(calls.filter((call) => call.method === "skills/list")).toHaveLength(1);
+        expect(calls.filter((call) => call.method === "config/read")).toHaveLength(1);
       } else {
         expect(report.codex.version).toBeTruthy();
       }

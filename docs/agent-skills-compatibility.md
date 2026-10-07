@@ -111,3 +111,9 @@ skills/**/SKILL.md                          └── portable package metadata
 Migration does not split one Agent Skills package into several SKITs merely because its contained Skills have different topics or release cadences. A package is split only when its author deliberately creates separate Agent Skills-compatible package roots.
 
 Legacy `owner/slug` metadata is evidence of a claimed Registry identity, not proof of authority. The first authenticated Draft synchronization verifies or establishes the authoritative relationship before recording it in private author state.
+
+## Harness context budgets
+
+Harnesses budget the initial skill listing separately from loaded skill bodies. See
+[Skill context budgets](skill-context-budgets.md) for Codex and Claude rules, model facts,
+implementation provenance, and estimation limits.

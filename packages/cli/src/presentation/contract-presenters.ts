@@ -1,3 +1,4 @@
+import { renderDoctorListingBudget } from "./doctor-listing-budget.js";
 import {
   outputContracts,
   type ContractDataForId,
@@ -193,7 +194,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v5">, context: RenderContext): string {
+function renderDoctor(data: ContractDataForId<"skit.doctor.v6">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactHomePath(value));
@@ -319,6 +320,10 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v5">, context: Render
     );
   }
   if (findings.length) lines.push("", section("Needs attention"), ...findings);
+
+  lines.push("", section("Skill budgets"));
+  for (const budget of data.listing_budgets)
+    lines.push(...renderDoctorListingBudget(budget, context));
 
   lines.push("", section("Harness discovery"));
   const status = (state: string, warning: boolean) =>

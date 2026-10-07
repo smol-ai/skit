@@ -217,6 +217,9 @@ importers:
       '@opentui/keymap':
         specifier: ^0.5.9
         version: 0.5.9(react@19.3.0)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@smolai/skit-core':
+        specifier: workspace:*
+        version: link:../skit
       effect:
         specifier: 4.0.0
         version: 4.0.0

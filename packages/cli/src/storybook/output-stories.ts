@@ -1,3 +1,4 @@
+import { codexListingResult, estimateCodexListing } from "@smolai/skit-core";
 import { Data } from "effect";
 import {
   makeCollectionId,
@@ -61,6 +62,25 @@ const emptyAssessment = {
   reasons: [],
   findingDecisions: [],
 };
+
+const doctorListing = estimateCodexListing({
+  cwd: "/home/story/project",
+  model: "gpt-6.1-sol",
+  contextWindow: 373000,
+  skills: [
+    {
+      name: "review",
+      path: "/home/story/.agents/skills/review/SKILL.md",
+      scope: "user",
+      description: "Review code changes and find regressions. ".repeat(20),
+    },
+  ],
+});
+const doctorListingBudget = codexListingResult({
+  skills: [],
+  budget: doctorListing.budget,
+  skillDemands: doctorListing.skills,
+});
 
 export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("version", "build-report", outputContracts.versionReport, {
@@ -327,6 +347,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     },
   }),
   resultStory("doctor", "healthy", outputContracts.doctor, {
+    listing_budgets: [doctorListingBudget],
     harnesses: [
       {
         harness: "claude-code",
@@ -380,6 +401,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     },
   }),
   resultStory("doctor", "duplicate-skills", outputContracts.doctor, {
+    listing_budgets: [doctorListingBudget],
     ok: true,
     issues: [],
     codex: {
@@ -458,6 +480,14 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     ],
   }),
   resultStory("doctor", "projection-conflict", outputContracts.doctor, {
+    listing_budgets: [
+      {
+        _tag: "Unavailable",
+        harness: "codex",
+        cwd: "/home/story/project",
+        detail: "Codex CLI is unavailable",
+      },
+    ],
     harnesses: [],
     ok: false,
     codex: {
