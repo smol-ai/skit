@@ -85,6 +85,7 @@ it.effect("derives the public manifest from executable leaves", () =>
       "sync",
       "update",
       "version",
+      "usage",
     ]);
   }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-manifest-test"))),
 );
