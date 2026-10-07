@@ -1,3 +1,4 @@
+import { renderUsage } from "./usage.js";
 import { renderDoctorListingBudget } from "./doctor-listing-budget.js";
 import {
   outputContracts,
@@ -945,6 +946,7 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.disable.id]: (data) => renderSetEnabled(data, true),
   [outputContracts.disablePlan.id]: (data) => renderSetEnabled(data, false),
   [outputContracts.doctor.id]: renderDoctor,
+  [outputContracts.usage.id]: (data, context) => renderUsage(data, context.detail === "full"),
   [outputContracts.inventory.id]: (data, context) =>
     renderInventory(data, data.machine, createColors(context.color)),
   [outputContracts.setup.id]: renderSetup,

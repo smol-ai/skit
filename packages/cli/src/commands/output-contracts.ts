@@ -1,3 +1,4 @@
+import { UsageReport } from "@smolai/skit-core";
 import { VersionReport } from "../releases/checker.js";
 import {
   AuthorSkitDeleteResponse,
@@ -53,6 +54,7 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
+  usage: effectOutput("skit.usage.v1", UsageReport),
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(

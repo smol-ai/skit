@@ -1,3 +1,4 @@
+import { usageCliCommand } from "../handlers/usage.js";
 import { Command } from "effect/cli";
 import { checkCliCommand } from "../handlers/library/check.js";
 import { serverBootstrapCliCommand } from "../bootstrap/server-bootstrap.js";
@@ -95,5 +96,6 @@ export const skitCommand = Command.make("skit").pipe(
     librarySyncCliCommand,
     updateCliCommand,
     versionCliCommand,
+    usageCliCommand,
   ]),
 );
