@@ -97,13 +97,16 @@ export const usageCliCommand = Command.make(
       homePath(input.home),
     ),
 ).pipe(
-  Command.withDescription("Show observed skill activity from local Claude and Codex transcripts."),
+  Command.withDescription(
+    "Experimental: show skill activity from local Claude and Codex transcripts.",
+  ),
   Command.withExamples([
     { command: "skit usage" },
     { command: "skit usage --days 30 --harness codex" },
     { command: "skit usage --project . --json" },
   ]),
   Command.annotate(CommandMetadata, {
+    stability: "experimental",
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.usage],
     exitCodes: [0, 64],

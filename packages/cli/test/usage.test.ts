@@ -117,6 +117,7 @@ it.effect("exposes the read-only command and output schema", () =>
     const commands = yield* commandDescriptions(skitCommand);
     const usage = commands.find((c) => c.path.join(" ") === "usage");
     expect(usage).toMatchObject({
+      stability: "experimental",
       effects: { capabilities: ["filesystem.read"] },
       outputSchemas: expect.arrayContaining(["skit.usage.v1"]),
       interactive: false,

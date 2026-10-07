@@ -59,7 +59,20 @@ export function extractUsage(harness: UsageHarness, r: TranscriptRecord): Extrac
       out.events.push({ kind: "calls", name: String(input.skill), id });
     if (name === "Read" && text(input.file_path)) read(String(input.file_path), id);
     if (["exec_command", "shell_command", "Bash", "shell"].includes(String(name))) {
-      const command = text(input.cmd) ?? text(input.command);
+      const value = input.cmd ?? input.command;
+      let command = text(value);
+      if (Array.isArray(value)) {
+        const [shell, flag, script] = value;
+        if (
+          value.length === 3 &&
+          typeof shell === "string" &&
+          /(?:^|\/)(?:bash|sh|zsh|dash|ksh)$/.test(shell) &&
+          (flag === "-c" || flag === "-lc") &&
+          typeof script === "string"
+        )
+          command = script;
+        else out.unsupported++;
+      } else if (command === undefined) out.unsupported++;
       if (command)
         for (const file of new Set(shellReadPaths(command)))
           read(file, id, text(input.cwd) ?? text(input.workdir));

@@ -1,4 +1,6 @@
-# Local skill activity
+# Experimental local skill activity
+
+This command is experimental; its interface and evidence rules may change or be removed.
 
 `skit usage` reports observed activity from retained Claude Code and Codex transcripts on this machine. It scans all local projects over a rolling seven-day window by default.
 
@@ -35,8 +37,8 @@ JSON uses the versioned `skit.usage.v1` contract. It includes per-root availabil
 
 Records larger than 16 MiB are skipped with a diagnostic. Compressed transcripts and transcript symlinks are also skipped. The scanner reads only the inventoried byte prefix and reports changes detected through final metadata; it is not an atomic snapshot and cannot recover overwritten content. Individual malformed or truncated records do not discard the rest of the transcript. Undated evidence is never assigned a neighboring timestamp.
 
-Codex JavaScript wrappers are parsed with a pinned Acorn parser, never evaluated. Recognition is bounded to literal eager `tools.exec_command` arguments and simple constant string bindings. Calls inside functions, conditional/short-circuit expressions, dynamic arguments, shell expansions/redirections, and more complicated wrappers are not reconstructed. Shell recognition covers literal read operands for a small set of commands. Results are read attempts, not success counts. JSON output contains aggregate skill identities and paths, not prompts, instruction bodies, tool results, or raw parser errors.
+Codex JavaScript wrappers are parsed with a pinned Acorn parser, never evaluated. Recognition is bounded to literal eager `tools.exec_command` arguments and simple constant string bindings. Calls inside functions, conditional/short-circuit expressions, dynamic arguments, shell expansions/redirections, and more complicated wrappers are not reconstructed. Shell recognition covers literal read operands for a small set of commands, including legacy array-form shell calls shaped as `[shell, "-c" | "-lc", script]`. Other command array shapes are diagnosed as unsupported. Current document recognition expects POSIX path spellings; Windows-style document paths are not yet covered. Results are read attempts, not success counts. JSON output contains aggregate skill identities and paths, not prompts, instruction bodies, tool results, or raw parser errors.
 
 The scanner is an on-demand Effect service with cancellable streaming reads and bounded record buffering. Progress goes through the existing terminal renderer and does not contaminate JSON output. It writes neither transcripts nor usage state; no cache, background process, sync feature, or TUI integration is introduced.
 
-The original performance experiment and its fixed historical aggregate measurements remain in [the spike](../scripts/skill-usage-spike/README.md). Production recognition is intentionally more conservative than its original regex and may produce different read counts.
+A local warm scan of approximately 3.39 GB across 2,183 retained files took 7.9 seconds on Node 22.22.3 / Darwin arm64. For the fixed seven-day interval [2026-09-30T15:49:15Z, 2026-10-07T15:49:15Z), it found 4 calls, 7 loads, and 81 read attempts. These are historical measurements from before legacy shell-array support; the OS page cache was uncontrolled. There is no modification-time prefilter because imported or restored files can carry recent events with old modification times.

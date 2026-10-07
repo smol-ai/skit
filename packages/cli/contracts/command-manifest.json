@@ -2331,8 +2331,8 @@
       "path": [
         "usage"
       ],
-      "stability": "stable",
-      "summary": "Show observed skill activity from local Claude and Codex transcripts.",
+      "stability": "experimental",
+      "summary": "Experimental: show skill activity from local Claude and Codex transcripts.",
       "effects": {
         "capabilities": [
           "filesystem.read"

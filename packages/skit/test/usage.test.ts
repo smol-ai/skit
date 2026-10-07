@@ -399,3 +399,75 @@ it.effect("measures duration with monotonic time while the wall clock moves back
     expect(wallTime()).toBe(Date.parse(end) - 1000);
   }).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );
+
+test("recognizes legacy shell argv and diagnoses unsupported command shapes", () => {
+  const record = (command: unknown) => ({
+    type: "response_item",
+    payload: {
+      type: "function_call",
+      name: "shell",
+      call_id: "legacy-read",
+      arguments: JSON.stringify({ command, workdir: "/synthetic/project" }),
+    },
+  });
+  for (const shell of ["bash", "/bin/sh", "/usr/bin/zsh"])
+    for (const flag of ["-c", "-lc"]) {
+      const result = extractUsage(
+        "codex",
+        record([shell, flag, "cat /synthetic/skills/example/SKILL.md"]),
+      );
+      expect(result.events).toEqual([
+        {
+          kind: "reads",
+          name: "example",
+          path: "/synthetic/skills/example/SKILL.md",
+          id: "legacy-read",
+          cwd: "/synthetic/project",
+        },
+      ]);
+      expect(result.unsupported).toBe(0);
+    }
+  for (const command of [
+    ["cat", "/synthetic/skills/example/SKILL.md"],
+    ["bash", "-lc", 42],
+    ["bash", "-lc", "cat /synthetic/skills/example/SKILL.md", "arg"],
+    [],
+    {},
+  ]) {
+    const result = extractUsage("codex", record(command));
+    expect(result.events).toEqual([]);
+    expect(result.unsupported).toBe(1);
+  }
+});
+
+it.effect(
+  "reports a coverage gap for unrecognized shell argv without discarding recognized reads",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-argv-" });
+      const record = (id: string, command: unknown) => ({
+        timestamp: start,
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "shell",
+          call_id: id,
+          arguments: JSON.stringify({ command }),
+        },
+      });
+      yield* fs.writeFileString(
+        join(root, "legacy.jsonl"),
+        [
+          record("known", ["bash", "-lc", "cat /synthetic/skills/example/SKILL.md"]),
+          record("unknown", ["python", "-c", "pass"]),
+        ]
+          .map((r) => JSON.stringify(r))
+          .join("\n"),
+      );
+      const report = yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
+      expect(report.rows).toMatchObject([{ name: "example", reads: 1 }]);
+      expect(report.coverage[0].unsupported).toBe(1);
+      expect(report.incomplete).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
