@@ -1,4 +1,4 @@
-import { Context, DateTime, Effect, FileSystem, Layer, Option, Stream } from "effect";
+import { Clock, Context, DateTime, Effect, FileSystem, Layer, Option, Stream } from "effect";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { LinkStat } from "../platform/link-stat.js";
@@ -69,6 +69,7 @@ export const skillUsageLayer = Layer.effect(
       return yield* links.realPathNative(file).pipe(Effect.orElseSucceed(() => file));
     });
     const scan = Effect.fn("SkillUsage.scan")(function* (options: UsageOptions) {
+      const durationStart = yield* Clock.monotonicTimeNanos;
       const began = yield* DateTime.now;
       const clockStart = DateTime.toEpochMillis(began);
       const end = options.end === undefined ? clockStart : Date.parse(options.end);
@@ -78,6 +79,13 @@ export const skillUsageLayer = Layer.effect(
           message: "Use a valid end timestamp and a whole number of days between 1 and 3650.",
         });
       const start = end - days * 86400000;
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()))
+        return yield* new InvalidUsageOptions({
+          message: "Both window boundaries must be within the supported date range.",
+        });
+      const window = { start: startDate.toISOString(), end: endDate.toISOString() };
       if (options.project !== undefined) {
         const info = yield* fs.stat(resolve(options.project)).pipe(
           Effect.catch(() =>
@@ -372,9 +380,9 @@ export const skillUsageLayer = Layer.effect(
         if (timestamp > row.lastObservedAt) row.lastObservedAt = timestamp;
         rows.set(key, row);
       }
-      const now = yield* DateTime.now;
+      const durationEnd = yield* Clock.monotonicTimeNanos;
       return {
-        window: { start: new Date(start).toISOString(), end: new Date(end).toISOString() },
+        window,
         project,
         rows: [...rows.values()].sort(
           (a, b) =>
@@ -396,7 +404,7 @@ export const skillUsageLayer = Layer.effect(
               c.unknownProjectRecords >
               0,
         ),
-        durationMs: Math.max(0, DateTime.toEpochMillis(now) - clockStart),
+        durationMs: Math.max(0, Number(durationEnd - durationStart) / 1_000_000),
       } satisfies UsageReport;
     });
     return SkillUsage.of({ scan });

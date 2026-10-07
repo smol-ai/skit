@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest";
 import { expect, test } from "vitest";
-import { Deferred, Effect, Fiber, FileSystem, Stream } from "effect";
+import { Clock, Deferred, Effect, Fiber, FileSystem, Stream } from "effect";
 import { join } from "node:path";
 import { SkillUsage, skillUsageLayer, skitLayer } from "../src/index.js";
 import { extractUsage } from "../src/usage/events.js";
@@ -358,4 +358,44 @@ it.effect("uses Codex turn working directories and resolves project aliases", ()
     ]);
     expect(report.coverage[0].windowRecords).toBe(2);
   }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect("rejects date underflow as an argument error and accepts the exact date boundary", () =>
+  Effect.gen(function* () {
+    const usage = yield* SkillUsage;
+    const error = yield* usage
+      .scan({ roots: [], end: "-271821-04-20T00:00:00.000Z" })
+      .pipe(Effect.flip);
+    expect(error._tag).toBe("InvalidUsageOptions");
+    const report = yield* usage.scan({ roots: [], end: "-271821-04-27T00:00:00.000Z" });
+    expect(report.window).toEqual({
+      start: "-271821-04-20T00:00:00.000Z",
+      end: "-271821-04-27T00:00:00.000Z",
+    });
+  }).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect("measures duration with monotonic time while the wall clock moves backwards", () =>
+  Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    let wallReads = 0;
+    let nanosReads = 0;
+    const wallTime = () => Date.parse(end) - wallReads++ * 1000;
+    const nanos = () => BigInt(nanosReads++) * 1_250_000_000n;
+    const controlled: Clock.Clock = {
+      currentTimeMillisUnsafe: wallTime,
+      currentTimeMillis: Effect.sync(wallTime),
+      currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+      currentTimeNanos: clock.currentTimeNanos,
+      monotonicTimeNanosUnsafe: nanos,
+      monotonicTimeNanos: Effect.sync(nanos),
+      sleep: (duration) => clock.sleep(duration),
+    };
+    const report = yield* (yield* SkillUsage)
+      .scan({ roots: [] })
+      .pipe(Effect.provideService(Clock.Clock, controlled));
+    expect(report.window).toEqual({ start, end });
+    expect(report.durationMs).toBe(1250);
+    expect(wallTime()).toBe(Date.parse(end) - 1000);
+  }).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );

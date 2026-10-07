@@ -2,9 +2,10 @@ import { Schema, Option } from "effect";
 import type { UsageHarness, UsageKind } from "./contracts.js";
 import { literalCommands, shellReadPaths } from "./literals.js";
 const RecordObject = Schema.Record(Schema.String, Schema.Unknown);
+const decodeRecord = Schema.decodeUnknownOption(RecordObject);
 export interface TranscriptRecord extends Schema.Schema.Type<typeof RecordObject> {}
 export const object = (value: unknown): TranscriptRecord =>
-  Option.getOrElse(Schema.decodeUnknownOption(RecordObject)(value), () => ({}));
+  Option.getOrElse(decodeRecord(value), () => ({}));
 const text = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 const parts = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
