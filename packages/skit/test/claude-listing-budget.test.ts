@@ -119,3 +119,54 @@ it.effect(
       Effect.provide(nativeLibraryLayer),
     ),
 );
+
+it.effect("nested discovery uses root shared settings, then local settings and alias pins", () =>
+  Effect.gen(function* () {
+    const f = yield* NativeLibraryFixture;
+    const fs = yield* FileSystem.FileSystem;
+    const state = yield* (yield* LibraryStore).load;
+    const project = join(f.root, "project");
+    const nested = join(project, "nested");
+    yield* fs.makeDirectory(join(project, ".git"), { recursive: true });
+    yield* fs.makeDirectory(join(project, ".claude"), { recursive: true });
+    yield* fs.makeDirectory(nested);
+    yield* fs.makeDirectory(join(f.home, ".claude"), { recursive: true });
+    yield* fs.writeFileString(
+      join(f.home, ".claude", "settings.json"),
+      JSON.stringify({ model: "haiku" }),
+    );
+    const shared = join(project, ".claude", "settings.json");
+    yield* fs.writeFileString(shared, JSON.stringify({ model: "opus" }));
+    const options = {
+      cwd: nested,
+      home: f.home,
+      configHome: join(f.home, ".config"),
+      overrides: {},
+    };
+    const snapshot = yield* readClaudeListingSnapshot(state, options);
+    expect(snapshot.budget).toMatchObject({ _tag: "Estimated", model: "opus", limit: 40000 });
+    expect("settings" in snapshot ? snapshot.settings.modelSource : null).toBe(shared);
+    const local = join(project, ".claude", "settings.local.json");
+    yield* fs.writeFileString(local, JSON.stringify({ model: "sonnet" }));
+    const localSnapshot = yield* readClaudeListingSnapshot(state, options);
+    expect("settings" in localSnapshot ? localSnapshot.settings.modelSource : null).toBe(local);
+    const pinned = yield* readClaudeListingSnapshot(state, options).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({ ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-haiku-4-5" }),
+        ),
+      ),
+    );
+    expect(pinned.budget).toMatchObject({
+      _tag: "Estimated",
+      model: "claude-haiku-4-5",
+      limit: 8000,
+    });
+    expect("settings" in pinned ? pinned.settings.modelSource : null).toBe(
+      "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    );
+  }).pipe(
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+    Effect.provide(nativeLibraryLayer),
+  ),
+);

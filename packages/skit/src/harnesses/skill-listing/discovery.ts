@@ -28,14 +28,13 @@ export const readListingSnapshot = Effect.fn("Listing.discover")(function* (
   state: LibraryState,
   options: ListingOptions,
 ) {
-  const [codex, claude] = yield* Effect.all(
-    [
-      readLibraryCodexListingSnapshot(state, options),
-      readClaudeListingSnapshot(state, { ...listingRoots(options), cwd: options.cwd }),
-    ],
+  return yield* Effect.all(
+    {
+      codex: readLibraryCodexListingSnapshot(state, options),
+      claude: readClaudeListingSnapshot(state, { ...listingRoots(options), cwd: options.cwd }),
+    },
     { concurrency: 2 },
   );
-  return { codex, claude } satisfies ListingSnapshot;
 });
 export function listingResults(snapshot: ListingSnapshot): readonly ListingBudget[] {
   return [codexListingResult(snapshot.codex), snapshot.claude.budget];

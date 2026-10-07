@@ -45,12 +45,26 @@ export const implicitInvocationAllowed = Effect.fn("CodexListing.implicitInvocat
       join(dirname(path), "agents", "openai.yaml"),
     ]) {
       if (!(yield* fs.exists(metadataPath))) continue;
-      const document = parseDocument(yield* fs.readFileString(metadataPath));
+      const content = yield* fs.readFileString(metadataPath);
+      const document = yield* Effect.try({
+        try: () => parseDocument(content),
+        catch: (error) =>
+          new CodexDoctorFailure({
+            message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
+          }),
+      });
       if (document.errors.length)
         return yield* new CodexDoctorFailure({
           message: `Cannot read invocation policy at ${metadataPath}`,
         });
-      const metadata = yield* Schema.decodeUnknownEffect(MetadataPolicy)(document.toJS());
+      const value = yield* Effect.try({
+        try: () => document.toJS(),
+        catch: (error) =>
+          new CodexDoctorFailure({
+            message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
+          }),
+      });
+      const metadata = yield* Schema.decodeUnknownEffect(MetadataPolicy)(value);
       return metadata.policy?.allow_implicit_invocation !== false;
     }
     return true;

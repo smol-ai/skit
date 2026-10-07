@@ -206,6 +206,21 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         contextWindow: 373_000,
         limit: 7_460,
       });
+      yield* fs.writeFileString(
+        metadataPath,
+        [
+          "a: &a [1,2,3,4,5,6,7,8,9,10]",
+          "b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a,*a]",
+          "c: [*b,*b,*b,*b,*b,*b,*b,*b,*b,*b]",
+          "policy: {allow_implicit_invocation: true}",
+        ].join("\n"),
+      );
+      const excessiveAliases = yield* readLibraryCodexListingBudget(
+        stateWithProjection,
+        options,
+        process.execPath,
+      );
+      expect(excessiveAliases).toMatchObject({ status: "unavailable" });
       yield* fs.writeFileString(metadataPath, "policy: [invalid");
       const malformed = yield* readLibraryCodexListingBudget(
         stateWithProjection,

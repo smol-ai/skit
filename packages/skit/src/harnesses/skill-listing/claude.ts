@@ -175,6 +175,61 @@ export function claudeEntry(
   };
 }
 
+export function resolveClaudeListingSettings(
+  contract: NonNullable<ReturnType<typeof harnessProfile>["skillListing"]>,
+  settings: typeof Settings.Type,
+  sources: ReadonlyMap<string, string>,
+  overrideSources: number,
+  model: string | null,
+  modelSource: string,
+  fixedLimit: number | null,
+  pinnedModel: string | null,
+  pinSource: string,
+): ClaudeListingSettings {
+  const resolvedModel = pinnedModel ?? model;
+  const contextWindow = Option.getOrNull(modelContextWindow("anthropic", resolvedModel));
+  const conversion = contract.contextConversion;
+  const fraction = settings.skillListingBudgetFraction ?? contract.fraction;
+  let limit = fixedLimit;
+  if (limit === null && conversion !== undefined)
+    limit = Math.max(
+      1,
+      Math.floor(
+        (contextWindow ?? conversion.fallbackContextWindow) *
+          conversion.charactersPerToken *
+          fraction,
+      ),
+    );
+  const limitSource =
+    fixedLimit !== null
+      ? "SLASH_COMMAND_TOOL_CHAR_BUDGET"
+      : conversion === undefined
+        ? "Limit unavailable: no context conversion recorded."
+        : `Estimated from ${contextWindow === null ? "native fallback" : resolvedModel} context ${(contextWindow ?? conversion.fallbackContextWindow).toLocaleString("en-US")} × ${conversion.charactersPerToken} characters/token × ${fraction} (Claude Code ${conversion.clientVersion})`;
+  return {
+    model: resolvedModel,
+    modelSource: pinnedModel !== null ? pinSource : modelSource,
+    limit,
+    limitSource,
+    cap: settings.skillListingMaxDescChars ?? contract.descriptionCap,
+    overrides: settings.skillOverrides ?? {},
+    notes: [
+      ...(overrideSources > 1
+        ? [
+            "skillOverrides merging across settings files is assumed to be per-key; native merge semantics are unverified.",
+          ]
+        : []),
+      "Overrides match names only; managed alias matching is not modelled.",
+      ...(settings.skillListingBudgetFraction === undefined
+        ? []
+        : [
+            `Configured fraction ${settings.skillListingBudgetFraction} (${sources.get("skillListingBudgetFraction")}); ${fixedLimit === null ? "using native context conversion" : "using the explicit character override"}.`,
+          ]),
+      "Model aliases assume the current Anthropic API mapping; provider/version-specific mappings and session model/flags are not observable offline.",
+    ],
+  };
+}
+
 export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(function* (
   state: LibraryState,
   options: ClaudeListingOptions,
@@ -201,6 +256,7 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
     const files = [
       ...new Set([
         join(configDir, "settings.json"),
+        join(projectRoot, ".claude", "settings.json"),
         join(options.cwd, ".claude", "settings.json"),
         join(options.cwd, ".claude", "settings.local.json"),
         join(projectRoot, ".claude", "settings.local.json"),
@@ -226,67 +282,37 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
         enabledPlugins: { ...settings.enabledPlugins, ...value.enabledPlugins },
       };
     }
-    const envModel = yield* Config.option(Config.String("ANTHROPIC_MODEL"));
-    const fixedBudget = yield* Config.option(Config.String("SLASH_COMMAND_TOOL_CHAR_BUDGET"));
-    const rawLimit = Option.getOrNull(fixedBudget);
-    const fixedLimit = rawLimit === null ? null : Number(rawLimit);
-    let limit = fixedLimit;
-    if (limit !== null && (!Number.isSafeInteger(limit) || limit <= 0))
-      return yield* new ListingReadFailure({
-        detail: "SLASH_COMMAND_TOOL_CHAR_BUDGET must be a positive integer.",
-      });
-    const contract = harnessProfile("claude-code").skillListing!;
-    const model = Option.getOrNull(envModel) ?? settings.model ?? null;
+    const environment = yield* Effect.all({
+      model: Config.option(Config.String("ANTHROPIC_MODEL")),
+      limit: Config.option(
+        Config.schema(Schema.Int.check(Schema.isGreaterThan(0)), "SLASH_COMMAND_TOOL_CHAR_BUDGET"),
+      ),
+    });
+    const model = Option.getOrNull(environment.model) ?? settings.model ?? null;
     const alias = model?.replace(/\[1m\]$/, "");
-    const defaultModel =
+    const pinSource = `ANTHROPIC_DEFAULT_${alias?.toUpperCase()}_MODEL`;
+    const pinnedModel =
       alias !== undefined && ["opus", "sonnet", "haiku", "fable"].includes(alias)
-        ? Option.getOrNull(
-            yield* Config.option(Config.String(`ANTHROPIC_DEFAULT_${alias.toUpperCase()}_MODEL`)),
-          )
+        ? Option.getOrNull(yield* Config.option(Config.String(pinSource)))
         : null;
-    const resolvedModel = defaultModel ?? model;
-    const contextWindow = Option.getOrNull(modelContextWindow("anthropic", resolvedModel));
-    const conversion = contract.contextConversion;
-    const fraction = settings.skillListingBudgetFraction ?? contract.fraction;
-    if (limit === null && conversion !== undefined)
-      limit = Math.max(
-        1,
-        Math.floor(
-          (contextWindow ?? conversion.fallbackContextWindow) *
-            conversion.charactersPerToken *
-            fraction,
-        ),
-      );
-    const limitSource =
-      fixedLimit !== null
-        ? "SLASH_COMMAND_TOOL_CHAR_BUDGET"
-        : conversion === undefined
-          ? "Limit unavailable: no context conversion recorded."
-          : `Estimated from ${contextWindow === null ? "native fallback" : resolvedModel} context ${(contextWindow ?? conversion.fallbackContextWindow).toLocaleString("en-US")} × ${conversion.charactersPerToken} characters/token × ${fraction} (Claude Code ${conversion.clientVersion})`;
-    const resolved: ClaudeListingSettings = {
-      model: resolvedModel,
-      modelSource: Option.isSome(envModel)
+    const contract = harnessProfile("claude-code").skillListing;
+    if (contract === undefined)
+      return yield* new ListingReadFailure({
+        detail: "Claude Code listing contract is unavailable.",
+      });
+    const resolved = resolveClaudeListingSettings(
+      contract,
+      settings,
+      sources,
+      overrideSources,
+      model,
+      Option.isSome(environment.model)
         ? "ANTHROPIC_MODEL"
         : (sources.get("model") ?? "not configured"),
-      limit,
-      limitSource,
-      cap: settings.skillListingMaxDescChars ?? contract.descriptionCap,
-      overrides: settings.skillOverrides ?? {},
-      notes: [
-        ...(overrideSources > 1
-          ? [
-              "skillOverrides merging across settings files is assumed to be per-key; native merge semantics are unverified.",
-            ]
-          : []),
-        "Overrides match names only; managed alias matching is not modelled.",
-        ...(settings.skillListingBudgetFraction === undefined
-          ? []
-          : [
-              `Configured fraction ${settings.skillListingBudgetFraction} (${sources.get("skillListingBudgetFraction")}); ${fixedLimit === null ? "using native context conversion" : "using the explicit character override"}.`,
-            ]),
-        "Model aliases assume the current Anthropic API mapping; provider/version-specific mappings and session model/flags are not observable offline.",
-      ],
-    };
+      Option.getOrNull(environment.limit),
+      pinnedModel,
+      pinSource,
+    );
     const coverage = [
       `Combined description and when_to_use text is capped at ${resolved.cap} characters per entry.`,
       "Counts name, description and when_to_use with estimated row separators; native row formatting and invocation order are not observable.",

@@ -114,26 +114,20 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
   const inventory = yield* refreshLibraryInventoryCommand(options);
   const report = libraryDoctorReport(inventory);
   const renderer = yield* Renderer;
-  const { codex, harnesses } = yield* renderer.withStatus(
+  const { codex, claude, claudeHarness, opencode, devin } = yield* renderer.withStatus(
     "Checking native harness skill discovery",
-    Effect.gen(function* () {
-      const codex = yield* doctorCodexCheck(
-        inventory,
-        process.cwd(),
-        options.overrides.codex,
-        options,
-      );
-      const harnesses = yield* Effect.all(
-        [
-          doctorHarnessCheck("claude-code", process.cwd(), options.overrides.claude),
-          doctorHarnessCheck("opencode", process.cwd(), options.overrides.opencode),
-          doctorHarnessCheck("devin", process.cwd(), options.overrides.devin),
-        ],
-        { concurrency: 3 },
-      );
-      return { codex, harnesses };
-    }),
+    Effect.all(
+      {
+        codex: doctorCodexCheck(inventory, process.cwd(), options.overrides.codex, options),
+        claude: readClaudeListingSnapshot(inventory, { ...options, cwd: process.cwd() }),
+        claudeHarness: doctorHarnessCheck("claude-code", process.cwd(), options.overrides.claude),
+        opencode: doctorHarnessCheck("opencode", process.cwd(), options.overrides.opencode),
+        devin: doctorHarnessCheck("devin", process.cwd(), options.overrides.devin),
+      },
+      { concurrency: 3 },
+    ),
   );
+  const harnesses = [claudeHarness, opencode, devin];
   const aliasErrors: ShadowObservationError[] = [];
   const locations = yield* observeHarnessSkills(
     [
@@ -142,7 +136,6 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
     ],
     { errors: aliasErrors },
   );
-  const claude = yield* readClaudeListingSnapshot(inventory, { ...options, cwd: process.cwd() });
   const { listingBudget, ...nativeCodex } = codex;
   return {
     ...report,
