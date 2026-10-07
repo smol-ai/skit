@@ -16,8 +16,8 @@ import { rendererTestLayer } from "./helpers/renderer.js";
 import type { CommandResult } from "../src/commands/types.js";
 
 test("presents separate evidence and diagnostics; encodes the public JSON contract", () => {
-  expect(renderUsage(emptyUsageStory)).toContain("No activity observed.");
-  const body = renderUsage(observedUsageStory);
+  expect(renderUsage(emptyUsageStory, true)).toContain("No activity observed.");
+  const body = renderUsage(observedUsageStory, true);
   expect(body).toContain("Calls | Loads | Reads");
   expect(body).toContain("example | codex | 0 | 1 | 3");
   expect(body).toContain("example | claude-code | 2 | 0 | 0");
@@ -45,9 +45,71 @@ test("does not render terminal controls embedded in observed names or paths", ()
       },
     ],
   };
-  const body = renderUsage(report);
+  const body = renderUsage(report, true);
   expect(body).not.toContain("\x1b");
   expect(body).toContain("/synthetic/ example/SKILL.md");
+});
+
+test("summarizes by name without dumping paths, scan internals, or test-fixture reads", () => {
+  const base = observedUsageStory.rows[0];
+  const report = {
+    ...observedUsageStory,
+    rows: [
+      ...observedUsageStory.rows,
+      {
+        ...base,
+        name: "library",
+        identity: "unresolved" as const,
+        path: "/synthetic/test/fixtures/library/SKILL.md",
+        loads: 0,
+        reads: 1,
+      },
+      {
+        ...base,
+        name: "review",
+        path: "/synthetic/test/fixtures/library/skills/review/SKILL.md",
+        loads: 0,
+        reads: 1,
+      },
+    ],
+  };
+  const body = renderUsage(report);
+  expect(body).toContain("Skill activity · 7 days");
+  expect(body.match(/^example\s+/gm)).toHaveLength(1);
+  expect(body).toMatch(/example\s+3\s+2\s+1\s+7 Oct/);
+  expect(body).not.toContain("/synthetic");
+  expect(body).not.toContain("library");
+  expect(body).not.toContain("review");
+  expect(body).not.toContain("unsupported tool wrappers");
+  expect(body).not.toContain("bytes read");
+  expect(body).toContain("--details");
+  const detailed = renderResultFrame(
+    { ...result("usage", outputContracts.usage, report), detail: "full" },
+    defaultTerminalEnvironment,
+  );
+  // JSON retains all observations even with the terminal details flag.
+  const json = renderResultFrame(
+    { ...result("usage", outputContracts.usage, report), detail: "full" },
+    { ...defaultTerminalEnvironment, format: "json" },
+  );
+  expect(JSON.parse(json?.stdout ?? "{}").data.rows).toHaveLength(4);
+  expect(detailed).toBeDefined();
+});
+
+test("keeps infrequent skills visible in the compact table", () => {
+  const report = {
+    ...emptyUsageStory,
+    rows: Array.from({ length: 12 }, (_, i) => ({
+      ...observedUsageStory.rows[0],
+      name: `skill-${i}`,
+      reads: 12 - i,
+      loads: 0,
+    })),
+  };
+  const body = renderUsage(report);
+  expect(body.match(/^skill-\d+\s+/gm)).toHaveLength(12);
+  expect(body).toContain("skill-11");
+  expect(renderUsage(report, true)).toContain("skill-11");
 });
 
 it.effect("exposes the read-only command and output schema", () =>

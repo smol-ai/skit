@@ -7,6 +7,7 @@ skit usage
 skit usage --days 30
 skit usage --harness codex
 skit usage --harness claude-code --project .
+skit usage --details
 skit usage --json
 ```
 
@@ -18,7 +19,9 @@ The categories stay separate:
 
 A call and its resulting load can describe the same invocation. Reads do not establish successful execution or a completed skill workflow. Advertised inventories, quoted examples, ordinary mentions, slash commands without a native load/call, and compaction summaries do not count.
 
-Rows include their harness, observed path where available, current identity match, and last observed timestamp. SKIT matches known projection paths and their currently resolved filesystem aliases to Library skill IDs. It does not merge different skills merely because they have the same name. Name-only invocations, unmanaged skills, ambiguous projection matches, and unresolved documents remain visible. Current filesystem resolution cannot establish what a symlink pointed to in the past.
+The default terminal view groups observations by displayed skill name into one compact table, with separate Reads, Calls, Loads, and Last seen columns. Paths, individual evidence rows, and scan diagnostics are available with `--details`. Read-only unresolved documents and unmanaged test-fixture documents are omitted from the summary; they remain in the details and JSON output.
+
+Detailed evidence rows include their harness, observed path where available, current identity match, and last observed timestamp. SKIT matches known projection paths and their currently resolved filesystem aliases to Library skill IDs. Evidence identities remain separate even when the human summary groups their displayed names. Name-only invocations, unmanaged skills, ambiguous projection matches, and unresolved documents remain visible. Current filesystem resolution cannot establish what a symlink pointed to in the past.
 
 `--project` selects events whose recorded working directory resolves to that directory. Codex session metadata and turn contexts provide working directories; Claude records can carry their own. Events without project attribution are reported as unknown when filtering. Subagent sidecars and independently retained child transcripts are included; replayed native event identities are suppressed across files. Separate calls remain separate. Missing native IDs use a timestamp/identity fallback and are diagnosed; shifted timestamps or rewritten IDs can defeat replay detection.
 

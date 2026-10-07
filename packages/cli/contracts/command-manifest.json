@@ -2358,6 +2358,11 @@
           "valueName": "boolean",
           "description": "Emit structured JSON."
         },
+        "details": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show all skills, individual evidence, paths, and scan diagnostics."
+        },
         "home": {
           "type": "string",
           "valueName": "string",

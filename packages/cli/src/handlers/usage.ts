@@ -15,6 +15,10 @@ export const usageCliCommand = Command.make(
   "usage",
   {
     json: jsonFlag,
+    details: Flag.Boolean("details").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("Show all skills, individual evidence, paths, and scan diagnostics."),
+    ),
     home: homeFlag,
     days: Flag.Int("days").pipe(
       Flag.withDefault(7),
@@ -85,7 +89,10 @@ export const usageCliCommand = Command.make(
               ),
             ),
         );
-        yield* renderer.result(result("usage", outputContracts.usage, report));
+        yield* renderer.result({
+          ...result("usage", outputContracts.usage, report),
+          ...(input.details ? { detail: "full" as const } : {}),
+        });
       }).pipe(Effect.provide(skillUsageLayer)),
       homePath(input.home),
     ),

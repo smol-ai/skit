@@ -26,7 +26,10 @@ export function renderResultFrame(
   const body =
     environment.format === "json"
       ? JSON.stringify({ schema: result.schema, data: result.encodedData }, null, 2)
-      : renderContract(result.schema, result.data, environment);
+      : renderContract(result.schema, result.data, {
+          ...environment,
+          detail: result.detail ?? environment.detail,
+        });
   if (body === undefined) return undefined;
   return { stdout: `${body}\n`, stderr: "", exitCode: result.exitCode };
 }

@@ -6,6 +6,8 @@ export interface CommandResult {
   data: unknown;
   /** Schema-encoded wire data consumed by JSON output. */
   encodedData: unknown;
+  /** Terminal presentation only; excluded from encoded JSON output. */
+  detail?: "summary" | "full";
   exitCode?: number;
 }
 
