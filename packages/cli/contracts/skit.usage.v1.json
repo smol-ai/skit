@@ -1,0 +1,262 @@
+{
+  "$id": "skit.usage.v1",
+  "type": "object",
+  "properties": {
+    "window": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string"
+        },
+        "end": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "additionalProperties": true
+    },
+    "project": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code"
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skillId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "type": "string",
+            "enum": [
+              "managed",
+              "unmanaged",
+              "name-only",
+              "unresolved",
+              "ambiguous"
+            ]
+          },
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "loads": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reads": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastObservedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "harness",
+          "path",
+          "skillId",
+          "identity",
+          "calls",
+          "loads",
+          "reads",
+          "lastObservedAt"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code"
+            ]
+          },
+          "root": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "missing",
+              "unreadable"
+            ]
+          },
+          "files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytesRead": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "records": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "windowRecords": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "malformed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "undated": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "undatedCandidates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unsupported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duplicates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "missingIds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "summaries": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mentions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "slashCommands": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "oversizedLines": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skippedFiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unreadableFiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "changedFiles": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unknownProjectRecords": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "harness",
+          "root",
+          "status",
+          "files",
+          "bytes",
+          "bytesRead",
+          "records",
+          "windowRecords",
+          "malformed",
+          "undated",
+          "undatedCandidates",
+          "unsupported",
+          "duplicates",
+          "missingIds",
+          "summaries",
+          "mentions",
+          "slashCommands",
+          "oversizedLines",
+          "skippedFiles",
+          "unreadableFiles",
+          "changedFiles",
+          "unknownProjectRecords"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "incomplete": {
+      "type": "boolean"
+    },
+    "durationMs": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "window",
+    "project",
+    "rows",
+    "coverage",
+    "incomplete",
+    "durationMs"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

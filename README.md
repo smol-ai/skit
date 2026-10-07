@@ -70,6 +70,10 @@ If SKIT finds multiple versions of skills from the same source across the reposi
 
 - SKIT does not currently support taking custody of skills found in repositories during setup. After adding one to your Library, remove it from the repository and enable it using `skit enable`.
 
+## Skill activity
+
+Run `skit usage` to see observed skill calls, instruction loads, and document reads from local Claude Code and Codex transcripts over the last seven days. Use `--days 30`, `--harness codex`, `--project .`, or `--json` to narrow the report or read structured output. See [local skill activity](docs/skill-usage.md) for evidence categories and coverage limits.
+
 ## Enabling and disabling skills
 
 Use the interactive flows:

@@ -79,3 +79,5 @@ export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
 export * from "./library/audit/audit-log.js";
 export { writeJsonAtomicEffect, writeJsonExclusiveEffect } from "./platform/atomic-write.js";
+export * from "./usage/contracts.js";
+export { SkillUsage, skillUsageLayer } from "./usage/scanner.js";

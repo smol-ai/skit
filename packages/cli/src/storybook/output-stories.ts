@@ -1,3 +1,4 @@
+import { emptyUsageStory, observedUsageStory } from "./usage-stories.js";
 import { codexListingResult, estimateCodexListing } from "@smolai/skit-core";
 import { Data } from "effect";
 import {
@@ -83,6 +84,8 @@ const doctorListingBudget = codexListingResult({
 });
 
 export const outputStories: ReadonlyArray<OutputStory> = [
+  resultStory("usage", "empty", outputContracts.usage, emptyUsageStory),
+  resultStory("usage", "observed", outputContracts.usage, observedUsageStory),
   resultStory("version", "build-report", outputContracts.versionReport, {
     version: "0.2.0",
     build: { kind: "release", version: "0.2.0", commit: "0123456789abcdef" },

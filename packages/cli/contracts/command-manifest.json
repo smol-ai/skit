@@ -2326,6 +2326,99 @@
           "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
         }
       }
+    },
+    {
+      "path": [
+        "usage"
+      ],
+      "stability": "stable",
+      "summary": "Show observed skill activity from local Claude and Codex transcripts.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read"
+        ]
+      },
+      "outputSchemas": [
+        "skit.usage.v1"
+      ],
+      "exitCodes": [
+        0,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit usage",
+        "skit usage --days 30 --harness codex",
+        "skit usage --project . --json"
+      ],
+      "positionals": [],
+      "flags": {
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "days": {
+          "type": "integer",
+          "valueName": "integer",
+          "description": "Scan this many rolling days (1–3650)."
+        },
+        "harness": {
+          "type": "choice",
+          "valueName": "choice",
+          "description": "Select local transcript harnesses. (choices: all, codex, claude-code)"
+        },
+        "project": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Only events recorded in this project directory."
+        },
+        "end": {
+          "type": "string",
+          "valueName": "string",
+          "description": "End timestamp, exclusive; defaults to now."
+        },
+        "codex-home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Codex transcript home (not the skills root)."
+        },
+        "claude-home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the Claude transcript home (not the skills root)."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "wizard": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Start wizard mode for a command"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|sh>",
+          "valueName": "<bash|zsh|fish|sh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
     }
   ]
 }
