@@ -1,3 +1,4 @@
+export * from "./harnesses/skill-listing/codex-discovery.js";
 export * from "./harnesses/skill-listing/contracts.js";
 export * from "./harnesses/skill-listing/discovery.js";
 export * from "./harnesses/skill-listing/claude.js";

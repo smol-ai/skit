@@ -2,7 +2,12 @@ import { HarnessShadow } from "../../projection/harness-shadows.js";
 import { Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { type LibraryState, LibraryDoctorReport, SourceProcess } from "@smolai/skit-core";
+import {
+  type LibraryState,
+  LibraryDoctorReport,
+  ListingBudget,
+  SourceProcess,
+} from "@smolai/skit-core";
 import { probeHarnessEffect, type ProbeableHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
@@ -40,6 +45,7 @@ export type HarnessDoctorCheck = typeof HarnessDoctorCheck.Type;
 export const DoctorReport = Schema.Struct({
   ...LibraryDoctorReport.fields,
   codex: CodexDoctorCheck,
+  listing_budgets: Schema.Array(ListingBudget),
   harnesses: Schema.Array(HarnessDoctorCheck),
 });
 

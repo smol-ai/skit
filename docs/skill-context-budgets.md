@@ -6,8 +6,20 @@ scripts loaded when a skill is selected.
 
 SKIT estimates full listing demand and compares it with the harness's allowance. Full demand
 means the listing before budget trimming; a fitted listing can hide descriptions that no
-longer reach the model. Budget diagnostics live in core and are displayed in the TUI's
-Harnesses view. They do not change Library health or CLI behavior.
+longer reach the model. Budget diagnostics live in core and are displayed by `skit doctor` and the TUI's
+Harnesses view. They do not change Library health or doctor's exit status.
+
+## Doctor output
+
+`skit doctor` shows demand, allowance, percentage, and overflow warnings for Codex and Claude.
+It lists skills whose pre-budget-trimming listing cost is strictly greater than 1% of the
+harness's allowance, including when the overall listing fits. Costs include row metadata;
+they are not measurements of the description alone.
+
+Use `--detail full` for source provenance, coverage notes, and paths. JSON output uses
+`skit.doctor.v6` and exposes the shared results in `listing_budgets`. Codex budget and
+native-discovery diagnostics reuse one app-server process; Claude budget discovery reads
+filesystem metadata and settings.
 
 ## Budget rules
 

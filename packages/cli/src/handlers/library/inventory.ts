@@ -1,3 +1,4 @@
+import { readClaudeListingSnapshot } from "@smolai/skit-core";
 import {
   observeHarnessSkills,
   readableHarnessRoots,
@@ -141,9 +142,20 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
     ],
     { errors: aliasErrors },
   );
+  const claude = yield* readClaudeListingSnapshot(inventory, { ...options, cwd: process.cwd() });
+  const { listingBudget, ...nativeCodex } = codex;
   return {
     ...report,
-    codex,
+    codex: nativeCodex,
+    listing_budgets: [
+      listingBudget ?? {
+        _tag: "Unavailable" as const,
+        harness: "codex" as const,
+        cwd: process.cwd(),
+        detail: "detail" in codex ? codex.detail : "Native discovery unavailable",
+      },
+      claude.budget,
+    ],
     harnesses: harnesses.map((check) =>
       classifyOpenCodeWarnings(
         {
