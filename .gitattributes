@@ -1,0 +1,4 @@
+# Preserve verbatim upstream fixture bytes across checkout line-ending settings.
+packages/cli/test/fixtures/collections/** -text
+# Upstream whitespace is part of the pinned fixture bytes.
+packages/cli/test/fixtures/collections/*/** whitespace=-blank-at-eol,-blank-at-eof

@@ -1,0 +1,305 @@
+[
+  {
+    "id": "swyxio",
+    "repository": "swyxio/skills",
+    "commit": "038ef3441a4c7bfff16ae3241dc1730746a69a5b",
+    "includedPaths": ["cli-ux", "skill-cutter", "README.md", "LICENSE"],
+    "skills": [
+      {
+        "name": "cli-ux",
+        "path": "cli-ux"
+      },
+      {
+        "name": "skill-cutter",
+        "path": "skill-cutter"
+      }
+    ],
+    "excluded": [],
+    "explicit": [],
+    "files": [
+      {
+        "path": "LICENSE",
+        "gitBlob": "6ed32883de566f824610b562b7c1349da29b279c",
+        "mode": "100644"
+      },
+      {
+        "path": "README.md",
+        "gitBlob": "84346d571c1bbc9760be5c161b05777063a9ca4d",
+        "mode": "100644"
+      },
+      {
+        "path": "cli-ux/SKILL.md",
+        "gitBlob": "60c118920fe34366ada870fccc29d450e8e8afda",
+        "mode": "100644"
+      },
+      {
+        "path": "cli-ux/agents/openai.yaml",
+        "gitBlob": "42187cbaf45903d746b64820c71a8109684a9b6e",
+        "mode": "100644"
+      },
+      {
+        "path": "skill-cutter/SKILL.md",
+        "gitBlob": "4d05011867f439004eaa4382d988d255fc386b64",
+        "mode": "100644"
+      },
+      {
+        "path": "skill-cutter/agents/openai.yaml",
+        "gitBlob": "1f55c06428d0355a50aea2ad256c83104c7ebb3d",
+        "mode": "100644"
+      }
+    ]
+  },
+  {
+    "id": "asmartbear",
+    "repository": "asmartbear/asb-skills",
+    "commit": "4fc9c1ca1356d162d53798f86f86e2e259185224",
+    "includedPaths": [
+      ".claude/skills/asb-positioning",
+      ".claude/skills/asb-problem",
+      "dev-skills/doc-skills",
+      "README.md",
+      "LICENSE",
+      ".claude-plugin/marketplace.json",
+      "plugins/asb-skills/.claude-plugin/plugin.json",
+      "plugins/asb-skills/skills/asb-positioning",
+      "plugins/asb-skills/skills/asb-problem"
+    ],
+    "skills": [
+      {
+        "name": "asb-positioning",
+        "path": ".claude/skills/asb-positioning"
+      },
+      {
+        "name": "asb-problem",
+        "path": ".claude/skills/asb-problem"
+      },
+      {
+        "name": "doc-skills",
+        "path": "dev-skills/doc-skills"
+      }
+    ],
+    "excluded": [
+      "plugins/asb-skills/skills/asb-positioning",
+      "plugins/asb-skills/skills/asb-problem"
+    ],
+    "explicit": [
+      {
+        "path": "plugins/asb-skills/skills/asb-positioning",
+        "name": "asb-positioning"
+      }
+    ],
+    "files": [
+      {
+        "path": ".claude-plugin/marketplace.json",
+        "gitBlob": "6413b2808ede6571bc826f0b1bbc68c00c71f9bc",
+        "mode": "100644"
+      },
+      {
+        "path": ".claude/skills/asb-positioning/SKILL.md",
+        "gitBlob": "30bedb649807660c04717125eb220956b42d5b3b",
+        "mode": "100644"
+      },
+      {
+        "path": ".claude/skills/asb-problem/SKILL.md",
+        "gitBlob": "489029d16ed7f7549829d3db9005c8dff3e7e368",
+        "mode": "100644"
+      },
+      {
+        "path": "LICENSE",
+        "gitBlob": "da6ab6cc8f333d7e89a99812866df8f24374d47c",
+        "mode": "100644"
+      },
+      {
+        "path": "README.md",
+        "gitBlob": "c3ad7214dcf39ab522e87f3a4140b172d91b6b4c",
+        "mode": "100644"
+      },
+      {
+        "path": "dev-skills/doc-skills/SKILL.md",
+        "gitBlob": "1cd0f972cb9561ef63a9d3eb61259c777311c666",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/asb-skills/.claude-plugin/plugin.json",
+        "gitBlob": "1b268dabe441ef2b22a90fbf3928348e868be533",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/asb-skills/skills/asb-positioning",
+        "gitBlob": "e25eb047167040d18057b2b5e787f1d9bf9f41ae",
+        "mode": "120000",
+        "linkTarget": "../../../.claude/skills/asb-positioning"
+      },
+      {
+        "path": "plugins/asb-skills/skills/asb-problem",
+        "gitBlob": "0d5be60b3be87e42901dc6336a457ee04da2d1df",
+        "mode": "120000",
+        "linkTarget": "../../../.claude/skills/asb-problem"
+      }
+    ]
+  },
+  {
+    "id": "nvidia",
+    "repository": "NVIDIA/skills",
+    "commit": "4c141a9a2b8b0210724fa68b9b0d52709a33548f",
+    "includedPaths": [
+      "skills/nvidia-skill-finder",
+      "plugins/nvidia-skills/skills/nvidia-skill-finder",
+      "skills/dynamo-router-starter",
+      "README.md",
+      "LICENSE-APACHE",
+      "LICENSE-CC-BY-4.0",
+      ".claude-plugin/marketplace.json",
+      "plugins/nvidia-skills/.claude-plugin/plugin.json"
+    ],
+    "skills": [
+      {
+        "name": "nvidia-skill-finder",
+        "path": "skills/nvidia-skill-finder"
+      },
+      {
+        "name": "dynamo-router-starter",
+        "path": "skills/dynamo-router-starter"
+      }
+    ],
+    "excluded": ["plugins/nvidia-skills/skills/nvidia-skill-finder"],
+    "explicit": [
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder",
+        "name": "nvidia-skill-finder"
+      }
+    ],
+    "files": [
+      {
+        "path": ".claude-plugin/marketplace.json",
+        "gitBlob": "9d95edf4f8c8bc2ff4c12d2e74400b6cfefa0674",
+        "mode": "100644"
+      },
+      {
+        "path": "LICENSE-APACHE",
+        "gitBlob": "001a3281169d6ade30cd1a44544029254ba490a8",
+        "mode": "100644"
+      },
+      {
+        "path": "LICENSE-CC-BY-4.0",
+        "gitBlob": "b0de5b1eb94213e92ad03b131684bae483db2bd9",
+        "mode": "100644"
+      },
+      {
+        "path": "README.md",
+        "gitBlob": "14952c90bd30c5baac410794015f7db89f946200",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/.claude-plugin/plugin.json",
+        "gitBlob": "ba406623bda2f4005b24ffc3099e179bb42812e3",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/BENCHMARK.md",
+        "gitBlob": "79fd0d79b6fb76ec8453ed716b8d74d78aea5a94",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/SKILL.md",
+        "gitBlob": "e9aa2f88736041e0400f5ebdfab5de7febf191a2",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/agents/openai.yaml",
+        "gitBlob": "726e2b5e75d5e16f7433c67731167d9a41f1a807",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/evals/evals.json",
+        "gitBlob": "7c351fc94b3efbeb71ebb04b8b3d39379c30340e",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/references/taxonomy-routing.md",
+        "gitBlob": "aea64d6fee36bb8f2a84695fe6805c5c24601245",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/skill-card.md",
+        "gitBlob": "b5487a7edc671b91954d1358ab1b584743d21088",
+        "mode": "100644"
+      },
+      {
+        "path": "plugins/nvidia-skills/skills/nvidia-skill-finder/skill.oms.sig",
+        "gitBlob": "cdde023c342dd5b3defc5318fbdf5bed81acbda9",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/dynamo-router-starter/BENCHMARK.md",
+        "gitBlob": "12b267e4c1b6dfed112cb4f7596d905c12e909db",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/dynamo-router-starter/SKILL.md",
+        "gitBlob": "954b040c479fabbb4411d4212ae2eb3316b19581",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/dynamo-router-starter/evals/evals.json",
+        "gitBlob": "83aae67ff5a9fb866fb98a99ffdf020e581d781b",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/dynamo-router-starter/references/router-modes.md",
+        "gitBlob": "bf76034230268cd7f35f2dfb789e69c371ec8709",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/dynamo-router-starter/scripts/check_router_health.py",
+        "gitBlob": "f7fd8bbd3d34f904269305c128fcdb86ab6dbfb2",
+        "mode": "100755"
+      },
+      {
+        "path": "skills/dynamo-router-starter/skill-card.md",
+        "gitBlob": "00033fd6dbe47ca0daa36c510e5022ea579b99cc",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/dynamo-router-starter/skill.oms.sig",
+        "gitBlob": "24f8776dc8cb1bb54825ff93e2ab87f346ea60a3",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/BENCHMARK.md",
+        "gitBlob": "79fd0d79b6fb76ec8453ed716b8d74d78aea5a94",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/SKILL.md",
+        "gitBlob": "e9aa2f88736041e0400f5ebdfab5de7febf191a2",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/agents/openai.yaml",
+        "gitBlob": "726e2b5e75d5e16f7433c67731167d9a41f1a807",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/evals/evals.json",
+        "gitBlob": "7c351fc94b3efbeb71ebb04b8b3d39379c30340e",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/references/taxonomy-routing.md",
+        "gitBlob": "aea64d6fee36bb8f2a84695fe6805c5c24601245",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/skill-card.md",
+        "gitBlob": "b5487a7edc671b91954d1358ab1b584743d21088",
+        "mode": "100644"
+      },
+      {
+        "path": "skills/nvidia-skill-finder/skill.oms.sig",
+        "gitBlob": "cdde023c342dd5b3defc5318fbdf5bed81acbda9",
+        "mode": "100644"
+      }
+    ]
+  }
+]
