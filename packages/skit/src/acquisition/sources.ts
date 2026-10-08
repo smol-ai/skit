@@ -873,7 +873,7 @@ function discoverRootEffect(
       }
       // Dirent semantics: a symlinked directory is not descended into.
       for (const name of yield* fs.readDirectory(directory)) {
-        if (name === ".git" || name.startsWith(".")) continue;
+        if (name === ".git") continue;
         const info = yield* probe.identity.lstat(join(directory, name));
         if (info.type === "Directory") queue.push(join(directory, name));
       }

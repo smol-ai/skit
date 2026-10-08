@@ -90,10 +90,6 @@ export const readLibraryCodexListingSnapshot = Effect.fn("Library.codexListingSn
     const discovery =
       suppliedDiscovery ?? (yield* readCodexSkills(command, options.cwd, undefined, true));
     if (discovery.configError !== undefined) return unavailable(discovery.configError);
-    if (discovery.errors.length)
-      return unavailable(
-        `Codex discovery is incomplete: ${discovery.errors.map((error) => error.message).join("; ")}`,
-      );
     const configuration = yield* Schema.decodeUnknownEffect(Configuration)(discovery.config);
     const fs = yield* FileSystem.FileSystem;
     const model = configuration.config.model ?? null;
@@ -142,11 +138,13 @@ export const readLibraryCodexListingSnapshot = Effect.fn("Library.codexListingSn
       skillDemands: estimate.skills,
       ...(maxContextTokens === null ? {} : { maxContextTokens }),
       budget: estimate.budget,
+      warnings: discovery.errors.map((error) => `Skipped skill ${error.path}: ${error.message}`),
     } satisfies CodexListingSnapshot;
   }).pipe(Effect.catch((error) => Effect.succeed(unavailable(String(error)))));
 });
 
 export interface CodexListingSnapshot {
+  readonly warnings?: readonly string[];
   readonly budget: CodexListingBudget;
   readonly skills: readonly CodexListingSkill[];
   readonly maxContextTokens?: number;

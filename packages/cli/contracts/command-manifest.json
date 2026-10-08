@@ -450,7 +450,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v6"
+        "skit.doctor.v7"
       ],
       "exitCodes": [
         0,

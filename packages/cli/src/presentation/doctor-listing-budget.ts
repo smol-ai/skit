@@ -16,7 +16,7 @@ export function renderDoctorListingBudget(
     Match.tagsExhaustive({
       Unavailable: (b) => [
         `  ${color.yellow("!")} ${label} · budget unavailable`,
-        ...(context.detail === "full" ? [`      ${color.dim(b.detail)}`] : []),
+        `      ${color.dim(b.detail)}`,
       ],
       DemandOnly: (b) => [
         `  ${label} · ~${amount(b.demand)} ${b.unit === "characters" ? "characters" : "tokens"} · limit unknown`,
@@ -30,6 +30,7 @@ export function renderDoctorListingBudget(
         const lines = [
           `  ${outside ? color.yellow("! Over budget") : color.green("✓ Within budget")} · ${label} · ~${amount(b.demand)} / ${amount(b.limit)} ${unit} · ${((b.demand / b.limit) * 100).toFixed(1)}%`,
         ];
+        for (const warning of b.warnings ?? []) lines.push(`      ${color.yellow(warning)}`);
         if (b.shortened)
           lines.push(
             `      ${color.yellow(`${b.shortened} description${b.shortened === 1 ? "" : "s"} shortened`)}`,

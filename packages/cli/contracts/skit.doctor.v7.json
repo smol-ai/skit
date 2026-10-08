@@ -1,5 +1,5 @@
 {
-  "$id": "skit.doctor.v6",
+  "$id": "skit.doctor.v7",
   "type": "object",
   "properties": {
     "ok": {
@@ -479,6 +479,12 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -635,6 +641,12 @@
                 "type": "string"
               },
               "coverage": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "warnings": {
                 "type": "array",
                 "items": {
                   "type": "string"

@@ -37,6 +37,31 @@ const provide = <A, E>(effect: Effect.Effect<A, E, SkitServices | Scope.Scope>) 
   effect.pipe(Effect.provide(skitLayer), Effect.scoped);
 
 describe("source contracts", () => {
+  it.effect(
+    "discovers skills in hidden agent directories while excluding Git metadata and directory symlinks",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* scratch("skit-hidden-skills-");
+        const paths = [".claude/skills/asb-positioning", "dev-skills/doc-skills", ".git/ignored"];
+        for (const path of paths) {
+          yield* fs.makeDirectory(join(root, path), { recursive: true });
+          yield* writeText(
+            join(root, path, "SKILL.md"),
+            "---\nname: review\ndescription: Review.\n---\n",
+          );
+        }
+        yield* fs.symlink(
+          join(root, "dev-skills/doc-skills"),
+          join(root, ".claude/skills/dev-link"),
+        );
+        const discovered = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+        expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+          ".claude/skills/asb-positioning",
+          "dev-skills/doc-skills",
+        ]);
+      }).pipe(provide),
+  );
   it.effect("keeps locator priorities and aliases unambiguous", () =>
     Effect.sync(() => {
       const priorities = sourceLocatorProfiles.map((profile) => profile.priority);

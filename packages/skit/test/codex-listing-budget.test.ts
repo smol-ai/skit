@@ -15,7 +15,12 @@ import {
   estimateCodexListingBudget,
   type CodexListingSkill,
 } from "../src/harnesses/skill-listing/codex-allocation.js";
-import { readLibraryCodexListingBudget } from "../src/harnesses/skill-listing/codex.js";
+import {
+  readLibraryCodexListingBudget,
+  readLibraryCodexListingSnapshot,
+} from "../src/harnesses/skill-listing/codex.js";
+import { codexListingResult, ListingBudget } from "../src/harnesses/skill-listing/contracts.js";
+import { Schema } from "effect";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
 
 const skill = (name: string, description = "Review code."): CodexListingSkill => ({
@@ -186,6 +191,27 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         limit: 7_460,
         otherSkills: 0,
         collections: [{ collectionId, skills: 1 }],
+      });
+      const withRejectedSkill = yield* readLibraryCodexListingSnapshot(
+        stateWithProjection,
+        options,
+        process.execPath,
+        {
+          cwd: f.root,
+          skills: entries,
+          errors: [
+            { path: "/broken/SKILL.md", message: "missing YAML frontmatter delimited by ---" },
+          ],
+          config: { config: { model: "gpt-6.1-sol", model_context_window: null, skills: null } },
+        },
+      );
+      expect(withRejectedSkill.budget).toEqual(first);
+      const shared = yield* Schema.decodeUnknownEffect(ListingBudget)(
+        codexListingResult(withRejectedSkill),
+      );
+      expect(shared).toMatchObject({
+        _tag: "Estimated",
+        warnings: ["Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---"],
       });
       yield* fs.writeFileString(metadataPath, "policy:\n  allow_implicit_invocation: true\n");
       const refreshed = yield* readLibraryCodexListingBudget(

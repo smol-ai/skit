@@ -65,5 +65,18 @@ test("doctor uses named character units and drop bounds for Claude, and reports 
   };
   expect(render(missing)).toContain("budget unavailable");
   expect(render(missing)).not.toContain("Within budget");
+  expect(render(missing)).toContain("config unreadable");
   expect(render(missing, "full")).toContain("config unreadable");
+});
+
+test("doctor keeps the estimate and shows rejected skill diagnostics in the summary", () => {
+  const output = render({
+    ...budget,
+    warnings: ["Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---"],
+  });
+  expect(output).toContain("Within budget");
+  expect(output).toContain("3,000 / 10,000 tokens");
+  expect(output).toContain(
+    "Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---",
+  );
 });
