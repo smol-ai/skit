@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect } from "vitest";
 import { Effect, FileSystem, type Scope } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -18,6 +19,7 @@ import {
 } from "../src/acquisition/sources.js";
 import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
+import { prepareObservedCollectionEffect } from "../src/library/observed-import.js";
 
 const git = (cwd: string, ...args: string[]) =>
   Effect.sync(() => execFileSync("git", args, { cwd, encoding: "utf8" }).trim());
@@ -36,7 +38,279 @@ const releaseHash = (root: string, context: "author" | "retain") =>
 const provide = <A, E>(effect: Effect.Effect<A, E, SkitServices | Scope.Scope>) =>
   effect.pipe(Effect.provide(skitLayer), Effect.scoped);
 
+const gitLinkFixture = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* scratch("skit-git-plugin-links-");
+  const repository = join(root, "repository");
+  const content = "---\nname: review\ndescription: Review.\n---\n\nVerbatim Skill content.\n";
+  for (const path of [".claude/skills/review", "outside"]) {
+    const directory = path === "outside" ? join(root, path) : join(repository, path);
+    yield* fs.makeDirectory(directory, { recursive: true });
+    yield* writeText(join(directory, "SKILL.md"), content);
+  }
+  yield* fs.makeDirectory(join(repository, ".claude/skills/review/references"));
+  yield* writeText(
+    join(repository, ".claude/skills/review/references/guide.md"),
+    "Supporting reference.\n",
+  );
+  yield* fs.makeDirectory(join(repository, "plugins/bundle/skills"), { recursive: true });
+  const selectedPath = "plugins/bundle/skills/review";
+  yield* fs.symlink("../../../.claude/skills/review", join(repository, selectedPath));
+  yield* fs.symlink("../.claude", join(repository, "plugins/linked"));
+  yield* fs.symlink(selectedPath, join(repository, "contained-chain"));
+  yield* fs.symlink(join(root, "outside"), join(repository, "absolute-escape"));
+  yield* fs.symlink("../../../../../../../../", join(repository, "relative-escape"));
+  yield* fs.symlink("absolute-escape", join(repository, "escape-chain"));
+  yield* fs.symlink("../absolute-escape", join(repository, "plugins/escape"));
+  yield* fs.makeDirectory(join(root, "outside/skills/review"), { recursive: true });
+  yield* writeText(join(root, "outside/skills/review/SKILL.md"), content);
+  yield* fs.symlink("missing-target", join(repository, "dangling"));
+  for (const path of ["example/skills/review", "example/plugins/bundle/skills/review"]) {
+    yield* fs.makeDirectory(join(repository, path), { recursive: true });
+    yield* writeText(join(repository, path, "SKILL.md"), content);
+  }
+  yield* git(repository, "init", "-q");
+  yield* git(repository, "add", ".");
+  yield* git(
+    repository,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-qm",
+    "plugin links",
+  );
+  const remote = join(root, "remote.git");
+  yield* git(root, "clone", "--bare", "-q", repository, remote);
+  return { remote: pathToFileURL(remote).href, selectedPath, content };
+});
+
 describe("source contracts", () => {
+  it.effect("preserves normalized relative paths for explicit member selections", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-selected-path-normalization-");
+      yield* fs.makeDirectory(join(root, "x"));
+      yield* writeText(join(root, "x/SKILL.md"), "---\nname: review\ndescription: Review.\n---\n");
+      for (const path of ["./x/SKILL.md", "x//SKILL.md"]) {
+        const resolved = yield* resolveSkitSourceEffect(root, {
+          verbatimOnly: true,
+          agentSkillPaths: [path],
+        });
+        expect(resolved.observedSkillPaths).toEqual(["x"]);
+      }
+    }).pipe(provide),
+  );
+  it.effect(
+    "retains selected Git directory links as Skill content through subpaths and member selections",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* gitLinkFixture;
+        const selections = [
+          { source: { subpath: fixture.selectedPath }, options: {}, path: "." },
+          {
+            source: { subpath: fixture.selectedPath, skillDirectories: ["."] },
+            options: {},
+            path: ".",
+          },
+          { source: { subpath: "plugins/linked/skills/review" }, options: {}, path: "." },
+          {
+            source: { skillDirectories: ["plugins/linked/skills/review"] },
+            options: {},
+            path: "plugins/linked/skills/review",
+          },
+          { source: { subpath: "contained-chain" }, options: {}, path: "." },
+          {
+            source: { skillDirectories: [fixture.selectedPath] },
+            options: {},
+            path: fixture.selectedPath,
+          },
+          {
+            source: {},
+            options: { agentSkillPaths: [`${fixture.selectedPath}/SKILL.md`] },
+            path: fixture.selectedPath,
+          },
+        ];
+        for (const selected of selections) {
+          const source = { type: "git" as const, remote: fixture.remote, ...selected.source };
+          const observed = yield* resolveSkitSourceEffect(source, {
+            ...selected.options,
+            verbatimOnly: true,
+          });
+          expect(observed.observedSkillPaths).toEqual([selected.path]);
+          const sourcePath = join(observed.originalRoot, selected.path);
+          const prepared = yield* prepareObservedCollectionEffect([
+            {
+              name: "review",
+              sourcePath,
+              relativePath: selected.path,
+              observedHash: yield* deterministicTreeHashEffect(sourcePath),
+            },
+          ]);
+          expect(yield* readText(join(prepared.staged, selected.path, "SKILL.md"))).toEqual(
+            fixture.content,
+          );
+          expect(
+            yield* readText(join(prepared.staged, selected.path, "references/guide.md")),
+          ).toEqual("Supporting reference.\n");
+          const normalized = yield* resolveSkitSourceEffect(source, selected.options);
+          expect(yield* readText(join(normalized.root, "skills/review/SKILL.md"))).toEqual(
+            fixture.content,
+          );
+          yield* releaseHash(normalized.root, "retain");
+        }
+      }).pipe(provide),
+  );
+  it.effect("rejects selected Git links escaping the checkout before discovery", () =>
+    Effect.gen(function* () {
+      const fixture = yield* gitLinkFixture;
+      for (const path of [
+        "absolute-escape",
+        "relative-escape",
+        "escape-chain",
+        "plugins/escape/skills/review",
+      ]) {
+        for (const selection of [
+          { source: { subpath: path }, options: {} },
+          { source: { skillDirectories: [path] }, options: {} },
+          {
+            source: {},
+            options: { agentSkillPaths: [`${path}/SKILL.md`], allowMissingAgentSkillPaths: true },
+          },
+        ]) {
+          const error = yield* resolveSkitSourceEffect(
+            { type: "git", remote: fixture.remote, ...selection.source },
+            { ...selection.options, verbatimOnly: true },
+          ).pipe(Effect.flip);
+          assert.strictEqual(error._tag, "SourcePolicyViolation");
+          assert.include(error.message, "outside the checkout");
+        }
+      }
+    }).pipe(provide),
+  );
+  it.effect(
+    "reports dangling Git selections clearly while preserving missing locked-member recovery",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* gitLinkFixture;
+        const source = { type: "git" as const, remote: fixture.remote };
+        const subpathError = yield* resolveSkitSourceEffect(
+          { ...source, subpath: "dangling" },
+          { verbatimOnly: true },
+        ).pipe(Effect.flip);
+        assert.strictEqual(subpathError._tag, "SourcePolicyViolation");
+        assert.include(subpathError.message, "symlink target is unavailable: dangling");
+        const memberError = yield* resolveSkitSourceEffect(
+          { ...source, skillDirectories: ["dangling"] },
+          { verbatimOnly: true },
+        ).pipe(Effect.flip);
+        assert.strictEqual(memberError._tag, "SourcePolicyViolation");
+        assert.include(memberError.message, "Locked Skill path is missing");
+        const recovered = yield* resolveSkitSourceEffect(source, {
+          verbatimOnly: true,
+          agentSkillPaths: ["dangling/SKILL.md", `${fixture.selectedPath}/SKILL.md`],
+          allowMissingAgentSkillPaths: true,
+        });
+        expect(recovered.observedSkillPaths).toEqual([fixture.selectedPath]);
+        expect(recovered.missingAgentSkillPaths).toEqual(["dangling/SKILL.md"]);
+      }).pipe(provide),
+  );
+  it.effect("accepts confined Git targets when the workspace has a symlinked parent", () =>
+    Effect.gen(function* () {
+      const fixture = yield* gitLinkFixture;
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-workspace-alias-");
+      yield* fs.makeDirectory(join(root, "real"));
+      const alias = join(root, "alias");
+      yield* fs.symlink(join(root, "real"), alias);
+      const resolved = yield* resolveSkitSourceEffect(
+        { type: "git", remote: fixture.remote, subpath: fixture.selectedPath },
+        { verbatimOnly: true },
+      ).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          makeTempDirectoryScoped: (options) =>
+            fs.makeTempDirectoryScoped({ ...options, directory: alias }),
+        }),
+      );
+      expect(resolved.observedSkillPaths).toEqual(["."]);
+      expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toEqual(fixture.content);
+    }).pipe(provide),
+  );
+  it.effect("applies root plugin exclusion relative to an explicitly selected Git subpath", () =>
+    Effect.gen(function* () {
+      const fixture = yield* gitLinkFixture;
+      const selected = yield* resolveSkitSourceEffect(
+        { type: "git", remote: fixture.remote, subpath: "example" },
+        { verbatimOnly: true },
+      );
+      expect(selected.observedSkillPaths).toEqual(["skills/review"]);
+    }).pipe(provide),
+  );
+  it.effect(
+    "skips root plugin packaging while discovering standalone and nested plugin paths",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* scratch("skit-plugin-discovery-");
+        for (const path of [
+          "skills/review",
+          "plugins/bundle/skills/review",
+          "examples/plugins/demo",
+        ]) {
+          yield* fs.makeDirectory(join(root, path), { recursive: true });
+          yield* writeText(
+            join(root, path, "SKILL.md"),
+            "---\nname: review\ndescription: Review.\n---\n",
+          );
+        }
+        const discovered = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+        expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+          "examples/plugins/demo",
+          "skills/review",
+        ]);
+      }).pipe(provide),
+  );
+  it.effect("allows an explicitly selected plugin Skill, including locked member paths", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-explicit-plugin-");
+      const path = "plugins/bundle/skills/review";
+      yield* fs.makeDirectory(join(root, path), { recursive: true });
+      yield* writeText(
+        join(root, path, "SKILL.md"),
+        "---\nname: review\ndescription: Review.\n---\n",
+      );
+      const direct = yield* resolveSkitSourceEffect(join(root, path), { verbatimOnly: true });
+      expect(direct.observedSkillPaths).toEqual(["."]);
+      yield* fs.symlink(join(root, path), join(root, "selected-link"));
+      const linked = yield* resolveSkitSourceEffect(join(root, "selected-link"), {
+        verbatimOnly: true,
+      });
+      expect(linked.originalRoot).toEqual(yield* fs.realPath(join(root, path)));
+      expect(linked.observedSkillPaths).toEqual(["."]);
+      const locked = yield* resolveSkitSourceEffect(root, {
+        verbatimOnly: true,
+        agentSkillPaths: [`${path}/SKILL.md`],
+      });
+      expect(locked.observedSkillPaths).toEqual([path]);
+    }).pipe(provide),
+  );
+  it.effect("does not fall back to plugin packaging when no standalone Skills exist", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-plugin-only-");
+      yield* fs.makeDirectory(join(root, "plugins/bundle/skills/review"), { recursive: true });
+      yield* writeText(
+        join(root, "plugins/bundle/skills/review/SKILL.md"),
+        "---\nname: review\ndescription: Review.\n---\n",
+      );
+      const error = yield* resolveSkitSourceEffect(root, { verbatimOnly: true }).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "NoSkitDescriptorFound");
+      assert.include(error.message, "target its directory explicitly");
+    }).pipe(provide),
+  );
   it.effect(
     "discovers skills in hidden agent directories while excluding Git metadata and directory symlinks",
     () =>

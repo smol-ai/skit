@@ -1,0 +1,18 @@
+{
+    "name": "nvidia-official",
+    "owner": {
+        "name": "NVIDIA",
+        "url": "https://github.com/NVIDIA/skills"
+    },
+    "metadata": {
+        "description": "NVIDIA plugin marketplace — install the curated NVIDIA plugins and skills from this catalog repo.",
+        "version": "1.0.0"
+    },
+    "plugins": [
+        {
+            "name": "nvidia-skills",
+            "source": "./plugins/nvidia-skills",
+            "description": "Find the right NVIDIA skill for GPU acceleration, CUDA, AI agents, data loading, training, inference, robotics, Physical AI, Omniverse, simulation, and other NVIDIA-powered workflows."
+        }
+    ]
+}

@@ -21,7 +21,8 @@
     "cli:stories:watch": "pnpm --filter @smolai/skit stories:watch",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck",
     "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test",
-    "check:ci": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test:ci && pnpm --fail-if-no-match --filter @smolai/skit-server-effect test:e2e"
+    "check:ci": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test:ci && pnpm --fail-if-no-match --filter @smolai/skit-server-effect test:e2e",
+    "test:collections": "pnpm --filter @smolai/skit test:collections"
   },
   "devDependencies": {
     "oxfmt": "^0.64.0",

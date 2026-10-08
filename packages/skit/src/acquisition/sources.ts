@@ -4,7 +4,7 @@ import { Effect, FileSystem, Predicate, Schema, Scope, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { SkitSource, type SourceRevision } from "../library/library-contracts.js";
 import { Data } from "effect";
@@ -781,6 +781,38 @@ function buildAgentSkillsWrapperEffect(
   });
 }
 
+const lockedSkillDirectoryEffect = Effect.fn("Source.lockedSkillDirectory")(function* (
+  root: string,
+  path: string,
+) {
+  if (
+    !path ||
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    path.split("/").includes("..") ||
+    /^[A-Za-z]:/.test(path)
+  )
+    return yield* invalidSource(`Locked Skill path must be safe and relative: ${path}`);
+  if (basename(path) !== "SKILL.md")
+    return yield* invalidSource(`Locked Skill path must end in SKILL.md: ${path}`);
+  return join(root, dirname(path));
+});
+
+/** Resolve selected Git content before discovery, without following it outside the checkout. */
+const checkoutPathEffect = Effect.fn("Source.checkoutPath")(function* (
+  checkoutRoot: string,
+  selectedPath: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const real = yield* fs.realPath(selectedPath);
+  const path = relative(checkoutRoot, real);
+  if (isAbsolute(path) || path === ".." || path.startsWith(`..${sep}`))
+    return yield* invalidSource(
+      `Selected Git path resolves outside the checkout: ${relative(checkoutRoot, selectedPath)}`,
+    );
+  return real;
+});
+
 function discoverRootEffect(
   extracted: string,
   workspace: string,
@@ -788,6 +820,7 @@ function discoverRootEffect(
   allowMissingAgentSkillPaths = false,
   selectedSourceUpdatedAt?: string | null,
   verbatimOnly = false,
+  selectedDirectories?: ReadonlyMap<string, string>,
 ): Effect.Effect<
   {
     root: string;
@@ -802,20 +835,11 @@ function discoverRootEffect(
     const fs = yield* FileSystem.FileSystem;
     const probe = yield* LinkStat;
     if (agentSkillPaths?.length) {
-      const skillDirectories: string[] = [];
+      const selectedSkills: { relativePath: string; directory: string }[] = [];
       const missing: string[] = [];
       for (const path of [...new Set(agentSkillPaths)].sort()) {
-        if (
-          !path ||
-          path.startsWith("/") ||
-          path.includes("\\") ||
-          path.split("/").includes("..") ||
-          /^[A-Za-z]:/.test(path)
-        )
-          return yield* invalidSource(`Locked Skill path must be safe and relative: ${path}`);
-        if (basename(path) !== "SKILL.md")
-          return yield* invalidSource(`Locked Skill path must end in SKILL.md: ${path}`);
-        const skillDirectory = join(extracted, dirname(path));
+        const requestedDirectory = yield* lockedSkillDirectoryEffect(extracted, path);
+        const skillDirectory = selectedDirectories?.get(path) ?? requestedDirectory;
         const info = yield* Effect.option(probe.identity.stat(join(skillDirectory, "SKILL.md")));
         if (info._tag === "None" || info.value.type !== "File") {
           if (allowMissingAgentSkillPaths) {
@@ -826,15 +850,18 @@ function discoverRootEffect(
             `Locked Skill path is missing from the acquired Source: ${path}`,
           );
         }
-        skillDirectories.push(skillDirectory);
+        selectedSkills.push({
+          relativePath: relative(extracted, requestedDirectory) || ".",
+          directory: skillDirectory,
+        });
       }
-      if (!skillDirectories.length)
+      if (!selectedSkills.length)
         return yield* invalidSource("None of the locked Skill paths exist in the acquired Source");
       return {
         root: verbatimOnly
           ? extracted
           : yield* wrapAgentSkillsEffect(
-              skillDirectories,
+              selectedSkills.map((skill) => skill.directory),
               workspace,
               selectedSourceUpdatedAt,
               extracted,
@@ -843,9 +870,7 @@ function discoverRootEffect(
         missingAgentSkillPaths: missing,
         ...(verbatimOnly
           ? {
-              observedSkillPaths: skillDirectories.map(
-                (directory) => relative(extracted, directory) || ".",
-              ),
+              observedSkillPaths: selectedSkills.map((skill) => skill.relativePath),
             }
           : {}),
       };
@@ -853,6 +878,7 @@ function discoverRootEffect(
     const queue = [extracted];
     const foundSkills: string[] = [];
     let examined = 0;
+    let excludedPlugins = false;
     while (queue.length) {
       const directory = queue.shift()!;
       examined++;
@@ -875,6 +901,12 @@ function discoverRootEffect(
       for (const name of yield* fs.readDirectory(directory)) {
         if (name === ".git") continue;
         const info = yield* probe.identity.lstat(join(directory, name));
+        // The selected source root's plugins are packaging, not standalone Skills.
+        // Explicit paths are handled above (or become the discovery root themselves).
+        if (directory === extracted && name === "plugins" && info.type === "Directory") {
+          excludedPlugins = true;
+          continue;
+        }
         if (info.type === "Directory") queue.push(join(directory, name));
       }
     }
@@ -892,7 +924,7 @@ function discoverRootEffect(
             }
           : {}),
       };
-    return yield* Effect.fail(new NoSkitDescriptorFound());
+    return yield* Effect.fail(new NoSkitDescriptorFound({ excludedPlugins }));
   });
 }
 
@@ -1195,10 +1227,17 @@ export function resolveSkitSourceEffect(
     const resolved = yield* Effect.gen(function* () {
       if (source.type === "local") {
         const info = yield* probe.identity.stat(source.path);
-        const start =
+        const selectedStart =
           info.type === "File" && basename(source.path) === "SKILL.md"
             ? dirname(source.path)
             : source.path;
+        // An explicitly selected directory link names its target's content. Retaining
+        // the relative link itself at a new staging root would make it dangling.
+        // The observed local Git revision likewise belongs to the retained target.
+        const start =
+          (yield* probe.identity.lstat(selectedStart)).type === "SymbolicLink"
+            ? yield* fs.realPath(selectedStart)
+            : selectedStart;
         const discovered = yield* discoverRootEffect(
           start,
           workspace,
@@ -1283,9 +1322,33 @@ export function resolveSkitSourceEffect(
           return yield* sourcePinMismatch(
             `Git returned ${sourceRevision} instead of pinned commit ${options.git.commit}`,
           );
-        const root = subpath ? join(checkout, ...subpath.split("/")) : checkout;
+        const checkoutRoot = yield* fs.realPath(checkout);
+        const root = yield* checkoutPathEffect(
+          checkoutRoot,
+          subpath ? join(checkoutRoot, ...subpath.split("/")) : checkoutRoot,
+        ).pipe(
+          Effect.catchTag("PlatformError", (error) =>
+            Effect.fail(
+              error.reason._tag === "NotFound"
+                ? invalidSource(
+                    `Selected Git path is missing or its symlink target is unavailable: ${subpath ?? "."}. Verify the directory and link target, then retry.`,
+                  )
+                : error,
+            ),
+          ),
+        );
         const selectedPaths =
           options.agentSkillPaths ?? (skillPaths.length ? skillPaths : undefined);
+        const selectedDirectories = new Map<string, string>();
+        for (const path of [...new Set(selectedPaths)].sort()) {
+          const requested = yield* lockedSkillDirectoryEffect(root, path);
+          const directory = yield* checkoutPathEffect(checkoutRoot, requested).pipe(
+            Effect.catchTag("PlatformError", (error) =>
+              error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+            ),
+          );
+          if (directory !== undefined) selectedDirectories.set(path, directory);
+        }
         const discovered = yield* discoverRootEffect(
           root,
           workspace,
@@ -1293,18 +1356,22 @@ export function resolveSkitSourceEffect(
           options.allowMissingAgentSkillPaths,
           skillPaths.length ? null : undefined,
           options.verbatimOnly ?? false,
+          selectedDirectories,
         );
         let originalRoot = root;
         if (selectedPaths?.length) {
           originalRoot = join(workspace, "git-selected-original");
-          yield* fs.makeDirectory(originalRoot);
           const missing = new Set(discovered.missingAgentSkillPaths ?? []);
           for (const path of [...new Set(selectedPaths)].sort()) {
             if (missing.has(path)) continue;
-            const directory = dirname(path);
-            const destination = join(originalRoot, directory);
+            const selectedDirectory = selectedDirectories.get(path);
+            if (selectedDirectory === undefined)
+              return yield* invalidSource(
+                `Locked Skill path is missing from the acquired Source: ${path}`,
+              );
+            const destination = join(originalRoot, dirname(path));
             yield* fs.makeDirectory(dirname(destination), { recursive: true });
-            yield* copyLocalTreeEffect(join(root, directory), destination, undefined, true);
+            yield* copyLocalTreeEffect(selectedDirectory, destination, undefined, true);
           }
         }
         return {
