@@ -213,10 +213,17 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         f.home,
         f.run(updateSubjectsEffect(retained, options).pipe(Effect.provide(rendererTestLayer()))),
       );
-      assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected > 0);
+      assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
       assert.include(yield* f.fs.readFileString(projectionPath), "after");
       const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.strictEqual(after.acquisitions.length, retained.acquisitions.length);
+      const unchanged = yield* writingTo(
+        f.home,
+        f.run(updateSubjectsEffect(after, options).pipe(Effect.provide(rendererTestLayer()))),
+      );
+      assert.isTrue(
+        unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
+      );
     }).pipe(Effect.provide(skitLayer)),
   );
 }
