@@ -71,7 +71,14 @@ export const updateCliCommand = Command.make(
           return yield* renderer.result(result("update", outputContracts.updatePlan, value));
         }
         const value = yield* updateSubjectsEffect(state, options, query);
-        yield* renderer.result(result("update", outputContracts.update, value));
+        yield* renderer.result(
+          result(
+            "update",
+            outputContracts.update,
+            value,
+            value.some((item) => "status" in item) ? 1 : 0,
+          ),
+        );
       }),
       homePath(input.home),
     ),
@@ -88,7 +95,7 @@ export const updateCliCommand = Command.make(
       outputContracts.projectionRetention,
       outputContracts.projectionRetentionPlan,
     ],
-    exitCodes: [0, 11, 12, 64, 65],
+    exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: false,
   }),
 );

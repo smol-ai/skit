@@ -2096,13 +2096,14 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.update.v6",
+        "skit.update.v7",
         "skit.update.plan.v5",
         "skit.update.projection-retention.v2",
         "skit.update.projection-retention.plan.v2"
       ],
       "exitCodes": [
         0,
+        1,
         11,
         12,
         64,

@@ -108,7 +108,7 @@ export const outputContracts = {
   inventory: effectOutput("skit.inventory.v9", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v6", DoctorReport),
   check: effectOutput("skit.check.v7", CheckResult),
-  update: effectOutput("skit.update.v6", UpdateResult),
+  update: effectOutput("skit.update.v7", UpdateResult),
   updatePlan: effectOutput("skit.update.plan.v5", UpdatePlan),
   projectionRetention: effectOutput(
     "skit.update.projection-retention.v2",

@@ -121,17 +121,29 @@ function skillChangeLines(
   ];
 }
 
-function renderUpdate(data: ContractDataForId<"skit.update.v6">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v7">): string {
   if (!data.length) return "No device-local Sources to update";
-  const updated = data.filter((item) => item.changed);
-  const current = data.length - updated.length;
-  if (updated.length === 0)
+  const failures = data.filter((item) => "status" in item);
+  const successful = data.filter((item) => "changed" in item);
+  const updated = successful.filter((item) => item.changed);
+  const current = successful.length - updated.length;
+  if (updated.length === 0 && failures.length === 0)
     return `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`;
-  const lines = ["Update complete"];
+  const lines = [failures.length ? "Update finished with failures" : "Update complete"];
   for (const item of updated) lines.push(item.label, ...skillChangeLines(item));
+  for (const item of failures)
+    lines.push(
+      `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating projections"}`,
+      `  Source: ${item.source}`,
+      ...(item.source_retained
+        ? ["  Source snapshot retained; this Collection did not finish updating."]
+        : []),
+      ...item.error.message.split("\n").map((line) => `  ${line}`),
+      `  ${item.error.remediation}`,
+    );
   lines.push(
     "",
-    `${plural(updated.length, "Source")} updated${current ? `; ${current} already current` : ""}.`,
+    `${plural(updated.length, "Source")} updated${current ? `; ${current} already current` : ""}${failures.length ? `; ${failures.length} failed` : ""}.`,
   );
   return lines.join("\n");
 }
