@@ -32,7 +32,7 @@ The absolute path remains the editable Source Locator and can change independent
 
 Ordinary `skit enable` and `skit disable` manage authored Skills through the existing Library Binding, Projection, Custody, and conflict model. There is no Author-specific enable/disable surface.
 
-`skit pull <authored-workspace-ref>` is the offline operation that re-reads the working tree, refreshes the retained Artifact, and reconciles existing Bindings. It works before a remote home or Registry exists. `skit author sync` remains solely responsible for working-tree and Registry Draft synchronization; it may diagnose a stale editable Entry but does not mutate Library or Projection state.
+`skit update <authored-workspace-ref>` is the offline operation that re-reads the working tree, refreshes the retained Artifact, and reconciles existing Bindings. It works before a remote home or Registry exists. `skit author sync` remains solely responsible for working-tree and Registry Draft synchronization; it may diagnose a stale editable Entry but does not mutate Library or Projection state.
 
 This separation reuses the existing local Source refresh and reconciliation outcomes without coupling a successful remote Draft write to an independently failing device-local Projection write. Truly live Projections remain a separate decision requiring an explicit filesystem adapter and safety contract.
 

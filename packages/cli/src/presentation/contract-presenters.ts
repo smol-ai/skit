@@ -903,8 +903,6 @@ const contractPresenters: ContractPresenters = {
     renderLibraryList(data, createColors(context.color)),
   [outputContracts.experimentalAuditV1Alpha4.id]: renderAuditV1Alpha4,
   [outputContracts.authorList.id]: renderAuthorList,
-  [outputContracts.pull.id]: (data) =>
-    data.map((item) => `${item.subject_id}: ${item.changed ? "refreshed" : "current"}`).join("\n"),
   [outputContracts.add.id]: (data) => {
     const count = data.skills.length;
     return `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`;

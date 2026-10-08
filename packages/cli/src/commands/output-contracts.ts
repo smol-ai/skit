@@ -102,7 +102,6 @@ export const outputContracts = {
   authorDelete: effectOutput("skit.author.delete.v1", AuthorSkitDeleteResponse),
   add: effectOutput("skit.add.v4", AddResult),
   addPreview: effectOutput("skit.add.preview.v3", AddPreview),
-  pull: effectOutput("skit.pull.v6", UpdateResult),
   list: effectOutput("skit.list.v6", ListResult),
   securityReview: effectOutput("skit.security.review.v2", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v2", SkillSecurityReview),

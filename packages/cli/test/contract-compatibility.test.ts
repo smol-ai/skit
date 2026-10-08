@@ -42,14 +42,15 @@ describe("contract compatibility", () => {
     const result = checkContractCompatibility({
       baseArtifacts: {
         "skit.pin.v5.json": artifact("skit.pin.v5", "before"),
-        "skit.pull.v5.json": artifact("skit.pull.v5", "before"),
+        "skit.pull.v6.json": artifact("skit.pull.v6", "before"),
+        "skit.example.v1.json": artifact("skit.example.v1", "before"),
       },
       headArtifacts: {},
-      baseManifest: manifest("stable", ["skit.pin.v5", "skit.pull.v5"]),
+      baseManifest: manifest("stable", ["skit.pin.v5", "skit.pull.v6", "skit.example.v1"]),
     });
     expect(result).toEqual({
-      errors: ["skit.pull.v5 was removed without a one-version successor"],
-      warnings: ["skit.pin.v5 was retired"],
+      errors: ["skit.example.v1 was removed without a one-version successor"],
+      warnings: ["skit.pin.v5 was retired", "skit.pull.v6 was retired"],
     });
   });
 
