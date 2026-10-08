@@ -7,7 +7,6 @@ import { authLoginCliCommand } from "../handlers/auth/login.js";
 import { authStatusCliCommand } from "../handlers/auth/status.js";
 import { listCliCommand } from "../handlers/library/list.js";
 import { addCliCommand } from "../handlers/library/add.js";
-import { pullCliCommand } from "../handlers/library/pull.js";
 import { removeCliCommand } from "../handlers/library/remove.js";
 import { updateCliCommand } from "../handlers/library/update.js";
 import { librarySyncCliCommand } from "../handlers/library/sync.js";
@@ -86,7 +85,6 @@ export const skitCommand = Command.make("skit").pipe(
     inventoryCliCommand,
     libraryCommand,
     listCliCommand,
-    pullCliCommand,
     registryCommand,
     repositoryCommand,
     removeCliCommand,

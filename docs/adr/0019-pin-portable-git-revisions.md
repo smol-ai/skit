@@ -23,7 +23,7 @@ both match before retention. Fetch does not use a shallow history because
 normalization derives Skill modification times from Git history. An unavailable
 commit fails with the revision, remote, and remediation; there is no branch fallback.
 
-Explicit `skit update` (and `skit pull`) resolves the retained locator again:
+Explicit `skit update` resolves the retained locator again:
 
 | Tracking input            | Explicit update                                    |
 | ------------------------- | -------------------------------------------------- |

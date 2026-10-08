@@ -24,6 +24,8 @@ const retiredContractIds: ReadonlySet<string> = new Set([
   // `skit pin` only selected Versions of pre-release Registry Sources.
   "skit.pin.v5",
   "skit.pin.plan.v5",
+  // `skit pull` duplicated `skit update <subject>`.
+  "skit.pull.v6",
 ]);
 
 const contractId = (contents: string): string | undefined => {

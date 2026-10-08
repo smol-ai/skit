@@ -198,7 +198,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     kind: "plain",
     skills: [{ name: "review", verbatim_path: "." }],
   }),
-  resultStory("pull", "current", outputContracts.pull, []),
   resultStory("list", "empty", outputContracts.list, { subjects: [], bindings: [] }),
   resultStory("list", "populated", outputContracts.list, {
     subjects: [
