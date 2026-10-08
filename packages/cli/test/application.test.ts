@@ -20,7 +20,7 @@ it.effect("presentation retains primary and cleanup failures", () =>
     expect(failure).toMatchObject({
       code: "CONFLICT",
       exitCode: 12,
-      message: "Registry rejected\ntemporary cleanup failed",
+      message: "Registry rejected\nAdditional failure: temporary cleanup failed",
     });
   }),
 );
