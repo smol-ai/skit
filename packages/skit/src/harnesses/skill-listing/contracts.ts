@@ -25,6 +25,7 @@ const fields = {
   ),
   basis: Schema.String,
   coverage: Schema.Array(Schema.String),
+  warnings: Schema.optionalKey(Schema.Array(Schema.String)),
 };
 export const ListingBudget = Schema.Union([
   Schema.TaggedStruct("Unavailable", {
@@ -62,6 +63,7 @@ export function codexListingResult(snapshot: CodexListingSnapshot): ListingBudge
     descriptionsDropped: { min: 0, max: 0 },
     omitted: b.omitted,
     fidelity: "modelled",
+    ...(snapshot.warnings?.length ? { warnings: snapshot.warnings } : {}),
     entries: (snapshot.skillDemands ?? []).map((s) => ({
       name: s.name,
       path: s.path,
