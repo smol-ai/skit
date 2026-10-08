@@ -80,7 +80,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
               : undefined
             : bindingRoot(target, binding.scope, options.roots);
       if (root === undefined) continue;
-      yield* projectBindingEffect({
+      projected += yield* projectBindingEffect({
         target,
         scope: binding.scope,
         root,
@@ -91,7 +91,6 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
           : { acceptedObservations: options.acceptedObservations }),
         ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
       });
-      projected++;
       outcomes.push({ target, scope: binding.scope });
     }
   }

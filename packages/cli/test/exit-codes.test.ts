@@ -49,17 +49,18 @@ describe("declared exit codes", () => {
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-codes-test"))),
   );
 
-  it.effect("every semantic taxonomy code is declared, and only the shared failure is not", () =>
+  it.effect("every semantic taxonomy code is declared, including partial update failure", () =>
     Effect.gen(function* () {
       const commands = yield* commandDescriptions(skitCommand);
       const declared = new Set<number>(commands.flatMap((command) => command.successExitCodes));
       const undeclared = taxonomy
         .filter((error) => !declared.has(error.exitCode))
         .map((error) => error.code);
-      // Command metadata documents semantic outcomes callers may branch on and excludes shared
-      // parse and unexpected failures. OPERATION_FAILED is that shared failure:
-      // any command may exit 1, so declaring it per command would say nothing.
-      expect(undeclared).toEqual(["OPERATION_FAILED"]);
+      // Exit 1 is also an intentional result for a partially failed update batch,
+      // rather than only a shared unexpected failure.
+      expect(undeclared).toEqual([]);
+      const update = commands.find((command) => command.path.join(" ") === "update");
+      expect(update?.successExitCodes).toContain(1);
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-taxonomy-test"))),
   );
 

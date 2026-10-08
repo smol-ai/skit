@@ -22,7 +22,7 @@ export class ProjectionInvalid extends Schema.TaggedError<ProjectionInvalid>()(
   { detail: Schema.String },
 ) {}
 
-/** Reconcile one Binding against one active target root. Caller owns the writer lock. */
+/** Reconcile one Binding; return the number of Skill copies written. Caller owns the writer lock. */
 export const projectBindingEffect = Effect.fn("Library.projectBinding")(function* (options: {
   target: ProjectionTarget;
   scope?: { kind: "global" } | { kind: "repository"; root: string };
@@ -226,5 +226,5 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         return selected.length;
       }),
   );
-  return result.value;
+  return result.projected;
 });

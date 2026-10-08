@@ -8,7 +8,11 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import { planUpdatesEffect, updateSubjectsEffect } from "../../workflows/library/update.js";
+import {
+  planUpdatesEffect,
+  updateSubjectsEffect,
+  updateExitCode,
+} from "../../workflows/library/update.js";
 import {
   applyProjectionRetention,
   planProjectionRetention,
@@ -71,7 +75,9 @@ export const updateCliCommand = Command.make(
           return yield* renderer.result(result("update", outputContracts.updatePlan, value));
         }
         const value = yield* updateSubjectsEffect(state, options, query);
-        yield* renderer.result(result("update", outputContracts.update, value));
+        yield* renderer.result(
+          result("update", outputContracts.update, value, updateExitCode(value)),
+        );
       }),
       homePath(input.home),
     ),
@@ -88,7 +94,7 @@ export const updateCliCommand = Command.make(
       outputContracts.projectionRetention,
       outputContracts.projectionRetentionPlan,
     ],
-    exitCodes: [0, 11, 12, 64, 65],
+    exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: false,
   }),
 );

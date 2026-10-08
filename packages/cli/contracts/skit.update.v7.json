@@ -1,0 +1,194 @@
+{
+  "$id": "skit.update.v7",
+  "type": "array",
+  "items": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "failed"
+            ]
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "subject_kind": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "skill"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "source",
+              "projection"
+            ]
+          },
+          "source_retained": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "exitCode": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Infinity",
+                      "-Infinity",
+                      "NaN"
+                    ]
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "remediation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "exitCode",
+              "message",
+              "remediation"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "status",
+          "subject_id",
+          "subject_kind",
+          "label",
+          "source",
+          "phase",
+          "source_retained",
+          "error"
+        ],
+        "additionalProperties": true
+      },
+      {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string"
+          },
+          "subject_kind": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "skill"
+            ]
+          },
+          "previous_retained_copy_id": {
+            "type": "string"
+          },
+          "selected_retained_copy_id": {
+            "type": "string"
+          },
+          "snapshot_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "projected": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "new_available": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "subject_id",
+          "subject_kind",
+          "previous_retained_copy_id",
+          "selected_retained_copy_id",
+          "snapshot_digest",
+          "changed",
+          "projected",
+          "label",
+          "enabled",
+          "new_available",
+          "updated",
+          "removed",
+          "kept"
+        ],
+        "additionalProperties": true
+      }
+    ]
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

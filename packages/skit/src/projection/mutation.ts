@@ -236,7 +236,12 @@ export function expectedProjectionHashResult(
 const materializeProjectionEffect = Effect.fn("Projection.materialize")(function* (
   request: MaterializeProjectionRequest,
   context: NativeProjectionContext,
-): Effect.fn.Return<ManagedProjection, ProjectionMutationError, TreeRequirements | TreeHasher> {
+): Effect.fn.Return<
+  { projection: ManagedProjection; changed: boolean },
+  ProjectionMutationError,
+  TreeRequirements | TreeHasher
+> {
+  let changed = false;
   const fs = yield* FileSystem.FileSystem;
   const hasher = yield* TreeHasher;
   const { installation, skill, target, previous } = request;
@@ -313,6 +318,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
               message: `Post-replacement hash verification failed for ${skill.skillId} at ${target}`,
             });
           projection.status = "installed";
+          changed = true;
           projection.observed_digest = acceptedHash;
           return projection;
         }
@@ -363,6 +369,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
                 message: `Post-adoption hash verification failed for ${skill.skillId} at ${target}`,
               });
             projection.status = "installed";
+            changed = true;
             projection.observed_digest = adoptedHash;
             return projection;
           }
@@ -410,6 +417,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
               return yield* new ProjectionFailure({
                 message: `Post-marker hash verification failed for ${skill.skillId} at ${target}`,
               });
+            changed = true;
           }
           projection.status = "installed";
           projection.observed_digest = observed;
@@ -433,6 +441,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             message: `Post-write hash verification failed for ${skill.skillId} at ${target}`,
           });
         projection.status = "installed";
+        changed = true;
         projection.observed_digest = nextHash;
         return projection;
       }
@@ -454,11 +463,12 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             message: `Post-write hash verification failed for ${skill.skillId} at ${target}`,
           });
         projection.status = "installed";
+        changed = true;
         projection.observed_digest = observed;
         return projection;
       });
     }),
-  );
+  ).pipe(Effect.map((projection) => ({ projection, changed })));
 });
 
 /**
@@ -570,13 +580,16 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
   stage: (mutation: ProjectionMutation<S>) => Effect.Effect<T, SE, SR>,
 ) {
   const candidate = structuredClone(loaded);
+  const changedProjections = new Set<string>();
   const mutation: ProjectionMutation<S> = {
     state: candidate,
     project: Effect.fn("Projection.project")(function* (request) {
       const root = request.root ?? context.rootFor(request.target);
       if (!root) return yield* new NoProjectionRoot({ target: request.target });
       yield* projectionNameEffect(request.skill.name);
-      return yield* materializeProjectionEffect({ ...request, state: candidate }, context);
+      const result = yield* materializeProjectionEffect({ ...request, state: candidate }, context);
+      if (result.changed) changedProjections.add(result.projection.projection_id);
+      return result.projection;
     }),
     retire: Effect.fn("Projection.retire")(function* (projection, onConflict, message) {
       const result = yield* retireProjectionEffect(projection, onConflict, message);
@@ -587,5 +600,5 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
   };
   const value = yield* stage(mutation);
   yield* context.publish(candidate);
-  return { state: candidate, value };
+  return { state: candidate, value, projected: changedProjections.size };
 });

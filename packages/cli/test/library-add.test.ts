@@ -217,7 +217,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         Effect.provide(rendererTestLayer()),
       ),
     );
-    assert.strictEqual(result[0]?.changed, true);
+    assert.isTrue(result[0] !== undefined && !("status" in result[0]) && result[0].changed);
     const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
