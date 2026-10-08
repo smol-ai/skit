@@ -1,5 +1,5 @@
 import { bindingSkillIds, LibraryStore, type LibraryState } from "@smolai/skit-core";
-import { Cause, Effect, Predicate, Schema } from "effect";
+import { Cause, Effect, FileSystem, Predicate, Schema } from "effect";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "./add.js";
 import type { UpdateFailure, UpdateResult } from "./update-contract.js";
@@ -10,6 +10,7 @@ import {
   resolveOwningLibrarySubjects,
   type LibrarySubject,
 } from "./subject-resolution.js";
+import { dirname, join, resolve } from "node:path";
 import { isPlatformError } from "effect/PlatformError";
 import { commandFailure } from "../../application.js";
 import { sourceLocator } from "@smolai/skit-core";
@@ -178,6 +179,38 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
   );
 });
 
+/** Canonicalize the existing ancestor too, since a failed write's destination may not exist. */
+const canonicalStoragePath = Effect.fn("Library.canonicalStoragePath")(function* (input: string) {
+  const fs = yield* FileSystem.FileSystem;
+  let path = resolve(input);
+  const suffix: string[] = [];
+  while (true) {
+    const canonical = yield* fs
+      .realPath(path)
+      .pipe(
+        Effect.catchTag("PlatformError", (error) =>
+          error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        ),
+      );
+    if (canonical !== undefined) return join(canonical, ...suffix);
+    const parent = dirname(path);
+    if (parent === path) return resolve(input);
+    suffix.unshift(path.slice(parent.length).replace(/^[/\\]/, ""));
+    path = parent;
+  }
+});
+
+/** Preserve a uniform failure code; mixed success or failure types use the batch code. */
+export function updateExitCode(outcomes: UpdateResult): number {
+  const failures = outcomes.filter((item) => "status" in item);
+  if (failures.length === 0) return 0;
+  const code = failures[0]!.error.exitCode;
+  return failures.length === outcomes.length &&
+    failures.every((item) => item.error.exitCode === code)
+    ? code
+    : 1;
+}
+
 export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function* (
   state: LibraryState,
   options: UpdateOptions,
@@ -186,6 +219,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
   const selected = yield* selectSubjects(state, query);
   const renderer = yield* Renderer;
   const store = yield* LibraryStore;
+  const storeHome = yield* canonicalStoragePath(store.home);
   const results: UpdateResult[number][] = [];
   for (const before of selected) {
     let phase: UpdateFailure["phase"] = "source";
@@ -226,7 +260,9 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
           before.kind === "collection"
             ? before.collection.collection_id
             : before.skill.collection_id;
-        if (changed) {
+        // Reconcile even when the Source is current: a previous run may have retained
+        // this snapshot before projection failed or temporary-source cleanup interrupted it.
+        {
           const current = yield* (yield* LibraryStore).load;
           phase = "projection";
           const reconciled = yield* renderer.withStatus(
@@ -286,53 +322,67 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
         };
       }),
     ).pipe(
-      Effect.catchCause((cause) => {
-        // Recover at the Collection boundary after its scopes close. Programming defects,
-        // interruption, and failures accessing shared Library storage remain fatal.
-        const storeHome = store.home;
-        const recoverable = cause.reasons.every((reason) => {
-          if (Cause.isInterruptReason(reason)) return false;
-          const error = Cause.isFailReason(reason) ? reason.error : reason.defect;
-          if (
-            Predicate.isTagged(error, "InvalidLibraryState") ||
-            Predicate.isTagged(error, "LibraryBusy")
-          )
-            return false;
-          if (isPlatformError(error)) {
-            const path =
-              "pathOrDescriptor" in error.reason ? error.reason.pathOrDescriptor : undefined;
-            if (
-              typeof path === "string" &&
-              (path === storeHome || path.startsWith(`${storeHome}/`))
-            )
-              return false;
-            return Cause.isFailReason(reason) || error.reason.method === "makeTempDirectoryScoped";
-          }
-          return Cause.isFailReason(reason);
-        });
-        if (!recoverable) return Effect.failCause(cause);
-        return Effect.gen(function* () {
-          // Source publication can succeed before its temporary checkout fails to close.
-          // Inspect persisted evidence rather than claiming that such an update was rolled back.
-          if (!sourceRetained) {
-            const current = yield* store.load;
-            const previous = latestSubjectAcquisition(state, before);
-            const latest = latestSubjectAcquisition(current, before);
-            sourceRetained =
-              latest !== undefined && latest.acquisition_id !== previous?.acquisition_id;
-          }
-          return {
-            status: "failed" as const,
-            subject_id: before.subjectId,
-            subject_kind: before.kind,
-            label: before.label,
-            source,
-            phase,
-            source_retained: sourceRetained,
-            error: commandFailure(cause),
-          };
-        });
-      }),
+      Effect.catchCause((cause) =>
+        Effect.gen(function* () {
+          // Recover at the Collection boundary after its scopes close. Programming defects,
+          // interruption, and failures accessing shared Library storage remain fatal.
+          const recovery = yield* Effect.forEach(cause.reasons, (reason) =>
+            Effect.gen(function* () {
+              if (Cause.isInterruptReason(reason)) return false;
+              const error = Cause.isFailReason(reason) ? reason.error : reason.defect;
+              if (
+                Predicate.isTagged(error, "InvalidLibraryState") ||
+                Predicate.isTagged(error, "LibraryBusy") ||
+                Predicate.isTagged(error, "ContentAddressCollision")
+              )
+                return false;
+              if (isPlatformError(error)) {
+                const path =
+                  "pathOrDescriptor" in error.reason ? error.reason.pathOrDescriptor : undefined;
+                if (typeof path === "string") {
+                  const canonical = yield* canonicalStoragePath(path).pipe(
+                    Effect.catchCause(() => Effect.failCause(cause)),
+                  );
+                  if (canonical === storeHome || canonical.startsWith(`${storeHome}/`))
+                    return false;
+                }
+                return (
+                  Cause.isFailReason(reason) || error.reason.method === "makeTempDirectoryScoped"
+                );
+              }
+              return Cause.isFailReason(reason);
+            }),
+          );
+          if (!recovery.every(Boolean)) return yield* Effect.failCause(cause);
+          return yield* Effect.gen(function* () {
+            // Source publication can succeed before its temporary checkout fails to close.
+            // Inspect persisted evidence rather than claiming that such an update was rolled back.
+            if (!sourceRetained) {
+              const current = yield* store.load;
+              const previous = latestSubjectAcquisition(state, before);
+              const latest = latestSubjectAcquisition(current, before);
+              sourceRetained =
+                latest !== undefined && latest.acquisition_id !== previous?.acquisition_id;
+            }
+            const error = commandFailure(cause);
+            return {
+              status: "failed" as const,
+              subject_id: before.subjectId,
+              subject_kind: before.kind,
+              label: before.label,
+              source,
+              phase,
+              source_retained: sourceRetained,
+              error: sourceRetained
+                ? {
+                    ...error,
+                    remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and reconcile its projections.`,
+                  }
+                : error,
+            };
+          });
+        }),
+      ),
     );
     results.push(outcome);
   }

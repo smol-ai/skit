@@ -328,18 +328,16 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
       (error) =>
-        new InvalidLibraryState({
-          path: join(store.home, "state.json"),
-          detail: `observed Collection failed validation: ${String(error)}`,
+        new ObservedImportInvalid({
+          reason: `observed Collection failed validation: ${String(error)}`,
         }),
     ),
   );
   yield* libraryManifestFromLocalStateEffect(successor).pipe(
     Effect.mapError(
       (error) =>
-        new InvalidLibraryState({
-          path: join(store.home, "state.json"),
-          detail: `observed Collection would violate the portable manifest: ${formatManifestIssue(error)}`,
+        new ObservedImportInvalid({
+          reason: `observed Collection would violate the portable manifest: ${formatManifestIssue(error)}`,
         }),
     ),
   );

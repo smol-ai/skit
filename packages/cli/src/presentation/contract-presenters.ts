@@ -128,7 +128,9 @@ function renderUpdate(data: ContractDataForId<"skit.update.v7">): string {
   const updated = successful.filter((item) => item.changed);
   const current = successful.length - updated.length;
   if (updated.length === 0 && failures.length === 0)
-    return `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`;
+    return successful.some((item) => item.projected > 0)
+      ? `Sources are current; projections reconciled\n${plural(current, "Source")} checked; no retained snapshots changed.`
+      : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`;
   const lines = [failures.length ? "Update finished with failures" : "Update complete"];
   for (const item of updated) lines.push(item.label, ...skillChangeLines(item));
   for (const item of failures)
