@@ -461,7 +461,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v6",
+        schema: "skit.doctor.v7",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );

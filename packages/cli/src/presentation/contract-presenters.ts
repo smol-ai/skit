@@ -209,7 +209,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v6">, context: RenderContext): string {
+function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactHomePath(value));
