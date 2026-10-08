@@ -24,7 +24,15 @@ export function commandFailure<E>(cause: Cause.Cause<E>): CommandFailure {
   const failure = classifyFailure(first);
   return {
     ...failure,
-    message: errors.length > 1 ? errors.map(errorMessage).join("\n") : failure.message,
+    // Cause reasons do not identify finalizers; describe secondary failures without
+    // mislabelling an arbitrary programming defect as cleanup.
+    message:
+      errors.length > 1
+        ? [
+            failure.message,
+            ...errors.slice(1).map((error) => `Additional failure: ${errorMessage(error)}`),
+          ].join("\n")
+        : failure.message,
   };
 }
 

@@ -84,7 +84,15 @@ const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(functio
 export class ObservedImportInvalid extends Schema.TaggedError<ObservedImportInvalid>()(
   "Library.ObservedImportInvalid",
   { reason: Schema.String },
-) {}
+) {
+  readonly code = "VALIDATION_FAILED" as const;
+  readonly exitCode = 65;
+  readonly remediation =
+    "Inspect the reported Skill paths in the source, correct the content, and retry.";
+  get message(): string {
+    return `Cannot import Collection: ${this.reason}`;
+  }
+}
 
 export interface ObservedSkill {
   readonly name: string;
@@ -122,27 +130,32 @@ interface PreparedFact {
 
 export const prepareObservedCollectionEffect = Effect.fn("Library.prepareObservedCollection")(
   function* (skills: ObservedImport["skills"]) {
-    const paths = new Set<string>();
-    const names = new Set<string>();
+    const seen: ObservedSkill[] = [];
     if (skills.length === 0)
       return yield* new ObservedImportInvalid({ reason: "empty observed Collection" });
     for (const skill of skills) {
       if (!safeRelative(skill.relativePath))
-        return yield* new ObservedImportInvalid({ reason: "unsafe Skill path" });
-      if (
-        names.has(skill.name) ||
-        [...paths].some(
-          (path) =>
-            path === "." ||
-            skill.relativePath === "." ||
-            path === skill.relativePath ||
-            path.startsWith(`${skill.relativePath}/`) ||
-            skill.relativePath.startsWith(`${path}/`),
-        )
-      )
-        return yield* new ObservedImportInvalid({ reason: "duplicate Skill path or name" });
-      paths.add(skill.relativePath);
-      names.add(skill.name);
+        return yield* new ObservedImportInvalid({
+          reason: `unsafe Skill path ${JSON.stringify(skill.relativePath)} for ${JSON.stringify(skill.name)}`,
+        });
+      const duplicate = seen.find((previous) => previous.name === skill.name);
+      if (duplicate)
+        return yield* new ObservedImportInvalid({
+          reason: `duplicate Skill name ${JSON.stringify(skill.name)} at ${JSON.stringify(duplicate.relativePath)} and ${JSON.stringify(skill.relativePath)}`,
+        });
+      const overlap = seen.find(
+        ({ relativePath: path }) =>
+          path === "." ||
+          skill.relativePath === "." ||
+          path === skill.relativePath ||
+          path.startsWith(`${skill.relativePath}/`) ||
+          skill.relativePath.startsWith(`${path}/`),
+      );
+      if (overlap)
+        return yield* new ObservedImportInvalid({
+          reason: `overlapping Skill paths ${JSON.stringify(overlap.relativePath)} (${JSON.stringify(overlap.name)}) and ${JSON.stringify(skill.relativePath)} (${JSON.stringify(skill.name)})`,
+        });
+      seen.push(skill);
     }
     const fs = yield* FileSystem.FileSystem;
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-observed-v4-" });
