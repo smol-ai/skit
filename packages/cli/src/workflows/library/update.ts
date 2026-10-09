@@ -155,6 +155,8 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
         });
       const inspected = yield* inspectLibrarySourceEffect(
         yield* subjectSourceEffect(subject, acquisition.input.value),
+        undefined,
+        tree.members.map((member) => member.source_path),
       );
       const members = ("members" in inspected ? inspected.members : undefined) ?? [];
       return {
@@ -164,6 +166,9 @@ export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (
         available_snapshot_digest: inspected.snapshot_digest,
         changed: tree.digest !== inspected.snapshot_digest,
         label: subject.label,
+        ...("diagnostics" in inspected && inspected.diagnostics?.length
+          ? { diagnostics: inspected.diagnostics }
+          : {}),
         ...skillChanges(
           state,
           acquisition.collection_id,
@@ -251,7 +256,11 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
                 ? `${before.label} · Source is current`
                 : `${before.label} · New snapshot retained`,
           },
-          addLibrarySourceEffect(input),
+          addLibrarySourceEffect(
+            input,
+            undefined,
+            priorTree.members.map((member) => member.source_path),
+          ),
         );
         sourceRetained = true;
         const changed = retained.snapshot_digest !== priorTree.digest;
@@ -305,6 +314,9 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
           changed,
           projected,
           label: before.label,
+          ...("diagnostics" in retained && retained.diagnostics?.length
+            ? { diagnostics: retained.diagnostics }
+            : {}),
           ...skillChanges(
             state,
             collectionId,

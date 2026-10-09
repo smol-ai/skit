@@ -503,7 +503,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v4",
+        schema: "skit.add.v5",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],
@@ -547,7 +547,7 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(preview.status).toBe(0);
-    expect(JSON.parse(preview.stdout).schema).toBe("skit.add.preview.v3");
+    expect(JSON.parse(preview.stdout).schema).toBe("skit.add.preview.v4");
     expect(existsSync(join(home, "state.json"))).toBe(false);
     expect(
       spawnSync(process.execPath, [bin, "add", source, "--home", home], { encoding: "utf8" })

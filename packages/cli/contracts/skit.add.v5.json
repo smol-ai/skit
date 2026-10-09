@@ -1,5 +1,5 @@
 {
-  "$id": "skit.add.v4",
+  "$id": "skit.add.v5",
   "type": "object",
   "properties": {
     "collection_id": {
@@ -33,6 +33,33 @@
         "required": [
           "name",
           "verbatim_path"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "plugin-manifest-invalid",
+              "plugin-member-held"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "path",
+          "message"
         ],
         "additionalProperties": true
       }

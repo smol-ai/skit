@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.v7",
+  "$id": "skit.update.v8",
   "type": "array",
   "items": {
     "anyOf": [
@@ -127,6 +127,33 @@
                 ]
               }
             ]
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "plugin-manifest-invalid",
+                    "plugin-member-held"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "path",
+                "message"
+              ],
+              "additionalProperties": true
+            }
           },
           "label": {
             "type": "string"

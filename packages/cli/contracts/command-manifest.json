@@ -234,8 +234,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.add.v4",
-        "skit.add.preview.v3"
+        "skit.add.v5",
+        "skit.add.preview.v4"
       ],
       "exitCodes": [
         0,
@@ -2096,8 +2096,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.update.v7",
-        "skit.update.plan.v5",
+        "skit.update.v8",
+        "skit.update.plan.v6",
         "skit.update.projection-retention.v2",
         "skit.update.projection-retention.plan.v2"
       ],

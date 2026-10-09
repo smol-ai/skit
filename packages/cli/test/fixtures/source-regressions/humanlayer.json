@@ -1,0 +1,547 @@
+{
+  "repository": "humanlayer/skills",
+  "commit": "653b6411c1f70c275a18e37673b042ff99f67ceb",
+  "completeness": "complete tracked tree",
+  "skills": [
+    {
+      "name": "build-iterated-agentic-loop",
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop"
+    },
+    {
+      "name": "design-control-loop",
+      "path": "plugins/design-control-loop/skills/design-control-loop"
+    },
+    {
+      "name": "improve-claude-md",
+      "path": "plugins/improve-claude-md/skills/improve-claude-md"
+    },
+    {
+      "name": "narrow-react-prop-types",
+      "path": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types"
+    },
+    {
+      "name": "rpi",
+      "path": "plugins/rpi/skills/rpi"
+    },
+    {
+      "name": "show-me",
+      "path": "plugins/show-me/skills/show-me"
+    },
+    {
+      "name": "visual-pr",
+      "path": "plugins/visual-pr/skills/visual-pr"
+    }
+  ],
+  "files": [
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "mode": "100644",
+      "gitBlob": "e0ddf3cffdbe9cbd2980b091f23448cca928e83c"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "gitBlob": "3ac597f06367056a80260d4b1a5508b71b915205"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "gitBlob": "f7ad6f4a1d5ed9bbf0589c172c6360587d1530e3"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "gitBlob": "abe25ffca70f1eecf52e7995ebbbc8cf3eac3f8e"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "ac36b5c62ad726ab509920f6283277c48567ebe0"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "6ac5e0e4f81d52fe0657745257d15e3aa9d160ae"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/agent-iteration.ts",
+      "mode": "100644",
+      "gitBlob": "96e4f053f20de4f1e12fae25ca46031a97cd27fd"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/agent-runner-templates.md",
+      "mode": "100644",
+      "gitBlob": "daf36be799217ab87021515124c5daae20917458"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/example-skill.md",
+      "mode": "100644",
+      "gitBlob": "c1f197f34da4e04bb332f6b43671a63e3254423c"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/memory-template.md",
+      "mode": "100644",
+      "gitBlob": "de9f4183a056cc1e45fe98f77db0999e4bfa51fa"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/prompt-template.md",
+      "mode": "100644",
+      "gitBlob": "f54cadec799680ca0e746cee28643782fd0630db"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/response-template.md",
+      "mode": "100644",
+      "gitBlob": "629fced7e8947d7edcb5958fc69f113785b41a67"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/skill-template.md",
+      "mode": "100644",
+      "gitBlob": "d1b155cab73f9a0f18f6946e56ce4d0399d0326a"
+    },
+    {
+      "path": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/references/workflow-template.yml",
+      "mode": "100644",
+      "gitBlob": "a8c69e2d3d278d74ca1f2223b79b95440179b09f"
+    },
+    {
+      "path": "plugins/design-control-loop/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "03fb6aa49b3aedeb686208f6fe43a39e8883cd82"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "c9abc1b884d6002b4b76a7f611cf7686e91d59c8"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/agent-iteration.ts",
+      "mode": "100644",
+      "gitBlob": "96e4f053f20de4f1e12fae25ca46031a97cd27fd"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/agent-runner-templates.md",
+      "mode": "100644",
+      "gitBlob": "ad4bdaf7c637260771632e2d6c80b4393a788f0d"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/control-loop-taxonomy.md",
+      "mode": "100644",
+      "gitBlob": "5e9827b6218e8cfd838524dadda3759f61a4feab"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/example-control-loop.md",
+      "mode": "100644",
+      "gitBlob": "4538cd6f83fbed78903687bd4e8758284f9cef9d"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/example-skill.md",
+      "mode": "100644",
+      "gitBlob": "c1f197f34da4e04bb332f6b43671a63e3254423c"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/memory-template.md",
+      "mode": "100644",
+      "gitBlob": "d7d644dc77412303e4fe3e26141b19ce206b93e3"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/prompt-template.md",
+      "mode": "100644",
+      "gitBlob": "f51645a25b2e5bb5fae8f1ad0d35f82276e7e209"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/response-template.md",
+      "mode": "100644",
+      "gitBlob": "629fced7e8947d7edcb5958fc69f113785b41a67"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/skill-template.md",
+      "mode": "100644",
+      "gitBlob": "d1b155cab73f9a0f18f6946e56ce4d0399d0326a"
+    },
+    {
+      "path": "plugins/design-control-loop/skills/design-control-loop/references/workflow-template.yml",
+      "mode": "100644",
+      "gitBlob": "3093c3496b789cb87d29d07dd5b2d34fe62978a0"
+    },
+    {
+      "path": "plugins/improve-claude-md/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "bb05dfd6f32686ea2c6787a6e53f0912014e7e2b"
+    },
+    {
+      "path": "plugins/improve-claude-md/skills/improve-claude-md/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "89a1333fbba11e623cef81925361dd098a81443e"
+    },
+    {
+      "path": "plugins/narrow-react-prop-types/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "59609db6688ac0286359d927719408f1590cd7db"
+    },
+    {
+      "path": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "5ee3644aa827eb2452be3ead8f66c3b97ad7f4e5"
+    },
+    {
+      "path": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types/references/agent-narrow-component-props.yml",
+      "mode": "100644",
+      "gitBlob": "be8c0137ca8c5ffae0cdcbfc3711f8053cb27c17"
+    },
+    {
+      "path": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types/references/narrow-component-props-memory.md",
+      "mode": "100644",
+      "gitBlob": "15f220514ec308667e17229b31a44d600c2d57b4"
+    },
+    {
+      "path": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types/references/response-template.md",
+      "mode": "100644",
+      "gitBlob": "8eab2377f382ae02fd3d55fa6e54cea17e8cd3a1"
+    },
+    {
+      "path": "plugins/rpi/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "4ec36f743bdac74c5ccb9c898edde856fe62cff5"
+    },
+    {
+      "path": "plugins/rpi/agents/codebase-analyzer.md",
+      "mode": "100644",
+      "gitBlob": "83c673818035317977ecb67aee7c6877dae8ce77"
+    },
+    {
+      "path": "plugins/rpi/agents/codebase-locator.md",
+      "mode": "100644",
+      "gitBlob": "3270735c13888deeb10ddf13e1bce7ee219ef13d"
+    },
+    {
+      "path": "plugins/rpi/agents/codebase-pattern-finder.md",
+      "mode": "100644",
+      "gitBlob": "f5048337b5c1031d8cc185493677f625084eea04"
+    },
+    {
+      "path": "plugins/rpi/agents/outline-implementer-agent.md",
+      "mode": "100644",
+      "gitBlob": "371182203d35bde2cc17d4006b11e8e83d998ce0"
+    },
+    {
+      "path": "plugins/rpi/agents/web-search-researcher.md",
+      "mode": "100644",
+      "gitBlob": "ea0d8f2c5cddca454edd61d6f23b1d122028f12a"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "56eb2dba8ecd28f9dc071feac86b38b392bd9df5"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-design-discussion/process.md",
+      "mode": "100644",
+      "gitBlob": "6e0dcd6e77d48dc479018f5dacaaee8e13e65c50"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-design-discussion/references/design_discussion_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "04d78fe05e70357f74ea89339940996cdad9d4b3"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-design-discussion/references/design_discussion_final_answer_resolved.md",
+      "mode": "100644",
+      "gitBlob": "0e5a96f7cef517bd0ae2fb8edfd06ffa0f408686"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-design-discussion/references/design_discussion_template.md",
+      "mode": "100644",
+      "gitBlob": "71a65a3dff44f0f04e32a8c4da8df8b2a3f81bfd"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-prd/process.md",
+      "mode": "100644",
+      "gitBlob": "5f33dbd078d3401578aba7364a3465fa8aa4a13b"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-prd/references/prd_final_answer_resolved.md",
+      "mode": "100644",
+      "gitBlob": "58e0fe91e4499b8677c5d932b36e0a60c1e9f7d5"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-prd/references/prd_template.md",
+      "mode": "100644",
+      "gitBlob": "be6f278b32c5ef616b82719921b1d167d4eaa1d2"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research-questions/process.md",
+      "mode": "100644",
+      "gitBlob": "1fc6bae31e3a7c6221f5f4a9331e306d7ad46eb2"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research-questions/references/request_template.md",
+      "mode": "100644",
+      "gitBlob": "ceb69599b4bc6cfe9491284dbff00fc14a68a947"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research-questions/references/research_questions_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "e04d19242a1b380ae50b948633a67f4bb5a21cf5"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research-questions/references/research_questions_template.md",
+      "mode": "100644",
+      "gitBlob": "7eda9c68cd0cbfebfff372bf2679c1e6c80bdba3"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research/process.md",
+      "mode": "100644",
+      "gitBlob": "02f5d36e3c8b5fbc9f3e9599d34ea06845e698cf"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research/references/research_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "2eefb258ac4735b91516c64788d5f2f613767b50"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-research/references/research_template.md",
+      "mode": "100644",
+      "gitBlob": "f7b1e17a5738fce845ab0f3233eb32fd1540808a"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-structure-outline/process.md",
+      "mode": "100644",
+      "gitBlob": "c32115261bb055b66c6e7101796da88ce04b0b37"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-structure-outline/references/structure_outline_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "1d16fbca0abbbc7268b448b80bb52cbf61c3e8ab"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-structure-outline/references/structure_outline_template.md",
+      "mode": "100644",
+      "gitBlob": "bd4d8fa6d894e7f444b020b55039b0823940861a"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-tdd/process.md",
+      "mode": "100644",
+      "gitBlob": "b084a6424a83c1ed6dee8aa9716951fff7059f77"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-tdd/references/tdd_final_answer_resolved.md",
+      "mode": "100644",
+      "gitBlob": "96542e88590639201d5fb924ffec737b54478014"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/create-tdd/references/tdd_template.md",
+      "mode": "100644",
+      "gitBlob": "e8b431fc85bc0a18d8665482eaf45cd6cb27f66f"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/implement-outline/process.md",
+      "mode": "100644",
+      "gitBlob": "c57f78cecbd05a74e6a97d429f414ca4e32414c8"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/implement-outline/references/implement_outline_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "e5f40e4827381d0ca14ab393127da4238e19aaf3"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-design-discussion/process.md",
+      "mode": "100644",
+      "gitBlob": "04a23260b6ab7c327d6f9c0eeffbcc6dfd2ca713"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-design-discussion/references/design_discussion_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "04d78fe05e70357f74ea89339940996cdad9d4b3"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-design-discussion/references/design_discussion_final_answer_resolved.md",
+      "mode": "100644",
+      "gitBlob": "0e5a96f7cef517bd0ae2fb8edfd06ffa0f408686"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-design-discussion/references/design_discussion_template.md",
+      "mode": "100644",
+      "gitBlob": "a4fb677ca78a8cb39e4e70a2ae2b77a16384d5c6"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-implementation/process.md",
+      "mode": "100644",
+      "gitBlob": "226d54b6596f268a4068b70cf0270bdb578ee15f"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-implementation/references/iterate_implementation_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "ffde529f0fd102ff06d9132cba453c54b98d6283"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-prd/process.md",
+      "mode": "100644",
+      "gitBlob": "b5fbea183804dbbe472cec9354ff331887298914"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-prd/references/prd_final_answer_resolved.md",
+      "mode": "100644",
+      "gitBlob": "58e0fe91e4499b8677c5d932b36e0a60c1e9f7d5"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-prd/references/prd_template.md",
+      "mode": "100644",
+      "gitBlob": "be6f278b32c5ef616b82719921b1d167d4eaa1d2"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-research-questions/process.md",
+      "mode": "100644",
+      "gitBlob": "88634571625d673c4ebcddfa429fd5e96b801752"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-research-questions/references/research_questions_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "86d6189bf8630bfe6efe565627424379352e90c5"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-research-questions/references/research_questions_template.md",
+      "mode": "100644",
+      "gitBlob": "7eda9c68cd0cbfebfff372bf2679c1e6c80bdba3"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-research/process.md",
+      "mode": "100644",
+      "gitBlob": "ca44e00724d14ab763344853dabeba64122b63dc"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-research/references/research_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "380a167185ebbf8dc1349a4a82b5226d5242b8b2"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-research/references/research_template.md",
+      "mode": "100644",
+      "gitBlob": "8cb24be611f3baa93dc48a6bb755c4636b00bf35"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-structure-outline/process.md",
+      "mode": "100644",
+      "gitBlob": "8a05e4f92fcd3da3427848c25844b5d47290a290"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-structure-outline/references/structure_outline_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "e544fc7410c16cde58744436f15f52f1d9f81449"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-structure-outline/references/structure_outline_template.md",
+      "mode": "100644",
+      "gitBlob": "bd4d8fa6d894e7f444b020b55039b0823940861a"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-tdd/process.md",
+      "mode": "100644",
+      "gitBlob": "456c683425af494c43c3e806d6070123e73d9b03"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-tdd/references/tdd_final_answer_resolved.md",
+      "mode": "100644",
+      "gitBlob": "96542e88590639201d5fb924ffec737b54478014"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/iterate-tdd/references/tdd_template.md",
+      "mode": "100644",
+      "gitBlob": "e8b431fc85bc0a18d8665482eaf45cd6cb27f66f"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/show-me.md",
+      "mode": "100644",
+      "gitBlob": "d57a0a0afc2800a4cc7a7765e65a9c6c18e67b4f"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/subagents/codebase-analyzer.md",
+      "mode": "100644",
+      "gitBlob": "83c673818035317977ecb67aee7c6877dae8ce77"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/subagents/codebase-locator.md",
+      "mode": "100644",
+      "gitBlob": "3270735c13888deeb10ddf13e1bce7ee219ef13d"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/subagents/codebase-pattern-finder.md",
+      "mode": "100644",
+      "gitBlob": "f5048337b5c1031d8cc185493677f625084eea04"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/subagents/outline-implementer-agent.md",
+      "mode": "100644",
+      "gitBlob": "371182203d35bde2cc17d4006b11e8e83d998ce0"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/subagents/web-search-researcher.md",
+      "mode": "100644",
+      "gitBlob": "ea0d8f2c5cddca454edd61d6f23b1d122028f12a"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/workflow-choice.md",
+      "mode": "100644",
+      "gitBlob": "1fb060f25ca96316885db76a0a83f15f28150ae7"
+    },
+    {
+      "path": "plugins/rpi/skills/rpi/references/workflow.md",
+      "mode": "100644",
+      "gitBlob": "9a794408b7eb2d47a8dc7bc85e7d6f9024bfe635"
+    },
+    {
+      "path": "plugins/show-me/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "72376ddfb6f159b2719703127a35de76b89c19cf"
+    },
+    {
+      "path": "plugins/show-me/skills/show-me/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "f0ccd047c136d7b702b385e0ecad775ccb773eae"
+    },
+    {
+      "path": "plugins/show-me/skills/show-me/agents/openai.yaml",
+      "mode": "100644",
+      "gitBlob": "5b1f887a9138416870f64ba2fe21602e4a59cfa7"
+    },
+    {
+      "path": "plugins/visual-pr/.claude-plugin/plugin.json",
+      "mode": "100644",
+      "gitBlob": "31f55edf67e649880a72cdd65d6a793772113fdf"
+    },
+    {
+      "path": "plugins/visual-pr/skills/visual-pr/SKILL.md",
+      "mode": "100644",
+      "gitBlob": "28fc3324e6c7dc91b7140728347afcd5f4c430b8"
+    },
+    {
+      "path": "plugins/visual-pr/skills/visual-pr/references/describe_pr_final_answer.md",
+      "mode": "100644",
+      "gitBlob": "898f9b53d11f6965e784810a8d42db5194480d88"
+    },
+    {
+      "path": "plugins/visual-pr/skills/visual-pr/references/pr_description_template.md",
+      "mode": "100644",
+      "gitBlob": "03e4136227c2452acfde30117349ebdce5696d1b"
+    },
+    {
+      "path": "plugins/visual-pr/skills/visual-pr/references/show-me.md",
+      "mode": "100644",
+      "gitBlob": "90cb62f9c55e1ab5c5285894cd90cd3bbcea815f"
+    },
+    {
+      "path": "scripts/sync-rpi-references.ts",
+      "mode": "100644",
+      "gitBlob": "2f485e28402b098b6f77feb4e686facf48e219c1"
+    },
+    {
+      "path": "scripts/test-rpi-workflows.ts",
+      "mode": "100644",
+      "gitBlob": "529831bb974c08f7558c7833c7217ddc75303a96"
+    },
+    {
+      "path": "scripts/test-rpi.ts",
+      "mode": "100644",
+      "gitBlob": "746cf59d5bff03eefc931a770853e540b4f4b3b1"
+    }
+  ]
+}

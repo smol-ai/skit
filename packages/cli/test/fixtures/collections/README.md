@@ -59,10 +59,17 @@ transport, not SKIT's GitHub acquisition path; archive extraction limits do not
 apply to Git clone/fetch. These tests do not install plugins or execute Skill scripts.
 Explicit Git directory links are resolved within the checkout before discovery;
 links that escape it are rejected. Selected member paths remain stable in retention.
-The exclusion rule applies to `plugins/` immediately under the selected source
-root, including a selected subpath. Nested directories named `plugins` remain
-searchable. Plugin-only roots fail with an explicit-target hint; there is no fallback.
-Declared collections continue following their declared paths.
+Discovery reads local Claude, Codex, and schema-marked portable plugin declarations.
+Plugin member directories follow their manifests instead of folder-name exclusions;
+ordinary directories named `plugins` remain searchable. Identical complete Skill
+mirrors can share one imported member when their declarations establish an alias.
+Fresh imports of different same-name plugin Skills require an explicit plugin or
+Skill directory selection. Invalid unselected declarations produce diagnostics and
+fall back to standalone discovery; containment escapes remain errors. A repo-root
+plugin does not hide other standalone Skills. Declared SKIT collections retain
+their descriptor precedence. Generated collections preserve previously retained
+member paths that still exist while discovering new members; a conflicting new
+candidate is held with a diagnostic rather than replacing the retained path.
 
 No schedule or CI job is installed by these commands; they can be invoked manually
 or wired into a separate integration job.
@@ -70,8 +77,8 @@ or wired into a separate integration job.
 ## Recorded source acquisition follow-up
 
 Selected-directory confinement does not cover file symlinks inside a directory.
-Review identified a pre-existing gap: discovery reads `README.md` and `SKILL.md`
-through links before materialization, potentially following a Git file link outside
-the checkout. A separate fix should reject linked discovery documents or check their
-resolved targets before reading, with hostile file-link regression fixtures. The
-directory-link tests here do not claim to resolve that gap.
+Discovery now checks resolved targets of `README.md`, `SKILL.md`, `skit.json`, and
+plugin manifests before reading them. Links outside the acquired Source or selected
+Git checkout are rejected. Focused hostile fixtures cover escaped discovery documents
+and manifests; retained Skill artifact validation remains responsible for links inside
+Skill supporting content.

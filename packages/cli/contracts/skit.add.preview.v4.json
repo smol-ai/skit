@@ -1,5 +1,5 @@
 {
-  "$id": "skit.add.preview.v3",
+  "$id": "skit.add.preview.v4",
   "type": "object",
   "properties": {
     "kind": {
@@ -24,6 +24,33 @@
         "required": [
           "name",
           "verbatim_path"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "plugin-manifest-invalid",
+              "plugin-member-held"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "path",
+          "message"
         ],
         "additionalProperties": true
       }

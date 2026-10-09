@@ -1,8 +1,9 @@
-import { Digest } from "@smolai/skit-core";
+import { Digest, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
 import { Schema } from "effect";
 
 /** What a refresh means for the Skills this device enables. */
 const SkillChanges = {
+  diagnostics: Schema.optionalKey(Schema.Array(SourceDiscoveryDiagnostic)),
   label: Schema.String,
   /** New upstream Skills enabled because the Collection is followed. */
   enabled: Schema.Array(Schema.String),

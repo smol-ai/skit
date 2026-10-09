@@ -238,39 +238,43 @@ describe("source contracts", () => {
       expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toEqual(fixture.content);
     }).pipe(provide),
   );
-  it.effect("applies root plugin exclusion relative to an explicitly selected Git subpath", () =>
+  it.effect("does not infer plugin ownership from a directory name in a selected Git subpath", () =>
     Effect.gen(function* () {
       const fixture = yield* gitLinkFixture;
       const selected = yield* resolveSkitSourceEffect(
         { type: "git", remote: fixture.remote, subpath: "example" },
         { verbatimOnly: true },
       );
-      expect(selected.observedSkillPaths).toEqual(["skills/review"]);
+      expect(selected.observedSkillPaths?.toSorted()).toEqual([
+        "plugins/bundle/skills/review",
+        "skills/review",
+      ]);
     }).pipe(provide),
   );
-  it.effect(
-    "skips root plugin packaging while discovering standalone and nested plugin paths",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const root = yield* scratch("skit-plugin-discovery-");
-        for (const path of [
-          "skills/review",
-          "plugins/bundle/skills/review",
-          "examples/plugins/demo",
-        ]) {
-          yield* fs.makeDirectory(join(root, path), { recursive: true });
-          yield* writeText(
-            join(root, path, "SKILL.md"),
-            "---\nname: review\ndescription: Review.\n---\n",
-          );
-        }
-        const discovered = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
-        expect(discovered.observedSkillPaths?.toSorted()).toEqual([
-          "examples/plugins/demo",
-          "skills/review",
-        ]);
-      }).pipe(provide),
+  it.effect("discovers ordinary directories named plugins without manifest declarations", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-plugin-discovery-");
+      for (const path of [
+        "skills/review",
+        "plugins/bundle/skills/review",
+        ".github/plugins/bundle/skills/review",
+        "examples/plugins/demo",
+      ]) {
+        yield* fs.makeDirectory(join(root, path), { recursive: true });
+        yield* writeText(
+          join(root, path, "SKILL.md"),
+          "---\nname: review\ndescription: Review.\n---\n",
+        );
+      }
+      const discovered = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+      expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+        ".github/plugins/bundle/skills/review",
+        "examples/plugins/demo",
+        "plugins/bundle/skills/review",
+        "skills/review",
+      ]);
+    }).pipe(provide),
   );
   it.effect("allows an explicitly selected plugin Skill, including locked member paths", () =>
     Effect.gen(function* () {
@@ -297,7 +301,7 @@ describe("source contracts", () => {
       expect(locked.observedSkillPaths).toEqual([path]);
     }).pipe(provide),
   );
-  it.effect("does not fall back to plugin packaging when no standalone Skills exist", () =>
+  it.effect("imports plugin-only Sources with their original member paths", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const root = yield* scratch("skit-plugin-only-");
@@ -306,9 +310,8 @@ describe("source contracts", () => {
         join(root, "plugins/bundle/skills/review/SKILL.md"),
         "---\nname: review\ndescription: Review.\n---\n",
       );
-      const error = yield* resolveSkitSourceEffect(root, { verbatimOnly: true }).pipe(Effect.flip);
-      assert.strictEqual(error._tag, "NoSkitDescriptorFound");
-      assert.include(error.message, "target its directory explicitly");
+      const source = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+      expect(source.observedSkillPaths).toEqual(["plugins/bundle/skills/review"]);
     }).pipe(provide),
   );
   it.effect(

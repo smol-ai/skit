@@ -1,4 +1,4 @@
-import { Digest } from "@smolai/skit-core";
+import { Digest, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
 import { Schema } from "effect";
 
 const AddSkill = Schema.Struct({
@@ -9,6 +9,7 @@ const AddSkill = Schema.Struct({
 export const AddPreview = Schema.Struct({
   kind: Schema.Literals(["plain", "authored"]),
   skills: Schema.Array(AddSkill),
+  diagnostics: Schema.optionalKey(Schema.Array(SourceDiscoveryDiagnostic)),
 });
 export type AddPreview = typeof AddPreview.Type;
 
@@ -18,5 +19,6 @@ export const AddResult = Schema.Struct({
   retained_version_id: Schema.String,
   snapshot_digest: Digest,
   skills: Schema.Array(AddSkill),
+  diagnostics: Schema.optionalKey(Schema.Array(SourceDiscoveryDiagnostic)),
 });
 export type AddResult = typeof AddResult.Type;

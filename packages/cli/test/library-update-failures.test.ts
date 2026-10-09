@@ -26,10 +26,17 @@ const fixture = Effect.gen(function* () {
       const directory = join(root, name);
       yield* fs.makeDirectory(join(directory, "a"), { recursive: true });
       yield* fs.writeFileString(join(directory, "a", "SKILL.md"), body(name, content));
-      if (!duplicate) yield* fs.remove(join(directory, "b"), { recursive: true, force: true });
+      if (!duplicate) {
+        yield* fs.remove(join(directory, "b"), { recursive: true, force: true });
+        yield* fs.remove(join(directory, "c"), { recursive: true, force: true });
+      }
       if (duplicate) {
+        // Both conflicting paths are new: a retained member would correctly win
+        // over a newly discovered same-name candidate during update.
         yield* fs.makeDirectory(join(directory, "b"));
-        yield* fs.writeFileString(join(directory, "b", "SKILL.md"), body(name, content));
+        yield* fs.writeFileString(join(directory, "b", "SKILL.md"), body("collision", content));
+        yield* fs.makeDirectory(join(directory, "c"));
+        yield* fs.writeFileString(join(directory, "c", "SKILL.md"), body("collision", content));
       }
       const path = join(root, `${name}.tar`);
       yield* Effect.sync(() => execFileSync("tar", ["-cf", path, "-C", directory, "."]));
@@ -98,7 +105,7 @@ it.effect(
       assert.isTrue("status" in outcomes[0]!);
       if (!("status" in outcomes[0]!)) return;
       assert.strictEqual(outcomes[0].error.code, "VALIDATION_FAILED");
-      assert.include(outcomes[0].error.message, 'duplicate Skill name "broken"');
+      assert.include(outcomes[0].error.message, 'duplicate Skill name "collision"');
       assert.include(outcomes[0].error.message, "Additional failure: PermissionDenied");
       assert.strictEqual(outcomes[0].source, f.urls[0]);
       assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
@@ -284,6 +291,11 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
     const f = yield* fixture;
     // The old path keeps its historical name, while a new path declares that same name.
     // The observed names are distinct, but the candidate portable manifest is invalid.
+    yield* f.fs.remove(join(f.root, "broken", "c"), { recursive: true });
+    yield* f.fs.writeFileString(
+      join(f.root, "broken", "b", "SKILL.md"),
+      "---\nname: broken\ndescription: Test Skill\n---\n\nafter\n",
+    );
     yield* f.fs.writeFileString(
       join(f.root, "broken", "a", "SKILL.md"),
       "---\nname: renamed\ndescription: Test Skill\n---\n\nafter\n",

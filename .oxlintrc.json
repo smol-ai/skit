@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
     "skit/no-record-any": "error",
