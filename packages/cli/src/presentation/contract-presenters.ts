@@ -100,11 +100,13 @@ function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): s
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+const sourceDiagnosticLines = (diagnostics?: readonly { path: string; message: string }[]) =>
+  (diagnostics ?? []).map((diagnostic) => `  ! ${diagnostic.path}: ${diagnostic.message}`);
 
 /** One Source's effect on this device: enabled, changed, retired, kept, and available Skills. */
 function skillChangeLines(
   item: Pick<
-    ContractDataForId<"skit.update.plan.v5">[number],
+    ContractDataForId<"skit.update.plan.v6">[number],
     "enabled" | "updated" | "removed" | "kept" | "new_available"
   >,
 ): string[] {
@@ -121,18 +123,24 @@ function skillChangeLines(
   ];
 }
 
-function renderUpdate(data: ContractDataForId<"skit.update.v7">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v8">): string {
   if (!data.length) return "No device-local Sources to update";
   const failures = data.filter((item) => "status" in item);
   const successful = data.filter((item) => "changed" in item);
   const updated = successful.filter((item) => item.changed);
   const current = successful.length - updated.length;
   if (updated.length === 0 && failures.length === 0)
-    return successful.some((item) => item.projected > 0)
-      ? `Sources are current; projections reconciled\n${plural(current, "Source")} checked; no retained snapshots changed.`
-      : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`;
+    return [
+      successful.some((item) => item.projected > 0)
+        ? `Sources are current; projections reconciled\n${plural(current, "Source")} checked; no retained snapshots changed.`
+        : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`,
+      ...successful.flatMap((item) =>
+        item.diagnostics?.length ? [item.label, ...sourceDiagnosticLines(item.diagnostics)] : [],
+      ),
+    ].join("\n");
   const lines = [failures.length ? "Update finished with failures" : "Update complete"];
-  for (const item of updated) lines.push(item.label, ...skillChangeLines(item));
+  for (const item of successful.filter((item) => item.changed || item.diagnostics?.length))
+    lines.push(item.label, ...skillChangeLines(item), ...sourceDiagnosticLines(item.diagnostics));
   for (const item of failures)
     lines.push(
       `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating projections"}`,
@@ -150,13 +158,14 @@ function renderUpdate(data: ContractDataForId<"skit.update.v7">): string {
   return lines.join("\n");
 }
 
-function renderUpdatePlan(data: ContractDataForId<"skit.update.plan.v5">): string {
+function renderUpdatePlan(data: ContractDataForId<"skit.update.plan.v6">): string {
   if (!data.length) return "No device-local Sources to update";
   const lines = ["Update plan"];
   for (const item of data)
     lines.push(
       `${item.label} · ${item.changed ? "update available" : "current"}`,
       ...skillChangeLines(item),
+      ...sourceDiagnosticLines(item.diagnostics),
     );
   const updates = data.filter((item) => item.changed).length;
   lines.push(
@@ -919,7 +928,10 @@ const contractPresenters: ContractPresenters = {
   [outputContracts.authorList.id]: renderAuthorList,
   [outputContracts.add.id]: (data) => {
     const count = data.skills.length;
-    return `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`;
+    return [
+      `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`,
+      ...sourceDiagnosticLines(data.diagnostics),
+    ].join("\n");
   },
   [outputContracts.addPreview.id]: (data) => {
     const count = data.skills.length;
@@ -927,6 +939,7 @@ const contractPresenters: ContractPresenters = {
       `${count} ${count === 1 ? "skill" : "skills"}`,
       "",
       ...data.skills.map((skill) => `  ${skill.name}`),
+      ...sourceDiagnosticLines(data.diagnostics),
     ].join("\n");
   },
   [outputContracts.update.id]: renderUpdate,

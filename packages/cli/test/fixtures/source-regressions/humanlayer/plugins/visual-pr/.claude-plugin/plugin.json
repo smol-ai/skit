@@ -1,0 +1,12 @@
+{
+  "name": "visual-pr",
+  "description": "Create or update a pull request with a concise visual outline for reviewers",
+  "version": "1.0.0",
+  "author": {
+    "name": "humanlayer",
+    "email": "support@humanlayer.dev"
+  },
+  "repository": "https://github.com/humanlayer/skills",
+  "license": "MIT",
+  "keywords": ["pull-request", "code-review", "visualization", "github", "claude-code"]
+}

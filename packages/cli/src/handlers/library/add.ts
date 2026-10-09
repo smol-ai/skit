@@ -82,6 +82,9 @@ export const addCliCommand = Command.make(
               name: skill.name,
               verbatim_path: skill.verbatim_path,
             })),
+            ...("diagnostics" in retained && retained.diagnostics?.length
+              ? { diagnostics: retained.diagnostics }
+              : {}),
           }),
         );
       }),

@@ -1,6 +1,6 @@
 import type { DescriptorFailure } from "../failures.js";
 import { semver } from "../distribution/api-contracts.js";
-import { Effect, FileSystem, Predicate, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Path, Predicate, Schema, Scope, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
@@ -26,6 +26,12 @@ import { copyLocalTreeEffect } from "../platform/copy-tree.js";
 import { TreeError } from "../shared/tree-error.js";
 import { readSkitDescriptorEffect } from "../artifact/skit.js";
 import { SourceProcess, type SourceProcessFailure } from "../platform/source-process.js";
+import { containedPluginPathEffect, PluginManifestInvalid } from "./plugin-manifests.js";
+export { PluginManifestInvalid } from "./plugin-manifests.js";
+import { PluginSkillConflict, selectPluginMembersEffect } from "./plugin-membership.js";
+export { PluginSkillConflict } from "./plugin-membership.js";
+export { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
+import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 
 export const AGENT_SKILLS_NORMALIZATION_PROFILE = "agent-skills/v1" as const;
 const ownerRepository = /^([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)$/;
@@ -402,6 +408,7 @@ export interface ResolvedSkitSource {
   missingAgentSkillPaths?: readonly string[];
   /** Directories observed in the verbatim tree; present only for a non-publishing acquisition. */
   observedSkillPaths?: readonly string[];
+  diagnostics?: readonly SourceDiscoveryDiagnostic[];
 }
 
 /**
@@ -756,7 +763,7 @@ function buildAgentSkillsWrapperEffect(
     // handle, so an abandoned copy cannot recreate cleaned output.
     for (const skill of skills)
       yield* copyLocalTreeEffect(
-        skill.directory,
+        yield* fs.realPath(skill.directory),
         join(root, "skills", skill.safe),
         undefined,
         // Verbatim, matching the recursive copy this replaces: normalization stages the source
@@ -821,15 +828,25 @@ function discoverRootEffect(
   selectedSourceUpdatedAt?: string | null,
   verbatimOnly = false,
   selectedDirectories?: ReadonlyMap<string, string>,
+  previousSkillPaths: readonly string[] = [],
+  containmentRoot = extracted,
+  strictPluginRoot = false,
 ): Effect.Effect<
   {
     root: string;
     descriptorKind: "declared" | "generated";
     missingAgentSkillPaths?: readonly string[];
     observedSkillPaths?: readonly string[];
+    diagnostics?: readonly SourceDiscoveryDiagnostic[];
   },
-  SourcePolicyViolation | NoSkitDescriptorFound | DescriptorFailure | TreeError | PlatformError,
-  FileSystem.FileSystem | LinkStat | SourceProcess
+  | SourcePolicyViolation
+  | PluginManifestInvalid
+  | PluginSkillConflict
+  | NoSkitDescriptorFound
+  | DescriptorFailure
+  | TreeError
+  | PlatformError,
+  FileSystem.FileSystem | Path.Path | LinkStat | SourceProcess
 > {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -850,6 +867,7 @@ function discoverRootEffect(
             `Locked Skill path is missing from the acquired Source: ${path}`,
           );
         }
+        yield* containedPluginPathEffect(containmentRoot, skillDirectory, "SKILL.md");
         selectedSkills.push({
           relativePath: relative(extracted, requestedDirectory) || ".",
           directory: skillDirectory,
@@ -876,24 +894,28 @@ function discoverRootEffect(
       };
     }
     const queue = [extracted];
+    const directories: string[] = [];
     const foundSkills: string[] = [];
     let examined = 0;
-    let excludedPlugins = false;
     while (queue.length) {
       const directory = queue.shift()!;
+      directories.push(directory);
       examined++;
       if (examined > 5_000)
         return yield* sourceLimitExceeded("Source discovery exceeded directory limit");
       if (yield* fs.exists(join(directory, "skit.json"))) {
+        yield* containedPluginPathEffect(containmentRoot, directory, "skit.json");
         yield* readSkitDescriptorEffect(directory);
         return { root: directory, descriptorKind: "declared" as const };
       }
       if (yield* fs.exists(join(directory, "README.md"))) {
+        yield* containedPluginPathEffect(containmentRoot, directory, "README.md");
         const text = yield* fs.readFileString(join(directory, "README.md"));
         if (/^---\r?\n[\s\S]*?^skit:\s*1\s*$/m.test(text))
           return { root: directory, descriptorKind: "declared" as const };
       }
       if (yield* fs.exists(join(directory, "SKILL.md"))) {
+        yield* containedPluginPathEffect(containmentRoot, directory, "SKILL.md");
         foundSkills.push(directory);
         continue;
       }
@@ -901,21 +923,25 @@ function discoverRootEffect(
       for (const name of yield* fs.readDirectory(directory)) {
         if (name === ".git") continue;
         const info = yield* probe.identity.lstat(join(directory, name));
-        // The selected source root's plugins are packaging, not standalone Skills.
-        // Explicit paths are handled above (or become the discovery root themselves).
-        if (directory === extracted && name === "plugins" && info.type === "Directory") {
-          excludedPlugins = true;
-          continue;
-        }
         if (info.type === "Directory") queue.push(join(directory, name));
       }
     }
+    const selection = yield* selectPluginMembersEffect(
+      extracted,
+      directories,
+      foundSkills,
+      previousSkillPaths,
+      containmentRoot,
+      strictPluginRoot,
+    );
+    foundSkills.splice(0, foundSkills.length, ...selection.members);
     if (foundSkills.length)
       return {
         root: verbatimOnly
           ? extracted
           : yield* wrapAgentSkillsEffect(foundSkills, workspace, undefined, extracted),
         descriptorKind: "generated" as const,
+        ...(selection.diagnostics.length ? { diagnostics: selection.diagnostics } : {}),
         ...(verbatimOnly
           ? {
               observedSkillPaths: foundSkills.map(
@@ -924,7 +950,7 @@ function discoverRootEffect(
             }
           : {}),
       };
-    return yield* Effect.fail(new NoSkitDescriptorFound({ excludedPlugins }));
+    return yield* Effect.fail(new NoSkitDescriptorFound());
   });
 }
 
@@ -1191,12 +1217,18 @@ export function resolveSkitSourceEffect(
     /** Exact Agent Skills documents supplied by verified external provenance. */
     agentSkillPaths?: readonly string[];
     allowMissingAgentSkillPaths?: boolean;
+    /** Existing Collection membership to preserve while discovering newly added Skills. */
+    previousSkillPaths?: readonly string[];
+    /** Enforce declarations for an explicitly selected plugin root. */
+    strictPluginManifests?: boolean;
     /** Retention acquisition observes bytes without creating a publication wrapper. */
     verbatimOnly?: boolean;
   } = {},
 ): Effect.Effect<
   ResolvedSkitSource,
   | SourcePolicyViolation
+  | PluginManifestInvalid
+  | PluginSkillConflict
   | UnsafeArchivePath
   | ArchiveEntryLimitExceeded
   | CommandFailed
@@ -1207,7 +1239,7 @@ export function resolveSkitSourceEffect(
   | DescriptorFailure
   | TreeError
   | PlatformError,
-  FileSystem.FileSystem | LinkStat | SourceProcess | HttpClient.HttpClient | Scope.Scope
+  FileSystem.FileSystem | Path.Path | LinkStat | SourceProcess | HttpClient.HttpClient | Scope.Scope
 > {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -1245,6 +1277,10 @@ export function resolveSkitSourceEffect(
           options.allowMissingAgentSkillPaths,
           undefined,
           options.verbatimOnly ?? false,
+          undefined,
+          options.previousSkillPaths,
+          start,
+          options.strictPluginManifests,
         );
         // Plain local directories have no upstream revision to pin.
         const head = yield* Effect.option(commandOutputEffect("git", ["rev-parse", "HEAD"], start));
@@ -1357,6 +1393,9 @@ export function resolveSkitSourceEffect(
           skillPaths.length ? null : undefined,
           options.verbatimOnly ?? false,
           selectedDirectories,
+          options.previousSkillPaths,
+          checkoutRoot,
+          options.strictPluginManifests ?? Boolean(source.subpath),
         );
         let originalRoot = root;
         if (selectedPaths?.length) {
@@ -1530,9 +1569,65 @@ export function resolveSkitSourceEffect(
         false,
         undefined,
         options.verbatimOnly ?? false,
+        undefined,
+        options.previousSkillPaths,
+        extracted,
+        options.strictPluginManifests,
       );
       return { source: acquiredSource, ...discovered, originalRoot: extracted, revision };
-    });
+    }).pipe(
+      Effect.catchTag("PluginSkillConflict", (error) =>
+        Effect.fail(
+          new PluginSkillConflict({
+            name: error.name,
+            paths: error.paths,
+            directories: error.directories,
+            ...(source.type === "github"
+              ? {
+                  locators: error.directories.map((directory) =>
+                    sourceLocator({
+                      ...source,
+                      subpath: join(source.subpath ?? ".", directory)
+                        .split(sep)
+                        .join("/"),
+                    }),
+                  ),
+                }
+              : source.type === "local"
+                ? { locators: error.directories.map((directory) => join(source.path, directory)) }
+                : {}),
+          }),
+        ),
+      ),
+    );
+    // Manifest-selected directory links must retain target content at the original member path.
+    if (
+      options.verbatimOnly &&
+      resolved.descriptorKind === "generated" &&
+      resolved.observedSkillPaths?.length
+    ) {
+      const targets = new Map<string, string>();
+      for (const path of resolved.observedSkillPaths) {
+        const selected = join(resolved.originalRoot, path);
+        const target = yield* fs.realPath(selected);
+        if (target !== (yield* fs.realPath(dirname(selected))) + sep + basename(selected))
+          targets.set(path, target);
+      }
+      if (targets.size) {
+        const originalRoot = join(workspace, "manifest-selected-original");
+        for (const path of resolved.observedSkillPaths) {
+          const destination = join(originalRoot, path);
+          yield* fs.makeDirectory(dirname(destination), { recursive: true });
+          yield* copyLocalTreeEffect(
+            targets.get(path) ?? join(resolved.originalRoot, path),
+            destination,
+            undefined,
+            true,
+          );
+        }
+        return { ...resolved, originalRoot };
+      }
+    }
     return resolved;
   });
 }

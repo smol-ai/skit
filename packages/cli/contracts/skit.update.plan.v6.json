@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.plan.v5",
+  "$id": "skit.update.plan.v6",
   "type": "array",
   "items": {
     "type": "object",
@@ -24,6 +24,33 @@
       },
       "changed": {
         "type": "boolean"
+      },
+      "diagnostics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "plugin-manifest-invalid",
+                "plugin-member-held"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "path",
+            "message"
+          ],
+          "additionalProperties": true
+        }
       },
       "label": {
         "type": "string"

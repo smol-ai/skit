@@ -27,6 +27,7 @@ export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVer
 export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(function* (
   input: string | SkitSource,
   version?: string,
+  previousSkillPaths?: readonly string[],
 ) {
   const registry = yield* (yield* RegistryAuth).resolve();
   return yield* Effect.scoped(
@@ -39,7 +40,9 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
         registryToken: registry.token,
         ...(version === undefined ? {} : { version }),
         verbatimOnly: true,
+        ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
       });
+      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
       if (resolved.descriptorKind === "declared") {
         const validated = yield* validateSkitDirectoryEffect(resolved.root, "retained", {
           assessmentContext: "retain",
@@ -79,6 +82,7 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
       const prepared = yield* prepareObservedCollectionEffect(skills);
       return {
         kind: "plain" as const,
+        ...diagnostics,
         snapshot_digest: prepared.digest,
         skills: prepared.facts.map((skill) => ({
           name: skill.name,
@@ -99,13 +103,18 @@ export const previewLibrarySourceEffect = Effect.fn("Library.previewSource")(fun
   version?: string,
 ) {
   const inspected = yield* inspectLibrarySourceEffect(input, version);
-  return { kind: inspected.kind, skills: inspected.skills };
+  return {
+    kind: inspected.kind,
+    skills: inspected.skills,
+    ...("diagnostics" in inspected ? { diagnostics: inspected.diagnostics } : {}),
+  };
 });
 
 /** Retain acquired bytes while the command composition root owns the Library writer lock. */
 export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
   version?: string,
+  previousSkillPaths?: readonly string[],
 ) {
   const registry = yield* (yield* RegistryAuth).resolve();
   return yield* Effect.scoped(
@@ -119,7 +128,9 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         registryToken: registry.token,
         ...(version === undefined ? {} : { version }),
         verbatimOnly: true,
+        ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
       });
+      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
       const authority =
         resolved.source.type === "registry"
           ? (resolved.source.authority ?? registry.origin)
@@ -207,6 +218,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         skill_ids: collection.skills.map((skill) => skill.skill_id),
         retained_version_id: retained.retained_copy_id,
         snapshot_digest: prepared.digest,
+        ...diagnostics,
         skills: prepared.facts.map((skill) => ({
           name: skill.name,
           verbatim_path: skill.sourcePath,

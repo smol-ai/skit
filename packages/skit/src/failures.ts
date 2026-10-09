@@ -154,17 +154,10 @@ export class DirectSkillDocumentInvalid extends Data.TaggedError("DirectSkillDoc
   }
 }
 
-export class NoSkitDescriptorFound extends Data.TaggedError("NoSkitDescriptorFound")<{
-  readonly excludedPlugins: boolean;
-}> {
+export class NoSkitDescriptorFound extends Data.TaggedError("NoSkitDescriptorFound")<{}> {
   readonly code = "VALIDATION_FAILED" as const;
   get message(): string {
-    return (
-      "Source contains no valid SKIT README.md or Agent Skills SKILL.md" +
-      (this.excludedPlugins
-        ? "; the root plugins/ directory is excluded by default. To import a plugin Skill, target its directory explicitly."
-        : "")
-    );
+    return "Source contains no valid SKIT README.md or Agent Skills SKILL.md";
   }
 }
 

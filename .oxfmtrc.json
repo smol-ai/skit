@@ -1,5 +1,6 @@
 {
   "ignorePatterns": [
+    "packages/cli/test/fixtures/source-regressions/humanlayer/**",
     "packages/cli/test/fixtures/collections/swyxio/**",
     "packages/cli/test/fixtures/collections/asmartbear/**",
     "packages/cli/test/fixtures/collections/nvidia/**"
