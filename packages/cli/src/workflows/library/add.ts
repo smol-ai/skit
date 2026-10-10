@@ -2,6 +2,7 @@ import {
   deterministicTreeHashEffect,
   originalTreeHashEffect,
   validateSkitDirectoryEffect,
+  readSkitDescriptorEffect,
   parseSkillFrontmatter,
   parseSkitSourceEffect,
   sourceLocator,
@@ -11,9 +12,10 @@ import {
   retainObservedCollectionEffect,
   LibraryStore,
   type SkitSource,
+  type ResolvedSkitSource,
 } from "@smolai/skit-core";
 import { Clock, Effect, FileSystem, Schema } from "effect";
-import { basename, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { RegistryAuth } from "../../registry/auth-service.js";
 import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 
@@ -24,6 +26,30 @@ export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVer
   "Library.AddRetainedVersionMissing",
   { source: Schema.String },
 ) {}
+
+/** Check every selected local member before retaining any bytes, including declared collections.
+ * Preserve the caller's dependency view when resolution canonicalizes or stages directory links.
+ */
+const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(function* (
+  source: SkitSource,
+  resolved: ResolvedSkitSource,
+) {
+  if (source.type !== "local") return;
+  const inputRoot = basename(source.path) === "SKILL.md" ? dirname(source.path) : source.path;
+  if (resolved.descriptorKind === "declared") {
+    const descriptor = yield* readSkitDescriptorEffect(resolved.root);
+    const memberRoot = join(inputRoot, relative(resolved.originalRoot, resolved.root));
+    for (const skill of descriptor.skills) {
+      yield* leavePnpmSkillEffect(join(memberRoot, skill.path));
+      yield* leavePnpmSkillEffect(join(resolved.root, skill.path));
+    }
+  } else {
+    for (const path of resolved.observedSkillPaths ?? []) {
+      yield* leavePnpmSkillEffect(join(inputRoot, path));
+      yield* leavePnpmSkillEffect(join(resolved.originalRoot, path));
+    }
+  }
+});
 
 export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(function* (
   input: string | SkitSource,
@@ -45,6 +71,7 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
         ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
       });
       const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
+      yield* leaveResolvedPnpmSkills(parsed, resolved);
       if (resolved.descriptorKind === "declared") {
         const validated = yield* validateSkitDirectoryEffect(resolved.root, "retained", {
           assessmentContext: "retain",
@@ -134,6 +161,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
       });
       const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
+      yield* leaveResolvedPnpmSkills(parsed, resolved);
       const authority =
         resolved.source.type === "registry"
           ? (resolved.source.authority ?? registry.origin)

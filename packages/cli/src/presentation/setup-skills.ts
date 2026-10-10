@@ -65,7 +65,7 @@ const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardi
   if (candidate?.action === "import-observed-collection") return "Add installed copy to Library";
   if (candidate?.action === "repository-owned")
     return "Add to Library; project files stay in place";
-  return candidate ? undefined : "Already retained · kept in place";
+  return candidate ? undefined : "Left in place · no setup action";
 };
 
 /** Show discovered copies that still need attention, including blocked content. */

@@ -11,8 +11,11 @@ import { SetupResult } from "../src/workflows/library/setup-contract.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import { setupRemovablePaths, applySetupRemovals } from "../src/workflows/library/setup-removal.js";
 import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { libraryHome, scratch } from "./helpers/library-home.js";
+import {
+  addLibrarySourceEffect,
+  inspectLibrarySourceEffect,
+} from "../src/workflows/library/add.js";
+import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
   const fs = yield* FileSystem.FileSystem;
@@ -111,8 +114,127 @@ it.effect(
       yield* f.fs.makeDirectory(join(f.root, "node_modules", "@acme"), { recursive: true });
       yield* f.fs.symlink(local, join(f.root, "node_modules", "@acme", "demo"));
       expect((yield* pnpmSkillOwner(f.alias))?.kind).toBe("pnpm");
-      expect((yield* pnpmSkillOwner(skill))?.kind).toBe("pnpm");
+      expect(yield* pnpmSkillOwner(skill)).toBeUndefined();
     }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("refuses parent-directory acquisition before retaining any pnpm member", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const home = yield* libraryHome({ home: join(f.root, "library") });
+    for (const declared of [false, true]) {
+      if (declared)
+        yield* f.fs.writeFileString(
+          join(f.pkg, "skit.json"),
+          JSON.stringify({ slug: "demo", skills: [{ name: "demo-guide", path: "skills/guide" }] }),
+        );
+      for (const input of [f.pkg, join(f.pkg, "skills")]) {
+        const results = yield* Effect.all([
+          Effect.result(home.owned(inspectLibrarySourceEffect(input))),
+          Effect.result(home.owned(writingTo(home.home, addLibrarySourceEffect(input)))),
+        ]);
+        for (const result of results) {
+          expect(result._tag).toBe("Failure");
+          if (result._tag === "Failure") expect(result.failure._tag).toBe("PnpmSkillManaged");
+        }
+      }
+      expect((yield* home.durable).skills).toHaveLength(0);
+      expect((yield* home.durable).retained_copies).toHaveLength(0);
+    }
+    expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("keeps an authored workspace source distinct from pnpm's recorded aliases", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const local = join(f.root, "packages", "demo");
+    yield* f.fs.makeDirectory(dirname(local), { recursive: true });
+    yield* f.fs.rename(f.pkg, local);
+    yield* f.fs.remove(f.alias);
+    const skill = join(local, "skills", "guide");
+    yield* f.fs.symlink(skill, f.alias);
+    yield* f.fs.makeDirectory(join(f.root, "node_modules", "@acme"), { recursive: true });
+    yield* f.fs.symlink(local, join(f.root, "node_modules", "@acme", "demo"));
+    yield* f.fs.writeFileString(
+      join(local, "skit.json"),
+      JSON.stringify({ slug: "demo", skills: [{ name: "demo-guide", path: "skills/guide" }] }),
+    );
+    yield* f.fs.writeFileString(
+      join(local, "skit.remote.json"),
+      JSON.stringify({
+        schema: "skit.remote.v1",
+        origin: "https://registry.test",
+        namespace: "tim",
+        skit: "demo",
+      }),
+    );
+    const process = yield* ChildProcessSpawner.ChildProcessSpawner;
+    for (const cwd of [f.root, local])
+      expect(yield* process.exitCode(ChildProcess.make("git", ["init", "-q"], { cwd }))).toBe(0);
+    expect(
+      yield* process.exitCode(
+        ChildProcess.make("git", ["add", "skills/guide/SKILL.md"], { cwd: local }),
+      ),
+    ).toBe(0);
+    const home = yield* libraryHome({
+      home: join(f.root, "library"),
+      inventoryHome: join(f.root, "home"),
+    });
+    const options = {
+      libraryHome: home.home,
+      inventory: home.inventory,
+      repositoryRoots: [f.root, local],
+      persistRoots: false,
+      probePath: "",
+    };
+    const observed = yield* home.owned(runSetup(options));
+    const source = observed.instances.find((item) => item.path === skill);
+    const installed = observed.instances.find((item) => item.path === f.alias);
+    expect(source?.owner.kind).toBe("authored");
+    expect(source?.aliases).not.toContain(f.alias);
+    expect(installed?.owner.kind).toBe("pnpm");
+    expect(observed.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
+    expect((yield* setupRemovablePaths(options, observed)).has(f.alias)).toBe(false);
+    const retained = yield* home.owned(writingTo(home.home, addLibrarySourceEffect(skill)));
+    expect(retained.skills.map((item) => item.name)).toEqual(["demo-guide"]);
+    expect(yield* f.fs.readLink(f.alias)).toBe(skill);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("does not attribute an unrecorded user alias to pnpm", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const alias = join(f.root, ".agents", "skills", "user-guide");
+    yield* f.fs.symlink(f.skill, alias);
+    expect(yield* pnpmSkillOwner(alias)).toBeUndefined();
+    expect((yield* fileProvenance(join(alias, "SKILL.md"), {}, "demo-guide")).source).toBe(
+      "symlink",
+    );
+    const home = yield* libraryHome({
+      home: join(f.root, "library"),
+      inventoryHome: join(f.root, "home"),
+      roots: { codex: dirname(alias) },
+    });
+    const options = {
+      libraryHome: home.home,
+      inventory: home.inventory,
+      repositoryRoots: [],
+      persistRoots: false,
+      probePath: "",
+    };
+    const observed = yield* home.owned(runSetup(options));
+    const instance = observed.instances.find((item) => item.path === alias);
+    expect(instance?.owner.kind).toBe("unknown");
+    expect(observed.onboarding.candidates.some((item) => item.paths.includes(alias))).toBe(false);
+    const row = setupDiscoveredSkillChoices(
+      observed.instances,
+      observed.onboarding.candidates,
+    ).find((item) => item.instance.path === alias);
+    expect(row?.choice.disabled).toBe(true);
+    expect(row?.details).toContain("Left in place · no setup action");
+    expect((yield* setupRemovablePaths(options, observed)).get(alias)).toEqual([alias]);
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("reports pnpm copies but excludes acquisition, setup selection and removal", () =>

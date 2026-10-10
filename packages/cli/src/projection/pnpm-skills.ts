@@ -30,6 +30,11 @@ const documentAt = Effect.fn("PnpmSkills.document")(function* (path: string) {
 export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
+  const caller = resolve(directory);
+  const callerParent = yield* fs
+    .realPath(dirname(caller))
+    .pipe(Effect.orElseSucceed(() => dirname(caller)));
+  const callerPath = join(callerParent, basename(caller));
   const canonical = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined));
   if (canonical === undefined || basename(dirname(canonical)) !== "skills") return undefined;
   const packageRoot = dirname(dirname(canonical));
@@ -67,6 +72,18 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
         const physicalModules = yield* fs
           .realPath(modulesDir)
           .pipe(Effect.orElseSucceed(() => modulesDir));
+        const recordedParent = yield* fs
+          .realPath(dirname(path))
+          .pipe(Effect.orElseSucceed(() => dirname(path)));
+        const recordedPath = join(recordedParent, basename(path));
+        // pnpm owns its recorded entry and installed package views, not an author's source
+        // or an unrelated user-created alias that happens to point at the same directory.
+        if (
+          callerPath !== recordedPath &&
+          !pathIsWithin(physicalModules, callerPath) &&
+          !pathIsWithin(modulesDir, caller)
+        )
+          continue;
         if (!pathIsWithin(physicalModules, canonical)) {
           const segment = basename(path).slice(5, -`-${basename(canonical)}`.length);
           const alias = segment.startsWith("@") ? segment.replace("+", "/") : segment;
