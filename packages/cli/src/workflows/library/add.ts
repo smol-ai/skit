@@ -15,6 +15,7 @@ import {
 import { Clock, Effect, FileSystem, Schema } from "effect";
 import { basename, join } from "node:path";
 import { RegistryAuth } from "../../registry/auth-service.js";
+import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 
 export class AddNoSkills extends Schema.TaggedError<AddNoSkills>()("Library.AddNoSkills", {
   source: Schema.String,
@@ -33,6 +34,7 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const parsed = typeof input === "string" ? yield* parseSkitSourceEffect(input) : input;
+      if (parsed.type === "local") yield* leavePnpmSkillEffect(parsed.path);
       if (parsed.type === "registry" && registry.configurationError)
         return yield* Effect.fail(registry.configurationError);
       const resolved = yield* resolveSkitSourceEffect(input, {
@@ -120,6 +122,7 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const parsed = typeof input === "string" ? yield* parseSkitSourceEffect(input) : input;
+      if (parsed.type === "local") yield* leavePnpmSkillEffect(parsed.path);
       const historicalInput = typeof input === "string" ? input : sourceLocator(input);
       if (parsed.type === "registry" && registry.configurationError)
         return yield* Effect.fail(registry.configurationError);

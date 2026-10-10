@@ -9,6 +9,7 @@ import {
   SkillVersionId,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
+import { PnpmSkillOwner } from "../../projection/pnpm-skills.js";
 
 export const SetupProbe = Schema.Struct({
   harness: HarnessName,
@@ -103,6 +104,7 @@ export const SetupManagedMembership = Schema.Union([
 export type SetupManagedMembership = typeof SetupManagedMembership.Type;
 
 export const SetupInstanceOwner = Schema.Union([
+  PnpmSkillOwner,
   Schema.Struct({ kind: Schema.tag("skit"), membership: SetupManagedMembership }),
   Schema.Struct({ kind: Schema.tag("invalid-marker") }),
   Schema.Struct({

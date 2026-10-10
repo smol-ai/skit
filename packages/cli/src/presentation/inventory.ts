@@ -15,6 +15,8 @@ type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
 
 const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
   switch (owner.kind) {
+    case "pnpm":
+      return ["Managed by: pnpm · left in place", `Package: ${owner.package}@${owner.version}`];
     case "skills-sh":
       return ["Installed by: skills.sh", `Source: ${owner.source}`];
     case "skit":
@@ -42,6 +44,8 @@ const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
 
 const ownerLabel = (owner: MachineInstance["owner"]): string => {
   switch (owner.kind) {
+    case "pnpm":
+      return "Managed by pnpm";
     case "skit":
       return "Managed by SKIT";
     case "invalid-marker":

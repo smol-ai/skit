@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v5",
+  "$id": "skit.setup.v6",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -408,6 +408,33 @@
                           "kind": {
                             "type": "string",
                             "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
                               "skit"
                             ]
                           },
@@ -732,6 +759,33 @@
                           "kind": {
                             "type": "string",
                             "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
                               "skit"
                             ]
                           },
@@ -1036,6 +1090,33 @@
                   },
                   "owner": {
                     "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
                       {
                         "type": "object",
                         "properties": {
@@ -1352,6 +1433,33 @@
                           "kind": {
                             "type": "string",
                             "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
                               "skit"
                             ]
                           },
@@ -1658,6 +1766,33 @@
                           "kind": {
                             "type": "string",
                             "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
                               "skit"
                             ]
                           },
@@ -1957,6 +2092,33 @@
                           "kind": {
                             "type": "string",
                             "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
                               "skit"
                             ]
                           },
@@ -2250,6 +2412,33 @@
                   },
                   "owner": {
                     "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
                       {
                         "type": "object",
                         "properties": {
@@ -2561,6 +2750,33 @@
                   },
                   "owner": {
                     "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
                       {
                         "type": "object",
                         "properties": {
@@ -2940,6 +3156,33 @@
           },
           "owner": {
             "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "pnpm"
+                    ]
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "ledgerPath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "package",
+                  "version",
+                  "ledgerPath"
+                ],
+                "additionalProperties": true
+              },
               {
                 "type": "object",
                 "properties": {

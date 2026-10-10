@@ -22,6 +22,8 @@ const usage = (instance: SetupSkillInstance) =>
     .join(", ");
 
 const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
+  if (instance.owner.kind === "pnpm")
+    return `pnpm · ${instance.owner.package}@${instance.owner.version}`;
   if (instance.git.repository)
     return `Repository · ${compactHomePath(instance.git.repository, home)}`;
   const owner = instance.owner;
@@ -41,6 +43,7 @@ const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
 const groupOrder = (group: string) =>
   [
     "Copies",
+    "pnpm",
     "Repository",
     "Local source",
     "Claude local skills",
@@ -50,6 +53,7 @@ const groupOrder = (group: string) =>
   ].findIndex((prefix) => group.startsWith(prefix));
 
 const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardingCandidate) => {
+  if (instance.owner.kind === "pnpm") return "Managed by pnpm · left in place";
   if (instance.owner.kind === "skit")
     return instance.owner.membership.kind === "retained"
       ? "Already managed in Library"
@@ -102,6 +106,7 @@ export const setupDiscoveredSkillChoices = (
         !candidate ||
         instance.owner.kind === "skit" ||
         instance.owner.kind === "authored" ||
+        instance.owner.kind === "pnpm" ||
         (candidate.action === "blocked" && candidate.reason !== "divergent-copies");
       const copyContext = differing.length
         ? "Content differs · Space selects this copy; other copies stay in place"

@@ -12,6 +12,7 @@ import {
 import { sourceIdentityLabel } from "./skill-metadata.js";
 import { custodyAt, lockMatches, type SetupEvidence } from "./setup-discovery.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
+import { pnpmSkillOwner } from "../../projection/pnpm-skills.js";
 import { probeHarnessesEffect } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
@@ -158,14 +159,17 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
       repository: repositoryHit.git.repository,
       locks: instanceLocks,
     });
+    const pnpmOwners = yield* Effect.forEach(sorted, (candidate) => pnpmSkillOwner(candidate.path));
+    const pnpmOwner = pnpmOwners.find((owner) => owner !== undefined);
     const owner: SetupSkillInstance["owner"] =
-      custodyObservation.custody === "skit-managed" && managedMembership
+      pnpmOwner ??
+      (custodyObservation.custody === "skit-managed" && managedMembership
         ? { kind: "skit", membership: managedMembership }
         : custodyObservation.custody === "invalid-marker"
           ? { kind: "invalid-marker" }
           : authoredCollection
             ? { kind: "authored", ...authoredCollection }
-            : observedOwner;
+            : observedOwner);
     instances.push({
       name: hit.name,
       path: hit.realPath,

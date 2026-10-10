@@ -765,7 +765,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v9"
+        "skit.inventory.v10"
       ],
       "exitCodes": [
         0,
@@ -1894,7 +1894,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v5"
+        "skit.setup.v6"
       ],
       "exitCodes": [
         0,

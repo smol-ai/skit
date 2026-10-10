@@ -32,6 +32,7 @@ import { applyLibraryBindings, type SetEnabledOptions } from "./set-enabled.js";
 import type { SetupResult } from "./setup-contract.js";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
+import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 
 import {
   copyConflict,
@@ -273,6 +274,7 @@ export const captureSetupAliasApproval = Effect.fn("Setup.captureAliasApproval")
   const fs = yield* FileSystem.FileSystem;
   const aliases = yield* Effect.forEach(paths, (path) =>
     Effect.gen(function* () {
+      yield* leavePnpmSkillEffect(path);
       const info = yield* links.identity.lstat(path);
       if (info.type !== "SymbolicLink") return yield* new PlanIsStale();
       const canonicalPath = yield* fs.realPath(path);

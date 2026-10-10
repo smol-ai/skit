@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v9",
+  "$id": "skit.inventory.v10",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -576,6 +576,33 @@
               },
               "owner": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "pnpm"
+                        ]
+                      },
+                      "package": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      },
+                      "ledgerPath": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "package",
+                      "version",
+                      "ledgerPath"
+                    ],
+                    "additionalProperties": true
+                  },
                   {
                     "type": "object",
                     "properties": {
