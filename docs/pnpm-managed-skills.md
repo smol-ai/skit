@@ -13,3 +13,5 @@ Authored workspace sources retain their authored or repository classification ev
 An unrecorded user alias to installed pnpm content keeps its own owner classification and remains visible for inspection, with acquisition and takeover disabled. The user-created link itself remains removable through setup; pnpm's recorded links and package bytes remain protected.
 
 Malformed or missing ledgers and dangling links cannot establish verified pnpm provenance. Broken links remain visible in diagnostics. This is observed package-manager attribution, not authenticated SKIT custody.
+
+Setup and audit share a bounded document cache for each scan, including missing-file probes. A new scan or mutation-time check starts with fresh evidence. Unreadable files produce a debug diagnostic containing the path and platform error reason; those results are not cached. Parsed package and ledger documents are decoded through small schemas that tolerate extra fields and skip invalid individual link entries.

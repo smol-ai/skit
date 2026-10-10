@@ -12,7 +12,7 @@ import {
 import { sourceIdentityLabel } from "./skill-metadata.js";
 import { custodyAt, lockMatches, type SetupEvidence } from "./setup-discovery.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
-import { pnpmSkillOwner } from "../../projection/pnpm-skills.js";
+import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
 import { probeHarnessesEffect } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
@@ -72,10 +72,11 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
 ) {
   const { hits, harnessRoots, observedLibrary, library, locks } = evidence;
   const { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath } = indexes;
+  const observePnpm = yield* makePnpmSkillObserver();
   const grouped = new Map<string, SetupEvidence["hits"]>();
   const pnpmByPath = new Map<string, Effect.Success<ReturnType<typeof pnpmSkillOwner>>>();
   for (const hit of hits) {
-    if (!pnpmByPath.has(hit.path)) pnpmByPath.set(hit.path, yield* pnpmSkillOwner(hit.path));
+    if (!pnpmByPath.has(hit.path)) pnpmByPath.set(hit.path, yield* observePnpm(hit.path));
     const key = `${hit.realPath}\0${pnpmByPath.get(hit.path) ? "pnpm" : "source"}`;
     grouped.set(key, [...(grouped.get(key) ?? []), hit]);
   }
@@ -166,7 +167,7 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
       locks: instanceLocks,
     });
     const pnpmOwner = pnpmByPath.get(hit.path);
-    const canonicalOwner = yield* pnpmSkillOwner(hit.realPath);
+    const canonicalOwner = yield* observePnpm(hit.realPath);
     const instancePath = Boolean(pnpmOwner) !== Boolean(canonicalOwner) ? hit.path : hit.realPath;
     const owner: SetupSkillInstance["owner"] =
       pnpmOwner ??

@@ -1,6 +1,6 @@
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
-import { isJsonObject, LinkStat, pathIsWithin, stringAt } from "@smolai/skit-core";
+import { Cache, Data, Duration, Effect, Exit, FileSystem, Option, Schema } from "effect";
+import { LinkStat, pathIsWithin } from "@smolai/skit-core";
 import { parseDocument } from "yaml";
 
 export const PnpmSkillOwner = Schema.Struct({
@@ -10,24 +10,51 @@ export const PnpmSkillOwner = Schema.Struct({
   ledgerPath: Schema.String,
 });
 
-const documentAt = Effect.fn("PnpmSkills.document")(function* (path: string) {
+const PnpmPackage = Schema.Struct({ name: Schema.NonEmptyString, version: Schema.NonEmptyString });
+// Invalid individual entries are skipped below; they must not hide valid neighboring entries.
+const PnpmLedger = Schema.Struct({
+  packageManager: Schema.String,
+  linkedSkills: Schema.Array(Schema.Unknown),
+});
+
+type PnpmDocument = Data.TaggedEnum<{
+  Missing: {};
+  Malformed: {};
+  Unreadable: {};
+  Parsed: { readonly value: unknown };
+}>;
+const PnpmDocument = Data.taggedEnum<PnpmDocument>();
+
+const documentAt = Effect.fn("PnpmSkills.document")(function* (
+  path: string,
+): Effect.fn.Return<PnpmDocument, never, FileSystem.FileSystem> {
   const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
-  if (text === undefined) return undefined;
+  const result = yield* Effect.result(fs.readFileString(path));
+  if (result._tag === "Failure") {
+    if (result.failure.reason._tag === "NotFound") return PnpmDocument.Missing();
+    yield* Effect.logDebug("Cannot read pnpm Skill evidence", {
+      path,
+      reason: result.failure.reason._tag,
+    });
+    return PnpmDocument.Unreadable();
+  }
   try {
-    const document = parseDocument(text);
-    if (document.errors.length) return undefined;
+    const document = parseDocument(result.success);
+    if (document.errors.length) return PnpmDocument.Malformed();
     const value: unknown = document.toJSON();
-    return isJsonObject(value) ? value : undefined;
+    return PnpmDocument.Parsed({ value });
   } catch {
-    return undefined;
+    return PnpmDocument.Malformed();
   }
 });
 
 /** Corroborate pnpm's ledger with a live link into an installed package's skills directory.
  * A prefix alone, stale ledger entry, or ordinary copy never establishes pnpm management.
  */
-export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory: string) {
+const observePnpmSkill = Effect.fn("PnpmSkills.observe")(function* (
+  directory: string,
+  readDocument: (path: string) => Effect.Effect<PnpmDocument>,
+) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const caller = resolve(directory);
@@ -38,10 +65,11 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
   const canonical = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined));
   if (canonical === undefined || basename(dirname(canonical)) !== "skills") return undefined;
   const packageRoot = dirname(dirname(canonical));
-  const pkg = yield* documentAt(join(packageRoot, "package.json"));
-  const packageName = pkg && stringAt(pkg, "name");
-  const version = pkg && stringAt(pkg, "version");
-  if (!packageName || !version) return undefined;
+  const packageDocument = yield* readDocument(join(packageRoot, "package.json"));
+  if (packageDocument._tag !== "Parsed") return undefined;
+  const pkg = Schema.decodeUnknownOption(PnpmPackage)(packageDocument.value);
+  if (Option.isNone(pkg)) return undefined;
+  const { name: packageName, version } = pkg.value;
 
   // Target ancestry finds custom modules directories; alias ancestry finds linked local packages.
   const candidates = new Set<string>();
@@ -54,12 +82,12 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
   }
   for (const modulesDir of candidates) {
     const ledgerPath = join(modulesDir, ".modules.yaml");
-    const ledger = yield* documentAt(ledgerPath);
-    const manager = ledger && stringAt(ledger, "packageManager");
-    const recorded = ledger?.linkedSkills;
-    if (manager?.startsWith("pnpm@") && Array.isArray(recorded)) {
+    const ledgerDocument = yield* readDocument(ledgerPath);
+    if (ledgerDocument._tag !== "Parsed") continue;
+    const ledger = Schema.decodeUnknownOption(PnpmLedger)(ledgerDocument.value);
+    if (Option.isSome(ledger) && ledger.value.packageManager.startsWith("pnpm@")) {
       const workspace = dirname(modulesDir);
-      for (const entry of recorded) {
+      for (const entry of ledger.value.linkedSkills) {
         if (typeof entry !== "string" || isAbsolute(entry)) continue;
         if (entry.split(/[\\/]/).includes("..")) continue;
         const path = resolve(workspace, entry);
@@ -98,6 +126,25 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
     }
   }
   return undefined;
+});
+
+export type PnpmSkillObserver = (directory: string) => ReturnType<typeof observePnpmSkill>;
+
+/** One cache per read-only scan. Never share this observer across review and apply. */
+export const makePnpmSkillObserver = Effect.fn("PnpmSkills.makeObserver")(function* () {
+  const documents = yield* Cache.makeWith(documentAt, {
+    capacity: 512,
+    timeToLive: (exit) =>
+      Exit.isSuccess(exit) && exit.value._tag !== "Unreadable" ? Duration.infinity : Duration.zero,
+  });
+  const readDocument = (path: string) => Cache.get(documents, resolve(path));
+  return (directory: string) => observePnpmSkill(directory, readDocument);
+});
+
+/** Standalone and mutation-time checks always start with fresh evidence. */
+export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory: string) {
+  const observe = yield* makePnpmSkillObserver();
+  return yield* observe(directory);
 });
 
 export class PnpmSkillManaged extends Schema.TaggedError<PnpmSkillManaged>()("PnpmSkillManaged", {

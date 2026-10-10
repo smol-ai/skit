@@ -15,6 +15,7 @@ import { Effect } from "effect";
 import { auditHarnesses } from "../harness/catalog.js";
 import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
+import { makePnpmSkillObserver } from "../projection/pnpm-skills.js";
 import type { AuditFinding, AuditObservation } from "./types.js";
 
 function frontmatterProblem(
@@ -155,6 +156,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
 
   const observations: AuditObservation[] = [];
   const findings: AuditFinding[] = [];
+  const observePnpm = yield* makePnpmSkillObserver();
   for (const skill of candidates) {
     const baseName = basename(dirname(skill.path));
     const occurrences = lockTargets.get(baseName)?.size ?? 1;
@@ -163,6 +165,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
       lockEligiblePaths.has(skill.canonicalPath) ? lock : {},
       baseName,
       occurrences,
+      observePnpm,
     );
     const provenance =
       file.source === "SKIT projection" || file.source === "Skills CLI / skills.sh"

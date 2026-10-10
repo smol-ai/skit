@@ -1,10 +1,15 @@
 import { dirname, join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Logger, References, Schema } from "effect";
+import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { skitLayer } from "@smolai/skit-core";
-import { pnpmSkillOwner, leavePnpmSkillEffect } from "../src/projection/pnpm-skills.js";
+import {
+  makePnpmSkillObserver,
+  pnpmSkillOwner,
+  leavePnpmSkillEffect,
+} from "../src/projection/pnpm-skills.js";
 import { fileProvenance } from "../src/audit/provenance.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { SetupResult } from "../src/workflows/library/setup-contract.js";
@@ -45,6 +50,111 @@ const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
   );
   return { fs, root, pkg, skill, alias, ledgerPath };
 });
+
+it.effect("shares document reads within a scan and starts fresh for mutation checks", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const calls = new Map<string, number>();
+    const fs = FileSystem.FileSystem.of({
+      ...f.fs,
+      readFileString: (path, ...args) =>
+        Effect.suspend(() => {
+          calls.set(path, (calls.get(path) ?? 0) + 1);
+          return f.fs.readFileString(path, ...args);
+        }),
+    });
+    yield* Effect.gen(function* () {
+      const observe = yield* makePnpmSkillObserver();
+      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+      expect((yield* observe(f.skill))?.kind).toBe("pnpm");
+      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+      expect(calls.get(f.ledgerPath)).toBe(1);
+      expect(calls.get(join(f.pkg, "package.json"))).toBe(1);
+      expect([...calls.values()].every((count) => count === 1)).toBe(true);
+
+      const ledger = yield* f.fs.readFileString(f.ledgerPath);
+      yield* f.fs.writeFileString(f.ledgerPath, "{}");
+      const negativeScan = yield* makePnpmSkillObserver();
+      expect(yield* negativeScan(f.alias)).toBeUndefined();
+      yield* f.fs.writeFileString(f.ledgerPath, ledger);
+      const mutation = yield* Effect.result(leavePnpmSkillEffect(f.alias));
+      expect(mutation._tag).toBe("Failure");
+      if (mutation._tag === "Failure") expect(mutation.failure._tag).toBe("PnpmSkillManaged");
+      const refreshed = yield* makePnpmSkillObserver();
+      expect((yield* refreshed(f.alias))?.kind).toBe("pnpm");
+    }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("reports unreadable evidence, retries it, and keeps missing-file probes quiet", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    let denied = true;
+    const messages: unknown[] = [];
+    const fs = FileSystem.FileSystem.of({
+      ...f.fs,
+      readFileString: (path, ...args) =>
+        Effect.suspend(() => {
+          if (path === f.ledgerPath && denied) {
+            denied = false;
+            return Effect.fail(
+              systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "readFileString",
+                pathOrDescriptor: path,
+              }),
+            );
+          }
+          return f.fs.readFileString(path, ...args);
+        }),
+    });
+    yield* Effect.gen(function* () {
+      const observe = yield* makePnpmSkillObserver();
+      expect(yield* observe(f.alias)).toBeUndefined();
+      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+    }).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(References.MinimumLogLevel, "Debug"),
+      Effect.provide(Logger.layer([Logger.make((entry) => messages.push(entry.message))])),
+    );
+    expect(messages).toEqual([
+      ["Cannot read pnpm Skill evidence", { path: f.ledgerPath, reason: "PermissionDenied" }],
+    ]);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "validates document shapes without rejecting extra fields or invalid neighboring entries",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.fs.writeFileString(
+        f.ledgerPath,
+        JSON.stringify({
+          packageManager: "pnpm@12.11.0",
+          linkedSkills: [null, 7, {}, ".agents/skills/pnpm-@acme+demo-guide"],
+          future: true,
+        }),
+      );
+      expect((yield* pnpmSkillOwner(f.alias))?.kind).toBe("pnpm");
+      yield* f.fs.writeFileString(
+        join(f.pkg, "package.json"),
+        JSON.stringify({ name: "@acme/demo", version: 1 }),
+      );
+      expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
+      yield* f.fs.writeFileString(
+        join(f.pkg, "package.json"),
+        JSON.stringify({ name: "@acme/demo", version: "1.0.0", future: true }),
+      );
+      expect((yield* pnpmSkillOwner(f.alias))?.kind).toBe("pnpm");
+      yield* f.fs.writeFileString(
+        f.ledgerPath,
+        JSON.stringify({ packageManager: "pnpm@12.11.0", linkedSkills: "not-an-array" }),
+      );
+      expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
+    }).pipe(Effect.provide(skitLayer)),
+);
 
 for (const yaml of [false, true]) {
   it.effect(`attributes live pnpm links using ${yaml ? "YAML" : "JSON"} ledger evidence`, () =>

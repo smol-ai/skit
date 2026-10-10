@@ -8,7 +8,7 @@ import {
 import { dirname, join, normalize, sep } from "node:path";
 import { Effect } from "effect";
 import { canonical, read } from "./io.js";
-import { pnpmSkillOwner } from "../projection/pnpm-skills.js";
+import { pnpmSkillOwner, type PnpmSkillObserver } from "../projection/pnpm-skills.js";
 
 function codexSystemSkillsRoot(path: string): string | null {
   const parts = normalize(path).split(sep);
@@ -24,8 +24,9 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
   lock: JsonObject,
   name: string,
   occurrences = 1,
+  observePnpm: PnpmSkillObserver = pnpmSkillOwner,
 ) {
-  const pnpm = yield* pnpmSkillOwner(dirname(path));
+  const pnpm = yield* observePnpm(dirname(path));
   if (pnpm)
     return {
       confidence: "exact" as const,
