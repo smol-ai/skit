@@ -57,12 +57,12 @@ export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOpti
     repositoryScans,
     locks,
   } = evidence;
-  const { instances, probes, projections } = yield* observeSetupCopies(
+  const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
     evidence,
     options.inventory.home,
     options.probePath,
   );
-  const candidates = classifySetupOnboarding(instances, {
+  const candidates = classifySetupOnboarding(onboardingInstances, {
     library,
     machineId: machineConfig.machineId,
   });

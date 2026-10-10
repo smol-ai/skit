@@ -12,6 +12,7 @@ import {
 import { sourceIdentityLabel } from "./skill-metadata.js";
 import { custodyAt, lockMatches, type SetupEvidence } from "./setup-discovery.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
+import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
 import { probeHarnessesEffect } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
@@ -71,9 +72,16 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
 ) {
   const { hits, harnessRoots, observedLibrary, library, locks } = evidence;
   const { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath } = indexes;
+  const observePnpm = yield* makePnpmSkillObserver();
   const grouped = new Map<string, SetupEvidence["hits"]>();
-  for (const hit of hits) grouped.set(hit.realPath, [...(grouped.get(hit.realPath) ?? []), hit]);
+  const pnpmByPath = new Map<string, Effect.Success<ReturnType<typeof pnpmSkillOwner>>>();
+  for (const hit of hits) {
+    if (!pnpmByPath.has(hit.path)) pnpmByPath.set(hit.path, yield* observePnpm(hit.path));
+    const key = `${hit.realPath}\0${pnpmByPath.get(hit.path) ? "pnpm" : "source"}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), hit]);
+  }
   const instances: SetupSkillInstance[] = [];
+  const onboardingInstances: SetupSkillInstance[] = [];
   for (const group of grouped.values()) {
     const sorted = [...group].sort((left, right) => left.path.localeCompare(right.path));
     const hit = sorted[0];
@@ -158,17 +166,21 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
       repository: repositoryHit.git.repository,
       locks: instanceLocks,
     });
+    const pnpmOwner = pnpmByPath.get(hit.path);
+    const canonicalOwner = yield* observePnpm(hit.realPath);
+    const instancePath = Boolean(pnpmOwner) !== Boolean(canonicalOwner) ? hit.path : hit.realPath;
     const owner: SetupSkillInstance["owner"] =
-      custodyObservation.custody === "skit-managed" && managedMembership
+      pnpmOwner ??
+      (custodyObservation.custody === "skit-managed" && managedMembership
         ? { kind: "skit", membership: managedMembership }
         : custodyObservation.custody === "invalid-marker"
           ? { kind: "invalid-marker" }
           : authoredCollection
             ? { kind: "authored", ...authoredCollection }
-            : observedOwner;
-    instances.push({
+            : observedOwner);
+    const instance: SetupSkillInstance = {
       name: hit.name,
-      path: hit.realPath,
+      path: instancePath,
       aliases: [...new Set(sorted.map((candidate) => candidate.path))],
       scope,
       harnesses,
@@ -176,9 +188,13 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
       contentIdentity,
       git: repositoryHit.git,
       locks: instanceLocks,
-    });
+    };
+    instances.push(instance);
+    // An unrecorded alias keeps its own owner label, but its installed pnpm bytes still
+    // cannot be acquired. Do not offer a setup action that acquisition will refuse.
+    if (!canonicalOwner && !pnpmOwner) onboardingInstances.push(instance);
   }
-  return instances;
+  return { instances, onboardingInstances };
 });
 
 const observeSetupProjections = Effect.fn("Setup.observeProjections")(function* (
@@ -215,12 +231,12 @@ export const observeSetupCopies = Effect.fn("Setup.observeCopies")(function* (
   probePath?: string,
 ) {
   const indexes = indexSetupLibrary(evidence.library, evidence.authoredCollections);
-  const instances = yield* observeSetupInstances(evidence, indexes, home);
+  const { instances, onboardingInstances } = yield* observeSetupInstances(evidence, indexes, home);
   const probes = (yield* probeHarnessesEffect(undefined, { path: probePath })).map((probe) => ({
     harness: probe.harnessId,
     status: probe.status,
     command: probe.command,
   }));
   const projections = yield* observeSetupProjections(evidence.observedLibrary, indexes);
-  return { instances, probes, projections };
+  return { instances, onboardingInstances, probes, projections };
 });

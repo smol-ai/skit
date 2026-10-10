@@ -128,7 +128,12 @@ export const classifySetupOnboarding = (
   const skills = retained?.library?.skills ?? [];
   const groups = new Map<string, SetupSkillInstance[]>();
   for (const instance of instances) {
-    if (instance.owner.kind === "skit" || instance.owner.kind === "authored") continue;
+    if (
+      instance.owner.kind === "skit" ||
+      instance.owner.kind === "authored" ||
+      instance.owner.kind === "pnpm"
+    )
+      continue;
     const key = setupInstanceGroupKey(instance);
     groups.set(key, [...(groups.get(key) ?? []), instance]);
   }

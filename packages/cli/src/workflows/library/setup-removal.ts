@@ -5,6 +5,7 @@ import { LinkStat, pathIsWithin, writeJsonAtomicEffect } from "@smolai/skit-core
 import { PlanIsStale } from "../../library/failures.js";
 import { collectHarnessRoots, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
+import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 
 export interface SetupRemoval {
   name: string;
@@ -37,6 +38,7 @@ export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
     if (
       instance.owner.kind === "skit" ||
       instance.owner.kind === "authored" ||
+      instance.owner.kind === "pnpm" ||
       instance.owner.kind === "invalid-marker"
     )
       continue;
@@ -102,6 +104,7 @@ export const applySetupRemovals = Effect.fn("Setup.applyRemovals")(function* (
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   for (const entry of plan.entries) {
+    yield* leavePnpmSkillEffect(entry.path);
     const current = yield* links.identity.lstat(entry.path);
     if (
       current.type !== entry.type ||
