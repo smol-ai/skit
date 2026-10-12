@@ -43,7 +43,11 @@ CLI handlers and the TUI resolve a required `SkitPaths` service at their applica
 boundary. Explicit state-directory flags take precedence over Effect `Config`'s
 `SKIT_HOME`, with the account's `.skit` directory as the default. Account home,
 SKIT state home, and XDG configuration/state roots remain separate values. Derived
-file paths, storage services, and writer locks share this snapshot. Standalone
+file paths, storage services, and writer locks share this snapshot. The optional XDG
+state override is preserved separately from the default state directory: when absent
+or empty, skills.sh lock discovery uses `~/.agents/.skill-lock.json`. Empty XDG
+configuration/state values are treated as unset. Account home is an OS boundary
+input, not a ConfigProvider key; embedders can pass it to `resolveSkitPaths`. Standalone
 configuration adapters construct it when no application service was supplied;
 configuration writers provide their resolved snapshot to the protected program.
 `ConfigProvider` injection therefore controls both the lock and the actual file writes,

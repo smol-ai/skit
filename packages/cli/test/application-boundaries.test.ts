@@ -62,12 +62,24 @@ it.effect("path configuration separates account home, state root, and XDG roots"
     assert.strictEqual(paths.authPath, join(paths.skitHome, "auth.json"));
     assert.strictEqual(paths.configHome, "/xdg/config");
     assert.strictEqual(paths.stateHome, "/xdg/state");
+    assert.strictEqual(paths.xdgStateHome, "/xdg/state");
     const defaults = yield* resolveSkitPaths(undefined, "/account").pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     );
     assert.strictEqual(defaults.skitHome, "/account/.skit");
     assert.strictEqual(defaults.configHome, "/account/.config");
     assert.strictEqual(defaults.stateHome, "/account/.local/state");
+    assert.isUndefined(defaults.xdgStateHome);
+    const empty = yield* resolveSkitPaths(undefined, "/account").pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({ XDG_CONFIG_HOME: "", XDG_STATE_HOME: "" }),
+        ),
+      ),
+    );
+    assert.strictEqual(empty.configHome, defaults.configHome);
+    assert.strictEqual(empty.stateHome, defaults.stateHome);
+    assert.isUndefined(empty.xdgStateHome);
   }),
 );
 

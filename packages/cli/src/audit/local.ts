@@ -164,7 +164,7 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
   const cwd = resolve(options.cwd ?? process.cwd());
   const observations: AuditObservation[] = [];
   const findings: AuditFinding[] = [];
-  const stateHome = options.stateHome ?? paths.stateHome;
+  const stateHome = options.stateHome ?? paths.xdgStateHome;
   let lockPath: string | undefined;
   for (const candidate of [
     stateHome ? join(stateHome, "skills", ".skill-lock.json") : null,

@@ -548,7 +548,7 @@ export const setupCliCommand = Command.make(
               libraryHome: selectedHome,
               inventory: configuration.inventory,
               probePath: process.env.PATH,
-              skillsStateHome: paths.stateHome,
+              skillsStateHome: paths.xdgStateHome,
             },
             localCustody: {
               acquisition: configuration.acquisition,
