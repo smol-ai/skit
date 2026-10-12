@@ -110,10 +110,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   else
     yield* renderer.note(
       proposed.pending.facts
-        .map(
-          (fact) =>
-            `${fact.action === "enable" ? "Enabled" : "Disabled"} (${fact.destination})`,
-        )
+        .map((fact) => `${fact.action === "enable" ? "Enabled" : "Disabled"} (${fact.destination})`)
         .join("\n"),
       "Applied",
     );
