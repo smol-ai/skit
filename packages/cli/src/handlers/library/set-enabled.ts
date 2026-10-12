@@ -1,8 +1,13 @@
-import { bindingSkillIds, LibraryStore, type SkitBindingScope as Scope } from "@smolai/skit-core";
+import {
+  bindingSkillIds,
+  withLibraryWriter,
+  LibraryStore,
+  type SkitBindingScope as Scope,
+} from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { NothingToSelect } from "../../presentation/interaction-failures.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
@@ -10,7 +15,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
 import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
-import { destinationLabel, scopeChoices } from "../../library/read-model.js";
+import { destinationLabel, scopeChoices } from "../../library-application/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
@@ -56,7 +61,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
     },
     (input) => {
       const selectedHome = homePath(input.home);
-      return handleCommand(
+      return handleLibraryCommand(
         Effect.gen(function* () {
           const configuration = yield* libraryCommandConfiguration(input);
           const selectedSubject = Option.getOrUndefined(input.subject);
@@ -378,7 +383,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             }),
           ),
         );
-      }),
+      }).pipe((effect) => (input.dryRun ? effect : withLibraryWriter(effect))),
     );
     for (const outcome of outcomes) {
       if (outcome === undefined) continue;

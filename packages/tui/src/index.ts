@@ -20,11 +20,7 @@ import { homedir } from "node:os";
 import { Effect, FileSystem, Layer } from "effect";
 import {
   LibraryActor,
-  libraryStoreLayer,
-  skitLayer,
-  errorMessage,
-  auditLocalCapabilitiesV1Alpha4Effect,
-  probeHarnessEffect,
+  libraryApplicationLayer,
   openLibrarySession,
   readLibrarySkillContent,
   refreshLibrarySession,
@@ -42,16 +38,21 @@ import {
   invocationEligibleBindings,
   invocationRowSummary,
   scopeChoices,
-  type AuditEntryV1Alpha4,
-  type AuditMcpServerV1Alpha4,
-  type HarnessProbeResult,
-  type ProbeableHarness,
   type LibraryActionOutcome,
   type LibraryBindingRow,
   type LibrarySkillRow,
   type PendingLibraryChange,
   type Scope,
   type InvocationOption,
+} from "../../cli/src/library-application/index";
+import {
+  errorMessage,
+  auditLocalCapabilitiesV1Alpha4Effect,
+  probeHarnessEffect,
+  type AuditEntryV1Alpha4,
+  type AuditMcpServerV1Alpha4,
+  type HarnessProbeResult,
+  type ProbeableHarness,
 } from "../../cli/src/front-end";
 import { LibraryStore, readListingBudgets, type ListingBudget } from "@smolai/skit-core";
 import { budgetReceipt } from "./budget/receipt";
@@ -142,10 +143,7 @@ const libraryConfiguration = {
   now: () => new Date().toISOString(),
 };
 const libraryHost = createLibraryHost(
-  libraryStoreLayer({ home: libraryHome }).pipe(
-    Layer.provideMerge(skitLayer),
-    Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
-  ),
+  libraryApplicationLayer(libraryHome).pipe(Layer.provideMerge(Layer.succeed(LibraryActor)("tui"))),
   openLibrarySession(),
 );
 let libraryOpenError: string | undefined;

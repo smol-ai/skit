@@ -1,8 +1,8 @@
-import { readLibrarySkillMetadata } from "../../workflows/library/skill-metadata.js";
+import { readLibrarySkillMetadata } from "../../library-application/skill-metadata.js";
 import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
@@ -11,7 +11,7 @@ import { result } from "../contracts.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { terminalPrompterLayer } from "../../presentation/prompter.js";
 import { browseLibraryEffect } from "../../presentation/interactive-list.js";
-import { openLibrarySession } from "../../workflows/library/session.js";
+import { openLibrarySession } from "../../library-application/session.js";
 import { librarySubjects } from "../../workflows/library/subject-resolution.js";
 
 export const shouldBrowseInteractively = (input: {
@@ -78,7 +78,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) => {
     stdout: Boolean(process.stdout.isTTY),
     stderr: Boolean(process.stderr.isTTY),
   });
-  return handleCommand(
+  return handleLibraryCommand(
     interactive
       ? Effect.gen(function* () {
           const configuration = yield* libraryCommandConfiguration(input);

@@ -1,3 +1,4 @@
+import { withLibraryWriter } from "@smolai/skit-core";
 import {
   acceptSecurityFindingFromStateEffect,
   LibraryStore,
@@ -22,4 +23,4 @@ export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(
 ) {
   const state = yield* (yield* LibraryStore).load;
   return yield* acceptSecurityFindingFromStateEffect(state, query, input);
-});
+}, withLibraryWriter);

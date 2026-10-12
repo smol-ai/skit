@@ -1,7 +1,7 @@
 import type { Digest } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { FindingFingerprintInvalid } from "../../audit/failures.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -82,7 +82,7 @@ export const securityAcceptCliCommand = Command.make(
   { skill, finding, principal, rationale, expiresAt, ...localFlags },
   ({ skill, finding, principal, rationale, expiresAt, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* securityAcceptCommand(

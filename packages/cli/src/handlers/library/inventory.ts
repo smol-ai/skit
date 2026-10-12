@@ -1,10 +1,11 @@
+import { withLibraryWriter } from "@smolai/skit-core";
 import { readClaudeListingSnapshot } from "@smolai/skit-core";
 import {
   observeHarnessSkills,
   readableHarnessRoots,
   type ShadowObservationError,
 } from "../../projection/harness-shadows.js";
-import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
+import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import {
@@ -16,7 +17,7 @@ import {
 } from "@smolai/skit-core";
 import { selectInventoryRoots, type InventoryRootOptions } from "../../projection/roots.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, inventoryRootOptions, localFlags } from "../../commands/parameters.js";
@@ -70,7 +71,7 @@ const refreshLibraryInventoryCommand = Effect.fn("CLI.refreshLibraryInventory")(
     refreshLibraryInventoryForCli(options, before),
   );
   return after;
-});
+}, withLibraryWriter);
 
 export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
   options: CliInventoryOptions,
@@ -192,7 +193,7 @@ const machineInventoryMetadata = {
 export const inventoryCliCommand = Command.make("inventory", localFlags, (input) => {
   const selectedHome = homePath(input.home);
   const options = { ...inventoryRootOptions(input), libraryHome: selectedHome };
-  return handleCommand(
+  return handleLibraryCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const value = yield* inventoryCommand(options);
@@ -223,7 +224,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
 export const doctorCliCommand = Command.make("doctor", localFlags, (input) => {
   const selectedHome = homePath(input.home);
   const options = { ...inventoryRootOptions(input), libraryHome: selectedHome };
-  return handleCommand(
+  return handleLibraryCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const value = yield* doctorCommand(options);

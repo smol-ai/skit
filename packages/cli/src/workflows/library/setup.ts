@@ -1,3 +1,4 @@
+import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Effect, Schema } from "effect";
 import { canonicalJson, Digest, hashParts } from "@smolai/skit-core";
 import { observeHarnessShadows } from "../../projection/harness-shadows.js";
@@ -42,118 +43,122 @@ export interface SetupOptions {
   readonly scanDecidedRepositories?: boolean;
 }
 
-export const runSetup = Effect.fn("Library.setup")(function* (options: SetupOptions) {
-  const evidence = yield* collectSetupEvidence(options);
-  const {
-    machineConfig,
-    discoveryRoots,
-    existingDecisions,
-    discovering,
-    walk,
-    repositoryConfigs,
-    harnessRoots,
-    library,
-    authoredCollections,
-    repositoryScans,
-    locks,
-  } = evidence;
-  const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
-    evidence,
-    options.inventory.home,
-    options.probePath,
-  );
-  const candidates = classifySetupOnboarding(onboardingInstances, {
-    library,
-    machineId: machineConfig.machineId,
-  });
-  const globalNames = candidates
-    .filter((candidate) =>
-      candidate.paths.some((path) =>
-        instances.some(
-          (instance) =>
-            instance.path === path && instance.scope === "global" && !instance.git.repository,
-        ),
-      ),
-    )
-    .map((candidate) => candidate.name);
-  const shadows = globalNames.length
-    ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
-    : [];
-  const onboarding = candidates.map((candidate) => {
-    const matches = shadows.filter((shadow) => shadow.name === candidate.name);
-    return matches.length ? { ...candidate, shadows: matches } : candidate;
-  });
-  const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-  const planId = hashParts([
-    canonicalJson({
-      candidates: onboarding,
-      instances: sortedInstances,
+export const runSetup = Effect.fn("Library.setup")(
+  function* (options: SetupOptions) {
+    const evidence = yield* collectSetupEvidence(options);
+    const {
+      machineConfig,
+      discoveryRoots,
+      existingDecisions,
+      discovering,
+      walk,
       repositoryConfigs,
-    }),
-  ]);
-  const missingRepositories = !discovering
-    ? [...existingDecisions]
-        .filter(([path, status]) => status === "watched" && !walk.repositories.includes(path))
-        .map(([path]) => path)
-        .sort()
-    : [];
-  return {
-    machineConfig: {
-      path: machineConfig.path,
-      ...(machineConfig.machineId === undefined ? {} : { machineId: machineConfig.machineId }),
-      ...(machineConfig.displayName === undefined
-        ? {}
-        : { displayName: machineConfig.displayName }),
-      repositoryRoots: discoveryRoots,
-      repositoryDecisions: [...existingDecisions]
-        .map(([path, status]) => ({ path, status }))
-        .sort((left, right) => left.path.localeCompare(right.path)),
-      persisted: options.persistRoots,
-    },
-    probes,
-    scan: {
-      complete:
-        walk.complete &&
-        repositoryScans.every((scan) => scan.complete) &&
-        repositoryConfigs.every((config) => ["missing", "valid"].includes(config.status)),
-      directoriesExamined: walk.directoriesExamined,
-      repositorySearchDepth: 1,
-      ...(missingRepositories.length ? { missingRepositories } : {}),
-    },
-    repositories: walk.repositories.flatMap((repository) => {
-      const skills = [
-        ...new Set(
-          instances
-            .filter((instance) => instance.git.repository === repository)
-            .map((instance) => instance.name),
+      harnessRoots,
+      library,
+      authoredCollections,
+      repositoryScans,
+      locks,
+    } = evidence;
+    const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
+      evidence,
+      options.inventory.home,
+      options.probePath,
+    );
+    const candidates = classifySetupOnboarding(onboardingInstances, {
+      library,
+      machineId: machineConfig.machineId,
+    });
+    const globalNames = candidates
+      .filter((candidate) =>
+        candidate.paths.some((path) =>
+          instances.some(
+            (instance) =>
+              instance.path === path && instance.scope === "global" && !instance.git.repository,
+          ),
         ),
-      ].sort();
-      return skills.length
-        ? [
-            {
-              path: repository,
-              skills,
-              status: existingDecisions.get(repository) ?? ("undecided" as const),
-            },
-          ]
-        : [];
-    }),
-    // Missing config is the normal case, not one diagnostic per repository. Keep the complete
-    // internal inventory for planning above, but expose only configured or invalid repositories.
-    repositoryConfigs: repositoryConfigs.filter((config) => config.status !== "missing"),
-    authoredCollections,
-    projections: projections.sort((left, right) =>
-      `${left.collectionId}\0${left.skillId}\0${left.path ?? ""}`.localeCompare(
-        `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
+      )
+      .map((candidate) => candidate.name);
+    const shadows = globalNames.length
+      ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
+      : [];
+    const onboarding = candidates.map((candidate) => {
+      const matches = shadows.filter((shadow) => shadow.name === candidate.name);
+      return matches.length ? { ...candidate, shadows: matches } : candidate;
+    });
+    const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
+    const planId = hashParts([
+      canonicalJson({
+        candidates: onboarding,
+        instances: sortedInstances,
+        repositoryConfigs,
+      }),
+    ]);
+    const missingRepositories = !discovering
+      ? [...existingDecisions]
+          .filter(([path, status]) => status === "watched" && !walk.repositories.includes(path))
+          .map(([path]) => path)
+          .sort()
+      : [];
+    return {
+      machineConfig: {
+        path: machineConfig.path,
+        ...(machineConfig.machineId === undefined ? {} : { machineId: machineConfig.machineId }),
+        ...(machineConfig.displayName === undefined
+          ? {}
+          : { displayName: machineConfig.displayName }),
+        repositoryRoots: discoveryRoots,
+        repositoryDecisions: [...existingDecisions]
+          .map(([path, status]) => ({ path, status }))
+          .sort((left, right) => left.path.localeCompare(right.path)),
+        persisted: options.persistRoots,
+      },
+      probes,
+      scan: {
+        complete:
+          walk.complete &&
+          repositoryScans.every((scan) => scan.complete) &&
+          repositoryConfigs.every((config) => ["missing", "valid"].includes(config.status)),
+        directoriesExamined: walk.directoriesExamined,
+        repositorySearchDepth: 1,
+        ...(missingRepositories.length ? { missingRepositories } : {}),
+      },
+      repositories: walk.repositories.flatMap((repository) => {
+        const skills = [
+          ...new Set(
+            instances
+              .filter((instance) => instance.git.repository === repository)
+              .map((instance) => instance.name),
+          ),
+        ].sort();
+        return skills.length
+          ? [
+              {
+                path: repository,
+                skills,
+                status: existingDecisions.get(repository) ?? ("undecided" as const),
+              },
+            ]
+          : [];
+      }),
+      // Missing config is the normal case, not one diagnostic per repository. Keep the complete
+      // internal inventory for planning above, but expose only configured or invalid repositories.
+      repositoryConfigs: repositoryConfigs.filter((config) => config.status !== "missing"),
+      authoredCollections,
+      projections: projections.sort((left, right) =>
+        `${left.collectionId}\0${left.skillId}\0${left.path ?? ""}`.localeCompare(
+          `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
+        ),
       ),
-    ),
-    onboarding: { planId, candidates: onboarding },
-    locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
-    instances: sortedInstances,
-    brokenLinks: yield* collectBrokenLinks(harnessRoots),
-    suppressed: walk.suppressed,
-  } satisfies SetupResult;
-});
+      onboarding: { planId, candidates: onboarding },
+      locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
+      instances: sortedInstances,
+      brokenLinks: yield* collectBrokenLinks(harnessRoots),
+      suppressed: walk.suppressed,
+    } satisfies SetupResult;
+  },
+  (effect, options) =>
+    options.persistRoots ? withConfigurationWriter(options.libraryHome, effect) : effect,
+);
 
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,

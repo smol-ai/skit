@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -32,7 +32,7 @@ export const securityReviewCliCommand = Command.make(
   { skill, ...localFlags },
   ({ skill, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* securityReviewCommand({ securityReviewEffect: reviewSecurity }, skill);

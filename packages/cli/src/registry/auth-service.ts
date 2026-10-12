@@ -47,7 +47,7 @@ export const RegistryAuth = Context.Reference<RegistryAuth>("skit/services/Regis
 });
 
 /** Read ambient Registry configuration at most once per command runtime. */
-export const registryAuthLayer = (home: string) =>
+export const registryAuthLayer = (home?: string) =>
   Layer.effect(
     RegistryAuth,
     Effect.gen(function* () {

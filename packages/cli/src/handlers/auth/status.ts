@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../application.js";
 import { authStatusCommand } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -23,13 +23,12 @@ export const authStatusCliCommand = Command.make(
   },
   ({ registry, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* authStatusCommand(selectedHome, optionValue(registry));
         yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
       }),
-      selectedHome,
     );
   },
 ).pipe(

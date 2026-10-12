@@ -16,7 +16,7 @@ import {
   proposeLibraryDisable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
-} from "../src/workflows/library/session.js";
+} from "../src/library-application/session.js";
 import {
   initializeLibraryMachine,
   libraryHome,

@@ -9,7 +9,7 @@ import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { readAuthorRemoteEffect } from "../../workflows/author/sync.js";
 import { NotBoundToRegistry } from "../../registry/failures.js";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -63,7 +63,7 @@ export const publishCliCommand = Command.make(
   "publish",
   { path, version, revision, json: jsonFlag },
   ({ path, version, revision }) =>
-    handleCommand(
+    handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* publishCommand({

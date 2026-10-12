@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
@@ -13,7 +13,7 @@ const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
 
 export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) => {
   const selectedHome = homePath(input.home);
-  return handleCommand(
+  return handleSourceCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const store = yield* LibraryStore;

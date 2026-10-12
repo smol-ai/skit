@@ -1,40 +1,11 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { Cause, Effect, Layer, Runtime } from "effect";
+import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "./registry/registry-http.js";
 import { registryAuthLayer } from "./registry/auth-service.js";
-import { NodeRuntime } from "@effect/platform-node";
-import {
-  skitLayer,
-  libraryStoreLayer,
-  libraryAuditLogLayer,
-  withLibraryWriter,
-} from "@smolai/skit-core";
-import { classifyFailure } from "./failure-classification.js";
-import { errorMessage } from "./presentation/command-errors.js";
+import { skitLayer } from "@smolai/skit-core";
+import { libraryApplicationLayer } from "./library-application/layers.js";
+import { configurationHome } from "./configuration-writer.js";
+import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
-import type { CommandFailure } from "./commands/types.js";
-
-/** The presentation boundary consumes a Cause only after the operation's scopes close. */
-export function commandFailure<E>(cause: Cause.Cause<E>): CommandFailure {
-  const errors = cause.reasons.flatMap((reason) =>
-    Cause.isFailReason(reason) ? [reason.error] : Cause.isDieReason(reason) ? [reason.defect] : [],
-  );
-  const first = errors[0];
-  const failure = classifyFailure(first);
-  return {
-    ...failure,
-    // Cause reasons do not identify finalizers; describe secondary failures without
-    // mislabelling an arbitrary programming defect as cleanup.
-    message:
-      errors.length > 1
-        ? [
-            failure.message,
-            ...errors.slice(1).map((error) => `Additional failure: ${errorMessage(error)}`),
-          ].join("\n")
-        : failure.message,
-  };
-}
 
 export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
   return Effect.uninterruptibleMask((restore) =>
@@ -48,59 +19,48 @@ export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) 
   );
 }
 
-export function applicationLayer(home: string) {
-  return Layer.mergeAll(
-    skitLayer,
-    registryHttpLayer(),
-    registryAuthLayer(home).pipe(Layer.provide(skitLayer)),
-    libraryStoreLayer({ home }).pipe(Layer.provide(skitLayer)),
-    libraryAuditLogLayer({ home }).pipe(Layer.provide(skitLayer)),
-  );
-}
-
-/** Complete command environment for non-entrypoint runners such as tests and generators. */
-export function commandApplicationLayer(json: boolean, home: string) {
-  return Layer.merge(applicationLayer(home), consoleRendererLayer(json));
-}
-
-/** Services supplied by the real CLI composition root. */
-export type ApplicationServices = Layer.Success<ReturnType<typeof applicationLayer>> | Renderer;
-
-/** Close one parsed command over the application services selected by its flags. */
-export function handleCommand<E>(
-  program: Effect.Effect<void, E, ApplicationServices>,
-  home: string = process.env.SKIT_HOME ?? join(homedir(), ".skit"),
-) {
-  return renderCommandFailures(withLibraryWriter(Effect.scoped(program))).pipe(
-    Effect.provide(applicationLayer(home)),
-  );
-}
-
-/** Close a diagnostic/preview command without acquiring the mutating Library writer lock. */
-export function handleReadOnlyCommand<E>(
-  program: Effect.Effect<void, E, ApplicationServices>,
-  home: string = process.env.SKIT_HOME ?? join(homedir(), ".skit"),
-) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(applicationLayer(home)));
-}
-/**
- * The sole process runner. NodeRuntime interrupts the root fiber on SIGINT/SIGTERM,
- * waits for finalization, and returns 130 for interruption. Command-selected exit codes
- * remain on process.exitCode after successful rendering.
- */
-export function runCli<E>(
-  program: Effect.Effect<void, E, ApplicationServices>,
-  json: boolean,
-  home: string = process.env.SKIT_HOME ?? join(homedir(), ".skit"),
-): void {
-  NodeRuntime.runMain(
-    renderCommandFailures(withLibraryWriter(Effect.scoped(program))).pipe(
-      Effect.provide(commandApplicationLayer(json, home)),
+export function registryApplicationLayer(home?: string) {
+  return Layer.unwrap(
+    Effect.map(configurationHome(home), (root) =>
+      Layer.mergeAll(registryHttpLayer(), registryAuthLayer(root)).pipe(
+        Layer.provideMerge(skitLayer),
+      ),
     ),
-    {
-      disableErrorReporting: true,
-      teardown: (exit, onExit) =>
-        Runtime.defaultTeardown(exit, (code) => onExit(Number(process.exitCode ?? 0) || code)),
-    },
   );
 }
+
+/** Combined environment for acquisition and synchronization, which need both domains. */
+export function sourceApplicationLayer(home: string) {
+  return Layer.merge(libraryApplicationLayer(home), registryApplicationLayer(home));
+}
+
+/** Full environment for contract generators and runners exercising multiple command families. */
+export function commandApplicationLayer(json: boolean, home: string) {
+  return Layer.merge(sourceApplicationLayer(home), consoleRendererLayer(json));
+}
+
+/** Keep requirements inferred until the selected composition boundary supplies them. */
+export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) {
+  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(skitLayer));
+}
+
+export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>, home: string) {
+  return renderCommandFailures(Effect.scoped(program)).pipe(
+    Effect.provide(libraryApplicationLayer(home)),
+  );
+}
+
+export function handleRegistryCommand<E, R>(program: Effect.Effect<void, E, R>, home?: string) {
+  return renderCommandFailures(Effect.scoped(program)).pipe(
+    Effect.provide(registryApplicationLayer(home)),
+  );
+}
+
+export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>, home: string) {
+  return renderCommandFailures(Effect.scoped(program)).pipe(
+    Effect.provide(sourceApplicationLayer(home)),
+  );
+}
+
+export { commandFailure } from "./failure-classification.js";
+export { libraryApplicationLayer } from "./library-application/layers.js";

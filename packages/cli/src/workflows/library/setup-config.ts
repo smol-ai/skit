@@ -1,3 +1,4 @@
+import { withConfigurationWriter } from "../../configuration-writer.js";
 import { hostname } from "node:os";
 import { join, matchesGlob, posix, resolve, sep } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
@@ -94,31 +95,30 @@ export const writeSetupMachineConfig = Effect.fn("Setup.writeMachineConfig")(fun
   return { path, ...config };
 });
 
-export const updateSetupRepositoryDecision = Effect.fn("Setup.updateRepositoryDecision")(function* (
-  libraryHome: string,
-  repository: string,
-  status: "watched" | "ignored" | undefined,
-) {
-  const prior = yield* readSetupMachineConfig(libraryHome);
-  const path = resolve(repository);
-  const decisions = new Map(
-    setupRepositoryDecisions(prior).map((decision) => [resolve(decision.path), decision.status]),
-  );
-  if (status === undefined) decisions.delete(path);
-  else decisions.set(path, status);
-  return yield* writeSetupMachineConfig(
-    libraryHome,
-    setupDiscoveryRoots(prior),
-    [...decisions]
-      .map(([decisionPath, decisionStatus]) => ({
-        path: decisionPath,
-        status: decisionStatus,
-      }))
-      .sort((left, right) => left.path.localeCompare(right.path)),
-    prior,
-    hostname(),
-  );
-});
+export const updateSetupRepositoryDecision = Effect.fn("Setup.updateRepositoryDecision")(
+  function* (libraryHome: string, repository: string, status: "watched" | "ignored" | undefined) {
+    const prior = yield* readSetupMachineConfig(libraryHome);
+    const path = resolve(repository);
+    const decisions = new Map(
+      setupRepositoryDecisions(prior).map((decision) => [resolve(decision.path), decision.status]),
+    );
+    if (status === undefined) decisions.delete(path);
+    else decisions.set(path, status);
+    return yield* writeSetupMachineConfig(
+      libraryHome,
+      setupDiscoveryRoots(prior),
+      [...decisions]
+        .map(([decisionPath, decisionStatus]) => ({
+          path: decisionPath,
+          status: decisionStatus,
+        }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+      prior,
+      hostname(),
+    );
+  },
+  (effect, home) => withConfigurationWriter(home, effect),
+);
 
 export const readRepositoryConfig = Effect.fn("Setup.readRepositoryConfig")(function* (
   repository: string,

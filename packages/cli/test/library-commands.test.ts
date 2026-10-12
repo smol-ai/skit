@@ -11,7 +11,7 @@ import {
   confirmLibraryChange,
   openLibrarySession,
   proposeLibraryEnable,
-} from "../src/workflows/library/session.js";
+} from "../src/library-application/session.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import {
   initializeLibraryMachine,

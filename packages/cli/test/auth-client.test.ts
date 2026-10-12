@@ -574,10 +574,19 @@ describe("CLI authentication journey", () => {
       };
       yield* login({ ...input, scopes: [...input.scopes] }, server);
       observed.length = 0;
-      yield* fs.chmod(home, 0o500);
-      const exit = yield* Effect.exit(login({ ...input, scopes: [...input.scopes] }, server)).pipe(
-        Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orDie)),
-      );
+      const unwritableAfterMint: TestHttpHandler = (request, url, signal) =>
+        server(request, url, signal).pipe(
+          Effect.tap(() => {
+            if (request.url.endsWith("/api/tokens") && request.method === "POST")
+              return fs.chmod(home, 0o500).pipe(Effect.orDie);
+            if (request.url.endsWith("/api/tokens/pat_two") && request.method === "DELETE")
+              return fs.chmod(home, 0o700).pipe(Effect.orDie);
+            return Effect.void;
+          }),
+        );
+      const exit = yield* Effect.exit(
+        login({ ...input, scopes: [...input.scopes] }, unwritableAfterMint),
+      ).pipe(Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orDie)));
       expect(exit._tag).toBe("Failure");
 
       expect(yield* resolveAuthEffect(home)).toMatchObject({ tokenId: "pat_one" });

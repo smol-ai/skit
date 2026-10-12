@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handleCommand } from "../application.js";
+import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, homePath, jsonFlag } from "../commands/parameters.js";
@@ -21,7 +21,7 @@ export const registryAddCliCommand = Command.make(
   { name, origin, home: homeFlag, json: jsonFlag },
   ({ name, origin, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* addRegistryRemoteEffect(name, origin, selectedHome);
@@ -29,7 +29,6 @@ export const registryAddCliCommand = Command.make(
           result("registryAdd", outputContracts.registryRemote, { ...value, action: "added" }),
         );
       }),
-      selectedHome,
     );
   },
 ).pipe(
@@ -47,7 +46,7 @@ export const registryListCliCommand = Command.make(
   { home: homeFlag, json: jsonFlag },
   ({ home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const registries = yield* listRegistryRemotesEffect(selectedHome);
@@ -55,7 +54,6 @@ export const registryListCliCommand = Command.make(
           result("registryList", outputContracts.registryList, { registries }),
         );
       }),
-      selectedHome,
     );
   },
 ).pipe(
@@ -73,7 +71,7 @@ export const registryDefaultCliCommand = Command.make(
   { name, home: homeFlag, json: jsonFlag },
   ({ name, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* defaultRegistryRemoteEffect(name, selectedHome);
@@ -84,7 +82,6 @@ export const registryDefaultCliCommand = Command.make(
           }),
         );
       }),
-      selectedHome,
     );
   },
 ).pipe(
@@ -102,7 +99,7 @@ export const registryRemoveCliCommand = Command.make(
   { name, home: homeFlag, json: jsonFlag },
   ({ name, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* removeRegistryRemoteEffect(name, selectedHome);
@@ -113,7 +110,6 @@ export const registryRemoveCliCommand = Command.make(
           }),
         );
       }),
-      selectedHome,
     );
   },
 ).pipe(

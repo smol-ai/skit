@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
@@ -14,7 +14,7 @@ export const harnessProbeCliCommand = Command.make(
   "probe",
   { harness, json: jsonFlag },
   ({ harness }) =>
-    handleCommand(
+    handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const probes = yield* probeRequestedHarnessesEffect(Option.getOrUndefined(harness));

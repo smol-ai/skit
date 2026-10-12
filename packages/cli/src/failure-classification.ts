@@ -1,6 +1,6 @@
 import type { SkitErrorCode } from "@smolai/skit-core";
-import { Predicate } from "effect";
-import { toCommandError } from "./presentation/command-errors.js";
+import { Cause, Predicate } from "effect";
+import { errorMessage, toCommandError } from "./presentation/command-errors.js";
 
 export interface ClassifiedFailure {
   code: SkitErrorCode | "OPERATION_FAILED";
@@ -19,5 +19,26 @@ export function classifyFailure(error: unknown): ClassifiedFailure {
     remediation: Predicate.isTagged(error, "InvalidLibraryState")
       ? "Back up the state file before recovery. To reset an alpha Library, move it aside and run `skit setup`; keep installed Skill files."
       : classified.remediation,
+  };
+}
+
+/** The presentation boundary consumes a Cause only after the operation's scopes close. */
+export function commandFailure<E>(cause: Cause.Cause<E>): ClassifiedFailure {
+  const errors = cause.reasons.flatMap((reason) =>
+    Cause.isFailReason(reason) ? [reason.error] : Cause.isDieReason(reason) ? [reason.defect] : [],
+  );
+  const first = errors[0];
+  const failure = classifyFailure(first);
+  return {
+    ...failure,
+    // Cause reasons do not identify finalizers; describe secondary failures without
+    // mislabelling an arbitrary programming defect as cleanup.
+    message:
+      errors.length > 1
+        ? [
+            failure.message,
+            ...errors.slice(1).map((error) => `Additional failure: ${errorMessage(error)}`),
+          ].join("\n")
+        : failure.message,
   };
 }

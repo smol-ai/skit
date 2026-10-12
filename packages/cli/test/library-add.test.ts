@@ -16,7 +16,7 @@ import {
   addLibrarySourceEffect,
   previewLibrarySourceEffect,
 } from "../src/workflows/library/add.js";
-import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/library/update.js";
+import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";

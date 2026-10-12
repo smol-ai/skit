@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
-import { handleCommand } from "../application.js";
+import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, homePath, jsonFlag } from "../commands/parameters.js";
@@ -19,7 +19,7 @@ const flags = { home: homeFlag, json: jsonFlag };
 const mutate = (name: "watch" | "ignore" | "forget") =>
   Command.make(name, { path, ...flags }, (input) => {
     const selectedHome = homePath(input.home);
-    return handleCommand(
+    return handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const repository = resolve(input.path);
@@ -36,7 +36,6 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
           }),
         );
       }),
-      selectedHome,
     );
   }).pipe(
     Command.withDescription(
@@ -56,7 +55,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
 
 export const repositoryListCliCommand = Command.make("list", flags, (input) => {
   const selectedHome = homePath(input.home);
-  return handleCommand(
+  return handlePlatformCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const config = yield* readSetupMachineConfig(selectedHome);
@@ -68,7 +67,6 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) => {
         }),
       );
     }),
-    selectedHome,
   );
 }).pipe(
   Command.withDescription("List repository decisions stored for this machine."),

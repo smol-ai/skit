@@ -1,7 +1,7 @@
 import { Effect, Option, Result } from "effect";
 import { sourceInputWithVersionEffect } from "@smolai/skit-core";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -24,7 +24,7 @@ export const addCliCommand = Command.make(
   "add",
   { source, version, registry, preview, ...localFlags },
   (input) =>
-    handleCommand(
+    handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const registryAuth = yield* RegistryAuth;

@@ -18,7 +18,7 @@ import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-
 import { Renderer } from "../../presentation/renderer.js";
 import { skitLocator } from "./sync.js";
 import { AuthenticationRequired, CredentialLacksScope } from "../../registry/failures.js";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -171,7 +171,7 @@ export const authorListCliCommand = Command.make(
   { registry, home: homeFlag, json: jsonFlag },
   ({ registry, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const selectedRegistry = Option.getOrUndefined(registry);

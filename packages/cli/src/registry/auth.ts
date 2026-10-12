@@ -1,3 +1,4 @@
+import { withConfigurationWriter } from "../configuration-writer.js";
 import { Clock, Effect, FileSystem, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
@@ -315,53 +316,52 @@ export const listRegistryRemotesEffect = Effect.fn("Registry.listRemotes")(funct
   }));
 });
 
-export const addRegistryRemoteEffect = Effect.fn("Registry.addRemote")(function* (
-  name: string,
-  originInput: string,
-  home?: string,
-) {
-  yield* validateRegistryAlias(name);
-  const origin = yield* parseOrigin(originInput);
-  const config = yield* readConfigEffect(home);
-  if (config.registryAliases?.[name]) return yield* new RegistryAliasConflict({ name });
-  const next: AuthConfig = {
-    ...config,
-    registryAliases: { ...config.registryAliases, [name]: origin },
-  };
-  yield* writeConfigEffect(next, home);
-  return { name, origin, isDefault: false } satisfies RegistryRemote;
-});
+export const addRegistryRemoteEffect = Effect.fn("Registry.addRemote")(
+  function* (name: string, originInput: string, home?: string) {
+    yield* validateRegistryAlias(name);
+    const origin = yield* parseOrigin(originInput);
+    const config = yield* readConfigEffect(home);
+    if (config.registryAliases?.[name]) return yield* new RegistryAliasConflict({ name });
+    const next: AuthConfig = {
+      ...config,
+      registryAliases: { ...config.registryAliases, [name]: origin },
+    };
+    yield* writeConfigEffect(next, home);
+    return { name, origin, isDefault: false } satisfies RegistryRemote;
+  },
+  (effect, _name, _origin, home) => withConfigurationWriter(home, effect),
+);
 
-export const defaultRegistryRemoteEffect = Effect.fn("Registry.defaultRemote")(function* (
-  name: string,
-  home?: string,
-) {
-  yield* validateRegistryAlias(name);
-  const config = yield* readConfigEffect(home);
-  const origin = config.registryAliases?.[name];
-  if (!origin) return yield* new RegistryAliasNotFound({ name });
-  yield* writeConfigEffect({ ...config, defaultRegistry: name }, home);
-  return { name, origin, isDefault: true } satisfies RegistryRemote;
-});
+export const defaultRegistryRemoteEffect = Effect.fn("Registry.defaultRemote")(
+  function* (name: string, home?: string) {
+    yield* validateRegistryAlias(name);
+    const config = yield* readConfigEffect(home);
+    const origin = config.registryAliases?.[name];
+    if (!origin) return yield* new RegistryAliasNotFound({ name });
+    yield* writeConfigEffect({ ...config, defaultRegistry: name }, home);
+    return { name, origin, isDefault: true } satisfies RegistryRemote;
+  },
+  (effect, _name, home) => withConfigurationWriter(home, effect),
+);
 
-export const removeRegistryRemoteEffect = Effect.fn("Registry.removeRemote")(function* (
-  name: string,
-  home?: string,
-) {
-  yield* validateRegistryAlias(name);
-  const config = yield* readConfigEffect(home);
-  if (!config.registryAliases?.[name]) return yield* new RegistryAliasNotFound({ name });
-  const { [name]: removed, ...registryAliases } = config.registryAliases;
-  const { defaultRegistry: _defaultRegistry, ...configWithoutDefault } = config;
-  yield* writeConfigEffect(
-    config.defaultRegistry === name
-      ? { ...configWithoutDefault, registryAliases }
-      : { ...config, registryAliases },
-    home,
-    { promoteSoleRegistry: false },
-  );
-  return { name, origin: removed, isDefault: false } satisfies RegistryRemote;
-});
+export const removeRegistryRemoteEffect = Effect.fn("Registry.removeRemote")(
+  function* (name: string, home?: string) {
+    yield* validateRegistryAlias(name);
+    const config = yield* readConfigEffect(home);
+    if (!config.registryAliases?.[name]) return yield* new RegistryAliasNotFound({ name });
+    const { [name]: removed, ...registryAliases } = config.registryAliases;
+    const { defaultRegistry: _defaultRegistry, ...configWithoutDefault } = config;
+    yield* writeConfigEffect(
+      config.defaultRegistry === name
+        ? { ...configWithoutDefault, registryAliases }
+        : { ...config, registryAliases },
+      home,
+      { promoteSoleRegistry: false },
+    );
+    return { name, origin: removed, isDefault: false } satisfies RegistryRemote;
+  },
+  (effect, _name, home) => withConfigurationWriter(home, effect),
+);
 
 /** Select a Registry without letting a device-local name enter durable Source state. */
 export const resolveRegistryLocatorEffect = Effect.fn("Registry.resolveLocator")(function* (
@@ -574,240 +574,243 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
  * Those cleanups are the existing behaviour carried into the Scope, not new guarantees: a process
  * killed outright can still leave a live token, and the messages say so.
  */
-export const loginEffect = Effect.fn("Auth.login")(function* (input: {
-  origin: string;
-  email: string;
-  password: string;
-  scopes: AuthScope[];
-  alias?: string;
-  home?: string;
-}) {
-  const origin = yield* validateAuthenticationOrigin(input.origin);
-  const config = yield* readConfigEffect(input.home);
-  if (input.alias) {
-    yield* validateRegistryAlias(input.alias);
-    const existingAlias = config.registryAliases?.[input.alias];
-    if (existingAlias && existingAlias !== origin)
-      return yield* new RegistryAliasConflict({ name: input.alias });
-  }
-  const existing = config.servers[origin];
-  const http = yield* (yield* RegistryHttp).client;
-  const send = (
-    url: URL,
-    init: {
-      readonly method?: "GET" | "POST" | "PUT" | "DELETE";
-      readonly headers?: Readonly<Record<string, string>>;
-      readonly body?: string;
-    } = {},
-  ): Effect.Effect<HttpClientResponse, SignInUnreachable> => {
-    let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
-    if (init.body !== undefined)
-      request = HttpClientRequest.bodyText(request, init.body, "application/json");
-    return http
-      .execute(request)
-      .pipe(Effect.mapError((error) => new SignInUnreachable({ origin, cause: error.cause })));
-  };
+export const loginEffect = Effect.fn("Auth.login")(
+  function* (input: {
+    origin: string;
+    email: string;
+    password: string;
+    scopes: AuthScope[];
+    alias?: string;
+    home?: string;
+  }) {
+    const origin = yield* validateAuthenticationOrigin(input.origin);
+    const config = yield* readConfigEffect(input.home);
+    if (input.alias) {
+      yield* validateRegistryAlias(input.alias);
+      const existingAlias = config.registryAliases?.[input.alias];
+      if (existingAlias && existingAlias !== origin)
+        return yield* new RegistryAliasConflict({ name: input.alias });
+    }
+    const existing = config.servers[origin];
+    const http = yield* (yield* RegistryHttp).client;
+    const send = (
+      url: URL,
+      init: {
+        readonly method?: "GET" | "POST" | "PUT" | "DELETE";
+        readonly headers?: Readonly<Record<string, string>>;
+        readonly body?: string;
+      } = {},
+    ): Effect.Effect<HttpClientResponse, SignInUnreachable> => {
+      let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
+      if (init.body !== undefined)
+        request = HttpClientRequest.bodyText(request, init.body, "application/json");
+      return http
+        .execute(request)
+        .pipe(Effect.mapError((error) => new SignInUnreachable({ origin, cause: error.cause })));
+    };
 
-  const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
-  if (!ok(discoveryResponse))
-    return yield* new SignInFailed({
-      message: `Registry discovery failed (${discoveryResponse.status})`,
-    });
-  const discovery = yield* discoveryResponse.json.pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
-    Effect.mapError(
-      (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
-    ),
-  );
-  const unsupportedScopes = input.scopes.filter((scope) => !discovery.scopes.includes(scope));
-  if (unsupportedScopes.length > 0)
-    return yield* new SignInFailed({
-      message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
-    });
-  /** The Registry's own words for a rejected request, in the shape every branch reported. */
-  const rejected = Effect.fn("Auth.rejected")(function* (
-    response: HttpClientResponse,
-    context: string,
-  ) {
-    const body = yield* response.json.pipe(
-      Effect.catchTag("HttpClientError", () => Effect.succeed({})),
-    );
-    if (response.status === 401) return yield* new SignInRejected({ context });
-    if (response.status === 429) return yield* new TooManyAuthAttempts();
-    const detail = yield* decodeRegistryErrorResponse(body).pipe(
-      Effect.map(({ error }) => error),
-      Effect.orElseSucceed(() => "unknown_error"),
-    );
-    return yield* new SignInFailed({
-      message: `${context} failed (${response.status}): ${detail}`,
-    });
-  });
-  const signIn = yield* send(new URL("/api/auth/sign-in/email", origin), {
-    method: "POST",
-    // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than
-    // acting as a security boundary. Browser requests still receive real origin enforcement.
-    headers: { "content-type": "application/json", origin },
-    body: JSON.stringify({ email: input.email, password: input.password }),
-  });
-  if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
-  const cookie = Cookies.toCookieHeader(signIn.cookies);
-  if (!cookie) return yield* new SignInFailed({ message: "Sign in did not establish a session" });
-  const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
-    httpClient: http,
-    baseUrl: origin,
-  }).pipe(Effect.provide(sessionApiMiddleware(cookie, origin)));
-  const revoke = (credential: StoredCredential) =>
-    HttpApiClient.makeWith(ConsumerAuthenticatedApi, { httpClient: http, baseUrl: origin }).pipe(
-      Effect.provide(authenticatedApiMiddleware(credential.token)),
-      Effect.flatMap((client) =>
-        client.tokens.revoke({
-          params: { token_id: credential.tokenId },
-          responseMode: "response-only",
-        }),
-      ),
-      Effect.mapError((error) =>
-        isRegistryTransportError(error)
-          ? new SignInUnreachable({ origin, cause: error.cause })
-          : new SignInFailed({ message: "Credential cleanup request could not be encoded" }),
+    const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
+    if (!ok(discoveryResponse))
+      return yield* new SignInFailed({
+        message: `Registry discovery failed (${discoveryResponse.status})`,
+      });
+    const discovery = yield* discoveryResponse.json.pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
+      Effect.mapError(
+        (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
       ),
     );
-
-  const signOutRequest = () =>
-    send(new URL("/api/auth/sign-out", origin), {
+    const unsupportedScopes = input.scopes.filter((scope) => !discovery.scopes.includes(scope));
+    if (unsupportedScopes.length > 0)
+      return yield* new SignInFailed({
+        message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
+      });
+    /** The Registry's own words for a rejected request, in the shape every branch reported. */
+    const rejected = Effect.fn("Auth.rejected")(function* (
+      response: HttpClientResponse,
+      context: string,
+    ) {
+      const body = yield* response.json.pipe(
+        Effect.catchTag("HttpClientError", () => Effect.succeed({})),
+      );
+      if (response.status === 401) return yield* new SignInRejected({ context });
+      if (response.status === 429) return yield* new TooManyAuthAttempts();
+      const detail = yield* decodeRegistryErrorResponse(body).pipe(
+        Effect.map(({ error }) => error),
+        Effect.orElseSucceed(() => "unknown_error"),
+      );
+      return yield* new SignInFailed({
+        message: `${context} failed (${response.status}): ${detail}`,
+      });
+    });
+    const signIn = yield* send(new URL("/api/auth/sign-in/email", origin), {
       method: "POST",
-      headers: { cookie, origin, "content-type": "application/json" },
-      body: "{}",
+      // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than
+      // acting as a security boundary. Browser requests still receive real origin enforcement.
+      headers: { "content-type": "application/json", origin },
+      body: JSON.stringify({ email: input.email, password: input.password }),
     });
-  // The temporary session and an unsaved credential are resources from here on, not steps.
-  //
-  // The promise implementation reached its sign-out because nothing could cancel it; a native
-  // login can be interrupted while minting, which would otherwise leave the session live. These
-  // finalizers run on every exit, including interruption, and are best-effort: the ordinary paths
-  // below still report their own failures, and a killed process can still leave both live.
-  let signedOut = false;
-  let unsaved: StoredCredential | undefined;
-  yield* Effect.addFinalizer(() => (signedOut ? Effect.void : Effect.ignore(signOutRequest())));
-  // Registered second, so it runs first: the credential is revoked before the session ends.
-  yield* Effect.addFinalizer(() => (unsaved ? Effect.ignore(revoke(unsaved)) : Effect.void));
+    if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
+    const cookie = Cookies.toCookieHeader(signIn.cookies);
+    if (!cookie) return yield* new SignInFailed({ message: "Sign in did not establish a session" });
+    const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
+      httpClient: http,
+      baseUrl: origin,
+    }).pipe(Effect.provide(sessionApiMiddleware(cookie, origin)));
+    const revoke = (credential: StoredCredential) =>
+      HttpApiClient.makeWith(ConsumerAuthenticatedApi, { httpClient: http, baseUrl: origin }).pipe(
+        Effect.provide(authenticatedApiMiddleware(credential.token)),
+        Effect.flatMap((client) =>
+          client.tokens.revoke({
+            params: { token_id: credential.tokenId },
+            responseMode: "response-only",
+          }),
+        ),
+        Effect.mapError((error) =>
+          isRegistryTransportError(error)
+            ? new SignInUnreachable({ origin, cause: error.cause })
+            : new SignInFailed({ message: "Credential cleanup request could not be encoded" }),
+        ),
+      );
 
-  const expiresAt = new Date(
-    (yield* Clock.currentTimeMillis) + 90 * 24 * 60 * 60 * 1_000,
-  ).toISOString();
-  const creation = yield* Effect.result(
-    Effect.gen(function* () {
-      const body = yield* sessionClient.tokens
-        .create({
-          payload: {
-            name: `skit CLI on ${hostname()}`,
-            scopes: input.scopes,
-            expires_at: expiresAt,
-          },
-        })
-        .pipe(
-          Effect.mapError((error) =>
-            Schema.is(UnauthorizedResponse)(error)
-              ? new SignInRejected({ context: "Credential creation" })
-              : Schema.is(RateLimitedResponse)(error)
-                ? new TooManyAuthAttempts()
-                : isSuccessfulResponseDecodeFailure(error, [201])
-                  ? new SignInFailed({
-                      message:
-                        "Credential was created but its response did not match the Registry contract",
-                    })
-                  : new SignInFailed({
-                      message: registryApiFailureMessage("Credential creation", error, {
-                        defaultStatus: 400,
+    const signOutRequest = () =>
+      send(new URL("/api/auth/sign-out", origin), {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: "{}",
+      });
+    // The temporary session and an unsaved credential are resources from here on, not steps.
+    //
+    // The promise implementation reached its sign-out because nothing could cancel it; a native
+    // login can be interrupted while minting, which would otherwise leave the session live. These
+    // finalizers run on every exit, including interruption, and are best-effort: the ordinary paths
+    // below still report their own failures, and a killed process can still leave both live.
+    let signedOut = false;
+    let unsaved: StoredCredential | undefined;
+    yield* Effect.addFinalizer(() => (signedOut ? Effect.void : Effect.ignore(signOutRequest())));
+    // Registered second, so it runs first: the credential is revoked before the session ends.
+    yield* Effect.addFinalizer(() => (unsaved ? Effect.ignore(revoke(unsaved)) : Effect.void));
+
+    const expiresAt = new Date(
+      (yield* Clock.currentTimeMillis) + 90 * 24 * 60 * 60 * 1_000,
+    ).toISOString();
+    const creation = yield* Effect.result(
+      Effect.gen(function* () {
+        const body = yield* sessionClient.tokens
+          .create({
+            payload: {
+              name: `skit CLI on ${hostname()}`,
+              scopes: input.scopes,
+              expires_at: expiresAt,
+            },
+          })
+          .pipe(
+            Effect.mapError((error) =>
+              Schema.is(UnauthorizedResponse)(error)
+                ? new SignInRejected({ context: "Credential creation" })
+                : Schema.is(RateLimitedResponse)(error)
+                  ? new TooManyAuthAttempts()
+                  : isSuccessfulResponseDecodeFailure(error, [201])
+                    ? new SignInFailed({
+                        message:
+                          "Credential was created but its response did not match the Registry contract",
+                      })
+                    : new SignInFailed({
+                        message: registryApiFailureMessage("Credential creation", error, {
+                          defaultStatus: 400,
+                        }),
                       }),
-                    }),
-          ),
-        );
-      return {
-        token: body.token,
-        tokenId: body.token_id,
-        tokenPrefix: body.token_prefix,
-        scopes: body.scopes,
-        expiresAt: typeof body.expires_at === "string" ? body.expires_at : undefined,
-      } satisfies StoredCredential;
-    }),
-  );
-  const created = Result.isSuccess(creation) ? creation.success : undefined;
-  unsaved = created;
-
-  // The temporary session is signed out whether or not the credential was created.
-  // Marked before the request, not after: the finalizer covers a sign-out that was never
-  // reached, and must not race a second one against a request already in flight.
-  signedOut = true;
-  const signOut = yield* signOutRequest();
-  if (!ok(signOut)) {
-    const cleanup = created ? yield* revoke(created) : undefined;
-    unsaved = undefined;
-    const original = Result.isFailure(creation) ? `: ${creation.failure.message}` : "";
-    if (created && cleanup && !ok(cleanup) && ![401, 404].includes(cleanup.status))
-      return yield* new SignInFailed({
-        message: `Sign out and credential cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live and the temporary session may also be live`,
-      });
-    const detail = yield* signOut.text.pipe(
-      Effect.catchTag("HttpClientError", () => Effect.succeed("")),
+            ),
+          );
+        return {
+          token: body.token,
+          tokenId: body.token_id,
+          tokenPrefix: body.token_prefix,
+          scopes: body.scopes,
+          expiresAt: typeof body.expires_at === "string" ? body.expires_at : undefined,
+        } satisfies StoredCredential;
+      }),
     );
-    return yield* new SignInFailed({
-      message: `Sign out failed (${signOut.status}): ${detail.slice(0, 500)}; the CLI credential was not saved${original}`,
-    });
-  }
-  if (Result.isFailure(creation)) return yield* Effect.fail(creation.failure);
-  if (!created) return yield* new SignInFailed({ message: "Credential creation failed" });
+    const created = Result.isSuccess(creation) ? creation.success : undefined;
+    unsaved = created;
 
-  // The decoded config is the file's shape, not a scratch object: build the next one.
-  const firstRegistry = Object.keys(config.servers).length === 0 && !config.defaultRegistry;
-  const existingOriginAlias = Object.entries(config.registryAliases ?? {}).find(
-    ([, value]) => value === origin,
-  )?.[0];
-  let initialAlias = input.alias ?? existingOriginAlias ?? "default";
-  for (
-    let suffix = 2;
-    config.registryAliases?.[initialAlias] && config.registryAliases[initialAlias] !== origin;
-    suffix += 1
-  )
-    initialAlias = `default-${suffix}`;
-  const configuredAlias = input.alias ?? (firstRegistry ? initialAlias : undefined);
-  const signedIn: AuthConfig = {
-    ...config,
-    ...(configuredAlias
-      ? { registryAliases: { ...config.registryAliases, [configuredAlias]: origin } }
-      : {}),
-    ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
-    servers: { ...config.servers, [origin]: created },
-  };
-  const stored = yield* Effect.result(writeConfigEffect(signedIn, input.home));
-  if (Result.isFailure(stored)) {
-    const cleanup = yield* revoke(created);
-    unsaved = undefined;
-    if (!ok(cleanup) && ![401, 404].includes(cleanup.status))
+    // The temporary session is signed out whether or not the credential was created.
+    // Marked before the request, not after: the finalizer covers a sign-out that was never
+    // reached, and must not race a second one against a request already in flight.
+    signedOut = true;
+    const signOut = yield* signOutRequest();
+    if (!ok(signOut)) {
+      const cleanup = created ? yield* revoke(created) : undefined;
+      unsaved = undefined;
+      const original = Result.isFailure(creation) ? `: ${creation.failure.message}` : "";
+      if (created && cleanup && !ok(cleanup) && ![401, 404].includes(cleanup.status))
+        return yield* new SignInFailed({
+          message: `Sign out and credential cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live and the temporary session may also be live`,
+        });
+      const detail = yield* signOut.text.pipe(
+        Effect.catchTag("HttpClientError", () => Effect.succeed("")),
+      );
       return yield* new SignInFailed({
-        message: `Credential storage and cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live`,
+        message: `Sign out failed (${signOut.status}): ${detail.slice(0, 500)}; the CLI credential was not saved${original}`,
       });
-    return yield* Effect.fail(stored.failure);
-  }
-  // Stored: an interrupt after this point must not revoke the credential the caller now has.
-  unsaved = undefined;
+    }
+    if (Result.isFailure(creation)) return yield* Effect.fail(creation.failure);
+    if (!created) return yield* new SignInFailed({ message: "Credential creation failed" });
 
-  let warning: string | undefined;
-  if (existing) {
-    const replaced = yield* revoke(existing);
-    if (!ok(replaced) && ![401, 404].includes(replaced.status))
-      warning = `The new credential is active, but previous token ${existing.tokenId} (${existing.tokenPrefix}) could not be revoked and may still be live`;
-  }
-  return {
-    origin,
-    tokenPrefix: created.tokenPrefix,
-    scopes: created.scopes,
-    ...(created.expiresAt ? { expiresAt: created.expiresAt } : {}),
-    ...(warning ? { warning } : {}),
-    ...(configuredAlias ? { alias: configuredAlias } : {}),
-    ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
-    alreadyAuthenticated: false,
-    credentialPath: authPath(input.home),
-  };
-});
+    // The decoded config is the file's shape, not a scratch object: build the next one.
+    const firstRegistry = Object.keys(config.servers).length === 0 && !config.defaultRegistry;
+    const existingOriginAlias = Object.entries(config.registryAliases ?? {}).find(
+      ([, value]) => value === origin,
+    )?.[0];
+    let initialAlias = input.alias ?? existingOriginAlias ?? "default";
+    for (
+      let suffix = 2;
+      config.registryAliases?.[initialAlias] && config.registryAliases[initialAlias] !== origin;
+      suffix += 1
+    )
+      initialAlias = `default-${suffix}`;
+    const configuredAlias = input.alias ?? (firstRegistry ? initialAlias : undefined);
+    const signedIn: AuthConfig = {
+      ...config,
+      ...(configuredAlias
+        ? { registryAliases: { ...config.registryAliases, [configuredAlias]: origin } }
+        : {}),
+      ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
+      servers: { ...config.servers, [origin]: created },
+    };
+    const stored = yield* Effect.result(writeConfigEffect(signedIn, input.home));
+    if (Result.isFailure(stored)) {
+      const cleanup = yield* revoke(created);
+      unsaved = undefined;
+      if (!ok(cleanup) && ![401, 404].includes(cleanup.status))
+        return yield* new SignInFailed({
+          message: `Credential storage and cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live`,
+        });
+      return yield* Effect.fail(stored.failure);
+    }
+    // Stored: an interrupt after this point must not revoke the credential the caller now has.
+    unsaved = undefined;
+
+    let warning: string | undefined;
+    if (existing) {
+      const replaced = yield* revoke(existing);
+      if (!ok(replaced) && ![401, 404].includes(replaced.status))
+        warning = `The new credential is active, but previous token ${existing.tokenId} (${existing.tokenPrefix}) could not be revoked and may still be live`;
+    }
+    return {
+      origin,
+      tokenPrefix: created.tokenPrefix,
+      scopes: created.scopes,
+      ...(created.expiresAt ? { expiresAt: created.expiresAt } : {}),
+      ...(warning ? { warning } : {}),
+      ...(configuredAlias ? { alias: configuredAlias } : {}),
+      ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
+      alreadyAuthenticated: false,
+      credentialPath: authPath(input.home),
+    };
+  },
+  (effect, input) => withConfigurationWriter(input.home, effect),
+);
 
 /**
  * Revoke the stored credential and forget it locally.
@@ -815,59 +818,60 @@ export const loginEffect = Effect.fn("Auth.login")(function* (input: {
  * The local forget happens whether or not the Registry accepted the revocation: a credential the
  * server already rejected or lost is still not one this machine should keep offering.
  */
-export const logoutEffect = Effect.fn("Auth.logout")(function* (
-  home?: string,
-  selectedOrigin?: string,
-) {
-  const config = yield* readConfigEffect(home);
-  const origins = Object.keys(config.servers).sort();
-  const origin = selectedOrigin
-    ? selectedOrigin.includes("://")
-      ? yield* parseOrigin(selectedOrigin)
-      : config.registryAliases?.[selectedOrigin]
-    : origins.length === 1
-      ? origins[0]
-      : origins.length > 1
-        ? yield* new RegistrySelectionAmbiguous({
-            origins,
-            command: "skit auth logout <origin-or-alias>",
-          })
-        : undefined;
-  if (selectedOrigin && !origin) return yield* new RegistryAliasNotFound({ name: selectedOrigin });
-  const credential = origin ? config.servers[origin] : undefined;
-  if (!origin || !credential) return yield* new NoStoredCredentials();
-  const http = yield* (yield* RegistryHttp).client;
-  const client = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
-    httpClient: http,
-    baseUrl: origin,
-  }).pipe(Effect.provide(authenticatedApiMiddleware(credential.token)));
-  const response = yield* client.tokens
-    .revoke({ params: { token_id: credential.tokenId }, responseMode: "response-only" })
-    .pipe(
-      Effect.mapError((error) =>
-        isRegistryTransportError(error)
-          ? new SignOutUnreachable({ origin, cause: error.cause })
-          : new SignOutRejected({ message: "Logout request could not be encoded" }),
-      ),
-    );
-  const ok = response.status >= 200 && response.status < 300;
-  if (!ok && ![401, 404].includes(response.status)) {
-    const body = yield* response.json.pipe(
-      Effect.catchTag("HttpClientError", () => Effect.succeed({})),
-    );
-    if (response.status === 429) return yield* new TooManyAuthAttempts();
-    const detail = yield* decodeRegistryErrorResponse(body).pipe(
-      Effect.map(({ error }) => error),
-      Effect.orElseSucceed(() => "unknown_error"),
-    );
-    return yield* new SignOutRejected({
-      message: `Logout failed (${response.status}): ${detail}`,
-    });
-  }
-  const { [origin]: _revoked, ...servers } = config.servers;
-  yield* writeConfigEffect({ ...config, servers }, home);
-  return { origin, revoked: ok };
-});
+export const logoutEffect = Effect.fn("Auth.logout")(
+  function* (home?: string, selectedOrigin?: string) {
+    const config = yield* readConfigEffect(home);
+    const origins = Object.keys(config.servers).sort();
+    const origin = selectedOrigin
+      ? selectedOrigin.includes("://")
+        ? yield* parseOrigin(selectedOrigin)
+        : config.registryAliases?.[selectedOrigin]
+      : origins.length === 1
+        ? origins[0]
+        : origins.length > 1
+          ? yield* new RegistrySelectionAmbiguous({
+              origins,
+              command: "skit auth logout <origin-or-alias>",
+            })
+          : undefined;
+    if (selectedOrigin && !origin)
+      return yield* new RegistryAliasNotFound({ name: selectedOrigin });
+    const credential = origin ? config.servers[origin] : undefined;
+    if (!origin || !credential) return yield* new NoStoredCredentials();
+    const http = yield* (yield* RegistryHttp).client;
+    const client = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
+      httpClient: http,
+      baseUrl: origin,
+    }).pipe(Effect.provide(authenticatedApiMiddleware(credential.token)));
+    const response = yield* client.tokens
+      .revoke({ params: { token_id: credential.tokenId }, responseMode: "response-only" })
+      .pipe(
+        Effect.mapError((error) =>
+          isRegistryTransportError(error)
+            ? new SignOutUnreachable({ origin, cause: error.cause })
+            : new SignOutRejected({ message: "Logout request could not be encoded" }),
+        ),
+      );
+    const ok = response.status >= 200 && response.status < 300;
+    if (!ok && ![401, 404].includes(response.status)) {
+      const body = yield* response.json.pipe(
+        Effect.catchTag("HttpClientError", () => Effect.succeed({})),
+      );
+      if (response.status === 429) return yield* new TooManyAuthAttempts();
+      const detail = yield* decodeRegistryErrorResponse(body).pipe(
+        Effect.map(({ error }) => error),
+        Effect.orElseSucceed(() => "unknown_error"),
+      );
+      return yield* new SignOutRejected({
+        message: `Logout failed (${response.status}): ${detail}`,
+      });
+    }
+    const { [origin]: _revoked, ...servers } = config.servers;
+    yield* writeConfigEffect({ ...config, servers }, home);
+    return { origin, revoked: ok };
+  },
+  (effect, home, _selectedOrigin) => withConfigurationWriter(home, effect),
+);
 
 export const authLogoutCommand = Effect.fn("CLI.authLogout")(function* (
   home?: string,

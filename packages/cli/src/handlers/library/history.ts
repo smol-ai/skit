@@ -1,7 +1,7 @@
 import { LibraryAuditLog } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleReadOnlyCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
@@ -13,7 +13,7 @@ export const libraryHistoryCliCommand = Command.make(
   { json: jsonFlag, home: homeFlag },
   (input) => {
     const home = homePath(input.home);
-    return handleReadOnlyCommand(
+    return handleLibraryCommand(
       Effect.gen(function* () {
         const audit = yield* LibraryAuditLog;
         const renderer = yield* Renderer;

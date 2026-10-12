@@ -53,6 +53,7 @@ export * from "./shared/tree-error.js";
 export * from "./artifact/tree.js";
 
 export * from "./library/store/library-store.js";
+export { withLibraryWriterLock } from "./library/store/writer-lock.js";
 export * from "./library/inventory/refresh.js";
 
 export {

@@ -1,4 +1,4 @@
-import { ProjectionWouldDuplicate } from "../../projection/harness-shadows.js";
+import { ProjectionWouldDuplicate } from "../projection/harness-shadows.js";
 import {
   readLibrarySkillMetadata,
   sourceIdentityLabel,
@@ -18,21 +18,24 @@ import {
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
-import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
-import { LibrarySubjectNotFound, resolveLibrarySubject } from "./subject-resolution.js";
-import type { InvocationOption } from "../../invocation/policy.js";
-import { invocationReadModel, type InvocationReadModel } from "../../invocation/read-model.js";
-import { bindingRowLabel, destinationLabel, scopeKey } from "../../library/read-model.js";
-import { classifyFailure, type ClassifiedFailure } from "../../failure-classification.js";
-import { unspecifiedDeclaredInvocation } from "../../invocation/library-source.js";
-import type { ProjectionOptions } from "./projection-options.js";
+import { activeProjectionTargetsEffect, bindingRoot } from "../projection/roots.js";
+import {
+  LibrarySubjectNotFound,
+  resolveLibrarySubject,
+} from "../workflows/library/subject-resolution.js";
+import type { InvocationOption } from "../invocation/policy.js";
+import { invocationReadModel, type InvocationReadModel } from "../invocation/read-model.js";
+import { bindingRowLabel, destinationLabel, scopeKey } from "./read-model.js";
+import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
+import { unspecifiedDeclaredInvocation } from "../invocation/library-source.js";
+import type { ProjectionOptions } from "../workflows/library/projection-options.js";
 import {
   applyLibraryBindings,
   libraryStateRevision,
   SetEnabledStale,
   previewLibraryBindings,
-} from "./set-enabled.js";
-import type { SetEnabledInvocation } from "./set-enabled-invocation.js";
+} from "../workflows/library/set-enabled.js";
+import type { SetEnabledInvocation } from "../workflows/library/set-enabled-invocation.js";
 
 export interface LibraryBindingRow {
   readonly scope: Scope;

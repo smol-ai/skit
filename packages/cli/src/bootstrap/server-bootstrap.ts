@@ -26,7 +26,7 @@ import {
   registryApiFailureMessage,
 } from "../registry/api-client.js";
 import { Renderer } from "../presentation/renderer.js";
-import { handleCommand } from "../application.js";
+import { handleRegistryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
@@ -356,7 +356,7 @@ export const serverBootstrapCliCommand = Command.make(
   "bootstrap",
   { config, url, wrangler, json: jsonFlag },
   ({ config, url, wrangler }) =>
-    handleCommand(
+    handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* bootstrapServerEffect({

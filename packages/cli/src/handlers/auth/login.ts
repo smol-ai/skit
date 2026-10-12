@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { loginEffect, resolveLoginTargetEffect, reuseLoginEffect } from "../../registry/auth.js";
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -90,7 +90,7 @@ export const authLoginCliCommand = Command.make(
   { registry, alias, scopes, relogin, home: homeFlag, json: jsonFlag },
   ({ registry, alias, scopes, relogin, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* authLoginCommand({

@@ -1,4 +1,4 @@
-import { SkillMetadata } from "./skill-metadata.js";
+import { SkillMetadata } from "../../library-application/skill-metadata.js";
 import { Schema } from "effect";
 import { CollectionId, Digest, SkillId, SkillVersionId } from "@smolai/skit-core";
 

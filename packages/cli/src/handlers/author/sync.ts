@@ -10,7 +10,7 @@ import {
   syncDraftEffect,
   type AuthorVisibility,
 } from "../../workflows/author/sync.js";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -78,7 +78,7 @@ export const authorSyncCliCommand = Command.make(
   { path, to, visibility, apply, home: homeFlag, json: jsonFlag },
   ({ path, to, visibility, apply, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);

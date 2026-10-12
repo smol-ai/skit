@@ -1,20 +1,25 @@
-import { bindingSkillIds, LibraryStore, type LibraryState } from "@smolai/skit-core";
+import {
+  bindingSkillIds,
+  withLibraryWriter,
+  LibraryStore,
+  type LibraryState,
+} from "@smolai/skit-core";
 import { Cause, Effect, FileSystem, Predicate, Schema } from "effect";
-import type { InventoryRootOptions } from "../../projection/roots.js";
-import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "./add.js";
-import type { UpdateFailure, UpdateResult } from "./update-contract.js";
-import { reconcileLibraryProjections } from "./projection-reconciliation.js";
-import { Renderer } from "../../presentation/renderer.js";
+import type { InventoryRootOptions } from "../projection/roots.js";
+import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "../workflows/library/add.js";
+import type { UpdateFailure, UpdateResult } from "../workflows/library/update-contract.js";
+import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
+import { LibraryProgress } from "./progress.js";
 import {
   latestSubjectAcquisition,
   resolveOwningLibrarySubjects,
   type LibrarySubject,
-} from "./subject-resolution.js";
+} from "../workflows/library/subject-resolution.js";
 import { dirname, join, resolve } from "node:path";
 import { isPlatformError } from "effect/PlatformError";
-import { commandFailure } from "../../application.js";
+import { commandFailure } from "../failure-classification.js";
 import { sourceLocator } from "@smolai/skit-core";
-import { sourceFromUpstream } from "./upstream-source.js";
+import { sourceFromUpstream } from "../workflows/library/upstream-source.js";
 
 export class UpdateNotRefreshable extends Schema.TaggedError<UpdateNotRefreshable>()(
   "Library.UpdateNotRefreshable",
@@ -221,8 +226,9 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
   options: UpdateOptions,
   query?: string,
 ) {
+  state = yield* (yield* LibraryStore).load;
   const selected = yield* selectSubjects(state, query);
-  const renderer = yield* Renderer;
+  const progress = yield* LibraryProgress;
   const store = yield* LibraryStore;
   const storeHome = yield* canonicalStoragePath(store.home);
   const results: UpdateResult[number][] = [];
@@ -248,19 +254,18 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
           });
         const input = yield* subjectSourceEffect(before, acquisition.input.value);
         source = sourceLocator(input);
-        const retained = yield* renderer.withStatus(
-          {
-            pending: `${before.label} · Fetching and inspecting Source`,
-            complete: (value) =>
-              value.snapshot_digest === priorTree.digest
-                ? `${before.label} · Source is current`
-                : `${before.label} · New snapshot retained`,
-          },
+        const subject = { id: before.subjectId, label: before.label };
+        const retained = yield* progress.around(
+          { kind: "source", subject },
           addLibrarySourceEffect(
             input,
             undefined,
             priorTree.members.map((member) => member.source_path),
           ),
+          (value) => ({
+            kind: "source-inspected",
+            changed: value.snapshot_digest !== priorTree.digest,
+          }),
         );
         sourceRetained = true;
         const changed = retained.snapshot_digest !== priorTree.digest;
@@ -274,14 +279,8 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
         {
           const current = yield* (yield* LibraryStore).load;
           phase = "projection";
-          const reconciled = yield* renderer.withStatus(
-            {
-              pending: `${before.label} · Updating projected Skills`,
-              complete: (value) =>
-                value.projected
-                  ? `${before.label} · ${value.projected} projected Skill${value.projected === 1 ? "" : "s"} updated`
-                  : `${before.label} · No projected Skills needed updating`,
-            },
+          const reconciled = yield* progress.around(
+            { kind: "projection", subject },
             reconcileLibraryProjections({
               roots: options.roots,
               variantsPath: options.variantsPath,
@@ -298,6 +297,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
                   ),
               ),
             }),
+            (value) => ({ kind: "projections-reconciled", projected: value.projected }),
           );
           projected = reconciled.projected;
         }
@@ -399,4 +399,4 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
     results.push(outcome);
   }
   return results;
-});
+}, withLibraryWriter);

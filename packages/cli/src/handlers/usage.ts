@@ -3,7 +3,7 @@ import { Config, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { handleReadOnlyCommand } from "../application.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, homePath, jsonFlag, optionalString } from "../commands/parameters.js";
@@ -40,7 +40,7 @@ export const usageCliCommand = Command.make(
     ),
   },
   (input) =>
-    handleReadOnlyCommand(
+    handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const usage = yield* SkillUsage;

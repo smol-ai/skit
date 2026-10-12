@@ -16,7 +16,7 @@ import {
   previewLibraryBindings,
 } from "../src/workflows/library/set-enabled.js";
 import { planRemoveEffect } from "../src/workflows/library/remove.js";
-import { planUpdatesEffect } from "../src/workflows/library/update.js";
+import { planUpdatesEffect } from "../src/library-application/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";

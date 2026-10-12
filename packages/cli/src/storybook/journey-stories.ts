@@ -18,7 +18,7 @@ import { presentSetEnabled } from "../handlers/library/set-enabled.js";
 import type { Prompter } from "../presentation/prompter.js";
 import type { Renderer } from "../presentation/renderer.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
-import { openLibrarySession } from "../workflows/library/session.js";
+import { openLibrarySession } from "../library-application/session.js";
 
 export interface JourneyStory<A, E, R> {
   readonly name: string;

@@ -9,7 +9,7 @@ import { retainedTreePath } from "@smolai/skit-core";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { updateSubjectsEffect, updateExitCode } from "../src/workflows/library/update.js";
+import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { result } from "../src/handlers/contracts.js";

@@ -1,8 +1,9 @@
-import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
+import { withLibraryWriter } from "@smolai/skit-core";
+import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -265,92 +266,97 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     yield* renderer.note("No changes were applied.", "Setup cancelled");
     return observed;
   }
-  observed = yield* renderer.withStatus(
-    "Revalidating the approved setup plan",
-    revalidateSetupPlan(setupOptions, observed.onboarding.planId),
+  const localCustody = input.localCustody;
+  const completed = yield* withLibraryWriter(
+    Effect.gen(function* () {
+      observed = yield* renderer.withStatus(
+        "Revalidating the approved setup plan",
+        revalidateSetupPlan(setupOptions, observed.onboarding.planId),
+      );
+      if (removalPlan.entries.length) {
+        yield* renderer.withStatus(
+          `Removing ${removalPlan.entries.length} installed cop${removalPlan.entries.length === 1 ? "y" : "ies"}`,
+          applySetupRemovals(removalPlan),
+        );
+        yield* renderer.note(
+          `Removed installed locations are saved at ${removalPlan.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
+          "Removed copies saved",
+        );
+      }
+      if (
+        (retainedSourceSelections.length || localCustodySelections.length) &&
+        !observed.machineConfig.machineId
+      )
+        observed = yield* renderer.withStatus(
+          "Creating this machine's Library identity",
+          runSetup({ ...setupOptions, persistRoots: true }),
+        );
+      if (retainedSourceSelections.length) {
+        const retainedSkillCount = retainedBySource.reduce(
+          (count, item) => count + item.names.length,
+          0,
+        );
+        yield* renderer.withStatus(
+          `Importing ${retainedBySource.length} installed Collection${retainedBySource.length === 1 ? "" : "s"} (${retainedSkillCount} Skill${retainedSkillCount === 1 ? "" : "s"})`,
+          applySetupObservedCollections(
+            { setup: setupOptions, retention: localCustody.acquisition },
+            observed,
+            retainedSourceSelections,
+          ),
+        );
+      }
+      if (existingBindingSelections.length) {
+        observed = yield* observe(setupOptions);
+        const applied = yield* renderer.withStatus(
+          reconnectSelections.length
+            ? `Reconnecting ${reconnectSelections.length} existing Library match${reconnectSelections.length === 1 ? "" : "es"}`
+            : "Keeping existing Library matches without enabling",
+          applySetupExistingBindings(
+            { setup: setupOptions, bindings: localCustody.bindings },
+            observed.onboarding.planId,
+            existingBindingSelections,
+          ),
+        );
+        yield* renderSetupAliasRecovery(applied);
+      }
+      if (localCustodySelections.length) {
+        observed = yield* observe(setupOptions);
+        const names =
+          localCustodySelections.length <= 5
+            ? `: ${localCustodySelections.map((selection) => selection.name).join(", ")}`
+            : "";
+        const applied = yield* renderer.withStatus(
+          `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}${names}`,
+          applySetupLocalCustody(
+            { setup: setupOptions, adoption: localCustody },
+            observed.onboarding.planId,
+            localCustodySelections,
+          ),
+        );
+        yield* renderSetupAliasRecovery(applied);
+      }
+      if (
+        retainedSourceSelections.length &&
+        !persistRoots &&
+        !existingBindingSelections.length &&
+        !localCustodySelections.length &&
+        !removalPlan.entries.length
+      ) {
+        // The import checked the staged bytes and the saved Library Versions. Interactive setup does
+        // not render this pre-apply observation, so a global rescan adds no user-visible result.
+        yield* renderer.note("Selected setup changes were applied.", "Setup complete");
+        return observed;
+      }
+      const refreshed = yield* renderer.withStatus(
+        "Verifying the completed setup",
+        runSetup({ ...setupOptions, persistRoots }),
+      );
+      yield* renderer.note("Selected setup changes were applied.", "Setup complete");
+      return refreshed;
+    }),
   );
-  if (removalPlan.entries.length) {
-    yield* renderer.withStatus(
-      `Removing ${removalPlan.entries.length} installed cop${removalPlan.entries.length === 1 ? "y" : "ies"}`,
-      applySetupRemovals(removalPlan),
-    );
-    yield* renderer.note(
-      `Removed installed locations are saved at ${removalPlan.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
-      "Removed copies saved",
-    );
-  }
-  if (
-    (retainedSourceSelections.length || localCustodySelections.length) &&
-    !observed.machineConfig.machineId
-  )
-    observed = yield* renderer.withStatus(
-      "Creating this machine's Library identity",
-      runSetup({ ...setupOptions, persistRoots: true }),
-    );
-  if (retainedSourceSelections.length) {
-    const retainedSkillCount = retainedBySource.reduce(
-      (count, item) => count + item.names.length,
-      0,
-    );
-    yield* renderer.withStatus(
-      `Importing ${retainedBySource.length} installed Collection${retainedBySource.length === 1 ? "" : "s"} (${retainedSkillCount} Skill${retainedSkillCount === 1 ? "" : "s"})`,
-      applySetupObservedCollections(
-        { setup: setupOptions, retention: input.localCustody.acquisition },
-        observed,
-        retainedSourceSelections,
-      ),
-    );
-  }
-  if (existingBindingSelections.length) {
-    observed = yield* observe(setupOptions);
-    const applied = yield* renderer.withStatus(
-      reconnectSelections.length
-        ? `Reconnecting ${reconnectSelections.length} existing Library match${reconnectSelections.length === 1 ? "" : "es"}`
-        : "Keeping existing Library matches without enabling",
-      applySetupExistingBindings(
-        { setup: setupOptions, bindings: input.localCustody.bindings },
-        observed.onboarding.planId,
-        existingBindingSelections,
-      ),
-    );
-    yield* renderSetupAliasRecovery(applied);
-  }
-  if (localCustodySelections.length) {
-    observed = yield* observe(setupOptions);
-    const names =
-      localCustodySelections.length <= 5
-        ? `: ${localCustodySelections.map((selection) => selection.name).join(", ")}`
-        : "";
-    const applied = yield* renderer.withStatus(
-      `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}${names}`,
-      applySetupLocalCustody(
-        { setup: setupOptions, adoption: input.localCustody },
-        observed.onboarding.planId,
-        localCustodySelections,
-      ),
-    );
-    yield* renderSetupAliasRecovery(applied);
-  }
-  if (
-    retainedSourceSelections.length &&
-    !persistRoots &&
-    !existingBindingSelections.length &&
-    !localCustodySelections.length &&
-    !removalPlan.entries.length
-  ) {
-    // The import checked the staged bytes and the saved Library Versions. Interactive setup does
-    // not render this pre-apply observation, so a global rescan adds no user-visible result.
-    yield* renderer.note("Selected setup changes were applied.", "Setup complete");
-    yield* offerSkillsShUpdateCheck();
-    return observed;
-  }
-  const refreshed = yield* renderer.withStatus(
-    "Verifying the completed setup",
-    runSetup({ ...setupOptions, persistRoots }),
-  );
-  yield* renderer.note("Selected setup changes were applied.", "Setup complete");
   yield* offerSkillsShUpdateCheck();
-  return refreshed;
+  return completed;
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
@@ -528,7 +534,7 @@ export const setupCliCommand = Command.make(
       stdout: Boolean(process.stdout.isTTY),
       stderr: Boolean(process.stderr.isTTY),
     });
-    return handleCommand(
+    return handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const configuration = yield* libraryCommandConfiguration(input);

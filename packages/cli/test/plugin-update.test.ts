@@ -10,7 +10,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { planUpdatesEffect, updateSubjectsEffect } from "../src/workflows/library/update.js";
+import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";

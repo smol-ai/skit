@@ -22,7 +22,7 @@ import {
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -137,7 +137,7 @@ export const authorDeleteCliCommand = Command.make(
   { skit, dryRun, home: homeFlag, json: jsonFlag },
   ({ skit, dryRun, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);

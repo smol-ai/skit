@@ -1,7 +1,8 @@
+import { terminalLibraryProgressLayer } from "../../presentation/library-progress.js";
 import { Effect, Option } from "effect";
 import { LibraryStore } from "@smolai/skit-core";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -12,7 +13,7 @@ import {
   planUpdatesEffect,
   updateSubjectsEffect,
   updateExitCode,
-} from "../../workflows/library/update.js";
+} from "../../library-application/update.js";
 import {
   applyProjectionRetention,
   planProjectionRetention,
@@ -33,7 +34,7 @@ export const updateCliCommand = Command.make(
   "update",
   { subject, dryRun, fromProjection, ...localFlags },
   (input) =>
-    handleCommand(
+    handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const configuration = yield* libraryCommandConfiguration(input);
@@ -74,7 +75,9 @@ export const updateCliCommand = Command.make(
           );
           return yield* renderer.result(result("update", outputContracts.updatePlan, value));
         }
-        const value = yield* updateSubjectsEffect(state, options, query);
+        const value = yield* updateSubjectsEffect(state, options, query).pipe(
+          Effect.provide(terminalLibraryProgressLayer),
+        );
         yield* renderer.result(
           result("update", outputContracts.update, value, updateExitCode(value)),
         );

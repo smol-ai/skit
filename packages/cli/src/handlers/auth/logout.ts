@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { authLogoutCommand } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
@@ -15,7 +15,7 @@ export const authLogoutCliCommand = Command.make(
   { origin, home: homeFlag, json: jsonFlag },
   ({ origin, home }) => {
     const selectedHome = homePath(home);
-    return handleCommand(
+    return handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* authLogoutCommand(selectedHome, Option.getOrUndefined(origin));

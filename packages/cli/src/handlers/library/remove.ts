@@ -1,17 +1,13 @@
 import { LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homePath, localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { executeRemoveEffect } from "../../workflows/library/remove.js";
-import {
-  readAuthorWorkspaceEffect,
-  writeAuthorWorkspaceEffect,
-} from "../../library/author-workspace.js";
 import { result } from "../contracts.js";
 
 const subject = Argument.String("skit-or-skill");
@@ -24,7 +20,7 @@ export const removeCliCommand = Command.make(
   "remove",
   { subject, dryRun, ...localFlags },
   (input) =>
-    handleCommand(
+    handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const configuration = yield* libraryCommandConfiguration(input);
@@ -42,28 +38,6 @@ export const removeCliCommand = Command.make(
           return yield* renderer.result(
             result("remove", outputContracts.removePlan, outcome.value),
           );
-        const removed =
-          outcome.value.subject_kind === "collection"
-            ? state.collections.find(
-                (collection) => collection.collection_id === outcome.value.subject_id,
-              )
-            : undefined;
-        if (removed?.upstream?.source_identity.kind === "authored-workspace") {
-          const workspacePath = state.acquisitions.find(
-            (acquisition) =>
-              acquisition.collection_id === removed.collection_id &&
-              acquisition.source_identity.kind === "authored-workspace",
-          )?.input.value;
-          const workspace =
-            workspacePath === undefined
-              ? undefined
-              : yield* readAuthorWorkspaceEffect(workspacePath);
-          if (workspace?.workspace_id === removed.upstream.source_identity.workspace_id)
-            yield* writeAuthorWorkspaceEffect(workspacePath!, {
-              ...workspace,
-              registration: "removed",
-            });
-        }
         yield* renderer.result(result("remove", outputContracts.remove, outcome.value));
       }),
       homePath(input.home),
