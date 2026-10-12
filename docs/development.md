@@ -4,7 +4,7 @@ This guide covers repository setup, local CLI usage, isolated testing, generated
 
 ## Prerequisites
 
-- Node.js 22.13.0 or newer
+- Node.js 22.16.0 or newer
 - pnpm 11.23.0
 
 Install pnpm with `npx get-pnpm`, `corepack`, or a system package manager such as Homebrew.

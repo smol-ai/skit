@@ -5,8 +5,10 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  effect: 4.0.0
-  '@effect/platform-node-shared': 4.0.0
+  effect: 4.0.3
+  '@effect/platform-node-shared': 4.0.3
+  '@effect/platform-node': 4.0.3
+  '@effect/platform-browser': 4.0.3
 
 patchedDependencies:
   '@cloudflare/vitest-plugin@1.3.5': 3533c80af9e0fa2bd7e5fec43098a7b36daa1ea52a5c258bf6020646d740a782
@@ -35,11 +37,11 @@ importers:
   packages/cli:
     devDependencies:
       '@effect/platform-node':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(redis@6.2.1)
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(redis@6.2.1)
       '@effect/vitest':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@smolai/skit-core':
         specifier: workspace:*
         version: link:../skit
@@ -50,8 +52,8 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
       effect:
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.0.3
+        version: 4.0.3
       esbuild:
         specifier: 0.28.1
         version: 0.28.1
@@ -80,14 +82,14 @@ importers:
   packages/skit:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(redis@6.2.1)
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(redis@6.2.1)
       acorn:
         specifier: 8.15.0
         version: 8.15.0
       effect:
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.0.3
+        version: 4.0.3
       typeid-js:
         specifier: ^1.2.0
         version: 1.2.0
@@ -99,8 +101,8 @@ importers:
         version: 3.3.1
     devDependencies:
       '@effect/vitest':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
@@ -114,14 +116,14 @@ importers:
   packages/skit-server-effect:
     dependencies:
       '@effect/platform-browser':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)
       '@effect/sql-d1':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)
       '@foldkit/ui':
         specifier: 0.165.0
-        version: 0.165.0(effect@4.0.0)(foldkit@0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0))
+        version: 0.165.0(effect@4.0.3)(foldkit@0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3))
       '@smolai/skit-core':
         specifier: workspace:*
         version: link:../skit
@@ -132,8 +134,8 @@ importers:
         specifier: ^0.3.0
         version: 0.3.0
       effect:
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.0.3
+        version: 4.0.3
       fflate:
         specifier: 0.8.2
         version: 0.8.2
@@ -154,11 +156,11 @@ importers:
         specifier: 1.3.5
         version: 1.3.5(patch_hash=3533c80af9e0fa2bd7e5fec43098a7b36daa1ea52a5c258bf6020646d740a782)(@cloudflare/workers-types@5.20261003.1)(@types/node@24.10.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@effect/vitest':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@foldkit/vite-plugin':
         specifier: 0.26.0
-        version: 0.26.0(effect@4.0.0)(foldkit@0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
+        version: 0.26.0(effect@4.0.3)(foldkit@0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
@@ -167,7 +169,7 @@ importers:
         version: 24.10.1
       foldkit:
         specifier: 0.165.0
-        version: 0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0)
+        version: 0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3)
       tailwindcss:
         specifier: ^4.1.14
         version: 4.3.3
@@ -190,8 +192,8 @@ importers:
   packages/storybook:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(redis@6.2.1)
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(redis@6.2.1)
       '@opentui/core':
         specifier: 0.5.9
         version: 0.5.9(typescript@5.9.3)(web-tree-sitter@0.25.10)
@@ -199,8 +201,8 @@ importers:
         specifier: workspace:*
         version: link:../cli
       effect:
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.0.3
+        version: 4.0.3
     devDependencies:
       '@types/node':
         specifier: 24.10.1
@@ -224,12 +226,12 @@ importers:
         specifier: workspace:*
         version: link:../skit
       effect:
-        specifier: 4.0.0
-        version: 4.0.0
+        specifier: 4.0.3
+        version: 4.0.3
     devDependencies:
       '@effect/vitest':
-        specifier: 4.0.0
-        version: 4.0.0(effect@4.0.0)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@types/bun':
         specifier: latest
         version: 1.4.2
@@ -468,33 +470,33 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@effect/platform-browser@4.0.0':
-    resolution: {integrity: sha512-OHo7EPpF3RVPiI+mjoU9yd05LdCdKPjzDXqs5wRgF9CsdVvwN76B0zgt54DxPUcvMYri1tVJOtLCVnK0tRkNQQ==}
+  '@effect/platform-browser@4.0.3':
+    resolution: {integrity: sha512-1heMTrwHkghTN2DWRb+Os+YdeowMFaxTbBqPzmqJDGU8DlBCKPGr+f4BIjWmnANxlnsIlKUqzr3gKqfR1ueicw==}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
 
-  '@effect/platform-node-shared@4.0.0':
-    resolution: {integrity: sha512-VBXHJU9UXVZPdQGGDRjGXpo+TpOzRwZuMrdKAtIxi1qwcRftmacZ1zTgIrzBa0Z2RA2KVkoOecQUsTlt/nJZhw==}
+  '@effect/platform-node-shared@4.0.3':
+    resolution: {integrity: sha512-5srkJfmWklWSgwZwlkMeTXobfNtxuwuTCvY9JWdPXRv/PBXAe5kKSptzRxT778oFFsaE9IMI8X61pvkifT9Eug==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
 
-  '@effect/platform-node@4.0.0':
-    resolution: {integrity: sha512-/L+4MUbl8FejPKLHLROYSOebvHnfixkP8KiblSD/DE5uH5xENZBHaux4nH6XMnRP+lr8ajpEJFS8sUrmmxFJeQ==}
+  '@effect/platform-node@4.0.3':
+    resolution: {integrity: sha512-ctvREpC1EzRVsOm0JyIzYHajAQScFaec6Gl+M7TEIpEqdmmx6Ju11Um92EA/CE2KBfY5Fp1QWlqTkK6lOL7tqg==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
       redis: '>=5.0.0 <7.0.0'
 
-  '@effect/sql-d1@4.0.0':
-    resolution: {integrity: sha512-pmkzncZCGD6CLyvc89keEBU85h+gHVCu/LKQnThd+ruYSUbG0R9jYA+lnk3R8Djp0wQW6SbsbmHQuhopIYyo3Q==}
+  '@effect/sql-d1@4.0.3':
+    resolution: {integrity: sha512-PPItxp9aAmJTRIfZtyJMuQCB7d1ExFvIRkGWnfQuWZlPxjtYfQT+V2kS9AUqf0OC1/nZnAFwLlFKCDgumLmy6A==}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
 
-  '@effect/vitest@4.0.0':
-    resolution: {integrity: sha512-kGElCPFGtP+CgMCwV/HjJWqtE3zYo6I1+8MSA54l+EI24lPU9p2Efa+TBp1jfkg9j711KKzEqgSAy3VzTsb76Q==}
+  '@effect/vitest@4.0.3':
+    resolution: {integrity: sha512-jsIkpssf0CFuOeycW2sQZkWx0qzlsRv+JIkzd9qQpoFDcHC9JZFSdIjEBAhsdp20pDy4Y/b2vT/ew7wXZxvEig==}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
       vitest: '>=5.0.0 <6.0.0'
 
   '@emnapi/runtime@1.11.3':
@@ -669,14 +671,14 @@ packages:
     resolution: {integrity: sha512-EARUWr5qlDqnEprAZqQ5KsUoplcv8pWtELkHiUGa5cyxGqmWRiYiL8jOwghF+d1vzUS1xquV1s0oa7Cu2+4dzw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
       foldkit: '>=0.165.0'
 
   '@foldkit/vite-plugin@0.26.0':
     resolution: {integrity: sha512-/ponCe7EZUv78EepsbACtH+FhjBD+O2C0OkjgvwP4t3K3Mribxo39QEyqbc1aWkahvBmKTsRIg6L9FMN6Eoinw==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      effect: 4.0.0
+      effect: 4.0.3
       foldkit: '>=0.165.0'
       vite: ^8.0.0
 
@@ -1764,8 +1766,8 @@ packages:
   '@types/semver@7.8.0':
     resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@types/yazl@3.3.0':
     resolution: {integrity: sha512-mFL6lGkk2N5u5nIxpNV/K5LW3qVSbxhJrMxYGOOxZndWxMgCamr/iCsq/1t9kd8pEwhuNP91LC5qZm/qS9pOEw==}
@@ -2056,8 +2058,8 @@ packages:
     resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
     engines: {node: '>=0.3.1'}
 
-  effect@4.0.0:
-    resolution: {integrity: sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ==}
+  effect@4.0.3:
+    resolution: {integrity: sha512-LoWn/Uwwx0JjHSDmBAAahx8sB+klzM6vsZovnbYowBNw6B4QScJLRLBByO61plvNiycx7HPN8FnsWUCu0eXW5w==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -2104,8 +2106,8 @@ packages:
     resolution: {integrity: sha512-ue0DVJvRtb6PnF4SbW/qWJIEuseXxaPHEiQX1iiG1Nk2n5BUMD0KYjsm741HsboAJlJPojzSvyG9HXwzpVUQmw==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      '@effect/platform-browser': 4.0.0
-      effect: 4.0.0
+      '@effect/platform-browser': 4.0.3
+      effect: 4.0.3
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -2890,37 +2892,37 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@effect/platform-browser@4.0.0(effect@4.0.0)':
+  '@effect/platform-browser@4.0.3(effect@4.0.3)':
     dependencies:
-      effect: 4.0.0
+      effect: 4.0.3
 
-  '@effect/platform-node-shared@4.0.0(effect@4.0.0)':
+  '@effect/platform-node-shared@4.0.3(effect@4.0.3)':
     dependencies:
-      '@types/ws': 8.18.1
-      effect: 4.0.0
+      '@types/ws': 8.18.2
+      effect: 4.0.3
       ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.0(effect@4.0.0)(redis@6.2.1)':
+  '@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.2.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0(effect@4.0.0)
-      effect: 4.0.0
+      '@effect/platform-node-shared': 4.0.3(effect@4.0.3)
+      effect: 4.0.3
       redis: 6.2.1
       undici: 8.11.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/sql-d1@4.0.0(effect@4.0.0)':
+  '@effect/sql-d1@4.0.3(effect@4.0.3)':
     dependencies:
       '@cloudflare/workers-types': 5.20261003.1
-      effect: 4.0.0
+      effect: 4.0.3
 
-  '@effect/vitest@4.0.0(effect@4.0.0)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))':
+  '@effect/vitest@4.0.3(effect@4.0.3)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))':
     dependencies:
-      effect: 4.0.0
+      effect: 4.0.3
       vitest: 5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
 
   '@emnapi/runtime@1.11.3':
@@ -3017,18 +3019,18 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@foldkit/ui@0.165.0(effect@4.0.0)(foldkit@0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0))':
+  '@foldkit/ui@0.165.0(effect@4.0.3)(foldkit@0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3))':
     dependencies:
       '@floating-ui/dom': 1.8.0
-      effect: 4.0.0
-      foldkit: 0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0)
+      effect: 4.0.3
+      foldkit: 0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3)
 
-  '@foldkit/vite-plugin@0.26.0(effect@4.0.0)(foldkit@0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))':
+  '@foldkit/vite-plugin@0.26.0(effect@4.0.3)(foldkit@0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))':
     dependencies:
-      '@effect/platform-node': 4.0.0(effect@4.0.0)(redis@6.2.1)
-      '@effect/platform-node-shared': 4.0.0(effect@4.0.0)
-      effect: 4.0.0
-      foldkit: 0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0)
+      '@effect/platform-node': 4.0.3(effect@4.0.3)(redis@6.2.1)
+      '@effect/platform-node-shared': 4.0.3(effect@4.0.3)
+      effect: 4.0.3
+      foldkit: 0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3)
       magic-string: 1.4.2
       vite: 8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)
       ws: 8.22.0
@@ -3718,7 +3720,7 @@ snapshots:
 
   '@types/semver@7.8.0': {}
 
-  '@types/ws@8.18.1':
+  '@types/ws@8.18.2':
     dependencies:
       '@types/node': 24.10.1
 
@@ -3895,7 +3897,7 @@ snapshots:
 
   diff@9.0.0: {}
 
-  effect@4.0.0: {}
+  effect@4.0.3: {}
 
   emoji-regex@10.6.0: {}
 
@@ -3951,10 +3953,10 @@ snapshots:
 
   fflate@0.8.2: {}
 
-  foldkit@0.165.0(@effect/platform-browser@4.0.0(effect@4.0.0))(effect@4.0.0):
+  foldkit@0.165.0(@effect/platform-browser@4.0.3(effect@4.0.3))(effect@4.0.3):
     dependencies:
-      '@effect/platform-browser': 4.0.0(effect@4.0.0)
-      effect: 4.0.0
+      '@effect/platform-browser': 4.0.3(effect@4.0.3)
+      effect: 4.0.3
       parse5: 8.0.1
 
   fsevents@2.3.3:
