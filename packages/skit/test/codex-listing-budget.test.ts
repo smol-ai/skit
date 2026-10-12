@@ -187,8 +187,8 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       );
       expect(first).toMatchObject({
         status: "estimated",
-        contextWindow: 373_000,
-        limit: 7_460,
+        contextWindow: 500_000,
+        limit: 10_000,
         otherSkills: 0,
         collections: [{ collectionId, skills: 1 }],
       });
@@ -206,6 +206,24 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         },
       );
       expect(withRejectedSkill.budget).toEqual(first);
+      const overridden = yield* readLibraryCodexListingSnapshot(
+        stateWithProjection,
+        options,
+        process.execPath,
+        {
+          cwd: f.root,
+          skills: entries,
+          errors: [],
+          config: {
+            config: { model: "gpt-6.1-sol", model_context_window: 1_000_000, skills: null },
+          },
+        },
+      );
+      expect(overridden.budget).toMatchObject({
+        status: "estimated",
+        contextWindow: 1_000_000,
+        limit: 20_000,
+      });
       const shared = yield* Schema.decodeUnknownEffect(ListingBudget)(
         codexListingResult(withRejectedSkill),
       );
@@ -229,8 +247,8 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       expect(fallback).toMatchObject({
         status: "estimated",
         unit: "budget-tokens",
-        contextWindow: 373_000,
-        limit: 7_460,
+        contextWindow: 500_000,
+        limit: 10_000,
       });
       yield* fs.writeFileString(
         metadataPath,

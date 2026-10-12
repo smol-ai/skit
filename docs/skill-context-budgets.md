@@ -146,3 +146,17 @@ model changes and remote managed settings are not observable offline.
 The numeric allowance therefore supports an estimated comparison, not a claim that SKIT
 captured the complete prompt. Per-skill `~tok` values from Claude's `/skills` are separate
 measurements and should not be directly compared with character counts.
+
+### Default and maximum context windows
+
+Catalog entries distinguish `defaultContextWindow` from optional `maxContextWindow`.
+Budget estimates use the default unless native configuration supplies an explicit
+`model_context_window`. An unknown maximum is omitted; it is not inferred from the default.
+Maximums are informational and do not automatically enlarge or clamp configured estimates.
+
+GPT-6.1 Sol's Codex/Work default is 500,000 tokens and its announced maximum is
+1,000,000 tokens, according to Tibo's announcement quoted on 2026-10-12. This entry
+records that announcement separately from the older native catalog snapshot. Its default
+Codex listing allowance is 10,000 budget tokens; an explicit 1M context override yields
+20,000 under the versioned 2% rule. The separate `skills.max_context_tokens` override
+remains capped at 10,000. These are harness context settings, not API model limits.

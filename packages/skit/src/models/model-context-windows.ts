@@ -2,7 +2,7 @@ import { Option, Schema } from "effect";
 import catalog from "./model-context-windows.json" with { type: "json" };
 
 export const ModelContextCatalog = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
+  schemaVersion: Schema.Literal(2),
   observedAt: Schema.NonEmptyString,
   sources: Schema.Record(
     Schema.NonEmptyString,
@@ -19,8 +19,23 @@ export const ModelContextCatalog = Schema.Struct({
       provider: Schema.NonEmptyString,
       id: Schema.NonEmptyString,
       aliases: Schema.Array(Schema.NonEmptyString),
-      contextWindow: Schema.Int.check(Schema.isGreaterThan(0)),
-    }),
+      defaultContextWindow: Schema.Int.check(Schema.isGreaterThan(0)),
+      maxContextWindow: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
+      contextWindowSource: Schema.optionalKey(
+        Schema.Struct({
+          kind: Schema.Literal("announcement"),
+          observedAt: Schema.NonEmptyString,
+          reference: Schema.NonEmptyString,
+        }),
+      ),
+    }).check(
+      Schema.makeFilter(
+        (model) =>
+          model.maxContextWindow === undefined ||
+          model.defaultContextWindow <= model.maxContextWindow ||
+          "Default context window must not exceed maximum",
+      ),
+    ),
   ).check(Schema.isMinLength(1)),
 }).check(
   Schema.makeFilter(
@@ -35,11 +50,25 @@ export type ModelContextCatalog = typeof ModelContextCatalog.Type;
 export const modelContextCatalog: ModelContextCatalog =
   Schema.decodeUnknownSync(ModelContextCatalog)(catalog);
 
+/** Default used for budget estimates when configuration provides no override. */
 export function modelContextWindow(provider: string, model: string | null): Option.Option<number> {
   return Option.fromUndefinedOr(
     modelContextCatalog.models.find(
       (entry) =>
         entry.provider === provider && (entry.id === model || entry.aliases.includes(model ?? "")),
-    )?.contextWindow,
+    )?.defaultContextWindow,
+  );
+}
+
+/** Unknown maximums stay unknown rather than inheriting the default. */
+export function modelMaxContextWindow(
+  provider: string,
+  model: string | null,
+): Option.Option<number> {
+  return Option.fromUndefinedOr(
+    modelContextCatalog.models.find(
+      (entry) =>
+        entry.provider === provider && (entry.id === model || entry.aliases.includes(model ?? "")),
+    )?.maxContextWindow,
   );
 }
