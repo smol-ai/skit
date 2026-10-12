@@ -105,7 +105,7 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
       expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(document);
       if (!nativeExecutable) {
         const budget = report.listing_budgets.find((budget) => budget.harness === "codex");
-        expect(budget).toMatchObject({ _tag: "Estimated", limit: 7460, unit: "budget-tokens" });
+        expect(budget).toMatchObject({ _tag: "Estimated", limit: 10_000, unit: "budget-tokens" });
         if (!budget) return yield* Effect.die("Missing Codex budget");
         expect(largeListingEntries(budget)).toHaveLength(2);
         const calls = (yield* fs.readFileString(requests))
