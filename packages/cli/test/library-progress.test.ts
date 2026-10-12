@@ -23,7 +23,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-headless-update-" });
     const source = join(root, "source");
     yield* copySkitFixtureEffect("authored", source);
-    const archivePath = join(root, "source.tar");
+    const archivePath = join(root, "source.zip");
     const archive = Effect.gen(function* () {
       yield* fs.remove(archivePath, { force: true });
       yield* createSkitArchiveEffect(source, archivePath);
@@ -35,12 +35,12 @@ it.effect("a headless update emits domain progress and records one attributed tr
       transport: () =>
         Effect.succeed(
           new Response(new Uint8Array(bytes), {
-            headers: { "content-type": "application/x-tar" },
+            headers: { "content-type": "application/zip" },
           }),
         ),
     });
     yield* home.owned(
-      addLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/source.tar" }),
+      addLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/source.zip" }),
     );
     const before = yield* home.durable;
     const events: LibraryProgressEvent[] = [];
