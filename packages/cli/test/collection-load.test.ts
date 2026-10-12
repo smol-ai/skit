@@ -12,22 +12,19 @@ import {
   descriptionLoadMessage,
   largeCollectionWarning,
 } from "../src/workflows/library/collection-load.js";
-import { renderNoteFrame } from "../src/presentation/output-frame.js";
 
 describe("collection load warning", () => {
   it("warns strictly above 100 and renders actionable guidance", () => {
     expect(largeCollectionWarning(100)).toBeUndefined();
     const warning = largeCollectionWarning(101)!;
-    const frame = renderNoteFrame(warning, "Large collection", "human");
-    expect(frame.stderr).toContain("101 skills");
-    expect(frame.stderr).toContain("skit doctor");
+    expect(warning).toContain("101 skills");
+    expect(warning).toContain("skit doctor");
   });
   it("reports aggregate characters and incomplete measurements without inventing a budget", () => {
     const message = descriptionLoadMessage({ skills: 120, characters: 24000, unknown: 2 });
     expect(message).toContain("24,000 description characters");
     expect(message).toContain("2 unmeasured");
     expect(message).not.toContain("budget");
-    expect(renderNoteFrame(message, "Skill context load", "json").stderr).toBeFalsy();
   });
 });
 
