@@ -1,5 +1,5 @@
 {
-  "$id": "skit.security.accept.v2",
+  "$id": "skit.security.review.v3",
   "type": "object",
   "properties": {
     "skill_version_id": {
@@ -88,7 +88,13 @@
           "properties": {
             "critical": {
               "type": "integer",
-              "minimum": 0
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "allOf": [
+                {
+                  "minimum": 0
+                }
+              ]
             },
             "nonCriticalCapabilities": {
               "type": "array",
@@ -185,11 +191,23 @@
                   },
                   "line": {
                     "type": "integer",
-                    "minimum": 1
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "allOf": [
+                      {
+                        "minimum": 1
+                      }
+                    ]
                   },
                   "column": {
                     "type": "integer",
-                    "minimum": 1
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "allOf": [
+                      {
+                        "minimum": 1
+                      }
+                    ]
                   },
                   "excerpt": {
                     "type": "string"

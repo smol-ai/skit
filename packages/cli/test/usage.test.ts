@@ -29,7 +29,7 @@ test("presents separate evidence and diagnostics; encodes the public JSON contra
     format: "json",
   });
   expect(JSON.parse(json?.stdout ?? "{}")).toEqual({
-    schema: "skit.usage.v1",
+    schema: "skit.usage.v2",
     data: observedUsageStory,
   });
 });
@@ -119,7 +119,7 @@ it.effect("exposes the read-only command and output schema", () =>
     expect(usage).toMatchObject({
       stability: "experimental",
       effects: { capabilities: ["filesystem.read"] },
-      outputSchemas: expect.arrayContaining(["skit.usage.v1"]),
+      outputSchemas: expect.arrayContaining(["skit.usage.v2"]),
       interactive: false,
     });
   }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-usage-contract"))),
@@ -177,7 +177,7 @@ it.effect("runs the real command against isolated transcripts without creating L
         }),
       ),
     );
-    expect(captured?.schema).toBe("skit.usage.v1");
+    expect(captured?.schema).toBe("skit.usage.v2");
     const report = yield* Schema.decodeUnknownEffect(UsageReport)(captured?.data);
     expect(report.rows).toMatchObject([{ name: "example", loads: 1, calls: 0, reads: 0 }]);
     expect(yield* fs.exists(home)).toBe(false);

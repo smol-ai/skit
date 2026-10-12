@@ -60,7 +60,7 @@ function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
   ].join("\n");
 }
 
-function renderSecurityReview(data: ContractDataForId<"skit.security.review.v2">): string {
+function renderSecurityReview(data: ContractDataForId<"skit.security.review.v3">): string {
   return data.audit.findings.length
     ? data.assessment.findingDecisions
         .map((finding) => `${finding.fingerprint} ${finding.disposition} (${finding.ruleId})`)
@@ -593,7 +593,7 @@ export function setupDiscoverySummary(data: SetupDiscoveryInput) {
   };
 }
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v6">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -698,7 +698,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v6">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v6">["projections"],
+  projections: ContractDataForId<"skit.setup.v7">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -725,7 +725,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v6">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -745,7 +745,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v6">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v6">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v7">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -787,7 +787,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v6">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v6">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,

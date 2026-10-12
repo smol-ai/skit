@@ -341,7 +341,7 @@ describe("CLI contracts", () => {
     );
     expect(reviewed.status).toBe(0);
     const review = JSON.parse(reviewed.stdout);
-    expect(review.schema).toBe("skit.security.review.v2");
+    expect(review.schema).toBe("skit.security.review.v3");
     const fingerprint = review.data.audit.findings[0].fingerprint as string;
     expect(review.data.assessment.outcome).toBe("warn");
 
@@ -381,7 +381,7 @@ describe("CLI contracts", () => {
     const acceptedReview = JSON.parse(accepted.stdout);
     expect(acceptedReview).toEqual(
       expect.objectContaining({
-        schema: "skit.security.accept.v2",
+        schema: "skit.security.accept.v3",
         data: expect.objectContaining({
           assessment: expect.objectContaining({ outcome: "warn" }),
           acceptances: expect.arrayContaining([
