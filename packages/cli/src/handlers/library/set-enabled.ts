@@ -1,6 +1,7 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import {
   bindingSkillIds,
+  currentCollectionSkills,
   withLibraryWriter,
   LibraryStore,
   type SkitBindingScope as Scope,
@@ -271,7 +272,11 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   if (input.interactive && collection !== undefined && !wholeCollection) {
     const collectionLabel = input.enabled
       ? `Enable whole collection · ${descriptionLoadMessage(
-          yield* readDescriptionLoad(state, store.originalsPath, selected ?? []),
+          yield* readDescriptionLoad(
+            state,
+            store.originalsPath,
+            currentCollectionSkills(state, collection.collection_id),
+          ),
         )}`
       : "Disable whole collection";
     const selection = yield* prompter
