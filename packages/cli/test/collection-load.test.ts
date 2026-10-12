@@ -1,10 +1,24 @@
 import { it as effectIt } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
-import { LibraryStore, libraryStoreLayer, retainedTreePath } from "@smolai/skit-core";
+import {
+  deterministicTreeHashEffect,
+  LibraryStore,
+  libraryStoreLayer,
+  retainedTreePath,
+  type ObservedSkill,
+} from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { initializeLibraryMachine } from "./helpers/library-home.js";
+import {
+  initializeLibraryMachine,
+  libraryHome,
+  retainObservedIn,
+  writingTo,
+} from "./helpers/library-home.js";
+import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
+import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
+import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 import { describe, expect, it } from "vitest";
@@ -27,6 +41,82 @@ describe("collection load warning", () => {
     expect(message).not.toContain("budget");
   });
 });
+
+effectIt.effect(
+  "measures current collection members while keeping removed skills individually selectable",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-collection-membership-" });
+      const home = yield* libraryHome({ home: join(root, "home") });
+      yield* initializeLibraryMachine(home.home);
+      const source = join(root, "source");
+      const members: ObservedSkill[] = [];
+      for (const name of ["keep", "removed"]) {
+        const path = join(source, name);
+        yield* fs.makeDirectory(path, { recursive: true });
+        yield* fs.writeFileString(
+          join(path, "SKILL.md"),
+          `---\nname: ${name}\ndescription: "A😀é"\n---\n`,
+        );
+        members.push({
+          name,
+          sourcePath: path,
+          relativePath: name,
+          observedHash: yield* deterministicTreeHashEffect(path),
+        });
+      }
+      const retain = (skills: typeof members, retainedAt: string) =>
+        home.owned(
+          writingTo(
+            home.home,
+            retainObservedIn(home.home)({
+              source: { type: "local", path: source },
+              input: source,
+              retainedAt,
+              skills,
+              observations: [],
+            }),
+          ),
+        );
+      const first = yield* retain(members, "2026-10-12T00:00:00.000Z");
+      yield* fs.remove(join(source, "removed"), { recursive: true });
+      yield* retain(
+        members.filter((member) => member.name === "keep"),
+        "2026-10-13T00:00:00.000Z",
+      );
+      expect((yield* home.durable).skills.map((skill) => skill.name).sort()).toEqual([
+        "keep",
+        "removed",
+      ]);
+      const configuration = yield* libraryCommandConfiguration({
+        home: Option.some(home.home),
+        codexRoot: Option.none(),
+        claudeRoot: Option.none(),
+        opencodeRoot: Option.none(),
+        devinRoot: [],
+      });
+      const interaction = yield* makeScriptedInteraction(["skills", []]);
+      yield* home.owned(
+        presentSetEnabled({
+          action: "enable",
+          enabled: true,
+          subject: first.collection?.collection_id,
+          scope: { kind: "global" },
+          cwd: root,
+          all: false,
+          dryRun: true,
+          interactive: true,
+          configuration,
+        }).pipe(Effect.provide(interaction.layer)),
+      );
+      const prompts = yield* interaction.prompts;
+      expect(prompts[0]?.choices.find((choice) => choice.value === "collection")?.label).toBe(
+        "Enable whole collection · 1 skills · 3 description characters",
+      );
+      expect(prompts[1]?.choices.map((choice) => choice.value).sort()).toEqual(["keep", "removed"]);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
 
 effectIt.effect(
   "measures selected retained bytes and reports unreadable or malformed descriptions",
