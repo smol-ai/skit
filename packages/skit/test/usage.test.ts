@@ -471,3 +471,82 @@ it.effect(
       expect(report.incomplete).toBe(true);
     }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );
+
+test("skill filename mentions and output callbacks do not diagnose unsupported reads", () => {
+  const wrap = (input: string) =>
+    extractUsage("codex", {
+      type: "response_item",
+      payload: { type: "custom_tool_call", name: "functions.exec", input, call_id: "example" },
+    });
+  for (const input of [
+    'await tools.apply_patch("*** Add File: /example/SKILL.md");',
+    'await tools.web__run({search_query:[{q:"SKILL.md"}]});',
+    'text("SKILL.md"); const f = x => x?.name || "unknown";',
+  ])
+    expect(wrap(input)).toMatchObject({ events: [], unsupported: 0 });
+  expect(
+    wrap(
+      'const r=await tools.exec_command({cmd:"cat /example/SKILL.md"}); text(r.output.split("\\n").map(x=>x.trim()));',
+    ),
+  ).toMatchObject({
+    events: [{ kind: "reads", path: "/example/SKILL.md" }],
+    unsupported: 0,
+  });
+  expect(
+    wrap(
+      'await tools.exec_command({cmd:"cat /example/SKILL.md"}); if (ready) { await tools.exec_command({cmd:dynamic}); }',
+    ),
+  ).toMatchObject({
+    events: [{ kind: "reads", path: "/example/SKILL.md" }],
+    unsupported: 1,
+  });
+});
+
+test("unknown and hoisted declarations cannot inherit a shadowed command constant", () => {
+  for (const declaration of [
+    'let cmd="echo nothing"',
+    "const cmd=dynamic",
+    "const {cmd}=config",
+    "class cmd {}",
+  ]) {
+    const parsed = literalCommands(
+      `const cmd="cat /outer/SKILL.md"; { ${declaration}; await tools.exec_command({cmd}); } await tools.exec_command({cmd});`,
+    );
+    expect(parsed).toEqual({ commands: [{ cmd: "cat /outer/SKILL.md" }], unsupported: true });
+  }
+  expect(
+    literalCommands(
+      'const cmd="cat /outer/SKILL.md"; { await tools.exec_command({cmd}); const cmd="echo nothing"; }',
+    ),
+  ).toEqual({ commands: [], unsupported: true });
+  expect(
+    literalCommands(
+      'const cmd="cat /outer/SKILL.md"; {const cmd="echo nothing"; await tools.exec_command({cmd});} await tools.exec_command({cmd});',
+    ),
+  ).toEqual({
+    commands: [{ cmd: "echo nothing" }, { cmd: "cat /outer/SKILL.md" }],
+    unsupported: false,
+  });
+});
+
+test("shell syntax in adjacent segments does not suppress a literal read or invent nested reads", () => {
+  for (const command of [
+    'cat /example/SKILL.md; echo "$status"',
+    'echo "$status"; cat /example/SKILL.md',
+    "cat /example/SKILL.md; echo $(cat /fake/SKILL.md; echo nested)",
+    "echo `cat /fake/SKILL.md`; cat /example/SKILL.md",
+    "cat /example/SKILL.md; cat /fake/SKILL.md > out",
+    "cat /example/SKILL.md # cat /fake/SKILL.md",
+    "cat /example/SKILL.md; function f() { cat /fake/SKILL.md; }",
+  ])
+    expect(shellReadPaths(command)).toEqual(["/example/SKILL.md"]);
+  for (const command of [
+    "cat $(echo /fake/SKILL.md)",
+    'cat "$(echo x; cat /fake/SKILL.md)"',
+    "cat <<EOF\ncat /fake/SKILL.md\nEOF",
+    "sed SKILL.md /ordinary.txt",
+    "sed -e SKILL.md /ordinary.txt",
+  ])
+    expect(shellReadPaths(command)).toEqual([]);
+  expect(shellReadPaths("sed -n '1,20p' /example/SKILL.md")).toEqual(["/example/SKILL.md"]);
+});
