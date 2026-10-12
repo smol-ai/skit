@@ -1,4 +1,4 @@
-import { configurationPaths } from "../configuration/paths.js";
+import { configurationPaths, SkitPaths } from "../configuration/paths.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
 import { Clock, Config, Effect, FileSystem, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
@@ -222,7 +222,7 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
   registry?: string,
   durableOrigin?: string,
   command?: string,
-): Effect.fn.Return<ResolvedAuth, RegistryConfigurationError, FileSystem.FileSystem> {
+): Effect.fn.Return<ResolvedAuth, RegistryConfigurationError, FileSystem.FileSystem | SkitPaths> {
   const config = yield* readConfigEffect(home);
   const origin = yield* resolveSelectedOriginEffect({ home, registry, durableOrigin, command });
   const stored = origin ? config.servers[origin] : undefined;
@@ -425,7 +425,7 @@ export function resolveAuthForOriginEffect(
 ): Effect.Effect<
   ResolvedAuth,
   RegistryOriginInvalid | CredentialsUnusable | Config.ConfigError,
-  FileSystem.FileSystem
+  FileSystem.FileSystem | SkitPaths
 > {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);

@@ -1,7 +1,7 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { skitPathsLayer } from "../../configuration/paths.js";
 import { readLibrarySkillMetadata } from "../../library-application/skill-metadata.js";
 import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
-import { Effect } from "effect";
+import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -73,14 +73,14 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
 });
 
 export const listCliCommand = Command.make("list", localFlags, (input) =>
-  withCommandPaths(input.home, (paths) => {
+  Effect.gen(function* () {
     const interactive = shouldBrowseInteractively({
       json: input.json,
       stdin: Boolean(process.stdin.isTTY),
       stdout: Boolean(process.stdout.isTTY),
       stderr: Boolean(process.stderr.isTTY),
     });
-    return handleLibraryCommand(
+    return yield* handleLibraryCommand(
       interactive
         ? Effect.gen(function* () {
             const configuration = yield* libraryCommandConfiguration(input);
@@ -88,9 +88,8 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
             yield* browseLibraryEffect(session, configuration.pull.bindings);
           }).pipe(Effect.provide(terminalPrompterLayer))
         : presentListCommand(),
-      paths.skitHome,
     );
-  }),
+  }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Browse retained Skills and Collections and manage enablement."),
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),

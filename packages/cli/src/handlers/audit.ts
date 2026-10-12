@@ -1,3 +1,4 @@
+import { skitPathsLayer } from "../configuration/paths.js";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { auditLocalCapabilitiesV1Alpha4Effect, type AuditOptions } from "../audit/local.js";
@@ -57,7 +58,7 @@ export const auditCliCommand = Command.make(
           { detail: input.verbose ? "full" : "summary" },
         );
       }),
-    ),
+    ).pipe(Effect.provide(skitPathsLayer())),
 ).pipe(
   Command.withDescription("Inspect local harness capabilities and configuration."),
   Command.withExamples([{ command: "skit audit --json" }, { command: "skit audit --cwd ." }]),

@@ -48,8 +48,11 @@ state override is preserved separately from the default state directory: when ab
 or empty, skills.sh lock discovery uses `~/.agents/.skill-lock.json`. Empty XDG
 configuration/state values are treated as unset. Account home is an OS boundary
 input, not a ConfigProvider key; embedders can pass it to `resolveSkitPaths`. Standalone
-configuration adapters construct it when no application service was supplied;
-configuration writers provide their resolved snapshot to the protected program.
+applications construct it with `skitPathsLayer`; command handlers provide that layer
+from their parsed flags. Domain layers consume a required `SkitPaths` service and do
+not provide it again. Standalone adapters and tests also supply this boundary explicitly.
+Configuration writers derive concrete root overrides from the supplied snapshot and
+provide those paths to the protected program; they never re-read configuration.
 `ConfigProvider` injection therefore controls both the lock and the actual file writes,
 including commands without explicit home flags, without changing process globals.
 

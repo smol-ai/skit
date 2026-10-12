@@ -1,14 +1,10 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import {
-  currentCollectionSkills,
-  LibraryStore,
-  libraryStoreLayer,
-  skitLayer,
-} from "@smolai/skit-core";
+import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
@@ -135,5 +131,5 @@ it.effect(
         yield* run(Effect.flatMap(LibraryStore, (store) => store.load)),
         beforeConflict,
       );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

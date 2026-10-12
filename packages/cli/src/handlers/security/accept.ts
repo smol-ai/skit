@@ -1,4 +1,4 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { skitPathsLayer } from "../../configuration/paths.js";
 import type { Digest } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -82,29 +82,25 @@ export const securityAcceptCliCommand = Command.make(
   "accept",
   { skill, finding, principal, rationale, expiresAt, ...localFlags },
   ({ skill, finding, principal, rationale, expiresAt, home }) =>
-    withCommandPaths(home, (paths) => {
-      const selectedHome = paths.skitHome;
-      return handleLibraryCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const value = yield* securityAcceptCommand(
-            {
-              acceptSecurityFindingEffect: (query, input) =>
-                acceptLibrarySecurityFinding(query, input),
-            },
-            {
-              query: skill,
-              fingerprint: finding,
-              principal,
-              rationale,
-              expiresAt: Option.getOrUndefined(expiresAt),
-            },
-          );
-          yield* renderer.result(result("securityAccept", outputContracts.securityAccept, value));
-        }),
-        selectedHome,
-      );
-    }),
+    handleLibraryCommand(
+      Effect.gen(function* () {
+        const renderer = yield* Renderer;
+        const value = yield* securityAcceptCommand(
+          {
+            acceptSecurityFindingEffect: (query, input) =>
+              acceptLibrarySecurityFinding(query, input),
+          },
+          {
+            query: skill,
+            fingerprint: finding,
+            principal,
+            rationale,
+            expiresAt: Option.getOrUndefined(expiresAt),
+          },
+        );
+        yield* renderer.result(result("securityAccept", outputContracts.securityAccept, value));
+      }),
+    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Accept one finding for Projection of an exact retained Skill Artifact."),
   Command.withExamples([

@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 // The two CLI readers of JSON this process did not write.
 //
 // Both used to cast the parse result. `servers: null` survived a `typeof value === "object"`
@@ -6,7 +7,6 @@
 
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
-import { skitLayer } from "@smolai/skit-core";
 import { join } from "node:path";
 import { resolveAuthEffect } from "../src/registry/auth.js";
 import { readAuthorRemoteEffect } from "../src/workflows/author/sync.js";
@@ -41,7 +41,7 @@ describe("the credential file", () => {
     Effect.gen(function* () {
       const exit = yield* withAuth(`{"schemaVersion":1,"activeOrigin":"${ORIGIN}","servers":null}`);
       assert.strictEqual(reason(exit), "CredentialsUnusable");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect.each([
@@ -51,7 +51,7 @@ describe("the credential file", () => {
   ])("rejects $why", ({ config }) =>
     Effect.gen(function* () {
       assert.strictEqual(reason(yield* withAuth(config)), "CredentialsUnusable");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("keeps a scope this build does not know about", () =>
@@ -65,7 +65,7 @@ describe("the credential file", () => {
       );
       assert.isTrue(Exit.isSuccess(exit));
       if (Exit.isSuccess(exit)) assert.deepStrictEqual(exit.value.scopes, ["future:scope"]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("ignores fields it does not read", () =>
@@ -80,7 +80,7 @@ describe("the credential file", () => {
       );
       assert.isTrue(Exit.isSuccess(exit));
       if (Exit.isSuccess(exit)) assert.strictEqual(exit.value.source, "stored");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 });
 
@@ -99,7 +99,7 @@ describe("Author Workspace remote metadata", () => {
       const exit = yield* withRemote(JSON.stringify(canonical));
       assert.isTrue(Exit.isSuccess(exit));
       if (Exit.isSuccess(exit)) assert.deepStrictEqual({ ...exit.value }, canonical);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect.each([
@@ -120,6 +120,6 @@ describe("Author Workspace remote metadata", () => {
   ])("rejects $why as invalid metadata", ({ document }) =>
     Effect.gen(function* () {
       assert.strictEqual(reason(yield* withRemote(document)), "AuthorRemoteMetadataInvalid");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 });

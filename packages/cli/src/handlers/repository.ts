@@ -1,5 +1,5 @@
-import { withCommandPaths } from "../configuration/paths.js";
-import { Effect } from "effect";
+import { SkitPaths, skitPathsLayer } from "../configuration/paths.js";
+import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
 import { handlePlatformCommand } from "../application.js";
@@ -19,9 +19,11 @@ const flags = { home: homeFlag, json: jsonFlag };
 
 const mutate = (name: "watch" | "ignore" | "forget") =>
   Command.make(name, { path, ...flags }, (input) =>
-    withCommandPaths(input.home, (paths) => {
+    Effect.gen(function* () {
+      const paths = yield* SkitPaths;
+
       const selectedHome = paths.skitHome;
-      return handlePlatformCommand(
+      return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const repository = resolve(input.path);
@@ -39,7 +41,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
           );
         }),
       );
-    }),
+    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
       name === "watch"
@@ -57,9 +59,11 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
   );
 
 export const repositoryListCliCommand = Command.make("list", flags, (input) =>
-  withCommandPaths(input.home, (paths) => {
+  Effect.gen(function* () {
+    const paths = yield* SkitPaths;
+
     const selectedHome = paths.skitHome;
-    return handlePlatformCommand(
+    return yield* handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const config = yield* readSetupMachineConfig(selectedHome);
@@ -72,7 +76,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
         );
       }),
     );
-  }),
+  }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("List repository decisions stored for this machine."),
   Command.annotate(CommandMetadata, {

@@ -1,16 +1,17 @@
-import { configurationPaths, SkitPaths } from "../configuration/paths.js";
+import { SkitPaths, skitPathsLayer } from "../configuration/paths.js";
 import { Effect, Layer } from "effect";
 import { libraryAuditLogLayer, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 
-/** Shared local environment. Front ends supply their own progress and presentation adapters. */
-export function libraryApplicationLayer(home?: string) {
-  return Layer.unwrap(
-    Effect.map(configurationPaths(home), (paths) =>
-      Layer.mergeAll(
-        libraryStoreLayer({ home: paths.skitHome }),
-        libraryAuditLogLayer({ home: paths.skitHome }),
-        Layer.succeed(SkitPaths, paths),
-      ).pipe(Layer.provideMerge(skitLayer)),
-    ),
-  );
-}
+/** Storage constructors consume the application boundary's required path snapshot. */
+export const libraryApplicationFromPaths = Layer.unwrap(
+  Effect.map(SkitPaths, (paths) =>
+    Layer.mergeAll(
+      libraryStoreLayer({ home: paths.skitHome }),
+      libraryAuditLogLayer({ home: paths.skitHome }),
+    ).pipe(Layer.provideMerge(skitLayer)),
+  ),
+);
+
+/** Standalone front ends construct their path boundary once. */
+export const libraryApplicationLayer = (home?: string) =>
+  libraryApplicationFromPaths.pipe(Layer.provideMerge(skitPathsLayer(home)));

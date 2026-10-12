@@ -1,8 +1,8 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
-import { skitLayer } from "@smolai/skit-core";
 import {
   addRegistryRemoteEffect,
   defaultRegistryRemoteEffect,
@@ -59,7 +59,7 @@ it.effect("resolves local Registry names without persisting them as authorities"
     expect(yield* listRegistryRemotesEffect(home)).toEqual([]);
     const stored = yield* (yield* FileSystem.FileSystem).readFileString(join(home, "auth.json"));
     expect(JSON.parse(stored)).not.toHaveProperty("defaultRegistry");
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("removing the default alias does not recreate it for a sole credential", () =>
@@ -87,5 +87,5 @@ it.effect("removing the default alias does not recreate it for a sole credential
     const stored = JSON.parse(yield* fs.readFileString(join(home, "auth.json")));
     expect(stored.registryAliases).toEqual({});
     expect(stored).not.toHaveProperty("defaultRegistry");
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

@@ -1,9 +1,9 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { join } from "node:path";
 import { afterEach, describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { HttpClientResponse } from "effect/http";
-import { skitLayer } from "@smolai/skit-core";
 import {
   addRegistryRemoteEffect,
   authStatusCommand,
@@ -101,7 +101,7 @@ describe("saved login reuse", () => {
         auth.resolve(undefined, "skit sync"),
       ).pipe(Effect.provide(registryAuthLayer(home)));
       expect(access.token).toBe("saved-test-token");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   for (const status of [200, 403]) {
@@ -131,7 +131,7 @@ describe("saved login reuse", () => {
         );
         expect(value.alreadyAuthenticated).toBe(true);
         expect(yield* interaction.prompts).toEqual([]);
-      }).pipe(Effect.provide(skitLayer)),
+      }).pipe(Effect.provide(testPlatformLayer)),
     );
   }
 
@@ -151,7 +151,7 @@ describe("saved login reuse", () => {
         ),
       );
       expect(failure._tag).toBe("InteractiveLoginUnavailable");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("revoked credentials require login and server failures do not collect a password", () =>
@@ -175,7 +175,7 @@ describe("saved login reuse", () => {
         expect(failure._tag).toBe(status === 401 ? "InteractiveLoginUnavailable" : "SignInFailed");
       }
       expect(yield* interaction.prompts).toEqual([]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("explicit relogin prompts and persists a replacement for later commands", () =>
@@ -202,7 +202,7 @@ describe("saved login reuse", () => {
         "password",
       ]);
       expect((yield* resolveAuthEffect(home)).token).toBe("skit_pat_secret_one");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 });
 const readText = (path: string) =>
@@ -300,7 +300,7 @@ describe("CLI authentication journey", () => {
         _tag: "RegistryAliasNotFound",
         name: "missing",
       });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("rejects scopes the selected Registry does not advertise before sign-in", () =>
@@ -331,7 +331,7 @@ describe("CLI authentication journey", () => {
       expect(observed).toEqual(["/.well-known/skit"]);
       expect(exit._tag).toBe("Failure");
       if (exit._tag === "Failure") expect(String(exit.cause)).toContain("authoring:write");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect(
@@ -380,7 +380,7 @@ describe("CLI authentication journey", () => {
         });
         expect(yield* resolveLoginTargetEffect(undefined, home)).toBe("https://skit.example");
         expect(yield* resolveLoginTargetEffect("default", home)).toBe("https://skit.example");
-      }).pipe(Effect.provide(skitLayer)),
+      }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports an unknown expiry honestly when an older server omits it", () =>
@@ -417,7 +417,7 @@ describe("CLI authentication journey", () => {
         expiresAt: undefined,
       });
       expect(yield* readText(join(home, "auth.json"))).not.toContain("expiresAt");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("a second login preserves the first configured default", () =>
@@ -446,7 +446,7 @@ describe("CLI authentication journey", () => {
         token: "skit_pat_secret_one",
         source: "stored",
       });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("revokes the active PAT before removing it locally", () =>
@@ -475,7 +475,7 @@ describe("CLI authentication journey", () => {
         "Bearer skit_pat_secret_one",
       );
       expect(yield* resolveAuthEffect(home)).toMatchObject({ source: "none", token: undefined });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("revokes a minted PAT when temporary-session sign-out fails", () =>
@@ -506,7 +506,7 @@ describe("CLI authentication journey", () => {
       expect(failure.message).toContain("Sign out failed");
       expect(observed.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
       expect(yield* resolveAuthEffect(home)).toMatchObject({ source: "none" });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports when both temporary-session cleanup operations fail", () =>
@@ -532,7 +532,7 @@ describe("CLI authentication journey", () => {
         ),
       );
       expect(failure.message).toMatch(/pat_one.*skit_pat_secret.*session may also be live/);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("logging in again rotates the credential for that origin", () =>
@@ -556,7 +556,7 @@ describe("CLI authentication journey", () => {
         scopes: ["library:sync", "authoring:write"],
       });
       expect(observed.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("keeps the previous stored credential working when replacement cannot be saved", () =>
@@ -594,7 +594,7 @@ describe("CLI authentication journey", () => {
         .filter(({ init }) => init?.method === "DELETE")
         .map(({ url }) => new URL(url).pathname);
       expect(revoked).toEqual(["/api/tokens/pat_two"]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("keeps the new credential and warns when the previous token cannot be revoked", () =>
@@ -621,7 +621,7 @@ describe("CLI authentication journey", () => {
 
       expect(result.warning).toMatch(/pat_one.*may still be live/);
       expect(yield* resolveAuthEffect(home)).toMatchObject({ tokenId: "pat_two" });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("logout preserves a default even when its credential is removed", () =>
@@ -655,7 +655,7 @@ describe("CLI authentication journey", () => {
         origin: "https://one.example",
         token: undefined,
       });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("environment origin and token override stored authentication", () =>
@@ -679,7 +679,7 @@ describe("CLI authentication journey", () => {
         token: "skit_pat_environment",
         source: "environment",
       });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("legacy activeOrigin is ignored and removed on the next write", () =>
@@ -712,7 +712,7 @@ describe("CLI authentication journey", () => {
       const stored = JSON.parse(yield* fs.readFileString(join(home, "auth.json")));
       expect(stored).not.toHaveProperty("activeOrigin");
       expect(stored).not.toHaveProperty("defaultRegistry");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("logout without a target refuses multiple credentials", () =>
@@ -738,7 +738,7 @@ describe("CLI authentication journey", () => {
         origins: ["https://one.example", "https://two.example"],
       });
       expect(observed).toEqual([]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("status lists environment credentials as a distinct row", () =>
@@ -763,7 +763,7 @@ describe("CLI authentication journey", () => {
         { origin: "https://stored.example", source: "stored" },
         { origin: "https://environment.example", source: "environment" },
       ]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("matching environment credentials bypass an invalid auth file", () =>
@@ -779,7 +779,7 @@ describe("CLI authentication journey", () => {
         token: "skit_pat_environment",
         source: "environment",
       });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("an environment origin does not disguise a stored token as an environment token", () =>
@@ -802,7 +802,7 @@ describe("CLI authentication journey", () => {
         token: "skit_pat_secret_one",
         source: "stored",
       });
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 });
 

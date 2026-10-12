@@ -1,5 +1,6 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { LibraryStore, skitLayer } from "@smolai/skit-core";
+import { LibraryStore } from "@smolai/skit-core";
 import { Effect, Result } from "effect";
 import { HttpClient } from "effect/http";
 import { authorSyncCommand } from "../src/handlers/author/sync.js";
@@ -14,7 +15,7 @@ const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "in
 const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(rendererTestLayer()),
-    Effect.provide(skitLayer),
+    Effect.provide(testPlatformLayer),
     Effect.provideService(
       LibraryStore,
       LibraryStore.of({

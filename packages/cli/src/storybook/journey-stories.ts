@@ -1,3 +1,4 @@
+import { skitPathsLayer } from "../configuration/paths.js";
 import { syncJourney } from "./sync-journey.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import {
@@ -131,7 +132,7 @@ const previewEnable = Effect.scoped(
       Effect.provide(libraryAuditLogLayer({ home })),
     );
   }),
-).pipe(Effect.provide(skitLayer));
+).pipe(Effect.provide(skitLayer), Effect.provide(skitPathsLayer()));
 
 export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
   {
@@ -150,7 +151,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     name: "library-sync/fresh-device",
     initialState: "Empty fixture device · remote has 3 Collections and 3 enabled Skills",
     answers: [],
-    run: syncJourney(false),
+    run: syncJourney(false).pipe(Effect.provide(skitPathsLayer())),
     finalState: (state) => state,
   },
   {
@@ -158,7 +159,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     expectedOutcome: "failure",
     initialState: "Empty fixture device · Registry rejects the second download",
     answers: [],
-    run: syncJourney(true),
+    run: syncJourney(true).pipe(Effect.provide(skitPathsLayer())),
     finalState: (state) => state,
   },
 ];

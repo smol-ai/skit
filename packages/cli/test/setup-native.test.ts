@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
@@ -17,7 +18,6 @@ import {
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
-  skitLayer,
 } from "@smolai/skit-core";
 import {
   classifySetupOnboarding,
@@ -89,12 +89,16 @@ const setupLock = (
 
 const observeSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
-    Effect.provide(libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(skitLayer))),
+    Effect.provide(
+      libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+    ),
   );
 
 const revalidateSetup = (options: SetupOptions, planId: Digest) =>
   revalidateSetupPlan(options, planId).pipe(
-    Effect.provide(libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(skitLayer))),
+    Effect.provide(
+      libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+    ),
   );
 
 const fixture = Effect.fn("Test.setupFixture")(function* () {
@@ -160,7 +164,7 @@ it.effect("persists repository roots only when requested and reuses the machine 
     expect(second.machineConfig.machineId).toBe(first.machineConfig.machineId);
     expect(second.machineConfig.displayName).toBe("Test machine");
     expect(second.machineConfig.persisted).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("migrates the version-one machine config only when setup persists", () =>
@@ -206,7 +210,7 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       discoveryRoots: [f.work],
       repositories: [],
     });
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("scans only repositories watched by machine configuration", () =>
@@ -244,7 +248,7 @@ it.effect("scans only repositories watched by machine configuration", () =>
       { path: ignored, status: "ignored" },
       { path: f.repository, status: "watched" },
     ]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("watches, ignores, and forgets a repository decision", () =>
@@ -261,7 +265,7 @@ it.effect("watches, ignores, and forgets a repository decision", () =>
     });
     yield* updateSetupRepositoryDecision(f.libraryHome, f.repository, undefined);
     expect(yield* readSetupMachineConfig(f.libraryHome)).toMatchObject({ repositories: [] });
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("binds setup consent to current discovery evidence", () =>
@@ -288,7 +292,7 @@ it.effect("binds setup consent to current discovery evidence", () =>
         expect(stale.failure.currentPlanId).not.toBe(preview.onboarding.planId);
       }
     }
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("reports Git preservation and verifies a project skills.sh lock", () =>
@@ -398,7 +402,7 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
         action: "repository-owned",
       }),
     ]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("applies repository discovery exclusions and declared collection roots", () =>
@@ -444,7 +448,7 @@ it.effect("applies repository discovery exclusions and declared collection roots
         collections: [{ path: "custom/skills" }],
       },
     ]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("reports unsafe repository discovery config instead of applying it", () =>
@@ -463,7 +467,7 @@ it.effect("reports unsafe repository discovery config instead of applying it", (
     expect(observed.repositoryConfigs).toEqual([
       expect.objectContaining({ repository: f.repository, status: "malformed" }),
     ]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("plans equivalent loose projections and blocks divergent copies", () =>
@@ -506,7 +510,7 @@ it.effect("plans equivalent loose projections and blocks divergent copies", () =
         sourceSelection: "required",
       },
     ]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("offers equivalent Codex native and shared-root installations for custody", () =>
@@ -540,7 +544,7 @@ it.effect("offers equivalent Codex native and shared-root installations for cust
         (candidate) => candidate.name === "shared" && candidate.action === "manage-locally",
       ),
     ).toMatchObject({ paths: [physicalTarget, physicalSource], sourceSelection: "required" });
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("keeps onboarding classifications conservative across conflicting evidence", () =>
@@ -1078,7 +1082,9 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
       yield* store.publish(state);
       return yield* runSetup(f.options);
     }).pipe(
-      Effect.provide(libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(skitLayer))),
+      Effect.provide(
+        libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+      ),
     );
     const authoredSkillRealPath = yield* f.fs.realPath(authoredSkill);
 
@@ -1143,7 +1149,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
         }),
       ]),
     );
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("coalesces harness aliases and retains broken-link and malformed-lock evidence", () =>
@@ -1169,7 +1175,7 @@ it.effect("coalesces harness aliases and retains broken-link and malformed-lock 
       { scope: "global", path: globalLock, status: "malformed", entries: [] },
     ]);
     expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("examines only immediate children until a nested container is configured", () =>
@@ -1197,7 +1203,7 @@ it.effect("examines only immediate children until a nested container is configur
       nestedRepository,
     ]);
     expect(configured.scan.repositorySearchDepth).toBe(1);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("reconciles current, missing, and orphaned SKIT projections without persisting", () =>
@@ -1371,7 +1377,9 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       yield* store.publish(state);
       return yield* runSetup(f.options);
     }).pipe(
-      Effect.provide(libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(skitLayer))),
+      Effect.provide(
+        libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+      ),
     );
 
     expect(observed.projections).toEqual(
@@ -1387,7 +1395,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
       "skit",
     );
     expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 for (const kind of ["source", "retained-edit"] as const) {
@@ -1562,5 +1570,5 @@ it.effect("includes unreported missing repository config in the approved plan id
     expect(configured.onboarding.planId).not.toBe(missing.onboarding.planId);
     yield* f.fs.remove(join(f.repository, "skit.config.json"));
     expect((yield* observeSetup(f.options)).onboarding.planId).toBe(missing.onboarding.planId);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

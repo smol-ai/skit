@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
@@ -5,7 +6,6 @@ import {
   LibraryManifest,
   inspectOwnershipMarkerEffect,
   makeSkillVersionId,
-  skitLayer,
 } from "@smolai/skit-core";
 import { devices, untouched } from "./helpers/library-sync-devices.js";
 
@@ -127,5 +127,5 @@ it.effect(
       const latest = yield* Effect.sync(() => server.remote);
       assert.ok(latest);
       yield* LibraryManifest.makeEffect(latest.manifest);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

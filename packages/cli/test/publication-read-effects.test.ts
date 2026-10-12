@@ -1,7 +1,8 @@
+import { SkitPaths } from "../src/configuration/paths.js";
+import { testPlatformLayer } from "./helpers/platform.js";
 import { Cause, Config, Deferred, Effect, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";
-import { skitLayer } from "@smolai/skit-core";
 import { expect } from "vitest";
 import {
   RegistryOriginInvalid,
@@ -21,7 +22,7 @@ it.effect.each(["remote", "config"] as const)(
       const operation: Effect.Effect<
         void,
         AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem
+        FileSystem.FileSystem | SkitPaths
       > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       // The effect signals readiness through an unsafe completion so the whole test can stay
       // inside one runtime instead of awaiting a raw Promise from outside it.
@@ -42,7 +43,7 @@ it.effect.each(["remote", "config"] as const)(
           return yield* operation.pipe(
             Effect.provideService(FileSystem.FileSystem, { ...fs, readFileString }),
           );
-        }).pipe(Effect.provide(skitLayer));
+        }).pipe(Effect.provide(testPlatformLayer));
       const defect = yield* injected(() => Effect.die("programming defect")).pipe(Effect.exit);
       expect(defect._tag).toBe("Failure");
       if (defect._tag === "Failure") {
@@ -71,7 +72,7 @@ it.effect.each(["remote", "config"] as const)(
       const operation: Effect.Effect<
         void,
         AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem
+        FileSystem.FileSystem | SkitPaths
       > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       for (const input of [
         Effect.succeed("null"),
@@ -90,7 +91,7 @@ it.effect.each(["remote", "config"] as const)(
           return yield* operation.pipe(
             Effect.provideService(FileSystem.FileSystem, { ...fs, readFileString: () => input }),
           );
-        }).pipe(Effect.provide(skitLayer), Effect.exit);
+        }).pipe(Effect.provide(testPlatformLayer), Effect.exit);
         expect(exit._tag).toBe("Failure");
         if (exit._tag === "Failure") {
           expect(Cause.hasDies(exit.cause)).toBe(false);
@@ -105,7 +106,7 @@ it.effect.each(["remote", "config"] as const)(
 it.effect("origin parsing fails in the named Registry channel", () =>
   Effect.gen(function* () {
     const exit = yield* resolveAuthForOriginEffect("not a URL").pipe(
-      Effect.provide(skitLayer),
+      Effect.provide(testPlatformLayer),
       Effect.exit,
     );
     expect(exit._tag).toBe("Failure");

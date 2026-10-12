@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
@@ -8,7 +9,6 @@ import {
   libraryStoreLayer,
   projectBindingEffect,
   refreshLibraryInventory,
-  skitLayer,
 } from "@smolai/skit-core";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { reconcileLibraryProjections } from "../src/workflows/library/projection-reconciliation.js";
@@ -101,7 +101,7 @@ it.effect("rewrites an untouched Projection when the selected Version advances",
     const { row, selected } = yield* projection;
     assert.strictEqual(row.status, "installed");
     assert.strictEqual(row.skill_version_id, selected);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("keeps a locally edited Projection conflicted when the selected Version advances", () =>
@@ -121,7 +121,7 @@ it.effect("keeps a locally edited Projection conflicted when the selected Versio
       yield* fs.readFileString(join(variants, variant, "SKILL.md")),
       "my local edit\n",
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 // Before the fix, an update left untouched Projections recorded as conflicted at the new Version.
@@ -153,7 +153,7 @@ it.effect("heals an untouched Projection already recorded as conflicted", () =>
     assert.strictEqual(yield* fs.readFileString(projected), "second verbatim Skill\n");
     const { row } = yield* projection;
     assert.strictEqual(row.status, "installed");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("re-enabling an unchanged Binding reconciles a changed global root", () =>
@@ -189,7 +189,7 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
     assert.strictEqual(after.projections.filter((row) => row.root === roots.codexRoot).length, 0);
     assert.strictEqual(after.projections.filter((row) => row.root === newRoot).length, 1);
     assert.deepStrictEqual(after.global_bindings, before.global_bindings);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const followedCollection of [false, true])
@@ -306,7 +306,7 @@ for (const followedCollection of [false, true])
           after.projections.find((row) => row.skill_id === otherId)?.suppression_reason,
           "native_delete",
         );
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
 it.effect(
@@ -323,5 +323,5 @@ it.effect(
       assert.strictEqual(reconciled.retired, 0);
       assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
       assert.strictEqual((yield* projection).row.status, "installed");
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

@@ -1,3 +1,4 @@
+import { skitPathsLayer } from "../../configuration/paths.js";
 import { readSkitDescriptorEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -73,7 +74,7 @@ export const publishCliCommand = Command.make(
         });
         yield* renderer.result(result("publish", outputContracts.publish, value));
       }),
-    ),
+    ).pipe(Effect.provide(skitPathsLayer())),
 ).pipe(
   Command.withDescription("Package and publish an immutable SKIT release."),
   Command.withExamples([

@@ -1,6 +1,6 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { skitPathsLayer } from "../../configuration/paths.js";
 import { RegistryAuth } from "../../registry/auth-service.js";
-import { Effect, Result } from "effect";
+import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import type { ResolvedAuth } from "../../registry/auth.js";
@@ -80,42 +80,36 @@ export const librarySyncCliCommand = Command.make(
   "sync",
   { apply, adopt, takeRemote, keepEnabled, registry, ...localFlags },
   (input) =>
-    withCommandPaths(input.home, (paths) =>
-      handleSourceCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const configuration = yield* libraryCommandConfiguration(input);
-          const registryAuth = yield* RegistryAuth;
-          const { authState } = yield* registryAuth.resolve(
-            optionValue(input.registry),
-            "skit sync",
-          );
-          const value = yield* librarySyncCommand({
-            authState,
-            apply: input.apply,
-            adopt: input.adopt,
-            takeRemote: input.takeRemote,
-            keepEnabled: input.keepEnabled,
-            projection: configuration.pull.installation,
-          });
-          yield* renderer.result(
-            result(
-              "librarySync",
-              outputContracts.librarySync,
-              value,
-              value.status === "conflicted" ||
-                value.status === "legacy_remote_conflict" ||
-                value.status === "adoption_required" ||
-                value.status === "base_mismatch" ||
-                value.status === "resolution_invalid"
-                ? 12
-                : undefined,
-            ),
-          );
-        }),
-        paths.skitHome,
-      ),
-    ),
+    handleSourceCommand(
+      Effect.gen(function* () {
+        const renderer = yield* Renderer;
+        const configuration = yield* libraryCommandConfiguration(input);
+        const registryAuth = yield* RegistryAuth;
+        const { authState } = yield* registryAuth.resolve(optionValue(input.registry), "skit sync");
+        const value = yield* librarySyncCommand({
+          authState,
+          apply: input.apply,
+          adopt: input.adopt,
+          takeRemote: input.takeRemote,
+          keepEnabled: input.keepEnabled,
+          projection: configuration.pull.installation,
+        });
+        yield* renderer.result(
+          result(
+            "librarySync",
+            outputContracts.librarySync,
+            value,
+            value.status === "conflicted" ||
+              value.status === "legacy_remote_conflict" ||
+              value.status === "adoption_required" ||
+              value.status === "base_mismatch" ||
+              value.status === "resolution_invalid"
+              ? 12
+              : undefined,
+          ),
+        );
+      }),
+    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Synchronize private retained Library bytes with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),

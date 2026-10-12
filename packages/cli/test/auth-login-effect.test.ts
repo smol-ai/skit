@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 // What the native login owns that the promise one did not.
 //
 // The promise implementation ran its four requests with a bare `fetch` and no owner: an
@@ -10,7 +11,6 @@
 import { join } from "node:path";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
 import { expect } from "vitest";
 import { loginEffect } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
@@ -21,14 +21,14 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 /** A temporary home on the platform FileSystem, so the suite never reaches node:fs to make one. */
 const scratch = (prefix: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectory({ prefix })).pipe(
-    Effect.provide(skitLayer),
+    Effect.provide(testPlatformLayer),
     Effect.orDie,
   );
 
 /** Ask the platform FileSystem, rather than reaching for node:fs to check one path. */
 const exists = (path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.exists(path)).pipe(
-    Effect.provide(skitLayer),
+    Effect.provide(testPlatformLayer),
     Effect.orDie,
   );
 
@@ -60,7 +60,7 @@ it.effect("an interrupted login aborts its in-flight request and stores nothing"
         loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
           Effect.provide(registryHttpLayer(testHttpClientLayer(server))),
         ),
-      ).pipe(Effect.provide(skitLayer)),
+      ).pipe(Effect.provide(testPlatformLayer)),
     );
     yield* Deferred.await(gated);
     yield* Fiber.interrupt(fiber);
@@ -147,7 +147,7 @@ const interruptedLogin = Effect.fn("test.interruptedLogin")(function* (gate: "mi
       loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
       ),
-    ).pipe(Effect.provide(skitLayer)),
+    ).pipe(Effect.provide(testPlatformLayer)),
   );
   yield* Deferred.await(gated);
   yield* Fiber.interrupt(fiber);

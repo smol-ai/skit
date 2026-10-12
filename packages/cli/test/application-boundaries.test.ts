@@ -1,9 +1,11 @@
+import { sourceApplicationFromPaths } from "../src/application.js";
+import { testPlatformLayer } from "./helpers/platform.js";
 import { addRegistryRemoteEffect, readConfigEffect } from "../src/registry/auth.js";
-import { resolveSkitPaths } from "../src/configuration/paths.js";
+import { resolveSkitPaths, skitPathsLayer, SkitPaths } from "../src/configuration/paths.js";
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join, resolve } from "node:path";
-import { LibraryStore, skitLayer, withLibraryWriter } from "@smolai/skit-core";
+import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "../src/library-application/layers.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
@@ -29,9 +31,11 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
         assert.isTrue(yield* fs.exists(join(home, "auth.json")));
       });
     yield* withConfigurationWriter(undefined, inside(configured)).pipe(
+      Effect.provide(skitPathsLayer()),
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
     );
     yield* withConfigurationWriter(explicit, inside(explicit)).pipe(
+      Effect.provide(skitPathsLayer(explicit)),
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
     );
     assert.isFalse(yield* fs.exists(join(configured, ".lock")));
@@ -41,7 +45,7 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
       const config = yield* readConfigEffect(home);
       assert.strictEqual(config.registryAliases?.fixture, "https://registry.example.test");
     }
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
 
 it.effect("path configuration separates account home, state root, and XDG roots", () =>
@@ -108,7 +112,7 @@ it.effect("parsed configuration commands honor ConfigProvider without a home fla
     assert.isTrue(yield* fs.exists(join(home, "auth.json")));
     assert.isFalse(yield* fs.exists(join(home, "state.json")));
     assert.isFalse(yield* fs.exists(join(home, ".lock")));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
 
 it.effect(
@@ -151,7 +155,7 @@ it.effect(
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.join(writer);
       assert.isFalse(yield* fs.exists(join(home, ".lock")));
-    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
 
 it.effect("Registry configuration commands do not open or create Library storage", () =>
@@ -195,5 +199,47 @@ it.effect("Registry configuration commands do not open or create Library storage
     yield* run(["registry", "list"]);
     assert.strictEqual(failures.length, 1);
     assert.isTrue(yield* fs.exists(join(home, ".lock")));
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+);
+
+it.effect("application layers consume the supplied paths without re-reading configuration", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-paths-required-" });
+    const paths = yield* resolveSkitPaths(join(root, "state"), join(root, "account")).pipe(
+      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+    );
+    yield* Effect.gen(function* () {
+      const store = yield* LibraryStore;
+      const supplied = yield* SkitPaths;
+      assert.strictEqual(store.home, paths.skitHome);
+      assert.strictEqual(supplied.userHome, paths.userHome);
+      yield* addRegistryRemoteEffect("fixture", "https://registry.example.test", undefined);
+      assert.isTrue(yield* fs.exists(paths.authPath));
+      assert.isFalse(yield* fs.exists(join(root, "ignored")));
+    }).pipe(
+      Effect.provide(sourceApplicationFromPaths),
+      Effect.provideService(SkitPaths, paths),
+      Effect.provide(
+        ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
+      ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+);
+
+it.effect("separate application boundaries retain their own storage roots", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-distinct-boundaries-" });
+    const homes = [join(root, "first"), join(root, "second")];
+    const resolved = yield* Effect.forEach(homes, (home) =>
+      Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        const paths = yield* SkitPaths;
+        assert.strictEqual(store.home, paths.skitHome);
+        return store.home;
+      }).pipe(Effect.provide(libraryApplicationLayer(home))),
+    );
+    assert.deepStrictEqual(resolved, homes);
+  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );

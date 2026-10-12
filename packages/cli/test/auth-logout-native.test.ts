@@ -1,8 +1,8 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import type { HttpClientRequest } from "effect/http";
 import { join } from "node:path";
-import { skitLayer } from "@smolai/skit-core";
 import { authLogoutCommand } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
@@ -37,7 +37,6 @@ it.effect("revokes and forgets a credential through the application Layer", () =
       }),
     );
     const applicationLayer = Layer.mergeAll(
-      skitLayer,
       registryHttpLayer(registry),
       rendererTestLayer({
         withStatus: (status, operation) =>
@@ -55,5 +54,5 @@ it.effect("revokes and forgets a credential through the application Layer", () =
     assert.deepStrictEqual(statuses, ["Revoking CLI credential"]);
     const stored = JSON.parse(yield* fs.readFileString(join(home, "auth.json")));
     assert.deepStrictEqual(stored.servers, {});
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

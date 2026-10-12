@@ -1,5 +1,5 @@
-import { withCommandPaths } from "../../configuration/paths.js";
-import { Effect } from "effect";
+import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { authStatusCommand } from "../../registry/auth.js";
@@ -17,16 +17,18 @@ export const authStatusCliCommand = Command.make(
     json: jsonFlag,
   },
   ({ registry, home }) =>
-    withCommandPaths(home, (paths) => {
+    Effect.gen(function* () {
+      const paths = yield* SkitPaths;
+
       const selectedHome = paths.skitHome;
-      return handlePlatformCommand(
+      return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const value = yield* authStatusCommand(selectedHome, optionValue(registry));
           yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
         }),
       );
-    }),
+    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Show stored Registry credential metadata."),
   Command.withExamples([{ command: "skit auth status" }]),

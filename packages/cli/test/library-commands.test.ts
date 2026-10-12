@@ -1,13 +1,9 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { SetEnabledStale } from "../src/workflows/library/set-enabled.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHashEffect,
-  LibraryStore,
-  skitLayer,
-  withLibraryWriter,
-} from "@smolai/skit-core";
+import { deterministicTreeHashEffect, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import { presentListCommand, shouldBrowseInteractively } from "../src/handlers/library/list.js";
 import { browseLibraryEffect } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -124,7 +120,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
     assert.strictEqual(yield* interaction.remaining, 0);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it("browses only on an attached human terminal", () => {
@@ -376,7 +372,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual((yield* home.durable).global_bindings, []);
     assert.deepStrictEqual((yield* home.durable).local_bindings, []);
     assert.strictEqual(yield* disableEverywhere.remaining, 0);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("bare disable asks before changing a global Binding spanning Collections", () =>
@@ -503,7 +499,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     );
     assert.strictEqual((yield* single.prompts).length, 1);
     assert.deepStrictEqual(yield* home.durable, after);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("rejects a stale multi-destination disable before changing any Binding", () =>
@@ -623,5 +619,5 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     assert.deepStrictEqual(yield* home.durable, concurrent);
     assert.deepStrictEqual(results, []);
     assert.isFalse(yield* fs.exists(join(home.home, ".lock")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

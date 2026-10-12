@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { createHash } from "node:crypto";
@@ -10,7 +11,6 @@ import {
   deterministicTreeHashEffect,
   libraryStoreLayer,
   retainedTreePath,
-  skitLayer,
 } from "@smolai/skit-core";
 import {
   addLibrarySourceEffect,
@@ -88,7 +88,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
       return assert.fail(`Expected UpdateNotRefreshable, received ${failure._tag}`);
     assert.strictEqual(failure.subject_id, added.collection_id);
     assert.strictEqual(failure.source, source);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("retains nested Skills as one Collection with independent Skill identities", () =>
@@ -122,7 +122,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
       2,
     );
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["plan", "review"]);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("runs the complete lifecycle for a selected well-known Collection member", () =>
@@ -250,7 +250,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     const removed = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(removed.skills, []);
     assert.deepStrictEqual(removed.collections, []);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("re-adding a changed local source adds a Skill Version and uses it", () =>
@@ -283,7 +283,7 @@ it.effect("re-adding a changed local source adds a Skill Version and uses it", (
     );
     assert.strictEqual(after.retained_copies.length, 2);
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("repeated identical local re-adds record nothing new", () =>
@@ -333,7 +333,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
         (acquisition) => acquisition.retained_copy_id === added.retained_version_id,
       ),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("records a new upstream commit even when its Skill bytes are unchanged", () =>
@@ -381,7 +381,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       ["a".repeat(40), "b".repeat(40)],
     );
     assert.deepStrictEqual(repeated.acquisitions, recorded.acquisitions);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("records the Registry Release a Collection is added from, so sync can refetch it", () =>
@@ -427,5 +427,5 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       (yield* libraryManifestFromLocalStateEffect(state)).snapshot_digests,
       [],
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

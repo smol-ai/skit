@@ -1,4 +1,4 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Effect, FileSystem, Option } from "effect";
@@ -527,7 +527,9 @@ export const setupCliCommand = Command.make(
   "setup",
   { workDir: workDirFlag, dryRun, ...localFlags },
   (input) =>
-    withCommandPaths(input.home, (paths) => {
+    Effect.gen(function* () {
+      const paths = yield* SkitPaths;
+
       const selectedHome = paths.skitHome;
       const interactive = shouldSetupInteractively({
         json: input.json,
@@ -536,7 +538,7 @@ export const setupCliCommand = Command.make(
         stdout: Boolean(process.stdout.isTTY),
         stderr: Boolean(process.stderr.isTTY),
       });
-      return handleSourceCommand(
+      return yield* handleSourceCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const configuration = yield* libraryCommandConfiguration(input);
@@ -557,9 +559,8 @@ export const setupCliCommand = Command.make(
           });
           if (!interactive) yield* renderer.result(result("setup", outputContracts.setup, value));
         }).pipe(Effect.provide(terminalPrompterLayer)),
-        selectedHome,
       );
-    }),
+    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
     "Remember this machine's repository roots and explain existing Skill Instances.",

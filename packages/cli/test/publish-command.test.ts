@@ -1,5 +1,5 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { HttpClient } from "effect/http";
 import { MissingRequirement } from "../src/handlers/failures.js";
@@ -10,7 +10,7 @@ import { rendererTestLayer } from "./helpers/renderer.js";
 it.effect("requires an exact release version before reading the workspace", () =>
   publishCommand({}).pipe(
     Effect.provide(rendererTestLayer()),
-    Effect.provide(skitLayer),
+    Effect.provide(testPlatformLayer),
     Effect.provideService(
       RegistryHttp,
       RegistryHttp.of({

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Config, Context, Effect, Option } from "effect";
+import { Config, Context, Effect, Layer, Option } from "effect";
 
 export interface ResolvedSkitPaths {
   readonly userHome: string;
@@ -57,20 +57,21 @@ export const resolveSkitPaths = Effect.fn("Configuration.resolvePaths")(function
   });
 });
 
-/** Standalone adapters may construct paths; application workflows reuse their boundary's value. */
+/** Concrete root overrides derive paths from the supplied application snapshot. */
 export const configurationPaths = Effect.fn("Configuration.paths")(function* (home?: string) {
-  const existing = yield* Effect.serviceOption(SkitPaths);
-  if (Option.isSome(existing) && (home === undefined || resolve(home) === existing.value.skitHome))
-    return existing.value;
-  return yield* resolveSkitPaths(home);
+  const paths = yield* SkitPaths;
+  if (home === undefined || resolve(home) === paths.skitHome) return paths;
+  const skitHome = resolve(home);
+  return SkitPaths.of({
+    ...paths,
+    skitHome,
+    authPath: join(skitHome, "auth.json"),
+    syncBindingsPath: join(skitHome, "sync-bindings.json"),
+    libraryStatePath: join(skitHome, "state.json"),
+    originalsPath: join(skitHome, "originals"),
+    variantsPath: join(skitHome, "variants"),
+  });
 });
 
-/** Resolve flags before constructing services and share that snapshot with the entire command. */
-export function withCommandPaths<A, E, R>(
-  home: Option.Option<string>,
-  command: (paths: ResolvedSkitPaths) => Effect.Effect<A, E, R>,
-) {
-  return Effect.flatMap(resolveSkitPaths(Option.getOrUndefined(home)), (paths) =>
-    command(paths).pipe(Effect.provideService(SkitPaths, paths)),
-  );
-}
+/** Construct paths once at the executable or standalone application boundary. */
+export const skitPathsLayer = (home?: string) => Layer.effect(SkitPaths, resolveSkitPaths(home));

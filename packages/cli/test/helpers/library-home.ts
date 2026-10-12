@@ -1,3 +1,4 @@
+import { SkitPaths, skitPathsLayer } from "../../src/configuration/paths.js";
 import {
   LibraryProgress,
   silentLibraryProgressLayer,
@@ -124,6 +125,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     effect.pipe(
       Effect.provide(
         Layer.mergeAll(
+          skitPathsLayer(home),
           silentLibraryProgressLayer,
           libraryStoreLayer({ home }),
           libraryAuditLogLayer({ home }),
@@ -138,6 +140,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       E,
       | Exclude<
           R,
+          | SkitPaths
           | LibraryStore
           | LibraryAuditLog
           | HttpClient.HttpClient

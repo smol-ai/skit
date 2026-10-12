@@ -1,4 +1,4 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { skitPathsLayer } from "../../configuration/paths.js";
 import {
   bindingSkillIds,
   withLibraryWriter,
@@ -65,42 +65,38 @@ const setEnabledCliCommand = (enabled: boolean) => {
       ...localFlags,
     },
     (input) =>
-      withCommandPaths(input.home, (paths) => {
-        const selectedHome = paths.skitHome;
-        return handleLibraryCommand(
-          Effect.gen(function* () {
-            const configuration = yield* libraryCommandConfiguration(input);
-            const selectedSubject = Option.getOrUndefined(input.subject);
-            const selectedScope = Option.getOrUndefined(
-              Option.map(input.repo, (root): Scope => ({
-                kind: "repository",
-                root: resolve(root),
-              })),
-            );
-            const selectedInvocation = Option.getOrUndefined(input.invocation) as
-              | InvocationOption
-              | undefined;
-            const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
+      handleLibraryCommand(
+        Effect.gen(function* () {
+          const configuration = yield* libraryCommandConfiguration(input);
+          const selectedSubject = Option.getOrUndefined(input.subject);
+          const selectedScope = Option.getOrUndefined(
+            Option.map(input.repo, (root): Scope => ({
+              kind: "repository",
+              root: resolve(root),
+            })),
+          );
+          const selectedInvocation = Option.getOrUndefined(input.invocation) as
+            | InvocationOption
+            | undefined;
+          const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
 
-            const store = yield* LibraryStore;
-            yield* store.load;
-            yield* presentSetEnabled({
-              action,
-              enabled,
-              subject: selectedSubject,
-              scope: selectedScope,
-              cwd: resolve(process.cwd()),
-              all: input.all,
-              allowDuplicate: input.allowDuplicate,
-              invocation: selectedInvocation,
-              dryRun: input.dryRun,
-              interactive,
-              configuration,
-            });
-          }).pipe(Effect.provide(terminalPrompterLayer)),
-          selectedHome,
-        );
-      }),
+          const store = yield* LibraryStore;
+          yield* store.load;
+          yield* presentSetEnabled({
+            action,
+            enabled,
+            subject: selectedSubject,
+            scope: selectedScope,
+            cwd: resolve(process.cwd()),
+            all: input.all,
+            allowDuplicate: input.allowDuplicate,
+            invocation: selectedInvocation,
+            dryRun: input.dryRun,
+            interactive,
+            configuration,
+          });
+        }).pipe(Effect.provide(terminalPrompterLayer)),
+      ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
       `${enabled ? "Enable" : "Disable"} retained Skills for every agent at a scope.`,

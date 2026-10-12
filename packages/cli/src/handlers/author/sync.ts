@@ -1,4 +1,4 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
 import { Effect, Option, Result } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import type { ResolvedAuth } from "../../registry/auth.js";
@@ -78,9 +78,11 @@ export const authorSyncCliCommand = Command.make(
   "sync",
   { path, to, visibility, apply, home: homeFlag, json: jsonFlag },
   ({ path, to, visibility, apply, home }) =>
-    withCommandPaths(home, (paths) => {
+    Effect.gen(function* () {
+      const paths = yield* SkitPaths;
+
       const selectedHome = paths.skitHome;
-      return handleRegistryCommand(
+      return yield* handleRegistryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
@@ -97,9 +99,8 @@ export const authorSyncCliCommand = Command.make(
             result("sync", outputContracts.sync, value, conflicted ? 12 : undefined),
           );
         }),
-        selectedHome,
       );
-    }),
+    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Synchronize a local SKIT with its remote draft."),
   Command.withExamples([

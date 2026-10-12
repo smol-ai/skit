@@ -1,4 +1,4 @@
-import { withCommandPaths } from "../../configuration/paths.js";
+import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
@@ -6,7 +6,7 @@ import {
   SkitNotFoundResponse,
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
-import { Data, Effect, Result, Schema, Scope } from "effect";
+import { Option, Data, Effect, Result, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
 import { AuthorSkitDeleteResponse, SkitContractError } from "@smolai/skit-core";
@@ -137,9 +137,11 @@ export const authorDeleteCliCommand = Command.make(
   "delete",
   { skit, dryRun, home: homeFlag, json: jsonFlag },
   ({ skit, dryRun, home }) =>
-    withCommandPaths(home, (paths) => {
+    Effect.gen(function* () {
+      const paths = yield* SkitPaths;
+
       const selectedHome = paths.skitHome;
-      return handleRegistryCommand(
+      return yield* handleRegistryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
@@ -150,9 +152,8 @@ export const authorDeleteCliCommand = Command.make(
           });
           yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
         }),
-        selectedHome,
       );
-    }),
+    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Permanently delete a private SKIT from its Registry."),
   Command.withExamples([

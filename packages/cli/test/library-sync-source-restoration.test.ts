@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
@@ -9,7 +10,6 @@ import {
   libraryStoreLayer,
   retainedTreePath,
   projectBindingEffect,
-  skitLayer,
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
@@ -158,7 +158,7 @@ it.effect(
       );
       for (const path of ["README.md", "skit.json", ".gitignore", "skills/.gitkeep"])
         assert.isFalse(yield* f.fs.exists(join(projected, path)));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("plain Registry restore keeps the retained subset and excludes sibling files", () =>
@@ -176,7 +176,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
       yield* f.fs.readFileString(join(f.root(digest), "skills/review/SKILL.md")),
       f.files["skills/review/SKILL.md"],
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("changed declared source bytes fail before publishing a fresh Library", () =>
@@ -194,7 +194,7 @@ it.effect("changed declared source bytes fail before publishing a fresh Library"
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
     assert.deepStrictEqual(f.server.stored, remote);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a declared copy rejects a source that no longer declares a SKIT", () =>
@@ -208,7 +208,7 @@ it.effect("a declared copy rejects a source that no longer declares a SKIT", () 
     if (error._tag === "Library.SyncSourceRestoreInvalid")
       assert.include(error.detail, "no declared Descriptor");
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("declared Git subpath restoration captures the resolved root at its pinned commit", () =>
@@ -258,5 +258,5 @@ it.effect("declared Git subpath restoration captures the resolved root at its pi
       f.files["skit.json"],
     );
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "outside.txt")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

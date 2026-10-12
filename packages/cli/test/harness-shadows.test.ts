@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { LinkStat } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
 import {
@@ -14,7 +15,7 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { skitLayer, LibraryStore } from "@smolai/skit-core";
+import { LibraryStore } from "@smolai/skit-core";
 import {
   observeHarnessShadows,
   observeHarnessSkills,
@@ -109,7 +110,7 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
         }),
       ),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect.each(["retain-only", "retire-aliases", "keep-both"] as const)(
@@ -159,7 +160,7 @@ it.effect.each(["retain-only", "retire-aliases", "keep-both"] as const)(
         ]);
         expect(yield* f.fs.readLink(receipt.entries[0].recoveryPath)).toBe(f.source);
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("setup consent becomes stale if the alias target changes", () =>
@@ -179,7 +180,7 @@ it.effect("setup consent becomes stale if the alias target changes", () =>
         expect(Result.isFailure(result)).toBe(true);
       }),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -208,7 +209,7 @@ it.effect(
         via: "symlink",
         linkPath: join(f.root, ".codex", "skills"),
       });
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("setup requires a duplicate decision before retaining any selected source", () =>
@@ -243,7 +244,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
         }),
       ),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a failed replacement keeps the original alias available", () =>
@@ -288,7 +289,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
         }),
       ),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("unreadable unrelated entries warn without dropping readable aliases", () =>
@@ -326,7 +327,7 @@ it.effect("unreadable unrelated entries warn without dropping readable aliases",
       ),
     );
     expect(Result.isFailure(blocked)).toBe(true);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("does not traverse a repository linked into a skill root", () =>
@@ -341,7 +342,7 @@ it.effect("does not traverse a repository linked into a skill root", () =>
     expect(yield* observeHarnessShadows(f.home.inventory, { kind: "global" }, ["review"])).toEqual(
       [],
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("setup's alias allowance does not permit an unapproved copy", () =>
@@ -387,7 +388,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
         }),
       ),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -451,7 +452,7 @@ it.effect(
           }),
         ),
       );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -505,7 +506,7 @@ it.effect(
           }),
         ),
       );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"] as const) {
@@ -557,7 +558,7 @@ for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"
             true,
           );
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }
 
@@ -593,7 +594,7 @@ it.effect.each(["retain-only", "keep-both"] as const)(
       ).toHaveLength(action === "retain-only" ? 0 : 2);
       expect(yield* f.fs.readLink(aliasRoot)).toBe(join(f.root, "Work", "skills"));
       expect(yield* f.fs.exists(f.destination)).toBe(action === "keep-both");
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -657,7 +658,7 @@ it.effect(
         expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name, "SKILL.md"))).toBe(true);
         expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name))).toBe(false);
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const operation of ["add", "bind"] as const) {
@@ -725,7 +726,7 @@ for (const operation of ["add", "bind"] as const) {
             }),
           ),
         );
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }
 
@@ -750,7 +751,7 @@ it.effect("duplicate decisions apply only to copies that setup can enable", () =
       };
       expect(copyConflict(ineligible, selection).kind).toBe("none");
     }
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("setup keeps retirement consent across its reconnect and add stages", () =>
@@ -809,5 +810,5 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
     expect(yield* f.fs.readLink(laterAlias)).toBe(later);
     expect(yield* f.fs.readLink(addedAlias)).toBe(later);
     expect(yield* f.fs.exists(join(f.root, ".agents", "skills", "later"))).toBe(false);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
