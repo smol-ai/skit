@@ -90,15 +90,39 @@ test("shrinks descriptions fairly, then omits entries while accounting only for 
   expect(omitted.collections[0]).toMatchObject({ skills: 2, omitted: 1 });
 });
 
-test("uses aliases with shared overhead, caps descriptions and applies character fallback and override ceiling", () => {
+test("uses shared roots to reduce row costs while accounting for roots overhead", () => {
+  const root = `/Users/${"long-directory".repeat(20)}/.agents/skills`;
   const skills = Array.from({ length: 15 }, (_, index) => ({
-    ...skill(`s${index}`, "a".repeat(2_000)),
-    path: `/Users/test/.agents/skills/s${index}/SKILL.md`,
+    ...skill(`s${index}`, "Review code."),
+    path: `${root}/s${index}/SKILL.md`,
   }));
   const result = estimate(skills);
-  expect(result.sharedOverhead).toBeGreaterThanOrEqual(0);
-  expect(result.collections[0]!.requested).toBeLessThan(15 * 300);
-  expect(result.used).toBeLessThanOrEqual(result.limit);
+  const expectedRows = skills.reduce(
+    (total, entry, index) =>
+      total +
+      Math.ceil(
+        Buffer.byteLength(`- ${entry.name}: Review code. (file: r0/s${index}/SKILL.md)\n`) / 4,
+      ),
+    0,
+  );
+  expect(result.sharedOverhead).toBeGreaterThan(0);
+  expect(result.collections[0]).toMatchObject({ requested: expectedRows, used: expectedRows });
+  expect(result.requested).toBe(expectedRows + result.sharedOverhead);
+  expect(result.used).toBe(result.requested);
+  expect(result.omitted).toBe(0);
+});
+
+test("caps descriptions at 1024 Unicode characters including the ellipsis", () => {
+  const boundary = estimate([skill("test", "🐱".repeat(1024))]);
+  const capped = estimate([skill("test", "🐱".repeat(1025))]);
+  const rowCost = (description: string) =>
+    Math.ceil(Buffer.byteLength(`- test: ${description} (file: /skills/test/SKILL.md)\n`) / 4);
+  expect(boundary.requested).toBe(rowCost("🐱".repeat(1024)));
+  expect(capped.requested).toBe(rowCost("🐱".repeat(1021) + "..."));
+  expect(capped.used).toBe(capped.requested);
+});
+
+test("applies character fallback and the explicit budget override ceiling", () => {
   const fallback = estimate([skill("test", "🐱")], null);
   expect(fallback.unit).toBe("characters");
   expect(fallback.limit).toBe(8_000);
@@ -187,8 +211,8 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       );
       expect(first).toMatchObject({
         status: "estimated",
-        contextWindow: 373_000,
-        limit: 7_460,
+        contextWindow: 500_000,
+        limit: 10_000,
         otherSkills: 0,
         collections: [{ collectionId, skills: 1 }],
       });
@@ -229,8 +253,8 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       expect(fallback).toMatchObject({
         status: "estimated",
         unit: "budget-tokens",
-        contextWindow: 373_000,
-        limit: 7_460,
+        contextWindow: 500_000,
+        limit: 10_000,
       });
       yield* fs.writeFileString(
         metadataPath,
@@ -264,4 +288,35 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
       Effect.provide(nativeLibraryLayer),
     ),
+);
+
+it.effect("uses the model default unless configuration overrides the context window", () =>
+  Effect.gen(function* () {
+    const f = yield* NativeLibraryFixture;
+    const store = yield* LibraryStore;
+    const state = yield* store.load;
+    for (const [configured, contextWindow, limit] of [
+      [null, 500_000, 10_000],
+      [1_000_000, 1_000_000, 20_000],
+      [200_000, 200_000, 4_000],
+    ] as const) {
+      const snapshot = yield* readLibraryCodexListingSnapshot(
+        state,
+        { cwd: f.root, home: f.home },
+        undefined,
+        {
+          cwd: f.root,
+          skills: [],
+          errors: [],
+          config: {
+            config: { model: "gpt-6.1-sol", model_context_window: configured, skills: null },
+          },
+        },
+      );
+      expect(snapshot.budget).toMatchObject({ status: "estimated", contextWindow, limit });
+    }
+  }).pipe(
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+    Effect.provide(nativeLibraryLayer),
+  ),
 );

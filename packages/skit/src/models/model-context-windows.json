@@ -1,162 +1,168 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "observedAt": "2026-10-06T22:34:25.109258Z",
   "models": [
     {
       "id": "gpt-6.1-sol",
-      "contextWindow": 373000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 500000,
+      "maxContextWindow": 1000000,
+      "contextWindowSource": {
+        "kind": "announcement",
+        "observedAt": "2026-10-12",
+        "reference": "Tibo announcement quoted by user: GPT-6.1 Sol default 500k in Codex and Work; maximum 1M."
+      }
     },
     {
       "id": "gpt-6-astra",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-6-sol",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-6-luna",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-reserve",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-5.6-sol",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-5.6-terra",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-5.6-luna",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "gpt-5.5",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "id": "codex-auto-review",
-      "contextWindow": 272000,
       "provider": "openai",
-      "aliases": []
+      "aliases": [],
+      "defaultContextWindow": 272000
     },
     {
       "provider": "anthropic",
       "id": "claude-fable-5",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-fable-5-1",
       "aliases": ["fable", "fable[1m]"],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-haiku-4-5",
       "aliases": ["haiku"],
-      "contextWindow": 200000
+      "defaultContextWindow": 200000
     },
     {
       "provider": "anthropic",
       "id": "claude-haiku-4-5-20251001",
       "aliases": [],
-      "contextWindow": 200000
+      "defaultContextWindow": 200000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-4-5",
       "aliases": [],
-      "contextWindow": 200000
+      "defaultContextWindow": 200000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-4-5-20251101",
       "aliases": [],
-      "contextWindow": 200000
+      "defaultContextWindow": 200000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-4-6",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-4-7",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-4-8",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-5",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-opus-5-5",
       "aliases": ["opus", "opus[1m]"],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-sonnet-4-5",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-sonnet-4-5-20250929",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-sonnet-4-6",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-sonnet-5",
       "aliases": [],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     },
     {
       "provider": "anthropic",
       "id": "claude-sonnet-5-5",
       "aliases": ["sonnet", "sonnet[1m]"],
-      "contextWindow": 1000000
+      "defaultContextWindow": 1000000
     }
   ],
   "sources": {

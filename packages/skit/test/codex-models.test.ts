@@ -4,10 +4,11 @@ import {
   ModelContextCatalog,
   modelContextCatalog,
   modelContextWindow,
+  modelMaxContextWindow,
 } from "../src/models/model-context-windows.js";
 
 test("bundled catalog resolves known models without native configuration or cache", () => {
-  expect(Option.getOrNull(modelContextWindow("openai", "gpt-6.1-sol"))).toBe(373_000);
+  expect(Option.getOrNull(modelContextWindow("openai", "gpt-6.1-sol"))).toBe(500_000);
   expect(Option.getOrNull(modelContextWindow("openai", "gpt-6-astra"))).toBe(272_000);
   expect(Option.getOrNull(modelContextWindow("openai", "unknown-model"))).toBeNull();
   expect(Option.getOrNull(modelContextWindow("openai", null))).toBeNull();
@@ -19,7 +20,9 @@ test("catalog rejects duplicate IDs and invalid context windows", () => {
     expect(() =>
       decode({
         ...modelContextCatalog,
-        models: [{ provider: "openai", id: "model", aliases: [], contextWindow }],
+        models: [
+          { provider: "openai", id: "model", aliases: [], defaultContextWindow: contextWindow },
+        ],
       }),
     ).toThrow();
   }
@@ -41,4 +44,32 @@ test("bundled Anthropic catalog resolves exact models and preserves source prove
   expect(Option.getOrNull(modelContextWindow("anthropic", "opus"))).toBe(1_000_000);
   expect(Option.getOrNull(modelContextWindow("openai", "claude-opus-5-5"))).toBeNull();
   expect(modelContextCatalog.sources.anthropic.url).toBe("https://models.dev/api.json");
+});
+
+test("maximum is distinct from the default and must cover it", () => {
+  expect(Option.getOrNull(modelMaxContextWindow("openai", "gpt-6.1-sol"))).toBe(1_000_000);
+  expect(Option.getOrNull(modelMaxContextWindow("openai", "gpt-6-astra"))).toBeNull();
+  expect(() =>
+    Schema.decodeUnknownSync(ModelContextCatalog)({
+      ...modelContextCatalog,
+      models: [{ ...modelContextCatalog.models[0], maxContextWindow: 499_999 }],
+    }),
+  ).toThrow();
+});
+
+test("accepts a default equal to the supported maximum", () => {
+  const decoded = Schema.decodeUnknownSync(ModelContextCatalog)({
+    ...modelContextCatalog,
+    models: [
+      {
+        ...modelContextCatalog.models[0],
+        defaultContextWindow: 1_000_000,
+        maxContextWindow: 1_000_000,
+      },
+    ],
+  });
+  expect(decoded.models[0]).toMatchObject({
+    defaultContextWindow: 1_000_000,
+    maxContextWindow: 1_000_000,
+  });
 });
