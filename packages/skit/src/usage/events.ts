@@ -118,7 +118,7 @@ export function extractUsage(harness: UsageHarness, r: TranscriptRecord): Extrac
       const source = text(p.input) ?? "";
       if (source.includes("SKILL.md")) {
         const result = literalCommands(source);
-        if (result.unsupported || !result.commands.length) out.unsupported++;
+        if (result.unsupported) out.unsupported++;
         for (const command of result.commands)
           tool("exec_command", object(command), text(p.call_id));
       }
