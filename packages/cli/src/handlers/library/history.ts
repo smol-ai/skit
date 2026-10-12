@@ -1,30 +1,32 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { LibraryAuditLog } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
+import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
 export const libraryHistoryCliCommand = Command.make(
   "history",
   { json: jsonFlag, home: homeFlag },
-  (input) => {
-    const home = homePath(input.home);
-    return handleLibraryCommand(
-      Effect.gen(function* () {
-        const audit = yield* LibraryAuditLog;
-        const renderer = yield* Renderer;
-        const events = yield* audit.list();
-        yield* renderer.result(
-          result("libraryHistory", outputContracts.libraryHistory, { events }),
-        );
-      }),
-      home,
-    );
-  },
+  (input) =>
+    withCommandPaths(input.home, (paths) => {
+      const home = paths.skitHome;
+      return handleLibraryCommand(
+        Effect.gen(function* () {
+          const audit = yield* LibraryAuditLog;
+          const renderer = yield* Renderer;
+          const events = yield* audit.list();
+          yield* renderer.result(
+            result("libraryHistory", outputContracts.libraryHistory, { events }),
+          );
+        }),
+        home,
+      );
+    }),
 ).pipe(
   Command.withDescription("Show device-local Library change history."),
   Command.withExamples([

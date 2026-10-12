@@ -39,9 +39,15 @@ mutex through `withConfigurationWriter`, preserving exclusion with existing writ
 This adapter does not open Library state or record Library history. Login questions run
 before the credential workflow acquires it. Read-only configuration commands do not lock.
 Persisting setup's machine configuration likewise owns its write scope explicitly.
-Its home resolver honors an explicit argument first, otherwise reads `SKIT_HOME` through
-Effect `Config`, with the user's `.skit` directory as the default. `ConfigProvider` injection
-therefore controls the writer and Registry environment without changing process globals.
+CLI handlers and the TUI resolve a required `SkitPaths` service at their application
+boundary. Explicit state-directory flags take precedence over Effect `Config`'s
+`SKIT_HOME`, with the account's `.skit` directory as the default. Account home,
+SKIT state home, and XDG configuration/state roots remain separate values. Derived
+file paths, storage services, and writer locks share this snapshot. Standalone
+configuration adapters construct it when no application service was supplied;
+configuration writers provide their resolved snapshot to the protected program.
+`ConfigProvider` injection therefore controls both the lock and the actual file writes,
+including commands without explicit home flags, without changing process globals.
 
 ## Command environments
 

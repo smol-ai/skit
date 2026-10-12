@@ -3,7 +3,7 @@ import { registryHttpLayer } from "./registry/registry-http.js";
 import { registryAuthLayer } from "./registry/auth-service.js";
 import { skitLayer } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "./library-application/layers.js";
-import { configurationHome } from "./configuration-writer.js";
+import { configurationPaths, SkitPaths } from "./configuration/paths.js";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
 
@@ -21,17 +21,26 @@ export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) 
 
 export function registryApplicationLayer(home?: string) {
   return Layer.unwrap(
-    Effect.map(configurationHome(home), (root) =>
-      Layer.mergeAll(registryHttpLayer(), registryAuthLayer(root)).pipe(
-        Layer.provideMerge(skitLayer),
-      ),
+    Effect.map(configurationPaths(home), (paths) =>
+      Layer.mergeAll(
+        registryHttpLayer(),
+        registryAuthLayer(paths.skitHome),
+        Layer.succeed(SkitPaths, paths),
+      ).pipe(Layer.provideMerge(skitLayer)),
     ),
   );
 }
 
 /** Combined environment for acquisition and synchronization, which need both domains. */
 export function sourceApplicationLayer(home: string) {
-  return Layer.merge(libraryApplicationLayer(home), registryApplicationLayer(home));
+  return Layer.unwrap(
+    Effect.map(configurationPaths(home), (paths) =>
+      Layer.merge(
+        libraryApplicationLayer(paths.skitHome),
+        registryApplicationLayer(paths.skitHome),
+      ).pipe(Layer.provideMerge(Layer.succeed(SkitPaths, paths))),
+    ),
+  );
 }
 
 /** Full environment for contract generators and runners exercising multiple command families. */

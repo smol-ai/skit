@@ -1,10 +1,11 @@
+import { configurationPaths } from "../configuration/paths.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
-import { Clock, Effect, FileSystem, Result, Schema } from "effect";
+import { Clock, Config, Effect, FileSystem, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
-import { homedir, hostname } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { hostname } from "node:os";
+import { dirname } from "node:path";
 import { isErrno } from "../platform/errno.js";
 import {
   InsecureOrigin,
@@ -107,6 +108,7 @@ export type ResolvedAuth = {
 };
 
 export type RegistryConfigurationError =
+  | Config.ConfigError
   | CredentialsUnusable
   | RegistryOriginInvalid
   | RegistryAliasNotFound
@@ -124,15 +126,13 @@ type AuthStatusCredential = {
   source: "stored" | "environment";
 };
 
-export function authPath(home?: string) {
-  return join(resolve(home ?? process.env.SKIT_HOME ?? join(homedir(), ".skit")), "auth.json");
-}
+export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
+  return (yield* configurationPaths(home)).authPath;
+});
 
-export function readConfigEffect(
-  home?: string,
-): Effect.Effect<AuthConfig, CredentialsUnusable, FileSystem.FileSystem> {
-  const path = authPath(home);
+export function readConfigEffect(home?: string) {
   return Effect.gen(function* () {
+    const path = yield* authPath(home);
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs.readFileString(path).pipe(
       Effect.catchTag("PlatformError", (error) => {
@@ -159,7 +159,7 @@ const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
   options: { readonly promoteSoleRegistry?: boolean } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const path = authPath(home);
+  const path = yield* authPath(home);
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${process.pid}`;
   const { activeOrigin: _legacyActiveOrigin, ...withoutActiveOrigin } = config;
@@ -222,11 +222,7 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
   registry?: string,
   durableOrigin?: string,
   command?: string,
-): Effect.fn.Return<
-  ResolvedAuth,
-  CredentialsUnusable | RegistryOriginInvalid | RegistryAliasNotFound | RegistrySelectionAmbiguous,
-  FileSystem.FileSystem
-> {
+): Effect.fn.Return<ResolvedAuth, RegistryConfigurationError, FileSystem.FileSystem> {
   const config = yield* readConfigEffect(home);
   const origin = yield* resolveSelectedOriginEffect({ home, registry, durableOrigin, command });
   const stored = origin ? config.servers[origin] : undefined;
@@ -426,7 +422,11 @@ export const resolveLoginTargetEffect = Effect.fn("Auth.resolveLoginTarget")(fun
 export function resolveAuthForOriginEffect(
   originInput: string,
   home?: string,
-): Effect.Effect<ResolvedAuth, RegistryOriginInvalid | CredentialsUnusable, FileSystem.FileSystem> {
+): Effect.Effect<
+  ResolvedAuth,
+  RegistryOriginInvalid | CredentialsUnusable | Config.ConfigError,
+  FileSystem.FileSystem
+> {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);
     const environmentOrigin = process.env.SKIT_SERVER_URL
@@ -505,7 +505,7 @@ export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
     ...(alias ? { alias } : {}),
     ...(config.defaultRegistry ? { defaultRegistry: config.defaultRegistry } : {}),
     alreadyAuthenticated: true,
-    credentialPath: authPath(input.home),
+    credentialPath: yield* authPath(input.home),
   };
 });
 
@@ -806,7 +806,7 @@ export const loginEffect = Effect.fn("Auth.login")(
       ...(configuredAlias ? { alias: configuredAlias } : {}),
       ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
       alreadyAuthenticated: false,
-      credentialPath: authPath(input.home),
+      credentialPath: yield* authPath(input.home),
     };
   },
   (effect, input) => withConfigurationWriter(input.home, effect),

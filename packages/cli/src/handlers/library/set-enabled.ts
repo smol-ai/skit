@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import {
   bindingSkillIds,
   withLibraryWriter,
@@ -13,7 +14,7 @@ import { NothingToSelect } from "../../presentation/interaction-failures.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
+import { localFlags, optionalString } from "../../commands/parameters.js";
 import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
 import { destinationLabel, scopeChoices } from "../../library-application/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
@@ -59,39 +60,43 @@ const setEnabledCliCommand = (enabled: boolean) => {
       ...(enabled ? { allowDuplicate } : {}),
       ...localFlags,
     },
-    (input) => {
-      const selectedHome = homePath(input.home);
-      return handleLibraryCommand(
-        Effect.gen(function* () {
-          const configuration = yield* libraryCommandConfiguration(input);
-          const selectedSubject = Option.getOrUndefined(input.subject);
-          const selectedScope = Option.getOrUndefined(
-            Option.map(input.repo, (root): Scope => ({ kind: "repository", root: resolve(root) })),
-          );
-          const selectedInvocation = Option.getOrUndefined(input.invocation) as
-            | InvocationOption
-            | undefined;
-          const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
+    (input) =>
+      withCommandPaths(input.home, (paths) => {
+        const selectedHome = paths.skitHome;
+        return handleLibraryCommand(
+          Effect.gen(function* () {
+            const configuration = yield* libraryCommandConfiguration(input);
+            const selectedSubject = Option.getOrUndefined(input.subject);
+            const selectedScope = Option.getOrUndefined(
+              Option.map(input.repo, (root): Scope => ({
+                kind: "repository",
+                root: resolve(root),
+              })),
+            );
+            const selectedInvocation = Option.getOrUndefined(input.invocation) as
+              | InvocationOption
+              | undefined;
+            const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
 
-          const store = yield* LibraryStore;
-          yield* store.load;
-          yield* presentSetEnabled({
-            action,
-            enabled,
-            subject: selectedSubject,
-            scope: selectedScope,
-            cwd: resolve(process.cwd()),
-            all: input.all,
-            allowDuplicate: input.allowDuplicate,
-            invocation: selectedInvocation,
-            dryRun: input.dryRun,
-            interactive,
-            configuration,
-          });
-        }).pipe(Effect.provide(terminalPrompterLayer)),
-        selectedHome,
-      );
-    },
+            const store = yield* LibraryStore;
+            yield* store.load;
+            yield* presentSetEnabled({
+              action,
+              enabled,
+              subject: selectedSubject,
+              scope: selectedScope,
+              cwd: resolve(process.cwd()),
+              all: input.all,
+              allowDuplicate: input.allowDuplicate,
+              invocation: selectedInvocation,
+              dryRun: input.dryRun,
+              interactive,
+              configuration,
+            });
+          }).pipe(Effect.provide(terminalPrompterLayer)),
+          selectedHome,
+        );
+      }),
   ).pipe(
     Command.withDescription(
       `${enabled ? "Enable" : "Disable"} retained Skills for every agent at a scope.`,

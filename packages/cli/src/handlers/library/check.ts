@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";
@@ -5,30 +6,32 @@ import { Renderer } from "../../presentation/renderer.js";
 import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 
 const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
 
-export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) => {
-  const selectedHome = homePath(input.home);
-  return handleSourceCommand(
-    Effect.gen(function* () {
-      const renderer = yield* Renderer;
-      const store = yield* LibraryStore;
-      const state = yield* store.load;
-      const value = yield* renderer.withStatus(
-        "Checking retained Collection custody",
-        checkSubjectsEffect(state, Option.getOrUndefined(input.subject), (collection) =>
-          renderer.updateStatus(`Checking ${collection.display_name}`),
-        ),
-      );
-      yield* renderer.result(result("check", outputContracts.check, value));
-    }),
-    selectedHome,
-  );
-}).pipe(
+export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) =>
+  withCommandPaths(input.home, (paths) => {
+    const selectedHome = paths.skitHome;
+    return handleSourceCommand(
+      Effect.gen(function* () {
+        const renderer = yield* Renderer;
+        const store = yield* LibraryStore;
+        const state = yield* store.load;
+        const value = yield* renderer.withStatus(
+          "Checking retained Collection custody",
+          checkSubjectsEffect(state, Option.getOrUndefined(input.subject), (collection) =>
+            renderer.updateStatus(`Checking ${collection.display_name}`),
+          ),
+        );
+        yield* renderer.result(result("check", outputContracts.check, value));
+      }),
+      selectedHome,
+    );
+  }),
+).pipe(
   Command.withDescription("Check retained Library custody or verified source changes."),
   Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),
   Command.annotate(CommandMetadata, {

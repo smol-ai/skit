@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { readLibrarySkillMetadata } from "../../library-application/skill-metadata.js";
 import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
 import { Effect } from "effect";
@@ -5,7 +6,7 @@ import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
@@ -71,24 +72,26 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   yield* renderer.result(result("list", outputContracts.list, value));
 });
 
-export const listCliCommand = Command.make("list", localFlags, (input) => {
-  const interactive = shouldBrowseInteractively({
-    json: input.json,
-    stdin: Boolean(process.stdin.isTTY),
-    stdout: Boolean(process.stdout.isTTY),
-    stderr: Boolean(process.stderr.isTTY),
-  });
-  return handleLibraryCommand(
-    interactive
-      ? Effect.gen(function* () {
-          const configuration = yield* libraryCommandConfiguration(input);
-          const session = yield* openLibrarySession();
-          yield* browseLibraryEffect(session, configuration.pull.bindings);
-        }).pipe(Effect.provide(terminalPrompterLayer))
-      : presentListCommand(),
-    homePath(input.home),
-  );
-}).pipe(
+export const listCliCommand = Command.make("list", localFlags, (input) =>
+  withCommandPaths(input.home, (paths) => {
+    const interactive = shouldBrowseInteractively({
+      json: input.json,
+      stdin: Boolean(process.stdin.isTTY),
+      stdout: Boolean(process.stdout.isTTY),
+      stderr: Boolean(process.stderr.isTTY),
+    });
+    return handleLibraryCommand(
+      interactive
+        ? Effect.gen(function* () {
+            const configuration = yield* libraryCommandConfiguration(input);
+            const session = yield* openLibrarySession();
+            yield* browseLibraryEffect(session, configuration.pull.bindings);
+          }).pipe(Effect.provide(terminalPrompterLayer))
+        : presentListCommand(),
+      paths.skitHome,
+    );
+  }),
+).pipe(
   Command.withDescription("Browse retained Skills and Collections and manage enablement."),
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),
   Command.annotate(CommandMetadata, {

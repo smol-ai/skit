@@ -1,16 +1,11 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { authStatusCommand } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import {
-  homeFlag,
-  homePath,
-  jsonFlag,
-  optionalString,
-  optionValue,
-} from "../../commands/parameters.js";
+import { homeFlag, jsonFlag, optionalString, optionValue } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
@@ -21,16 +16,17 @@ export const authStatusCliCommand = Command.make(
     home: homeFlag,
     json: jsonFlag,
   },
-  ({ registry, home }) => {
-    const selectedHome = homePath(home);
-    return handlePlatformCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* authStatusCommand(selectedHome, optionValue(registry));
-        yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
-      }),
-    );
-  },
+  ({ registry, home }) =>
+    withCommandPaths(home, (paths) => {
+      const selectedHome = paths.skitHome;
+      return handlePlatformCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const value = yield* authStatusCommand(selectedHome, optionValue(registry));
+          yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
+        }),
+      );
+    }),
 ).pipe(
   Command.withDescription("Show stored Registry credential metadata."),
   Command.withExamples([{ command: "skit auth status" }]),

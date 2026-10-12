@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { Effect, Option, Result } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import type { ResolvedAuth } from "../../registry/auth.js";
@@ -14,7 +15,7 @@ import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag, optionalString } from "../../commands/parameters.js";
+import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 
 export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthError>(options: {
@@ -76,28 +77,29 @@ const apply = Flag.Boolean("apply").pipe(
 export const authorSyncCliCommand = Command.make(
   "sync",
   { path, to, visibility, apply, home: homeFlag, json: jsonFlag },
-  ({ path, to, visibility, apply, home }) => {
-    const selectedHome = homePath(home);
-    return handleRegistryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
-        const value = yield* authorSyncCommand({
-          root: Option.getOrUndefined(path),
-          apply,
-          home: selectedHome,
-          to: Option.getOrUndefined(to),
-          visibility: Option.getOrUndefined(visibility),
-          authState,
-        });
-        const conflicted = value.status === "conflicted" || value.status === "unbound_conflict";
-        yield* renderer.result(
-          result("sync", outputContracts.sync, value, conflicted ? 12 : undefined),
-        );
-      }),
-      selectedHome,
-    );
-  },
+  ({ path, to, visibility, apply, home }) =>
+    withCommandPaths(home, (paths) => {
+      const selectedHome = paths.skitHome;
+      return handleRegistryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
+          const value = yield* authorSyncCommand({
+            root: Option.getOrUndefined(path),
+            apply,
+            home: selectedHome,
+            to: Option.getOrUndefined(to),
+            visibility: Option.getOrUndefined(visibility),
+            authState,
+          });
+          const conflicted = value.status === "conflicted" || value.status === "unbound_conflict";
+          yield* renderer.result(
+            result("sync", outputContracts.sync, value, conflicted ? 12 : undefined),
+          );
+        }),
+        selectedHome,
+      );
+    }),
 ).pipe(
   Command.withDescription("Synchronize a local SKIT with its remote draft."),
   Command.withExamples([

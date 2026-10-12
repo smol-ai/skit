@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
@@ -5,7 +6,7 @@ import { loginEffect, resolveLoginTargetEffect, reuseLoginEffect } from "../../r
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag, jsonRequested } from "../../commands/parameters.js";
+import { homeFlag, jsonFlag, jsonRequested } from "../../commands/parameters.js";
 import { InteractiveLoginUnavailable, ScopesInvalid } from "../../registry/failures.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -88,24 +89,25 @@ const scopes = Flag.String("scopes").pipe(
 export const authLoginCliCommand = Command.make(
   "login",
   { registry, alias, scopes, relogin, home: homeFlag, json: jsonFlag },
-  ({ registry, alias, scopes, relogin, home }) => {
-    const selectedHome = homePath(home);
-    return handleRegistryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* authLoginCommand({
-          registry: Option.getOrUndefined(registry),
-          alias: Option.getOrUndefined(alias),
-          scopes: Option.getOrElse(scopes, () => ["library:sync"]),
-          home: selectedHome,
-          relogin,
-          interactive: !jsonRequested() && Boolean(process.stdin.isTTY && process.stderr.isTTY),
-        });
-        yield* renderer.result(result("authLogin", outputContracts.authLogin, value));
-      }).pipe(Effect.provide(terminalPrompterLayer)),
-      selectedHome,
-    );
-  },
+  ({ registry, alias, scopes, relogin, home }) =>
+    withCommandPaths(home, (paths) => {
+      const selectedHome = paths.skitHome;
+      return handleRegistryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const value = yield* authLoginCommand({
+            registry: Option.getOrUndefined(registry),
+            alias: Option.getOrUndefined(alias),
+            scopes: Option.getOrElse(scopes, () => ["library:sync"]),
+            home: selectedHome,
+            relogin,
+            interactive: !jsonRequested() && Boolean(process.stdin.isTTY && process.stderr.isTTY),
+          });
+          yield* renderer.result(result("authLogin", outputContracts.authLogin, value));
+        }).pipe(Effect.provide(terminalPrompterLayer)),
+        selectedHome,
+      );
+    }),
 ).pipe(
   Command.withDescription(
     "Reuse saved authentication or sign in and store a CLI credential in ~/.skit/auth.json.",

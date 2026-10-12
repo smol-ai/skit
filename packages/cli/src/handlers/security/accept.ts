@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import type { Digest } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -6,7 +7,7 @@ import { FindingFingerprintInvalid } from "../../audit/failures.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { acceptLibrarySecurityFinding } from "../../library/security.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
@@ -80,29 +81,30 @@ const expiresAt = Flag.String("expires-at").pipe(
 export const securityAcceptCliCommand = Command.make(
   "accept",
   { skill, finding, principal, rationale, expiresAt, ...localFlags },
-  ({ skill, finding, principal, rationale, expiresAt, home }) => {
-    const selectedHome = homePath(home);
-    return handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* securityAcceptCommand(
-          {
-            acceptSecurityFindingEffect: (query, input) =>
-              acceptLibrarySecurityFinding(query, input),
-          },
-          {
-            query: skill,
-            fingerprint: finding,
-            principal,
-            rationale,
-            expiresAt: Option.getOrUndefined(expiresAt),
-          },
-        );
-        yield* renderer.result(result("securityAccept", outputContracts.securityAccept, value));
-      }),
-      selectedHome,
-    );
-  },
+  ({ skill, finding, principal, rationale, expiresAt, home }) =>
+    withCommandPaths(home, (paths) => {
+      const selectedHome = paths.skitHome;
+      return handleLibraryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const value = yield* securityAcceptCommand(
+            {
+              acceptSecurityFindingEffect: (query, input) =>
+                acceptLibrarySecurityFinding(query, input),
+            },
+            {
+              query: skill,
+              fingerprint: finding,
+              principal,
+              rationale,
+              expiresAt: Option.getOrUndefined(expiresAt),
+            },
+          );
+          yield* renderer.result(result("securityAccept", outputContracts.securityAccept, value));
+        }),
+        selectedHome,
+      );
+    }),
 ).pipe(
   Command.withDescription("Accept one finding for Projection of an exact retained Skill Artifact."),
   Command.withExamples([

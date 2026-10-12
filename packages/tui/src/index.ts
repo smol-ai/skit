@@ -15,10 +15,10 @@ import {
   type KeyEvent,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import { resolve, join } from "node:path";
-import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
+  SkitPaths,
   LibraryActor,
   libraryApplicationLayer,
   openLibrarySession,
@@ -131,21 +131,21 @@ const flag = (name: string): string | undefined => {
 };
 
 // One host runtime and serialized state transitions for the writable Library view.
-const libraryHome = resolve(
-  flag("--skit-home") ?? process.env.SKIT_HOME ?? join(homedir(), ".skit"),
+const libraryHost = createLibraryHost(
+  libraryApplicationLayer(flag("--skit-home")).pipe(
+    Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
+  ),
+  openLibrarySession(),
 );
+const paths = await libraryHost.run(SkitPaths);
 const libraryConfiguration = {
-  home: homedir(),
-  configHome: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-  statePath: join(libraryHome, "state.json"),
-  variantsPath: join(libraryHome, "variants"),
+  home: paths.userHome,
+  configHome: paths.configHome,
+  statePath: paths.libraryStatePath,
+  variantsPath: paths.variantsPath,
   overrides: { codex: flag("--codex-root"), claude: flag("--claude-root") },
   now: () => new Date().toISOString(),
 };
-const libraryHost = createLibraryHost(
-  libraryApplicationLayer(libraryHome).pipe(Layer.provideMerge(Layer.succeed(LibraryActor)("tui"))),
-  openLibrarySession(),
-);
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
 const report = await libraryHost.run(

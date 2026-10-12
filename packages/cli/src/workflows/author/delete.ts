@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
@@ -26,7 +27,7 @@ import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
+import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 
 export class AuthorDeleteHttpError extends Data.TaggedError("AuthorDeleteHttpError")<{
@@ -135,22 +136,23 @@ const dryRun = Flag.Boolean("dry-run").pipe(
 export const authorDeleteCliCommand = Command.make(
   "delete",
   { skit, dryRun, home: homeFlag, json: jsonFlag },
-  ({ skit, dryRun, home }) => {
-    const selectedHome = homePath(home);
-    return handleRegistryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
-        const value = yield* authorDeleteCommand(skit, {
-          authState,
-          home: selectedHome,
-          dryRun,
-        });
-        yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
-      }),
-      selectedHome,
-    );
-  },
+  ({ skit, dryRun, home }) =>
+    withCommandPaths(home, (paths) => {
+      const selectedHome = paths.skitHome;
+      return handleRegistryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
+          const value = yield* authorDeleteCommand(skit, {
+            authState,
+            home: selectedHome,
+            dryRun,
+          });
+          yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
+        }),
+        selectedHome,
+      );
+    }),
 ).pipe(
   Command.withDescription("Permanently delete a private SKIT from its Registry."),
   Command.withExamples([

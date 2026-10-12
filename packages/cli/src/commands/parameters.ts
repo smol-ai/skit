@@ -1,7 +1,6 @@
 import { Option } from "effect";
 import { Flag, GlobalFlag } from "effect/cli";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import type { ResolvedSkitPaths } from "../configuration/paths.js";
 
 export const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit structured JSON."),
@@ -50,18 +49,18 @@ export const localFlags = {
   devinRoot: devinRootFlag,
 };
 
-export const homePath = (home: Option.Option<string>): string =>
-  resolve(Option.getOrElse(home, () => process.env.SKIT_HOME ?? join(homedir(), ".skit")));
-
-export function inventoryRootOptions(input: {
-  readonly codexRoot: Option.Option<string>;
-  readonly claudeRoot: Option.Option<string>;
-  readonly opencodeRoot: Option.Option<string>;
-  readonly devinRoot: readonly string[];
-}) {
+export function inventoryRootOptions(
+  input: {
+    readonly codexRoot: Option.Option<string>;
+    readonly claudeRoot: Option.Option<string>;
+    readonly opencodeRoot: Option.Option<string>;
+    readonly devinRoot: readonly string[];
+  },
+  paths: ResolvedSkitPaths,
+) {
   return {
-    home: homedir(),
-    configHome: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    home: paths.userHome,
+    configHome: paths.configHome,
     overrides: {
       codex: Option.getOrUndefined(input.codexRoot),
       claude: Option.getOrUndefined(input.claudeRoot),

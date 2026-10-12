@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Effect, FileSystem, Option } from "effect";
@@ -7,7 +8,7 @@ import { handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
+import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { compactHomePath } from "../../presentation/home-path.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -525,39 +526,40 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
 export const setupCliCommand = Command.make(
   "setup",
   { workDir: workDirFlag, dryRun, ...localFlags },
-  (input) => {
-    const selectedHome = homePath(input.home);
-    const interactive = shouldSetupInteractively({
-      json: input.json,
-      dryRun: input.dryRun,
-      stdin: Boolean(process.stdin.isTTY),
-      stdout: Boolean(process.stdout.isTTY),
-      stderr: Boolean(process.stderr.isTTY),
-    });
-    return handleSourceCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const configuration = yield* libraryCommandConfiguration(input);
-        const value = yield* setupCommand({
-          workDirFlag: Option.getOrUndefined(input.workDir),
-          interactive,
-          dryRun: input.dryRun || input.json,
-          options: {
-            libraryHome: selectedHome,
-            inventory: configuration.inventory,
-            probePath: process.env.PATH,
-            skillsStateHome: process.env.XDG_STATE_HOME,
-          },
-          localCustody: {
-            acquisition: configuration.acquisition,
-            bindings: configuration.pull.bindings,
-          },
-        });
-        if (!interactive) yield* renderer.result(result("setup", outputContracts.setup, value));
-      }).pipe(Effect.provide(terminalPrompterLayer)),
-      selectedHome,
-    );
-  },
+  (input) =>
+    withCommandPaths(input.home, (paths) => {
+      const selectedHome = paths.skitHome;
+      const interactive = shouldSetupInteractively({
+        json: input.json,
+        dryRun: input.dryRun,
+        stdin: Boolean(process.stdin.isTTY),
+        stdout: Boolean(process.stdout.isTTY),
+        stderr: Boolean(process.stderr.isTTY),
+      });
+      return handleSourceCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const configuration = yield* libraryCommandConfiguration(input);
+          const value = yield* setupCommand({
+            workDirFlag: Option.getOrUndefined(input.workDir),
+            interactive,
+            dryRun: input.dryRun || input.json,
+            options: {
+              libraryHome: selectedHome,
+              inventory: configuration.inventory,
+              probePath: process.env.PATH,
+              skillsStateHome: paths.stateHome,
+            },
+            localCustody: {
+              acquisition: configuration.acquisition,
+              bindings: configuration.pull.bindings,
+            },
+          });
+          if (!interactive) yield* renderer.result(result("setup", outputContracts.setup, value));
+        }).pipe(Effect.provide(terminalPrompterLayer)),
+        selectedHome,
+      );
+    }),
 ).pipe(
   Command.withDescription(
     "Remember this machine's repository roots and explain existing Skill Instances.",

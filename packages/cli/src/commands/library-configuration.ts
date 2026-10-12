@@ -1,8 +1,8 @@
+import { configurationPaths } from "../configuration/paths.js";
 import { Effect, Option } from "effect";
-import { join } from "node:path";
 import { libraryInstallationConfiguration } from "../library/installation-configuration.js";
 import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
-import { homePath, inventoryRootOptions } from "./parameters.js";
+import { inventoryRootOptions } from "./parameters.js";
 
 export interface LocalCommandInput {
   readonly home: Option.Option<string>;
@@ -16,8 +16,9 @@ export interface LocalCommandInput {
 export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")(function* (
   input: LocalCommandInput,
 ) {
-  const libraryHome = homePath(input.home);
-  const inventory = inventoryRootOptions(input);
+  const paths = yield* configurationPaths(Option.getOrUndefined(input.home));
+  const libraryHome = paths.skitHome;
+  const inventory = inventoryRootOptions(input, paths);
   const detectedHarnesses = yield* detectInstalledHarnessesEffect({
     home: inventory.home,
     configHome: inventory.configHome,
@@ -33,15 +34,15 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
     detectedHarnesses: Effect.succeed(detectedHarnesses),
     acquisition: {
       installation,
-      originalsPath: join(libraryHome, "originals"),
+      originalsPath: paths.originalsPath,
     },
     pull: {
       installation,
-      originalsPath: join(libraryHome, "originals"),
+      originalsPath: paths.originalsPath,
       bindings: {
         ...inventory,
-        statePath: join(libraryHome, "state.json"),
-        variantsPath: join(libraryHome, "variants"),
+        statePath: paths.libraryStatePath,
+        variantsPath: paths.variantsPath,
       },
     },
   };

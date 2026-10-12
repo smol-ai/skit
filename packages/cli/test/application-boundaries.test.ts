@@ -1,6 +1,8 @@
+import { addRegistryRemoteEffect, readConfigEffect } from "../src/registry/auth.js";
+import { resolveSkitPaths } from "../src/configuration/paths.js";
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem } from "effect";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { LibraryStore, skitLayer, withLibraryWriter } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "../src/library-application/layers.js";
 import { skitCommand } from "../src/commands/tree.js";
@@ -19,6 +21,12 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
       Effect.gen(function* () {
         assert.isTrue(yield* fs.exists(join(home, ".lock")));
         assert.isFalse(yield* fs.exists(join(home, "state.json")));
+        yield* addRegistryRemoteEffect("fixture", "https://registry.example.test", undefined).pipe(
+          Effect.provide(
+            ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
+          ),
+        );
+        assert.isTrue(yield* fs.exists(join(home, "auth.json")));
       });
     yield* withConfigurationWriter(undefined, inside(configured)).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
@@ -28,6 +36,66 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
     );
     assert.isFalse(yield* fs.exists(join(configured, ".lock")));
     assert.isFalse(yield* fs.exists(join(explicit, ".lock")));
+    assert.isFalse(yield* fs.exists(join(root, "ignored")));
+    for (const home of [configured, explicit]) {
+      const config = yield* readConfigEffect(home);
+      assert.strictEqual(config.registryAliases?.fixture, "https://registry.example.test");
+    }
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("path configuration separates account home, state root, and XDG roots", () =>
+  Effect.gen(function* () {
+    const paths = yield* resolveSkitPaths("relative-state", "/account").pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            SKIT_HOME: "/ignored",
+            XDG_CONFIG_HOME: "/xdg/config",
+            XDG_STATE_HOME: "/xdg/state",
+          }),
+        ),
+      ),
+    );
+    assert.strictEqual(paths.userHome, "/account");
+    assert.strictEqual(paths.skitHome, resolve("relative-state"));
+    assert.strictEqual(paths.authPath, join(paths.skitHome, "auth.json"));
+    assert.strictEqual(paths.configHome, "/xdg/config");
+    assert.strictEqual(paths.stateHome, "/xdg/state");
+    const defaults = yield* resolveSkitPaths(undefined, "/account").pipe(
+      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+    );
+    assert.strictEqual(defaults.skitHome, "/account/.skit");
+    assert.strictEqual(defaults.configHome, "/account/.config");
+    assert.strictEqual(defaults.stateHome, "/account/.local/state");
+  }),
+);
+
+it.effect("parsed configuration commands honor ConfigProvider without a home flag", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-command-paths-" });
+    const home = join(root, "configured");
+    const failures: CommandFailure[] = [];
+    yield* runCommandTree(
+      skitCommand,
+      ["registry", "add", "fixture", "https://registry.example.test", "--json"],
+      "test",
+    ).pipe(
+      Effect.provide(
+        rendererTestLayer({
+          failure: (value) =>
+            Effect.sync(() => {
+              failures.push(value);
+            }),
+        }),
+      ),
+      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: home }))),
+    );
+    assert.deepStrictEqual(failures, []);
+    assert.isTrue(yield* fs.exists(join(home, "auth.json")));
+    assert.isFalse(yield* fs.exists(join(home, "state.json")));
+    assert.isFalse(yield* fs.exists(join(home, ".lock")));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 

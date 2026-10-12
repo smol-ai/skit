@@ -1,3 +1,4 @@
+import { configurationPaths } from "../../configuration/paths.js";
 import {
   AuthoringAuthenticatedApi,
   DraftNotFoundResponse,
@@ -9,7 +10,6 @@ import {
 import { Data, Effect, FileSystem, Predicate, Result, Schema } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
@@ -290,16 +290,10 @@ function fromBase64(contentBase64: string, mediaType: string): SyncFileVersion {
   const bytes = Buffer.from(contentBase64, "base64");
   return { bytes, digest: hash(bytes), mediaType };
 }
-function statePath(home?: string) {
-  return join(
-    resolve(home ?? process.env.SKIT_HOME ?? join(homedir(), ".skit")),
-    "sync-bindings.json",
-  );
-}
 const readState = Effect.fn("Sync.readState")(function* (home?: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs
-    .readFileString(statePath(home))
+    .readFileString((yield* configurationPaths(home)).syncBindingsPath)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeed(undefined) : Effect.fail(error),
@@ -316,7 +310,7 @@ const writeState = Effect.fn("Sync.writeState")(function* (
   state: SyncState,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const path = statePath(home);
+  const path = (yield* configurationPaths(home)).syncBindingsPath;
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${process.pid}`;
   yield* fs.writeFileString(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });

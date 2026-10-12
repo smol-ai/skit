@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { terminalLibraryProgressLayer } from "../../presentation/library-progress.js";
 import { Effect, Option } from "effect";
 import { LibraryStore } from "@smolai/skit-core";
@@ -6,7 +7,7 @@ import { handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import {
@@ -34,55 +35,57 @@ export const updateCliCommand = Command.make(
   "update",
   { subject, dryRun, fromProjection, ...localFlags },
   (input) =>
-    handleSourceCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const configuration = yield* libraryCommandConfiguration(input);
-        const query = Option.getOrUndefined(input.subject);
-        const projectionSelector = Option.getOrUndefined(input.fromProjection);
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
-        const options = {
-          roots: configuration.inventory,
-          variantsPath: configuration.pull.bindings.variantsPath,
-        };
-        if (projectionSelector !== undefined) {
-          if (query === undefined)
-            return yield* new ProjectionRetentionMissing({
-              message: "A Skill is required with --from-projection",
-            });
-          if (input.dryRun) {
+    withCommandPaths(input.home, (paths) =>
+      handleSourceCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const configuration = yield* libraryCommandConfiguration(input);
+          const query = Option.getOrUndefined(input.subject);
+          const projectionSelector = Option.getOrUndefined(input.fromProjection);
+          const store = yield* LibraryStore;
+          const state = yield* store.load;
+          const options = {
+            roots: configuration.inventory,
+            variantsPath: configuration.pull.bindings.variantsPath,
+          };
+          if (projectionSelector !== undefined) {
+            if (query === undefined)
+              return yield* new ProjectionRetentionMissing({
+                message: "A Skill is required with --from-projection",
+              });
+            if (input.dryRun) {
+              const value = yield* renderer.withStatus(
+                "Inspecting changed Projection bytes",
+                planProjectionRetention(state, options, query, projectionSelector),
+              );
+              return yield* renderer.result(
+                result("update", outputContracts.projectionRetentionPlan, value),
+              );
+            }
             const value = yield* renderer.withStatus(
-              "Inspecting changed Projection bytes",
-              planProjectionRetention(state, options, query, projectionSelector),
+              "Retaining changed Projection bytes",
+              applyProjectionRetention(state, options, query, projectionSelector),
             );
             return yield* renderer.result(
-              result("update", outputContracts.projectionRetentionPlan, value),
+              result("update", outputContracts.projectionRetention, value),
             );
           }
-          const value = yield* renderer.withStatus(
-            "Retaining changed Projection bytes",
-            applyProjectionRetention(state, options, query, projectionSelector),
+          if (input.dryRun) {
+            const value = yield* renderer.withStatus(
+              "Checking Source observations",
+              planUpdatesEffect(state, options, query),
+            );
+            return yield* renderer.result(result("update", outputContracts.updatePlan, value));
+          }
+          const value = yield* updateSubjectsEffect(state, options, query).pipe(
+            Effect.provide(terminalLibraryProgressLayer),
           );
-          return yield* renderer.result(
-            result("update", outputContracts.projectionRetention, value),
+          yield* renderer.result(
+            result("update", outputContracts.update, value, updateExitCode(value)),
           );
-        }
-        if (input.dryRun) {
-          const value = yield* renderer.withStatus(
-            "Checking Source observations",
-            planUpdatesEffect(state, options, query),
-          );
-          return yield* renderer.result(result("update", outputContracts.updatePlan, value));
-        }
-        const value = yield* updateSubjectsEffect(state, options, query).pipe(
-          Effect.provide(terminalLibraryProgressLayer),
-        );
-        yield* renderer.result(
-          result("update", outputContracts.update, value, updateExitCode(value)),
-        );
-      }),
-      homePath(input.home),
+        }),
+        paths.skitHome,
+      ),
     ),
 ).pipe(
   Command.withDescription("Update sources from their recorded origins."),

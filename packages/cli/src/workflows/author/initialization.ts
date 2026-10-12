@@ -1,3 +1,4 @@
+import { withCommandPaths } from "../../configuration/paths.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
@@ -25,7 +26,7 @@ import { handleLibraryCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
@@ -178,27 +179,29 @@ export const authorInitCliCommand = Command.make(
   "init",
   { path, register, ...localFlags },
   (input) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const configuration = yield* libraryCommandConfiguration(input);
-        const { initialized: value, entry } = yield* authorInitCommand(
-          Option.getOrElse(input.path, () => "."),
-          {
-            ...configuration.inventory,
-            libraryHome: configuration.libraryHome,
-            statePath: join(configuration.libraryHome, "state.json"),
-            variantsPath: join(configuration.libraryHome, "variants"),
-          },
-          input.register,
-        );
-        const output = {
-          ...value,
-          library_registration: entry ? ("registered" as const) : ("removed" as const),
-        };
-        yield* renderer.result(result("init", outputContracts.init, output));
-      }),
-      homePath(input.home),
+    withCommandPaths(input.home, (paths) =>
+      handleLibraryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const configuration = yield* libraryCommandConfiguration(input);
+          const { initialized: value, entry } = yield* authorInitCommand(
+            Option.getOrElse(input.path, () => "."),
+            {
+              ...configuration.inventory,
+              libraryHome: configuration.libraryHome,
+              statePath: join(configuration.libraryHome, "state.json"),
+              variantsPath: join(configuration.libraryHome, "variants"),
+            },
+            input.register,
+          );
+          const output = {
+            ...value,
+            library_registration: entry ? ("registered" as const) : ("removed" as const),
+          };
+          yield* renderer.result(result("init", outputContracts.init, output));
+        }),
+        paths.skitHome,
+      ),
     ),
 ).pipe(
   Command.withDescription("Initialize SKIT authoring in a new or existing Skill Collection."),

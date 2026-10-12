@@ -1,5 +1,4 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { configurationPaths } from "../../configuration/paths.js";
 import {
   SkillAlias,
   type HarnessShadow,
@@ -163,11 +162,13 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       ),
     );
     const errors = [...entry.errors];
-    const roots = inventoryRoots ?? {
-      home: homedir(),
-      configHome: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-      overrides: {},
-    };
+    const roots =
+      inventoryRoots ??
+      (yield* Effect.map(configurationPaths(), (paths) => ({
+        home: paths.userHome,
+        configHome: paths.configHome,
+        overrides: {},
+      })));
     const aliasIndex = yield* observeHarnessSkills(
       [
         ...readableHarnessRoots(roots, { kind: "global" }),

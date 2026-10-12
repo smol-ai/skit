@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Fiber, FileSystem } from "effect";
+import { Cause, Config, Deferred, Effect, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";
 import { skitLayer } from "@smolai/skit-core";
@@ -20,7 +20,7 @@ it.effect.each(["remote", "config"] as const)(
     Effect.gen(function* () {
       const operation: Effect.Effect<
         void,
-        AuthorRemoteMetadataInvalid | CredentialsUnusable,
+        AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
         FileSystem.FileSystem
       > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       // The effect signals readiness through an unsafe completion so the whole test can stay
@@ -70,7 +70,7 @@ it.effect.each(["remote", "config"] as const)(
     Effect.gen(function* () {
       const operation: Effect.Effect<
         void,
-        AuthorRemoteMetadataInvalid | CredentialsUnusable,
+        AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
         FileSystem.FileSystem
       > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       for (const input of [

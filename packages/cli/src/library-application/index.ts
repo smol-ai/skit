@@ -40,3 +40,10 @@ export {
   type Scope,
 } from "./read-model.js";
 export type { InvocationOption } from "../invocation/policy.js";
+
+export {
+  SkitPaths,
+  resolveSkitPaths,
+  skitPathsLayer,
+  type ResolvedSkitPaths,
+} from "../configuration/paths.js";
