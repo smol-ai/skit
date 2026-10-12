@@ -26,6 +26,11 @@ import {
   libraryStateRevision,
   SetEnabledStale,
 } from "../../workflows/library/set-enabled.js";
+import {
+  largeCollectionWarning,
+  readDescriptionLoad,
+  descriptionLoadMessage,
+} from "../../workflows/library/collection-load.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");
@@ -264,11 +269,16 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     : undefined;
   let wholeCollection = input.all;
   if (input.interactive && collection !== undefined && !wholeCollection) {
+    const collectionLabel = input.enabled
+      ? `Enable whole collection · ${descriptionLoadMessage(
+          yield* readDescriptionLoad(state, store.originalsPath, selected ?? []),
+        )}`
+      : "Disable whole collection";
     const selection = yield* prompter
       .select("What would you like to " + input.action + "?", [
         {
           value: "collection",
-          label: input.enabled ? "Enable whole collection" : "Disable whole collection",
+          label: collectionLabel,
           hint: input.enabled
             ? "Include new skills and remove deleted ones when you update"
             : "Disable every skill in this collection",
@@ -443,6 +453,15 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       variantsPath: input.configuration.pull.bindings.variantsPath,
     }),
   );
+  if (input.enabled) {
+    const bindings = [
+      ...outcome.value.bindings,
+      ...(scope.kind === "repository" ? state.global_bindings : []),
+    ];
+    const ids = new Set(bindings.flatMap((binding) => bindingSkillIds(state, binding)));
+    const warning = largeCollectionWarning(ids.size);
+    if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
+  }
   if (outcome.kind === "plan") {
     yield* renderer.result(
       result(

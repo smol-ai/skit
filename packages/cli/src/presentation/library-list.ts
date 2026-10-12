@@ -29,7 +29,7 @@ export function renderLibraryList(
   }
   for (const binding of data.bindings)
     lines.push(
-      `Enabled for every agent: ${
+      `Enabled: ${
         binding.entries
           .map((entry) =>
             entry.kind === "collection" ? `${entry.label} (whole Collection)` : entry.name,

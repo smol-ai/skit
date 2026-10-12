@@ -59,7 +59,6 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
                 : "    collection every skill is disabled",
             ]
           : []),
-        "    agents     every agent",
         `    applies to ${fact.destination}`,
         ...(fact.action === "enable" && policy
           ? [
@@ -113,7 +112,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
       proposed.pending.facts
         .map(
           (fact) =>
-            `${fact.action === "enable" ? "Enabled" : "Disabled"} for every agent (${fact.destination})`,
+            `${fact.action === "enable" ? "Enabled" : "Disabled"} (${fact.destination})`,
         )
         .join("\n"),
       "Applied",
