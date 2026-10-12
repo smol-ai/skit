@@ -1,19 +1,19 @@
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 
 const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
 
-export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) => {
-  const selectedHome = homePath(input.home);
-  return handleCommand(
+export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) =>
+  handleSourceCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const store = yield* LibraryStore;
@@ -26,9 +26,8 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       );
       yield* renderer.result(result("check", outputContracts.check, value));
     }),
-    selectedHome,
-  );
-}).pipe(
+  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+).pipe(
   Command.withDescription("Check retained Library custody or verified source changes."),
   Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),
   Command.annotate(CommandMetadata, {

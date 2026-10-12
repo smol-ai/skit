@@ -1,7 +1,8 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { join } from "node:path";
-import { skitLayer, type LibraryState } from "@smolai/skit-core";
+import { type LibraryState } from "@smolai/skit-core";
 import { LibraryApiUnreachable } from "../src/workflows/library/library-sync-api.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
@@ -27,7 +28,7 @@ it.effect("each sync publishes state with the revision it reconciled against", (
     yield* anchoredAt(a.state);
     assert.strictEqual((yield* b.sync()).status, "clean");
     yield* anchoredAt(b.state);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 /**
@@ -53,7 +54,7 @@ it.effect("an older state.json does not delete Collections the remote gained sin
     yield* a.sync();
     assert.deepStrictEqual(yield* remoteCollections, added);
     assert.strictEqual((yield* a.state).collections.length, 2);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a local removal after sync still removes the Collection everywhere", () =>
@@ -74,7 +75,7 @@ it.effect("a local removal after sync still removes the Collection everywhere", 
     assert.isFalse(
       (yield* b.state).collections.some((item) => item.collection_id === removed.collection_id),
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a write committed without a response leaves coherent state and converges", () =>
@@ -97,7 +98,7 @@ it.effect("a write committed without a response leaves coherent state and conver
     assert.deepStrictEqual(yield* remoteCollections, committed);
     assert.strictEqual((yield* b.sync()).status, "merged");
     assert.strictEqual((yield* b.state).collections.length, 2);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("state without ancestry adopts explicitly and keeps remote-only Collections", () =>
@@ -116,7 +117,7 @@ it.effect("state without ancestry adopts explicitly and keeps remote-only Collec
     for (const collectionId of remoteOnly) assert.include(adopted, collectionId);
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* a.state).collections.length, 2);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 /** Enable one Skill globally with a device-local invocation policy. */
@@ -156,7 +157,7 @@ it.effect("a merge keeps device-local invocation policies", () =>
     assert.deepStrictEqual(merged.global_bindings[0]?.invocation_policies, {
       [skillId]: "explicit",
     });
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a projection failure after sync publishes leaves state and ancestry coherent", () =>
@@ -176,7 +177,7 @@ it.effect("a projection failure after sync publishes leaves state and ancestry c
     yield* fs.remove(b.root);
     assert.strictEqual((yield* b.sync()).status, "clean");
     assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -205,7 +206,7 @@ it.effect(
       const retried = yield* a.sync();
       assert.strictEqual(retried.status, "conflicted");
       assert.strictEqual((yield* remote)?.manifest.collections[0]?.label, "from-c");
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const removalSyncsFirst of [true, false])
@@ -239,7 +240,7 @@ for (const removalSyncsFirst of [true, false])
         assert.isFalse(
           (yield* remote)!.manifest.collections.some((item) => item.collection_id === removed),
         );
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
 it.effect("adoption recovers a home whose Library vanished without deleting anything", () =>
@@ -259,5 +260,5 @@ it.effect("adoption recovers a home whose Library vanished without deleting anyt
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* a.state).collections.length, 2);
     assert.strictEqual((yield* b.sync()).status, "clean");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

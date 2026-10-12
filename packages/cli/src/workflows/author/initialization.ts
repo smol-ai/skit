@@ -1,3 +1,5 @@
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { withLibraryWriter } from "@smolai/skit-core";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { Clock, Effect, FileSystem, Option } from "effect";
@@ -20,11 +22,11 @@ import {
   DirectoryAlreadyRetained,
 } from "../../library/failures.js";
 import type { ProjectionOptions } from "../../workflows/library/projection-options.js";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags } from "../../commands/parameters.js";
+import { localFlags } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
@@ -155,7 +157,7 @@ export const ensureAuthoredWorkspaceEffect = Effect.fn("Author.ensureWorkspace")
   const initialized = scaffold ? yield* initSkitEffect(root) : undefined;
   const entry = yield* registerOwnedWorkspaceEffect(root, options, plan, register);
   return { initialized, entry };
-});
+}, withLibraryWriter);
 
 export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   input: string,
@@ -177,7 +179,7 @@ export const authorInitCliCommand = Command.make(
   "init",
   { path, register, ...localFlags },
   (input) =>
-    handleCommand(
+    handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const configuration = yield* libraryCommandConfiguration(input);
@@ -197,8 +199,7 @@ export const authorInitCliCommand = Command.make(
         };
         yield* renderer.result(result("init", outputContracts.init, output));
       }),
-      homePath(input.home),
-    ),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Initialize SKIT authoring in a new or existing Skill Collection."),
   Command.withExamples([

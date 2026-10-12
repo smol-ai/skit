@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { invocationEligibleBindings, scopeChoices, scopeKey } from "../src/library/read-model.js";
+import {
+  invocationEligibleBindings,
+  scopeChoices,
+  scopeKey,
+} from "../src/library-application/read-model.js";
 
 describe("Library workflow choices", () => {
   test("keys a Scope by the destination it selects", () => {

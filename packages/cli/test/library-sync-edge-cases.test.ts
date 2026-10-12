@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
 import { join } from "node:path";
@@ -7,7 +8,6 @@ import {
   observeInventory,
   makeAcquisitionId,
   retainedTreePath,
-  skitLayer,
   type SkillId,
 } from "@smolai/skit-core";
 import { LibraryApiUnreachable } from "../src/workflows/library/library-sync-api.js";
@@ -59,7 +59,7 @@ it.effect(
           "authored edit\n",
         );
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("same-name Skills from different Sources stop before writes and resolve explicitly", () =>
@@ -123,7 +123,7 @@ it.effect("same-name Skills from different Sources stop before writes and resolv
     assert.equal(yield* fs.readFileString(join(a.root, "review", "SKILL.md")), "second\n");
     assert.equal((yield* c.sync()).status, "pulled");
     assert.equal((yield* a.sync()).status, "clean");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -185,7 +185,7 @@ it.effect(
       const head = yield* remote;
       assert.ok(head);
       assert.equal(head.manifest.collections.length, 1);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const repository of [false, true]) {
@@ -257,7 +257,7 @@ for (const repository of [false, true]) {
             );
           }
           assert.equal((yield* b.sync()).status, "clean");
-        }).pipe(Effect.provide(skitLayer), Effect.scoped),
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
     );
   }
 }
@@ -275,7 +275,7 @@ it.effect("edited inactive projections remain non-blocking while their reference
     assert.equal((yield* b.sync({ rootFor: () => undefined })).status, "clean");
     assert.equal((yield* b.state).projections[0]?.status, "conflicted");
     assert.equal(yield* fs.readFileString(join(b.root, "review", "SKILL.md")), "native edit\n");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("nested repository reconciliation retains each repository's own route", () =>
@@ -305,7 +305,7 @@ it.effect("nested repository reconciliation retains each repository's own route"
     assert.equal(yield* fs.readFileString(join(parentRoot, "parent", "SKILL.md")), "parent\n");
     assert.equal(yield* fs.readFileString(join(childRoot, "child", "SKILL.md")), "child\n");
     assert.isFalse(yield* fs.exists(join(childRoot, "parent")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("incoming repository name collisions stop before either head changes", () =>
@@ -344,7 +344,7 @@ it.effect("incoming repository name collisions stop before either head changes",
     assert.deepEqual(yield* remote, head);
     assert.equal(yield* fs.readFileString(join(root, "foo", "SKILL.md")), "first\n");
     assert.equal(yield* fs.readFileString(join(root, "bar", "SKILL.md")), "second\n");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -379,7 +379,7 @@ it.effect(
       yield* fs.writeFileString(join(b.root, "review", "SKILL.md"), "review\n");
       assert.equal((yield* b.sync()).status, "merged");
       assert.isFalse(yield* fs.exists(join(b.root, "review")));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -418,7 +418,7 @@ it.effect(
       const head = yield* remote;
       assert.ok(head);
       assert.equal(head.manifest.collections.length, 1);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const localBytes of ["B\n", "base\n"]) {
@@ -484,7 +484,7 @@ for (const localBytes of ["B\n", "base\n"]) {
           currentSkillVersion(updated, updated.skills[0])?.source_digest,
           next.skills[0]?.versions.at(-1)?.source_digest,
         );
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }
 
@@ -513,7 +513,7 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     assert.isFalse(yield* fs.exists(join(b.root, "same")));
     assert.equal((yield* b.sync()).status, "clean");
     assert.isFalse(yield* fs.exists(join(b.root, "same")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const remoteDeletes of [false, true]) {
@@ -541,7 +541,7 @@ for (const remoteDeletes of [false, true]) {
         assert.equal((yield* b.sync({ takeRemote: [key] })).status, "merged");
         assert.equal((yield* b.state).collections.length, remoteDeletes ? 0 : 1);
         assert.equal((yield* b.sync()).status, "clean");
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }
 
@@ -567,7 +567,7 @@ it.effect("destination comparison follows the filesystem's case behavior", () =>
         "merged",
       );
     else assert.equal((yield* b.sync({ adopt: true })).status, "merged");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("aliased projection targets stop even when only one Skill is enabled", () =>
@@ -582,7 +582,7 @@ it.effect("aliased projection targets stop even when only one Skill is enabled",
     assert.equal(result.status, "conflicted");
     assert.deepEqual(yield* a.state, before);
     assert.isNull(yield* remote);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -619,7 +619,7 @@ it.effect(
         yield* fs.readFileString(join(repositoryRoot, "review", "SKILL.md")),
         "second\n",
       );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a copy becoming snapshot-backed during merge uploads its already-retained bytes", () =>
@@ -677,5 +677,5 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
     assert.ok(head);
     assert.equal(head.manifest.snapshot_digests.length, 1);
     assert.equal((yield* b.sync()).status, "merged");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

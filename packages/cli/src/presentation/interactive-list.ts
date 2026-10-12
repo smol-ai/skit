@@ -15,7 +15,7 @@ import {
   invocationEligibleBindings,
   invocationBriefing,
   invocationRowSummary,
-} from "../library/read-model.js";
+} from "../library-application/read-model.js";
 import type { ProjectionOptions } from "../workflows/library/projection-options.js";
 import {
   cancelLibraryChange,
@@ -29,7 +29,7 @@ import {
   type LibrarySessionState,
   type LibrarySkillRow,
   type PendingLibraryChange,
-} from "../workflows/library/session.js";
+} from "../library-application/session.js";
 import { Prompter, PromptCancelled } from "./prompter.js";
 import { Renderer } from "./renderer.js";
 import { promptForScope } from "./scope-prompt.js";

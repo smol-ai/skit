@@ -1,7 +1,8 @@
+import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { auditLocalCapabilitiesV1Alpha4Effect, type AuditOptions } from "../audit/local.js";
-import { handleCommand } from "../application.js";
+import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
@@ -37,7 +38,7 @@ export const auditCliCommand = Command.make(
   "audit",
   { home: auditHome, cwd: auditCwd, verbose, probe, json: jsonFlag },
   (input) =>
-    handleCommand(
+    handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* auditCommand({
@@ -57,7 +58,7 @@ export const auditCliCommand = Command.make(
           { detail: input.verbose ? "full" : "summary" },
         );
       }),
-    ),
+    ).pipe(Effect.provide(skitConfigurationLayer())),
 ).pipe(
   Command.withDescription("Inspect local harness capabilities and configuration."),
   Command.withExamples([{ command: "skit audit --json" }, { command: "skit audit --cwd ." }]),

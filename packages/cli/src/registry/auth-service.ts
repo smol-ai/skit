@@ -1,3 +1,4 @@
+import { SkitConfiguration, configurationForHome } from "../configuration/skit-configuration.js";
 import { Context, Effect, Layer, Result } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import {
@@ -47,18 +48,24 @@ export const RegistryAuth = Context.Reference<RegistryAuth>("skit/services/Regis
 });
 
 /** Read ambient Registry configuration at most once per command runtime. */
-export const registryAuthLayer = (home: string) =>
+export const registryAuthLayer = (home?: string) =>
   Layer.effect(
     RegistryAuth,
     Effect.gen(function* () {
+      const paths = yield* configurationForHome(home);
       const ambient = yield* Effect.cached(
-        resolveAuthEffect(home).pipe(Effect.result, Effect.map(accessFrom)),
+        resolveAuthEffect(home).pipe(
+          Effect.provideService(SkitConfiguration, paths),
+          Effect.result,
+          Effect.map(accessFrom),
+        ),
       );
       return {
         resolve: (registry, command) =>
           registry === undefined && command === undefined
             ? ambient
             : resolveAuthEffect(home, registry, undefined, command).pipe(
+                Effect.provideService(SkitConfiguration, paths),
                 Effect.result,
                 Effect.map(accessFrom),
               ),
@@ -66,7 +73,7 @@ export const registryAuthLayer = (home: string) =>
           resolveRegistryLocatorEffect(input, {
             home,
             ...(registry === undefined ? {} : { registry }),
-          }),
+          }).pipe(Effect.provideService(SkitConfiguration, paths)),
       } satisfies RegistryAuth;
     }),
   );

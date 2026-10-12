@@ -1,21 +1,31 @@
-import { bindingSkillIds, LibraryStore, type SkitBindingScope as Scope } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import {
+  bindingSkillIds,
+  withLibraryWriter,
+  LibraryStore,
+  type SkitBindingScope as Scope,
+} from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { NothingToSelect } from "../../presentation/interaction-failures.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
+import { localFlags, optionalString } from "../../commands/parameters.js";
 import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
-import { destinationLabel, scopeChoices } from "../../library/read-model.js";
+import { destinationLabel, scopeChoices } from "../../library-application/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
 import { result } from "../contracts.js";
-import { applyLibraryBindings } from "../../workflows/library/set-enabled.js";
+import {
+  applyLibraryBindings,
+  libraryStateRevision,
+  SetEnabledStale,
+} from "../../workflows/library/set-enabled.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");
@@ -54,14 +64,16 @@ const setEnabledCliCommand = (enabled: boolean) => {
       ...(enabled ? { allowDuplicate } : {}),
       ...localFlags,
     },
-    (input) => {
-      const selectedHome = homePath(input.home);
-      return handleCommand(
+    (input) =>
+      handleLibraryCommand(
         Effect.gen(function* () {
           const configuration = yield* libraryCommandConfiguration(input);
           const selectedSubject = Option.getOrUndefined(input.subject);
           const selectedScope = Option.getOrUndefined(
-            Option.map(input.repo, (root): Scope => ({ kind: "repository", root: resolve(root) })),
+            Option.map(input.repo, (root): Scope => ({
+              kind: "repository",
+              root: resolve(root),
+            })),
           );
           const selectedInvocation = Option.getOrUndefined(input.invocation) as
             | InvocationOption
@@ -84,9 +96,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
             configuration,
           });
         }).pipe(Effect.provide(terminalPrompterLayer)),
-        selectedHome,
-      );
-    },
+      ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
       `${enabled ? "Enable" : "Disable"} retained Skills for every agent at a scope.`,
@@ -128,6 +138,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
   const store = yield* LibraryStore;
   const state = yield* store.load;
+  const expectedRevision = libraryStateRevision(state);
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
   let query = input.subject;
@@ -351,34 +362,40 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   if (selectedBindings !== undefined && selectedBindings.length > 1) {
     const outcomes = yield* renderer.withStatus(
       input.dryRun ? "Planning Collection Bindings" : "Removing retained Projections",
-      Effect.forEach(selectedBindings, (binding) => {
-        const names = selectedSkills?.filter((name) => {
-          const skill = state.skills.find(
-            (candidate) =>
-              candidate.collection_id === binding.collectionId && candidate.name === name,
+      Effect.gen(function* () {
+        if (!input.dryRun && libraryStateRevision(yield* store.load) !== expectedRevision)
+          return yield* new SetEnabledStale({
+            message: "Library changed after this Binding change was previewed",
+          });
+        return yield* Effect.forEach(selectedBindings, (binding) => {
+          const names = selectedSkills?.filter((name) => {
+            const skill = state.skills.find(
+              (candidate) =>
+                candidate.collection_id === binding.collectionId && candidate.name === name,
+            );
+            return skill !== undefined && binding.skillIds.includes(skill.skill_id);
+          });
+          if (!wholeCollection && (names === undefined || names.length === 0))
+            return Effect.succeed(undefined);
+          return store.load.pipe(
+            Effect.flatMap((current) =>
+              applyLibraryBindings(current, {
+                query: binding.collectionId,
+                all: wholeCollection,
+                ...(wholeCollection ? {} : { selectedSkills: names }),
+                invocation: {
+                  subjects: [binding.collectionId],
+                  scope: binding.scope,
+                  enabled: false,
+                  dryRun: input.dryRun,
+                },
+                roots: input.configuration.inventory,
+                variantsPath: input.configuration.pull.bindings.variantsPath,
+              }),
+            ),
           );
-          return skill !== undefined && binding.skillIds.includes(skill.skill_id);
         });
-        if (!wholeCollection && (names === undefined || names.length === 0))
-          return Effect.succeed(undefined);
-        return store.load.pipe(
-          Effect.flatMap((current) =>
-            applyLibraryBindings(current, {
-              query: binding.collectionId,
-              all: wholeCollection,
-              ...(wholeCollection ? {} : { selectedSkills: names }),
-              invocation: {
-                subjects: [binding.collectionId],
-                scope: binding.scope,
-                enabled: false,
-                dryRun: input.dryRun,
-              },
-              roots: input.configuration.inventory,
-              variantsPath: input.configuration.pull.bindings.variantsPath,
-            }),
-          ),
-        );
-      }),
+      }).pipe((effect) => (input.dryRun ? effect : withLibraryWriter(effect))),
     );
     for (const outcome of outcomes) {
       if (outcome === undefined) continue;

@@ -14,11 +14,12 @@ context. A migration is successful when ownership becomes clearer and behavior i
 intentional, not when every function returns an Effect.
 
 The CLI process has one application runner, `NodeRuntime.runMain`, in
-`packages/cli/src/application.ts`. Native handlers return Effects to dispatch.
-They do not run them, provide the platform layer independently, or render through
-another runtime. The application provides platform, Renderer and RegistryHttp
-services. Help, startup credential reads, native dispatch and result/failure rendering
-participate in that lifetime.
+`packages/cli/src/main.ts`. Native handlers return Effects to the command tree.
+They do not run them or render through another runtime. Command composition selects
+platform, local Library, Registry, or combined source environments; Renderer is supplied
+at the process boundary. Help, credential reads, native dispatch and result/failure
+rendering participate in that lifetime. Requirements remain inferred until their
+composition boundary supplies them.
 
 SIGINT and SIGTERM interrupt the root fiber. Native operation scopes finalize before
 the process exits. Pure interruption is not an authentication or operation failure,
@@ -69,8 +70,8 @@ The named `inventoryCommand` workflow owns status presentation and preserves the
 domain error channel from `refreshInventoryForCli`, which selects device roots and filters
 the returned view. Core `refreshInventory` owns the state snapshot, recovery, observation
 and publication. The handler only turns the successful value into the versioned command
-result; the root failure renderer classifies failures for the CLI. `runCli` supplies services
-and runs the root fiber. No layer construction or runtime entry occurs inside that path.
+result; the root failure renderer classifies failures for the CLI. Command composition supplies
+services and `main.ts` runs the root fiber. No runtime entry occurs inside that path.
 `doctorCommand` composes the same refresh with its own status presentation and applies the pure
 `libraryDoctorReport` view; it does not reach the compatibility Library class or provide a
 second store.

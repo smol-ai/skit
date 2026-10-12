@@ -1,9 +1,9 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
-import { skitLayer } from "@smolai/skit-core";
 import { parseAuthorDestination, syncDraftEffect } from "../src/workflows/author/sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
@@ -169,7 +169,7 @@ it.effect("first sync previews then records one remote home without publishing i
       namespace: "tim",
       skit: "tools",
     });
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("first sync distinguishes credential scope from Namespace authority", () =>
@@ -219,7 +219,7 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
         ),
       ),
     ).toMatchObject({ message: expect.stringContaining("draft read failed (404)") });
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("author destinations are Registry-qualified", () =>
@@ -344,7 +344,7 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
     ).toMatchObject({ status: "merged" });
     expect(updateBody?.descriptor).toMatchObject({ id: "test/tools", slug: "tools" });
     expect(yield* readText(join(root, "README.md"))).toBe("# Human-owned tools documentation\n");
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("an interrupted sync aborts its in-flight Draft request and writes nothing", () =>
@@ -386,5 +386,5 @@ it.effect("an interrupted sync aborts its in-flight Draft request and writes not
     expect(aborted).toBe(true);
     expect(yield* exists(join(home, "sync-bindings.json"))).toBe(false);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

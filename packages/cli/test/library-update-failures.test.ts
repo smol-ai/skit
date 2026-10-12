@@ -1,15 +1,16 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { InvalidLibraryState, LibraryStore, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
+import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { retainedTreePath } from "@smolai/skit-core";
 import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { updateSubjectsEffect, updateExitCode } from "../src/workflows/library/update.js";
+import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { result } from "../src/handlers/contracts.js";
@@ -128,7 +129,7 @@ it.effect(
       })!;
       assert.strictEqual(JSON.parse(json.stdout).data[0].status, "failed");
       assert.strictEqual(json.exitCode, 1);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 for (const failurePhase of ["projection", "source-cleanup"] as const) {
@@ -231,7 +232,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
       assert.isTrue(
         unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 }
 
@@ -252,7 +253,7 @@ for (const kind of ["defect", "interrupt"] as const) {
       if (Exit.isFailure(exit) && kind === "interrupt")
         assert.isTrue(Cause.hasInterruptsOnly(exit.cause));
       assert.deepStrictEqual(f.requests, []);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 }
 
@@ -283,7 +284,7 @@ it.effect("stops on typed filesystem errors in shared Library storage", () =>
     );
     assert.isTrue(Exit.isFailure(exit));
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("keeps candidate manifest validation failures local to their Collection", () =>
@@ -315,7 +316,7 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
     assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
     const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("aborts the batch on typed shared state failures", () =>
@@ -349,7 +350,7 @@ it.effect("aborts the batch on typed shared state failures", () =>
       );
     // A source fetch may precede the store load inside retention; no subsequent Source runs.
     assert.isFalse(f.requests.includes(f.urls[1]!));
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("stops on corruption of an existing retained object", () =>
@@ -374,5 +375,5 @@ it.effect("stops on corruption of an existing retained object", () =>
         ),
       );
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

@@ -1,4 +1,4 @@
-import type { SkillMetadata } from "../workflows/library/skill-metadata.js";
+import type { SkillMetadata } from "../library-application/skill-metadata.js";
 import { homedir } from "node:os";
 import { sep } from "node:path";
 

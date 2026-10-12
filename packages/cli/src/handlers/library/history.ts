@@ -1,19 +1,19 @@
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { LibraryAuditLog } from "@smolai/skit-core";
-import { Effect } from "effect";
+import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleReadOnlyCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
+import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
 export const libraryHistoryCliCommand = Command.make(
   "history",
   { json: jsonFlag, home: homeFlag },
-  (input) => {
-    const home = homePath(input.home);
-    return handleReadOnlyCommand(
+  (input) =>
+    handleLibraryCommand(
       Effect.gen(function* () {
         const audit = yield* LibraryAuditLog;
         const renderer = yield* Renderer;
@@ -22,9 +22,7 @@ export const libraryHistoryCliCommand = Command.make(
           result("libraryHistory", outputContracts.libraryHistory, { events }),
         );
       }),
-      home,
-    );
-  },
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Show device-local Library change history."),
   Command.withExamples([

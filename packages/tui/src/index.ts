@@ -15,16 +15,13 @@ import {
   type KeyEvent,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import { resolve, join } from "node:path";
-import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
+  SkitConfiguration,
+  skitConfigurationLayer,
   LibraryActor,
-  libraryStoreLayer,
-  skitLayer,
-  errorMessage,
-  auditLocalCapabilitiesV1Alpha4Effect,
-  probeHarnessEffect,
+  libraryApplicationLayer,
   openLibrarySession,
   readLibrarySkillContent,
   refreshLibrarySession,
@@ -42,16 +39,21 @@ import {
   invocationEligibleBindings,
   invocationRowSummary,
   scopeChoices,
-  type AuditEntryV1Alpha4,
-  type AuditMcpServerV1Alpha4,
-  type HarnessProbeResult,
-  type ProbeableHarness,
   type LibraryActionOutcome,
   type LibraryBindingRow,
   type LibrarySkillRow,
   type PendingLibraryChange,
   type Scope,
   type InvocationOption,
+} from "../../cli/src/library-application/index";
+import {
+  errorMessage,
+  auditLocalCapabilitiesV1Alpha4Effect,
+  probeHarnessEffect,
+  type AuditEntryV1Alpha4,
+  type AuditMcpServerV1Alpha4,
+  type HarnessProbeResult,
+  type ProbeableHarness,
 } from "../../cli/src/front-end";
 import { LibraryStore, readListingBudgets, type ListingBudget } from "@smolai/skit-core";
 import { budgetReceipt } from "./budget/receipt";
@@ -130,24 +132,22 @@ const flag = (name: string): string | undefined => {
 };
 
 // One host runtime and serialized state transitions for the writable Library view.
-const libraryHome = resolve(
-  flag("--skit-home") ?? process.env.SKIT_HOME ?? join(homedir(), ".skit"),
-);
-const libraryConfiguration = {
-  home: homedir(),
-  configHome: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-  statePath: join(libraryHome, "state.json"),
-  variantsPath: join(libraryHome, "variants"),
-  overrides: { codex: flag("--codex-root"), claude: flag("--claude-root") },
-  now: () => new Date().toISOString(),
-};
 const libraryHost = createLibraryHost(
-  libraryStoreLayer({ home: libraryHome }).pipe(
-    Layer.provideMerge(skitLayer),
+  libraryApplicationLayer.pipe(
+    Layer.provideMerge(skitConfigurationLayer(flag("--skit-home"))),
     Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   ),
   openLibrarySession(),
 );
+const paths = await libraryHost.run(SkitConfiguration);
+const libraryConfiguration = {
+  home: paths.userHome,
+  configHome: paths.configHome,
+  statePath: paths.libraryStatePath,
+  variantsPath: paths.variantsPath,
+  overrides: { codex: flag("--codex-root"), claude: flag("--claude-root") },
+  now: () => new Date().toISOString(),
+};
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
 const report = await libraryHost.run(

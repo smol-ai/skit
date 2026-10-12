@@ -1,3 +1,4 @@
+import { terminalLibraryProgressLayer } from "../../src/presentation/library-progress.js";
 import { Effect, Layer } from "effect";
 import { Renderer, type RendererShape } from "../../src/presentation/renderer.js";
 
@@ -12,4 +13,6 @@ const silent: RendererShape = {
 };
 
 export const rendererTestLayer = (overrides: Partial<RendererShape> = {}) =>
-  Layer.succeed(Renderer, Renderer.of({ ...silent, ...overrides }));
+  terminalLibraryProgressLayer.pipe(
+    Layer.provideMerge(Layer.succeed(Renderer, Renderer.of({ ...silent, ...overrides }))),
+  );

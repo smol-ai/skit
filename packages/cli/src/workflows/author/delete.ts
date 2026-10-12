@@ -1,11 +1,15 @@
 import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
+import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
   InsufficientScopeResponse,
   SkitNotFoundResponse,
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
-import { Data, Effect, Result, Schema, Scope } from "effect";
+import { Option, Data, Effect, Result, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
 import { AuthorSkitDeleteResponse, SkitContractError } from "@smolai/skit-core";
@@ -22,11 +26,11 @@ import {
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag } from "../../commands/parameters.js";
+import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 
 export class AuthorDeleteHttpError extends Data.TaggedError("AuthorDeleteHttpError")<{
@@ -135,22 +139,24 @@ const dryRun = Flag.Boolean("dry-run").pipe(
 export const authorDeleteCliCommand = Command.make(
   "delete",
   { skit, dryRun, home: homeFlag, json: jsonFlag },
-  ({ skit, dryRun, home }) => {
-    const selectedHome = homePath(home);
-    return handleCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
-        const value = yield* authorDeleteCommand(skit, {
-          authState,
-          home: selectedHome,
-          dryRun,
-        });
-        yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
-      }),
-      selectedHome,
-    );
-  },
+  ({ skit, dryRun, home }) =>
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
+
+      const selectedHome = paths.skitHome;
+      return yield* handleRegistryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
+          const value = yield* authorDeleteCommand(skit, {
+            authState,
+            home: selectedHome,
+            dryRun,
+          });
+          yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
+        }),
+      );
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Permanently delete a private SKIT from its Registry."),
   Command.withExamples([

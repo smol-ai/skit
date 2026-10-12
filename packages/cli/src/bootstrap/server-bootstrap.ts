@@ -1,3 +1,4 @@
+import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import {
   Cause,
   Clock,
@@ -26,7 +27,7 @@ import {
   registryApiFailureMessage,
 } from "../registry/api-client.js";
 import { Renderer } from "../presentation/renderer.js";
-import { handleCommand } from "../application.js";
+import { handleRegistryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
@@ -356,7 +357,7 @@ export const serverBootstrapCliCommand = Command.make(
   "bootstrap",
   { config, url, wrangler, json: jsonFlag },
   ({ config, url, wrangler }) =>
-    handleCommand(
+    handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* bootstrapServerEffect({
@@ -370,7 +371,7 @@ export const serverBootstrapCliCommand = Command.make(
           }),
         );
       }).pipe(Effect.provide(bootstrapOperationsLayer(Option.getOrUndefined(wrangler)))),
-    ),
+    ).pipe(Effect.provide(skitConfigurationLayer())),
 ).pipe(
   Command.withDescription("Create the first operator for a deployed skit-server."),
   Command.withExamples([

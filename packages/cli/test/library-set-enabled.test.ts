@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
@@ -8,7 +9,6 @@ import {
   makeCollectionId,
   makeSkillId,
   type ObservedSkill,
-  skitLayer,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import {
@@ -16,7 +16,7 @@ import {
   previewLibraryBindings,
 } from "../src/workflows/library/set-enabled.js";
 import { planRemoveEffect } from "../src/workflows/library/remove.js";
-import { planUpdatesEffect } from "../src/workflows/library/update.js";
+import { planUpdatesEffect } from "../src/library-application/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
@@ -198,7 +198,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const final = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.deepEqual(final?.global_bindings, []);
     assert.strictEqual(final?.skills.find((skill) => skill.name === "review")?.versions.length, 1);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("enables a whole Collection and converts it to Skills when one is disabled", () =>
@@ -288,5 +288,5 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     );
     assert.deepStrictEqual(yield* set(collectionId, false, true), []);
     assert.deepStrictEqual(yield* fs.readDirectory(roots.codexRoot), []);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

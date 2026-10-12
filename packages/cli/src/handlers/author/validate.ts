@@ -2,7 +2,7 @@ import { validateSkitDirectoryEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import type { ContractDataForId } from "../../commands/output-contracts.js";
@@ -41,7 +41,7 @@ export const validateCliCommand = Command.make(
   "validate",
   { path, assessmentContext, json: jsonFlag },
   ({ path, assessmentContext }) =>
-    handleCommand(
+    handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const { status, value } = yield* validateCommand(

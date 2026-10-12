@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { promisify } from "node:util";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,3 +89,64 @@ syncBuiltinESMExports();
     await rm(root, { recursive: true, force: true });
   }
 });
+
+const execFileAsync = promisify(execFile);
+
+test.each(["unset", "empty", "explicit"] as const)(
+  "setup discovers the global skills.sh lock with XDG_STATE_HOME %s",
+  async (xdg) => {
+    const root = await mkdtemp(join(tmpdir(), "skit-setup-xdg-"));
+    const account = join(root, "account");
+    const installed = join(account, ".agents", "skills", "review");
+    const state = join(root, "xdg-state");
+    const lockPath =
+      xdg === "explicit"
+        ? join(state, "skills", ".skill-lock.json")
+        : join(account, ".agents", ".skill-lock.json");
+    const document = "---\nname: review\ndescription: Review code.\n---\n\n# Review\n";
+    try {
+      await mkdir(installed, { recursive: true });
+      await mkdir(join(state, "skills"), { recursive: true });
+      await writeFile(join(installed, "SKILL.md"), document);
+      await writeFile(
+        lockPath,
+        JSON.stringify({
+          version: 3,
+          skills: {
+            review: {
+              source: "wellknown/skills.example",
+              sourceType: "well-known",
+              sourceUrl: "https://skills.example/review/SKILL.md",
+              sourceBaseUrl: "https://skills.example",
+              wellKnownDigest: `sha256:${createHash("sha256").update(document).digest("hex")}`,
+            },
+          },
+        }),
+      );
+      const env: NodeJS.ProcessEnv = { ...process.env, HOME: account, XDG_CONFIG_HOME: "" };
+      if (xdg === "unset") delete env.XDG_STATE_HOME;
+      else env.XDG_STATE_HOME = xdg === "empty" ? "" : state;
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          join(process.cwd(), "bin/skit.js"),
+          "setup",
+          "--dry-run",
+          "--json",
+          "--home",
+          join(root, "library"),
+          "--codex-root",
+          join(account, ".agents", "skills"),
+        ],
+        { env, cwd: account, timeout: 15_000 },
+      );
+      const { data } = JSON.parse(stdout);
+      expect(data.locks).toEqual([expect.objectContaining({ path: lockPath, status: "valid" })]);
+      expect(data.onboarding.candidates).toEqual(
+        expect.arrayContaining([expect.objectContaining({ action: "import-observed-collection" })]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

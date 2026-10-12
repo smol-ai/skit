@@ -9,7 +9,7 @@ import {
   pathIsWithin,
   projectionTargetHarnesses,
 } from "@smolai/skit-core";
-import { sourceIdentityLabel } from "./skill-metadata.js";
+import { sourceIdentityLabel } from "../../library-application/skill-metadata.js";
 import { custodyAt, lockMatches, type SetupEvidence } from "./setup-discovery.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
 import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-skills.js";

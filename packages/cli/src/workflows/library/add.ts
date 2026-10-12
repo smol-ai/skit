@@ -1,3 +1,4 @@
+import { withLibraryWriter } from "@smolai/skit-core";
 import {
   deterministicTreeHashEffect,
   originalTreeHashEffect,
@@ -139,7 +140,7 @@ export const previewLibrarySourceEffect = Effect.fn("Library.previewSource")(fun
   };
 });
 
-/** Retain acquired bytes while the command composition root owns the Library writer lock. */
+/** Own the retention transaction, including partial commits and temporary-source cleanup. */
 export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
   version?: string,
@@ -257,4 +258,4 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
       };
     }),
   );
-});
+}, withLibraryWriter);

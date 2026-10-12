@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { dirname, isAbsolute, join } from "node:path";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
@@ -8,7 +9,6 @@ import {
   makeProjectionId,
   makeSkillId,
   makeSkillVersionId,
-  skitLayer,
 } from "@smolai/skit-core";
 import {
   auditLocalCapabilitiesEffect,
@@ -69,7 +69,7 @@ describe("experimental capability audit", () => {
       Reflect.set(finding.location, "line", "six");
       expect(Schema.is(AuditReportV1Alpha4)(malformed)).toBe(false);
       expect(Schema.is(outputContracts.experimentalAuditV1Alpha4.schema)(malformed)).toBe(false);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("attributes Codex system skills to their bundled source", () =>
@@ -97,7 +97,7 @@ describe("experimental capability audit", () => {
           (finding) => finding.subject === "imagegen" && finding.code === "skill-field-unknown",
         ),
       ).toEqual([]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("joins canonical skill aliases and Skills CLI provenance", () =>
@@ -149,7 +149,7 @@ describe("experimental capability audit", () => {
           .every((source) => source.kind === "observed" || source.url !== null),
       ).toBe(true);
       expect(report.generatedAt).toBe("2026-01-01T00:00:00.000Z");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect(
@@ -195,7 +195,7 @@ describe("experimental capability audit", () => {
 
         const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
         expect(Schema.is(outputContracts.experimentalAuditV1Alpha4.schema)(report)).toBe(true);
-      }).pipe(Effect.provide(skitLayer)),
+      }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports unretained and invalid ownership markers as custody findings", () =>
@@ -251,7 +251,7 @@ describe("experimental capability audit", () => {
         "codex",
         "devin",
       ]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports an unreadable ledger without misclassifying every marker as orphaned", () =>
@@ -282,7 +282,7 @@ describe("experimental capability audit", () => {
       expect(report.findings.some((finding) => finding.code === "orphaned-projection-claim")).toBe(
         false,
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports a readable version-1 ledger as requiring migration", () =>
@@ -303,7 +303,7 @@ describe("experimental capability audit", () => {
           details: { code: "MIGRATION_REQUIRED", fromVersion: 1, toVersion: 2 },
         }),
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("separates Codex configured, cached, and MCP state", () =>
@@ -348,7 +348,7 @@ describe("experimental capability audit", () => {
         cwd: "/tmp/review",
       });
       expect(report.findings.map((item) => item.code)).toEqual(["enabled-codex-plugin-not-cached"]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("audits project Codex configuration only for a trusted cwd", () =>
@@ -382,7 +382,7 @@ describe("experimental capability audit", () => {
           path: join(cwd, ".codex", "config.toml"),
         }),
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("matches Codex project trust through a symlinked cwd", () =>
@@ -405,7 +405,7 @@ describe("experimental capability audit", () => {
       ).toContainEqual(
         expect.objectContaining({ kind: "mcp-server", name: "project-review", scope: "project" }),
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reconciles plugin payload skills with the root skill inventory", () =>
@@ -442,7 +442,7 @@ describe("experimental capability audit", () => {
       expect(skills.find((item) => item.name.includes(":"))?.role).toBe("native");
       expect(report.coverage.deferred).not.toContain("devin");
       expect(report.coverage.supported.map((item) => item.id)).toContain("devin");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("ownership markers override plugin provenance while retaining the parent plugin", () =>
@@ -486,7 +486,7 @@ describe("experimental capability audit", () => {
           parentPlugin: "review@vendor",
         }),
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect(
@@ -519,7 +519,7 @@ describe("experimental capability audit", () => {
             parentPlugin: "review@vendor",
           }),
         );
-      }).pipe(Effect.provide(skitLayer)),
+      }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("discards partial Codex state after a parse failure", () =>
@@ -533,7 +533,7 @@ describe("experimental capability audit", () => {
       const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
       expect(report.observations.filter((item) => item.kind === "mcp-server")).toEqual([]);
       expect(report.findings.map((item) => item.code)).toEqual(["codex-config-parse-failed"]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("discovers Claude plugin installation state", () =>
@@ -562,7 +562,7 @@ describe("experimental capability audit", () => {
         report.observations.find((item) => item.kind === "skill" && item.name === "review:review")
           ?.provenance.parentPlugin,
       ).toBe("review");
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("missing plugin roots cannot escape into the process working directory", () =>
@@ -595,7 +595,7 @@ describe("experimental capability audit", () => {
       } finally {
         process.chdir(previous);
       }
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("groups rule references when their MCP registration is absent", () =>
@@ -626,7 +626,7 @@ describe("experimental capability audit", () => {
           details: { server: "reviewer", advertisingPaths: [first, second] },
         }),
       ]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("recognizes a disabled MCP registration without claiming it is absent", () =>
@@ -655,7 +655,7 @@ describe("experimental capability audit", () => {
           active: false,
         }),
       );
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("folds rule references into an unsupported-location MCP finding", () =>
@@ -678,6 +678,6 @@ describe("experimental capability audit", () => {
           details: expect.objectContaining({ server: "reviewer", advertisingPaths: [rule] }),
         }),
       ]);
-    }).pipe(Effect.provide(skitLayer)),
+    }).pipe(Effect.provide(testPlatformLayer)),
   );
 });

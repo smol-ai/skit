@@ -1,11 +1,12 @@
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option, Result } from "effect";
 import { sourceInputWithVersionEffect } from "@smolai/skit-core";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags, optionalString } from "../../commands/parameters.js";
+import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
@@ -24,7 +25,7 @@ export const addCliCommand = Command.make(
   "add",
   { source, version, registry, preview, ...localFlags },
   (input) =>
-    handleCommand(
+    handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const registryAuth = yield* RegistryAuth;
@@ -88,8 +89,7 @@ export const addCliCommand = Command.make(
           }),
         );
       }),
-      homePath(input.home),
-    ),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Add a source to the local library without enabling it."),
   Command.withExamples([

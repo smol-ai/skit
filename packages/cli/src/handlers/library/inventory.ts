@@ -1,11 +1,16 @@
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
+import { withLibraryWriter } from "@smolai/skit-core";
 import { readClaudeListingSnapshot } from "@smolai/skit-core";
 import {
   observeHarnessSkills,
   readableHarnessRoots,
   type ShadowObservationError,
 } from "../../projection/harness-shadows.js";
-import { skillModificationTime } from "../../workflows/library/skill-metadata.js";
-import { Effect } from "effect";
+import { skillModificationTime } from "../../library-application/skill-metadata.js";
+import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import {
   libraryDoctorReport,
@@ -16,10 +21,10 @@ import {
 } from "@smolai/skit-core";
 import { selectInventoryRoots, type InventoryRootOptions } from "../../projection/roots.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { handleCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, inventoryRootOptions, localFlags } from "../../commands/parameters.js";
+import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
 import {
@@ -70,7 +75,7 @@ const refreshLibraryInventoryCommand = Effect.fn("CLI.refreshLibraryInventory")(
     refreshLibraryInventoryForCli(options, before),
   );
   return after;
-});
+}, withLibraryWriter);
 
 export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
   options: CliInventoryOptions,
@@ -189,27 +194,30 @@ const machineInventoryMetadata = {
   interactive: false,
 } as const;
 
-export const inventoryCliCommand = Command.make("inventory", localFlags, (input) => {
-  const selectedHome = homePath(input.home);
-  const options = { ...inventoryRootOptions(input), libraryHome: selectedHome };
-  return handleCommand(
-    Effect.gen(function* () {
-      const renderer = yield* Renderer;
-      const value = yield* inventoryCommand(options);
-      const {
-        schemaVersion: _schemaVersion,
-        sync_ancestry: _syncAncestry,
-        assessmentAcceptances: _,
-        collections: __,
-        global_bindings: ___,
-        local_bindings: ____,
-        ...inventory
-      } = value;
-      yield* renderer.result(result("inventory", outputContracts.inventory, inventory));
-    }),
-    selectedHome,
-  );
-}).pipe(
+export const inventoryCliCommand = Command.make("inventory", localFlags, (input) =>
+  Effect.gen(function* () {
+    const paths = yield* SkitConfiguration;
+
+    const selectedHome = paths.skitHome;
+    const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
+    return yield* handleLibraryCommand(
+      Effect.gen(function* () {
+        const renderer = yield* Renderer;
+        const value = yield* inventoryCommand(options);
+        const {
+          schemaVersion: _schemaVersion,
+          sync_ancestry: _syncAncestry,
+          assessmentAcceptances: _,
+          collections: __,
+          global_bindings: ___,
+          local_bindings: ____,
+          ...inventory
+        } = value;
+        yield* renderer.result(result("inventory", outputContracts.inventory, inventory));
+      }),
+    );
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+).pipe(
   Command.withDescription(
     "Show every observed Skill instance, its Git state, and refreshed Library projections.",
   ),
@@ -220,20 +228,23 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
   }),
 );
 
-export const doctorCliCommand = Command.make("doctor", localFlags, (input) => {
-  const selectedHome = homePath(input.home);
-  const options = { ...inventoryRootOptions(input), libraryHome: selectedHome };
-  return handleCommand(
-    Effect.gen(function* () {
-      const renderer = yield* Renderer;
-      const value = yield* doctorCommand(options);
-      yield* renderer.result(
-        result("doctor", outputContracts.doctor, value, value.ok ? undefined : 12),
-      );
-    }),
-    selectedHome,
-  );
-}).pipe(
+export const doctorCliCommand = Command.make("doctor", localFlags, (input) =>
+  Effect.gen(function* () {
+    const paths = yield* SkitConfiguration;
+
+    const selectedHome = paths.skitHome;
+    const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
+    return yield* handleLibraryCommand(
+      Effect.gen(function* () {
+        const renderer = yield* Renderer;
+        const value = yield* doctorCommand(options);
+        yield* renderer.result(
+          result("doctor", outputContracts.doctor, value, value.ok ? undefined : 12),
+        );
+      }),
+    );
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+).pipe(
   Command.withDescription("Diagnose local library and projection state."),
   Command.withExamples([{ command: "skit doctor" }]),
   Command.annotate(CommandMetadata, {

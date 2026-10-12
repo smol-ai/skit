@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Exit, type Layer, type Scope } from "effect";
 import { join } from "node:path";
@@ -7,7 +8,6 @@ import {
   captureSnapshotArchiveEffect,
   retainedTreePath,
   libraryManifestFromLocalStateEffect,
-  skitLayer,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer } from "../src/registry/failures.js";
 import {
@@ -40,7 +40,7 @@ const cases: readonly {
   row: string;
   run: (
     homes: Homes,
-  ) => Effect.Effect<void, unknown, Layer.Success<typeof skitLayer> | Scope.Scope>;
+  ) => Effect.Effect<void, unknown, Layer.Success<typeof testPlatformLayer> | Scope.Scope>;
 }[] = [
   {
     row: "Preflight: local_bytes_changed preserves every store",
@@ -483,7 +483,7 @@ for (const scenario of cases)
   it.effect(`oracle row: ${scenario.row}`, () =>
     Effect.gen(function* () {
       yield* scenario.run(yield* devices);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
 it.effect(
@@ -521,5 +521,5 @@ it.effect(
       );
       assert.strictEqual(events.at(-1), "Enabling synced Skills");
       assert.strictEqual((yield* b.state).collections.length, 2);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

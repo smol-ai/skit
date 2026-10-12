@@ -1,6 +1,6 @@
+import { configurationForHome } from "../configuration/skit-configuration.js";
 import { Effect } from "effect";
 import { LinkStat } from "@smolai/skit-core";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   harnessProfile,
@@ -66,7 +66,7 @@ export function harnessLabel(harness: HarnessName): string {
 }
 
 export interface HarnessProbeOptions {
-  home?: string;
+  home: string;
   configHome?: string;
   codexRoot?: string;
   claudeRoot?: string;
@@ -79,8 +79,8 @@ export interface HarnessProbeOptions {
 
 /** The detection policy over an answered marker probe; `detectInstalledHarnessesEffect` asks the filesystem. */
 export function detectInstalledHarnesses(options: HarnessProbeOptions): HarnessName[] {
-  const home = options.home ?? homedir();
-  const configHome = options.configHome ?? process.env.XDG_CONFIG_HOME ?? join(home, ".config");
+  const home = options.home;
+  const configHome = options.configHome ?? join(home, ".config");
   const exists = options.exists;
   const detected: HarnessName[] = [];
   const context = { home, configHome };
@@ -99,11 +99,17 @@ export function detectInstalledHarnesses(options: HarnessProbeOptions): HarnessN
 
 /** Resolve the same synchronous detection policy with application-owned filesystem probes. */
 export const detectInstalledHarnessesEffect = Effect.fn("Harness.detectInstalled")(function* (
-  options: Omit<HarnessProbeOptions, "exists"> = {},
+  options: Partial<Omit<HarnessProbeOptions, "exists">> = {},
 ) {
+  const configuration = yield* configurationForHome();
+  const resolvedOptions = {
+    ...options,
+    home: options.home ?? configuration.userHome,
+    configHome: options.configHome ?? configuration.configHome,
+  };
   const paths = new Set<string>();
   detectInstalledHarnesses({
-    ...options,
+    ...resolvedOptions,
     exists: (path) => {
       paths.add(path);
       return false;
@@ -115,5 +121,5 @@ export const detectInstalledHarnessesEffect = Effect.fn("Harness.detectInstalled
     const info = yield* Effect.option(probe.identity.lstat(path));
     if (info._tag === "Some") found.add(path);
   }
-  return detectInstalledHarnesses({ ...options, exists: (path) => found.has(path) });
+  return detectInstalledHarnesses({ ...resolvedOptions, exists: (path) => found.has(path) });
 });

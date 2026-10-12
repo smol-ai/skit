@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem } from "effect";
 
-import { homedir } from "node:os";
+import { configurationForHome } from "../configuration/skit-configuration.js";
 import { dirname, join, resolve } from "node:path";
 import {
   isJsonObject,
@@ -159,11 +159,12 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
   options: AuditOptions = {},
   suppliedProbes?: readonly ProbeResult[],
 ) {
-  const home = resolve(options.home ?? homedir());
+  const paths = yield* configurationForHome();
+  const home = resolve(options.home ?? paths.userHome);
   const cwd = resolve(options.cwd ?? process.cwd());
   const observations: AuditObservation[] = [];
   const findings: AuditFinding[] = [];
-  const stateHome = options.stateHome ?? process.env.XDG_STATE_HOME;
+  const stateHome = options.stateHome ?? paths.xdgStateHome;
   let lockPath: string | undefined;
   for (const candidate of [
     stateHome ? join(stateHome, "skills", ".skill-lock.json") : null,

@@ -1,7 +1,7 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { join } from "node:path";
-import { skitLayer } from "@smolai/skit-core";
 import { authorDeleteCommand, deleteAuthorSkitEffect } from "../src/workflows/author/delete.js";
 import { DeleteRequiresPrivate } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
@@ -99,7 +99,6 @@ it.effect("runs destination, credential, status and DELETE as one application Ef
       }),
     );
     const applicationLayer = Layer.mergeAll(
-      skitLayer,
       registryHttpLayer(registry),
       rendererTestLayer({
         withStatus: (status, operation) =>
@@ -115,5 +114,5 @@ it.effect("runs destination, credential, status and DELETE as one application Ef
     assert.strictEqual(value.status, "deleted");
     assert.strictEqual(requests, 1);
     assert.deepStrictEqual(statuses, ["Deleting private SKIT"]);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

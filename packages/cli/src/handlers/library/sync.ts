@@ -1,11 +1,13 @@
-import { Effect, Result } from "effect";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { RegistryAuth } from "../../registry/auth-service.js";
+import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homePath, localFlags, optionalString, optionValue } from "../../commands/parameters.js";
+import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
 import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
 import { NoStoredCredentials } from "../../registry/failures.js";
@@ -78,16 +80,14 @@ export const librarySyncCliCommand = Command.make(
   "sync",
   { apply, adopt, takeRemote, keepEnabled, registry, ...localFlags },
   (input) =>
-    handleCommand(
+    handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const configuration = yield* libraryCommandConfiguration(
-          input,
-          optionValue(input.registry),
-          "skit sync",
-        );
+        const configuration = yield* libraryCommandConfiguration(input);
+        const registryAuth = yield* RegistryAuth;
+        const { authState } = yield* registryAuth.resolve(optionValue(input.registry), "skit sync");
         const value = yield* librarySyncCommand({
-          authState: configuration.authState,
+          authState,
           apply: input.apply,
           adopt: input.adopt,
           takeRemote: input.takeRemote,
@@ -109,8 +109,7 @@ export const librarySyncCliCommand = Command.make(
           ),
         );
       }),
-      homePath(input.home),
-    ),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Synchronize private retained Library bytes with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),

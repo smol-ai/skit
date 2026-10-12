@@ -1,7 +1,9 @@
+import { testPlatformLayer } from "./helpers/platform.js";
+import { SetEnabledStale } from "../src/workflows/library/set-enabled.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect, LibraryStore, skitLayer } from "@smolai/skit-core";
+import { deterministicTreeHashEffect, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import { presentListCommand, shouldBrowseInteractively } from "../src/handlers/library/list.js";
 import { browseLibraryEffect } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -11,7 +13,7 @@ import {
   confirmLibraryChange,
   openLibrarySession,
   proposeLibraryEnable,
-} from "../src/workflows/library/session.js";
+} from "../src/library-application/session.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import {
   initializeLibraryMachine,
@@ -118,7 +120,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
     assert.strictEqual(yield* interaction.remaining, 0);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it("browses only on an attached human terminal", () => {
@@ -370,7 +372,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual((yield* home.durable).global_bindings, []);
     assert.deepStrictEqual((yield* home.durable).local_bindings, []);
     assert.strictEqual(yield* disableEverywhere.remaining, 0);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("bare disable asks before changing a global Binding spanning Collections", () =>
@@ -497,5 +499,125 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     );
     assert.strictEqual((yield* single.prompts).length, 1);
     assert.deepStrictEqual(yield* home.durable, after);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("rejects a stale multi-destination disable before changing any Binding", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-disable-stale-" });
+    const home = yield* libraryHome({ home: join(root, "home") });
+    yield* initializeLibraryMachine(home.home);
+    const installed = join(root, "installed");
+    const review = join(installed, "review");
+    const effect = join(installed, "effect");
+    for (const path of [review, effect]) yield* fs.makeDirectory(path, { recursive: true });
+    yield* fs.writeFileString(join(review, "SKILL.md"), "review\n");
+    yield* fs.writeFileString(join(effect, "SKILL.md"), "effect\n");
+    const collection = yield* home.owned(
+      writingTo(
+        home.home,
+        retainObservedIn(home.home)({
+          source: { type: "local", path: installed },
+          input: installed,
+          retainedAt: "2026-09-17T00:00:00.000Z",
+          skills: [
+            {
+              name: "review",
+              sourcePath: review,
+              relativePath: "review",
+              observedHash: yield* deterministicTreeHashEffect(review),
+            },
+            {
+              name: "effect",
+              sourcePath: effect,
+              relativePath: "effect",
+              observedHash: yield* deterministicTreeHashEffect(effect),
+            },
+          ],
+          observations: [],
+        }),
+      ),
+    );
+    const state = yield* home.durable;
+    const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
+    assert.ok(reviewId);
+    yield* home.owned(
+      writingTo(
+        home.home,
+        LibraryStore.use((store) =>
+          store.publish({
+            ...state,
+            global_bindings: [
+              { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
+            ],
+            local_bindings: [
+              {
+                scope: { kind: "repository", root },
+                entries: [{ kind: "skill", skill_id: reviewId }],
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    const configuration = yield* libraryCommandConfiguration({
+      home: Option.some(home.home),
+      codexRoot: Option.none(),
+      claudeRoot: Option.none(),
+      opencodeRoot: Option.none(),
+      devinRoot: [],
+    });
+    const interaction = yield* makeScriptedInteraction([
+      `all:${collection.collection?.collection_id}`,
+      "collection",
+    ]);
+    const ready = yield* Deferred.make<void>();
+    const resume = yield* Deferred.make<void>();
+    const results: CommandResult[] = [];
+    const command = yield* home
+      .owned(
+        presentSetEnabled({
+          action: "disable",
+          enabled: false,
+          cwd: root,
+          all: false,
+          dryRun: false,
+          interactive: true,
+          configuration,
+        }).pipe(
+          Effect.provide(
+            rendererTestLayer({
+              withStatus: (_status, operation) =>
+                Deferred.succeed(ready, undefined).pipe(
+                  Effect.andThen(Deferred.await(resume)),
+                  Effect.andThen(operation),
+                ),
+              result: (value) =>
+                Effect.sync(() => {
+                  results.push(value);
+                }),
+            }),
+          ),
+          Effect.provide(interaction.layer),
+        ),
+      )
+      .pipe(Effect.result, Effect.forkScoped);
+    yield* Effect.raceFirst(
+      Deferred.await(ready),
+      Fiber.join(command).pipe(
+        Effect.andThen(Effect.die("Disable finished before the writer gate")),
+      ),
+    );
+    const current = yield* home.durable;
+    const concurrent = { ...current, global_bindings: [] };
+    yield* home.owned(withLibraryWriter(LibraryStore.use((store) => store.publish(concurrent))));
+    yield* Deferred.succeed(resume, undefined);
+    const outcome = yield* Fiber.join(command);
+    assert.isTrue(Result.isFailure(outcome));
+    if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, SetEnabledStale);
+    assert.deepStrictEqual(yield* home.durable, concurrent);
+    assert.deepStrictEqual(results, []);
+    assert.isFalse(yield* fs.exists(join(home.home, ".lock")));
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

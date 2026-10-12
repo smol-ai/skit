@@ -13,12 +13,12 @@ import {
 import {
   readLibrarySkillMetadata,
   skillModificationTime,
-} from "../src/workflows/library/skill-metadata.js";
+} from "../src/library-application/skill-metadata.js";
 import { inventoryCommand } from "../src/handlers/library/inventory.js";
 import { renderMachineSkills } from "../src/presentation/inventory.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
 import { presentListCommand } from "../src/handlers/library/list.js";
-import { openLibrarySession } from "../src/workflows/library/session.js";
+import { openLibrarySession } from "../src/library-application/session.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
   libraryHome,

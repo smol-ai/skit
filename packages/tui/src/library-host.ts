@@ -1,5 +1,5 @@
 import { Effect, Layer, ManagedRuntime, Semaphore } from "effect";
-import type { LibrarySessionState } from "../../cli/src/front-end";
+import type { LibrarySessionState } from "../../cli/src/library-application/index";
 
 /** Executable host boundary: one runtime, ordered transitions, and explicit disposal. */
 export function createLibraryHost<R, E, OpenError>(

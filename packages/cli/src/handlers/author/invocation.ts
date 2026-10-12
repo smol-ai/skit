@@ -2,7 +2,7 @@ import { generateInvocationMetadataEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
@@ -28,7 +28,7 @@ export const authorInvocationCliCommand = Command.make(
   "invocation",
   { path, dryRun: dryRunFlag, json: jsonFlag },
   ({ path, dryRun }) =>
-    handleCommand(
+    handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const { root, generated } = yield* authorInvocationCommand(

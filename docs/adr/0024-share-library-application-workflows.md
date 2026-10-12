@@ -1,0 +1,81 @@
+# Share Library application workflows across front ends
+
+## Decision
+
+`packages/cli/src/library-application` owns Library session transitions, update orchestration,
+shared read models, and the local application layer. CLI and TUI consume its supported
+`index.ts` surface. Domain adapters remain in core and the existing workflow modules;
+terminal rendering, prompts, and command output envelopes belong to CLI adapters.
+All front ends import core through `@smolai/skit-core`, preserving one runtime identity
+for service tags and schemas. The older `front-end.ts` facade retains presentation/audit
+exports and re-exports the application surface for existing workspace consumers.
+
+Library updates require an explicit `LibraryProgress` implementation. Stages and completions
+carry subject identity, source change, and projection counts. The terminal adapter maps
+these facts to the existing scoped spinner and completion lines. Other consumers can
+observe structured events or explicitly supply the silent layer. A stage's completion or
+failure follows its resource finalization; defects and interruption retain their Effect
+semantics. Update result and CLI output contracts are unchanged.
+
+## Transaction ownership
+
+Command composition supplies dependencies and renders failures; it does not acquire the
+Library writer. Mutating application workflows own writer scopes and attributed history.
+Add, update, removal, authored workspace registration, security acceptance, and inventory
+refresh acquire their transaction explicitly. Applying sync acquires the writer; its preview
+does not. Binding/session confirmation retains its existing authoritative revision check.
+Update and removal reload state after acquiring the writer.
+
+Interactive browsing and questions run outside writer scopes. Setup acquires the writer
+after confirmation, revalidates the approved plan under the lock, applies selected changes,
+then releases it before the optional source-update question. Multi-destination Binding
+changes share one transaction. Removal's authored workspace marker is finalized inside
+the same transaction as removal, preventing re-registration from racing that marker.
+Nested writer scopes remain reentrant, so one composed action produces one history event.
+State-file migration retains its own writer lock even when initiated by a reader.
+
+Registry credential/alias and repository-decision mutations use the same root storage
+mutex through `withConfigurationWriter`, preserving exclusion with existing writers.
+This adapter does not open Library state or record Library history. Login questions run
+before the credential workflow acquires it. Read-only configuration commands do not lock.
+Persisting setup's machine configuration likewise owns its write scope explicitly.
+CLI handlers and the TUI resolve a required `SkitConfiguration` service at their application
+boundary. Explicit state-directory flags take precedence over Effect `Config`'s
+`SKIT_HOME`, with the account's `.skit` directory as the default. Account home,
+SKIT state home, and XDG configuration/state roots remain separate values. Derived
+file paths, storage services, and writer locks share this snapshot. The optional XDG
+state override is preserved separately from the default state directory: when absent
+or empty, skills.sh lock discovery uses `~/.agents/.skill-lock.json`. Empty XDG
+configuration/state values are treated as unset. Account home is an OS boundary
+input, not a ConfigProvider key; embedders can pass it to `resolveSkitConfiguration`. Standalone
+applications construct it with `skitConfigurationLayer`; command handlers provide that layer
+from their parsed flags. The configuration includes resolved directory settings and centrally derived storage paths.
+Domain layers consume a required `SkitConfiguration` service and do
+not provide it again. Standalone adapters and tests also supply this boundary explicitly.
+Configuration writers derive concrete root overrides from the supplied snapshot and
+provide those paths to the protected program; they never re-read configuration.
+`ConfigProvider` injection therefore controls both the lock and the actual file writes,
+including commands without explicit home flags, without changing process globals.
+
+## Command environments
+
+`handlePlatformCommand` supplies platform capabilities for file/configuration operations.
+`handleLibraryCommand` supplies local storage and audit services. `handleRegistryCommand`
+supplies Registry transport/authentication. `handleSourceCommand` combines Library and
+Registry environments for acquisition and synchronization. Local path configuration
+does not resolve Registry credentials; sync resolves its selected Registry explicitly.
+Each helper preserves the program's inferred requirements: unsatisfied dependencies
+remain visible to the command tree and ultimately fail the executable's typecheck.
+
+The full command environment remains available to contract generators and tests that
+exercise multiple command families. It is not the default environment for each command.
+
+## Validation
+
+Boundary tests run a real parsed listing while another fiber holds the writer and exercise
+Registry configuration with absent or malformed Library storage. A headless update test
+uses injected transport and structured progress, verifies retained bytes and one attributed
+history event, and supplies no Renderer. A Deferred-gated interruption test verifies progress
+does not report a closed stage before asynchronous cleanup finishes. Existing focused
+workflow, session, setup, sync, runtime lifetime, and rendered command checks cover the
+preserved behavior.

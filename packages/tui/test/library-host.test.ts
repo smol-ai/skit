@@ -1,7 +1,7 @@
 // Runtime entry and disposal are the subject here, so these tests drive the Promise host API.
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vitest";
-import type { LibrarySessionState, LibrarySkillRow } from "../../cli/src/front-end";
+import type { LibrarySessionState, LibrarySkillRow } from "../../cli/src/library-application/index";
 import { createLibraryHost } from "../src/library-host";
 
 /**

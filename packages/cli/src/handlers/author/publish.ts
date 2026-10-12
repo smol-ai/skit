@@ -1,3 +1,4 @@
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { readSkitDescriptorEffect } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -9,7 +10,7 @@ import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { readAuthorRemoteEffect } from "../../workflows/author/sync.js";
 import { NotBoundToRegistry } from "../../registry/failures.js";
-import { handleCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -63,7 +64,7 @@ export const publishCliCommand = Command.make(
   "publish",
   { path, version, revision, json: jsonFlag },
   ({ path, version, revision }) =>
-    handleCommand(
+    handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* publishCommand({
@@ -73,7 +74,7 @@ export const publishCliCommand = Command.make(
         });
         yield* renderer.result(result("publish", outputContracts.publish, value));
       }),
-    ),
+    ).pipe(Effect.provide(skitConfigurationLayer())),
 ).pipe(
   Command.withDescription("Package and publish an immutable SKIT release."),
   Command.withExamples([

@@ -1,10 +1,11 @@
-import { Effect } from "effect";
+import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
+import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
-import { handleCommand } from "../application.js";
+import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
-import { homeFlag, homePath, jsonFlag } from "../commands/parameters.js";
+import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import { Renderer } from "../presentation/renderer.js";
 import {
   readSetupMachineConfig,
@@ -17,28 +18,31 @@ const path = Argument.String("path");
 const flags = { home: homeFlag, json: jsonFlag };
 
 const mutate = (name: "watch" | "ignore" | "forget") =>
-  Command.make(name, { path, ...flags }, (input) => {
-    const selectedHome = homePath(input.home);
-    return handleCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const repository = resolve(input.path);
-        const config = yield* updateSetupRepositoryDecision(
-          selectedHome,
-          repository,
-          name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
-        );
-        yield* renderer.result(
-          result("repositoryPolicy", outputContracts.repositoryPolicy, {
-            action: name,
-            path: repository,
-            repositories: config.repositories,
-          }),
-        );
-      }),
-      selectedHome,
-    );
-  }).pipe(
+  Command.make(name, { path, ...flags }, (input) =>
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
+
+      const selectedHome = paths.skitHome;
+      return yield* handlePlatformCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const repository = resolve(input.path);
+          const config = yield* updateSetupRepositoryDecision(
+            selectedHome,
+            repository,
+            name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
+          );
+          yield* renderer.result(
+            result("repositoryPolicy", outputContracts.repositoryPolicy, {
+              action: name,
+              path: repository,
+              repositories: config.repositories,
+            }),
+          );
+        }),
+      );
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+  ).pipe(
     Command.withDescription(
       name === "watch"
         ? "Include a repository in ordinary Skill inventory."
@@ -54,23 +58,26 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
     }),
   );
 
-export const repositoryListCliCommand = Command.make("list", flags, (input) => {
-  const selectedHome = homePath(input.home);
-  return handleCommand(
-    Effect.gen(function* () {
-      const renderer = yield* Renderer;
-      const config = yield* readSetupMachineConfig(selectedHome);
-      yield* renderer.result(
-        result("repositoryPolicy", outputContracts.repositoryPolicy, {
-          action: "list",
-          path: "",
-          repositories: [...setupRepositoryDecisions(config)],
-        }),
-      );
-    }),
-    selectedHome,
-  );
-}).pipe(
+export const repositoryListCliCommand = Command.make("list", flags, (input) =>
+  Effect.gen(function* () {
+    const paths = yield* SkitConfiguration;
+
+    const selectedHome = paths.skitHome;
+    return yield* handlePlatformCommand(
+      Effect.gen(function* () {
+        const renderer = yield* Renderer;
+        const config = yield* readSetupMachineConfig(selectedHome);
+        yield* renderer.result(
+          result("repositoryPolicy", outputContracts.repositoryPolicy, {
+            action: "list",
+            path: "",
+            repositories: [...setupRepositoryDecisions(config)],
+          }),
+        );
+      }),
+    );
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+).pipe(
   Command.withDescription("List repository decisions stored for this machine."),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },

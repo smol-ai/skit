@@ -1,16 +1,14 @@
-import { Effect } from "effect";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
+import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../application.js";
 import { authStatusCommand } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import {
-  homeFlag,
-  homePath,
-  jsonFlag,
-  optionalString,
-  optionValue,
-} from "../../commands/parameters.js";
+import { homeFlag, jsonFlag, optionalString, optionValue } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
@@ -21,17 +19,19 @@ export const authStatusCliCommand = Command.make(
     home: homeFlag,
     json: jsonFlag,
   },
-  ({ registry, home }) => {
-    const selectedHome = homePath(home);
-    return handleCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* authStatusCommand(selectedHome, optionValue(registry));
-        yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
-      }),
-      selectedHome,
-    );
-  },
+  ({ registry, home }) =>
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
+
+      const selectedHome = paths.skitHome;
+      return yield* handlePlatformCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const value = yield* authStatusCommand(selectedHome, optionValue(registry));
+          yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
+        }),
+      );
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Show stored Registry credential metadata."),
   Command.withExamples([{ command: "skit auth status" }]),

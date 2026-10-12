@@ -1,9 +1,8 @@
 /**
  * Supported source-level seam for the workspace TUI and Storybook applications.
  *
- * These prototypes deliberately reuse CLI orchestration. Keeping their imports here ensures that
- * every path reaches core through the CLI package's `@smolai/skit-core` dependency instead of
- * loading core source and built output as two runtime identities.
+ * Presentation and audit adapters live here. Reusable Library behavior is owned by
+ * library-application and shared directly by CLI, TUI, and Storybook.
  */
 export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 
@@ -20,34 +19,7 @@ export {
   type HarnessProbeResult,
   type ProbeableHarness,
 } from "./harness/probe.js";
-export {
-  openLibrarySession,
-  readLibrarySkillContent,
-  refreshLibrarySession,
-  proposeLibraryEnable,
-  proposeLibraryCollectionChange,
-  libraryCollectionScopes,
-  proposeLibraryDisable,
-  proposeLibraryInvocation,
-  confirmLibraryChange,
-  cancelLibraryChange,
-  type LibraryActionOutcome,
-  type LibraryBindingRow,
-  type LibrarySessionState,
-  type LibrarySkillRow,
-  type PendingLibraryChange,
-} from "./workflows/library/session.js";
-export {
-  DESTINATION_QUESTION,
-  destinationLabel,
-  invocationChoices,
-  invocationBriefing,
-  invocationEligibleBindings,
-  invocationRowSummary,
-  scopeChoices,
-  type Scope,
-} from "./library/read-model.js";
-export type { InvocationOption } from "./invocation/policy.js";
+export * from "./library-application/index.js";
 
 export {
   defaultTerminalEnvironment,

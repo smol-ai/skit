@@ -1,8 +1,8 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { authStatusCommand } from "../src/registry/auth.js";
-import { skitLayer } from "@smolai/skit-core";
 
 it.effect("returns every stored authentication record", () =>
   Effect.gen(function* () {
@@ -55,7 +55,7 @@ it.effect("returns every stored authentication record", () =>
         },
       ],
     });
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("preserves an invalid credential-file failure", () =>
@@ -65,5 +65,5 @@ it.effect("preserves an invalid credential-file failure", () =>
     yield* fs.writeFileString(join(home, "auth.json"), "{");
     const actual = yield* Effect.flip(authStatusCommand(home));
     assert.strictEqual(actual._tag, "CredentialsUnusable");
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
