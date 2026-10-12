@@ -14,8 +14,13 @@ export function renderSetEnabled(
     : data.enabled
       ? "Would enable"
       : "Would disable";
-  const skills = data.skills.length ? data.skills.join(", ") : "no Skills";
-  const destination = data.scope.kind === "global" ? "all projects" : data.scope.root;
+  const skills =
+    data.skills.length > 3
+      ? `${data.skills.length} skills`
+      : data.skills.length
+        ? data.skills.join(", ")
+        : "no skills";
+  const destination = data.scope.kind === "global" ? "" : ` in ${data.scope.root}`;
   const change = data.changed ? "" : data.enabled ? " · Already enabled" : " · Already disabled";
   const shadows = data.shadows ?? [];
   const warning = shadows.length
@@ -24,5 +29,5 @@ export function renderSetEnabled(
   const warnings = data.warnings
     ?.map((warning) => `Could not inspect ${warning.path}: ${warning.message}`)
     .join("\n");
-  return `${verb} ${skills} for every agent (${destination})${change}${warning}${warnings ? `\n${warnings}` : ""}`;
+  return `${verb} ${skills}${destination}${change}${warning}${warnings ? `\n${warnings}` : ""}`;
 }

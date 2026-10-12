@@ -1,6 +1,10 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option, Result } from "effect";
-import { sourceInputWithVersionEffect } from "@smolai/skit-core";
+import { LibraryStore, sourceInputWithVersionEffect } from "@smolai/skit-core";
+import {
+  readDescriptionLoad,
+  descriptionLoadMessage,
+} from "../../workflows/library/collection-load.js";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../failures.js";
@@ -88,6 +92,18 @@ export const addCliCommand = Command.make(
               : {}),
           }),
         );
+        const measurement = yield* Effect.gen(function* () {
+          const store = yield* LibraryStore;
+          const state = yield* store.load;
+          const ids = new Set<string>(retained.skill_ids);
+          const load = yield* readDescriptionLoad(
+            state,
+            store.originalsPath,
+            state.skills.filter((skill) => ids.has(skill.skill_id)),
+          );
+          return descriptionLoadMessage(load);
+        }).pipe(Effect.orElseSucceed(() => "Description size unavailable."));
+        yield* renderer.note(measurement, "Description size");
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
