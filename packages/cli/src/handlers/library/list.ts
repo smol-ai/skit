@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { readLibrarySkillMetadata } from "../../library-application/skill-metadata.js";
 import { bindingSkillIds, currentSkillVersion, LibraryStore } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
@@ -89,7 +89,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
           }).pipe(Effect.provide(terminalPrompterLayer))
         : presentListCommand(),
     );
-  }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Browse retained Skills and Collections and manage enablement."),
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),

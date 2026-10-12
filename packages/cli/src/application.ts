@@ -2,8 +2,8 @@ import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "./registry/registry-http.js";
 import { registryAuthLayer } from "./registry/auth-service.js";
 import { skitLayer } from "@smolai/skit-core";
-import { libraryApplicationFromPaths } from "./library-application/layers.js";
-import { skitPathsLayer, SkitPaths } from "./configuration/paths.js";
+import { libraryApplicationFromConfiguration } from "./library-application/layers.js";
+import { skitConfigurationLayer, SkitConfiguration } from "./configuration/skit-configuration.js";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
 
@@ -19,8 +19,8 @@ export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) 
   );
 }
 
-export const registryApplicationFromPaths = Layer.unwrap(
-  Effect.map(SkitPaths, (paths) =>
+export const registryApplicationFromConfiguration = Layer.unwrap(
+  Effect.map(SkitConfiguration, (paths) =>
     Layer.merge(registryHttpLayer(), registryAuthLayer(paths.skitHome)).pipe(
       Layer.provideMerge(skitLayer),
     ),
@@ -28,16 +28,16 @@ export const registryApplicationFromPaths = Layer.unwrap(
 );
 
 export const registryApplicationLayer = (home?: string) =>
-  registryApplicationFromPaths.pipe(Layer.provideMerge(skitPathsLayer(home)));
+  registryApplicationFromConfiguration.pipe(Layer.provideMerge(skitConfigurationLayer(home)));
 
 /** Combined domain services consume the same required path snapshot. */
-export const sourceApplicationFromPaths = Layer.merge(
-  libraryApplicationFromPaths,
-  registryApplicationFromPaths,
+export const sourceApplicationFromConfiguration = Layer.merge(
+  libraryApplicationFromConfiguration,
+  registryApplicationFromConfiguration,
 );
 
 export const sourceApplicationLayer = (home: string) =>
-  sourceApplicationFromPaths.pipe(Layer.provideMerge(skitPathsLayer(home)));
+  sourceApplicationFromConfiguration.pipe(Layer.provideMerge(skitConfigurationLayer(home)));
 
 /** Full environment for contract generators and runners exercising multiple command families. */
 export function commandApplicationLayer(json: boolean, home: string) {
@@ -51,19 +51,19 @@ export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) 
 
 export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(libraryApplicationFromPaths),
+    Effect.provide(libraryApplicationFromConfiguration),
   );
 }
 
 export function handleRegistryCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(registryApplicationFromPaths),
+    Effect.provide(registryApplicationFromConfiguration),
   );
 }
 
 export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(sourceApplicationFromPaths),
+    Effect.provide(sourceApplicationFromConfiguration),
   );
 }
 

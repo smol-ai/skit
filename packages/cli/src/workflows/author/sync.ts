@@ -1,4 +1,4 @@
-import { configurationPaths } from "../../configuration/paths.js";
+import { configurationForHome } from "../../configuration/skit-configuration.js";
 import {
   AuthoringAuthenticatedApi,
   DraftNotFoundResponse,
@@ -293,7 +293,7 @@ function fromBase64(contentBase64: string, mediaType: string): SyncFileVersion {
 const readState = Effect.fn("Sync.readState")(function* (home?: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs
-    .readFileString((yield* configurationPaths(home)).syncBindingsPath)
+    .readFileString((yield* configurationForHome(home)).syncBindingsPath)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeed(undefined) : Effect.fail(error),
@@ -310,7 +310,7 @@ const writeState = Effect.fn("Sync.writeState")(function* (
   state: SyncState,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const path = (yield* configurationPaths(home)).syncBindingsPath;
+  const path = (yield* configurationForHome(home)).syncBindingsPath;
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${process.pid}`;
   yield* fs.writeFileString(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });

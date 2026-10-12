@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { RegistryAuth } from "../../registry/auth-service.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -109,7 +109,7 @@ export const librarySyncCliCommand = Command.make(
           ),
         );
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Synchronize private retained Library bytes with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),

@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem } from "effect";
 
-import { configurationPaths } from "../configuration/paths.js";
+import { configurationForHome } from "../configuration/skit-configuration.js";
 import { dirname, join, resolve } from "node:path";
 import {
   isJsonObject,
@@ -159,7 +159,7 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
   options: AuditOptions = {},
   suppliedProbes?: readonly ProbeResult[],
 ) {
-  const paths = yield* configurationPaths();
+  const paths = yield* configurationForHome();
   const home = resolve(options.home ?? paths.userHome);
   const cwd = resolve(options.cwd ?? process.cwd());
   const observations: AuditObservation[] = [];

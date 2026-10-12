@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -38,7 +38,7 @@ export const securityReviewCliCommand = Command.make(
         const value = yield* securityReviewCommand({ securityReviewEffect: reviewSecurity }, skill);
         yield* renderer.result(result("securityReview", outputContracts.securityReview, value));
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Review security findings for an exact retained Skill Artifact."),
   Command.withExamples([{ command: "skit security review owner/tools:review --json" }]),

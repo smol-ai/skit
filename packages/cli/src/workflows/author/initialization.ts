@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
@@ -199,7 +199,7 @@ export const authorInitCliCommand = Command.make(
         };
         yield* renderer.result(result("init", outputContracts.init, output));
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Initialize SKIT authoring in a new or existing Skill Collection."),
   Command.withExamples([

@@ -1,4 +1,4 @@
-import { SkitPaths, skitPathsLayer } from "../configuration/paths.js";
+import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handlePlatformCommand } from "../application.js";
@@ -22,7 +22,7 @@ export const registryAddCliCommand = Command.make(
   { name, origin, home: homeFlag, json: jsonFlag },
   ({ name, origin, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handlePlatformCommand(
@@ -34,7 +34,7 @@ export const registryAddCliCommand = Command.make(
           );
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Name a Registry for use in source references."),
   Command.withExamples([{ command: "skit registry add public https://registry.example.com" }]),
@@ -50,7 +50,7 @@ export const registryListCliCommand = Command.make(
   { home: homeFlag, json: jsonFlag },
   ({ home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handlePlatformCommand(
@@ -62,7 +62,7 @@ export const registryListCliCommand = Command.make(
           );
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("List named Registries."),
   Command.withExamples([{ command: "skit registry list" }]),
@@ -78,7 +78,7 @@ export const registryDefaultCliCommand = Command.make(
   { name, home: homeFlag, json: jsonFlag },
   ({ name, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handlePlatformCommand(
@@ -93,7 +93,7 @@ export const registryDefaultCliCommand = Command.make(
           );
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Select the Registry used by registry shorthand."),
   Command.withExamples([{ command: "skit registry default public" }]),
@@ -109,7 +109,7 @@ export const registryRemoveCliCommand = Command.make(
   { name, home: homeFlag, json: jsonFlag },
   ({ name, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handlePlatformCommand(
@@ -124,7 +124,7 @@ export const registryRemoveCliCommand = Command.make(
           );
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Remove a Registry name."),
   Command.withExamples([{ command: "skit registry remove work" }]),

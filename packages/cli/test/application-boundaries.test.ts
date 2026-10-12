@@ -1,7 +1,11 @@
-import { sourceApplicationFromPaths } from "../src/application.js";
+import { sourceApplicationFromConfiguration } from "../src/application.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { addRegistryRemoteEffect, readConfigEffect } from "../src/registry/auth.js";
-import { resolveSkitPaths, skitPathsLayer, SkitPaths } from "../src/configuration/paths.js";
+import {
+  resolveSkitConfiguration,
+  skitConfigurationLayer,
+  SkitConfiguration,
+} from "../src/configuration/skit-configuration.js";
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join, resolve } from "node:path";
@@ -31,11 +35,11 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
         assert.isTrue(yield* fs.exists(join(home, "auth.json")));
       });
     yield* withConfigurationWriter(undefined, inside(configured)).pipe(
-      Effect.provide(skitPathsLayer()),
+      Effect.provide(skitConfigurationLayer()),
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
     );
     yield* withConfigurationWriter(explicit, inside(explicit)).pipe(
-      Effect.provide(skitPathsLayer(explicit)),
+      Effect.provide(skitConfigurationLayer(explicit)),
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
     );
     assert.isFalse(yield* fs.exists(join(configured, ".lock")));
@@ -50,7 +54,7 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
 
 it.effect("path configuration separates account home, state root, and XDG roots", () =>
   Effect.gen(function* () {
-    const paths = yield* resolveSkitPaths("relative-state", "/account").pipe(
+    const paths = yield* resolveSkitConfiguration("relative-state", "/account").pipe(
       Effect.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
@@ -67,14 +71,14 @@ it.effect("path configuration separates account home, state root, and XDG roots"
     assert.strictEqual(paths.configHome, "/xdg/config");
     assert.strictEqual(paths.stateHome, "/xdg/state");
     assert.strictEqual(paths.xdgStateHome, "/xdg/state");
-    const defaults = yield* resolveSkitPaths(undefined, "/account").pipe(
+    const defaults = yield* resolveSkitConfiguration(undefined, "/account").pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     );
     assert.strictEqual(defaults.skitHome, "/account/.skit");
     assert.strictEqual(defaults.configHome, "/account/.config");
     assert.strictEqual(defaults.stateHome, "/account/.local/state");
     assert.isUndefined(defaults.xdgStateHome);
-    const empty = yield* resolveSkitPaths(undefined, "/account").pipe(
+    const empty = yield* resolveSkitConfiguration(undefined, "/account").pipe(
       Effect.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({ XDG_CONFIG_HOME: "", XDG_STATE_HOME: "" }),
@@ -206,20 +210,20 @@ it.effect("application layers consume the supplied paths without re-reading conf
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-paths-required-" });
-    const paths = yield* resolveSkitPaths(join(root, "state"), join(root, "account")).pipe(
+    const paths = yield* resolveSkitConfiguration(join(root, "state"), join(root, "account")).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     );
     yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
-      const supplied = yield* SkitPaths;
+      const supplied = yield* SkitConfiguration;
       assert.strictEqual(store.home, paths.skitHome);
       assert.strictEqual(supplied.userHome, paths.userHome);
       yield* addRegistryRemoteEffect("fixture", "https://registry.example.test", undefined);
       assert.isTrue(yield* fs.exists(paths.authPath));
       assert.isFalse(yield* fs.exists(join(root, "ignored")));
     }).pipe(
-      Effect.provide(sourceApplicationFromPaths),
-      Effect.provideService(SkitPaths, paths),
+      Effect.provide(sourceApplicationFromConfiguration),
+      Effect.provideService(SkitConfiguration, paths),
       Effect.provide(
         ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
       ),
@@ -235,7 +239,7 @@ it.effect("separate application boundaries retain their own storage roots", () =
     const resolved = yield* Effect.forEach(homes, (home) =>
       Effect.gen(function* () {
         const store = yield* LibraryStore;
-        const paths = yield* SkitPaths;
+        const paths = yield* SkitConfiguration;
         assert.strictEqual(store.home, paths.skitHome);
         return store.home;
       }).pipe(Effect.provide(libraryApplicationLayer(home))),

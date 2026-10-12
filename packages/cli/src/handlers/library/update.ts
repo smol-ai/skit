@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { terminalLibraryProgressLayer } from "../../presentation/library-progress.js";
 import { Effect, Option } from "effect";
 import { LibraryStore } from "@smolai/skit-core";
@@ -83,7 +83,7 @@ export const updateCliCommand = Command.make(
           result("update", outputContracts.update, value, updateExitCode(value)),
         );
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Update sources from their recorded origins."),
   Command.withExamples([

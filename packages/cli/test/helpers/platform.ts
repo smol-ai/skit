@@ -1,6 +1,6 @@
 import { Layer } from "effect";
 import { skitLayer } from "@smolai/skit-core";
-import { skitPathsLayer } from "../../src/configuration/paths.js";
+import { skitConfigurationLayer } from "../../src/configuration/skit-configuration.js";
 
 /** Standalone adapters receive the same explicit path boundary as executables. */
-export const testPlatformLayer = Layer.merge(skitLayer, skitPathsLayer());
+export const testPlatformLayer = Layer.merge(skitLayer, skitConfigurationLayer());

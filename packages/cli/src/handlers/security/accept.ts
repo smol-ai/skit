@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import type { Digest } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -100,7 +100,7 @@ export const securityAcceptCliCommand = Command.make(
         );
         yield* renderer.result(result("securityAccept", outputContracts.securityAccept, value));
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Accept one finding for Projection of an exact retained Skill Artifact."),
   Command.withExamples([

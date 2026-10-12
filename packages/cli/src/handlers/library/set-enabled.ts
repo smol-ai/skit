@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import {
   bindingSkillIds,
   withLibraryWriter,
@@ -96,7 +96,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
             configuration,
           });
         }).pipe(Effect.provide(terminalPrompterLayer)),
-      ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+      ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
       `${enabled ? "Enable" : "Disable"} retained Skills for every agent at a scope.`,

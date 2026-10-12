@@ -1,4 +1,4 @@
-import { configurationPaths } from "../../configuration/paths.js";
+import { configurationForHome } from "../../configuration/skit-configuration.js";
 import {
   SkillAlias,
   type HarnessShadow,
@@ -164,7 +164,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
     const errors = [...entry.errors];
     const roots =
       inventoryRoots ??
-      (yield* Effect.map(configurationPaths(), (paths) => ({
+      (yield* Effect.map(configurationForHome(), (paths) => ({
         home: paths.userHome,
         configHome: paths.configHome,
         overrides: {},

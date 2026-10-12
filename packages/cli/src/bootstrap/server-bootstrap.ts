@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../configuration/paths.js";
+import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import {
   Cause,
   Clock,
@@ -371,7 +371,7 @@ export const serverBootstrapCliCommand = Command.make(
           }),
         );
       }).pipe(Effect.provide(bootstrapOperationsLayer(Option.getOrUndefined(wrangler)))),
-    ).pipe(Effect.provide(skitPathsLayer())),
+    ).pipe(Effect.provide(skitConfigurationLayer())),
 ).pipe(
   Command.withDescription("Create the first operator for a deployed skit-server."),
   Command.withExamples([

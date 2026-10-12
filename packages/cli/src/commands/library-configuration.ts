@@ -1,4 +1,4 @@
-import { configurationPaths } from "../configuration/paths.js";
+import { configurationForHome } from "../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { libraryInstallationConfiguration } from "../library/installation-configuration.js";
 import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
@@ -16,7 +16,7 @@ export interface LocalCommandInput {
 export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")(function* (
   input: LocalCommandInput,
 ) {
-  const paths = yield* configurationPaths(Option.getOrUndefined(input.home));
+  const paths = yield* configurationForHome(Option.getOrUndefined(input.home));
   const libraryHome = paths.skitHome;
   const inventory = inventoryRootOptions(input, paths);
   const detectedHarnesses = yield* detectInstalledHarnessesEffect({

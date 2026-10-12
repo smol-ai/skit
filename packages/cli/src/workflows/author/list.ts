@@ -1,4 +1,7 @@
-import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
 import {
   AuthoringAuthenticatedApi,
   InsufficientScopeResponse,
@@ -172,7 +175,7 @@ export const authorListCliCommand = Command.make(
   { registry, home: homeFlag, json: jsonFlag },
   ({ registry, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handleRegistryCommand(
@@ -193,7 +196,7 @@ export const authorListCliCommand = Command.make(
           yield* renderer.result(result("authorList", outputContracts.authorList, value));
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("List SKITs the active Principal can author on a Registry."),
   Command.withExamples([

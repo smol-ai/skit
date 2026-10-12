@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { Flag, GlobalFlag } from "effect/cli";
-import type { ResolvedSkitPaths } from "../configuration/paths.js";
+import type { ResolvedSkitConfiguration } from "../configuration/skit-configuration.js";
 
 export const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit structured JSON."),
@@ -56,7 +56,7 @@ export function inventoryRootOptions(
     readonly opencodeRoot: Option.Option<string>;
     readonly devinRoot: readonly string[];
   },
-  paths: ResolvedSkitPaths,
+  paths: ResolvedSkitConfiguration,
 ) {
   return {
     home: paths.userHome,

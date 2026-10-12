@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { LibraryStore } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -41,7 +41,7 @@ export const removeCliCommand = Command.make(
           );
         yield* renderer.result(result("remove", outputContracts.remove, outcome.value));
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Remove a retained Collection and its owned Projections."),
   Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),

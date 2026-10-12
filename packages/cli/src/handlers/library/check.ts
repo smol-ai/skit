@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";
@@ -26,7 +26,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       );
       yield* renderer.result(result("check", outputContracts.check, value));
     }),
-  ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Check retained Library custody or verified source changes."),
   Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),

@@ -1,4 +1,7 @@
-import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
@@ -91,7 +94,7 @@ export const authLoginCliCommand = Command.make(
   { registry, alias, scopes, relogin, home: homeFlag, json: jsonFlag },
   ({ registry, alias, scopes, relogin, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handleRegistryCommand(
@@ -108,7 +111,7 @@ export const authLoginCliCommand = Command.make(
           yield* renderer.result(result("authLogin", outputContracts.authLogin, value));
         }).pipe(Effect.provide(terminalPrompterLayer)),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription(
     "Reuse saved authentication or sign in and store a CLI credential in ~/.skit/auth.json.",

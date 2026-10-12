@@ -18,7 +18,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
-  SkitPaths,
+  SkitConfiguration,
   LibraryActor,
   libraryApplicationLayer,
   openLibrarySession,
@@ -137,7 +137,7 @@ const libraryHost = createLibraryHost(
   ),
   openLibrarySession(),
 );
-const paths = await libraryHost.run(SkitPaths);
+const paths = await libraryHost.run(SkitConfiguration);
 const libraryConfiguration = {
   home: paths.userHome,
   configHome: paths.configHome,

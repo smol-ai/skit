@@ -1,4 +1,4 @@
-import { configurationPaths, SkitPaths } from "../configuration/paths.js";
+import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
 import { Clock, Config, Effect, FileSystem, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
@@ -127,7 +127,7 @@ type AuthStatusCredential = {
 };
 
 export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
-  return (yield* configurationPaths(home)).authPath;
+  return (yield* configurationForHome(home)).authPath;
 });
 
 export function readConfigEffect(home?: string) {
@@ -222,7 +222,11 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
   registry?: string,
   durableOrigin?: string,
   command?: string,
-): Effect.fn.Return<ResolvedAuth, RegistryConfigurationError, FileSystem.FileSystem | SkitPaths> {
+): Effect.fn.Return<
+  ResolvedAuth,
+  RegistryConfigurationError,
+  FileSystem.FileSystem | SkitConfiguration
+> {
   const config = yield* readConfigEffect(home);
   const origin = yield* resolveSelectedOriginEffect({ home, registry, durableOrigin, command });
   const stored = origin ? config.servers[origin] : undefined;
@@ -425,7 +429,7 @@ export function resolveAuthForOriginEffect(
 ): Effect.Effect<
   ResolvedAuth,
   RegistryOriginInvalid | CredentialsUnusable | Config.ConfigError,
-  FileSystem.FileSystem | SkitPaths
+  FileSystem.FileSystem | SkitConfiguration
 > {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);

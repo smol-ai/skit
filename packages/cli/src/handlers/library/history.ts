@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { LibraryAuditLog } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
@@ -22,7 +22,7 @@ export const libraryHistoryCliCommand = Command.make(
           result("libraryHistory", outputContracts.libraryHistory, { events }),
         );
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Show device-local Library change history."),
   Command.withExamples([

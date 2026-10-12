@@ -1,4 +1,7 @@
-import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { readClaudeListingSnapshot } from "@smolai/skit-core";
 import {
@@ -193,7 +196,7 @@ const machineInventoryMetadata = {
 
 export const inventoryCliCommand = Command.make("inventory", localFlags, (input) =>
   Effect.gen(function* () {
-    const paths = yield* SkitPaths;
+    const paths = yield* SkitConfiguration;
 
     const selectedHome = paths.skitHome;
     const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
@@ -213,7 +216,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
         yield* renderer.result(result("inventory", outputContracts.inventory, inventory));
       }),
     );
-  }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
     "Show every observed Skill instance, its Git state, and refreshed Library projections.",
@@ -227,7 +230,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
 
 export const doctorCliCommand = Command.make("doctor", localFlags, (input) =>
   Effect.gen(function* () {
-    const paths = yield* SkitPaths;
+    const paths = yield* SkitConfiguration;
 
     const selectedHome = paths.skitHome;
     const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
@@ -240,7 +243,7 @@ export const doctorCliCommand = Command.make("doctor", localFlags, (input) =>
         );
       }),
     );
-  }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Diagnose local library and projection state."),
   Command.withExamples([{ command: "skit doctor" }]),

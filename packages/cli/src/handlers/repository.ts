@@ -1,4 +1,4 @@
-import { SkitPaths, skitPathsLayer } from "../configuration/paths.js";
+import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
@@ -20,7 +20,7 @@ const flags = { home: homeFlag, json: jsonFlag };
 const mutate = (name: "watch" | "ignore" | "forget") =>
   Command.make(name, { path, ...flags }, (input) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handlePlatformCommand(
@@ -41,7 +41,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
           );
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
       name === "watch"
@@ -60,7 +60,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
 
 export const repositoryListCliCommand = Command.make("list", flags, (input) =>
   Effect.gen(function* () {
-    const paths = yield* SkitPaths;
+    const paths = yield* SkitConfiguration;
 
     const selectedHome = paths.skitHome;
     return yield* handlePlatformCommand(
@@ -76,7 +76,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
         );
       }),
     );
-  }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("List repository decisions stored for this machine."),
   Command.annotate(CommandMetadata, {

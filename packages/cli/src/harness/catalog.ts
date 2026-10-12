@@ -1,4 +1,4 @@
-import { configurationPaths } from "../configuration/paths.js";
+import { configurationForHome } from "../configuration/skit-configuration.js";
 import { Effect } from "effect";
 import { LinkStat } from "@smolai/skit-core";
 import { dirname, join } from "node:path";
@@ -101,7 +101,7 @@ export function detectInstalledHarnesses(options: HarnessProbeOptions): HarnessN
 export const detectInstalledHarnessesEffect = Effect.fn("Harness.detectInstalled")(function* (
   options: Partial<Omit<HarnessProbeOptions, "exists">> = {},
 ) {
-  const configuration = yield* configurationPaths();
+  const configuration = yield* configurationForHome();
   const resolvedOptions = {
     ...options,
     home: options.home ?? configuration.userHome,

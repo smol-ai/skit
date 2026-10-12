@@ -39,7 +39,7 @@ mutex through `withConfigurationWriter`, preserving exclusion with existing writ
 This adapter does not open Library state or record Library history. Login questions run
 before the credential workflow acquires it. Read-only configuration commands do not lock.
 Persisting setup's machine configuration likewise owns its write scope explicitly.
-CLI handlers and the TUI resolve a required `SkitPaths` service at their application
+CLI handlers and the TUI resolve a required `SkitConfiguration` service at their application
 boundary. Explicit state-directory flags take precedence over Effect `Config`'s
 `SKIT_HOME`, with the account's `.skit` directory as the default. Account home,
 SKIT state home, and XDG configuration/state roots remain separate values. Derived
@@ -47,9 +47,10 @@ file paths, storage services, and writer locks share this snapshot. The optional
 state override is preserved separately from the default state directory: when absent
 or empty, skills.sh lock discovery uses `~/.agents/.skill-lock.json`. Empty XDG
 configuration/state values are treated as unset. Account home is an OS boundary
-input, not a ConfigProvider key; embedders can pass it to `resolveSkitPaths`. Standalone
-applications construct it with `skitPathsLayer`; command handlers provide that layer
-from their parsed flags. Domain layers consume a required `SkitPaths` service and do
+input, not a ConfigProvider key; embedders can pass it to `resolveSkitConfiguration`. Standalone
+applications construct it with `skitConfigurationLayer`; command handlers provide that layer
+from their parsed flags. The configuration includes resolved directory settings and centrally derived storage paths.
+Domain layers consume a required `SkitConfiguration` service and do
 not provide it again. Standalone adapters and tests also supply this boundary explicitly.
 Configuration writers derive concrete root overrides from the supplied snapshot and
 provide those paths to the protected program; they never re-read configuration.

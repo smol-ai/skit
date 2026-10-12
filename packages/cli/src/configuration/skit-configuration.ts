@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { Config, Context, Effect, Layer, Option } from "effect";
 
-export interface ResolvedSkitPaths {
+export interface ResolvedSkitConfiguration {
   readonly userHome: string;
   readonly skitHome: string;
   readonly configHome: string;
@@ -16,10 +16,13 @@ export interface ResolvedSkitPaths {
   readonly variantsPath: string;
 }
 
-export class SkitPaths extends Context.Service<SkitPaths, ResolvedSkitPaths>()("skit/SkitPaths") {}
+export class SkitConfiguration extends Context.Service<
+  SkitConfiguration,
+  ResolvedSkitConfiguration
+>()("skit/SkitConfiguration") {}
 
-/** Read environment configuration only when constructing an application boundary. */
-export const resolveSkitPaths = Effect.fn("Configuration.resolvePaths")(function* (
+/** Resolve inputs and derived storage paths once at the application boundary. */
+export const resolveSkitConfiguration = Effect.fn("Configuration.resolve")(function* (
   home?: string,
   userHome = homedir(),
 ) {
@@ -43,7 +46,7 @@ export const resolveSkitPaths = Effect.fn("Configuration.resolvePaths")(function
   const xdgStateHome = yield* xdgDirectory("XDG_STATE_HOME");
   const configHome = xdgConfigHome ?? resolve(userHome, ".config");
   const stateHome = xdgStateHome ?? resolve(userHome, ".local", "state");
-  return SkitPaths.of({
+  return SkitConfiguration.of({
     userHome: resolve(userHome),
     skitHome,
     configHome,
@@ -58,11 +61,11 @@ export const resolveSkitPaths = Effect.fn("Configuration.resolvePaths")(function
 });
 
 /** Concrete root overrides derive paths from the supplied application snapshot. */
-export const configurationPaths = Effect.fn("Configuration.paths")(function* (home?: string) {
-  const paths = yield* SkitPaths;
+export const configurationForHome = Effect.fn("Configuration.forHome")(function* (home?: string) {
+  const paths = yield* SkitConfiguration;
   if (home === undefined || resolve(home) === paths.skitHome) return paths;
   const skitHome = resolve(home);
-  return SkitPaths.of({
+  return SkitConfiguration.of({
     ...paths,
     skitHome,
     authPath: join(skitHome, "auth.json"),
@@ -73,5 +76,6 @@ export const configurationPaths = Effect.fn("Configuration.paths")(function* (ho
   });
 });
 
-/** Construct paths once at the executable or standalone application boundary. */
-export const skitPathsLayer = (home?: string) => Layer.effect(SkitPaths, resolveSkitPaths(home));
+/** Construct the shared configuration at an executable or standalone application boundary. */
+export const skitConfigurationLayer = (home?: string) =>
+  Layer.effect(SkitConfiguration, resolveSkitConfiguration(home));

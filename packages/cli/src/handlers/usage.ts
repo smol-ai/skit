@@ -1,4 +1,4 @@
-import { SkitPaths, skitPathsLayer } from "../configuration/paths.js";
+import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import { LibraryStore, SkillUsage, skillUsageLayer } from "@smolai/skit-core";
 import { Config, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -41,7 +41,7 @@ export const usageCliCommand = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
       return yield* handleLibraryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
@@ -99,7 +99,7 @@ export const usageCliCommand = Command.make(
           });
         }).pipe(Effect.provide(skillUsageLayer)),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
     "Experimental: show skill activity from local Claude and Codex transcripts.",

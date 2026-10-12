@@ -1,4 +1,4 @@
-import { skitPathsLayer } from "../../configuration/paths.js";
+import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option, Result } from "effect";
 import { sourceInputWithVersionEffect } from "@smolai/skit-core";
 import { Argument, Command, Flag } from "effect/cli";
@@ -89,7 +89,7 @@ export const addCliCommand = Command.make(
           }),
         );
       }),
-    ).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription("Add a source to the local library without enabling it."),
   Command.withExamples([

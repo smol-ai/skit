@@ -1,4 +1,7 @@
-import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Effect, FileSystem, Option } from "effect";
@@ -528,7 +531,7 @@ export const setupCliCommand = Command.make(
   { workDir: workDirFlag, dryRun, ...localFlags },
   (input) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       const interactive = shouldSetupInteractively({
@@ -560,7 +563,7 @@ export const setupCliCommand = Command.make(
           if (!interactive) yield* renderer.result(result("setup", outputContracts.setup, value));
         }).pipe(Effect.provide(terminalPrompterLayer)),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(input.home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
     "Remember this machine's repository roots and explain existing Skill Instances.",

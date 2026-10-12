@@ -1,4 +1,7 @@
-import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
@@ -16,7 +19,7 @@ export const authLogoutCliCommand = Command.make(
   { origin, home: homeFlag, json: jsonFlag },
   ({ origin, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handleRegistryCommand(
@@ -26,7 +29,7 @@ export const authLogoutCliCommand = Command.make(
           yield* renderer.result(result("authLogout", outputContracts.authLogout, value));
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Revoke and remove a stored CLI credential."),
   Command.withExamples([

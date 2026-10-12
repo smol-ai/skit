@@ -1,4 +1,7 @@
-import { SkitPaths, skitPathsLayer } from "../../configuration/paths.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../../configuration/skit-configuration.js";
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
@@ -138,7 +141,7 @@ export const authorDeleteCliCommand = Command.make(
   { skit, dryRun, home: homeFlag, json: jsonFlag },
   ({ skit, dryRun, home }) =>
     Effect.gen(function* () {
-      const paths = yield* SkitPaths;
+      const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
       return yield* handleRegistryCommand(
@@ -153,7 +156,7 @@ export const authorDeleteCliCommand = Command.make(
           yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
         }),
       );
-    }).pipe(Effect.provide(skitPathsLayer(Option.getOrUndefined(home)))),
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription("Permanently delete a private SKIT from its Registry."),
   Command.withExamples([
