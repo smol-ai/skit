@@ -1,4 +1,4 @@
-import { sourceApplicationFromConfiguration } from "../src/application.js";
+import { sourceApplicationLayer } from "../src/application.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { addRegistryRemoteEffect, readConfigEffect } from "../src/registry/auth.js";
 import {
@@ -7,7 +7,7 @@ import {
   SkitConfiguration,
 } from "../src/configuration/skit-configuration.js";
 import { assert, it } from "@effect/vitest";
-import { ConfigProvider, Deferred, Effect, Fiber, FileSystem } from "effect";
+import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
 import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "../src/library-application/layers.js";
@@ -134,7 +134,12 @@ it.effect(
           yield* Deferred.succeed(ready, undefined);
           yield* Deferred.await(release);
         }),
-      ).pipe(Effect.provide(libraryApplicationLayer(home)), Effect.forkScoped);
+      ).pipe(
+        Effect.provide(
+          libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+        ),
+        Effect.forkScoped,
+      );
       yield* Deferred.await(ready);
       const results: CommandResult[] = [];
       const failures: CommandFailure[] = [];
@@ -222,7 +227,7 @@ it.effect("application layers consume the supplied paths without re-reading conf
       assert.isTrue(yield* fs.exists(paths.authPath));
       assert.isFalse(yield* fs.exists(join(root, "ignored")));
     }).pipe(
-      Effect.provide(sourceApplicationFromConfiguration),
+      Effect.provide(sourceApplicationLayer),
       Effect.provideService(SkitConfiguration, paths),
       Effect.provide(
         ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
@@ -242,7 +247,11 @@ it.effect("separate application boundaries retain their own storage roots", () =
         const paths = yield* SkitConfiguration;
         assert.strictEqual(store.home, paths.skitHome);
         return store.home;
-      }).pipe(Effect.provide(libraryApplicationLayer(home))),
+      }).pipe(
+        Effect.provide(
+          libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+        ),
+      ),
     );
     assert.deepStrictEqual(resolved, homes);
   }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),

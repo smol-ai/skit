@@ -19,6 +19,7 @@ import { resolve } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
   SkitConfiguration,
+  skitConfigurationLayer,
   LibraryActor,
   libraryApplicationLayer,
   openLibrarySession,
@@ -132,7 +133,8 @@ const flag = (name: string): string | undefined => {
 
 // One host runtime and serialized state transitions for the writable Library view.
 const libraryHost = createLibraryHost(
-  libraryApplicationLayer(flag("--skit-home")).pipe(
+  libraryApplicationLayer.pipe(
+    Layer.provideMerge(skitConfigurationLayer(flag("--skit-home"))),
     Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   ),
   openLibrarySession(),

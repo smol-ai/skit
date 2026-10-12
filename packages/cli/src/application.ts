@@ -2,7 +2,7 @@ import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "./registry/registry-http.js";
 import { registryAuthLayer } from "./registry/auth-service.js";
 import { skitLayer } from "@smolai/skit-core";
-import { libraryApplicationFromConfiguration } from "./library-application/layers.js";
+import { libraryApplicationLayer } from "./library-application/layers.js";
 import { skitConfigurationLayer, SkitConfiguration } from "./configuration/skit-configuration.js";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
@@ -19,7 +19,7 @@ export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) 
   );
 }
 
-export const registryApplicationFromConfiguration = Layer.unwrap(
+export const registryApplicationLayer = Layer.unwrap(
   Effect.map(SkitConfiguration, (paths) =>
     Layer.merge(registryHttpLayer(), registryAuthLayer(paths.skitHome)).pipe(
       Layer.provideMerge(skitLayer),
@@ -27,21 +27,18 @@ export const registryApplicationFromConfiguration = Layer.unwrap(
   ),
 );
 
-export const registryApplicationLayer = (home?: string) =>
-  registryApplicationFromConfiguration.pipe(Layer.provideMerge(skitConfigurationLayer(home)));
-
-/** Combined domain services consume the same required path snapshot. */
-export const sourceApplicationFromConfiguration = Layer.merge(
-  libraryApplicationFromConfiguration,
-  registryApplicationFromConfiguration,
+/** Combined domain services consume the same required configuration snapshot. */
+export const sourceApplicationLayer = Layer.merge(
+  libraryApplicationLayer,
+  registryApplicationLayer,
 );
-
-export const sourceApplicationLayer = (home: string) =>
-  sourceApplicationFromConfiguration.pipe(Layer.provideMerge(skitConfigurationLayer(home)));
 
 /** Full environment for contract generators and runners exercising multiple command families. */
 export function commandApplicationLayer(json: boolean, home: string) {
-  return Layer.merge(sourceApplicationLayer(home), consoleRendererLayer(json));
+  return Layer.merge(
+    sourceApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+    consoleRendererLayer(json),
+  );
 }
 
 /** Keep requirements inferred until the selected composition boundary supplies them. */
@@ -51,20 +48,18 @@ export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) 
 
 export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(libraryApplicationFromConfiguration),
+    Effect.provide(libraryApplicationLayer),
   );
 }
 
 export function handleRegistryCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(registryApplicationFromConfiguration),
+    Effect.provide(registryApplicationLayer),
   );
 }
 
 export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(sourceApplicationFromConfiguration),
-  );
+  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(sourceApplicationLayer));
 }
 
 export { commandFailure } from "./failure-classification.js";
