@@ -54,7 +54,7 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
-  usage: effectOutput("skit.usage.v1", UsageReport),
+  usage: effectOutput("skit.usage.v2", UsageReport),
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(
@@ -103,9 +103,9 @@ export const outputContracts = {
   add: effectOutput("skit.add.v5", AddResult),
   addPreview: effectOutput("skit.add.preview.v4", AddPreview),
   list: effectOutput("skit.list.v6", ListResult),
-  securityReview: effectOutput("skit.security.review.v2", SkillSecurityReview),
-  securityAccept: effectOutput("skit.security.accept.v2", SkillSecurityReview),
-  inventory: effectOutput("skit.inventory.v10", MachineInventoryResult),
+  securityReview: effectOutput("skit.security.review.v3", SkillSecurityReview),
+  securityAccept: effectOutput("skit.security.accept.v3", SkillSecurityReview),
+  inventory: effectOutput("skit.inventory.v11", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v7", DoctorReport),
   check: effectOutput("skit.check.v7", CheckResult),
   update: effectOutput("skit.update.v8", UpdateResult),
@@ -131,7 +131,7 @@ export const outputContracts = {
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
-  setup: effectOutput("skit.setup.v6", SetupResult),
+  setup: effectOutput("skit.setup.v7", SetupResult),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",

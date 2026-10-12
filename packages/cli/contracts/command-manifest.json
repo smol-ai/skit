@@ -77,9 +77,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -148,9 +148,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -213,9 +213,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -313,9 +313,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -414,9 +414,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -509,9 +509,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -618,9 +618,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -732,9 +732,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -765,7 +765,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v10"
+        "skit.inventory.v11"
       ],
       "exitCodes": [
         0,
@@ -823,9 +823,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -884,9 +884,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -966,9 +966,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1036,9 +1036,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1102,9 +1102,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1162,9 +1162,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1228,9 +1228,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1287,9 +1287,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1353,9 +1353,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1419,9 +1419,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1485,9 +1485,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1578,9 +1578,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1602,7 +1602,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.security.accept.v2"
+        "skit.security.accept.v3"
       ],
       "exitCodes": [
         0,
@@ -1688,9 +1688,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1710,7 +1710,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.security.review.v2"
+        "skit.security.review.v3"
       ],
       "exitCodes": [
         0,
@@ -1776,9 +1776,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1854,9 +1854,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -1894,7 +1894,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v6"
+        "skit.setup.v7"
       ],
       "exitCodes": [
         0,
@@ -1967,9 +1967,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -2075,9 +2075,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -2177,9 +2177,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -2230,9 +2230,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
@@ -2253,7 +2253,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.usage.v1"
+        "skit.usage.v2"
       ],
       "exitCodes": [
         0,
@@ -2328,9 +2328,9 @@
           "description": "Start wizard mode for a command"
         },
         "completions": {
-          "type": "<bash|zsh|fish|sh>",
-          "valueName": "<bash|zsh|fish|sh>",
-          "description": "Print shell completion script (choices: bash, zsh, fish, sh)"
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
         },
         "log-level": {
           "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",

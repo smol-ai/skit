@@ -130,7 +130,7 @@ export const layer = Layer.effect(
       const archiveDigest = yield* sha256(input.archive).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
-      const releaseId = `rel_${yield* crypto.randomUUIDv4}`;
+      const releaseId = `rel_${yield* crypto.randomUUIDv4()}`;
       const objectKey = `releases/${input.owner}/${input.slug}/${input.version}/${releaseId}.zip`;
       yield* blobs("write release archive", (bucket) =>
         bucket.put(objectKey, input.archive, {

@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0",
+    "@effect/platform-node": "4.0.3",
     "@opentui/core": "0.5.9",
     "@smolai/skit": "workspace:*",
-    "effect": "4.0.0"
+    "effect": "4.0.3"
   },
   "devDependencies": {
     "@types/node": "24.10.1",

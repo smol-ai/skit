@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v6",
+  "$id": "skit.setup.v7",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -98,7 +98,13 @@
         },
         "directoriesExamined": {
           "type": "integer",
-          "minimum": 0
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "allOf": [
+            {
+              "minimum": 0
+            }
+          ]
         },
         "repositorySearchDepth": {
           "type": "number",

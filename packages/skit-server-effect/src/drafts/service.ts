@@ -155,7 +155,7 @@ export const layer = Layer.effect(
       const bundleDigest = yield* sha256(new TextEncoder().encode(manifest)).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
-      const revisionId = `draft_${(yield* crypto.randomUUIDv4).replaceAll("-", "")}`;
+      const revisionId = `draft_${(yield* crypto.randomUUIDv4()).replaceAll("-", "")}`;
       const now = new Date(yield* Clock.currentTimeMillis).toISOString();
 
       for (const file of prepared) {

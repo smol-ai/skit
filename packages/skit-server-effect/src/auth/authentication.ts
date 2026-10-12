@@ -228,9 +228,9 @@ export const layer = (supportedScopes: ReadonlySet<Scope>) =>
           .replaceAll("/", "_")
           .replaceAll("=", "");
         const token = `skit_pat_${secret}`;
-        const uuid = yield* crypto.randomUUIDv4.pipe(
-          Effect.mapError((cause) => new AuthenticationCryptoError({ cause })),
-        );
+        const uuid = yield* crypto
+          .randomUUIDv4()
+          .pipe(Effect.mapError((cause) => new AuthenticationCryptoError({ cause })));
         const tokenId = `pat_${uuid.replaceAll("-", "")}`;
         const tokenPrefix = token.slice(0, 18);
         const tokenHash = yield* sha256(crypto, token);

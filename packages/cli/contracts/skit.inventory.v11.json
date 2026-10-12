@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v10",
+  "$id": "skit.inventory.v11",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -515,7 +515,13 @@
             },
             "directoriesExamined": {
               "type": "integer",
-              "minimum": 0
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "allOf": [
+                {
+                  "minimum": 0
+                }
+              ]
             },
             "repositorySearchDepth": {
               "type": "number",

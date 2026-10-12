@@ -33,20 +33,20 @@
     "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0",
+    "@effect/platform-node": "4.0.3",
     "acorn": "8.15.0",
-    "effect": "4.0.0",
+    "effect": "4.0.3",
     "typeid-js": "^1.2.0",
     "yaml": "2.8.3",
     "yazl": "3.3.1"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0",
+    "@effect/vitest": "4.0.3",
     "@types/node": "24.10.1",
     "@types/yazl": "3.3.0",
     "vitest": "5.0.3"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.16.0"
   }
 }
