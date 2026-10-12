@@ -56,3 +56,20 @@ test("maximum is distinct from the default and must cover it", () => {
     }),
   ).toThrow();
 });
+
+test("accepts a default equal to the supported maximum", () => {
+  const decoded = Schema.decodeUnknownSync(ModelContextCatalog)({
+    ...modelContextCatalog,
+    models: [
+      {
+        ...modelContextCatalog.models[0],
+        defaultContextWindow: 1_000_000,
+        maxContextWindow: 1_000_000,
+      },
+    ],
+  });
+  expect(decoded.models[0]).toMatchObject({
+    defaultContextWindow: 1_000_000,
+    maxContextWindow: 1_000_000,
+  });
+});
