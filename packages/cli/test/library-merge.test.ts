@@ -16,10 +16,10 @@ import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 
 import {
-  alignLibraryVersionIds,
-  applyLibraryVersionAliases,
-  applyDeviceVersionAliases,
-} from "../src/workflows/library/library-version-alignment.js";
+  alignLibrary,
+  aliasDevice,
+  aliasManifest,
+} from "../src/workflows/library/library-alignment.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
@@ -432,10 +432,10 @@ it.effect(
         ],
       });
       const original = structuredClone(local);
-      const aligned = alignLibraryVersionIds(local, remote);
+      const aliases = alignLibrary(local, remote, base);
       const merged = mergeLibraryManifests(
-        applyLibraryVersionAliases(base, aligned.aliases),
-        aligned.manifest,
+        aliasManifest(base, aliases),
+        aliasManifest(local, aliases),
         remote,
       );
       assert.deepEqual(merged.conflicts, []);
@@ -476,7 +476,7 @@ it.effect(
           acceptedAt: "2026-01-01T00:00:00.000Z",
         })),
       });
-      const device = applyDeviceVersionAliases(state, aligned.aliases);
+      const device = aliasDevice(state, aliases);
       yield* LibraryState.makeEffect(device);
       assert.deepEqual(
         restoreCustodyConflicts(device, { ...merged.manifest, bindings: state.global_bindings }),
@@ -498,9 +498,12 @@ it.effect(
           })),
         })),
       };
-      const thirdAligned = alignLibraryVersionIds(thirdDevice, merged.manifest);
-      assert.deepEqual(thirdAligned.manifest.skills, merged.manifest.skills);
-      assert.deepEqual(alignLibraryVersionIds(thirdAligned.manifest, merged.manifest).aliases, []);
+      const thirdAligned = aliasManifest(
+        thirdDevice,
+        alignLibrary(thirdDevice, merged.manifest, merged.manifest),
+      );
+      assert.deepEqual(thirdAligned.skills, merged.manifest.skills);
+      assert.deepEqual(alignLibrary(thirdAligned, merged.manifest, merged.manifest).versions, []);
     }),
 );
 
@@ -526,10 +529,10 @@ it.effect("aligns equivalent retained-edit selections but preserves different ed
       ...manifest(),
       skills: [{ ...skill, local_version_id: second }],
     });
-    const aligned = alignLibraryVersionIds(local, remote);
+    const aliases = alignLibrary(local, remote, base);
     const merged = mergeLibraryManifests(
-      applyLibraryVersionAliases(base, aligned.aliases),
-      aligned.manifest,
+      aliasManifest(base, aliases),
+      aliasManifest(local, aliases),
       remote,
     );
     assert.deepEqual(merged.conflicts, []);
@@ -538,14 +541,15 @@ it.effect("aligns equivalent retained-edit selections but preserves different ed
       ...manifest(),
       skills: [{ ...skill, local_version_id: third }],
     });
-    const differentAligned = alignLibraryVersionIds(local, different);
-    assert.strictEqual(differentAligned.aliases.length, 1);
-    const differentBase = applyLibraryVersionAliases(base, differentAligned.aliases);
-    const preliminary = mergeLibraryManifests(differentBase, differentAligned.manifest, different);
+    const differentAliases = alignLibrary(local, different, base);
+    assert.strictEqual(differentAliases.versions.length, 1);
+    const differentBase = aliasManifest(base, differentAliases);
+    const differentLocal = aliasManifest(local, differentAliases);
+    const preliminary = mergeLibraryManifests(differentBase, differentLocal, different);
     assert.deepEqual(preliminary.conflicts, [`skill:${skillId}`]);
     const resolved = mergeLibraryManifests(
       differentBase,
-      differentAligned.manifest,
+      differentLocal,
       different,
       new Set(preliminary.conflicts),
     );
@@ -579,17 +583,18 @@ it.effect("does not alias different validation metadata or another Skill's versi
         },
       ],
     });
-    const aligned = alignLibraryVersionIds(local, remote);
-    assert.deepEqual(aligned.aliases, []);
-    assert.deepEqual(mergeLibraryManifests(base, aligned.manifest, remote).conflicts, [
+    const aliases = alignLibrary(local, remote, base);
+    assert.deepEqual(aliases, { collections: [], skills: [], versions: [] });
+    assert.deepEqual(mergeLibraryManifests(base, aliasManifest(local, aliases), remote).conflicts, [
       `skill:${skillId}`,
     ]);
     assert.deepEqual(
-      alignLibraryVersionIds(local, {
-        ...remote,
-        skills: remote.skills.map((row) => ({ ...row, skill_id: makeSkillId() })),
-      }).aliases,
-      [],
+      alignLibrary(
+        local,
+        { ...remote, skills: remote.skills.map((row) => ({ ...row, skill_id: makeSkillId() })) },
+        base,
+      ),
+      { collections: [], skills: [], versions: [] },
     );
   }),
 );
@@ -611,9 +616,12 @@ it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
       ],
     });
     const remote = yield* decode(manifest());
-    const aligned = alignLibraryVersionIds(local, remote);
-    const alignedBase = applyLibraryVersionAliases(local, aligned.aliases);
-    assert.deepEqual(mergeLibraryManifests(alignedBase, aligned.manifest, remote).conflicts, []);
+    const aliases = alignLibrary(local, remote, local);
+    const alignedBase = aliasManifest(local, aliases);
+    assert.deepEqual(
+      mergeLibraryManifests(alignedBase, aliasManifest(local, aliases), remote).conflicts,
+      [],
+    );
     const independentBase = {
       ...local,
       skills: local.skills.map((row) => ({
@@ -625,7 +633,7 @@ it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
         ),
       })),
     };
-    assert.deepEqual(applyLibraryVersionAliases(independentBase, aligned.aliases), independentBase);
+    assert.deepEqual(aliasManifest(independentBase, aliases), independentBase);
     const pruned = {
       ...local,
       skills: local.skills.map((row) => ({

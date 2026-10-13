@@ -189,51 +189,22 @@ it.effect("an anchored home that matches the remote: a clean preview writes noth
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-// BUG characterization: an applied clean sync publishes identical state twice, once to anchor
-// ancestry that already names the head and once from projection reconciliation, replacing the file.
-// The desired outcome is zero publications: once sync unification skips both when B already equals
-// R and nothing changed, this flips to `unwritten` holding as it does for a preview.
-it.effect("BUG: an anchored home that matches the remote republishes on an applied clean", () =>
+// A clean sync whose ancestry already names the head has nothing to anchor, and reconciliation of
+// Projections that are already current publishes nothing either.
+it.effect("an anchored home that matches the remote: an applied clean writes nothing", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
     yield* anchored(a);
-    const before = yield* captureDisk(a.disk, { identity: true });
-    const stored = server.stored;
-    const publishes = a.publishes;
-    const writeRequests = server.writeRequests;
-    const result = yield* a.sync();
-    assert.deepStrictEqual(result, {
+    const unchanged = yield* unwritten(homes, a);
+    assert.deepStrictEqual(yield* a.sync(), {
       status: "clean",
       changed: false,
       revision_id: server.remote!.revision_id,
       projected: 0,
       retired: 0,
     });
-    assert.strictEqual(a.publishes, publishes + 2);
-    assert.strictEqual(server.writeRequests, writeRequests);
-    assert.deepStrictEqual(server.stored, stored);
-    // The publications atomically replace state.json with identical bytes. The publication count
-    // above is the evidence; file identity cannot be, because a filesystem may hand the replaced
-    // inode number to the next temporary file (Linux does), so only content is compared here.
-    const changes = yield* diskChanges(before);
-    assert.deepStrictEqual(
-      {
-        ...changes,
-        changed: changes.changed.filter(
-          (item) =>
-            !(
-              item.path.length === 2 &&
-              item.path[0] === a.home &&
-              item.path[1] === "state.json" &&
-              item.before.type === "file" &&
-              item.after.type === "file" &&
-              item.after.content === item.before.content
-            ),
-        ),
-      },
-      noDiskChanges,
-    );
+    yield* unchanged;
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

@@ -160,6 +160,148 @@ it.effect("a merge keeps device-local invocation policies", () =>
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+/** A home holding every declared device field next to its portable records. */
+const furnished = Effect.fn("Test.furnishedHome")(function* ({
+  fs,
+  a,
+}: Effect.Success<typeof devices>) {
+  const first = yield* a.retain("first");
+  const skill = first.skills[0]!;
+  const version = skill.versions[0]!;
+  const repository = join(a.home, "..", "a-repository");
+  yield* fs.makeDirectory(join(repository, ".agents", "skills"), { recursive: true });
+  yield* a.edit((state) => ({
+    ...state,
+    global_bindings: [
+      {
+        scope: { kind: "global" },
+        entries: [{ kind: "skill", skill_id: skill.skill_id }],
+        invocation_policies: { [skill.skill_id]: "explicit" },
+      },
+    ],
+    local_bindings: [
+      {
+        scope: { kind: "repository", root: repository },
+        entries: [{ kind: "skill", skill_id: skill.skill_id }],
+      },
+    ],
+    assessmentAcceptances: [
+      {
+        fingerprint: version.artifact_digest,
+        artifactContentDigest: version.artifact_digest,
+        skill_version_id: version.skill_version_id,
+        context: "project",
+        principal: "test",
+        rationale: "accepted",
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+  }));
+  yield* a.project();
+  yield* a.project({ kind: "repository", root: repository }, join(repository, ".agents", "skills"));
+});
+
+const deviceFields = (state: LibraryState) => ({
+  policies: state.global_bindings[0]?.invocation_policies,
+  local_bindings: state.local_bindings,
+  assessmentAcceptances: state.assessmentAcceptances,
+  projections: state.projections,
+});
+
+it.effect("every declared device field survives a push, a merge and a clean sync", () =>
+  Effect.gen(function* () {
+    const homes = yield* devices;
+    const { a, b, remote } = homes;
+    yield* furnished(homes);
+    const before = yield* a.state;
+    assert.strictEqual(before.projections.length, 2);
+
+    assert.strictEqual((yield* a.sync()).status, "pushed");
+    const pushed = yield* a.state;
+    assert.deepStrictEqual(deviceFields(pushed), deviceFields(before));
+    assert.deepStrictEqual(
+      [pushed.collections, pushed.skills, pushed.acquisitions, pushed.retained_copies],
+      [before.collections, before.skills, before.acquisitions, before.retained_copies],
+    );
+    assert.strictEqual(pushed.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
+
+    yield* b.sync();
+    yield* b.retain("second");
+    yield* b.sync();
+    assert.strictEqual((yield* a.sync()).status, "merged");
+    const merged = yield* a.state;
+    assert.deepStrictEqual(deviceFields(merged), deviceFields(before));
+    assert.includeDeepMembers(merged.acquisitions, before.acquisitions);
+    assert.includeDeepMembers(merged.retained_copies, before.retained_copies);
+    assert.strictEqual(merged.collections.length, 2);
+    assert.strictEqual(merged.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
+
+    assert.strictEqual((yield* a.sync()).status, "clean");
+    assert.deepStrictEqual(yield* a.state, merged);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+// Loading and publishing state keep fields this CLI does not declare. Sync rebuilds state through
+// the Library schema and keeps only declared fields, so a field that matters must come with a state
+// version bump. A preview, and a clean sync with nothing to anchor, write nothing and keep it.
+it.effect("sync publishes only declared fields, and writes nothing that would drop others", () =>
+  Effect.gen(function* () {
+    const { a, b } = yield* devices;
+    yield* a.retain("first");
+    const extended = (state: LibraryState) =>
+      ({ ...state, extension: { kept: true } }) as LibraryState;
+    yield* a.edit(extended);
+    assert.strictEqual((yield* a.sync({ apply: false })).status, "push_ready");
+    assert.deepStrictEqual(Object.hasOwn(yield* a.state, "extension"), true);
+    assert.strictEqual((yield* a.sync()).status, "pushed");
+    assert.deepStrictEqual(Object.hasOwn(yield* a.state, "extension"), false);
+
+    yield* a.edit(extended);
+    assert.strictEqual((yield* a.sync()).status, "clean");
+    assert.deepStrictEqual(Object.hasOwn(yield* a.state, "extension"), true);
+
+    yield* b.sync();
+    yield* b.retain("second");
+    yield* b.sync();
+    assert.strictEqual((yield* a.sync()).status, "merged");
+    assert.deepStrictEqual(Object.hasOwn(yield* a.state, "extension"), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+for (const ancestry of ["missing", "stale"] as const)
+  it.effect(
+    `a clean sync anchoring ${ancestry} ancestry publishes once, without undeclared fields`,
+    () =>
+      Effect.gen(function* () {
+        const { a, remote } = yield* devices;
+        yield* a.retain("first");
+        yield* a.sync();
+        const head = (yield* remote)!;
+        // L and R match; only the ancestry differs from what a clean sync anchors.
+        yield* a.edit(
+          ({ sync_ancestry, ...state }) =>
+            ({
+              ...state,
+              ...(ancestry === "stale" && sync_ancestry !== undefined
+                ? { sync_ancestry: { ...sync_ancestry, revision_id: "revision_stale" } }
+                : {}),
+              extension: { kept: true },
+            }) as LibraryState,
+        );
+        const before = yield* a.state;
+        const publishes = a.publishes;
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
+        assert.strictEqual(a.publishes, publishes);
+        assert.deepStrictEqual(yield* a.state, before);
+
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual(a.publishes, publishes + 1);
+        const anchored = yield* a.state;
+        assert.isFalse(Object.hasOwn(anchored, "extension"));
+        assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
 it.effect("a projection failure after sync publishes leaves state and ancestry coherent", () =>
   Effect.gen(function* () {
     const { fs, a, b, remote } = yield* devices;

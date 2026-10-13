@@ -35,7 +35,7 @@ import {
   type SkillVersionId as SkillVersionIdType,
 } from "../library/entity-ids.js";
 import type { ManagedProjection } from "../library/library-state.js";
-import type { LibraryState } from "../library/library-state.js";
+import { libraryStateRevision, type LibraryState } from "../library/library-state.js";
 import { projectionSourceEffect } from "../library/installation/projection-source.js";
 import {
   backUpProjectionEffect,
@@ -588,7 +588,8 @@ export interface ProjectionMutation<S extends ProjectionState = ProjectionState>
  * its place, as `pending`, so an absence SKIT caused is never read as a native deletion. A write
  * that fails verification publishes nothing for its Projection. After a publish, pending backups of
  * every Projection the batch touched are settled: discarded only when the loaded state proves the
- * retained original reproduces them, otherwise kept.
+ * retained original reproduces them, otherwise kept. A batch that leaves the state as loaded, wrote
+ * nothing and has no backup to settle publishes nothing.
  */
 export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(function* <
   S extends ProjectionState,
@@ -670,20 +671,32 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
     ),
   );
   const value = yield* stage(mutation).pipe(Effect.onError(() => publishOnDisk));
-  yield* context.publish(candidate, loaded);
+  const pending = yield* Effect.forEach([...touched.values()], (projection) =>
+    Effect.map(pendingProjectionBackupsEffect(projection), (backups) =>
+      backups.map((backup) => ({ backup, projectionId: projection.projection_id })),
+    ),
+  ).pipe(
+    Effect.map((backups) => backups.flat()),
+    Effect.catchCause((cause) =>
+      Effect.as(Effect.logWarning("Projection backups stayed pending", cause), []),
+    ),
+  );
+  // The publish also proves `loaded` is still the Library's, which settling a backup relies on.
+  if (
+    onDisk.size > 0 ||
+    pending.length > 0 ||
+    libraryStateRevision(candidate) !== libraryStateRevision(loaded)
+  )
+    yield* context.publish(candidate, loaded);
   yield* Effect.gen(function* () {
-    for (const projection of touched.values())
-      for (const backup of yield* pendingProjectionBackupsEffect(projection))
-        if (
-          yield* reproducibleEffect(
-            backup,
-            loaded,
-            context.originalsPath,
-            projection.projection_id,
-          ).pipe(Effect.orElseSucceed(() => false))
+    for (const { backup, projectionId } of pending)
+      if (
+        yield* reproducibleEffect(backup, loaded, context.originalsPath, projectionId).pipe(
+          Effect.orElseSucceed(() => false),
         )
-          yield* fs.remove(backup, { recursive: true });
-        else yield* keepProjectionBackupEffect(backup);
+      )
+        yield* fs.remove(backup, { recursive: true });
+      else yield* keepProjectionBackupEffect(backup);
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("Library changed, but projection backups stayed pending", cause),
