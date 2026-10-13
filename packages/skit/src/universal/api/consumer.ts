@@ -1,10 +1,6 @@
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import {
-  libraryResponseSchema,
-  libraryWriteRequestSchema,
-} from "../../distribution/api-contracts.js";
-import {
   LibraryResponse,
   LibraryWriteRequest,
   SnapshotArchive,
@@ -26,7 +22,6 @@ import {
   InvalidRequestResponse,
   InvalidScopeResponse,
   InvalidTeamResponse,
-  LibraryCreateFailedResponse,
   LibraryNotFoundResponse,
   MembershipNotFoundResponse,
   OwnerRoleImmutableResponse,
@@ -165,38 +160,6 @@ export class TeamsApi extends HttpApiGroup.make("teams")
   .middleware(RequestDecoding)
   .middleware(PrincipalAuthentication) {}
 
-export class LibrariesApi extends HttpApiGroup.make("libraries")
-  .add(
-    HttpApiEndpoint.get("readDefault", "/api/library", {
-      success: libraryResponseSchema,
-      error: [InsufficientScopeResponse, LibraryNotFoundResponse, StorageFailureResponse],
-    }),
-    HttpApiEndpoint.get("readShared", "/api/libraries/:library_id", {
-      params: { library_id: Schema.String },
-      success: libraryResponseSchema,
-      error: [
-        InvalidRequestResponse,
-        InsufficientScopeResponse,
-        LibraryNotFoundResponse,
-        StorageFailureResponse,
-      ],
-    }),
-    HttpApiEndpoint.put("writeDefault", "/api/library", {
-      payload: libraryWriteRequestSchema,
-      success: libraryResponseSchema,
-      error: [
-        InvalidRequestResponse,
-        InsufficientScopeResponse,
-        ForbiddenOriginResponse,
-        LibraryCreateFailedResponse,
-        RevisionConflictResponse,
-        StorageFailureResponse,
-      ],
-    }),
-  )
-  .middleware(RequestDecoding)
-  .middleware(PrincipalAuthentication) {}
-
 export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
   .add(
     HttpApiEndpoint.post("upload", "/api/library/snapshots", {
@@ -264,7 +227,6 @@ export class ReadinessApi extends HttpApiGroup.make("readiness")
 export class ConsumerAuthenticatedApi extends HttpApi.make("skit-consumer-authenticated-api").add(
   TokensApi,
   TeamsApi,
-  LibrariesApi,
   LibrarySnapshotsApi,
   LibrarySyncApi,
   ReadinessApi,

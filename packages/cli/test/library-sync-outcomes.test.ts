@@ -57,20 +57,6 @@ const cases: readonly {
       }),
   },
   {
-    row: "Preflight: legacy_remote_conflict",
-    run: (homes) =>
-      Effect.gen(function* () {
-        const { a, server } = homes;
-        yield* seed(homes);
-        server.replaceHeadWithLegacy({ schema: "skit.library.v2", entries: [], bindings: [] });
-        const unchanged = yield* untouched(a);
-        const before = server.stored;
-        assert.strictEqual((yield* a.sync()).status, "legacy_remote_conflict");
-        yield* unchanged;
-        assert.deepStrictEqual(server.stored, before);
-      }),
-  },
-  {
     row: "Preflight: base_mismatch",
     run: (homes) =>
       Effect.gen(function* () {

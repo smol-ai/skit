@@ -131,7 +131,7 @@ describe("personal access token authentication", () => {
       );
 
       const principal = yield* sessionAuthentication.authenticate(
-        new Request("https://registry.test/api/library"),
+        new Request("https://registry.test/api/library/portable"),
       );
 
       expect(principal).toEqual({

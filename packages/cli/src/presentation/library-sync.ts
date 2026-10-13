@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v7">;
+type SyncData = ContractDataForId<"skit.library.sync.v8">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -101,8 +101,6 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
       return withNotes("Library synced.");
     case "upgrade_ready":
       return "The remote Library uses an older sync format. Run skit sync --apply to upgrade it.";
-    case "legacy_remote_conflict":
-      return "The remote Library has changes from an older skit that this device doesn't have; sync stopped.";
     case "local_migration_required":
       return "Update this device's Library before syncing.";
     case "local_bytes_changed":

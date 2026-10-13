@@ -637,7 +637,4 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     };
   },
   (effect, options) => (options.apply ? withLibraryWriter(effect) : effect),
-  Effect.catchTag("Library.LibraryRemoteUnsupported", ({ revision_id }) =>
-    Effect.succeed({ status: "legacy_remote_conflict" as const, revision_id }),
-  ),
 );

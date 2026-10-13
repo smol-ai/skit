@@ -30,7 +30,6 @@ export const PrincipalNotFoundResponse = errorResponse("PRINCIPAL_NOT_FOUND", 40
 export const OwnerRoleImmutableResponse = errorResponse("OWNER_ROLE_IMMUTABLE", 400);
 export const MembershipNotFoundResponse = errorResponse("membership_not_found", 404);
 export const LibraryNotFoundResponse = errorResponse("library_not_found", 404);
-export const LibraryCreateFailedResponse = errorResponse("LIBRARY_CREATE_FAILED", 400);
 export const RevisionConflictResponse = errorResponse("REVISION_CONFLICT", 409);
 export const StorageFailureResponse = errorResponse("storage_failure", 500);
 
@@ -60,6 +59,5 @@ export const principalNotFoundResponse = { error: "PRINCIPAL_NOT_FOUND" as const
 export const ownerRoleImmutableResponse = { error: "OWNER_ROLE_IMMUTABLE" as const };
 export const membershipNotFoundResponse = { error: "membership_not_found" as const };
 export const libraryNotFoundResponse = { error: "library_not_found" as const };
-export const libraryCreateFailedResponse = { error: "LIBRARY_CREATE_FAILED" as const };
 export const revisionConflictResponse = { error: "REVISION_CONFLICT" as const };
 export const storageFailureResponse = { error: "storage_failure" as const };

@@ -2,8 +2,8 @@ import { Effect, Schema } from "effect";
 import { assert, it } from "@effect/vitest";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import {
+  LibraryApiInvalidResponse,
   LibraryApiRejected,
-  LibraryRemoteUnsupported,
   librarySyncApiEffect,
 } from "../src/workflows/library/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
@@ -32,7 +32,7 @@ it.effect("retains an undeclared response status without inventing an error code
   ),
 );
 
-it.effect("reports a v2 remote Library as unsupported instead of returning it", () =>
+it.effect("rejects an undecodable remote Library instead of returning it", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const api = yield* librarySyncApiEffect({
@@ -41,9 +41,7 @@ it.effect("reports a v2 remote Library as unsupported instead of returning it", 
       });
       const failure = yield* Effect.flip(api.read());
 
-      assert.isTrue(Schema.is(LibraryRemoteUnsupported)(failure));
-      if (Schema.is(LibraryRemoteUnsupported)(failure))
-        assert.strictEqual(failure.revision_id, "revision_v2");
+      assert.isTrue(Schema.is(LibraryApiInvalidResponse)(failure));
     }).pipe(
       Effect.provide(
         registryHttpLayer(
@@ -52,8 +50,8 @@ it.effect("reports a v2 remote Library as unsupported instead of returning it", 
               Response.json({
                 library: {
                   library_id: "library_test",
-                  revision_id: "revision_v2",
-                  manifest: { schema: "skit.library.v2", entries: [], bindings: [] },
+                  revision_id: "revision_unknown",
+                  manifest: { schema: "skit.library.unknown" },
                 },
               }),
             ),

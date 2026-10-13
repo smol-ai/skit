@@ -1,5 +1,4 @@
 import { Schema, SchemaGetter } from "effect";
-import { LegacyLibraryManifestV2 } from "../distribution/api-contracts.js";
 import { canonicalJson } from "../shared/json.js";
 import { CollectionId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
@@ -289,7 +288,7 @@ export const LibraryManifestAnyVersion = Schema.Union([
 export const LibraryHead = Schema.Struct({
   library_id: Schema.String,
   revision_id: Schema.String,
-  manifest: Schema.Union([LibraryManifestAnyVersion, LegacyLibraryManifestV2]),
+  manifest: LibraryManifestAnyVersion,
 });
 export interface LibraryHead extends Schema.Schema.Type<typeof LibraryHead> {}
 export const LibraryReadResponse = Schema.Struct({ library: LibraryHead });

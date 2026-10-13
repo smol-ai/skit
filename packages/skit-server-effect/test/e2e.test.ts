@@ -423,7 +423,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
     expect(revoked.status).toBe(204);
     expect(
       (
-        await fetch(new URL("/api/library", registryUrl), {
+        await fetch(new URL("/api/library/portable", registryUrl), {
           headers: { authorization: `Bearer ${cliToken}` },
         })
       ).status,

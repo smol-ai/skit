@@ -23,7 +23,7 @@ The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes eve
 
 If a committed write's response is lost, immediately retrying with its original expected revision returns `409`, including a first write with a null base. Reading the current head and submitting the identical manifest with that revision returns `200` without adding a revision or changing stored snapshots.
 
-The legacy v2 `PUT /api/library` currently shares the same Library head as `PUT /api/library/portable`. With the current revision as its CAS base, it can replace a portable manifest with a v2 manifest; the portable GET then returns that v2 head. The preceding portable revision and its snapshot bytes remain stored. This is a characterization of the existing endpoint, not endpoint retirement; the client-side `legacy_remote_conflict` guard remains necessary.
+`/api/library/portable` is the only Library head API; the server no longer accepts or serves `skit.library.v2` manifests. A v2 revision already stored as a head is not rewritten: the portable GET fails with `500` and the client stops before writing anything.
 
 ## Durable state
 
@@ -46,7 +46,6 @@ Preflight writes nothing. Each row is checked in order; the first match returns.
 | Condition | Outcome |
 | --- | --- |
 | A retained copy's bytes no longer hash to its digest | `local_bytes_changed` |
-| R has schema `skit.library.v2` | `legacy_remote_conflict` |
 | B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id), without `--adopt` | `base_mismatch` |
 | Neither L nor R exists | `clean` (nothing written) |
 

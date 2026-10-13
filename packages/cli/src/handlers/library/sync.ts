@@ -100,7 +100,6 @@ export const librarySyncCliCommand = Command.make(
             outputContracts.librarySync,
             value,
             value.status === "conflicted" ||
-              value.status === "legacy_remote_conflict" ||
               value.status === "adoption_required" ||
               value.status === "base_mismatch" ||
               value.status === "resolution_invalid"
