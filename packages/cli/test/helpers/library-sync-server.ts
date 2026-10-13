@@ -69,9 +69,10 @@ const reply = <A, I>(schema: Schema.Codec<A, I>, value: A) =>
 /**
  * An in-memory Registry speaking the core Library sync contract. Responses are encoded with the
  * contract schemas the Worker uses; the Worker suite proves the same compare-and-swap rules on
- * real D1.
+ * real D1. Every write request is appended to `events`, a Library write with the revision it
+ * names as its base.
  */
-export function librarySyncServer(faults = faultQueue()) {
+export function librarySyncServer(faults = faultQueue(), events: string[] = []) {
   let head: LibraryReceipt | null = null;
   const snapshots = new Map<string, SnapshotArchive>();
   const revisions: { revision_id: string; parent_revision_id: string | null }[] = [];
@@ -113,6 +114,7 @@ export function librarySyncServer(faults = faultQueue()) {
       return reply(LibraryResponse, { library: head });
     }
     if (method === "POST" && path === "/api/library/snapshots") {
+      events.push("upload");
       if (faults.take("FailUpload"))
         return reply(StorageFailureResponse, { error: "storage_failure" });
       const archive = Schema.decodeUnknownSync(SnapshotArchive)(payload);
@@ -133,6 +135,7 @@ export function librarySyncServer(faults = faultQueue()) {
           200,
         );
       const request = Schema.decodeUnknownSync(LibraryWriteRequest)(payload);
+      events.push(`write on ${request.expected_revision_id}`);
       if (faults.take("RejectWrite"))
         return reply(RevisionConflictResponse, { error: "REVISION_CONFLICT" });
       const response = write(request);

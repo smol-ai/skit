@@ -4,8 +4,8 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 
 | Coverage | Where |
 | --- | --- |
-| Named preflight, push, pull, and merge fault rows; byte-level state and projection checks | `packages/cli/test/library-sync-outcomes.test.ts` |
-| Lost response on a later push, restored older state, ancestry, removals, and device policies | `packages/cli/test/library-sync-crash.test.ts` |
+| Named preflight, push, pull, and merge fault rows; byte-level state and projection checks; the commit order of every applying path; `--take-remote` refused before collision checks; edited copies recorded before reconciliation | `packages/cli/test/library-sync-outcomes.test.ts` |
+| Lost response on a later push, restored older state, ancestry, removals, device policies, every declared device field through push, merge and clean, and undeclared fields | `packages/cli/test/library-sync-crash.test.ts` |
 | Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
 | Stale bases, retries of a committed manifest, and snapshot readiness/reuse, on real D1 and on the client fake | `packages/skit-server-effect/test/library-sync.test.ts`, `packages/cli/test/library-sync-server.test.ts` |
 | Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
@@ -15,13 +15,13 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 | Literal supported-wire bodies decoded and encoded by the client; a literal newer head and receipt refused | `packages/cli/test/library-sync-wire.test.ts` |
 | A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
 
-The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards, merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
+The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards (including a merge and a `--keep-enabled` pull that would otherwise upload or write), merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
 
 **Known bug characterization:** `local_bytes_changed` reports that sync stopped but the CLI exits `0`. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` belongs to the subprocess suite and asserts that current status and structured outcome with a BUG comment requiring a nonzero exit when fixed. The ordinary in-process matrix row separately checks unchanged state/projection bytes and remote storage. There is no expected-failure mask.
 
-**Known bug characterization:** an applied `clean` sync of a home whose ancestry already names the head publishes byte-identical state once, to anchor ancestry, replacing `state.json`. Projection reconciliation publishes nothing when its batch leaves the state as loaded, wrote nothing and has no backup to settle. It sends no Registry write request, no other local path and no remote store changes, and a preview publishes nothing. `packages/cli/test/library-sync-absence.test.ts` measures writes directly: the test devices count every `LibraryStore.publish` call and the fake Registry counts every write request it receives, separately from the revisions it commits, so an identical rewrite in place or an idempotent write answered with the head is still counted. The BUG test pins the current counts (one local publication, no write requests); the desired outcome, which sync unification must reach, is zero publications. Anchoring is not a no-op: an applied `clean` of an empty Library without ancestry over an empty remote is pinned at one publication and no write requests, and every other no-op row (each preview, `base_mismatch`, `adoption_required`, and absent R with absent L) at zero of both. Lossless snapshots with file identity (`captureDisk(roots, { identity: true })`) are complementary durable-state evidence: they show that nothing but `state.json` changed and that its bytes are identical. They cannot prove or disprove a rewrite, because a filesystem may hand the replaced inode number to the next temporary file.
+An applied `clean` sync of a home whose ancestry already names the head publishes nothing and sends no Registry write request. `packages/cli/test/library-sync-absence.test.ts` measures writes directly: the test devices count every `LibraryStore.publish` call and the fake Registry counts every write request it receives, separately from the revisions it commits, so an identical rewrite in place or an idempotent write answered with the head is still counted. Anchoring is not a no-op: an applied `clean` of an empty Library without ancestry over an empty remote is pinned at one publication and no write requests, and every other no-op row (each preview, `base_mismatch`, `adoption_required`, absent R with absent L, and an anchored clean) at zero of both. Lossless snapshots with file identity (`captureDisk(roots, { identity: true })`) are complementary durable-state evidence. They cannot prove or disprove a rewrite, because a filesystem may hand the replaced inode number to the next temporary file.
 
-The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes every response with the core Library sync contract schemas the Worker uses, so status codes and bodies cannot drift; its compare-and-swap rules are asserted separately against the Worker. Faults are one typed union injected per test and consumed once at the boundary they target. Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root.
+The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes every response with the core Library sync contract schemas the Worker uses, so status codes and bodies cannot drift; its compare-and-swap rules are asserted separately against the Worker. Faults are one typed union injected per test and consumed once at the boundary they target. Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root. The fake also records, in order, each snapshot upload, each Library write with the revision it names as its base, and each local publication, so the commit order is asserted as a sequence.
 
 ## Worker endpoint characterization
 
@@ -37,6 +37,36 @@ The client reads a successful head response's `manifest.schema` from the raw bod
 
 The refusal comes from the head read, so it happens before sync plans, uploads, writes or publishes anything: zero local publications, zero Registry write requests (uploads included) and no remote change, for a preview or an apply, whether the home is current, legacy or absent. Loader maintenance that precedes the read is permitted and is the only durable change: taking the writer lock creates an absent home, and opening a legacy `state.json` migrates it in place and keeps the pre-migration file as `state.json.v<N>.backup-<time>`. A retained copy whose bytes changed is still reported first as `local_bytes_changed`, because local verification precedes the head read. `packages/cli/test/library-sync-outcomes.test.ts` pins this with a literal `skit.library.v8` head for each home and mode.
 
+## One pipeline
+
+Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean or need adoption, and only an absent R is created by the write, so an empty L still pushes. One alias map, of Collection, Skill and Version handles, is computed once and applied to L, B and the device state at one site. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
+
+Every applying path commits in one order, stated once in `syncLibraryEffect`:
+
+1. Retain every copy the result references in originals (downloading and reacquiring what is missing).
+2. Upload every snapshot the new head references that R lacks.
+3. Write the head by compare-and-swap on the revision this sync read, skipped when the result equals an existing R.
+4. Retire the Projections the plan removes or reidentifies.
+5. Publish local state, with ancestry naming exactly the written revision, onto exactly the state this sync planned from.
+6. Reconcile Projections.
+
+Remote commits before local, so an interruption leaves R ahead of B and the next sync re-derives the same result from the old base; local state never names a revision R does not hold. A merge or pull re-inspects L after step 1 and stops with `SyncLocalChanged` if it moved; a push relies on the check in step 5. A clean sync has nothing to commit: it skips steps 1–4, publishes only when its state's ancestry does not already name R, and then reconciles.
+
+Sync rebuilds the device state it publishes through the Library schema, so it carries only fields this CLI declares. Loading and publishing `state.json` keep undeclared fields at every depth, and a preview or a clean sync with nothing to anchor writes nothing, but an applied push, pull, merge or anchoring clean drops them. Any persisted field whose meaning matters must therefore come with a state or manifest version bump, never as an undeclared extension.
+
+### Differences from the four earlier paths
+
+The unification is not behaviour-identical. These differences are intended, and `packages/cli/test` pins each:
+
+| Difference | Before | Now |
+| --- | --- | --- |
+| Undeclared state fields | A push and a clean anchor kept them; a merge dropped them | Every applied publication drops them |
+| An edited copy whose Version a push changes | Published as `installed` with its old digest until reconciliation | Published `conflicted` with its observed digest at step 5, as a merge does |
+| An applied clean of an anchored home | Published identical state twice | Publishes nothing and does not enter sync's retirement step |
+| Reconciliation that changes nothing | Published identical state | Publishes nothing ([projection batches](#durable-state)) |
+| A head in a newer manifest schema | `LibraryApiInvalidResponse` | `LibraryManifestTooNew` before any write ([Remote manifest version](#remote-manifest-version)) |
+| Record order of a pushed manifest and the state it anchors | L's order | The merge's normalized order, as a merge already wrote |
+
 ## Durable state
 
 | Store | Where | Written by | Atomicity |
@@ -46,6 +76,8 @@ The refusal comes from the head read, so it happens before sync plans, uploads, 
 | **Originals** | `<home>/originals/<digest>` | `prepareRestoreEffect` | Content-addressed; unreferenced trees are inert |
 | **Local state** | `<home>/state.json`, including `sync_ancestry` | `store.publish` | Atomic rename, no fsync |
 | **Projections** | Harness roots | `reconcileLibraryProjections` | Per-projection; derived from local state |
+
+A projection batch whose state is unchanged, which wrote nothing and has no pending backup to settle, publishes nothing. A batch with backups to settle publishes onto the state it loaded first, so a backup is never judged against a state the Library has moved on from.
 
 Local state and the accepted base it was reconciled with are one document ([ADR 0023](adr/0023-keep-sync-ancestry-in-library-state.md)), so no interruption can pair state with a newer base.
 
@@ -72,10 +104,11 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 
 | Step | Effect | Commit point |
 | --- | --- | --- |
+| P0 | `prepareRestoreEffect` re-verifies L's retained copies | Originals (already present) |
 | P1 | Upload each snapshot | Remote snapshots |
 | P2 | `api.write(null, L)` | **Remote head** |
 | P3 | Retire intact copies the Binding choice removes | Projections, local state (B unchanged) |
-| P4 | Publish state with B = R' | Local state |
+| P4 | Publish state with B = R', recording edited copies as `conflicted` with their observed digest | Local state |
 | P5 | Reconcile global and existing repository projections | Projections |
 
 | Interruption | State left | Legal next outcome |
@@ -95,7 +128,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 | U2 | `prepareRestoreEffect` retains trees | Originals |
 | U3 | Re-inspect; fail `SyncLocalChanged` if L now exists | — |
 | U4 | Publish restored state with B = R | **Local state** |
-| U5 | Reconcile projections | Projections |
+| U5 | Reconcile global projections | Projections |
 
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
@@ -107,7 +140,7 @@ When `--keep-enabled` changes the pulled Binding, a CAS write of that choice occ
 
 ## Clean — L and R are equal after normalization
 
-Preview writes nothing. Apply publishes state with B = R, then reconciles projections. If L changed after it was compared with R, the publish is refused with `SyncLocalChanged` and B is unchanged. This is also how a home without ancestry anchors when it already matches the remote. Interruption between the two leaves stale projections, which the next `clean` repairs.
+Preview writes nothing. Apply transfers, writes and retires nothing. It publishes only when the state's ancestry does not already name R: it then publishes the state with B = R, and if L changed after it was compared with R, the publish is refused with `SyncLocalChanged` and B is unchanged. This is how a home without ancestry anchors when it already matches the remote. An anchored home publishes nothing and sends no write request. Either way it then reconciles projections, which publishes only what it changes. Interruption between anchoring and reconciliation leaves stale projections, which the next `clean` repairs.
 
 ## Adoption gate — L and R differ, no B
 
@@ -137,7 +170,7 @@ Apply:
 | M4 | Upload snapshots the merge introduced | Remote snapshots |
 | M5 | `api.write(R.revision, merged)`, skipped when merged = R | **Remote head** |
 | M6 | Retire preflighted removed or reidentified projections; persist pending intent before reidentification retirement | Projections, local state (B unchanged) |
-| M7 | Blend restored portable state into device state; publish with B = merged | **Local state** |
+| M7 | Blend restored portable state into the aliased device state; publish with B = merged | **Local state** |
 | M8 | Reconcile global and existing repository projections | Projections |
 
 | Interruption | State left | Legal next outcome |

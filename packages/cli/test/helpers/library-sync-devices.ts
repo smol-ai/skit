@@ -29,7 +29,9 @@ export const devices = Effect.gen(function* () {
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => assert.deepStrictEqual(faults.unconsumed(), [])),
   );
-  const server = librarySyncServer(faults);
+  // Registry write requests and local publications, in the order they happened.
+  const events: string[] = [];
+  const server = librarySyncServer(faults, events);
   const http = registryHttpLayer(
     Layer.succeed(
       HttpClient.HttpClient,
@@ -85,6 +87,7 @@ export const devices = Effect.gen(function* () {
               detail: "Test interruption before merged state publication",
             });
           yield* store.publish(state, base);
+          events.push(`publish ${name}`);
           const obstruction = faults.take("ObstructAfterPublish", (fault) => fault.home === home);
           if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
@@ -204,6 +207,7 @@ export const devices = Effect.gen(function* () {
     c: device("c"),
     inject: faults.inject,
     server,
+    events,
     remote: Effect.sync(() => server.remote),
     /** The Registry loses the Library, as a deleted account or reset database would. */
     resetRemote: Effect.sync(() => server.reset()),
