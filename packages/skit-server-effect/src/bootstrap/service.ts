@@ -1,6 +1,7 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { PasswordHashError, PasswordHasher, type PasswordHasherService } from "../auth/password.js";
+import { provisionPrincipal } from "../auth/provisioning.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
@@ -138,10 +139,7 @@ export const layer = (bootstrapSecret: string) =>
             sql`INSERT INTO account
              (id, issuer, accountId, providerId, userId, password, createdAt, updatedAt)
             VALUES (${accountId}, ${CREDENTIAL_ISSUER}, ${userId}, 'credential', ${userId}, ${passwordHash}, ${now}, ${now})`,
-            sql`INSERT INTO principals (principal_id, better_auth_user_id, created_at, updated_at)
-            VALUES (${principalId}, ${userId}, ${timestamp}, ${timestamp})`,
-            sql`INSERT INTO namespaces (namespace_slug, subject_kind, subject_id, created_at)
-            VALUES (${username}, 'principal', ${principalId}, ${timestamp})`,
+            ...provisionPrincipal(sql, { userId, username, principalId, timestamp }),
             sql`INSERT INTO server_operators (principal_id, created_at)
             VALUES (${principalId}, ${timestamp})`,
             sql`INSERT INTO server_bootstrap (id, claimed_at, claimed_by)

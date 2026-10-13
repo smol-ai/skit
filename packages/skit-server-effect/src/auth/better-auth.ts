@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { D1Client } from "@effect/sql-d1";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -14,13 +15,14 @@ import { NativeClock } from "../platform/native-clock.js";
 import { ServerConfiguration } from "../configuration.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
 import { passwordCallbacks } from "./password.js";
+import { provisionPrincipal } from "./provisioning.js";
 
 export const AUTH_BASE_PATH = "/api/auth";
 const MAX_USERNAME_REQUEST_BYTES = 4 * 1024;
 const UsernameClaimInput = Schema.Struct({ username: Schema.String });
-const UsernameClaimRow = Schema.Struct({
+const ProvisioningRow = Schema.Struct({
   username: Schema.NullOr(Schema.String),
-  claimed: Schema.NullOr(Schema.String),
+  namespace_slug: Schema.NullOr(Schema.String),
 });
 
 const UserIdentity = Schema.Struct({
@@ -101,6 +103,40 @@ export const layer = (configuration: BetterAuthConfiguration) =>
       const { now } = yield* NativeClock;
       const passwords = passwordCallbacks(crypto);
       const email = configuration.email;
+
+      const readProvisioning = Effect.fn("BetterAuth.readProvisioning")(function* (userId: string) {
+        const rows = yield* sql`SELECT u.username, n.namespace_slug
+      FROM user u
+      LEFT JOIN principals p ON p.better_auth_user_id = u.id
+      LEFT JOIN namespaces n ON n.namespace_slug = u.username
+        AND n.subject_kind = 'principal' AND n.subject_id = p.principal_id
+      WHERE u.id = ${userId}`.pipe(
+          Effect.mapError(
+            (cause) => new BetterAuthError({ operation: "read provisioning", cause }),
+          ),
+        );
+        if (rows[0] === undefined)
+          return yield* new BetterAuthError({ operation: "provision missing user", cause: userId });
+        return yield* Schema.decodeUnknownEffect(ProvisioningRow)(rows[0]).pipe(
+          Effect.mapError(
+            (cause) => new BetterAuthError({ operation: "decode provisioning", cause }),
+          ),
+        );
+      });
+
+      const provision = Effect.fn("BetterAuth.provision")((userId: string, username: string) =>
+        sql
+          .batch(
+            provisionPrincipal(sql, {
+              userId,
+              username,
+              principalId: `principal_${crypto.randomUUID().replaceAll("-", "")}`,
+              timestamp: now().toISOString(),
+            }),
+          )
+          .pipe(Effect.mapError((cause) => new BetterAuthError({ operation: "provision", cause }))),
+      );
+
       const auth = betterAuth({
         appName: "SKIT",
         baseURL: configuration.publicAppOrigin,
@@ -201,8 +237,21 @@ export const layer = (configuration: BetterAuthConfiguration) =>
           user: {
             create: {
               before: async (user) => {
-                if (email === undefined || user.emailVerified) return { data: user };
-                return { data: { ...user, username: null } };
+                if (email !== undefined && !user.emailVerified)
+                  return { data: { ...user, username: null } };
+                // Better Auth cannot create the user and its Namespace atomically, so refuse a
+                // username that provisioning could never reserve.
+                const taken = await bindings.database
+                  .prepare("SELECT 1 taken FROM namespaces WHERE namespace_slug = ?")
+                  .bind(user.username ?? null)
+                  .first();
+                // oxlint-disable-next-line skit/no-throw-in-effect -- Better Auth database hooks are Promise callbacks and reject by throwing.
+                if (taken)
+                  throw APIError.from("BAD_REQUEST", {
+                    code: "USERNAME_UNAVAILABLE",
+                    message: "Username is unavailable",
+                  });
+                return { data: user };
               },
               after: async (unknownUser) => {
                 const decoded = Schema.decodeUnknownOption(UserIdentity)(unknownUser);
@@ -213,42 +262,34 @@ export const layer = (configuration: BetterAuthConfiguration) =>
                   (email !== undefined && !decoded.value.emailVerified)
                 )
                   return;
-                const timestamp = now().toISOString();
-                const principalId = `principal_${crypto.randomUUID().replaceAll("-", "")}`;
-                try {
-                  await bindings.database.batch([
-                    bindings.database
-                      .prepare(
-                        `INSERT INTO principals (principal_id, better_auth_user_id, created_at, updated_at)
-                   VALUES (?, ?, ?, ?)`,
-                      )
-                      .bind(principalId, decoded.value.id, timestamp, timestamp),
-                    bindings.database
-                      .prepare(
-                        `INSERT INTO namespaces (namespace_slug, subject_kind, subject_id, created_at)
-                   VALUES (?, 'principal', ?, ?)`,
-                      )
-                      .bind(decoded.value.username, principalId, timestamp),
-                  ]);
-                } catch (cause) {
-                  console.error("skit-server Principal provisioning failed", cause);
-                  try {
-                    await bindings.database
-                      .prepare("DELETE FROM user WHERE id = ?")
-                      .bind(decoded.value.id)
-                      .run();
-                  } catch (cleanupCause) {
-                    console.error("skit-server incomplete signup cleanup failed", cleanupCause);
-                  }
-                  // oxlint-disable-next-line skit/no-throw-in-effect -- Better Auth database hooks are Promise callbacks and reject by throwing.
-                  throw cause;
-                }
+                // A failed batch writes nothing; the next sign-in or username claim provisions
+                // the user.
+                // oxlint-disable-next-line skit/no-nested-runtime -- Better Auth database hooks are Promise callbacks; this adapter owns that integration boundary.
+                await Effect.runPromise(
+                  provision(decoded.value.id, decoded.value.username).pipe(
+                    Effect.tapError((error) =>
+                      Effect.logError("Principal provisioning failed", error),
+                    ),
+                  ),
+                );
               },
             },
           },
           session: {
             create: {
               before: async (session) => {
+                // Sign-in repairs a user whose username was saved without its Principal Namespace.
+                // oxlint-disable-next-line skit/no-nested-runtime -- Better Auth database hooks are Promise callbacks; this adapter owns that integration boundary.
+                await Effect.runPromise(
+                  readProvisioning(session.userId).pipe(
+                    Effect.flatMap(({ username, namespace_slug }) =>
+                      username === null || namespace_slug !== null
+                        ? Effect.void
+                        : provision(session.userId, username),
+                    ),
+                    Effect.catch((error) => Effect.logError("Principal repair failed", error)),
+                  ),
+                );
                 const principal = await bindings.database
                   .prepare(
                     `SELECT state, authorization_generation
@@ -305,42 +346,36 @@ export const layer = (configuration: BetterAuthConfiguration) =>
       ) {
         const username = normalizeNamespace(requestedUsername);
         if (username === undefined) return yield* new InvalidUsername();
-        const rows = yield* sql`SELECT u.username username, n.namespace_slug claimed
-      FROM user u
-      LEFT JOIN namespaces n ON n.namespace_slug = ${username}
-      WHERE u.id = ${userId}`.pipe(
+        const existing = yield* readProvisioning(userId);
+        if (existing.namespace_slug !== null) return existing.namespace_slug;
+        const taken = yield* sql`SELECT 1 taken FROM namespaces WHERE namespace_slug = ${username}
+      UNION ALL SELECT 1 taken FROM user WHERE username = ${username} AND id <> ${userId}
+      LIMIT 1`.pipe(
           Effect.mapError(
             (cause) => new BetterAuthError({ operation: "read username claim", cause }),
           ),
         );
-        if (rows[0] === undefined)
-          return yield* new BetterAuthError({
-            operation: "claim username for missing user",
-            cause: userId,
-          });
-        const existing = yield* Schema.decodeUnknownEffect(UsernameClaimRow)(rows[0]).pipe(
-          Effect.mapError(
-            (cause) => new BetterAuthError({ operation: "decode username claim", cause }),
-          ),
-        );
-        if (existing.username !== null) return existing.username;
-        if (existing.claimed !== null) return yield* new UsernameUnavailable();
+        if (taken.length !== 0) return yield* new UsernameUnavailable();
 
-        const timestamp = now().toISOString();
-        const principalId = `principal_${crypto.randomUUID().replaceAll("-", "")}`;
+        const timestamp = now();
         yield* sql
           .batch([
-            sql`UPDATE user SET username = ${username}, name = ${username}, updatedAt = ${now().getTime()}
+            sql`UPDATE user SET name = ${username}, updatedAt = ${timestamp.getTime()}
             WHERE id = ${userId} AND username IS NULL`,
-            sql`INSERT INTO principals (principal_id, better_auth_user_id, created_at, updated_at)
-            VALUES (${principalId}, ${userId}, ${timestamp}, ${timestamp})`,
-            sql`INSERT INTO namespaces (namespace_slug, subject_kind, subject_id, created_at)
-            VALUES (${username}, 'principal', ${principalId}, ${timestamp})`,
+            ...provisionPrincipal(sql, {
+              userId,
+              username,
+              principalId: `principal_${crypto.randomUUID().replaceAll("-", "")}`,
+              timestamp: timestamp.toISOString(),
+            }),
           ])
           .pipe(
             Effect.mapError((cause) => new BetterAuthError({ operation: "claim username", cause })),
           );
-        return username;
+        const claimed = yield* readProvisioning(userId);
+        if (claimed.namespace_slug === null)
+          return yield* new BetterAuthError({ operation: "claim username", cause: userId });
+        return claimed.namespace_slug;
       });
 
       const sendVerificationEmail = Effect.fn("BetterAuth.sendVerificationEmail")(
