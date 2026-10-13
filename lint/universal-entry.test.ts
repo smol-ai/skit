@@ -3,13 +3,13 @@ import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 /**
- * `@smolai/skit-core/universal` is the entry the Registry Worker imports, so its import graph
- * must never reach the Node platform layer. The Worker runs on workerd, where
+ * The `@smolai/skit-core/universal/*` entries are what the Registry Worker imports, so their
+ * import graphs must never reach the Node platform layer. The Worker runs on workerd, where
  * `@effect/platform-node` cannot load; the whole graph is evaluated on import, so one stray
  * re-export anywhere below the entry breaks the Worker even if nothing calls it.
  */
 const coreRoot = resolve(import.meta.dirname, "../packages/skit/src");
-const entry = join(coreRoot, "universal.ts");
+const authoringEntry = join(coreRoot, "universal-authoring.ts");
 const consumerEntry = join(coreRoot, "universal-consumer.ts");
 const consumerApiEntry = join(coreRoot, "universal/api/index.ts");
 
@@ -68,8 +68,8 @@ function offendingPathFrom(
 
 describe("@smolai/skit-core/universal", () => {
   for (const [name, rootEntry] of [
-    ["universal", entry],
     ["universal/consumer", consumerEntry],
+    ["universal/authoring", authoringEntry],
     ["universal/api", consumerApiEntry],
   ] as const)
     test(`${name} never reaches the Node platform layer`, () => {

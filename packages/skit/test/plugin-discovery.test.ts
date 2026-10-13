@@ -1,6 +1,8 @@
 import { assert, it } from "@effect/vitest";
+import { execFileSync } from "node:child_process";
 import { Effect, FileSystem } from "effect";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
 import { readPluginUnitsEffect } from "../src/acquisition/plugin-manifests.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -190,9 +192,18 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
     const discovered = yield* f.discover();
     assert.deepStrictEqual(discovered.observedSkillPaths, ["tools/skills/review"]);
     assert.include(discovered.diagnostics?.[0]?.message ?? "", "strict:false");
-    const error = yield* resolveSkitSourceEffect(f.root, { strictPluginManifests: true }).pipe(
-      Effect.flip,
-    );
+    // An explicitly selected Git subpath enforces its plugin declarations.
+    for (const args of [
+      ["init", "-q"],
+      ["add", "."],
+      ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "tools"],
+    ])
+      execFileSync("git", args, { cwd: f.root });
+    const error = yield* resolveSkitSourceEffect({
+      type: "git",
+      remote: pathToFileURL(f.root).href,
+      subpath: ".",
+    }).pipe(Effect.flip);
     assert.strictEqual(error._tag, "PluginManifestInvalid");
     assert.include(error.message, "strict:false");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

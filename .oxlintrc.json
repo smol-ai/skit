@@ -86,7 +86,7 @@
             "paths": [
               {
                 "name": "@smolai/skit-core",
-                "message": "The Worker runs on workerd; import @smolai/skit-core/universal, which never reaches the Node platform layer."
+                "message": "The Worker runs on workerd; import @smolai/skit-core/universal/*, which never reaches the Node platform layer."
               }
             ]
           }

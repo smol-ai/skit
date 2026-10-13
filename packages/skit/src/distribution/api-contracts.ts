@@ -2,8 +2,6 @@ import { Schema } from "effect";
 import { Digest } from "../library/store/state-schema.js";
 import {
   apiSemverPattern,
-  isSafePath,
-  parseContract,
   parseContractEffect,
   parseWireDescriptor,
   semver,
@@ -18,8 +16,6 @@ import {
 
 /** Consumer-facing Registry contracts: Distribution reads and Server discovery. */
 export {
-  isSafePath,
-  parseContract,
   parseContractEffect,
   parseWireDescriptor,
   semver,

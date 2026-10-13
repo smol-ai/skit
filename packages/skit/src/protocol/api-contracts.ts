@@ -1,7 +1,6 @@
 import { Effect, Result, Schema, SchemaIssue, type SchemaAST } from "effect";
 import {
   registrySkitSlugSchema,
-  safePathSchema,
   skitDescriptorWireSchema,
   skitValidationDiagnosticSchema,
   type SkitWireDescriptor,
@@ -9,9 +8,6 @@ import {
 
 /** Capability-neutral primitives shared by consumer and optional write protocols. */
 export const SKIT_API_CONTRACT_VERSION = "1" as const;
-export function isSafePath(value: unknown): value is string {
-  return Schema.is(safePathSchema)(value);
-}
 export const skitVisibilitySchema = Schema.Literals(["public", "unlisted", "private"]);
 export const skitSourceKindSchema = Schema.Literals([
   "registry",
@@ -73,16 +69,6 @@ function contractIssues(error: Schema.SchemaError): Array<{ path: string; messag
     path: issue.path?.map(String).join(".") ?? "",
     message: issue.message,
   }));
-}
-export function parseContract<S extends Schema.ConstraintDecoder<unknown>>(
-  contract: string,
-  schema: S,
-  value: unknown,
-  options?: SchemaAST.ParseOptions,
-): S["Type"] {
-  const parsed = Schema.decodeUnknownResult(schema, { errors: "all", ...options })(value);
-  if (Result.isSuccess(parsed)) return parsed.success;
-  throw new SkitContractError(contract, contractIssues(parsed.failure));
 }
 export function parseContractEffect<S extends Schema.ConstraintDecoder<unknown>>(
   contract: string,

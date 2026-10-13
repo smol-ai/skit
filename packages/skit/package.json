@@ -10,10 +10,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./universal": {
-      "types": "./dist/universal.d.ts",
-      "import": "./dist/universal.js"
-    },
     "./universal/consumer": {
       "types": "./dist/universal-consumer.d.ts",
       "import": "./dist/universal-consumer.js"
