@@ -3,14 +3,15 @@ import { Effect } from "effect";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { skitLayer } from "@smolai/skit-core";
-import { devices, untouched } from "./helpers/library-sync-devices.js";
+import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
+import { devices } from "./helpers/library-sync-devices.js";
 
 it.effect("characterizes local_bytes_changed as a stopped sync with exit 0", () =>
   Effect.gen(function* () {
     const { a } = yield* devices;
     yield* a.retain("local");
     yield* a.corruptOriginal;
-    const unchanged = yield* untouched(a);
+    const unchanged = yield* captureDisk(a.disk);
     const result = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "../bin/skit.js"), "sync", "--apply", "--home", a.home, "--json"],
@@ -24,6 +25,6 @@ it.effect("characterizes local_bytes_changed as a stopped sync with exit 0", () 
     assert.strictEqual(JSON.parse(result.stdout).data.status, "local_bytes_changed");
     // BUG: local_bytes_changed must exit non-zero. Flip this characterization when fixed.
     assert.strictEqual(result.status, 0);
-    yield* unchanged;
+    yield* assertDiskUnchanged(unchanged);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

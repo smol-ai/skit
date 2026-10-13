@@ -7,7 +7,8 @@ import {
   inspectOwnershipMarkerEffect,
   makeSkillVersionId,
 } from "@smolai/skit-core";
-import { devices, untouched } from "./helpers/library-sync-devices.js";
+import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
+import { devices } from "./helpers/library-sync-devices.js";
 
 it.effect(
   "syncs independent identical updates with projected custody and a read-only preview",
@@ -52,10 +53,10 @@ it.effect(
       assert.notStrictEqual(publishedId, bBefore.projections[0]?.skill_version_id);
       assert.strictEqual((yield* a.sync()).status, "merged");
       const writesBeforePreview = server.writes;
-      const previewUntouched = yield* untouched(b);
+      const previewUntouched = yield* captureDisk(b.disk);
       const markerBefore = yield* fs.readFileString(join(b.root, "review", ".skit-ownership.json"));
       assert.strictEqual((yield* b.sync({ apply: false })).status, "merge_ready");
-      yield* previewUntouched;
+      yield* assertDiskUnchanged(previewUntouched);
       assert.strictEqual(server.writes, writesBeforePreview);
       assert.deepEqual(yield* b.state, bBefore);
       assert.strictEqual(

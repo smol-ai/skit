@@ -12,9 +12,31 @@ import {
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected } from "../src/workflows/library/library-sync-api.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
-import { devices, untouched } from "./helpers/library-sync-devices.js";
+import {
+  assertDiskUnchanged,
+  captureDisk,
+  diskChanges,
+  noDiskChanges,
+  type DiskSnapshot,
+} from "./helpers/disk-snapshot.js";
+import { devices } from "./helpers/library-sync-devices.js";
 
 type Homes = Effect.Success<typeof devices>;
+
+/** A row stopped before publication may leave orphan originals, and nothing else may change. */
+const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (
+  before: DiskSnapshot,
+  home: string,
+) {
+  const changes = yield* diskChanges(before);
+  assert.deepStrictEqual({ ...changes, created: [] }, noDiskChanges);
+  // The writer lock creates a home that did not exist yet.
+  for (const { path } of changes.created)
+    assert.isTrue(
+      path[0] === home && (path.length === 1 || path[1] === "originals"),
+      path.join("/"),
+    );
+});
 
 const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
   yield* a.retain("first");
@@ -46,10 +68,10 @@ const cases: readonly {
         const { a, server } = homes;
         yield* seed(homes);
         yield* a.corruptOriginal;
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
         assert.strictEqual((yield* a.sync()).status, "local_bytes_changed");
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
   },
@@ -60,10 +82,10 @@ const cases: readonly {
         const { a, resetRemote, server } = homes;
         yield* seed(homes);
         yield* resetRemote;
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
         assert.strictEqual((yield* a.sync()).status, "base_mismatch");
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
   },
@@ -72,10 +94,10 @@ const cases: readonly {
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailUpload" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof LibraryApiRejected);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.strictEqual(server.remote, null);
         assert.strictEqual((yield* a.sync()).status, "pushed");
       }),
@@ -96,13 +118,13 @@ const cases: readonly {
           _tag: "CompetingWrite",
           manifest: yield* libraryManifestFromLocalStateEffect(competingState),
         });
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         const winner = server.remote;
         assert.ok(winner);
         assert.strictEqual((yield* a.sync()).status, "adoption_required");
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, winner);
         assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 2);
@@ -113,12 +135,12 @@ const cases: readonly {
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "ErrorAfterCommit" });
         const error = yield* Effect.flip(a.sync());
         assert.strictEqual(error._tag, "Library.LibraryApiRejected");
         if (error._tag === "Library.LibraryApiRejected") assert.strictEqual(error.status, 500);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.ok(server.remote);
         assert.strictEqual((yield* a.sync()).status, "clean");
       }),
@@ -128,10 +150,10 @@ const cases: readonly {
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "DropAfterCommit" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         const committed = server.remote;
         assert.ok(committed);
         assert.strictEqual((yield* a.sync()).status, "clean");
@@ -144,10 +166,10 @@ const cases: readonly {
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.ok(server.remote);
         assert.strictEqual((yield* a.sync()).status, "clean");
         assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, server.remote!.revision_id);
@@ -158,16 +180,16 @@ const cases: readonly {
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
         yield* a.retain("first");
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "DropAfterCommit" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         yield* b.sync();
         yield* b.retain("second");
         yield* b.sync();
         const winner = server.remote;
         assert.strictEqual((yield* a.sync()).status, "adoption_required");
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, winner);
         assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 2);
@@ -180,11 +202,11 @@ const cases: readonly {
       Effect.gen(function* () {
         yield* a.retain("first");
         yield* a.sync();
-        const unchanged = yield* untouched(b);
+        const unchanged = yield* captureDisk(b.disk);
         const head = server.remote;
         inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
-        yield* unchanged;
+        yield* onlyOrphanOriginals(unchanged, b.home);
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* b.sync()).status, "pulled");
         assert.strictEqual((yield* b.state).sync_ancestry?.revision_id, head!.revision_id);
@@ -264,9 +286,9 @@ const cases: readonly {
             })),
           },
         });
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
-        yield* unchanged;
+        yield* onlyOrphanOriginals(unchanged, a.home);
         const winner = server.remote!;
         assert.strictEqual((yield* a.sync()).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 3);
@@ -288,10 +310,10 @@ const cases: readonly {
         yield* a.retain("from-a");
         yield* b.retain("from-b");
         yield* b.sync();
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
-        yield* unchanged;
+        yield* onlyOrphanOriginals(unchanged, a.home);
         const committed = server.remote!;
         assert.strictEqual(committed.manifest.collections.length, 3);
         assert.strictEqual((yield* a.sync()).status, "merged");
@@ -310,11 +332,11 @@ const cases: readonly {
         yield* a.retain("from-a");
         yield* b.retain("from-b");
         yield* b.sync();
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         const head = server.remote;
         inject({ _tag: "FailUpload" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof LibraryApiRejected);
-        yield* unchanged;
+        yield* onlyOrphanOriginals(unchanged, a.home);
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* a.sync()).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 3);
@@ -327,10 +349,10 @@ const cases: readonly {
         yield* a.retain("remote");
         yield* a.sync();
         yield* b.retain("local");
-        const unchanged = yield* untouched(b);
+        const unchanged = yield* captureDisk(b.disk);
         const before = server.stored;
         assert.strictEqual((yield* b.sync()).status, "adoption_required");
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
   },
@@ -351,7 +373,7 @@ const cases: readonly {
           }));
         } else yield* b.retain("remote-addition");
         yield* b.sync();
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
         const value = yield* a.sync(
           outcome === "merge_ready"
@@ -361,7 +383,7 @@ const cases: readonly {
               : {},
         );
         assert.strictEqual(value.status, outcome);
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
   })),
@@ -441,16 +463,16 @@ const cases: readonly {
         yield* b.sync();
         // Force M5 to include a local-only record as well as the resolved remote label.
         yield* a.retain("local-only");
-        const unchanged = yield* untouched(a);
+        const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailPublish", anchoredOnly: false });
         assert.instanceOf(
           yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
           InvalidLibraryState,
         );
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         const committed = server.remote!;
         assert.strictEqual((yield* a.sync()).status, "conflicted");
-        yield* unchanged;
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, committed);
         assert.strictEqual((yield* a.sync({ takeRemote: [`collection:${id}`] })).status, "merged");
         assert.deepStrictEqual(server.remote, committed);

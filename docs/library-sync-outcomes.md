@@ -140,7 +140,7 @@ An intact projection whose previous Version is dropped by a remote Skill choice 
 
 ## Safety invariants and their coverage
 
-These are obligations of sync, not a claim that every existing test asserts all seven. The fault matrix uses `untouched(device)` for byte-level nonmutation checks where the row forbids local writes. The concurrent-local-write rows instead compare the new writer's exact state bytes and preserve existing projection bytes. Publication and recovery rows assert ancestry and retained records. The crash, custody, version-alignment, and merge-property suites cover the additional cases listed above; generated manifest merge properties do not constitute an exhaustive model of device synchronization.
+These are obligations of sync, not a claim that every existing test asserts all seven. The fault matrix captures each home, its projection root and their backups with the lossless `captureDisk` snapshot (`packages/cli/test/helpers/disk-snapshot.ts`) and asserts an empty diff where the row forbids local writes, or only orphan originals where the row permits them. The concurrent-local-write rows instead compare the new writer's exact state bytes and preserve existing projection bytes. Publication and recovery rows assert ancestry and retained records. The crash, custody, version-alignment, and merge-property suites cover the additional cases listed above; generated manifest merge properties do not constitute an exhaustive model of device synchronization.
 
 1. **The loser of a CAS race changes no portable state.** `state.json` and owned projections are byte-identical to before; only orphans may appear.
 2. **Only `pushed`, `pulled`, `merged`, and `clean` replace B, and each replaces it in the same publish as the state it reconciled.**
