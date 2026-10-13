@@ -4,7 +4,7 @@ import { credentialOriginAllowed } from "../auth/request-context.js";
 import { ServerConfiguration } from "../configuration.js";
 import { LibrarySync } from "../library/library-sync.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "./authenticated.js";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   forbiddenOriginResponse,
   insufficientScopeResponse,

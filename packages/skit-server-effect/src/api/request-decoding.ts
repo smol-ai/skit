@@ -3,8 +3,6 @@ import { Effect } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
 import { invalidRequestResponse } from "./errors.js";
 
-export { RequestDecoding };
-
 // Effect v4's schema-error transform is the supported seam for preserving a
 // public API's decoding-error envelope.
 export const requestDecodingLayer = HttpApiMiddleware.layerSchemaErrorTransform(

@@ -1,7 +1,7 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { WireDescriptor } from "../src/drafts/contracts.js";
+import { skitDescriptorRequestSchema } from "@smolai/skit-core/universal/authoring";
 import {
   hashProjectedSkillFiles,
   parseSkitConfig,
@@ -99,9 +99,9 @@ describe("Integrity descriptor", () => {
         ],
         capabilities: { executables: ["bin/review"] },
       };
-      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(WireDescriptor))(
-        JSON.stringify(descriptor),
-      );
+      const decoded = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(skitDescriptorRequestSchema),
+      )(JSON.stringify(descriptor));
       expect(decoded).toEqual(descriptor);
     }),
   );

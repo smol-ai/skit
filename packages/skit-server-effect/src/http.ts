@@ -8,7 +8,8 @@ import {
   AuthoringAuthenticatedApi,
   ConsumerAuthenticatedApi,
   PublicationAuthenticatedApi,
-} from "./api/authenticated.js";
+  ReleaseApi,
+} from "@smolai/skit-core/universal/api";
 import { authorInventoryHandlers } from "./api/author-inventory-http.js";
 import { bootstrapHandlers } from "./api/bootstrap-http.js";
 import { BootstrapApi } from "./api/bootstrap.js";
@@ -19,7 +20,6 @@ import { readinessHandlers } from "./api/readiness-http.js";
 import { publicationHandlers } from "./api/publication-http.js";
 import { requestDecodingLayer } from "./api/request-decoding.js";
 import { anonymousReleaseHandlers, authenticatedReleaseHandlers } from "./api/releases-http.js";
-import { ReleaseApi } from "./api/releases.js";
 import { skitDeleteHandlers } from "./api/skit-delete-http.js";
 import { makeSystemHandlers, systemApi } from "./api/system-http.js";
 import { teamHandlers } from "./api/teams-http.js";

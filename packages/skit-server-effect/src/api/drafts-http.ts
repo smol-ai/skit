@@ -5,13 +5,13 @@ import { credentialOriginAllowed } from "../auth/request-context.js";
 import { Authorization } from "../authorization/service.js";
 import { ServerConfiguration } from "../configuration.js";
 import {
-  DraftCreateRequest,
-  DraftUpdateRequest,
-  MAX_DRAFT_REQUEST_BYTES,
-} from "../drafts/contracts.js";
+  draftCreateRequestSchema,
+  draftUpdateRequestSchema,
+  MAX_ARTIFACT_CONTENT_BYTES,
+} from "@smolai/skit-core/universal/authoring";
 import { Drafts, type WriteError } from "../drafts/service.js";
 import type { DatabaseError } from "../platform/cloudflare.js";
-import { AuthoringAuthenticatedApi } from "./authenticated.js";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
 import {
   forbiddenOriginResponse,
@@ -23,6 +23,8 @@ import {
 import { schemaBodyJsonLimited } from "./request-body.js";
 import { noStore } from "./response.js";
 
+// Base64 inflates the content by 4/3; the rest of the JSON body gets a 1 MiB allowance.
+const MAX_DRAFT_REQUEST_BYTES = Math.ceil(MAX_ARTIFACT_CONTENT_BYTES / 3) * 4 + 1024 * 1024;
 const draftTooLargeResponse = { error: "DRAFT_TOO_LARGE" as const };
 const draftNotFoundResponse = { error: "draft_not_found" as const };
 const revisionConflictResponse = { error: "REVISION_CONFLICT" as const };
@@ -67,7 +69,7 @@ export const draftHandlers = HttpApiBuilder.group(AuthoringAuthenticatedApi, "dr
       return principal;
     });
     const decodeCreate = (request: HttpServerRequest.HttpServerRequest) =>
-      schemaBodyJsonLimited(request, DraftCreateRequest, MAX_DRAFT_REQUEST_BYTES).pipe(
+      schemaBodyJsonLimited(request, draftCreateRequestSchema, MAX_DRAFT_REQUEST_BYTES).pipe(
         Effect.mapError((error): typeof draftTooLargeResponse | typeof invalidRequestResponse =>
           error._tag === "Http.RequestBodyTooLarge"
             ? draftTooLargeResponse
@@ -75,7 +77,7 @@ export const draftHandlers = HttpApiBuilder.group(AuthoringAuthenticatedApi, "dr
         ),
       );
     const decodeUpdate = (request: HttpServerRequest.HttpServerRequest) =>
-      schemaBodyJsonLimited(request, DraftUpdateRequest, MAX_DRAFT_REQUEST_BYTES).pipe(
+      schemaBodyJsonLimited(request, draftUpdateRequestSchema, MAX_DRAFT_REQUEST_BYTES).pipe(
         Effect.mapError((error): typeof draftTooLargeResponse | typeof invalidRequestResponse =>
           error._tag === "Http.RequestBodyTooLarge"
             ? draftTooLargeResponse

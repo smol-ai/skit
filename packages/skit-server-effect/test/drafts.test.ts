@@ -3,7 +3,7 @@ import { D1Client } from "@effect/sql-d1";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import type { DraftCreateRequest } from "../src/drafts/contracts.js";
+import type { DraftCreateRequest } from "@smolai/skit-core/universal/authoring";
 import { Drafts, layer as draftsLayer } from "../src/drafts/service.js";
 import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
 

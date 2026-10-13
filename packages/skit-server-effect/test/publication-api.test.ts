@@ -7,7 +7,7 @@ import {
   CurrentRequest,
   PrincipalAuthentication,
 } from "../src/api/authentication.js";
-import { PublicationAuthenticatedApi } from "../src/api/authenticated.js";
+import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { publicationHandlers } from "../src/api/publication-http.js";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { Authorization } from "../src/authorization/service.js";

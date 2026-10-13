@@ -4,7 +4,7 @@ import { Authentication } from "../auth/authentication.js";
 import { Authorization } from "../authorization/service.js";
 import { downloadRelease, downloadReleaseAnonymous } from "../releases/http.js";
 import { ReleaseStore } from "../releases/store.js";
-import { ReleaseApi } from "./releases.js";
+import { ReleaseApi } from "@smolai/skit-core/universal/api";
 
 export const authenticatedReleaseHandlers = HttpApiBuilder.group(
   ReleaseApi,

@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import { ServerConfiguration } from "../configuration.js";
 import { Teams } from "../teams/service.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "./authenticated.js";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   forbiddenOriginResponse,
   invalidTeamResponse,

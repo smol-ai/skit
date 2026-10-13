@@ -8,8 +8,7 @@ import {
   type CloudflareBindings,
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
-import { SkitDeleteResult } from "./contracts.js";
-export { SkitDeleteResult } from "./contracts.js";
+import { AuthorSkitDeleteResponse } from "@smolai/skit-core/universal/api";
 
 const DraftVisibility = Schema.Struct({
   visibility: Schema.Literals(["public", "unlisted", "private"]),
@@ -47,7 +46,7 @@ export interface SkitDeletionService {
   readonly delete: (
     owner: string,
     slug: string,
-  ) => Effect.Effect<SkitDeleteResult, DatabaseError | DeleteRequiresPrivate>;
+  ) => Effect.Effect<AuthorSkitDeleteResponse, DatabaseError | DeleteRequiresPrivate>;
 }
 export class SkitDeletion extends Context.Service<SkitDeletion, SkitDeletionService>()(
   "@skit-server-effect/SkitDeletion",

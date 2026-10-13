@@ -1,5 +1,13 @@
 import { D1Client } from "@effect/sql-d1";
-import { MAX_ARTIFACT_CONTENT_BYTES } from "@smolai/skit-core/universal/authoring";
+import {
+  type DraftCreateRequest,
+  type DraftReadResponse,
+  type DraftRevision,
+  type DraftUpdateRequest,
+  MAX_ARTIFACT_CONTENT_BYTES,
+  skitDescriptorRequestSchema,
+  skitValidationDiagnosticSchema,
+} from "@smolai/skit-core/universal/authoring";
 import { sha256Digest } from "@smolai/skit-core/universal/consumer";
 import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
 import type { CloudflareBindings } from "../platform/cloudflare.js";
@@ -14,14 +22,6 @@ import {
 } from "../platform/cloudflare.js";
 import { IntegrityError } from "../integrity/contracts.js";
 import { validateArtifactBundle } from "../integrity/validate.js";
-import {
-  Diagnostic,
-  type DraftCreateRequest,
-  type DraftReadResponse,
-  type DraftRevision,
-  type DraftUpdateRequest,
-  WireDescriptor,
-} from "./contracts.js";
 
 export class RevisionConflict extends Schema.TaggedError<RevisionConflict>()(
   "Draft.RevisionConflict",
@@ -83,8 +83,8 @@ const StoredFile = Schema.Struct({
   executable: Schema.Int,
   object_key: Schema.String,
 });
-const StoredDiagnostics = Schema.fromJsonString(Schema.Array(Diagnostic));
-const StoredDescriptor = Schema.fromJsonString(WireDescriptor);
+const StoredDiagnostics = Schema.fromJsonString(Schema.Array(skitValidationDiagnosticSchema));
+const StoredDescriptor = Schema.fromJsonString(skitDescriptorRequestSchema);
 
 const encodeBase64 = (bytes: Uint8Array): string => {
   let binary = "";

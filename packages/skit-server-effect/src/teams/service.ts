@@ -4,8 +4,7 @@ import type { Principal } from "../auth/authentication.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
-import { Team, TeamMember } from "./contracts.js";
-export { Team, TeamMember } from "./contracts.js";
+import { Team, TeamMember } from "@smolai/skit-core/universal/api";
 
 const TEAM_SLUG = /^[a-z0-9][a-z0-9-]{2,38}$/;
 const TeamIdRow = Schema.Struct({ team_id: Schema.String });
