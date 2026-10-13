@@ -1,18 +1,27 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
-import { join } from "node:path";
+import { systemError } from "effect/PlatformError";
+import { execFileSync } from "node:child_process";
+import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { projectBindingEffect } from "../src/library/installation/project-binding.js";
+import { removeCollectionEffect } from "../src/library/installation/remove.js";
 import { retireUnboundGlobalProjectionsEffect } from "../src/library/installation/retire-unbound.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
+import {
+  retainChangedProjectionEffect,
+  retainObservedCollectionEffect,
+} from "../src/library/observed-import.js";
+import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/library/store/state-schema.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
+import { backUpProjectionEffect, projectionWorkDirectory } from "../src/projection/backups.js";
 import { inspectOwnershipMarkerEffect } from "../src/projection/mutation.js";
 
 const machineId = migratedMachineId(
@@ -21,7 +30,7 @@ const machineId = migratedMachineId(
 );
 
 /** A retained local Collection with one Skill globally bound to codex, not yet projected. */
-const boundCollectionWith = (second = false) =>
+const boundCollectionWith = (second = false, emptyDirectories: readonly string[] = []) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-project-" });
@@ -33,6 +42,7 @@ const boundCollectionWith = (second = false) =>
     const firstSource = second ? join(source, "review") : source;
     yield* fs.makeDirectory(firstSource, { recursive: true });
     yield* fs.writeFileString(join(firstSource, "SKILL.md"), "raw Skill bytes\n");
+    for (const directory of emptyDirectories) yield* fs.makeDirectory(join(firstSource, directory));
     const secondSource = join(source, "second");
     if (second) {
       yield* fs.makeDirectory(secondSource);
@@ -508,7 +518,13 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(storeLayer),
     );
-    assert.deepStrictEqual(after, before);
+    // The copy already written at the new root is recorded, so a retry keeps its custody.
+    assert.deepStrictEqual(after.projections.slice(0, 2), before.projections);
+    assert.deepStrictEqual(
+      after.projections.slice(2).map((projection) => [projection.path, projection.status]),
+      [[join(newRoot, "review"), "installed"]],
+    );
+    assert.deepStrictEqual({ ...after, projections: [] }, { ...before, projections: [] });
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -623,3 +639,513 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
     assert.deepStrictEqual((yield* load).projections, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+/** A projectable Collection with the workflows and observations the backup tests drive. */
+const projectionFixture = (second = false, emptyDirectories: readonly string[] = []) =>
+  Effect.gen(function* () {
+    const bound = yield* boundCollectionWith(second, emptyDirectories);
+    const { home, targetRoot, storeLayer } = bound;
+    const variantsPath = join(home, "variants");
+    const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+    const edit = (change: (state: LibraryState) => LibraryState) =>
+      withLibraryWriterLock(
+        home,
+        LibraryStore.use((store) =>
+          Effect.flatMap(store.load, (state) => store.publish(change(state), state)),
+        ).pipe(Effect.provide(storeLayer)),
+      );
+    const project = (
+      options: Omit<Parameters<typeof projectBindingEffect>[0], "target" | "variantsPath"> = {
+        root: targetRoot,
+      },
+    ) =>
+      withLibraryWriterLock(
+        home,
+        projectBindingEffect({ target: "agents", variantsPath, ...options }).pipe(
+          Effect.provide(storeLayer),
+        ),
+      );
+    const retire = withLibraryWriterLock(
+      home,
+      retireUnboundGlobalProjectionsEffect({ variantsPath, activeTargets: ["agents"] }).pipe(
+        Effect.asVoid,
+        Effect.provide(storeLayer),
+      ),
+    );
+    const remove = (state: LibraryState) =>
+      withLibraryWriterLock(
+        home,
+        removeCollectionEffect(state, {
+          collectionId: state.collections[0]!.collection_id,
+          variantsPath,
+        }).pipe(Effect.asVoid, Effect.provide(storeLayer)),
+      );
+    const refresh = withLibraryWriterLock(
+      home,
+      LibraryStore.use((store) =>
+        Effect.flatMap(store.load, (loaded) =>
+          refreshLibraryInventory(loaded, () => [{ harness: "codex", root: targetRoot }]),
+        ),
+      ).pipe(Effect.provide(storeLayer)),
+    );
+    return { ...bound, variantsPath, load, edit, project, retire, remove, refresh };
+  });
+
+/** Every backup beside a real projection root, as `pending`/`kept` and its path. */
+const backupsBeside = (root: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const backups = join(dirname(yield* fs.realPath(root)), ".skit-backups");
+    if (!(yield* fs.exists(backups))) return [];
+    return (yield* fs.readDirectory(backups))
+      .filter((name) => name !== ".gitignore")
+      .map((name) => ({ disposition: name.split("-")[0]!, path: join(backups, name) }));
+  });
+
+const explicitPolicies = (state: LibraryState): LibraryState => ({
+  ...state,
+  global_bindings: state.global_bindings.map((binding) => ({
+    ...binding,
+    invocation_policies: Object.fromEntries(
+      state.skills.map((skill) => [skill.skill_id, "explicit" as const]),
+    ),
+  })),
+});
+
+const unbound = (state: LibraryState): LibraryState => ({ ...state, global_bindings: [] });
+
+/** A hasher that misreports the `nth` hash of one path, as a write diverging under SKIT would. */
+const divergingOn = (path: string, nth: number) => {
+  let calls = 0;
+  return Layer.succeed(TreeHasher)({
+    hash: (candidate) =>
+      candidate === path && ++calls === nth
+        ? Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`))
+        : deterministicTreeHashEffect(candidate),
+  });
+};
+
+it.effect("adopts equal content in place, keeping its excluded entries and empty directories", () =>
+  Effect.gen(function* () {
+    const { fs, targetRoot, load, project } = yield* projectionFixture();
+    const target = join(targetRoot, "review");
+    yield* fs.makeDirectory(join(target, ".git"), { recursive: true });
+    yield* fs.makeDirectory(join(target, "notes"));
+    yield* fs.writeFileString(join(target, ".git", "HEAD"), "ref: refs/heads/main\n");
+    yield* fs.writeFileString(join(target, "SKILL.md"), "raw Skill bytes\n");
+    yield* project({
+      root: targetRoot,
+      adoption: { path: target, observedHash: yield* deterministicTreeHashEffect(target) },
+    });
+    assert.strictEqual(
+      yield* fs.readFileString(join(target, ".git", "HEAD")),
+      "ref: refs/heads/main\n",
+    );
+    assert.strictEqual((yield* fs.stat(join(target, "notes"))).type, "Directory");
+    assert.strictEqual((yield* inspectOwnershipMarkerEffect(target)).kind, "valid");
+    assert.strictEqual((yield* load).projections[0]?.status, "installed");
+    assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "keeps the replaced copy in a pending backup when its install fails, then converges",
+  () =>
+    Effect.gen(function* () {
+      const { fs, targetRoot, load, edit, project } = yield* projectionFixture();
+      const target = join(targetRoot, "review");
+      yield* project();
+      const original = yield* deterministicTreeHashEffect(target);
+      yield* edit(explicitPolicies);
+
+      const failed = yield* project().pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (from, to) =>
+            to === target
+              ? Effect.fail(
+                  systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "rename",
+                    pathOrDescriptor: to,
+                  }),
+                )
+              : fs.rename(from, to),
+        }),
+        Effect.result,
+      );
+      assert.strictEqual(Result.isFailure(failed), true);
+      assert.strictEqual(yield* fs.exists(target), false);
+      const backups = yield* backupsBeside(targetRoot);
+      assert.deepStrictEqual(
+        backups.map((backup) => backup.disposition),
+        ["pending"],
+      );
+      assert.strictEqual(yield* deterministicTreeHashEffect(backups[0]!.path), original);
+      assert.strictEqual((yield* load).projections[0]?.status, "pending");
+
+      yield* project();
+      assert.notStrictEqual(yield* deterministicTreeHashEffect(target), original);
+      assert.strictEqual((yield* load).projections[0]?.status, "installed");
+      // The retained original and the recorded declared policy restage the original exactly.
+      assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
+  for (const action of ["replace", "retire"] as const)
+    it.effect(`${action} keeps a backup only of a copy SKIT cannot restage (${content})`, () =>
+      Effect.gen(function* () {
+        const { fs, targetRoot, edit, project, retire } = yield* projectionFixture();
+        const target = join(targetRoot, "review");
+        yield* project();
+        if (content === "git-bytes") {
+          yield* fs.makeDirectory(join(target, ".git"));
+          yield* fs.writeFileString(join(target, ".git", "config"), "[core]\n");
+        }
+        if (content === "empty-directory") yield* fs.makeDirectory(join(target, "my-notes"));
+        if (action === "replace") {
+          yield* edit(explicitPolicies);
+          yield* project();
+        } else {
+          yield* edit(unbound);
+          yield* retire;
+        }
+        const backups = yield* backupsBeside(targetRoot);
+        assert.deepStrictEqual(
+          backups.map((backup) => backup.disposition),
+          content === "reproducible" ? [] : ["kept"],
+        );
+        if (content === "git-bytes") {
+          assert.strictEqual(
+            yield* fs.readFileString(join(backups[0]!.path, ".git", "config")),
+            "[core]\n",
+          );
+          // Backups beside a repository's root must never be committed with it.
+          const repository = dirname(dirname(targetRoot));
+          execFileSync("git", ["init", "--quiet", repository]);
+          execFileSync("git", [
+            "-C",
+            repository,
+            "check-ignore",
+            "--quiet",
+            join(backups[0]!.path, "SKILL.md"),
+          ]);
+        }
+        if (content === "empty-directory")
+          assert.deepStrictEqual(yield* fs.readDirectory(join(backups[0]!.path, "my-notes")), []);
+      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    );
+
+for (const change of ["entry-name", "link-target", "root-mode"] as const)
+  it.effect(`retire keeps a backup whose ${change} differs from what SKIT wrote`, () =>
+    Effect.gen(function* () {
+      const { fs, targetRoot, edit, project, retire } = yield* projectionFixture(false, ["a", "b"]);
+      const target = join(targetRoot, "review");
+      yield* project();
+      if (change === "entry-name") {
+        // One directory named to read like the two it replaces, were entries joined as text.
+        const mode = ((yield* fs.stat(join(target, "a"))).mode & 0o7777).toString(8);
+        yield* fs.remove(join(target, "a"), { recursive: true });
+        yield* fs.remove(join(target, "b"), { recursive: true });
+        yield* fs.makeDirectory(join(target, `a\ndirectory ${mode} b`));
+      }
+      if (change === "link-target")
+        yield* fs.symlink(`SKILL.md\nfile 644 SKILL.md`, join(target, ".DS_Store"));
+      if (change === "root-mode") yield* fs.chmod(target, 0o700);
+      yield* edit(unbound);
+      yield* retire;
+      assert.deepStrictEqual(
+        (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
+        ["kept"],
+      );
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect("retire discards a reproducible copy with empty directories", () =>
+  Effect.gen(function* () {
+    const { targetRoot, edit, project, retire } = yield* projectionFixture(false, ["a", "b"]);
+    yield* project();
+    yield* edit(unbound);
+    yield* retire;
+    assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const original of ["intact", "missing", "corrupt"] as const)
+  for (const action of ["replace", "retire", "remove"] as const)
+    it.effect(
+      `${action} discards a backup only with an intact retained original (${original})`,
+      () =>
+        Effect.gen(function* () {
+          const { fs, home, targetRoot, storeLayer, load, edit, project, retire, remove } =
+            yield* projectionFixture();
+          const target = join(targetRoot, "review");
+          yield* project();
+          let backed = (yield* load).retained_copies[0]!.digest;
+          let bytes = "raw Skill bytes\n";
+          if (action === "replace") {
+            // Install a second retained Version, then select the first again so the copy of the
+            // second is the one replaced.
+            const first = (yield* load).projections[0]!;
+            bytes = "second Version bytes\n";
+            yield* fs.writeFileString(join(target, "SKILL.md"), bytes);
+            const second = yield* withLibraryWriterLock(
+              home,
+              retainChangedProjectionEffect({
+                skillId: first.skill_id,
+                projectionId: first.projection_id,
+                path: target,
+                observedHash: yield* deterministicTreeHashEffect(target),
+                retainedAt: "2026-09-17T00:00:00.000Z",
+              }).pipe(Effect.provide(storeLayer)),
+            );
+            backed = second.snapshotDigest;
+            yield* fs.remove(target, { recursive: true });
+            yield* project();
+            assert.strictEqual(
+              (yield* load).projections[0]?.skill_version_id,
+              second.skillVersionId,
+            );
+            yield* edit((state) => ({
+              ...state,
+              skills: state.skills.map((skill) => ({
+                ...skill,
+                local_version_id: first.skill_version_id,
+              })),
+            }));
+          }
+          const retained = retainedTreePath(join(home, "originals"), backed);
+          if (original === "missing") yield* fs.remove(retained, { recursive: true });
+          if (original === "corrupt")
+            yield* fs.writeFileString(join(retained, "SKILL.md"), "tampered retained bytes\n");
+
+          if (action === "replace") yield* project();
+          if (action === "retire") {
+            yield* edit(unbound);
+            yield* retire;
+          }
+          if (action === "remove") yield* remove(yield* load);
+          const backups = yield* backupsBeside(targetRoot);
+          assert.deepStrictEqual(
+            backups.map((backup) => backup.disposition),
+            original === "intact" ? [] : ["kept"],
+          );
+          if (original !== "intact")
+            assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), bytes);
+        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    );
+
+for (const batch of ["retire-unbound", "remove-collection"] as const)
+  it.effect(
+    `records the copies a failed ${batch} batch already retired, so none reads as a native deletion`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, load, edit, project, retire, remove, refresh } = yield* projectionFixture(true);
+        yield* project();
+        const state = yield* load;
+        const [first, second] = state.projections;
+        assert.ok(first && second);
+        yield* fs.writeFileString(join(second.path, "SKILL.md"), "my edit\n");
+        if (batch === "retire-unbound") yield* edit(unbound);
+        const failed = yield* (batch === "retire-unbound" ? retire : remove(state)).pipe(
+          Effect.result,
+        );
+        assert.strictEqual(Result.isFailure(failed), true);
+        // A failed removal keeps the Collection; only the copy it moved aside is recorded.
+        assert.deepStrictEqual((yield* load).collections, state.collections);
+        assert.strictEqual(yield* fs.exists(first.path), false);
+        assert.strictEqual(yield* fs.readFileString(join(second.path, "SKILL.md")), "my edit\n");
+
+        yield* refresh;
+        assert.deepStrictEqual(
+          (yield* load).projections.map((projection) => [
+            projection.projection_id,
+            projection.status,
+          ]),
+          [
+            [first.projection_id, "pending"],
+            [second.projection_id, "conflicted"],
+          ],
+        );
+      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect(
+  "reads a copy moved to a pending backup as SKIT's absence, and a deletion as native",
+  () =>
+    Effect.gen(function* () {
+      const { fs, targetRoot, load, project, refresh } = yield* projectionFixture();
+      yield* project();
+      const projection = (yield* load).projections[0];
+      assert.ok(projection);
+      // A process killed after moving the copy aside, before publishing what it meant to do.
+      yield* backUpProjectionEffect(projection, "replace");
+      yield* refresh;
+      assert.strictEqual((yield* load).projections[0]?.status, "pending");
+      yield* project();
+      assert.strictEqual((yield* load).projections[0]?.status, "installed");
+      assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+
+      yield* fs.remove(projection.path, { recursive: true });
+      yield* refresh;
+      const deleted = (yield* load).projections[0];
+      assert.strictEqual(deleted?.status, "suppressed");
+      assert.strictEqual(deleted?.suppression_reason, "native_delete");
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const stale of ["observed-successor", "settle-failure"] as const)
+  it.effect(`a stale pending backup cannot hide a later native deletion (${stale})`, () =>
+    Effect.gen(function* () {
+      const { fs, targetRoot, load, edit, project, refresh } = yield* projectionFixture();
+      yield* project();
+      const projection = (yield* load).projections[0];
+      assert.ok(projection);
+      if (stale === "observed-successor") {
+        // Killed after installing a successor but before publishing it; inventory then verifies it.
+        const backup = yield* backUpProjectionEffect(projection, "replace");
+        yield* fs.copy(backup, projection.path);
+        yield* refresh;
+      } else {
+        yield* edit(explicitPolicies);
+        yield* project().pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...fs,
+            remove: (path, options) =>
+              path.includes(".skit-backups")
+                ? Effect.fail(systemError({ _tag: "Busy", module: "FileSystem", method: "remove" }))
+                : fs.remove(path, options),
+          }),
+        );
+      }
+      assert.strictEqual(
+        (yield* backupsBeside(targetRoot)).length,
+        1,
+        "the superseded original is still backed up",
+      );
+      yield* fs.remove(projection.path, { recursive: true });
+      yield* refresh;
+      assert.strictEqual((yield* load).projections[0]?.suppression_reason, "native_delete");
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect("publishes nothing for a replacement whose successor fails verification", () =>
+  Effect.gen(function* () {
+    const { fs, targetRoot, load, edit, project } = yield* projectionFixture();
+    const target = join(targetRoot, "review");
+    yield* project();
+    yield* edit(explicitPolicies);
+    const before = yield* load;
+    const failed = yield* project().pipe(Effect.provide(divergingOn(target, 2)), Effect.result);
+    assert.strictEqual(Result.isFailure(failed), true);
+    assert.strictEqual(yield* fs.exists(target), true);
+    assert.deepStrictEqual(yield* load, before);
+    assert.deepStrictEqual(
+      (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
+      ["pending"],
+    );
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("records an earlier verified write when a later item's successor diverges", () =>
+  Effect.gen(function* () {
+    const { fs, targetRoot, load, edit, project } = yield* projectionFixture(true);
+    yield* project();
+    yield* edit(explicitPolicies);
+    const before = yield* load;
+    const second = join(targetRoot, "second");
+    const failed = yield* project().pipe(Effect.provide(divergingOn(second, 2)), Effect.result);
+    assert.strictEqual(Result.isFailure(failed), true);
+    assert.strictEqual(yield* fs.exists(second), true);
+    const after = yield* load;
+    const row = (state: LibraryState, path: string) =>
+      state.projections.find((projection) => projection.path === path);
+    const review = join(targetRoot, "review");
+    assert.strictEqual(row(after, review)?.status, "installed");
+    assert.notStrictEqual(
+      row(after, review)?.expected_digest,
+      row(before, review)?.expected_digest,
+    );
+    assert.deepStrictEqual(row(after, second), row(before, second));
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const path of ["equivalent-version", "accepted-observation"] as const)
+  it.effect(`never stamps a marker through a managed destination link (${path})`, () =>
+    Effect.gen(function* () {
+      const { fs, home, targetRoot, load, edit, project } = yield* projectionFixture();
+      const target = join(targetRoot, "review");
+      yield* project();
+      const external = join(home, "authored");
+      yield* fs.rename(target, external);
+      yield* fs.symlink(external, target);
+      const externalMarker = yield* fs.readFileString(join(external, ".skit-ownership.json"));
+      const installed = (yield* load).projections[0]!;
+      if (path === "equivalent-version") {
+        const newId = makeSkillVersionId();
+        yield* edit((state) => ({
+          ...state,
+          skills: state.skills.map((skill) => ({
+            ...skill,
+            versions: skill.versions.map((version) => ({ ...version, skill_version_id: newId })),
+          })),
+          projections: state.projections.map((projection) => ({
+            ...projection,
+            skill_version_id: newId,
+          })),
+        }));
+        yield* project();
+      } else {
+        const marker = yield* inspectOwnershipMarkerEffect(target);
+        assert.strictEqual(marker.kind, "valid");
+        if (marker.kind === "valid")
+          yield* project({
+            root: targetRoot,
+            acceptedObservations: new Map([
+              [
+                installed.projection_id,
+                {
+                  observedHash: yield* deterministicTreeHashEffect(target),
+                  marker: marker.marker,
+                },
+              ],
+            ]),
+          });
+      }
+      assert.strictEqual(
+        yield* fs.readFileString(join(external, ".skit-ownership.json")),
+        externalMarker,
+      );
+      assert.strictEqual((yield* fs.readLink(target).pipe(Effect.result))._tag, "Failure");
+      assert.strictEqual((yield* inspectOwnershipMarkerEffect(target)).kind, "valid");
+      assert.strictEqual((yield* load).projections[0]?.status, "installed");
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect("backs up beside a symlinked root's real directory, on the copy's own device", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, edit, project } = yield* projectionFixture();
+    const alias = join(home, "dotfiles-alias");
+    yield* fs.symlink(targetRoot, alias);
+    yield* project({ root: alias });
+    yield* fs.makeDirectory(join(alias, "review", ".git"));
+    yield* fs.writeFileString(join(alias, "review", ".git", "HEAD"), "ref\n");
+    yield* edit(explicitPolicies);
+    yield* project({ root: alias });
+    assert.deepStrictEqual(
+      (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
+      ["kept"],
+    );
+    assert.strictEqual(yield* fs.exists(join(home, ".skit-backups")), false);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it("works beside a root on its parent's device, and inside a root mounted from another", () => {
+  assert.strictEqual(projectionWorkDirectory("/home/me/.claude/skills", 1, 1), "/home/me/.claude");
+  assert.strictEqual(
+    projectionWorkDirectory("/home/me/.claude/skills", 2, 1),
+    "/home/me/.claude/skills",
+  );
+});

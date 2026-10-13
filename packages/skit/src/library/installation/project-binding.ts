@@ -1,6 +1,5 @@
 import { Clock, Effect, Schema } from "effect";
-import { join, resolve } from "node:path";
-import { validateSkitDirectoryEffect } from "../../artifact/skit.js";
+import { resolve } from "node:path";
 import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
 import {
@@ -10,7 +9,7 @@ import {
 import { pathIsWithin, projectionTargetPathIdentityEffect } from "../../platform/path-identity.js";
 import { ProjectionRetireConflict } from "../../failures.js";
 import { repositorySelectsProjection } from "./retire-unbound.js";
-import { originalTreeHashEffect, retainedTreePath } from "../retention/retain-tree.js";
+import { projectionSourceEffect } from "./projection-source.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { Digest, ProjectionTarget } from "../store/state-schema.js";
 import type { ManagedProjection } from "../library-state.js";
@@ -110,6 +109,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     {
       rootFor: () => options.root,
       variantsPath: options.variantsPath,
+      originalsPath: store.originalsPath,
       publish: store.publish,
     },
     (mutation) =>
@@ -133,32 +133,14 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         );
         const toRetire: ManagedProjection[] = [];
         for (const item of selected) {
-          const root = retainedTreePath(store.originalsPath, item.tree.digest);
-          const authored = item.version.materialization_profile === "declared-skit-skill/v1";
-          const validated = authored
-            ? yield* validateSkitDirectoryEffect(root, "retained", {
-                assessmentContext: "project",
-                acceptances: mutation.state.assessmentAcceptances ?? [],
-                evaluatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-              })
-            : undefined;
-          if (validated?.diagnostics.some((diagnostic) => diagnostic.severity === "error"))
-            return yield* new ProjectionInvalid({
-              detail: "retained authored descriptor is invalid",
-            });
-          const descriptorSkill = validated?.descriptor.skills.find(
-            (candidate) => candidate.name === item.skill.name,
+          const source = yield* projectionSourceEffect(
+            mutation.state,
+            store.originalsPath,
+            item.skill,
+            item.version,
           );
-          if (authored && descriptorSkill === undefined)
-            return yield* new ProjectionInvalid({
-              detail: `authored descriptor lacks ${item.skill.name}`,
-            });
-          const retainedPath =
-            item.member.source_path === "." ? root : join(root, item.member.source_path);
-          if ((yield* originalTreeHashEffect(retainedPath)) !== item.version.source_digest)
-            return yield* new ProjectionInvalid({
-              detail: `retained Skill ${item.skill.name} changed`,
-            });
+          if (source.kind === "invalid")
+            return yield* new ProjectionInvalid({ detail: source.detail });
           const previousRows = state.projections.filter(
             (candidate) => candidate.skill_id === item.skill.skill_id && atTarget(candidate),
           );
@@ -166,7 +148,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           const projectionId = priorProjection?.projection_id ?? makeProjectionId();
           const policy = binding.invocation_policies?.[item.skill.skill_id];
           const projected = yield* mutation.project({
-            installation: { libraryPath: root },
+            installation: { libraryPath: source.libraryPath },
             skill: {
               skillId: item.skill.skill_id,
               skillVersionId: item.version.skill_version_id,
@@ -175,14 +157,11 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
             },
             target: options.target,
             root: options.root,
-            sourcePath:
-              descriptorSkill === undefined ? retainedPath : join(root, descriptorSkill.path),
-            ...(descriptorSkill === undefined
+            sourcePath: source.sourcePath,
+            ...(source.shared === undefined ? {} : { shared: source.shared }),
+            ...(source.declaredInvocation === undefined
               ? {}
-              : {
-                  shared: descriptorSkill.shared,
-                  declaredInvocation: descriptorSkill.invocation,
-                }),
+              : { declaredInvocation: source.declaredInvocation }),
             invocationIntent:
               policy === undefined ? declaredInvocationIntent : overrideInvocationIntent(policy),
             ...(priorProjection === undefined ? {} : { previous: priorProjection }),

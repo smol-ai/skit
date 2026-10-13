@@ -192,8 +192,18 @@ Preview does not materialize.
 
 Projection mutations prepare replacement trees in scoped random directories on the destination
 filesystem, verify custody, apply the derived directory changes, and atomically publish candidate
-Library state once. Failure before publication leaves the prior state authoritative; retrying the
-mutation reconciles missing or managed-stale Projections from retained content. Foreign or modified
+Library state once. Adopting equal content stamps only its ownership marker, in place. Replacing or
+retiring a copy never deletes it: the copy is renamed into a `pending` backup under `.skit-backups`
+beside the real root (inside the root when it is a mount point), which is Git-ignored. After
+publication a backup is removed only when the loaded state proves it reproducible: its marker names
+the recorded Projection and Version, that Version's retained original is intact, and restaging it
+under a recorded invocation policy reproduces every name, type, mode and byte, its root included. Any other backup
+becomes `kept` until an operator deletes it. Nothing is rolled back: a failed mutation publishes
+the Projections it already wrote and verified as installed and those it moved aside, leaving
+nothing in their place, as `pending`; a write that fails verification publishes nothing. Inventory
+reads a `pending` backup of the copy a Projection still records as SKIT's absence rather than a
+native deletion, and keeps older pending backups once it verifies a successor. Retrying the mutation
+reconciles missing or managed-stale Projections from retained content. Foreign or modified
 content remains protected. See [ADR-0020](adr/0020-treat-projections-as-reconcilable-derived-state.md).
 
 When a global Harness root changes, Binding reconciliation verifies that its former projections

@@ -11,7 +11,12 @@ import {
   type InvocationPolicy,
 } from "../contracts.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { applyInvocationPolicyEffect, type InvocationIntent } from "./policy.js";
+import {
+  applyInvocationPolicyEffect,
+  declaredInvocationIntent,
+  overrideInvocationIntent,
+  type InvocationIntent,
+} from "./policy.js";
 import { deterministicTreeHashEffect } from "../artifact/skit.js";
 import { TreeHasher } from "../artifact/tree-hasher.js";
 import type { HarnessInvocationWriteFailure } from "../harnesses/projection.js";
@@ -31,15 +36,17 @@ import {
   type SkillVersionId as SkillVersionIdType,
 } from "../library/entity-ids.js";
 import type { ManagedProjection } from "../library/library-state.js";
+import type { LibraryState } from "../library/library-state.js";
+import { projectionSourceEffect } from "../library/installation/projection-source.js";
+import {
+  backUpProjectionEffect,
+  keepProjectionBackupEffect,
+  losslessTreeEffect,
+  pendingProjectionBackupsEffect,
+  projectionWorkDirectoryEffect,
+} from "./backups.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
-const ADOPTION_RECOVERY_FILE = ".skit-adoption-recovery.json";
-const AdoptionRecoveryMarker = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
-  operation: Schema.Literal("adoption-swap"),
-  destination: Schema.String,
-  displaced: Schema.String,
-});
 
 export type RetireProjectionResult =
   | { kind: "absent" }
@@ -82,7 +89,7 @@ export interface MaterializeProjectionRequest {
   projectedAt: string;
 }
 
-export interface ProjectionState {}
+export interface ProjectionState extends LibraryState {}
 
 /** A projection could not be materialized or verified. */
 export class ProjectionFailure extends Data.TaggedError("ProjectionFailure")<{
@@ -233,9 +240,15 @@ export function expectedProjectionHashResult(
   return Result.succeed(projection.expected_digest);
 }
 
+/** Moves an owned copy into a pending backup for the mutation that will settle it. */
+type BackUp = (
+  projection: ManagedProjection,
+  action: "replace" | "retire",
+) => Effect.Effect<void, PlatformError, FileSystem.FileSystem>;
+
 const materializeProjectionEffect = Effect.fn("Projection.materialize")(function* (
   request: MaterializeProjectionRequest,
-  context: NativeProjectionContext,
+  context: NativeProjectionContext & { readonly backUp: BackUp },
 ): Effect.fn.Return<
   { projection: ManagedProjection; changed: boolean },
   ProjectionMutationError,
@@ -251,10 +264,12 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
   const destination = join(root, yield* projectionNameEffect(skill.name));
   const projectionId = request.identity.projectionId;
   const prior = previous?.projection_id === projectionId ? previous : undefined;
+  const workDirectory = yield* projectionWorkDirectoryEffect(root);
   return yield* Effect.scoped(
     Effect.gen(function* () {
+      // Staged on the root's own device, so installing it is a rename even through a symlink.
       const staging = yield* fs.makeTempDirectoryScoped({
-        directory: dirname(root),
+        directory: workDirectory,
         prefix: ".skit-stage-",
       });
       const temporary = join(staging, "projection");
@@ -276,11 +291,53 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         projected_at: request.projectedAt,
       };
       const settled = () => projection;
+      /**
+       * Commit custody of the selected Version and verify it. `marker` stamps equal bytes in place,
+       * keeping whatever the hash leaves out; `replace` first moves the owned original into a
+       * pending backup; `install` refuses a destination that appeared since it was observed.
+       */
+      const commit = Effect.fn("Projection.commit")(function* (
+        mode: "marker" | "replace" | "install",
+        verification: string,
+      ) {
+        const marker = `${JSON.stringify(ownershipMarker(request, projectionId, desiredHash), null, 2)}\n`;
+        // Stamping through a link would claim a directory outside the root, so a linked
+        // destination is replaced instead, and the link itself kept in a backup.
+        const inPlace =
+          mode === "marker" &&
+          (yield* (yield* LinkStat).lstat(destination)).type !== "SymbolicLink";
+        if (inPlace) {
+          // Stage outside the projected tree so an interrupted write cannot leave hash drift.
+          const markerTemporary = join(staging, "ownership.json");
+          yield* fs.writeFileString(markerTemporary, marker, { mode: 0o600, flag: "wx" });
+          yield* fs
+            .rename(markerTemporary, join(destination, ".skit-ownership.json"))
+            .pipe(Effect.uninterruptible);
+        } else {
+          yield* fs.writeFileString(join(temporary, ".skit-ownership.json"), marker, {
+            mode: 0o600,
+          });
+          if (mode !== "install") yield* context.backUp(projection, "replace");
+          else if (yield* fs.exists(destination))
+            return yield* new ProjectionFailure({
+              message: `Projection appeared before materialization: ${destination}`,
+            });
+          yield* fs.rename(temporary, destination).pipe(Effect.uninterruptible);
+        }
+        const observed = yield* hasher.hash(destination);
+        if (observed !== desiredHash)
+          return yield* new ProjectionFailure({
+            message: `Post-${verification} hash verification failed for ${skill.skillId} at ${target}`,
+          });
+        changed = true;
+        return { ...projection, status: "installed" as const, observed_digest: observed };
+      });
       const nativeDeletion =
         !request.restoreNativeDeletion &&
         prior?.status === "suppressed" &&
         prior.suppression_reason === "native_delete" &&
-        !(yield* exists(destination));
+        !(yield* exists(destination)) &&
+        !(yield* projectionDisplacedEffect(prior));
       if (nativeDeletion) {
         projection.status = "suppressed";
         projection.suppression_reason = "native_delete";
@@ -306,22 +363,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           observed === desiredHash &&
           marker !== null &&
           sameMarker(marker, request.replacement.marker);
-        if (replacementMatches) {
-          yield* fs.writeFileString(
-            join(destination, ".skit-ownership.json"),
-            `${JSON.stringify(ownershipMarker(request, projectionId, desiredHash), null, 2)}\n`,
-            { mode: 0o600 },
-          );
-          const acceptedHash = yield* hasher.hash(destination);
-          if (acceptedHash !== desiredHash)
-            return yield* new ProjectionFailure({
-              message: `Post-replacement hash verification failed for ${skill.skillId} at ${target}`,
-            });
-          projection.status = "installed";
-          changed = true;
-          projection.observed_digest = acceptedHash;
-          return projection;
-        }
+        if (replacementMatches) return yield* commit("marker", "replacement");
         if (!marker || !markerMatches(marker, request)) {
           if (
             markerInspection.kind === "absent" &&
@@ -332,46 +374,8 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
               return yield* new AdoptionTargetChanged({ path: destination });
             if (observed !== desiredHash)
               return yield* new AdoptionContentMismatch({ path: destination });
-            const adoptedMarker = ownershipMarker(request, projectionId, desiredHash);
-            yield* fs.writeFileString(
-              join(temporary, ".skit-ownership.json"),
-              `${JSON.stringify(adoptedMarker, null, 2)}\n`,
-              { mode: 0o600 },
-            );
-            const displaced = join(staging, "unmanaged-original");
-            const recovery = AdoptionRecoveryMarker.make({
-              schemaVersion: 1,
-              operation: "adoption-swap",
-              destination,
-              displaced,
-            });
-            // This marker is durable before Custody moves. A killed process therefore leaves the
-            // original in a named location with its intended destination instead of anonymous
-            // temporary residue. Graceful failure still rolls back and scoped cleanup removes it.
-            yield* fs
-              .writeFileString(
-                join(staging, ADOPTION_RECOVERY_FILE),
-                `${JSON.stringify(recovery, null, 2)}\n`,
-                { mode: 0o600 },
-              )
-              .pipe(Effect.uninterruptible);
-            yield* fs.rename(destination, displaced).pipe(Effect.uninterruptible);
-            yield* fs.rename(temporary, destination).pipe(
-              Effect.uninterruptible,
-              Effect.onError(() =>
-                fs.rename(displaced, destination).pipe(Effect.uninterruptible, Effect.orDie),
-              ),
-            );
-            yield* fs.remove(displaced, { recursive: true }).pipe(Effect.uninterruptible);
-            const adoptedHash = yield* hasher.hash(destination);
-            if (adoptedHash !== desiredHash)
-              return yield* new ProjectionFailure({
-                message: `Post-adoption hash verification failed for ${skill.skillId} at ${target}`,
-              });
-            projection.status = "installed";
-            changed = true;
-            projection.observed_digest = adoptedHash;
-            return projection;
+            // Equal content is adopted in place, keeping every entry the hash leaves out.
+            return yield* commit("marker", "adoption");
           }
           projection.status = "conflicted";
           projection.observed_digest = observed;
@@ -402,71 +406,15 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           };
         }
         if (observed === desiredHash) {
-          if (marker.skill_version_id !== request.identity.skillVersionId) {
-            // Stage outside the projected tree so an interrupted write cannot leave hash drift.
-            const markerTemporary = join(staging, "ownership.json");
-            yield* fs.writeFileString(
-              markerTemporary,
-              `${JSON.stringify(ownershipMarker(request, projectionId, desiredHash), null, 2)}\n`,
-              { mode: 0o600, flag: "wx" },
-            );
-            yield* fs
-              .rename(markerTemporary, join(destination, ".skit-ownership.json"))
-              .pipe(Effect.uninterruptible);
-            if ((yield* hasher.hash(destination)) !== desiredHash)
-              return yield* new ProjectionFailure({
-                message: `Post-marker hash verification failed for ${skill.skillId} at ${target}`,
-              });
-            changed = true;
-          }
+          if (marker.skill_version_id !== request.identity.skillVersionId)
+            return yield* commit("marker", "marker");
           projection.status = "installed";
           projection.observed_digest = observed;
           return settled();
         }
-        const markerNext = ownershipMarker(request, projectionId, desiredHash);
-        yield* fs.writeFileString(
-          join(temporary, ".skit-ownership.json"),
-          `${JSON.stringify(markerNext, null, 2)}\n`,
-          { mode: 0o600 },
-        );
-        yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* fs.remove(destination, { recursive: true });
-            yield* fs.rename(temporary, destination);
-          }),
-        );
-        const nextHash = yield* hasher.hash(destination);
-        if (nextHash !== desiredHash)
-          return yield* new ProjectionFailure({
-            message: `Post-write hash verification failed for ${skill.skillId} at ${target}`,
-          });
-        projection.status = "installed";
-        changed = true;
-        projection.observed_digest = nextHash;
-        return projection;
+        return yield* commit("replace", "write");
       }
-      const marker = ownershipMarker(request, projectionId, desiredHash);
-      yield* fs.writeFileString(
-        join(temporary, ".skit-ownership.json"),
-        `${JSON.stringify(marker, null, 2)}\n`,
-        { mode: 0o600 },
-      );
-      if (yield* fs.exists(destination))
-        return yield* new ProjectionFailure({
-          message: `Projection appeared before materialization: ${destination}`,
-        });
-      yield* fs.rename(temporary, destination).pipe(Effect.uninterruptible);
-      return yield* Effect.gen(function* () {
-        const observed = yield* hasher.hash(destination);
-        if (observed !== desiredHash)
-          return yield* new ProjectionFailure({
-            message: `Post-write hash verification failed for ${skill.skillId} at ${target}`,
-          });
-        projection.status = "installed";
-        changed = true;
-        projection.observed_digest = observed;
-        return projection;
-      });
+      return yield* commit("install", "write");
     }),
   ).pipe(Effect.map((projection) => ({ projection, changed })));
 });
@@ -476,7 +424,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
  *
  * This is the custody question `retire` asks immediately before displacing anything, separated so
  * a caller can also ask it *first*. A batch may use that to refuse before changing any derived
- * directory; otherwise its authoritative state remains unchanged until the final publication.
+ * directory.
  */
 export const projectionCustodyEffect = Effect.fn("Projection.custody")(function* (
   projection: ManagedProjection,
@@ -505,28 +453,100 @@ const retireProjectionEffect = Effect.fn("Projection.retire")(function* (
   projection: ManagedProjection,
   onConflict: "throw" | "report",
   conflictMessage: string,
+  backUp: BackUp,
 ): Effect.fn.Return<
   RetireProjectionResult,
   ProjectionRetireConflict | OwnershipMarkerDisagrees | TreeError | PlatformError,
   TreeRequirements | TreeHasher
 > {
-  const fs = yield* FileSystem.FileSystem;
   const custody = yield* projectionCustodyEffect(projection);
   if (custody.kind === "absent") return { kind: "absent" as const };
   if (custody.kind === "conflicted") {
     if (onConflict === "report") return { kind: "conflicted" as const, observed: custody.observed };
     return yield* new ProjectionRetireConflict({ detail: conflictMessage });
   }
-  // Intact means the Projection exists, so it has a path.
-  const destination = projection.path;
   const { observed } = custody;
-  yield* fs.remove(destination, { recursive: true }).pipe(Effect.uninterruptible);
+  yield* backUp(projection, "retire");
   return {
     kind: "retired" as const,
     observed,
   };
 });
 
+/**
+ * Whether a pending backup holds the very copy a recorded Projection describes, so it still
+ * explains that Projection's absence. A backup of an earlier copy explains nothing about a later one.
+ */
+export const projectionDisplacedEffect = Effect.fn("Projection.displaced")(function* (
+  projection: ManagedProjection,
+) {
+  for (const backup of yield* pendingProjectionBackupsEffect(projection)) {
+    const marker = yield* readOwnershipMarkerEffect(backup);
+    if (
+      marker?.projection_id === projection.projection_id &&
+      marker.expected_digest === projection.expected_digest
+    )
+      return true;
+  }
+  return false;
+});
+
+/**
+ * Whether a backup is exactly what SKIT would write again, proven only from `prior`, the Library
+ * state the mutation loaded: the backup's marker must name the recorded Projection and Version, that
+ * Version's retained original must be intact, and restaging it under a recorded invocation policy
+ * must reproduce every name, type, mode and byte. Anything short of that proof keeps the backup.
+ */
+const reproducibleEffect = Effect.fn("Projection.reproducible")(function* (
+  backup: string,
+  prior: LibraryState,
+  originalsPath: string,
+  projectionId: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const recorded = prior.projections.find((item) => item.projection_id === projectionId);
+  const marker = yield* readOwnershipMarkerEffect(backup);
+  if (
+    recorded === undefined ||
+    marker?.projection_id !== recorded.projection_id ||
+    marker.skill_id !== recorded.skill_id ||
+    marker.skill_version_id !== recorded.skill_version_id
+  )
+    return false;
+  const skill = prior.skills.find((item) => item.skill_id === recorded.skill_id);
+  const version = skill?.versions.find(
+    (item) => item.skill_version_id === recorded.skill_version_id,
+  );
+  const target = recorded.target;
+  // A former per-Harness root's transforms are no longer known, so its copy cannot be restaged.
+  if (skill === undefined || version === undefined || target === "legacy") return false;
+  const source = yield* projectionSourceEffect(prior, originalsPath, skill, version);
+  const expected = yield* losslessTreeEffect(backup);
+  if (source.kind === "invalid" || expected === undefined) return false;
+  const policies = new Set(
+    [...prior.global_bindings, ...prior.local_bindings].flatMap((binding) => {
+      const policy = binding.invocation_policies?.[skill.skill_id];
+      return policy === undefined ? [] : [policy];
+    }),
+  );
+  for (const invocationIntent of [
+    declaredInvocationIntent,
+    ...[...policies].map(overrideInvocationIntent),
+  ]) {
+    const restaged = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const destination = join(
+          yield* fs.makeTempDirectoryScoped({ prefix: "skit-reproduce-" }),
+          "projection",
+        );
+        yield* copySkill({ ...source, target, invocationIntent, destination });
+        return yield* losslessTreeEffect(destination);
+      }),
+    );
+    if (restaged === expected) return true;
+  }
+  return false;
+});
 export type ProjectionMutationError =
   | AdoptionContentMismatch
   | AdoptionTargetChanged
@@ -564,7 +584,16 @@ export interface ProjectionMutation<S extends ProjectionState = ProjectionState>
   >;
 }
 
-/** Owns one private candidate and publishes it once after all derived filesystem work succeeds. */
+/**
+ * Owns one private candidate and publishes it once after all derived filesystem work succeeds.
+ *
+ * Nothing is rolled back. A failed batch instead publishes what its verified filesystem work left
+ * behind: each copy it wrote and verified as installed, and each it moved aside, leaving nothing in
+ * its place, as `pending`, so an absence SKIT caused is never read as a native deletion. A write
+ * that fails verification publishes nothing for its Projection. After a publish, pending backups of
+ * every Projection the batch touched are settled: discarded only when the loaded state proves the
+ * retained original reproduces them, otherwise kept.
+ */
 export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(function* <
   S extends ProjectionState,
   T,
@@ -575,31 +604,94 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
 >(
   loaded: S,
   context: NativeProjectionContext & {
+    /** Where retained originals live, to prove a backup reproducible before discarding it. */
+    readonly originalsPath: string;
     /** Publish `next` only if the Library is still `base`, the state this mutation loaded. */
     readonly publish: (next: S, base: S) => Effect.Effect<void, PE, PR>;
   },
   stage: (mutation: ProjectionMutation<S>) => Effect.Effect<T, SE, SR>,
 ) {
+  const fs = yield* FileSystem.FileSystem;
   const candidate = structuredClone(loaded);
   const changedProjections = new Set<string>();
+  const touched = new Map<string, ManagedProjection>();
+  const onDisk = new Map<string, ManagedProjection>();
+  const backUp: BackUp = (projection, action) =>
+    backUpProjectionEffect(projection, action).pipe(
+      Effect.map(() => {
+        onDisk.set(projection.projection_id, { ...projection, status: "pending" });
+      }),
+    );
   const mutation: ProjectionMutation<S> = {
     state: candidate,
     project: Effect.fn("Projection.project")(function* (request) {
       const root = request.root ?? context.rootFor(request.target);
       if (!root) return yield* new NoProjectionRoot({ target: request.target });
       yield* projectionNameEffect(request.skill.name);
-      const result = yield* materializeProjectionEffect({ ...request, state: candidate }, context);
-      if (result.changed) changedProjections.add(result.projection.projection_id);
+      const projectionId = request.identity.projectionId;
+      const result = yield* materializeProjectionEffect(
+        { ...request, state: candidate },
+        { ...context, backUp },
+      ).pipe(
+        Effect.onError(() =>
+          Effect.gen(function* () {
+            const displaced = onDisk.get(projectionId);
+            // An unverified successor now stands where the original was: never call it pending.
+            if (displaced !== undefined && (yield* fs.exists(displaced.path)))
+              onDisk.delete(projectionId);
+          }).pipe(Effect.orElseSucceed(() => onDisk.delete(projectionId))),
+        ),
+      );
+      touched.set(projectionId, result.projection);
+      if (result.changed) {
+        changedProjections.add(projectionId);
+        onDisk.set(projectionId, result.projection);
+      }
       return result.projection;
     }),
     retire: Effect.fn("Projection.retire")(function* (projection, onConflict, message) {
-      const result = yield* retireProjectionEffect(projection, onConflict, message);
+      touched.set(projection.projection_id, projection);
+      const result = yield* retireProjectionEffect(projection, onConflict, message, backUp);
       return result.kind === "retired"
         ? { kind: "retired" as const, observed: result.observed }
         : result;
     }),
   };
-  const value = yield* stage(mutation);
+  const publishOnDisk = Effect.suspend(() => {
+    if (onDisk.size === 0) return Effect.void;
+    const next = structuredClone(loaded);
+    for (const projection of onDisk.values()) {
+      const index = next.projections.findIndex(
+        (item) => item.projection_id === projection.projection_id,
+      );
+      if (index >= 0) next.projections[index] = projection;
+      else next.projections.push(projection);
+    }
+    return context.publish(next, loaded);
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Projections changed, but the Library could not record them", cause),
+    ),
+  );
+  const value = yield* stage(mutation).pipe(Effect.onError(() => publishOnDisk));
   yield* context.publish(candidate, loaded);
+  yield* Effect.gen(function* () {
+    for (const projection of touched.values())
+      for (const backup of yield* pendingProjectionBackupsEffect(projection))
+        if (
+          yield* reproducibleEffect(
+            backup,
+            loaded,
+            context.originalsPath,
+            projection.projection_id,
+          ).pipe(Effect.orElseSucceed(() => false))
+        )
+          yield* fs.remove(backup, { recursive: true });
+        else yield* keepProjectionBackupEffect(backup);
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Library changed, but projection backups stayed pending", cause),
+    ),
+  );
   return { state: candidate, value, projected: changedProjections.size };
 });

@@ -50,6 +50,7 @@ export const retireUnboundGlobalProjectionsEffect = Effect.fn(
     {
       rootFor: () => undefined,
       variantsPath: options.variantsPath,
+      originalsPath: store.originalsPath,
       publish: store.publish,
     },
     (mutation) =>

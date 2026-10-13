@@ -294,22 +294,14 @@ export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProject
 ) {
   const store = yield* LibraryStore;
   if (plan.retire.length === 0) return { retired: 0, state: current };
-  const pending = {
-    ...current,
-    projections: current.projections.map((projection) =>
-      plan.retire.includes(projection.projection_id) &&
-      !plan.remove.includes(projection.projection_id) &&
-      projection.suppression_reason !== "native_delete"
-        ? { ...projection, status: "pending" as const }
-        : projection,
-    ),
-  };
-  // Persist the intent before removing an aliased copy, so an intervening inventory scan cannot
-  // mistake an interrupted managed relocation for a user's native deletion.
-  yield* store.publish(pending, current);
   const result = yield* withProjectionMutationEffect(
-    pending,
-    { rootFor: () => undefined, variantsPath, publish: store.publish },
+    current,
+    {
+      rootFor: () => undefined,
+      variantsPath,
+      originalsPath: store.originalsPath,
+      publish: store.publish,
+    },
     (mutation) =>
       Effect.gen(function* () {
         let retired = 0;
@@ -328,7 +320,7 @@ export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProject
               mutation.state.projections.length,
               ...mutation.state.projections.filter((item) => item.projection_id !== id),
             );
-          else if (outcome.kind === "retired") projection.status = "pending";
+          else if (projection.suppression_reason !== "native_delete") projection.status = "pending";
         }
         return retired;
       }),
