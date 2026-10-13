@@ -12,7 +12,7 @@ export const projectionTargetHarnesses = {
 } as const satisfies Record<ProjectionTarget, readonly HarnessName[]>;
 
 /** The Harness profile whose writable root each target materializes into. */
-const projectionTargetProfiles = {
+export const projectionTargetProfiles = {
   agents: "codex",
   claude: "claude-code",
 } as const satisfies Record<ProjectionTarget, HarnessName>;

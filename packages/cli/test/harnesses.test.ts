@@ -22,7 +22,7 @@ describe("harness probing", () => {
       detectInstalledHarnesses({
         home: "/empty",
         exists: () => false,
-        codexRoot: "/codex",
+        overrides: { codex: ["/codex"] },
       }),
     ).toEqual(["codex"]);
   });
@@ -32,7 +32,7 @@ describe("harness probing", () => {
     expect(
       detectInstalledHarnesses({
         home: "/empty",
-        devinRoots: ["/repo/.devin/skills"],
+        overrides: { devin: ["/repo/.devin/skills"] },
         exists: () => false,
       }),
     ).toEqual([]);

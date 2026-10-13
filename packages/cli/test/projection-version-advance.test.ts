@@ -174,7 +174,7 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
       applyLibraryBindings(before, {
         query: skillId,
         all: false,
-        roots: { home, configHome: join(home, "config"), overrides: { codex: newRoot } },
+        roots: { home, configHome: join(home, "config"), overrides: { codex: [newRoot] } },
         variantsPath: join(home, "variants"),
         invocation: {
           scope: { kind: "global" },
@@ -282,7 +282,7 @@ for (const followedCollection of [false, true])
               roots: {
                 home,
                 configHome: join(home, "config"),
-                overrides: { codex: roots.codexRoot },
+                overrides: { codex: [roots.codexRoot] },
               },
               variantsPath: join(home, "variants"),
               invocation: {

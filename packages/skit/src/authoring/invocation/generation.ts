@@ -12,7 +12,6 @@ import {
   type HarnessInvocationWriteFailure,
 } from "../../harnesses/projection.js";
 import {
-  AUTHORED_INVOCATION_HARNESSES,
   AuthoredInvocationHarness,
   invocationMetadataAdapters,
 } from "../../harnesses/invocation-metadata.js";
@@ -66,18 +65,15 @@ export function generateInvocationMetadataEffect(
     for (const skill of descriptor.skills) {
       if (!skill.invocation) continue;
       const directory = join(absolute, ...skill.path.split("/"));
-      for (const harness of AUTHORED_INVOCATION_HARNESSES) {
+      for (const harness of AuthoredInvocationHarness.literals) {
         results.push({
           skill: skill.name,
           harness,
           path: posix.join(skill.path, invocationMetadataAdapters[harness].file),
           policy: skill.invocation,
-          changed: yield* applyHarnessInvocationPolicyEffect(
-            directory,
-            harness,
-            { source: "declared", policy: skill.invocation },
-            { dryRun: options.dryRun },
-          ),
+          changed: yield* applyHarnessInvocationPolicyEffect(directory, harness, skill.invocation, {
+            dryRun: options.dryRun,
+          }),
         });
       }
     }

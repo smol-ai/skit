@@ -3,7 +3,11 @@ import { expect, test } from "vitest";
 import { Clock, Deferred, Effect, Fiber, FileSystem, Stream } from "effect";
 import { join } from "node:path";
 import { SkillUsage, skillUsageLayer, skitLayer } from "../src/index.js";
-import { extractUsage } from "../src/usage/events.js";
+import {
+  claudeTranscriptGrammar,
+  codexTranscriptGrammar,
+  extractUsage,
+} from "../src/usage/events.js";
 import { literalCommands, shellReadPaths } from "../src/usage/literals.js";
 import { systemError } from "effect/PlatformError";
 import { MAX_USAGE_LINE_BYTES } from "../src/usage/scanner.js";
@@ -18,7 +22,7 @@ const call = (timestamp: string | undefined, id: string) => ({
 });
 
 test("native events distinguish calls, loads, inventories, slash commands and summaries", () => {
-  expect(extractUsage("claude-code", call(start, "one")).events).toEqual([
+  expect(extractUsage(claudeTranscriptGrammar, call(start, "one")).events).toEqual([
     { kind: "calls", name: "example", id: "one" },
   ]);
   const load = {
@@ -27,14 +31,16 @@ test("native events distinguish calls, loads, inventories, slash commands and su
     uuid: "load",
     message: { content: "Base directory for this skill: /synthetic/skills/example\nInstructions" },
   };
-  expect(extractUsage("claude-code", load).events[0]).toMatchObject({
+  expect(extractUsage(claudeTranscriptGrammar, load).events[0]).toMatchObject({
     kind: "loads",
     path: "/synthetic/skills/example/SKILL.md",
   });
-  expect(extractUsage("claude-code", { ...load, isMeta: false }).events).toEqual([]);
-  expect(extractUsage("claude-code", { ...load, isCompactSummary: true }).events).toEqual([]);
+  expect(extractUsage(claudeTranscriptGrammar, { ...load, isMeta: false }).events).toEqual([]);
+  expect(extractUsage(claudeTranscriptGrammar, { ...load, isCompactSummary: true }).events).toEqual(
+    [],
+  );
   expect(
-    extractUsage("claude-code", {
+    extractUsage(claudeTranscriptGrammar, {
       type: "user",
       message: {
         content: "<command-message>example</command-message><command-name>/example</command-name>",
@@ -49,18 +55,22 @@ test("native events distinguish calls, loads, inventories, slash commands and su
     id: "injection",
     content: [{ type: "input_text", text }],
   };
-  expect(extractUsage("codex", { type: "response_item", payload }).events).toHaveLength(1);
   expect(
-    extractUsage("codex", { type: "response_item", payload: { ...payload, role: "developer" } })
-      .events,
+    extractUsage(codexTranscriptGrammar, { type: "response_item", payload }).events,
+  ).toHaveLength(1);
+  expect(
+    extractUsage(codexTranscriptGrammar, {
+      type: "response_item",
+      payload: { ...payload, role: "developer" },
+    }).events,
   ).toEqual([]);
   expect(
-    extractUsage("codex", {
+    extractUsage(codexTranscriptGrammar, {
       type: "response_item",
       payload: { ...payload, content: [{ type: "input_text", text: "Available skills: " + text }] },
     }).events,
   ).toEqual([]);
-  expect(extractUsage("codex", { type: "compacted", payload }).events).toEqual([]);
+  expect(extractUsage(codexTranscriptGrammar, { type: "compacted", payload }).events).toEqual([]);
 });
 
 test("bounded static command parsing ignores comments and string bodies, accepts literals and fails closed", () => {
@@ -413,7 +423,7 @@ test("recognizes legacy shell argv and diagnoses unsupported command shapes", ()
   for (const shell of ["bash", "/bin/sh", "/usr/bin/zsh"])
     for (const flag of ["-c", "-lc"]) {
       const result = extractUsage(
-        "codex",
+        codexTranscriptGrammar,
         record([shell, flag, "cat /synthetic/skills/example/SKILL.md"]),
       );
       expect(result.events).toEqual([
@@ -434,7 +444,7 @@ test("recognizes legacy shell argv and diagnoses unsupported command shapes", ()
     [],
     {},
   ]) {
-    const result = extractUsage("codex", record(command));
+    const result = extractUsage(codexTranscriptGrammar, record(command));
     expect(result.events).toEqual([]);
     expect(result.unsupported).toBe(1);
   }
@@ -474,7 +484,7 @@ it.effect(
 
 test("skill filename mentions and output callbacks do not diagnose unsupported reads", () => {
   const wrap = (input: string) =>
-    extractUsage("codex", {
+    extractUsage(codexTranscriptGrammar, {
       type: "response_item",
       payload: { type: "custom_tool_call", name: "functions.exec", input, call_id: "example" },
     });

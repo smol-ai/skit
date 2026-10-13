@@ -96,9 +96,6 @@ export interface SkillListingContract {
   };
   readonly fallbackCharacters: number | null;
   readonly descriptionCap: number;
-  readonly descriptionFields: readonly string[];
-  readonly overflow: "round-robin-prefix" | "drop-descriptions-by-usage";
-  readonly namesRetained: boolean;
   readonly sourceIds: readonly string[];
 }
 
@@ -124,6 +121,9 @@ export interface HarnessProfile {
 export function defineHarnessProfile<const T extends HarnessProfile>(profile: T): T {
   return profile;
 }
+
+/** Device-local Skill roots that stand in for a Harness's own global roots. */
+export type HarnessRootOverrides = Partial<Record<HarnessName, readonly string[]>>;
 
 export interface HarnessRootContext {
   home: string;

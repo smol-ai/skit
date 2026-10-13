@@ -243,6 +243,17 @@ test("conformance assessment skips a Skill whose SKILL.md is missing", () => {
   ).toEqual(Result.succeed([expect.objectContaining({ harness: "codex", path: CODEX_PATH })]));
 });
 
+test("conformance assessment rejects Codex metadata it cannot read instead of reading it as absent", () => {
+  const assessed = assessInvocationConformance(
+    [{ name: "review", path: "skills/review", invocation: "explicit" }],
+    (path) =>
+      path === CODEX_PATH
+        ? "policy: {allow_implicit_invocation: no-policy}\n"
+        : "---\ndisable-model-invocation: true\n---\n",
+  );
+  expect(Result.isFailure(assessed) && assessed.failure._tag).toBe("HarnessMetadataInvalid");
+});
+
 const REVIEW = { name: "review", path: "skills/review" } as const;
 const CLAUDE = "skills/review/SKILL.md";
 

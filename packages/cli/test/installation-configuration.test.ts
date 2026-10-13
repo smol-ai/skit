@@ -25,7 +25,7 @@ describe("Library installation configuration", () => {
   test("honors direct root overrides", () => {
     const installation = libraryInstallationConfiguration(
       "/library",
-      { ...roots, overrides: { codex: "/custom/agents", claude: "/custom/claude" } },
+      { ...roots, overrides: { codex: ["/custom/agents"], "claude-code": ["/custom/claude"] } },
       ["claude-code"],
     );
 

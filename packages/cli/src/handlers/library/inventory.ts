@@ -10,7 +10,7 @@ import {
   type ShadowObservationError,
 } from "../../projection/harness-shadows.js";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
-import { Option, Effect } from "effect";
+import { Option, Effect, Record } from "effect";
 import { Command } from "effect/cli";
 import {
   libraryDoctorReport,
@@ -27,10 +27,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
-import {
-  classifyOpenCodeWarnings,
-  doctorHarnessCheck,
-} from "../../workflows/library/doctor-harnesses.js";
+import { nativeDiscovery, doctorHarnessCheck } from "../../workflows/library/doctor-harnesses.js";
 import { doctorCodexCheck } from "../../workflows/library/doctor-codex.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
@@ -119,20 +116,21 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
   const inventory = yield* refreshLibraryInventoryCommand(options);
   const report = libraryDoctorReport(inventory);
   const renderer = yield* Renderer;
-  const { codex, claude, claudeHarness, opencode, devin } = yield* renderer.withStatus(
+  const { codex, claude, harnesses } = yield* renderer.withStatus(
     "Checking native harness skill discovery",
     Effect.all(
       {
-        codex: doctorCodexCheck(inventory, process.cwd(), options.overrides.codex, options),
+        codex: doctorCodexCheck(inventory, process.cwd(), options.overrides.codex?.[0], options),
         claude: readClaudeListingSnapshot(inventory, { ...options, cwd: process.cwd() }),
-        claudeHarness: doctorHarnessCheck("claude-code", process.cwd(), options.overrides.claude),
-        opencode: doctorHarnessCheck("opencode", process.cwd(), options.overrides.opencode),
-        devin: doctorHarnessCheck("devin", process.cwd(), options.overrides.devin),
+        harnesses: Effect.forEach(
+          Record.keys(nativeDiscovery),
+          (harness) => doctorHarnessCheck(harness, process.cwd(), options.overrides[harness]),
+          { concurrency: 3 },
+        ),
       },
       { concurrency: 3 },
     ),
   );
-  const harnesses = [claudeHarness, opencode, devin];
   const aliasErrors: ShadowObservationError[] = [];
   const locations = yield* observeHarnessSkills(
     [
@@ -154,21 +152,19 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
       },
       claude.budget,
     ],
-    harnesses: harnesses.map((check) =>
-      classifyOpenCodeWarnings(
-        {
-          ...check,
-          locations: locations.filter((location) => location.harness === check.harness),
-          warnings: [
-            ...check.warnings,
-            ...aliasErrors.map(
-              (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
-            ),
-          ],
-        },
-        inventory,
-      ),
-    ),
+    harnesses: harnesses.map((check) => {
+      const located = {
+        ...check,
+        locations: locations.filter((location) => location.harness === check.harness),
+        warnings: [
+          ...check.warnings,
+          ...aliasErrors.map(
+            (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
+          ),
+        ],
+      };
+      return nativeDiscovery[check.harness].classifyWarnings?.(located, inventory) ?? located;
+    }),
   };
 });
 

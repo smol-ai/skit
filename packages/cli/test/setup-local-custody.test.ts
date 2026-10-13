@@ -44,7 +44,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
     const home = yield* libraryHome({
       home: join(root, "home"),
       inventoryHome: root,
-      roots: { codex: codexRoot },
+      roots: { codex: [codexRoot] },
     });
     const interaction = yield* makeScriptedInteraction([
       [repository],
@@ -133,7 +133,7 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
     const home = yield* libraryHome({
       home: join(root, "home"),
       inventoryHome: root,
-      roots: { codex: codexRoot },
+      roots: { codex: [codexRoot] },
     });
     const interaction = yield* makeScriptedInteraction([["ai-readme", "review"], true]);
     yield* home.owned(
@@ -213,7 +213,7 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
     const home = yield* libraryHome({
       home: join(root, "library"),
       inventoryHome: root,
-      roots: { claude, codex },
+      roots: { "claude-code": [claude], codex: [codex] },
     });
     const chosenPath = yield* fs.realPath(join(claude, names[0]));
     const interaction = yield* makeScriptedInteraction([[`${names[0]}\0${chosenPath}`], true]);
@@ -285,7 +285,7 @@ it.effect("reconnects only the selected exact Library copy", () =>
     const home = yield* libraryHome({
       home: join(root, "library"),
       inventoryHome: root,
-      roots: { claude, codex },
+      roots: { "claude-code": [claude], codex: [codex] },
     });
     const selected = yield* fs.realPath(join(claude, "review"));
     const interaction = yield* makeScriptedInteraction([[`review\0${selected}`], true]);

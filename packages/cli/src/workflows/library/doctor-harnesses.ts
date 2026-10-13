@@ -3,12 +3,14 @@ import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
+  HarnessName,
   type LibraryState,
   LibraryDoctorReport,
   ListingBudget,
   SourceProcess,
+  type SourceProcessResult,
 } from "@smolai/skit-core";
-import { probeHarnessEffect, type ProbeableHarness } from "../../harness/probe.js";
+import { probeHarnessEffect } from "../../harness/probe.js";
 import { CodexDoctorCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -36,8 +38,11 @@ export const HarnessDoctorSkill = Schema.Struct({
   errors: Schema.Array(Schema.String),
 });
 export type HarnessDoctorSkill = typeof HarnessDoctorSkill.Type;
+/** The Harnesses doctor checks through their own discovery; Codex has its own check. */
+const NativeDoctorHarness = HarnessName.pick(["claude-code", "opencode", "devin"]);
+type NativeDoctorHarness = typeof NativeDoctorHarness.Type;
 export const HarnessDoctorCheck = Schema.Struct({
-  harness: Schema.Literals(["claude-code", "opencode", "devin"]),
+  harness: NativeDoctorHarness,
   status: Schema.Literals(["checked", "missing", "failed", "skipped"]),
   cwd: Schema.String,
   version: Schema.optionalKey(Schema.String),
@@ -205,82 +210,150 @@ if (result.error || result.status !== 0) {
 } else process.stdout.write(fs.readFileSync(file));
 `;
 
-export const readNativeSkills = Effect.fn("Doctor.readNativeSkills")(function* (
-  harness: "opencode" | "devin",
+const NATIVE_LIST_LIMITS = { timeoutMs: 15_000, maxOutputBytes: 4_000_000, maxErrorBytes: 32_000 };
+
+const nativeListWarnings = (output: SourceProcessResult) =>
+  output.stderr.trim() ? [output.stderr.trim()] : [];
+
+/** OpenCode V1's resolved skill list. */
+export const readOpenCodeSkills = Effect.fn("Doctor.readOpenCodeSkills")(function* (
   executable: string,
   cwd: string,
-  version?: string,
 ) {
-  if (harness === "opencode" && version?.startsWith("2."))
-    return yield* readOpenCodeV2Skills(executable, cwd);
   const sourceProcess = yield* SourceProcess;
-  const options = { cwd, timeoutMs: 15_000, maxOutputBytes: 4_000_000, maxErrorBytes: 32_000 };
-  const output =
-    harness === "opencode"
-      ? yield* Effect.scoped(
-          Effect.gen(function* () {
-            const fs = yield* FileSystem.FileSystem;
-            const directory = yield* fs.makeTempDirectoryScoped({
-              prefix: "skit-opencode-discovery-",
-            });
-            return yield* sourceProcess.output(
-              process.execPath,
-              ["-e", openCodeCapture, executable, join(directory, "skills.json")],
-              options,
-            );
-          }),
-        )
-      : yield* sourceProcess.output(executable, ["skills", "list", "--json"], options);
+  const output = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "skit-opencode-discovery-" });
+      return yield* sourceProcess.output(
+        process.execPath,
+        ["-e", openCodeCapture, executable, join(directory, "skills.json")],
+        { cwd, ...NATIVE_LIST_LIMITS },
+      );
+    }),
+  );
   if (output.exitCode !== 0)
     return yield* new HarnessDiscoveryFailure({
-      message: `${harness} discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
+      message: `opencode discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
     });
-  const text = new TextDecoder().decode(output.stdout);
-  const skills: HarnessDoctorSkill[] =
-    harness === "opencode"
-      ? (yield* decodeOpenCodeSkills(text)).map((skill) => ({
-          name: skill.name,
-          ...(skill.description === undefined ? {} : { description: skill.description }),
-          path: skill.location,
-          warnings: [],
-          errors: [],
-        }))
-      : (yield* decodeDevinSkills(text)).map((skill) => ({
-          name: skill.name,
-          ...(skill.description === null ? {} : { description: skill.description }),
-          path: skill.base_dir,
-          ...(skill.display_name === null ? {} : { displayName: skill.display_name }),
-          provider: skill.provider,
-          triggers: skill.triggers,
-          warnings: skill.warnings,
-          errors: skill.errors,
-        }));
-  return { skills, warnings: output.stderr.trim() ? [output.stderr.trim()] : [] };
+  const skills: HarnessDoctorSkill[] = (yield* decodeOpenCodeSkills(
+    new TextDecoder().decode(output.stdout),
+  )).map((skill) => ({
+    name: skill.name,
+    ...(skill.description === undefined ? {} : { description: skill.description }),
+    path: skill.location,
+    warnings: [],
+    errors: [],
+  }));
+  return { skills, warnings: nativeListWarnings(output) };
 });
 
-export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
-  harness: Exclude<ProbeableHarness, "codex">,
+/** Devin's own skill list, with its per-skill diagnostics. */
+export const readDevinSkills = Effect.fn("Doctor.readDevinSkills")(function* (
+  executable: string,
   cwd: string,
-  overrideRoot?: string | readonly string[],
 ) {
-  const coverage: HarnessDoctorCheck["coverage"] =
-    harness === "claude-code"
-      ? "callable-commands"
-      : harness === "opencode"
-        ? "resolved-skills"
-        : "native-skills";
-  const limitations =
-    harness === "claude-code"
-      ? [
-          "Callable commands only; may include legacy commands and bundled commands. Non-user-invocable skills and file paths are not exposed. Hooks and MCP startup are disabled.",
-        ]
-      : harness === "opencode"
+  const output = yield* (yield* SourceProcess).output(executable, ["skills", "list", "--json"], {
+    cwd,
+    ...NATIVE_LIST_LIMITS,
+  });
+  if (output.exitCode !== 0)
+    return yield* new HarnessDiscoveryFailure({
+      message: `devin discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
+    });
+  const skills: HarnessDoctorSkill[] = (yield* decodeDevinSkills(
+    new TextDecoder().decode(output.stdout),
+  )).map((skill) => ({
+    name: skill.name,
+    ...(skill.description === null ? {} : { description: skill.description }),
+    path: skill.base_dir,
+    ...(skill.display_name === null ? {} : { displayName: skill.display_name }),
+    provider: skill.provider,
+    triggers: skill.triggers,
+    warnings: skill.warnings,
+    errors: skill.errors,
+  }));
+  return { skills, warnings: nativeListWarnings(output) };
+});
+
+const isOpenCodeV2 = (version: string | undefined) => version?.startsWith("2.") === true;
+
+/** How doctor reads one Harness's own Skill discovery, and what that reading can and cannot show. */
+export interface NativeDiscovery {
+  readonly coverage: HarnessDoctorCheck["coverage"];
+  readonly limitations: (version?: string) => readonly string[];
+  readonly read: (
+    executable: string,
+    cwd: string,
+    version?: string,
+  ) => Effect.Effect<
+    { readonly skills: readonly HarnessDoctorSkill[]; readonly warnings: readonly string[] },
+    unknown,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | SourceProcess
+  >;
+  /** Drop diagnostics that only restate SKIT's own expected Projections. */
+  readonly classifyWarnings?: (
+    check: HarnessDoctorCheck,
+    state: LibraryState,
+  ) => HarnessDoctorCheck;
+}
+
+/** Codex has its own, richer check. */
+export const nativeDiscovery: Record<NativeDoctorHarness, NativeDiscovery> = {
+  "claude-code": {
+    coverage: "callable-commands",
+    limitations: () => [
+      "Callable commands only; may include legacy commands and bundled commands. Non-user-invocable skills and file paths are not exposed. Hooks and MCP startup are disabled.",
+    ],
+    read: (executable: string, cwd: string) =>
+      readClaudeCommands(executable, cwd).pipe(
+        Effect.map((commands) => ({
+          skills: commands.map((command) => ({ ...command, warnings: [], errors: [] })),
+          warnings: [],
+        })),
+      ),
+  },
+  opencode: {
+    coverage: "resolved-skills",
+    limitations: (version?: string) =>
+      isOpenCodeV2(version)
         ? [
-            "Resolved skills only: duplicate names can replace earlier entries. Native warnings may reveal collisions; the final list cannot prove their absence. Skill bodies are omitted.",
+            "Registered skills after discovery plugin activation and three stable metadata snapshots. Duplicate filesystem IDs are resolved by native precedence without warnings; equal display names can coexist. Skill bodies are omitted.",
           ]
-        : ["Native list semantics; completeness across duplicate paths has not been established."];
-  const empty = { harness, cwd, coverage, limitations, skills: [], warnings: [] };
-  if (typeof overrideRoot === "string" ? Boolean(overrideRoot) : Boolean(overrideRoot?.length))
+        : [
+            "Resolved skills only: duplicate names can replace earlier entries. Native warnings may reveal collisions; the final list cannot prove their absence. Skill bodies are omitted.",
+          ],
+    read: (executable: string, cwd: string, version?: string) =>
+      isOpenCodeV2(version)
+        ? readOpenCodeV2Skills(executable, cwd)
+        : readOpenCodeSkills(executable, cwd),
+    classifyWarnings: classifyOpenCodeWarnings,
+  },
+  devin: {
+    coverage: "native-skills",
+    limitations: () => [
+      "Native list semantics; completeness across duplicate paths has not been established.",
+    ],
+    read: (executable: string, cwd: string) => readDevinSkills(executable, cwd),
+  },
+};
+
+export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
+  harness: NativeDoctorHarness,
+  cwd: string,
+  overrides?: readonly string[],
+) {
+  const discovery = nativeDiscovery[harness];
+  const coverage: HarnessDoctorCheck["coverage"] = discovery.coverage;
+  const empty = {
+    harness,
+    cwd,
+    coverage,
+    limitations: discovery.limitations(),
+    skills: [],
+    warnings: [],
+  };
+  if (overrides?.some(Boolean))
     return {
       ...empty,
       status: "skipped" as const,
@@ -296,29 +369,13 @@ export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       status: probe.status === "missing" ? ("missing" as const) : ("failed" as const),
       detail: probe.error ?? "Harness unavailable",
     };
-  const executable = probe.executablePath;
   const native = {
     ...empty,
     ...version,
-    limitations:
-      harness === "opencode" && probe.version?.startsWith("2.")
-        ? [
-            "Registered skills after discovery plugin activation and three stable metadata snapshots. Duplicate filesystem IDs are resolved by native precedence without warnings; equal display names can coexist. Skill bodies are omitted.",
-          ]
-        : limitations,
+    limitations: discovery.limitations(probe.version ?? undefined),
   };
-  return yield* Effect.gen(function* () {
-    if (harness === "claude-code") {
-      const commands = yield* readClaudeCommands(executable, cwd);
-      return {
-        ...native,
-        status: "checked" as const,
-        skills: commands.map((command) => ({ ...command, warnings: [], errors: [] })),
-      };
-    }
-    const result = yield* readNativeSkills(harness, executable, cwd, probe.version ?? undefined);
-    return { ...native, ...result, status: "checked" as const };
-  }).pipe(
+  return yield* discovery.read(probe.executablePath, cwd, probe.version ?? undefined).pipe(
+    Effect.map((result) => ({ ...native, ...result, status: "checked" as const })),
     Effect.catch((error) =>
       Effect.succeed({ ...native, status: "failed" as const, detail: String(error) }),
     ),
@@ -330,7 +387,7 @@ export function classifyOpenCodeWarnings(
   check: HarnessDoctorCheck,
   state: LibraryState,
 ): HarnessDoctorCheck {
-  if (check.harness !== "opencode" || check.status !== "checked") return check;
+  if (check.status !== "checked") return check;
   const lines = check.warnings.flatMap((warning) => warning.split("\n").filter(Boolean));
   const field = (line: string, key: string) => {
     const value = line.match(new RegExp(`(?:^|\\s)${key}=("(?:\\\\.|[^"\\\\])*"|\\S+)`))?.[1];

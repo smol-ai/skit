@@ -1,4 +1,4 @@
-import { resolveDeclaredInvocation, type InvocationHarness } from "@smolai/skit-core";
+import { resolveDeclaredInvocation, type HarnessName } from "@smolai/skit-core";
 import { describe, expect, test } from "vitest";
 import { Result } from "effect";
 import { invocationPolicyChoices, invocationReadModel } from "../src/invocation/read-model.js";
@@ -8,7 +8,7 @@ const CLAUDE = "skills/review/SKILL.md";
 
 function model(options: {
   /** Whose native metadata supplies the author's default. */
-  harness?: InvocationHarness;
+  harness?: HarnessName;
   invocation?: "explicit" | "implicit" | "host-policy";
   files?: Record<string, string>;
   storedIntent?: InvocationOption;

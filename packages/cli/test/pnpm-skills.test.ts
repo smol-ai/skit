@@ -324,7 +324,7 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
     const home = yield* libraryHome({
       home: join(f.root, "library"),
       inventoryHome: join(f.root, "home"),
-      roots: { codex: dirname(alias) },
+      roots: { codex: [dirname(alias)] },
     });
     const options = {
       libraryHome: home.home,

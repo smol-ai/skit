@@ -1,5 +1,5 @@
 import { Data, Schema } from "effect";
-import type { CodexListingSnapshot } from "./codex.js";
+import { HarnessName } from "../../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 export class ListingReadFailure
@@ -22,8 +22,11 @@ export const ListingEntry = Schema.Struct({
   collectionId: Schema.optionalKey(Schema.String),
 });
 export type ListingEntry = typeof ListingEntry.Type;
+/** The Harnesses whose skill listing SKIT can estimate; each one's driver carries the estimator. */
+export const ListingHarness = HarnessName.pick(["codex", "claude-code"]);
+export type ListingHarness = typeof ListingHarness.Type;
 const fields = {
-  harness: Schema.Literals(["codex", "claude-code"]),
+  harness: ListingHarness,
   cwd: Schema.String,
   model: Schema.NullOr(Schema.String),
   unit: Schema.Literals(["budget-tokens", "characters"]),
@@ -54,44 +57,6 @@ export const ListingBudget = Schema.Union([
   }),
 ]);
 export type ListingBudget = typeof ListingBudget.Type;
-
-export function codexListingResult(snapshot: CodexListingSnapshot): ListingBudget {
-  const b = snapshot.budget;
-  if (b.status === "unavailable")
-    return { _tag: "Unavailable", harness: "codex", cwd: b.cwd, detail: b.detail };
-  return {
-    _tag: "Estimated",
-    harness: "codex",
-    cwd: b.cwd,
-    model: b.model,
-    unit: b.unit,
-    demand: b.requested,
-    limit: b.limit,
-    fitted: b.used,
-    shortened: b.shortened,
-    descriptionsDropped: { min: 0, max: 0 },
-    omitted: b.omitted,
-    fidelity: "modelled",
-    ...(snapshot.warnings?.length ? { warnings: snapshot.warnings } : {}),
-    entries: (snapshot.skillDemands ?? []).map((s) => ({
-      name: s.name,
-      path: s.path,
-      demand: s.requested,
-    })),
-    collections: b.collections.map((c) => ({
-      collectionId: c.collectionId,
-      skills: c.skills,
-      demand: c.requested,
-    })),
-    basis:
-      b.unit === "characters"
-        ? "Context window unknown; using Codex's 8,000-character fallback."
-        : `${b.model ?? "Configured model"} · context ${b.contextWindow?.toLocaleString("en-US") ?? "unknown"}; native budget overrides take precedence.`,
-    coverage: [
-      "Includes native discoverable built-ins and other enabled skills. Path aliases are estimated; full instructions loaded later are additional.",
-    ],
-  };
-}
 
 export function largeListingEntries(budget: ListingBudget): readonly ListingEntry[] {
   return budget._tag !== "Estimated"

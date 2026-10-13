@@ -22,10 +22,7 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
   const detectedHarnesses = yield* detectInstalledHarnessesEffect({
     home: inventory.home,
     configHome: inventory.configHome,
-    codexRoot: inventory.overrides.codex,
-    claudeRoot: inventory.overrides.claude,
-    opencodeRoot: inventory.overrides.opencode,
-    devinRoots: inventory.overrides.devin,
+    overrides: inventory.overrides,
   });
   const installation = libraryInstallationConfiguration(libraryHome, inventory, detectedHarnesses);
   return {

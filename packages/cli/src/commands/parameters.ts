@@ -1,6 +1,8 @@
-import { Option } from "effect";
+import { Option, Record } from "effect";
 import { Flag, GlobalFlag } from "effect/cli";
+import type { HarnessName } from "@smolai/skit-core";
 import type { ResolvedSkitConfiguration } from "../configuration/skit-configuration.js";
+import type { InventoryRootOptions } from "../projection/roots.js";
 
 export const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit structured JSON."),
@@ -57,16 +59,17 @@ export function inventoryRootOptions(
     readonly devinRoot: readonly string[];
   },
   paths: ResolvedSkitConfiguration,
-) {
+): InventoryRootOptions {
+  const overrides: Record<HarnessName, readonly string[]> = {
+    codex: Option.toArray(input.codexRoot),
+    "claude-code": Option.toArray(input.claudeRoot),
+    opencode: Option.toArray(input.opencodeRoot),
+    devin: input.devinRoot,
+  };
   return {
     home: paths.userHome,
     configHome: paths.configHome,
-    overrides: {
-      codex: Option.getOrUndefined(input.codexRoot),
-      claude: Option.getOrUndefined(input.claudeRoot),
-      opencode: Option.getOrUndefined(input.opencodeRoot),
-      devin: [...input.devinRoot],
-    },
+    overrides: Record.filter(overrides, (roots) => roots.length > 0),
   };
 }
 

@@ -201,7 +201,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       roots: {
         home: root,
         configHome: join(root, "config"),
-        overrides: { codex: join(root, "codex") },
+        overrides: { codex: [join(root, "codex")] },
       },
       variantsPath: join(home, "variants"),
     };

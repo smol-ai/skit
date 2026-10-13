@@ -3,98 +3,48 @@ import { Effect } from "effect";
 import { LinkStat } from "@smolai/skit-core";
 import { dirname, join } from "node:path";
 import {
-  harnessProfile,
-  hasHarnessProfile,
+  HarnessName,
+  harnessDrivers,
   resolveHarnessRoot,
-  type HarnessName,
+  type HarnessRootOverrides,
 } from "@smolai/skit-core";
 
-export const harnessRoster = [
-  { id: "codex", aliases: ["codex"], label: "Codex", audit: "supported", target: true },
-  {
-    id: "claude-code",
-    aliases: ["claude", "claude-code"],
-    label: "Claude Code",
-    audit: "supported",
-    target: true,
-  },
-  {
-    id: "opencode",
-    aliases: ["opencode"],
-    label: "OpenCode",
-    audit: "supported",
-    target: true,
-  },
-  { id: "devin", aliases: ["devin"], label: "Devin", audit: "supported", target: true },
-  { id: "cursor", aliases: [], label: "Cursor", audit: "deferred", target: false },
-  { id: "pi", aliases: [], label: "Pi", audit: "deferred", target: false },
-] as const satisfies readonly {
-  id: string;
-  aliases: readonly string[];
-  label: string;
-  audit: "supported" | "deferred";
-  target: boolean;
-}[];
-
-export const targetHarnesses = harnessRoster.filter((item) => item.target);
-export const harnessAliases = targetHarnesses.flatMap((item) => item.aliases);
-export const auditHarnesses = harnessRoster.filter((item) => item.audit === "supported");
-export const deferredAuditHarnesses = harnessRoster
-  .filter((item) => item.audit === "deferred")
-  .map((item) => item.id);
-
-function assertHarnessRoster(): void {
-  const aliases = new Set<string>();
-  for (const entry of harnessRoster) {
-    if ((entry.audit === "supported" || entry.target) && !hasHarnessProfile(entry.id))
-      throw new Error(`Harness roster entry has no core profile: ${entry.id}`);
-    for (const alias of entry.aliases) {
-      if (aliases.has(alias)) throw new Error(`Duplicate harness alias: ${alias}`);
-      aliases.add(alias);
-    }
-  }
-}
-
-assertHarnessRoster();
-
-export function harnessFromAlias(alias: string): HarnessName | undefined {
-  return targetHarnesses.find((item) => (item.aliases as readonly string[]).includes(alias))?.id;
-}
-
 export function harnessLabel(harness: HarnessName): string {
-  return harnessRoster.find((item) => item.id === harness)?.label ?? harness;
+  return harnessDrivers[harness].label;
 }
 
 export interface HarnessProbeOptions {
   home: string;
   configHome?: string;
-  codexRoot?: string;
-  claudeRoot?: string;
-  opencodeRoot?: string;
-  /** Extra Devin roots to scan; these do not establish Harness availability. */
-  devinRoots?: string[];
+  overrides?: HarnessRootOverrides;
   /** Whether a filesystem marker is present. Detection is a pure decision over this probe. */
   exists: (path: string) => boolean;
 }
 
+/** The filesystem markers whose presence shows a Harness installed. */
+function installMarkers(harness: HarnessName, context: { home: string; configHome: string }) {
+  const driver = harnessDrivers[harness];
+  const native = driver.profile.roots.find(
+    (root) => root.scope === "global" && root.role === "native",
+  );
+  return [
+    ...(native ? [dirname(resolveHarnessRoot(native, context))] : []),
+    ...driver.installMarkers,
+  ];
+}
+
 /** The detection policy over an answered marker probe; `detectInstalledHarnessesEffect` asks the filesystem. */
 export function detectInstalledHarnesses(options: HarnessProbeOptions): HarnessName[] {
-  const home = options.home;
-  const configHome = options.configHome ?? join(home, ".config");
-  const exists = options.exists;
-  const detected: HarnessName[] = [];
-  const context = { home, configHome };
-  const installed = (harness: HarnessName) => {
-    const native = harnessProfile(harness).roots.find(
-      (root) => root.scope === "global" && root.role === "native",
-    );
-    return native ? exists(dirname(resolveHarnessRoot(native, context))) : false;
+  const context = {
+    home: options.home,
+    configHome: options.configHome ?? join(options.home, ".config"),
   };
-  if (options.codexRoot || installed("codex") || exists("/etc/codex")) detected.push("codex");
-  if (options.claudeRoot || installed("claude-code")) detected.push("claude-code");
-  if (options.opencodeRoot || installed("opencode")) detected.push("opencode");
-  if (installed("devin")) detected.push("devin");
-  return detected;
+  return HarnessName.literals.filter(
+    (harness) =>
+      (harnessDrivers[harness].rootOverride === "replaces" &&
+        Boolean(options.overrides?.[harness]?.some(Boolean))) ||
+      installMarkers(harness, context).some(options.exists),
+  );
 }
 
 /** Resolve the same synchronous detection policy with application-owned filesystem probes. */
@@ -102,24 +52,24 @@ export const detectInstalledHarnessesEffect = Effect.fn("Harness.detectInstalled
   options: Partial<Omit<HarnessProbeOptions, "exists">> = {},
 ) {
   const configuration = yield* configurationForHome();
-  const resolvedOptions = {
-    ...options,
-    home: options.home ?? configuration.userHome,
-    configHome: options.configHome ?? configuration.configHome,
-  };
-  const paths = new Set<string>();
-  detectInstalledHarnesses({
-    ...resolvedOptions,
-    exists: (path) => {
-      paths.add(path);
-      return false;
-    },
-  });
+  const home = options.home ?? configuration.userHome;
+  const configHome = options.configHome ?? configuration.configHome;
   const probe = yield* LinkStat;
   const found = new Set<string>();
-  for (const path of paths) {
-    const info = yield* Effect.option(probe.identity.lstat(path));
-    if (info._tag === "Some") found.add(path);
-  }
-  return detectInstalledHarnesses({ ...resolvedOptions, exists: (path) => found.has(path) });
+  yield* Effect.forEach(
+    HarnessName.literals.flatMap((harness) => installMarkers(harness, { home, configHome })),
+    (path) =>
+      Effect.option(probe.identity.lstat(path)).pipe(
+        Effect.map((info) => {
+          if (info._tag === "Some") found.add(path);
+        }),
+      ),
+    { concurrency: "unbounded", discard: true },
+  );
+  return detectInstalledHarnesses({
+    ...options,
+    home,
+    configHome,
+    exists: (path) => found.has(path),
+  });
 });

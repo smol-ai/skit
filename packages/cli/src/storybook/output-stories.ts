@@ -1,5 +1,5 @@
 import { emptyUsageStory, observedUsageStory } from "./usage-stories.js";
-import { codexListingResult, estimateCodexListing } from "@smolai/skit-core";
+import { estimateCodexListing } from "@smolai/skit-core";
 import { Data } from "effect";
 import {
   makeCollectionId,
@@ -56,7 +56,7 @@ const emptyAssessment = {
   findingDecisions: [],
 };
 
-const doctorListing = estimateCodexListing({
+const doctorListingBudget = estimateCodexListing({
   cwd: "/home/story/project",
   model: "gpt-6.1-sol",
   contextWindow: 373000,
@@ -68,11 +68,6 @@ const doctorListing = estimateCodexListing({
       description: "Review code changes and find regressions. ".repeat(20),
     },
   ],
-});
-const doctorListingBudget = codexListingResult({
-  skills: [],
-  budget: doctorListing.budget,
-  skillDemands: doctorListing.skills,
 });
 
 export const outputStories: ReadonlyArray<OutputStory> = [

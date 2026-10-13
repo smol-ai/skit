@@ -1,38 +1,5 @@
-import { Schema } from "effect";
-import { harnessProfile } from "../catalog.js";
-
-const Contribution = Schema.Struct({
-  collectionId: Schema.String,
-  skills: Schema.Number,
-  used: Schema.Number,
-  requested: Schema.Number,
-  shortened: Schema.Number,
-  omitted: Schema.Number,
-});
-
-export const CodexListingBudget = Schema.Union([
-  Schema.Struct({
-    status: Schema.Literal("unavailable"),
-    cwd: Schema.String,
-    detail: Schema.String,
-  }),
-  Schema.Struct({
-    status: Schema.Literal("estimated"),
-    cwd: Schema.String,
-    model: Schema.NullOr(Schema.String),
-    contextWindow: Schema.NullOr(Schema.Number),
-    unit: Schema.Literals(["budget-tokens", "characters"]),
-    limit: Schema.Number,
-    used: Schema.Number,
-    requested: Schema.Number,
-    sharedOverhead: Schema.Number,
-    otherSkills: Schema.Number,
-    shortened: Schema.Number,
-    omitted: Schema.Number,
-    collections: Schema.Array(Contribution),
-  }),
-]);
-export type CodexListingBudget = typeof CodexListingBudget.Type;
+import { harnessProfiles } from "../catalog.js";
+import type { ListingBudget } from "./contracts.js";
 
 export interface CodexListingSkill {
   readonly name: string;
@@ -72,19 +39,14 @@ export interface CodexListingEstimateInput {
   readonly contextWindow: number | null;
   readonly maxContextTokens?: number;
   readonly skills: readonly CodexListingSkill[];
+  /** Native discovery diagnostics carried into the estimate. */
+  readonly warnings?: readonly string[];
 }
 
-export interface CodexSkillDemand {
-  readonly name: string;
-  readonly path: string;
-  readonly requested: number;
-}
-
-export function estimateCodexListing(input: CodexListingEstimateInput): {
-  readonly budget: Extract<CodexListingBudget, { status: "estimated" }>;
-  readonly skills: readonly CodexSkillDemand[];
-} {
-  const contract = harnessProfile("codex").skillListing!;
+export function estimateCodexListing(
+  input: CodexListingEstimateInput,
+): Extract<ListingBudget, { _tag: "Estimated" }> {
+  const contract = harnessProfiles.codex.skillListing;
   const unit =
     input.maxContextTokens !== undefined || input.contextWindow !== null
       ? "budget-tokens"
@@ -93,7 +55,7 @@ export function estimateCodexListing(input: CodexListingEstimateInput): {
     input.maxContextTokens !== undefined
       ? Math.min(input.maxContextTokens, 10_000)
       : input.contextWindow === null
-        ? contract.fallbackCharacters!
+        ? contract.fallbackCharacters
         : Math.max(1, Math.floor(input.contextWindow * contract.fraction));
   const cost = (text: string): number =>
     unit === "budget-tokens" ? Math.ceil(bytes(text) / 4) : Array.from(text).length;
@@ -194,58 +156,48 @@ export function estimateCodexListing(input: CodexListingEstimateInput): {
     )
       selected = aliased;
   }
-  const collections = new Map<string, typeof Contribution.Type>();
+  const collections = new Map<string, { collectionId: string; skills: number; demand: number }>();
   skills.forEach((skill, index) => {
     if (skill.collectionId === undefined) return;
     const current = collections.get(skill.collectionId) ?? {
       collectionId: skill.collectionId,
       skills: 0,
-      used: 0,
-      requested: 0,
-      shortened: 0,
-      omitted: 0,
+      demand: 0,
     };
     collections.set(skill.collectionId, {
       ...current,
       skills: current.skills + 1,
-      used: current.used + selected.used[index]!,
-      requested: current.requested + selected.full[index]!,
-      shortened:
-        current.shortened +
-        (selected.counts[index]! >= 0 && selected.counts[index]! < descriptions[index]!.length
-          ? 1
-          : 0),
-      omitted: current.omitted + (selected.counts[index]! < 0 ? 1 : 0),
+      demand: current.demand + selected.full[index]!,
     });
   });
   return {
-    skills: skills.map((skill, index) => ({
+    _tag: "Estimated",
+    harness: "codex",
+    cwd: input.cwd,
+    model: input.model,
+    unit,
+    demand: selected.full.reduce((a, b) => a + b, selected.overhead),
+    limit,
+    fitted: selected.used.reduce((a, b) => a + b, selected.overhead),
+    shortened: selected.counts.filter(
+      (count, index) => count >= 0 && count < descriptions[index]!.length,
+    ).length,
+    descriptionsDropped: { min: 0, max: 0 },
+    omitted: selected.omitted,
+    fidelity: "modelled",
+    ...(input.warnings?.length ? { warnings: input.warnings } : {}),
+    entries: skills.map((skill, index) => ({
       name: skill.name,
       path: skill.path,
-      requested: selected.full[index]!,
+      demand: selected.full[index]!,
     })),
-    budget: {
-      status: "estimated",
-      cwd: input.cwd,
-      model: input.model,
-      contextWindow: input.contextWindow,
-      unit,
-      limit,
-      used: selected.used.reduce((a, b) => a + b, selected.overhead),
-      requested: selected.full.reduce((a, b) => a + b, selected.overhead),
-      sharedOverhead: selected.overhead,
-      otherSkills: skills.filter((skill) => skill.collectionId === undefined).length,
-      shortened: selected.counts.filter(
-        (count, index) => count >= 0 && count < descriptions[index]!.length,
-      ).length,
-      omitted: selected.omitted,
-      collections: [...collections.values()],
-    },
+    collections: [...collections.values()],
+    basis:
+      unit === "characters"
+        ? "Context window unknown; using Codex's 8,000-character fallback."
+        : `${input.model ?? "Configured model"} · context ${input.contextWindow?.toLocaleString("en-US") ?? "unknown"}; native budget overrides take precedence.`,
+    coverage: [
+      "Includes native discoverable built-ins and other enabled skills. Path aliases are estimated; full instructions loaded later are additional.",
+    ],
   };
-}
-
-export function estimateCodexListingBudget(
-  input: CodexListingEstimateInput,
-): Extract<CodexListingBudget, { status: "estimated" }> {
-  return estimateCodexListing(input).budget;
 }

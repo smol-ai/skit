@@ -16,7 +16,7 @@ import {
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, FileSystem, Layer, Schema } from "effect";
 import {
   SkitConfiguration,
   skitConfigurationLayer,
@@ -49,13 +49,17 @@ import {
 import {
   errorMessage,
   auditLocalCapabilitiesV1Alpha4Effect,
-  isProbeableHarness,
   probeHarnessEffect,
   type AuditEntryV1Alpha4,
   type AuditMcpServerV1Alpha4,
   type HarnessProbeResult,
 } from "../../cli/src/front-end";
-import { LibraryStore, readListingBudgets, type ListingBudget } from "@smolai/skit-core";
+import {
+  HarnessName,
+  LibraryStore,
+  readListingBudgets,
+  type ListingBudget,
+} from "@smolai/skit-core";
 import { budgetReceipt } from "./budget/receipt";
 import { createLibraryHost } from "./library-host";
 import { createRenderer, writeFrame } from "./snapshot";
@@ -140,12 +144,17 @@ const libraryHost = createLibraryHost(
   openLibrarySession(),
 );
 const paths = await libraryHost.run(SkitConfiguration);
+const codexRoot = flag("--codex-root");
+const claudeRoot = flag("--claude-root");
 const libraryConfiguration = {
   home: paths.userHome,
   configHome: paths.configHome,
   statePath: paths.libraryStatePath,
   variantsPath: paths.variantsPath,
-  overrides: { codex: flag("--codex-root"), claude: flag("--claude-root") },
+  overrides: {
+    ...(codexRoot === undefined ? {} : { codex: [codexRoot] }),
+    ...(claudeRoot === undefined ? {} : { "claude-code": [claudeRoot] }),
+  },
   now: () => new Date().toISOString(),
 };
 let libraryOpenError: string | undefined;
@@ -166,8 +175,7 @@ async function refreshListingBudgets(): Promise<void> {
         cwd: flag("--cwd") ?? process.cwd(),
         home: libraryConfiguration.home,
         configHome: libraryConfiguration.configHome,
-        overrideRoot: libraryConfiguration.overrides.codex,
-        claudeRoot: libraryConfiguration.overrides.claude,
+        overrides: libraryConfiguration.overrides,
       });
     }),
   );
@@ -1265,7 +1273,7 @@ function showDocument(name: string, location: string, content: string): void {
 const probing = new Set<string>();
 
 async function runHarnessProbe(item: AuditItem): Promise<void> {
-  if (item.kind !== "harness" || !isProbeableHarness(item.name)) return;
+  if (item.kind !== "harness" || !Schema.is(HarnessName)(item.name)) return;
   if (probing.has(item.name)) return;
   probing.add(item.name);
   let result: HarnessProbeResult;

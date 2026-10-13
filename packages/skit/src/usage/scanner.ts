@@ -1,6 +1,7 @@
 import { Clock, Context, DateTime, Effect, FileSystem, Layer, Option, Stream } from "effect";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
+import { harnessDrivers } from "../harnesses/drivers.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { extractUsage, object, type UsageEvent, type ExtractedUsage } from "./events.js";
 import {
@@ -235,14 +236,17 @@ export const skillUsageLayer = Layer.effect(
           const stamp = typeof r.timestamp === "string" ? Date.parse(r.timestamp) : NaN;
           if (!Number.isFinite(stamp)) {
             c.undated++;
-            c.undatedCandidates += extractUsage(c.harness, r).events.length;
+            c.undatedCandidates += extractUsage(
+              harnessDrivers[c.harness].transcripts.grammar,
+              r,
+            ).events.length;
             return;
           }
           if (stamp < start || stamp >= end) return;
           pending.push({
             cwd,
             timestamp: new Date(stamp).toISOString(),
-            extracted: extractUsage(c.harness, r),
+            extracted: extractUsage(harnessDrivers[c.harness].transcripts.grammar, r),
           });
         };
         const segment = (part: Buffer, finished: boolean) => {

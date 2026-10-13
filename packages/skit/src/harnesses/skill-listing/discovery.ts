@@ -1,47 +1,26 @@
 import { Effect } from "effect";
-import { join } from "node:path";
+import { HarnessName } from "../../vocabulary.js";
 import type { LibraryState } from "../../library/library-state.js";
-import { codexListingResult, type ListingBudget } from "./contracts.js";
-import { readLibraryCodexListingSnapshot, type CodexListingSnapshot } from "./codex.js";
-import { readClaudeListingSnapshot, type ClaudeListingSnapshot } from "./claude.js";
+import type { HarnessRootOverrides } from "../contracts.js";
+import { harnessDrivers } from "../drivers.js";
 
 export interface ListingOptions {
   readonly cwd: string;
   readonly home: string;
   readonly configHome?: string;
-  readonly overrideRoot?: string;
-  readonly claudeRoot?: string;
+  readonly overrides?: HarnessRootOverrides;
 }
-export interface ListingSnapshot {
-  readonly codex: CodexListingSnapshot;
-  readonly claude: ClaudeListingSnapshot;
-}
-export const listingRoots = (options: ListingOptions) => ({
-  home: options.home,
-  configHome: options.configHome ?? join(options.home, ".config"),
-  overrides: {
-    ...(options.overrideRoot === undefined ? {} : { codex: options.overrideRoot }),
-    ...(options.claudeRoot === undefined ? {} : { claude: options.claudeRoot }),
-  },
-});
-export const readListingSnapshot = Effect.fn("Listing.discover")(function* (
-  state: LibraryState,
-  options: ListingOptions,
-) {
-  return yield* Effect.all(
-    {
-      codex: readLibraryCodexListingSnapshot(state, options),
-      claude: readClaudeListingSnapshot(state, { ...listingRoots(options), cwd: options.cwd }),
-    },
-    { concurrency: 2 },
-  );
-});
-export function listingResults(snapshot: ListingSnapshot): readonly ListingBudget[] {
-  return [codexListingResult(snapshot.codex), snapshot.claude.budget];
-}
+
+/** Every listing-capable Harness's estimate, in Harness order. */
 export const readListingBudgets = Effect.fn("Listing.budgets")(function* (
   state: LibraryState,
   options: ListingOptions,
 ) {
-  return listingResults(yield* readListingSnapshot(state, options));
+  return yield* Effect.all(
+    HarnessName.literals.flatMap((harness) => {
+      const listing = harnessDrivers[harness].listing;
+      return listing ? [listing(state, options)] : [];
+    }),
+    { concurrency: "unbounded" },
+  );
 });

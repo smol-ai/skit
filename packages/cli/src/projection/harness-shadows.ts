@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import { Data, Effect, FileSystem, Schema } from "effect";
 import {
+  HarnessName,
   LinkStat,
-  harnessProfile,
+  harnessDrivers,
   parseSkillFrontmatter,
   resolveHarnessRoot,
-  type HarnessName,
   type SkitBindingScope,
 } from "@smolai/skit-core";
 import { activeProjectionTargetsEffect, bindingRoot, type InventoryRootOptions } from "./roots.js";
@@ -28,35 +28,32 @@ export const HarnessShadow = Schema.Struct({
   documentDigest: Schema.String,
 });
 export type HarnessShadow = typeof HarnessShadow.Type;
-const harnesses: readonly HarnessName[] = ["codex", "claude-code", "opencode", "devin"];
-
-export function readableHarnessRoots(options: InventoryRootOptions, scope: SkitBindingScope) {
+/** Each Harness's readable Skill roots for a scope; a global override stands in for its own. */
+export function readableHarnessRoots(
+  options: InventoryRootOptions,
+  scope: SkitBindingScope,
+  harnesses: readonly HarnessName[] = HarnessName.literals,
+) {
   return harnesses.flatMap((harness) => {
-    const override =
-      harness === "codex"
-        ? options.overrides.codex
-        : harness === "claude-code"
-          ? options.overrides.claude
-          : harness === "opencode"
-            ? options.overrides.opencode
-            : options.overrides.devin;
+    const driver = harnessDrivers[harness];
+    const own = driver.profile.roots
+      .filter(
+        (root) => root.readable && root.scope === (scope.kind === "global" ? "global" : "project"),
+      )
+      .map((root) =>
+        resolveHarnessRoot(root, {
+          home: options.home,
+          configHome: options.configHome,
+          ...(scope.kind === "repository" ? { repository: scope.root } : {}),
+        }),
+      );
+    const override = scope.kind === "global" ? options.overrides[harness] : undefined;
     const roots =
-      scope.kind === "global" && override !== undefined
-        ? typeof override === "string"
-          ? [override]
-          : override
-        : harnessProfile(harness)
-            .roots.filter(
-              (root) =>
-                root.readable && root.scope === (scope.kind === "global" ? "global" : "project"),
-            )
-            .map((root) =>
-              resolveHarnessRoot(root, {
-                home: options.home,
-                configHome: options.configHome,
-                ...(scope.kind === "repository" ? { repository: scope.root } : {}),
-              }),
-            );
+      override === undefined
+        ? own
+        : driver.rootOverride === "extends"
+          ? [...own, ...override]
+          : override;
     return roots.map((root) => ({ harness, root: resolve(root) }));
   });
 }

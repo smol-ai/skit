@@ -178,7 +178,7 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
     const home = yield* libraryHome({
       home: join(root, "home"),
       inventoryHome: root,
-      roots: { codex, claude },
+      roots: { codex: [codex], "claude-code": [claude] },
     });
     const interaction = yield* makeScriptedInteraction([]);
     const inventory = yield* home.owned(

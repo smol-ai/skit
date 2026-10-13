@@ -15,6 +15,7 @@ export * from "./shared/failure.js";
 export * from "./failures.js";
 export * from "./harnesses/contracts.js";
 export * from "./harnesses/catalog.js";
+export * from "./harnesses/drivers.js";
 export * from "./shared/json.js";
 export * from "./harnesses/frontmatter.js";
 export * from "./harnesses/invocation-metadata.js";
