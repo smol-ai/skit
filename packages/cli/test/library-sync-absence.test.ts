@@ -213,17 +213,27 @@ it.effect("BUG: an anchored home that matches the remote republishes on an appli
     assert.strictEqual(a.publishes, publishes + 2);
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.deepStrictEqual(server.stored, stored);
-    // The publications atomically replace state.json with identical bytes.
+    // The publications atomically replace state.json with identical bytes. The publication count
+    // above is the evidence; file identity cannot be, because a filesystem may hand the replaced
+    // inode number to the next temporary file (Linux does), so only content is compared here.
     const changes = yield* diskChanges(before);
-    assert.deepStrictEqual({ ...changes, changed: [] }, noDiskChanges);
     assert.deepStrictEqual(
-      changes.changed.map((item) => item.path),
-      [[a.home, "state.json"]],
+      {
+        ...changes,
+        changed: changes.changed.filter(
+          (item) =>
+            !(
+              item.path.length === 2 &&
+              item.path[0] === a.home &&
+              item.path[1] === "state.json" &&
+              item.before.type === "file" &&
+              item.after.type === "file" &&
+              item.after.content === item.before.content
+            ),
+        ),
+      },
+      noDiskChanges,
     );
-    const [rewritten] = changes.changed;
-    assert.ok(rewritten?.before.type === "file" && rewritten.after.type === "file");
-    assert.strictEqual(rewritten.after.content, rewritten.before.content);
-    assert.notStrictEqual(rewritten.after.identity, rewritten.before.identity);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
