@@ -1,7 +1,6 @@
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import {
-  LegacyLibraryManifestV2,
   LibraryManifest,
   LibraryManifestAnyVersion,
   LibraryHead,
@@ -14,9 +13,7 @@ import { findOwnedLibrary } from "./owner.js";
 
 const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
 const CountRow = Schema.Struct({ n: Schema.Number });
-const StoredManifest = Schema.fromJsonString(
-  Schema.Union([LibraryManifestAnyVersion, LegacyLibraryManifestV2]),
-);
+const StoredManifest = Schema.fromJsonString(LibraryManifestAnyVersion);
 
 export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(
   "Library.LibraryRevisionConflict",

@@ -593,50 +593,9 @@ describe("Better Auth adapter", () => {
       });
       expect(revokedToken.status).toBe(204);
 
-      expect((yield* request("/api/library", { headers: { cookie: sessionCookie } })).status).toBe(
-        404,
-      );
-      const manifest = { schema: "skit.library.v2", entries: [], bindings: [] };
-      const createdLibrary = yield* request("/api/library", {
-        method: "PUT",
-        headers: {
-          cookie: sessionCookie,
-          origin: "https://registry.test",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ expected_revision_id: null, manifest }),
-      });
-      expect(createdLibrary.status).toBe(200);
-      const libraryBody = Schema.decodeUnknownSync(
-        Schema.Struct({
-          library: Schema.Struct({
-            library_id: Schema.String,
-            revision_id: Schema.String,
-            manifest: Schema.Unknown,
-          }),
-        }),
-      )(yield* webPromise(() => createdLibrary.json()));
-      expect(libraryBody.library.manifest).toEqual(manifest);
       expect(
-        (yield* request("/api/library", {
-          method: "PUT",
-          headers: {
-            cookie: sessionCookie,
-            origin: "https://registry.test",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ expected_revision_id: null, manifest }),
-        })).status,
-      ).toBe(409);
-      const defaultLibrary = yield* request("/api/library", {
-        headers: { cookie: sessionCookie },
-      });
-      const sharedLibrary = yield* request(`/api/libraries/${libraryBody.library.library_id}`, {
-        headers: { cookie: sessionCookie },
-      });
-      expect(defaultLibrary.status).toBe(200);
-      expect(sharedLibrary.status).toBe(200);
-      expect(yield* webPromise(() => sharedLibrary.json())).toEqual(libraryBody);
+        (yield* request("/api/library/portable", { headers: { cookie: sessionCookie } })).status,
+      ).toBe(404);
 
       const archive = {
         profile: "verbatim/v1",
@@ -655,16 +614,20 @@ describe("Better Auth adapter", () => {
         });
       const firstUpload = yield* uploadSnapshot();
       expect(firstUpload.status).toBe(200);
-      expect(yield* webPromise(() => firstUpload.json())).toMatchObject({
-        library_id: libraryBody.library.library_id,
-        snapshot_digest: archive.digest,
-        reused: false,
-      });
+      const uploaded = Schema.decodeUnknownSync(
+        Schema.Struct({
+          library_id: Schema.String,
+          snapshot_digest: Schema.String,
+          reused: Schema.Boolean,
+        }),
+      )(yield* webPromise(() => firstUpload.json()));
+      expect(uploaded).toMatchObject({ snapshot_digest: archive.digest, reused: false });
+      const libraryId = uploaded.library_id;
       const secondUpload = yield* uploadSnapshot();
       expect(secondUpload.status).toBe(200);
       expect(yield* webPromise(() => secondUpload.json())).toMatchObject({ reused: true });
       const downloaded = yield* request(
-        `/api/libraries/${libraryBody.library.library_id}/snapshots/${encodeURIComponent(archive.digest)}`,
+        `/api/libraries/${libraryId}/snapshots/${encodeURIComponent(archive.digest)}`,
         { headers: { cookie: sessionCookie } },
       );
       expect(downloaded.status).toBe(200);
@@ -801,16 +764,14 @@ describe("Better Auth adapter", () => {
           body: JSON.stringify({ expected_revision_id: expected, manifest }),
         });
       // An older CLI cannot write a manifest the current model does not decode.
-      expect((yield* writeLibrarySync(libraryBody.library.revision_id, portableV5)).status).toBe(
-        400,
-      );
+      expect((yield* writeLibrarySync(null, portableV5)).status).toBe(400);
       expect(
-        (yield* writeLibrarySync(libraryBody.library.revision_id, {
+        (yield* writeLibrarySync(null, {
           ...portable,
           schema: "skit.library.v6",
         })).status,
       ).toBe(400);
-      const committed = yield* writeLibrarySync(libraryBody.library.revision_id, portable);
+      const committed = yield* writeLibrarySync(null, portable);
       expect(committed.status).toBe(200);
       const syncedBody = Schema.decodeUnknownSync(
         Schema.Struct({
@@ -904,9 +865,9 @@ describe("Better Auth adapter", () => {
         sql.batch([
           sql`INSERT INTO library_revisions
                 (revision_id, library_id, parent_revision_id, manifest_json, created_at)
-              VALUES (${legacyRevisionId}, ${libraryBody.library.library_id}, ${sourceBody.library.revision_id}, ${JSON.stringify(legacyManifest)}, '2026-01-02T00:00:00.000Z')`,
+              VALUES (${legacyRevisionId}, ${libraryId}, ${sourceBody.library.revision_id}, ${JSON.stringify(legacyManifest)}, '2026-01-02T00:00:00.000Z')`,
           sql`UPDATE libraries SET current_revision_id = ${legacyRevisionId}
-              WHERE library_id = ${libraryBody.library.library_id}`,
+              WHERE library_id = ${libraryId}`,
         ]),
       );
       const legacyRead = yield* request("/api/library/portable", {
@@ -921,9 +882,9 @@ describe("Better Auth adapter", () => {
         sql.batch([
           sql`INSERT INTO library_revisions
                 (revision_id, library_id, parent_revision_id, manifest_json, created_at)
-              VALUES (${v5RevisionId}, ${libraryBody.library.library_id}, ${legacyRevisionId}, ${JSON.stringify(portableV5)}, '2026-01-03T00:00:00.000Z')`,
+              VALUES (${v5RevisionId}, ${libraryId}, ${legacyRevisionId}, ${JSON.stringify(portableV5)}, '2026-01-03T00:00:00.000Z')`,
           sql`UPDATE libraries SET current_revision_id = ${v5RevisionId}
-              WHERE library_id = ${libraryBody.library.library_id}`,
+              WHERE library_id = ${libraryId}`,
         ]),
       );
       const v5Read = yield* request("/api/library/portable", {

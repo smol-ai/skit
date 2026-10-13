@@ -13,7 +13,6 @@ import { authorInventoryHandlers } from "./api/author-inventory-http.js";
 import { bootstrapHandlers } from "./api/bootstrap-http.js";
 import { BootstrapApi } from "./api/bootstrap.js";
 import { draftHandlers } from "./api/drafts-http.js";
-import { libraryHandlers } from "./api/libraries-http.js";
 import { librarySnapshotHandlers } from "./api/library-snapshots-http.js";
 import { librarySyncHandlers } from "./api/library-sync-http.js";
 import { readinessHandlers } from "./api/readiness-http.js";
@@ -170,7 +169,6 @@ const consumerAuthenticatedApi = (application: AuthenticatedApplication) => {
   const handlers = Layer.mergeAll(
     tokenHandlers,
     teamHandlers,
-    libraryHandlers,
     librarySnapshotHandlers,
     librarySyncHandlers,
     readinessHandlers,

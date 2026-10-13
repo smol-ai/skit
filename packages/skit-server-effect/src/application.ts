@@ -11,7 +11,6 @@ import { layer as authorizationLayer } from "./authorization/service.js";
 import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
 import { layer as draftsLayer } from "./drafts/service.js";
-import { layer as librariesLayer } from "./library/service.js";
 import { layer as librarySyncLayer } from "./library/library-sync.js";
 import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
 import { databaseLayer, layer as bindingsLayer, type RuntimeEnv } from "./platform/cloudflare.js";
@@ -90,7 +89,6 @@ export const applicationLayers = (
   const authenticated = Layer.mergeAll(
     authenticationLayer(supportedScopes),
     teamsLayer,
-    librariesLayer,
     librarySnapshotsLayer,
     librarySyncLayer,
     readinessLayer(env),

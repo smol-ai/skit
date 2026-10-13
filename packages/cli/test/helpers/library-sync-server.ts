@@ -1,7 +1,7 @@
 import { assert } from "@effect/vitest";
 import { Schema, SchemaAST } from "effect";
 import type { HttpClientRequest } from "effect/http";
-import { LegacyLibraryManifestV2, type LibraryState } from "@smolai/skit-core";
+import type { LibraryState } from "@smolai/skit-core";
 import {
   InvalidRequestResponse,
   LibraryManifest,
@@ -71,7 +71,6 @@ const reply = <A, I>(schema: Schema.Codec<A, I>, value: A) =>
  */
 export function librarySyncServer(faults = faultQueue()) {
   let head: LibraryReceipt | null = null;
-  let legacyHead: LegacyLibraryManifestV2 | undefined;
   const snapshots = new Map<string, SnapshotArchive>();
   const revisions: { revision_id: string; parent_revision_id: string | null }[] = [];
   let libraryId = "library_test";
@@ -105,10 +104,7 @@ export function librarySyncServer(faults = faultQueue()) {
     }
     if (method === "GET" && path === "/api/library/portable") {
       if (head === null) return reply(LibraryNotFoundResponse, { error: "library_not_found" });
-      if (legacyHead === undefined) return reply(LibraryResponse, { library: head });
-      return Response.json({
-        library: { ...head, manifest: Schema.encodeSync(LegacyLibraryManifestV2)(legacyHead) },
-      });
+      return reply(LibraryResponse, { library: head });
     }
     if (method === "POST" && path === "/api/library/snapshots") {
       if (faults.take("FailUpload"))
@@ -155,10 +151,6 @@ export function librarySyncServer(faults = faultQueue()) {
           ? JSON.parse(new TextDecoder().decode(incoming.body.body))
           : undefined,
       ),
-    /** A pre-portable client replaces the head through the legacy v2 endpoint. */
-    replaceHeadWithLegacy: (manifest: LegacyLibraryManifestV2) => {
-      legacyHead = manifest;
-    },
     get remote() {
       return head;
     },
@@ -170,7 +162,6 @@ export function librarySyncServer(faults = faultQueue()) {
     },
     reset() {
       head = null;
-      legacyHead = undefined;
       snapshots.clear();
       revisions.length = 0;
       libraryId = "library_recreated";

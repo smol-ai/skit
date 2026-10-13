@@ -331,7 +331,7 @@ describe("Library sync Worker persistence", () => {
     }),
   );
 
-  it.effect("characterizes legacy v2 PUT replacing the portable head with the same CAS base", () =>
+  it.effect("serves a synced head only through the portable Library API", () =>
     Effect.gen(function* () {
       const headers = yield* session();
       const { library_id } = yield* upload(headers);
@@ -339,36 +339,30 @@ describe("Library sync Worker persistence", () => {
       const current = Schema.decodeUnknownSync(receipt)(
         yield* Effect.promise(() => first.json()),
       ).library;
-      const response = yield* Effect.promise(() =>
-        SELF.fetch(`${origin}/api/library`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({
-            expected_revision_id: current.revision_id,
-            manifest: legacyFixture,
+      const before = yield* stored(library_id);
+      const legacyResponses = yield* Effect.all([
+        Effect.promise(() => SELF.fetch(`${origin}/api/library`, { headers })),
+        Effect.promise(() => SELF.fetch(`${origin}/api/libraries/${library_id}`, { headers })),
+        Effect.promise(() =>
+          SELF.fetch(`${origin}/api/library`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({
+              expected_revision_id: current.revision_id,
+              manifest: legacyFixture,
+            }),
           }),
-        }),
-      );
-      expect(response.status).toBe(200);
-      const legacy = Schema.decodeUnknownSync(
-        Schema.Struct({
-          library: Schema.Struct({ revision_id: Schema.String, manifest: Schema.Unknown }),
-        }),
-      )(yield* Effect.promise(() => response.json()));
+        ),
+      ]);
+      expect(legacyResponses.map((response) => response.status)).toEqual([404, 404, 404]);
+      expect(yield* stored(library_id)).toEqual(before);
       const read = yield* Effect.promise(() =>
         SELF.fetch(`${origin}/api/library/portable`, { headers }),
       );
       expect(read.status).toBe(200);
-      expect(yield* Effect.promise(() => read.json())).toMatchObject({
-        library: { library_id, revision_id: legacy.library.revision_id, manifest: legacyFixture },
-      });
-      const persisted = yield* stored(library_id);
-      expect(persisted.library).toEqual({ current_revision_id: legacy.library.revision_id });
-      expect(persisted.revisions).toHaveLength(2);
-      expect(persisted.revisions.at(-1)).toMatchObject({
-        parent_revision_id: current.revision_id,
-        manifest_json: JSON.stringify(legacyFixture),
-      });
+      expect(
+        Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => read.json())).library,
+      ).toEqual(current);
       yield* assertArchive(library_id);
     }),
   );

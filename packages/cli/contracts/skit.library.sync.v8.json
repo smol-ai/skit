@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v7",
+  "$id": "skit.library.sync.v8",
   "type": "object",
   "properties": {
     "status": {
@@ -12,7 +12,6 @@
         "pulled",
         "upgrade_ready",
         "upgraded",
-        "legacy_remote_conflict",
         "local_migration_required",
         "local_bytes_changed",
         "adoption_required",

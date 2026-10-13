@@ -24,12 +24,6 @@ export const makeServerDiscovery = (capabilities: ServerCapabilities) =>
       ...(capabilities.authoring ? ["authoring:write"] : []),
       ...(capabilities.publication ? ["publication:write"] : []),
     ],
-    ...(capabilities.library
-      ? {
-          library: "/api/library",
-          sharedLibrary: "/api/libraries/{library_id}",
-        }
-      : {}),
     ...(capabilities.authoring
       ? {
           authorSkits: "/api/author/skits",

@@ -49,7 +49,6 @@ export const SyncResult = Schema.Struct({
     "pulled",
     "upgrade_ready",
     "upgraded",
-    "legacy_remote_conflict",
     "local_migration_required",
     "local_bytes_changed",
     "adoption_required",
