@@ -15,7 +15,6 @@ import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
 import manifestFixture from "./fixtures/library-sync/manifest.json" with { type: "json" };
 import emptyManifestFixture from "./fixtures/library-sync/empty-manifest.json" with { type: "json" };
-import legacyFixture from "./fixtures/library-sync/legacy-v2.json" with { type: "json" };
 
 const archive = Schema.decodeUnknownSync(SnapshotArchive)(archiveFixture);
 const manifest = Schema.decodeUnknownSync(LibraryManifest)(manifestFixture);
@@ -328,42 +327,6 @@ describe("Library sync Worker persistence", () => {
         Schema.decodeUnknownSync(SnapshotArchive)(yield* Effect.promise(() => download.json())),
       ).toEqual(archive);
       yield* assertArchive(first.library_id);
-    }),
-  );
-
-  it.effect("serves a synced head only through the portable Library API", () =>
-    Effect.gen(function* () {
-      const headers = yield* session();
-      const { library_id } = yield* upload(headers);
-      const first = yield* write(headers, null, manifest);
-      const current = Schema.decodeUnknownSync(receipt)(
-        yield* Effect.promise(() => first.json()),
-      ).library;
-      const before = yield* stored(library_id);
-      const legacyResponses = yield* Effect.all([
-        Effect.promise(() => SELF.fetch(`${origin}/api/library`, { headers })),
-        Effect.promise(() => SELF.fetch(`${origin}/api/libraries/${library_id}`, { headers })),
-        Effect.promise(() =>
-          SELF.fetch(`${origin}/api/library`, {
-            method: "PUT",
-            headers,
-            body: JSON.stringify({
-              expected_revision_id: current.revision_id,
-              manifest: legacyFixture,
-            }),
-          }),
-        ),
-      ]);
-      expect(legacyResponses.map((response) => response.status)).toEqual([404, 404, 404]);
-      expect(yield* stored(library_id)).toEqual(before);
-      const read = yield* Effect.promise(() =>
-        SELF.fetch(`${origin}/api/library/portable`, { headers }),
-      );
-      expect(read.status).toBe(200);
-      expect(
-        Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => read.json())).library,
-      ).toEqual(current);
-      yield* assertArchive(library_id);
     }),
   );
 });

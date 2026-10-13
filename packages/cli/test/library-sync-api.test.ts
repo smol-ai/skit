@@ -32,7 +32,7 @@ it.effect("retains an undeclared response status without inventing an error code
   ),
 );
 
-it.effect("rejects a v2 remote Library instead of returning it", () =>
+it.effect("rejects an undecodable remote Library instead of returning it", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const api = yield* librarySyncApiEffect({
@@ -50,8 +50,8 @@ it.effect("rejects a v2 remote Library instead of returning it", () =>
               Response.json({
                 library: {
                   library_id: "library_test",
-                  revision_id: "revision_v2",
-                  manifest: { schema: "skit.library.v2", entries: [], bindings: [] },
+                  revision_id: "revision_unknown",
+                  manifest: { schema: "skit.library.unknown" },
                 },
               }),
             ),
