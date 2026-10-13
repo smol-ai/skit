@@ -113,13 +113,18 @@ const codexFieldResult = (
   path: string,
 ): Result.Result<boolean | undefined, HarnessMetadataInvalid> => {
   const invalid = Result.fail(new HarnessMetadataInvalid({ path, kind: "Codex metadata" }));
-  const resolved = (node: unknown) => (isAlias(node) ? node.resolve(document) : node);
+  // An alias to an unknown anchor names metadata that is not there; it is invalid, not absent.
+  const unresolved = Symbol("unresolved alias");
+  const resolved = (node: unknown) =>
+    isAlias(node) ? (node.resolve(document) ?? unresolved) : node;
   let node = resolved(document.contents);
   for (const key of CODEX_FIELD) {
+    if (node === unresolved) return invalid;
     if (node === null || node === undefined) return Result.succeed(undefined);
     if (!isMap(node)) return invalid;
     node = resolved(node.get(key, true));
   }
+  if (node === unresolved) return invalid;
   if (node === undefined) return Result.succeed(undefined);
   return isScalar(node) && typeof node.value === "boolean" ? Result.succeed(node.value) : invalid;
 };

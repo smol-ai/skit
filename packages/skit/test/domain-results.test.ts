@@ -88,6 +88,9 @@ describe("Codex invocation metadata reads", () => {
         "policy: {allow_implicit_invocation: null}\n",
         "policy: [allow_implicit_invocation]\n",
         "policy: implicit\n",
+        "policy: *missing\n",
+        "policy:\n  allow_implicit_invocation: *missing\n",
+        "*missing\n",
       ])
         assert.strictEqual(tagOf(read(text)), "HarnessMetadataInvalid", text);
       assert.deepStrictEqual(
@@ -116,6 +119,8 @@ describe("Codex invocation metadata reads", () => {
       for (const text of [
         "policy: {allow_implicit_invocation: no-policy}\n",
         "shared: &policy {allow_implicit_invocation: false}\npolicy: *policy\n",
+        "policy: *missing\n",
+        "policy:\n  allow_implicit_invocation: *missing\n",
       ])
         for (const policy of ["implicit", "host-policy"] as const)
           assert.strictEqual(

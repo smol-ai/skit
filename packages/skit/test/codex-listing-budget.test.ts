@@ -280,6 +280,15 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         process.execPath,
       );
       expect(unreadable).toMatchObject({ _tag: "Unavailable" });
+      for (const text of [
+        "policy: *missing\n",
+        "policy:\n  allow_implicit_invocation: *missing\n",
+      ]) {
+        yield* fs.writeFileString(metadataPath, text);
+        expect(
+          yield* readCodexListingBudget(stateWithProjection, options, process.execPath),
+        ).toMatchObject({ _tag: "Unavailable" });
+      }
       yield* fs.writeFileString(metadataPath, "policy: [invalid");
       const malformed = yield* readCodexListingBudget(
         stateWithProjection,
