@@ -1,37 +1,77 @@
 import { Schema } from "effect";
 import { HttpApiSchema } from "effect/http-api";
 
-const errorResponse = <const Code extends string>(code: Code, status: number) =>
-  Schema.Struct({ error: Schema.Literal(code) }).pipe(HttpApiSchema.status(status));
+/**
+ * Every error code a Registry route answers with, and the HTTP status it is sent with. The
+ * server declares its responses from this table and clients read statuses back from it.
+ */
+export const apiErrorStatuses = {
+  unauthorized: 401,
+  insufficient_scope: 403,
+  session_required: 403,
+  forbidden: 403,
+  invalid_cursor: 400,
+  invalid_request: 400,
+  forbidden_origin: 403,
+  skit_not_found: 404,
+  delete_requires_private: 409,
+  archive_too_large: 413,
+  draft_not_found: 404,
+  stale_draft_revision: 409,
+  release_conflict: 409,
+  publish_blocked: 422,
+  rate_limited: 429,
+  INVALID_SCOPE: 400,
+  invalid_expiry: 400,
+  UNAUTHORIZED: 400,
+  token_not_found: 404,
+  SESSION_REQUIRED: 400,
+  INVALID_TEAM: 400,
+  TEAM_CONFLICT: 409,
+  FORBIDDEN: 403,
+  PRINCIPAL_NOT_FOUND: 404,
+  OWNER_ROLE_IMMUTABLE: 400,
+  membership_not_found: 404,
+  library_not_found: 404,
+  REVISION_CONFLICT: 409,
+  DRAFT_TOO_LARGE: 413,
+  storage_failure: 500,
+} as const;
 
-export const UnauthorizedResponse = errorResponse("unauthorized", 401);
-export const InsufficientScopeResponse = errorResponse("insufficient_scope", 403);
-export const SessionRequiredResponse = errorResponse("session_required", 403);
-export const ForbiddenResponse = errorResponse("forbidden", 403);
-export const InvalidCursorResponse = errorResponse("invalid_cursor", 400);
-export const InvalidRequestResponse = errorResponse("invalid_request", 400);
-export const ForbiddenOriginResponse = errorResponse("forbidden_origin", 403);
-export const SkitNotFoundResponse = errorResponse("skit_not_found", 404);
-export const DeleteRequiresPrivateResponse = errorResponse("delete_requires_private", 409);
-export const ArchiveTooLargeResponse = errorResponse("archive_too_large", 413);
-export const DraftNotFoundResponse = errorResponse("draft_not_found", 404);
-export const StaleDraftRevisionResponse = errorResponse("stale_draft_revision", 409);
-export const ReleaseConflictResponse = errorResponse("release_conflict", 409);
-export const RateLimitedResponse = errorResponse("rate_limited", 429);
-export const InvalidScopeResponse = errorResponse("INVALID_SCOPE", 400);
-export const InvalidExpiryResponse = errorResponse("invalid_expiry", 400);
-export const UnauthorizedPrincipalResponse = errorResponse("UNAUTHORIZED", 400);
-export const TokenNotFoundResponse = errorResponse("token_not_found", 404);
-export const TeamSessionRequiredResponse = errorResponse("SESSION_REQUIRED", 400);
-export const InvalidTeamResponse = errorResponse("INVALID_TEAM", 400);
-export const TeamConflictResponse = errorResponse("TEAM_CONFLICT", 409);
-export const TeamForbiddenResponse = errorResponse("FORBIDDEN", 403);
-export const PrincipalNotFoundResponse = errorResponse("PRINCIPAL_NOT_FOUND", 404);
-export const OwnerRoleImmutableResponse = errorResponse("OWNER_ROLE_IMMUTABLE", 400);
-export const MembershipNotFoundResponse = errorResponse("membership_not_found", 404);
-export const LibraryNotFoundResponse = errorResponse("library_not_found", 404);
-export const RevisionConflictResponse = errorResponse("REVISION_CONFLICT", 409);
-export const StorageFailureResponse = errorResponse("storage_failure", 500);
+/** The body every Registry error response carries, whichever code it names. */
+export const ApiErrorBody = Schema.Struct({ error: Schema.String });
+
+const errorResponse = <const Code extends keyof typeof apiErrorStatuses>(code: Code) =>
+  Schema.Struct({ error: Schema.Literal(code) }).pipe(HttpApiSchema.status(apiErrorStatuses[code]));
+
+export const UnauthorizedResponse = errorResponse("unauthorized");
+export const InsufficientScopeResponse = errorResponse("insufficient_scope");
+export const SessionRequiredResponse = errorResponse("session_required");
+export const ForbiddenResponse = errorResponse("forbidden");
+export const InvalidCursorResponse = errorResponse("invalid_cursor");
+export const InvalidRequestResponse = errorResponse("invalid_request");
+export const ForbiddenOriginResponse = errorResponse("forbidden_origin");
+export const SkitNotFoundResponse = errorResponse("skit_not_found");
+export const DeleteRequiresPrivateResponse = errorResponse("delete_requires_private");
+export const ArchiveTooLargeResponse = errorResponse("archive_too_large");
+export const DraftNotFoundResponse = errorResponse("draft_not_found");
+export const StaleDraftRevisionResponse = errorResponse("stale_draft_revision");
+export const ReleaseConflictResponse = errorResponse("release_conflict");
+export const RateLimitedResponse = errorResponse("rate_limited");
+export const InvalidScopeResponse = errorResponse("INVALID_SCOPE");
+export const InvalidExpiryResponse = errorResponse("invalid_expiry");
+export const UnauthorizedPrincipalResponse = errorResponse("UNAUTHORIZED");
+export const TokenNotFoundResponse = errorResponse("token_not_found");
+export const TeamSessionRequiredResponse = errorResponse("SESSION_REQUIRED");
+export const InvalidTeamResponse = errorResponse("INVALID_TEAM");
+export const TeamConflictResponse = errorResponse("TEAM_CONFLICT");
+export const TeamForbiddenResponse = errorResponse("FORBIDDEN");
+export const PrincipalNotFoundResponse = errorResponse("PRINCIPAL_NOT_FOUND");
+export const OwnerRoleImmutableResponse = errorResponse("OWNER_ROLE_IMMUTABLE");
+export const MembershipNotFoundResponse = errorResponse("membership_not_found");
+export const LibraryNotFoundResponse = errorResponse("library_not_found");
+export const RevisionConflictResponse = errorResponse("REVISION_CONFLICT");
+export const StorageFailureResponse = errorResponse("storage_failure");
 
 export const unauthorizedResponse = { error: "unauthorized" as const };
 export const insufficientScopeResponse = { error: "insufficient_scope" as const };

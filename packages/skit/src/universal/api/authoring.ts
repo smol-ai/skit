@@ -18,6 +18,7 @@ export {
 } from "../../authoring/api-contracts.js";
 import { PrincipalAuthentication, RequestDecoding } from "./authentication.js";
 import {
+  apiErrorStatuses,
   ArchiveTooLargeResponse,
   DeleteRequiresPrivateResponse,
   DraftNotFoundResponse,
@@ -34,10 +35,10 @@ import {
 
 export const DraftTooLargeResponse = Schema.Struct({
   error: Schema.Literal("DRAFT_TOO_LARGE"),
-}).pipe(HttpApiSchema.status(413));
+}).pipe(HttpApiSchema.status(apiErrorStatuses.DRAFT_TOO_LARGE));
 export const DraftRevisionConflictResponse = Schema.Struct({
   error: Schema.Literal("REVISION_CONFLICT"),
-}).pipe(HttpApiSchema.status(409));
+}).pipe(HttpApiSchema.status(apiErrorStatuses.REVISION_CONFLICT));
 const dedicatedDraftErrorCodes = new Set([
   "unauthorized",
   "invalid_request",
@@ -129,7 +130,7 @@ export class SkitDeleteApi extends HttpApiGroup.make("skitDelete")
 export const PublishBlockedResponse = Schema.Struct({
   error: Schema.Literal("publish_blocked"),
   diagnostics: skitValidationDiagnosticsSchema,
-}).pipe(HttpApiSchema.status(422));
+}).pipe(HttpApiSchema.status(apiErrorStatuses.publish_blocked));
 export const IntegrityErrorCode = Schema.Literals([
   "ARCHIVE_MANIFEST_MISMATCH",
   "CAPABILITY_PATH_MISSING",
