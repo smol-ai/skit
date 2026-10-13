@@ -33,7 +33,6 @@ export { PluginSkillConflict } from "./plugin-membership.js";
 export { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 
-export const AGENT_SKILLS_NORMALIZATION_PROFILE = "agent-skills/v1" as const;
 const ownerRepository = /^([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)$/;
 const MAX_ARCHIVE_FILES = 1_000;
 const MAX_EXTRACTED_BYTES = 25 * 1024 * 1024;
@@ -397,19 +396,28 @@ function classifySource(input: string, cwd: string): Effect.Effect<SkitSource, P
   });
 }
 
-export interface ResolvedSkitSource {
+/** A declared SKIT names its Skills in its Descriptor; plain Agent Skills are observed in place. */
+type DiscoveredSkills =
+  | {
+      descriptorKind: "declared";
+      /** Directory holding the Descriptor, inside the acquired tree. */
+      root: string;
+    }
+  | {
+      descriptorKind: "observed";
+      /** Skill directories relative to `originalRoot`, `.` when it is itself the Skill. */
+      observedSkillPaths: readonly string[];
+      missingAgentSkillPaths?: readonly string[];
+      diagnostics?: readonly SourceDiscoveryDiagnostic[];
+    };
+
+export type ResolvedSkitSource = DiscoveredSkills & {
   source: SkitSource;
-  root: string;
-  /** Unmodified acquired source tree, retained separately from normalization. */
+  /** Unmodified acquired source tree. */
   originalRoot: string;
   /** Exact upstream revision, independent of tracking policy, where the protocol names one. */
   revision?: SourceRevision;
-  descriptorKind: "declared" | "generated";
-  missingAgentSkillPaths?: readonly string[];
-  /** Directories observed in the verbatim tree; present only for a non-publishing acquisition. */
-  observedSkillPaths?: readonly string[];
-  diagnostics?: readonly SourceDiscoveryDiagnostic[];
-}
+};
 
 /**
  * A user-facing locator for a Source, recorded as Acquisition history and shown in messages.
@@ -593,201 +601,6 @@ function commandOutputEffect(
   });
 }
 
-function sourceUpdatedAtsEffect(
-  skillDirectories: readonly string[],
-  historyRoot: string,
-): Effect.Effect<
-  ReadonlyMap<string, string>,
-  SourcePolicyViolation | PlatformError,
-  FileSystem.FileSystem | SourceProcess
-> {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const relativePaths = skillDirectories.map((directory) =>
-      join(directory.slice(historyRoot.length + 1), "SKILL.md"),
-    );
-    // A local Agent Skills directory does not have to be a Git checkout. One history traversal
-    // supplies the newest commit for every discovered Skill instead of one process per Skill.
-    const logged = yield* Effect.option(
-      commandOutputEffect(
-        "git",
-        ["log", "--relative", "--format=@@%cI", "--name-only", "--", ...relativePaths],
-        historyRoot,
-      ),
-    );
-    const updated = new Map<string, string>();
-    if (logged._tag === "Some") {
-      let timestamp: string | undefined;
-      for (const line of logged.value.split(/\r?\n/)) {
-        if (line.startsWith("@@")) {
-          const value = line.slice(2).trim();
-          timestamp =
-            value && !Number.isNaN(Date.parse(value)) ? new Date(value).toISOString() : undefined;
-        } else if (timestamp && line && !updated.has(line)) updated.set(line, timestamp);
-      }
-    }
-    for (const [index, skillDirectory] of skillDirectories.entries()) {
-      const relative = relativePaths[index]!;
-      if (updated.has(relative)) continue;
-      const path = join(skillDirectory, "SKILL.md");
-      const info = yield* fs.stat(path);
-      if (info.mtime._tag === "None")
-        return yield* invalidSource(`Unable to read a modification time for ${path}`);
-      updated.set(relative, info.mtime.value.toISOString());
-    }
-    return updated;
-  });
-}
-
-function wrapSingleSkillEffect(
-  skillDirectory: string,
-  workspace: string,
-  sourceUpdatedAt?: string | null,
-): Effect.Effect<
-  string,
-  SourcePolicyViolation | TreeError | PlatformError,
-  FileSystem.FileSystem | LinkStat | SourceProcess
-> {
-  return wrapAgentSkillsEffect([skillDirectory], workspace, sourceUpdatedAt, skillDirectory);
-}
-
-/**
- * `sourceUpdatedAt` is the Source's own modification time, when the Source has one.
- *
- * Undefined means observe it: a checkout or a local directory carries a real timestamp, in Git
- * history or on disk, and it is the same on every acquisition. Null means this Source has none,
- * which is true of a document downloaded into a fresh temporary file: its mtime is the moment we
- * wrote it, so stamping it into the wrapper made the generated release hash different on every
- * acquisition. The field is optional in the Descriptor schema, so it is omitted rather than
- * invented.
- */
-function wrapAgentSkillsEffect(
-  skillDirectories: string[],
-  workspace: string,
-  sourceUpdatedAt?: string | null,
-  historyRoot = skillDirectories[0]!,
-): Effect.Effect<
-  string,
-  SourcePolicyViolation | TreeError | PlatformError,
-  FileSystem.FileSystem | LinkStat | SourceProcess
-> {
-  return buildAgentSkillsWrapperEffect(
-    skillDirectories,
-    workspace,
-    sourceUpdatedAt,
-    historyRoot,
-  ).pipe(Effect.map(({ root }) => root));
-}
-
-/** Normalize observed installed Skills without inventing an upstream modification time. */
-export const normalizeObservedAgentSkillsEffect = Effect.fn("Source.normalizeObservedSkills")(
-  function* (skillDirectories: readonly string[], workspace: string, historyRoot: string) {
-    return yield* buildAgentSkillsWrapperEffect(
-      [...skillDirectories],
-      workspace,
-      null,
-      historyRoot,
-    );
-  },
-);
-
-function buildAgentSkillsWrapperEffect(
-  skillDirectories: string[],
-  workspace: string,
-  sourceUpdatedAt?: string | null,
-  historyRoot = skillDirectories[0]!,
-) {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const sourceUpdatedAts =
-      sourceUpdatedAt === undefined
-        ? yield* sourceUpdatedAtsEffect(skillDirectories, historyRoot)
-        : undefined;
-    const observedSkills: Array<{
-      directory: string;
-      name: string;
-      sourceUpdatedAt: string | undefined;
-    }> = [];
-    for (const skillDirectory of skillDirectories) {
-      const skillText = yield* fs.readFileString(join(skillDirectory, "SKILL.md"));
-      const frontmatter = skillText.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-      const name =
-        frontmatter?.[1].match(/^name:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1]?.trim() ??
-        basename(skillDirectory);
-      observedSkills.push({
-        directory: skillDirectory,
-        name,
-        sourceUpdatedAt:
-          sourceUpdatedAt === undefined
-            ? sourceUpdatedAts?.get(join(skillDirectory.slice(historyRoot.length + 1), "SKILL.md"))
-            : (sourceUpdatedAt ?? undefined),
-      });
-    }
-    const selected = sourceUpdatedAt !== undefined;
-    observedSkills.sort((left, right) =>
-      selected
-        ? left.name.localeCompare(right.name)
-        : left.directory < right.directory
-          ? -1
-          : left.directory > right.directory
-            ? 1
-            : 0,
-    );
-    const skills: Array<(typeof observedSkills)[number] & { safe: string }> = [];
-    const used = new Set<string>();
-    for (const skill of observedSkills) {
-      if (selected && skills.some((prior) => prior.name === skill.name))
-        return yield* invalidSource(`Selected Agent Skills declare the same name: ${skill.name}`);
-      let safe =
-        skill.name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "") || "skill";
-      if (used.has(safe))
-        safe = `${safe}-${createHash("sha256")
-          .update(selected ? skill.name : skill.directory)
-          .digest("hex")
-          .slice(0, 6)}`;
-      if (selected && used.has(safe))
-        return yield* invalidSource(
-          `Selected Agent Skills normalize to the same path: ${skill.name}`,
-        );
-      used.add(safe);
-      skills.push({ ...skill, safe });
-    }
-    const root = join(workspace, "agent-skills-skit");
-    yield* fs.makeDirectory(join(root, "skills"), { recursive: true });
-    // The normalized wrapper is a copy this workspace owns. A recursive `fs.copy` is one
-    // interruptible operation whose writes can land after the enclosing workspace has been
-    // removed; the shared owned-copy primitive settles each namespace change and each file
-    // handle, so an abandoned copy cannot recreate cleaned output.
-    for (const skill of skills)
-      yield* copyLocalTreeEffect(
-        yield* fs.realPath(skill.directory),
-        join(root, "skills", skill.safe),
-        undefined,
-        // Verbatim, matching the recursive copy this replaces: normalization stages the source
-        // as it found it, and resolving link targets here would change the release hash.
-        true,
-      );
-    const declarations = skills
-      .map(
-        (skill) =>
-          `  - name: ${skill.safe}\n    path: skills/${skill.safe}\n${skill.sourceUpdatedAt ? `    source_updated_at: ${skill.sourceUpdatedAt}\n` : ""}    default_enabled: true`,
-      )
-      .join("\n");
-    const title = skills.length === 1 ? skills[0].name : `${skills.length} imported skills`;
-    // This Descriptor is an internal normalization adapter. Its ID is never used as
-    // Collection Identity; the identity catalog derives that from the acquired Source.
-    const readme = `---\nskit: 1\nslug: internal-normalized\nskills:\n${declarations}\n---\n\n# ${title}\n`;
-    yield* fs.writeFileString(join(root, "README.md"), readme);
-    return {
-      root,
-      relativePaths: new Map(skills.map((skill) => [skill.directory, join("skills", skill.safe)])),
-    };
-  });
-}
-
 const lockedSkillDirectoryEffect = Effect.fn("Source.lockedSkillDirectory")(function* (
   root: string,
   path: string,
@@ -822,23 +635,14 @@ const checkoutPathEffect = Effect.fn("Source.checkoutPath")(function* (
 
 function discoverRootEffect(
   extracted: string,
-  workspace: string,
   agentSkillPaths?: readonly string[],
   allowMissingAgentSkillPaths = false,
-  selectedSourceUpdatedAt?: string | null,
-  verbatimOnly = false,
   selectedDirectories?: ReadonlyMap<string, string>,
   previousSkillPaths: readonly string[] = [],
   containmentRoot = extracted,
   strictPluginRoot = false,
 ): Effect.Effect<
-  {
-    root: string;
-    descriptorKind: "declared" | "generated";
-    missingAgentSkillPaths?: readonly string[];
-    observedSkillPaths?: readonly string[];
-    diagnostics?: readonly SourceDiscoveryDiagnostic[];
-  },
+  DiscoveredSkills,
   | SourcePolicyViolation
   | PluginManifestInvalid
   | PluginSkillConflict
@@ -852,7 +656,7 @@ function discoverRootEffect(
     const fs = yield* FileSystem.FileSystem;
     const probe = yield* LinkStat;
     if (agentSkillPaths?.length) {
-      const selectedSkills: { relativePath: string; directory: string }[] = [];
+      const selectedSkills: string[] = [];
       const missing: string[] = [];
       for (const path of [...new Set(agentSkillPaths)].sort()) {
         const requestedDirectory = yield* lockedSkillDirectoryEffect(extracted, path);
@@ -868,29 +672,14 @@ function discoverRootEffect(
           );
         }
         yield* containedPluginPathEffect(containmentRoot, skillDirectory, "SKILL.md");
-        selectedSkills.push({
-          relativePath: relative(extracted, requestedDirectory) || ".",
-          directory: skillDirectory,
-        });
+        selectedSkills.push(relative(extracted, requestedDirectory) || ".");
       }
       if (!selectedSkills.length)
         return yield* invalidSource("None of the locked Skill paths exist in the acquired Source");
       return {
-        root: verbatimOnly
-          ? extracted
-          : yield* wrapAgentSkillsEffect(
-              selectedSkills.map((skill) => skill.directory),
-              workspace,
-              selectedSourceUpdatedAt,
-              extracted,
-            ),
-        descriptorKind: "generated" as const,
+        descriptorKind: "observed" as const,
+        observedSkillPaths: selectedSkills,
         missingAgentSkillPaths: missing,
-        ...(verbatimOnly
-          ? {
-              observedSkillPaths: selectedSkills.map((skill) => skill.relativePath),
-            }
-          : {}),
       };
     }
     const queue = [extracted];
@@ -937,18 +726,9 @@ function discoverRootEffect(
     foundSkills.splice(0, foundSkills.length, ...selection.members);
     if (foundSkills.length)
       return {
-        root: verbatimOnly
-          ? extracted
-          : yield* wrapAgentSkillsEffect(foundSkills, workspace, undefined, extracted),
-        descriptorKind: "generated" as const,
+        descriptorKind: "observed" as const,
+        observedSkillPaths: foundSkills.map((directory) => relative(extracted, directory) || "."),
         ...(selection.diagnostics.length ? { diagnostics: selection.diagnostics } : {}),
-        ...(verbatimOnly
-          ? {
-              observedSkillPaths: foundSkills.map(
-                (directory) => relative(extracted, directory) || ".",
-              ),
-            }
-          : {}),
       };
     return yield* Effect.fail(new NoSkitDescriptorFound());
   });
@@ -1008,7 +788,6 @@ const readDiscoveryResponse = Effect.fn("Discovery.readResponse")(function* (
 const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
   source: Extract<SkitSource, { type: "well-known" }>,
   workspace: string,
-  verbatimOnly = false,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const baseUrl = source.origin.replace(/\/$/, "");
@@ -1186,21 +965,13 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
     }
   }
   yield* auditExtractedSourceEffect(originalRoot);
-  const root = verbatimOnly
-    ? originalRoot
-    : yield* wrapAgentSkillsEffect(acquiredDirectories, workspace, null, originalRoot);
   return {
     source,
-    root,
-    descriptorKind: "generated" as const,
+    descriptorKind: "observed" as const,
     originalRoot,
-    ...(verbatimOnly
-      ? {
-          observedSkillPaths: acquiredDirectories.map(
-            (directory) => relative(originalRoot, directory) || ".",
-          ),
-        }
-      : {}),
+    observedSkillPaths: acquiredDirectories.map(
+      (directory) => relative(originalRoot, directory) || ".",
+    ),
   };
 });
 
@@ -1221,8 +992,6 @@ export function resolveSkitSourceEffect(
     previousSkillPaths?: readonly string[];
     /** Enforce declarations for an explicitly selected plugin root. */
     strictPluginManifests?: boolean;
-    /** Retention acquisition observes bytes without creating a publication wrapper. */
-    verbatimOnly?: boolean;
   } = {},
 ): Effect.Effect<
   ResolvedSkitSource,
@@ -1272,11 +1041,8 @@ export function resolveSkitSourceEffect(
             : selectedStart;
         const discovered = yield* discoverRootEffect(
           start,
-          workspace,
           options.agentSkillPaths,
           options.allowMissingAgentSkillPaths,
-          undefined,
-          options.verbatimOnly ?? false,
           undefined,
           options.previousSkillPaths,
           start,
@@ -1387,11 +1153,8 @@ export function resolveSkitSourceEffect(
         }
         const discovered = yield* discoverRootEffect(
           root,
-          workspace,
           selectedPaths,
           options.allowMissingAgentSkillPaths,
-          skillPaths.length ? null : undefined,
-          options.verbatimOnly ?? false,
           selectedDirectories,
           options.previousSkillPaths,
           checkoutRoot,
@@ -1400,7 +1163,9 @@ export function resolveSkitSourceEffect(
         let originalRoot = root;
         if (selectedPaths?.length) {
           originalRoot = join(workspace, "git-selected-original");
-          const missing = new Set(discovered.missingAgentSkillPaths ?? []);
+          const missing = new Set(
+            discovered.descriptorKind === "observed" ? discovered.missingAgentSkillPaths : [],
+          );
           for (const path of [...new Set(selectedPaths)].sort()) {
             if (missing.has(path)) continue;
             const selectedDirectory = selectedDirectories.get(path);
@@ -1420,8 +1185,7 @@ export function resolveSkitSourceEffect(
           revision: { kind: "commit" as const, commit: sourceRevision },
         };
       }
-      if (source.type === "well-known")
-        return yield* acquireDiscoveryEffect(source, workspace, options.verbatimOnly ?? false);
+      if (source.type === "well-known") return yield* acquireDiscoveryEffect(source, workspace);
       const registryBaseUrl =
         source.type === "registry" ? (source.authority ?? options.registryBaseUrl) : undefined;
       if (source.type === "registry" && !registryBaseUrl)
@@ -1506,30 +1270,12 @@ export function resolveSkitSourceEffect(
         const skillText = new TextDecoder().decode(body);
         yield* assertDirectSkillDocument(skillText, type);
         yield* fs.writeFileString(join(directory, "SKILL.md"), skillText);
-        if (options.verbatimOnly)
-          return {
-            source: acquiredSource,
-            revision,
-            root: directory,
-            originalRoot: directory,
-            descriptorKind: "generated" as const,
-            observedSkillPaths: ["."],
-          };
-        // A downloaded document has no modification time of its own beyond what the server
-        // reports; the file we just wrote only records when we wrote it.
-        const lastModified = response.headers["last-modified"];
-        const declared = lastModified ? Date.parse(lastModified) : Number.NaN;
-        const root = yield* wrapSingleSkillEffect(
-          directory,
-          workspace,
-          Number.isNaN(declared) ? null : new Date(declared).toISOString(),
-        );
         return {
           source: acquiredSource,
           revision,
-          root,
           originalRoot: directory,
-          descriptorKind: "generated" as const,
+          descriptorKind: "observed" as const,
+          observedSkillPaths: ["."],
         };
       }
       const archive = join(
@@ -1573,11 +1319,8 @@ export function resolveSkitSourceEffect(
       yield* auditExtractedSourceEffect(extracted);
       const discovered = yield* discoverRootEffect(
         extracted,
-        workspace,
         undefined,
         false,
-        undefined,
-        options.verbatimOnly ?? false,
         undefined,
         options.previousSkillPaths,
         extracted,
@@ -1610,11 +1353,7 @@ export function resolveSkitSourceEffect(
       ),
     );
     // Manifest-selected directory links must retain target content at the original member path.
-    if (
-      options.verbatimOnly &&
-      resolved.descriptorKind === "generated" &&
-      resolved.observedSkillPaths?.length
-    ) {
+    if (resolved.descriptorKind === "observed") {
       const targets = new Map<string, string>();
       for (const path of resolved.observedSkillPaths) {
         const selected = join(resolved.originalRoot, path);

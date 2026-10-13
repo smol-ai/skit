@@ -45,7 +45,7 @@ const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(fun
       yield* leavePnpmSkillEffect(join(resolved.root, skill.path));
     }
   } else {
-    for (const path of resolved.observedSkillPaths ?? []) {
+    for (const path of resolved.observedSkillPaths) {
       yield* leavePnpmSkillEffect(join(inputRoot, path));
       yield* leavePnpmSkillEffect(join(resolved.originalRoot, path));
     }
@@ -68,10 +68,8 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
         registryBaseUrl: registry.origin,
         registryToken: registry.token,
         ...(version === undefined ? {} : { version }),
-        verbatimOnly: true,
         ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
       });
-      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
       yield* leaveResolvedPnpmSkills(parsed, resolved);
       if (resolved.descriptorKind === "declared") {
         const validated = yield* validateSkitDirectoryEffect(resolved.root, "retained", {
@@ -87,8 +85,8 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
         };
       }
       const paths = resolved.observedSkillPaths;
-      if (paths === undefined || paths.length === 0)
-        return yield* new AddNoSkills({ source: sourceLocator(parsed) });
+      if (paths.length === 0) return yield* new AddNoSkills({ source: sourceLocator(parsed) });
+      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
       const fs = yield* FileSystem.FileSystem;
       const skills = yield* Effect.forEach(paths, (relativePath) =>
         Effect.gen(function* () {
@@ -158,10 +156,8 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         registryBaseUrl: registry.origin,
         registryToken: registry.token,
         ...(version === undefined ? {} : { version }),
-        verbatimOnly: true,
         ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
       });
-      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
       yield* leaveResolvedPnpmSkills(parsed, resolved);
       const authority =
         resolved.source.type === "registry"
@@ -206,8 +202,8 @@ export const addLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
         };
       }
       const paths = resolved.observedSkillPaths;
-      if (paths === undefined || paths.length === 0)
-        return yield* new AddNoSkills({ source: historicalInput });
+      if (paths.length === 0) return yield* new AddNoSkills({ source: historicalInput });
+      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
       const fs = yield* FileSystem.FileSystem;
       const skills = yield* Effect.forEach(paths, (relativePath) =>
         Effect.gen(function* () {
