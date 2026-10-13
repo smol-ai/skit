@@ -3,7 +3,7 @@ import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { skitLayer } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../src/harness/probe.js";
+import { isProbeableHarness, probeHarnessEffect } from "../src/harness/probe.js";
 
 describe("harness probe", () => {
   it.effect("reports executable, resolved target, and parsed product version", () =>
@@ -64,4 +64,10 @@ describe("harness probe", () => {
       });
     }).pipe(Effect.provide(skitLayer)),
   );
+
+  it("recognises every probeable Harness, including Devin", () => {
+    expect(["codex", "claude-code", "opencode", "devin"].every(isProbeableHarness)).toBe(true);
+    expect(isProbeableHarness("cursor")).toBe(false);
+    expect(isProbeableHarness("toString")).toBe(false);
+  });
 });

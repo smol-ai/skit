@@ -15,6 +15,7 @@ export type {
   AuditSkillV1Alpha4,
 } from "./audit/schema.js";
 export {
+  isProbeableHarness,
   probeHarnessEffect,
   type HarnessProbeResult,
   type ProbeableHarness,
