@@ -1461,4 +1461,50 @@ describe("Principal provisioning", () => {
       ]);
     }).pipe(Effect.provide(bindingsLayer)),
   );
+
+  it.effect("never demotes a team owner while adding a member", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      expect((yield* signUp("owner")).status).toBe(200);
+      expect((yield* signUp("member")).status).toBe(200);
+      const cookie = yield* signIn("owner");
+      const created = yield* send("/api/teams", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ slug: "tool-makers", name: "Tool Makers" }),
+      });
+      expect(created.status).toBe(201);
+      const addMember = send("/api/teams/tool-makers/members", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ email: "member@example.test" }),
+      });
+      expect((yield* addMember).status).toBe(201);
+      // Promote the member between addMember's read and its write, as a concurrent owner
+      // change would.
+      yield* Effect.flatMap(
+        D1Client.D1Client,
+        (sql) =>
+          sql`CREATE TRIGGER promote_member BEFORE INSERT ON team_memberships
+              BEGIN
+                UPDATE team_memberships SET role = 'owner'
+                WHERE team_id = NEW.team_id AND principal_id = NEW.principal_id;
+              END`,
+      );
+
+      expect((yield* addMember).status).toBe(400);
+      const roles = yield* Effect.flatMap(
+        D1Client.D1Client,
+        (sql) =>
+          sql`SELECT u.username, m.role FROM team_memberships m
+              JOIN principals p ON p.principal_id = m.principal_id
+              JOIN user u ON u.id = p.better_auth_user_id
+              ORDER BY u.username`,
+      );
+      expect(roles).toEqual([
+        { username: "member", role: "owner" },
+        { username: "owner", role: "owner" },
+      ]);
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
 });

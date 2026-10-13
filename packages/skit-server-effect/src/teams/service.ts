@@ -10,7 +10,6 @@ export { Team, TeamMember } from "./contracts.js";
 const TEAM_SLUG = /^[a-z0-9][a-z0-9-]{2,38}$/;
 const TeamIdRow = Schema.Struct({ team_id: Schema.String });
 const PrincipalIdRow = Schema.Struct({ principal_id: Schema.String });
-const MembershipRoleRow = Schema.Struct({ role: Schema.Literals(["owner", "member"]) });
 
 export class TeamSessionRequired extends Schema.TaggedError<TeamSessionRequired>()(
   "Team.SessionRequired",
@@ -125,26 +124,18 @@ export const layer = Layer.effect(
           (cause) => new DatabaseError({ operation: "decode team member principal", cause }),
         ),
       );
-      const existingRows = yield* db(
-        "read team membership",
-        sql`SELECT role FROM team_memberships
-            WHERE team_id = ${team.team_id} AND principal_id = ${member.principal_id}`,
-      );
-      if (existingRows[0] !== undefined) {
-        const existing = yield* Schema.decodeUnknownEffect(MembershipRoleRow)(existingRows[0]).pipe(
-          Effect.mapError(
-            (cause) => new DatabaseError({ operation: "decode team membership", cause }),
-          ),
-        );
-        if (existing.role === "owner") return yield* new OwnerRoleImmutable();
-      }
       const now = new Date(yield* clock.currentTimeMillis).toISOString();
-      yield* db(
+      // Guard the owner role inside the write, so no role change after the reads above can
+      // let it demote an owner.
+      const added = yield* db(
         "add team member",
         sql`INSERT INTO team_memberships (team_id, principal_id, role, created_at)
             VALUES (${team.team_id}, ${member.principal_id}, 'member', ${now})
-            ON CONFLICT(team_id, principal_id) DO UPDATE SET role = 'member'`,
+            ON CONFLICT(team_id, principal_id) DO UPDATE SET role = excluded.role
+            WHERE team_memberships.role <> 'owner'
+            RETURNING role`,
       );
+      if (added.length === 0) return yield* new OwnerRoleImmutable();
       return { principal_id: member.principal_id, role: "member" as const };
     });
 
