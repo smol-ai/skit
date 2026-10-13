@@ -11,7 +11,7 @@ import { LibraryState } from "@smolai/skit-core";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
-import { DraftReadResponse } from "../src/drafts/contracts.js";
+import { draftReadResponseSchema } from "@smolai/skit-core/universal/authoring";
 import { expectedMigrations } from "../src/readiness/migrations.generated.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -313,7 +313,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       headers: { authorization: `Bearer ${cliToken}` },
     });
     expect(remoteDraftResponse.status).toBe(200);
-    const remoteDraft = Schema.decodeUnknownSync(DraftReadResponse)(
+    const remoteDraft = Schema.decodeUnknownSync(draftReadResponseSchema)(
       await remoteDraftResponse.json(),
     );
     const remoteFiles = remoteDraft.draft.files.map((file) =>

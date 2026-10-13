@@ -1,16 +1,15 @@
 import {
-  canonicalJson,
+  encodeHashParts,
   normalizeDescriptorDeclarations as normalizeDescriptor,
   parseSkitConfigEffect,
   parseSkitReadmeEffect,
   projectedSkillHashParts,
   projectSkillFiles as projectFiles,
-  type SkitDescriptor,
+  sha256Digest,
+  type SharedMapping,
 } from "@smolai/skit-core/universal/consumer";
 import { Effect } from "effect";
-import type { SharedMapping } from "./contracts.js";
 import { IntegrityError } from "./contracts.js";
-import { encodeHashParts, sha256 } from "./crypto.js";
 
 interface SharedFailure {
   readonly _tag?: string;
@@ -40,8 +39,6 @@ export const parseSkitReadme = (text: string) =>
 
 export const parseSkitConfig = (text: string) =>
   parseSkitConfigEffect(text).pipe(Effect.mapError(descriptorError));
-
-export const canonical = canonicalJson;
 
 export interface ProjectedFile {
   readonly path: string;
@@ -76,7 +73,5 @@ export const hashProjectedSkillFiles = Effect.fn("Integrity.hashProjectedSkillFi
   const parts = yield* Effect.fromResult(
     projectedSkillHashParts([...files], skillPath, [...shared]),
   ).pipe(Effect.mapError(projectionError));
-  return yield* sha256(encodeHashParts(parts));
+  return yield* sha256Digest(encodeHashParts(parts));
 });
-
-export type { SkitDescriptor };

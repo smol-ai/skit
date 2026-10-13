@@ -10,9 +10,8 @@ import {
   type DatabaseSqlClient,
   type RuntimeEnv,
 } from "../platform/cloudflare.js";
-import { Readiness, type ReadinessCheck } from "./contracts.js";
+import { Readiness, type ReadinessCheck } from "@smolai/skit-core/universal/api";
 import { expectedMigrations } from "./migrations.generated.js";
-export { Readiness, ReadinessCheck } from "./contracts.js";
 
 const MigrationRow = Schema.Struct({ name: Schema.String });
 

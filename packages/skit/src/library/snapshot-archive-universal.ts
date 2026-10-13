@@ -1,4 +1,5 @@
-import { Crypto, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { encodeHashParts, sha256Digest } from "../shared/digest.js";
 import { SnapshotArchive } from "./library-contracts.js";
 
 const MAX_TREE_BYTES = 32 * 1024 * 1024;
@@ -29,21 +30,6 @@ const fromBase64 = (value: string) =>
     try: () => Uint8Array.from(atob(value), (character) => character.charCodeAt(0)),
     catch: () => new SnapshotArchiveInvalid({ reason: "invalid file base64" }),
   });
-
-const encodedParts = (parts: readonly (string | Uint8Array)[]): Uint8Array => {
-  const encoder = new TextEncoder();
-  const chunks = parts.flatMap((part) => {
-    const bytes = typeof part === "string" ? encoder.encode(part) : part;
-    return [encoder.encode(`${bytes.length}:`), bytes, Uint8Array.of(0)];
-  });
-  const result = new Uint8Array(chunks.reduce((length, chunk) => length + chunk.length, 0));
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
-};
 
 /** Decode, validate archive hierarchy, and recompute the verbatim tree digest. */
 export const verifySnapshotArchiveEffect = Effect.fn("Library.verifySnapshotArchive")(function* (
@@ -104,10 +90,7 @@ export const verifySnapshotArchiveEffect = Effect.fn("Library.verifySnapshotArch
     }
     if (entry.kind === "symlink") parts.push(entry.target);
   }
-  const crypto = yield* Crypto.Crypto;
-  const actualBytes = yield* crypto.digest("SHA-256", encodedParts(parts));
-  const actual = `sha256:${Array.from(actualBytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-  if (actual !== archive.digest)
+  if ((yield* sha256Digest(encodeHashParts(parts))) !== archive.digest)
     return yield* new SnapshotArchiveInvalid({ reason: "snapshot digest mismatch" });
   return { archive, entries: ordered, files: decodedFiles };
 });

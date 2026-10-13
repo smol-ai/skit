@@ -4,13 +4,13 @@ import { Authorization } from "../authorization/service.js";
 import { credentialOriginAllowed } from "../auth/request-context.js";
 import { ServerConfiguration } from "../configuration.js";
 import {
-  MAX_PUBLISH_REQUEST_BYTES,
+  MAX_RELEASE_ARCHIVE_BASE64_LENGTH,
   MAX_RELEASE_ARCHIVE_BYTES,
-  ReleasePublishRequest,
-} from "../publication/contracts.js";
+  releasePublishRequestSchema,
+} from "@smolai/skit-core/universal/authoring";
 import { Publication } from "../publication/service.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { PublicationAuthenticatedApi } from "./authenticated.js";
+import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   archiveTooLargeResponse,
   draftNotFoundResponse,
@@ -24,6 +24,9 @@ import {
 } from "./errors.js";
 import { schemaBodyJsonLimited } from "./request-body.js";
 import { noStore } from "./response.js";
+
+// The base64 archive plus room for the rest of the JSON body.
+const MAX_PUBLISH_REQUEST_BYTES = MAX_RELEASE_ARCHIVE_BASE64_LENGTH + 4_096;
 
 export const publicationHandlers = HttpApiBuilder.group(
   PublicationAuthenticatedApi,
@@ -60,7 +63,7 @@ export const publicationHandlers = HttpApiBuilder.group(
 
           const decoded = yield* schemaBodyJsonLimited(
             rawRequest,
-            ReleasePublishRequest,
+            releasePublishRequestSchema,
             MAX_PUBLISH_REQUEST_BYTES,
           ).pipe(Effect.result);
           if (decoded._tag === "Failure")

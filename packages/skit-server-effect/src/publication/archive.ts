@@ -2,13 +2,13 @@ import { Effect, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import { unzipSync } from "fflate";
 import { databaseError } from "../platform/cloudflare.js";
-import { Digest, IntegrityError } from "../integrity/contracts.js";
-import { sha256 } from "../integrity/crypto.js";
+import {
+  MAX_ARTIFACT_CONTENT_BYTES,
+  MAX_ARTIFACT_FILES,
+} from "@smolai/skit-core/universal/authoring";
+import { Digest, sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { IntegrityError } from "../integrity/contracts.js";
 import { validateArtifactBundle } from "../integrity/validate.js";
-
-const MAX_FILES = 5_000;
-const MAX_FILE_BYTES = 64 * 1024 * 1024;
-const MAX_RELEASE_ARCHIVE_BYTES = 25 * 1024 * 1024;
 
 const invalidArchive = () => new IntegrityError({ code: "INVALID_ARCHIVE" });
 const manifestMismatch = () => new IntegrityError({ code: "ARCHIVE_MANIFEST_MISMATCH" });
@@ -47,7 +47,7 @@ const archiveEntryNamesUnsafe = (archive: Uint8Array): Array<string> => {
     centralOffset === 0xffffffff ||
     end + 22 + commentBytes !== archive.byteLength ||
     entries < 1 ||
-    entries > MAX_FILES ||
+    entries > MAX_ARTIFACT_FILES ||
     centralOffset + centralBytes > end
   )
     throw invalidArchive();
@@ -71,14 +71,13 @@ const archiveEntryNamesUnsafe = (archive: Uint8Array): Array<string> => {
       ![0, 8].includes(method) ||
       compressed === 0xffffffff ||
       uncompressed === 0xffffffff ||
-      uncompressed > MAX_FILE_BYTES ||
       next > end
     )
       throw invalidArchive();
     const name = decoder.decode(archive.subarray(offset + 46, offset + 46 + nameBytes));
     if (!safeArchivePath(name) || seen.has(name)) throw invalidArchive();
     total += uncompressed;
-    if (total > MAX_RELEASE_ARCHIVE_BYTES) throw invalidArchive();
+    if (total > MAX_ARTIFACT_CONTENT_BYTES) throw invalidArchive();
     seen.add(name);
     names.push(name);
     offset = next;
@@ -143,7 +142,7 @@ export const verifyReleaseArchive = Effect.fn("Integrity.verifyReleaseArchive")(
     if (
       !bytes ||
       bytes.byteLength !== row.byte_length ||
-      (yield* sha256(bytes)) !== row.blob_digest
+      (yield* sha256Digest(bytes)) !== row.blob_digest
     )
       return yield* manifestMismatch();
   }

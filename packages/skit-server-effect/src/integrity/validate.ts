@@ -1,32 +1,28 @@
-import { Effect } from "effect";
-import { publicationBlockReasons } from "./audit.js";
 import {
-  type ArtifactFile,
-  IntegrityError,
-  type IntegrityErrorCode,
+  assessInvocationConformance,
+  auditSkill,
+  canonicalJson,
+  describeInvocationConformanceIssue,
+  evaluateSkillAudit,
+  type RegistrySkitDescriptor,
+} from "@smolai/skit-core/universal/consumer";
+import type { IntegrityErrorCode } from "@smolai/skit-core/universal/api";
+import {
   MAX_ARTIFACT_CONTENT_BYTES,
-  type SkitDescriptor,
-  type ValidationDiagnostic,
-} from "./contracts.js";
+  MAX_ARTIFACT_FILES,
+} from "@smolai/skit-core/universal/authoring";
+import { Effect } from "effect";
+import { type ArtifactFile, IntegrityError, type ValidationDiagnostic } from "./contracts.js";
 import {
-  canonical,
   hashProjectedSkillFiles,
   normalizeDescriptorDeclarations,
   parseSkitConfig,
   parseSkitReadme,
   projectSkillFiles,
 } from "./descriptor.js";
-import { assessInvocationConformance, describeInvocationConformanceIssue } from "./invocation.js";
-
-const MAX_FILES = 5_000;
-const MAX_FILE_BYTES = MAX_ARTIFACT_CONTENT_BYTES;
-
-export interface RegistryDescriptor extends SkitDescriptor {
-  readonly id: string;
-}
 
 export interface ValidatedArtifactBundle {
-  readonly descriptor: RegistryDescriptor;
+  readonly descriptor: RegistrySkitDescriptor;
   readonly diagnostics: ReadonlyArray<ValidationDiagnostic>;
 }
 
@@ -39,10 +35,10 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
   descriptorInput: unknown,
   files: ReadonlyArray<ArtifactFile>,
 ) {
-  if (files.length < 1 || files.length > MAX_FILES) return yield* fail("INVALID_DRAFT");
+  if (files.length < 1 || files.length > MAX_ARTIFACT_FILES) return yield* fail("INVALID_DRAFT");
   if (new Set(files.map(({ path }) => path)).size !== files.length)
     return yield* fail("DUPLICATE_FILE_PATH");
-  if (files.some(({ bytes }) => bytes.byteLength > MAX_FILE_BYTES))
+  if (files.some(({ bytes }) => bytes.byteLength > MAX_ARTIFACT_CONTENT_BYTES))
     return yield* fail("DRAFT_FILE_TOO_LARGE");
   if (files.reduce((total, { bytes }) => total + bytes.byteLength, 0) > MAX_ARTIFACT_CONTENT_BYTES)
     return yield* fail("DRAFT_TOO_LARGE");
@@ -55,10 +51,10 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
       ? yield* parseSkitReadme(new TextDecoder().decode(readme.bytes))
       : yield* fail("DESCRIPTOR_MISSING");
   if (localDescriptor.slug !== slug) return yield* fail("INVALID_DESCRIPTOR_ID");
-  const descriptor: RegistryDescriptor = { ...localDescriptor, id: `${owner}/${slug}` };
+  const descriptor: RegistrySkitDescriptor = { ...localDescriptor, id: `${owner}/${slug}` };
   const normalizedLocal = yield* normalizeDescriptorDeclarations(descriptor);
   const normalizedInput = yield* normalizeDescriptorDeclarations(descriptorInput);
-  if (canonical(normalizedLocal) !== canonical(normalizedInput))
+  if (canonicalJson(normalizedLocal) !== canonicalJson(normalizedInput))
     return yield* fail("DESCRIPTOR_CONTENT_MISMATCH");
 
   const paths = new Set(files.map(({ path }) => path));
@@ -73,24 +69,34 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
         return yield* fail("SHARED_SOURCE_MISSING", mapping.from);
     }
     yield* projectSkillFiles(files, skill.path, skill.shared);
-    yield* hashProjectedSkillFiles(files, skill.path, skill.shared);
-    const reasons = publicationBlockReasons(
-      text.decode(primaryFile.bytes),
-      skill.capabilities ?? [],
+    const decision = evaluateSkillAudit(
+      auditSkill(text.decode(primaryFile.bytes), {
+        declaredCapabilities: [...(skill.capabilities ?? [])],
+        path: primary,
+        artifactContentDigest: yield* hashProjectedSkillFiles(files, skill.path, skill.shared),
+      }),
+      { context: "publish" },
     );
-    if (reasons.length > 0)
+    // A `warn` outcome is advisory; only `block` gates publication.
+    if (decision.outcome === "block")
       diagnostics.push({
         code: "SECURITY_POLICY_BLOCKED",
         severity: "error",
         path: primary,
-        message: `Security publication policy blocked: ${reasons.join(", ")}`,
+        message: `Security assessment block: ${decision.reasons.map((reason) => reason.code).join(", ")}`,
       });
   }
 
   const contents = new Map(files.map((file) => [file.path, text.decode(file.bytes)]));
-  for (const issue of yield* assessInvocationConformance(descriptor.skills, (path) =>
-    contents.get(path),
-  ))
+  const conformance = yield* Effect.fromResult(
+    assessInvocationConformance(descriptor.skills, (path) => contents.get(path)),
+  ).pipe(
+    Effect.mapError(
+      (failure) =>
+        new IntegrityError({ code: "INVALID_INVOCATION_METADATA", detail: failure.path }),
+    ),
+  );
+  for (const issue of conformance)
     diagnostics.push({
       code: "INVOCATION_METADATA_MISMATCH",
       severity: "error",

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { AuthorInventory } from "../author-inventory/service.js";
 import { CurrentPrincipal } from "./authentication.js";
-import { AuthoringAuthenticatedApi } from "./authenticated.js";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   insufficientScopeResponse,
   invalidCursorResponse,

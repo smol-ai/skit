@@ -8,7 +8,7 @@ import {
   PrincipalAuthentication,
 } from "../src/api/authentication.js";
 import { authorInventoryHandlers } from "../src/api/author-inventory-http.js";
-import { AuthoringAuthenticatedApi } from "../src/api/authenticated.js";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { AuthorInventory, type AuthorInventoryService } from "../src/author-inventory/service.js";
 import type { Principal } from "../src/auth/authentication.js";

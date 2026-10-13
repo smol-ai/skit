@@ -4,7 +4,7 @@ import { Authorization } from "../authorization/service.js";
 import { ServerConfiguration } from "../configuration.js";
 import { SkitDeletion } from "../skit-delete/service.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { AuthoringAuthenticatedApi } from "./authenticated.js";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   deleteRequiresPrivateResponse,
   forbiddenOriginResponse,

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ReadinessInspector } from "../readiness/service.js";
 import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "./authenticated.js";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { forbiddenResponse, sessionRequiredResponse, storageFailureResponse } from "./errors.js";
 import { noStore } from "./response.js";
 

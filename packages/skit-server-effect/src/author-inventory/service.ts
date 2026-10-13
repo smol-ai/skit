@@ -3,7 +3,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import type { Principal } from "../auth/authentication.js";
 import { Authorization, type AuthorizationService } from "../authorization/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
-import type { AuthorInventoryEntry } from "./contracts.js";
+import type { AuthorSkitSummary } from "@smolai/skit-core/universal/api";
 
 const ACCESS_BATCH_SIZE = 40;
 const SUBREQUEST_CONCURRENCY = 4;
@@ -32,7 +32,7 @@ export interface AuthorInventoryQuery {
 export type AuthorInventoryPage =
   | {
       readonly outcome: "page";
-      readonly skits: ReadonlyArray<AuthorInventoryEntry>;
+      readonly skits: ReadonlyArray<AuthorSkitSummary>;
       readonly next_cursor: string | null;
     }
   | { readonly outcome: "invalid_cursor" };
