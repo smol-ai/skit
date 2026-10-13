@@ -49,11 +49,11 @@ import {
 import {
   errorMessage,
   auditLocalCapabilitiesV1Alpha4Effect,
+  isProbeableHarness,
   probeHarnessEffect,
   type AuditEntryV1Alpha4,
   type AuditMcpServerV1Alpha4,
   type HarnessProbeResult,
-  type ProbeableHarness,
 } from "../../cli/src/front-end";
 import { LibraryStore, readListingBudgets, type ListingBudget } from "@smolai/skit-core";
 import { budgetReceipt } from "./budget/receipt";
@@ -1259,10 +1259,6 @@ function showDocument(name: string, location: string, content: string): void {
   documentScroll = scroll;
   renderer.root.add(overlay);
   scroll.focus();
-}
-
-function isProbeableHarness(value: string): value is ProbeableHarness {
-  return value === "codex" || value === "claude-code" || value === "opencode";
 }
 
 /** Harnesses with a probe already running, so a repeated key cannot start a second one. */

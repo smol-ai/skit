@@ -16,6 +16,7 @@ import {
   type CodexListingSkill,
 } from "../src/harnesses/skill-listing/codex-allocation.js";
 import {
+  implicitInvocationAllowed,
   readLibraryCodexListingBudget,
   readLibraryCodexListingSnapshot,
 } from "../src/harnesses/skill-listing/codex.js";
@@ -319,4 +320,24 @@ it.effect("uses the model default unless configuration overrides the context win
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     Effect.provide(nativeLibraryLayer),
   ),
+);
+
+it.effect("reads the invocation policy from agents/openai.yaml only", () =>
+  Effect.gen(function* () {
+    const f = yield* NativeLibraryFixture;
+    const fs = yield* FileSystem.FileSystem;
+    const doc = join(f.root, "policy", "SKILL.md");
+    yield* fs.makeDirectory(join(f.root, "policy", "agents"), { recursive: true });
+    yield* fs.writeFileString(doc, "Policy.");
+    yield* fs.writeFileString(
+      join(f.root, "policy", "SKILL.json"),
+      JSON.stringify({ policy: { allow_implicit_invocation: false } }),
+    );
+    expect(yield* implicitInvocationAllowed(doc)).toBe(true);
+    yield* fs.writeFileString(
+      join(f.root, "policy", "agents", "openai.yaml"),
+      "policy:\n  allow_implicit_invocation: false\n",
+    );
+    expect(yield* implicitInvocationAllowed(doc)).toBe(false);
+  }).pipe(Effect.provide(nativeLibraryLayer)),
 );

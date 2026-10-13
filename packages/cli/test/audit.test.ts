@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { dirname, isAbsolute, join } from "node:path";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Schema } from "effect";
+import { ConfigProvider, Effect, FileSystem, Schema } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
   makeCollectionId,
@@ -173,13 +173,6 @@ describe("experimental capability audit", () => {
             harness: "codex",
           }),
         );
-        yield* write(
-          join(home, ".skit", "state.json"),
-          JSON.stringify({
-            schemaVersion: 5,
-            skills: [],
-          }),
-        );
 
         const observed = (yield* auditLocalCapabilitiesEffect({
           home,
@@ -285,23 +278,54 @@ describe("experimental capability audit", () => {
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
-  it.effect("reports a readable version-1 ledger as requiring migration", () =>
+  it.effect("reads the Library configured by SKIT_HOME", () =>
     Effect.gen(function* () {
-      const root = yield* scratch("skit-audit-migration-");
+      const root = yield* scratch("skit-audit-skit-home-");
       const home = join(root, "home");
-      yield* write(
-        join(home, ".skit", "state.json"),
-        JSON.stringify({ schemaVersion: 1, entries: [], installations: [] }),
+      const statePath = join(root, "library", "state.json");
+      yield* write(statePath, "{");
+
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "library") })),
+        ),
       );
 
-      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
-
       expect(report.findings).toContainEqual(
-        expect.objectContaining({
-          severity: "error",
-          code: "migration-required",
-          details: { code: "MIGRATION_REQUIRED", fromVersion: 1, toVersion: 2 },
-        }),
+        expect.objectContaining({ code: "unreadable-library-ledger", details: { statePath } }),
+      );
+    }).pipe(Effect.provide(testPlatformLayer)),
+  );
+
+  it.effect("migrates a legacy Library through the store and keeps its backup", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-audit-legacy-");
+      const home = join(root, "home");
+      const library = join(root, "library");
+      const legacy = yield* fs.readFileString(
+        join(
+          import.meta.dirname,
+          "../../skit/test/fixtures/library-state/v4-well-known-subset.json",
+        ),
+      );
+      yield* write(join(library, "state.json"), legacy);
+
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root }).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: library }))),
+      );
+
+      expect(report.findings.some((finding) => finding.code === "unreadable-library-ledger")).toBe(
+        false,
+      );
+      const migrated = JSON.parse(yield* fs.readFileString(join(library, "state.json")));
+      expect(migrated.schemaVersion).toBe(8);
+      const backups = (yield* fs.readDirectory(library)).filter((name) =>
+        name.startsWith("state.json.v4.backup-"),
+      );
+      expect(backups).toHaveLength(1);
+      expect(JSON.parse(yield* fs.readFileString(join(library, backups[0]!)))).toEqual(
+        JSON.parse(legacy),
       );
     }).pipe(Effect.provide(testPlatformLayer)),
   );
@@ -468,13 +492,6 @@ describe("experimental capability audit", () => {
       yield* write(
         join(home, ".claude", "plugins", "installed_plugins.json"),
         JSON.stringify({ plugins: { "review@vendor": [{ scope: "user", installPath }] } }),
-      );
-      yield* write(
-        join(home, ".skit", "state.json"),
-        JSON.stringify({
-          schemaVersion: 5,
-          skills: [],
-        }),
       );
 
       const observed = (yield* auditLocalCapabilitiesEffect({ home, cwd: root })).observations.find(

@@ -38,6 +38,10 @@ const commands: Record<ProbeableHarness, string> = {
   devin: "devin",
 };
 
+export function isProbeableHarness(value: string): value is ProbeableHarness {
+  return Object.hasOwn(commands, value);
+}
+
 function versionFrom(output: string): string | null {
   return output.match(/\bv?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)\b/)?.[1] ?? null;
 }

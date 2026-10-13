@@ -7,7 +7,17 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect, test } from "vitest";
-import { resolveSkitSourceEffect, skitLayer } from "@smolai/skit-core";
+import {
+  DescriptorMalformed,
+  DirectSkillDocumentInvalid,
+  HarnessMetadataInvalid,
+  InvalidLibraryState,
+  NoSkitDescriptorFound,
+  ProjectionFileMissing,
+  ReadmeFrontmatterMissing,
+  resolveSkitSourceEffect,
+  skitLayer,
+} from "@smolai/skit-core";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
@@ -80,6 +90,25 @@ describe("declared exit codes", () => {
     expect(failure.message).toBe("");
     expect(errorMessage(failure)).toBe("pinned Git acquisition has no commit");
   });
+});
+
+test("validation failures from shipped commands carry their own remediation", () => {
+  for (const failure of [
+    new ReadmeFrontmatterMissing(),
+    new DescriptorMalformed({ format: "json", detail: "unexpected token" }),
+    new DirectSkillDocumentInvalid(),
+    new NoSkitDescriptorFound(),
+    new ProjectionFileMissing({ path: "/skills/review/SKILL.md" }),
+    new HarnessMetadataInvalid({ path: "/skills/review/SKILL.md", kind: "SKILL.md frontmatter" }),
+    new InvalidLibraryState({ path: "/home/.skit/state.json", detail: "schema v2" }),
+  ]) {
+    expect(classifyFailure(failure)).toMatchObject({
+      code: "VALIDATION_FAILED",
+      exitCode: 65,
+      remediation: failure.remediation,
+    });
+    expect(failure.remediation).not.toContain("skit author");
+  }
 });
 
 it.effect("malformed direct Skill downloads preserve the validation exit code", () =>

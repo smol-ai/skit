@@ -64,7 +64,7 @@ export const auditCliCommand = Command.make(
   Command.withExamples([{ command: "skit audit --json" }, { command: "skit audit --cwd ." }]),
   Command.annotate(CommandMetadata, {
     effects: {
-      capabilities: ["filesystem.read", "process.execute"],
+      capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
       subprocesses: auditSubprocesses,
     },
     outputSchemas: [outputContracts.experimentalAuditV1Alpha4],

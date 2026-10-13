@@ -39,35 +39,29 @@ const positive = (value: number | null | undefined): number | null =>
 export const implicitInvocationAllowed = Effect.fn("CodexListing.implicitInvocationAllowed")(
   function* (path: string) {
     const fs = yield* FileSystem.FileSystem;
-    // SKILL.json is the current metadata source; agents/openai.yaml supports existing installations.
-    for (const metadataPath of [
-      join(dirname(path), "SKILL.json"),
-      join(dirname(path), "agents", "openai.yaml"),
-    ]) {
-      if (!(yield* fs.exists(metadataPath))) continue;
-      const content = yield* fs.readFileString(metadataPath);
-      const document = yield* Effect.try({
-        try: () => parseDocument(content),
-        catch: (error) =>
-          new CodexDoctorFailure({
-            message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
-          }),
+    const metadataPath = join(dirname(path), "agents", "openai.yaml");
+    if (!(yield* fs.exists(metadataPath))) return true;
+    const content = yield* fs.readFileString(metadataPath);
+    const document = yield* Effect.try({
+      try: () => parseDocument(content),
+      catch: (error) =>
+        new CodexDoctorFailure({
+          message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
+        }),
+    });
+    if (document.errors.length)
+      return yield* new CodexDoctorFailure({
+        message: `Cannot read invocation policy at ${metadataPath}`,
       });
-      if (document.errors.length)
-        return yield* new CodexDoctorFailure({
-          message: `Cannot read invocation policy at ${metadataPath}`,
-        });
-      const value = yield* Effect.try({
-        try: () => document.toJS(),
-        catch: (error) =>
-          new CodexDoctorFailure({
-            message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
-          }),
-      });
-      const metadata = yield* Schema.decodeUnknownEffect(MetadataPolicy)(value);
-      return metadata.policy?.allow_implicit_invocation !== false;
-    }
-    return true;
+    const value = yield* Effect.try({
+      try: () => document.toJS(),
+      catch: (error) =>
+        new CodexDoctorFailure({
+          message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
+        }),
+    });
+    const metadata = yield* Schema.decodeUnknownEffect(MetadataPolicy)(value);
+    return metadata.policy?.allow_implicit_invocation !== false;
   },
 );
 

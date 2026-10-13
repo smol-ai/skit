@@ -114,12 +114,12 @@ const authenticatedRoutes = (env: RuntimeEnv) =>
     }),
   );
 
-const onboardingRoutes = (env: RuntimeEnv, application: AuthenticatedApplication) =>
+const onboardingRoutes = (application: AuthenticatedApplication) =>
   HttpRouter.use((router) =>
     router.add(
       "POST",
       "/api/onboarding/username",
-      handleUsernameClaim(env).pipe(Effect.provide(application)),
+      handleUsernameClaim().pipe(Effect.provide(application)),
     ),
   );
 
@@ -218,7 +218,7 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
           downloadMethodRoutes(),
           authenticatedReleaseApi(authentication),
           authenticatedRoutes(env),
-          onboardingRoutes(env, authentication),
+          onboardingRoutes(authentication),
           capabilities.library ? consumerAuthenticatedApi(authentication) : Layer.empty,
           capabilities.authoring ? authoringAuthenticatedApi(authentication) : Layer.empty,
           capabilities.publication ? publicationAuthenticatedApi(authentication) : Layer.empty,

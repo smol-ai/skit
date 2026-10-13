@@ -1,9 +1,14 @@
 import { Clock, Effect, FileSystem } from "effect";
 
-import { configurationForHome } from "../configuration/skit-configuration.js";
+import {
+  configurationForHome,
+  resolveSkitConfiguration,
+  type ResolvedSkitConfiguration,
+} from "../configuration/skit-configuration.js";
 import { dirname, join, resolve } from "node:path";
 import {
-  isJsonObject,
+  LibraryStore,
+  libraryStoreLayer,
   objectAt,
   observationPathIdentityEffect,
   parseOwnershipMarker,
@@ -13,7 +18,6 @@ import { auditCodex } from "./codex.js";
 import { pathExists, read, readJson as json } from "./io.js";
 import { runAuditProbesEffect, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
-import { retainedLibraryReferences } from "./library-ledger.js";
 import type { AuditFinding, AuditObservation } from "./types.js";
 import { deferredAuditHarnesses } from "../harness/catalog.js";
 import { normalizeAuditReport } from "./normalize.js";
@@ -29,34 +33,33 @@ export interface AuditOptions {
 type LedgerInspection =
   | { kind: "absent" }
   | { kind: "unreadable"; path: string }
-  | { kind: "readable"; retained: Set<string>; schemaVersion: unknown };
+  | { kind: "readable"; retained: Set<string> };
 
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
-  home: string,
+  library: ResolvedSkitConfiguration,
 ): Effect.gen.Return<LedgerInspection, never, FileSystem.FileSystem> {
-  const path = join(home, ".skit", "state.json");
-  const source = yield* read(path);
-  if (source === null) return { kind: "absent" };
-  let value: unknown;
-  try {
-    value = JSON.parse(source);
-  } catch {
-    return { kind: "unreadable", path };
-  }
-  const retained = retainedLibraryReferences(value);
-  if (retained === undefined || !isJsonObject(value)) return { kind: "unreadable", path };
-  return {
-    kind: "readable" as const,
-    schemaVersion: value.schemaVersion,
-    retained,
-  };
+  return yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
+    Effect.provide(libraryStoreLayer({ home: library.skitHome })),
+    Effect.map((inspected): LedgerInspection =>
+      inspected.present
+        ? {
+            kind: "readable",
+            retained: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
+          }
+        : { kind: "absent" },
+    ),
+    Effect.orElseSucceed((): LedgerInspection => ({
+      kind: "unreadable",
+      path: library.libraryStatePath,
+    })),
+  );
 });
 
 const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
-  home: string,
+  library: ResolvedSkitConfiguration,
   observations: readonly AuditObservation[],
 ) {
-  const ledger = yield* inspectLibraryLedger(home);
+  const ledger = yield* inspectLibraryLedger(library);
   const inspected = new Set<string>();
   const findings: AuditFinding[] =
     ledger.kind === "unreadable"
@@ -71,15 +74,6 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
           },
         ]
       : [];
-  if (ledger.kind === "readable" && ledger.schemaVersion === 1)
-    findings.push({
-      severity: "error",
-      code: "migration-required",
-      subject: join(home, ".skit", "state.json"),
-      problem: "SKIT Library state requires migration",
-      locations: [join(home, ".skit", "state.json")],
-      details: { code: "MIGRATION_REQUIRED", fromVersion: 1, toVersion: 2 },
-    });
   for (const observation of observations) {
     if (observation.kind !== "skill" || !observation.path) continue;
     const directory = dirname(observation.path);
@@ -183,7 +177,10 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
   const skills = yield* auditSkills(home, cwd, lock, claude.skills);
   observations.push(...skills.observations);
   findings.push(...skills.findings);
-  findings.push(...(yield* auditProjectionCustody(home, skills.observations)));
+  // An audited home other than the configured one has its own Library, unless SKIT_HOME names one.
+  const library =
+    options.home === undefined ? paths : yield* resolveSkitConfiguration(undefined, home);
+  findings.push(...(yield* auditProjectionCustody(library, skills.observations)));
 
   const codex = yield* auditCodex(home, cwd);
   observations.push(...codex.observations);

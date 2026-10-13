@@ -16,6 +16,7 @@ export class PluginSkillConflict extends Data.TaggedError("PluginSkillConflict")
   locators?: readonly string[];
 }> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation = "Add one of the available selections instead.";
   get message() {
     const selections = this.locators
       ? this.locators.map((locator) => `  skit add '${locator.replaceAll("'", "'\\''")}'`)

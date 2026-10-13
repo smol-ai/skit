@@ -16,9 +16,11 @@ export function classifyFailure(error: unknown): ClassifiedFailure {
     code: classified.code,
     exitCode: classified.exitCode,
     message: classified.message,
-    remediation: Predicate.isTagged(error, "InvalidLibraryState")
-      ? "Back up the state file before recovery. To reset an alpha Library, move it aside and run `skit setup`; keep installed Skill files."
-      : classified.remediation,
+    // A domain failure may name its own next step; the code supplies a generic one otherwise.
+    remediation:
+      Predicate.hasProperty(error, "remediation") && typeof error.remediation === "string"
+        ? error.remediation
+        : classified.remediation,
   };
 }
 
