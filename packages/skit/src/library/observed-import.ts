@@ -471,15 +471,6 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
           }),
       ),
     );
-    yield* libraryManifestFromLocalStateEffect(successor).pipe(
-      Effect.mapError(
-        (error) =>
-          new InvalidLibraryState({
-            path: join(store.home, "state.json"),
-            detail: `Projection retention would violate the portable manifest: ${formatManifestIssue(error)}`,
-          }),
-      ),
-    );
     yield* store.publish(successor);
     return {
       skillVersionId: version.skill_version_id,

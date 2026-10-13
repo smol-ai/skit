@@ -1,7 +1,7 @@
 // The only code that addresses `state.json` by path. Deliberately absent from the package barrel:
 // workflows reach Library state through `LibraryStore`.
 
-import { Clock, Effect, FileSystem, Schema } from "effect";
+import { Clock, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
@@ -47,7 +47,13 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library state" })),
   );
   yield* libraryManifestFromLocalStateEffect(state).pipe(
-    Effect.mapError((error) => new InvalidLibraryState({ path, detail: String(error) })),
+    Effect.mapError(
+      (issue) =>
+        new InvalidLibraryState({
+          path,
+          detail: `Library state violates the portable manifest: ${SchemaIssue.makeFormatterDefault()(issue)}`,
+        }),
+    ),
   );
   return state;
 });
@@ -182,11 +188,13 @@ export const publishLibraryStateEffect = Effect.fn("Library.publishState")(funct
   home: string,
   state: LibraryState,
 ) {
-  // Encoding validates the state and serialises exactly what the loader decodes.
+  const path = join(resolve(home), "state.json");
+  // Refuse what the loader would refuse, so a publish can never strand the Library unreadable.
+  yield* decodeCurrentState(path, state);
   const text = yield* encodeLibraryState(state).pipe(
     Effect.mapError(
-      () => new InvalidLibraryState({ path: home, detail: "refusing invalid Library state" }),
+      () => new InvalidLibraryState({ path, detail: "refusing invalid Library state" }),
     ),
   );
-  yield* writeRawAtomicEffect(join(resolve(home), "state.json"), `${text}\n`);
+  yield* writeRawAtomicEffect(path, `${text}\n`);
 });
