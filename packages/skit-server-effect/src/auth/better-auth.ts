@@ -11,6 +11,7 @@ import {
   type RuntimeEnv,
 } from "../platform/cloudflare.js";
 import { NativeClock } from "../platform/native-clock.js";
+import { ServerConfiguration } from "../configuration.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
 import { passwordCallbacks } from "./password.js";
 
@@ -407,10 +408,9 @@ export const handleRequest = Effect.fn("BetterAuthHttp.handleRequest")(function*
   );
 });
 
-export const handleUsernameClaim = Effect.fn("BetterAuthHttp.handleUsernameClaim")(function* (
-  env: RuntimeEnv,
-) {
+export const handleUsernameClaim = Effect.fn("BetterAuthHttp.handleUsernameClaim")(function* () {
   const betterAuth = yield* BetterAuth;
+  const configuration = yield* ServerConfiguration;
   const request = yield* HttpServerRequest.HttpServerRequest;
   const webRequest = yield* HttpServerRequest.toWeb(request).pipe(
     Effect.catch(() => Effect.succeed(undefined)),
@@ -420,7 +420,7 @@ export const handleUsernameClaim = Effect.fn("BetterAuthHttp.handleUsernameClaim
       { error: "invalid_request" },
       { status: 400, headers: { "cache-control": "no-store" } },
     );
-  if (webRequest.headers.get("origin") !== env.PUBLIC_APP_ORIGIN)
+  if (webRequest.headers.get("origin") !== configuration.publicAppOrigin)
     return yield* HttpServerResponse.json(
       { error: "forbidden_origin" },
       { status: 403, headers: { "cache-control": "no-store" } },

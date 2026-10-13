@@ -1048,6 +1048,27 @@ describe("Better Auth adapter", () => {
     }).pipe(Effect.provide(bindingsLayer)),
   );
 
+  it.effect("accepts the configured origin for username claims despite a trailing slash", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const slashed = makeWebHandler({ ...env, PUBLIC_APP_ORIGIN: "https://registry.test/" });
+      const claim = (origin: string) =>
+        webPromise(() =>
+          slashed.handler(
+            new Request("https://registry.test/api/onboarding/username", {
+              method: "POST",
+              headers: { origin, "content-type": "application/json" },
+              body: JSON.stringify({ username: "octocat" }),
+            }),
+          ),
+        );
+
+      expect((yield* claim("https://registry.test")).status).toBe(401);
+      expect((yield* claim("https://elsewhere.test")).status).toBe(403);
+      yield* webPromise(() => slashed.dispose());
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
   it.effect("keeps account registration closed by default", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
