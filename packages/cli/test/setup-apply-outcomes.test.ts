@@ -379,6 +379,25 @@ it.effect("a removal selection edited after the first additive stage stays in pl
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+// A custody marker leaves the tree hash unchanged, so removal checks custody on its own: a copy
+// that gains a marker after the apply-time scan, even an invalid one, is no longer removable.
+it.effect("a removal selection that gains a custody marker after the scan stays in place", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: true });
+    const marker = join(f.path("gamma"), ".skit-ownership.json");
+    const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+      published: f.fs.writeFileString(marker, "{}"),
+    });
+    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.strictEqual(
+      yield* f.fs.readFileString(join(f.path("gamma"), "SKILL.md")),
+      skillBytes("gamma"),
+    );
+    assert.strictEqual(yield* f.fs.readFileString(marker), "{}");
+    assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 // Each entry is checked again immediately before its own move, so a later entry replaced while an
 // earlier one moves is left alone; the earlier move stays, recorded in the receipt.
 it.effect("a removal entry replaced during an earlier move stays untouched", () =>
