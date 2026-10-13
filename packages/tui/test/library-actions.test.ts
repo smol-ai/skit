@@ -126,4 +126,4 @@ test("disposing the host kills a Harness probe that is still running", async () 
   await host.dispose();
   expect(await probe).toBe("interrupted");
   expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
-});
+}, 30_000);

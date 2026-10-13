@@ -42,4 +42,4 @@ Set `SKIT_TUI_SNAPSHOT_DOCUMENT=1` to capture the selected Skill document and
 `SKIT_TUI_SNAPSHOT_HARNESS_PROBE=1` to capture Harness probe results. Use
 `--item <name>` with `--view` to select a particular row before capture.
 
-Set `SKIT_TUI_SNAPSHOT_LIBRARY=enable`, `disable`, or `confirm` to preview Library actions without applying them. `SKIT_TUI_SNAPSHOT_KEYS=RETURN,ESCAPE` replays navigation; `SKIT_TUI_SNAPSHOT_RESIZE=60x24` captures a resized layout.
+Set `SKIT_TUI_SNAPSHOT_LIBRARY=enable`, `disable`, or `confirm` to preview Library actions without applying them. `SKIT_TUI_SNAPSHOT_KEYS=RETURN,ESCAPE` replays navigation, waiting after each step for the work it started (`p+p` presses keys back-to-back); `SKIT_TUI_SNAPSHOT_RESIZE=60x24` captures a resized layout.

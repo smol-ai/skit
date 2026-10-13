@@ -2016,10 +2016,12 @@ if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY && sections[variant]?.key === "library
 if (test && snapshotPath) {
   await test.flush();
   if (process.env.SKIT_TUI_SNAPSHOT_KEYS) {
-    for (const key of process.env.SKIT_TUI_SNAPSHOT_KEYS.split(",")) {
-      const leavingDetails = key === "ESCAPE" && isNarrow() && narrowDetails;
-      await test.mockInput.pressKey(key);
+    // Each step waits for the work it started; `a+b` presses keys back-to-back before it can finish.
+    for (const step of process.env.SKIT_TUI_SNAPSHOT_KEYS.split(",")) {
+      const leavingDetails = step === "ESCAPE" && isNarrow() && narrowDetails;
+      for (const key of step.split("+")) test.mockInput.pressKey(key);
       if (leavingDetails) await test.waitFor(() => !narrowDetails);
+      await libraryHost.settled();
       await test.flush();
     }
   }

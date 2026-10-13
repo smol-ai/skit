@@ -49,6 +49,23 @@ test("queued transitions read the state committed by their predecessor", async (
   }
 });
 
+test("settled waits for a workflow and for the one it starts when it finishes", async () => {
+  const resume = Deferred.makeUnsafe<void>();
+  const host = createLibraryHost(Layer.empty, Effect.succeed(initial));
+  const finished: string[] = [];
+  try {
+    void host
+      .run(Deferred.await(resume))
+      .then(() => host.run(Effect.sync(() => finished.push("follow-up"))));
+    const settling = host.settled();
+    await outside(Deferred.succeed(resume, undefined));
+    await settling;
+    expect(finished).toEqual(["follow-up"]);
+  } finally {
+    await host.dispose();
+  }
+});
+
 test("disposal waits for in-flight finalization before releasing host resources", async () => {
   const reached = Deferred.makeUnsafe<void>();
   const cleanupStarted = Deferred.makeUnsafe<void>();

@@ -9,10 +9,13 @@ import {
   withLibraryWriter,
 } from "@smolai/skit-core";
 import {
+  confirmLibraryChange,
   LibraryActor,
   libraryApplicationLayer,
   openLibrarySession,
+  proposeLibraryCollectionChange,
   skitConfigurationLayer,
+  type Scope,
 } from "../../../cli/src/front-end";
 import { createLibraryHost } from "../../src/library-host";
 
@@ -64,6 +67,18 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
       ).pipe(Effect.provide(libraryStoreLayer({ home: skitHome })));
     });
   for (const [collection, skills] of Object.entries(collections)) yield* retain(collection, skills);
+  const configuration = {
+    home,
+    configHome: join(home, ".config"),
+    statePath: join(skitHome, "state.json"),
+    variantsPath: join(skitHome, "variants"),
+    overrides: {},
+    now: () => "2026-10-14T00:00:00.000Z",
+  };
+  const application = libraryApplicationLayer.pipe(
+    Layer.provideMerge(skitConfigurationLayer(skitHome)),
+    Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
+  );
   return {
     root,
     home,
@@ -72,26 +87,25 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     /** Retain another Collection, as a second front end writing to the same Library would. */
     retain,
     /** The projection options the TUI derives from its flags for this home. */
-    configuration: {
-      home,
-      configHome: join(home, ".config"),
-      statePath: join(skitHome, "state.json"),
-      variantsPath: join(skitHome, "variants"),
-      overrides: {},
-      now: () => "2026-10-14T00:00:00.000Z",
-    },
+    configuration,
+    /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
+    bind: (label: string, scopes: readonly Scope[]) =>
+      Effect.gen(function* () {
+        const session = yield* openLibrarySession();
+        const collectionId = session.skills.find((row) => row.heading === label)!.collectionId;
+        const confirmed = yield* confirmLibraryChange(
+          yield* proposeLibraryCollectionChange(session, configuration, collectionId, true, scopes),
+          configuration,
+        );
+        if (confirmed.outcome?.kind !== "applied")
+          return yield* Effect.die(`binding ${label} was ${confirmed.outcome?.kind}`);
+        return collectionId;
+      }).pipe(Effect.provide(application)),
     durable: Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home: skitHome })),
     ),
     /** The host the TUI builds for this Library, over the production application layer. */
-    host: () =>
-      createLibraryHost(
-        libraryApplicationLayer.pipe(
-          Layer.provideMerge(skitConfigurationLayer(skitHome)),
-          Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
-        ),
-        openLibrarySession(),
-      ),
+    host: () => createLibraryHost(application, openLibrarySession()),
     /** Every path under the fixture with its type, mode, link target and bytes, lstat-based. */
     tree: Effect.gen(function* () {
       const entries = new Map<string, string>();
