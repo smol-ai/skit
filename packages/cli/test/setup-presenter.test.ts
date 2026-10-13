@@ -6,7 +6,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
-import { renderContract, setupDiscoverySummary } from "../src/presentation/contract-presenters.js";
+import { renderContract } from "../src/presentation/contract-presenters.js";
 import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
@@ -148,100 +148,6 @@ it("omits managed Library projections while preserving unmanaged copies and orph
   expect(rows.find((row) => row.instance === unmanaged)?.choice.selectExplicitly).toBe(true);
   expect(rows.find((row) => row.instance === orphaned)?.choice.disabled).toBe(true);
   expect(setupDiscoveredSkillChoices([managed], [])).toEqual([]);
-});
-
-it("models large discovery results as collapsed while retaining their Collections", () => {
-  const names = Array.from({ length: 6 }, (_, index) => `skill-${index + 1}`);
-  const summary = setupDiscoverySummary({
-    instances: names.map((name) => ({ name, path: `/work/project/.agents/skills/${name}` })),
-    locks: [
-      {
-        path: "/work/project/skills-lock.json",
-        status: "valid",
-        entries: names.map((name, index) => ({
-          name,
-          source: "example/collection",
-          computedHash: `hash-${index + 1}`,
-        })),
-      },
-    ],
-  });
-
-  expect(summary).toEqual({
-    skills: {
-      count: 6,
-      locations: 6,
-      expanded: false,
-      items: names.map((name) => ({
-        name,
-        paths: [`/work/project/.agents/skills/${name}`],
-      })),
-    },
-    lockFiles: [
-      {
-        directory: "/work/project",
-        status: "valid",
-        collections: [
-          {
-            source: "example/collection",
-            skills: names.map((name, index) => ({
-              name,
-              computedHash: `hash-${index + 1}`,
-            })),
-            expanded: false,
-          },
-        ],
-      },
-    ],
-  });
-});
-
-it("models small skills and Collections as expanded", () => {
-  const summary = setupDiscoverySummary({
-    instances: [
-      { name: "review", path: "/work/project/.agents/skills/review" },
-      { name: "review", path: "/home/.agents/skills/review" },
-      { name: "write", path: "/work/project/.agents/skills/write" },
-    ],
-    locks: [
-      {
-        path: "/work/project/skills-lock.json",
-        status: "valid",
-        entries: [
-          {
-            name: "review",
-            source: "example/collection",
-            computedHash: "review-hash",
-            skillFolderHash: "legacy-review-hash",
-          },
-          { name: "write", source: "example/collection", computedHash: "write-hash" },
-        ],
-      },
-    ],
-  });
-
-  expect(summary.skills).toMatchObject({ count: 2, locations: 3, expanded: true });
-  expect(summary.skills.items).toEqual([
-    {
-      name: "review",
-      paths: ["/home/.agents/skills/review", "/work/project/.agents/skills/review"],
-    },
-    { name: "write", paths: ["/work/project/.agents/skills/write"] },
-  ]);
-  expect(summary.lockFiles[0]?.collections).toEqual([
-    {
-      source: "example/collection",
-      skills: [
-        {
-          name: "review",
-          computedHash: "review-hash",
-          skillFolderHash: "legacy-review-hash",
-        },
-        { name: "write", computedHash: "write-hash" },
-      ],
-      expanded: true,
-    },
-  ]);
 });
 
 it("separates installed, repository-authored, and loose skills", () => {

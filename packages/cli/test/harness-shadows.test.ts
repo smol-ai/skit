@@ -74,7 +74,6 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
             query: retained.collection_id,
             all: false,
             invocation: {
-              subjects: ["review"],
               scope: { kind: "global" as const },
               enabled: true,
               dryRun: false,
@@ -364,7 +363,6 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
               query: "review",
               all: false,
               invocation: {
-                subjects: ["review"],
                 scope: { kind: "global" },
                 enabled: true,
                 dryRun: false,
@@ -411,7 +409,6 @@ it.effect(
               all: false,
               allowDuplicate: true,
               invocation: {
-                subjects: ["review"],
                 scope: { kind: "global" },
                 enabled: true,
                 dryRun: false,

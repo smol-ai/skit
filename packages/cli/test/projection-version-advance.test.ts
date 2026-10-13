@@ -177,7 +177,6 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
         roots: { home, configHome: join(home, "config"), overrides: { codex: newRoot } },
         variantsPath: join(home, "variants"),
         invocation: {
-          subjects: [skillId],
           scope: { kind: "global" },
           enabled: true,
           dryRun: false,
@@ -287,7 +286,6 @@ for (const followedCollection of [false, true])
               },
               variantsPath: join(home, "variants"),
               invocation: {
-                subjects: [skillId],
                 scope: { kind: "global" },
                 enabled: true,
                 dryRun,

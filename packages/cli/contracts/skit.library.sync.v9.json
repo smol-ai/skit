@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v8",
+  "$id": "skit.library.sync.v9",
   "type": "object",
   "properties": {
     "status": {
@@ -10,9 +10,6 @@
         "pushed",
         "pull_ready",
         "pulled",
-        "upgrade_ready",
-        "upgraded",
-        "local_migration_required",
         "local_bytes_changed",
         "adoption_required",
         "adoption_ready",
@@ -46,12 +43,6 @@
     },
     "digest": {
       "type": "string"
-    },
-    "projection_drift": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
     },
     "projected": {
       "anyOf": [

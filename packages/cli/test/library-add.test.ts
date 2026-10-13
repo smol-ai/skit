@@ -225,7 +225,6 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       roots: options.roots,
       variantsPath: options.variantsPath,
       invocation: {
-        subjects: [skill.skill_id],
         harnesses: ["codex" as const],
         scope: { kind: "global" as const },
         enabled,

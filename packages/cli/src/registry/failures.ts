@@ -325,33 +325,3 @@ export class DestinationExistsWithoutHistory extends Data.TaggedError(
     return `Destination ${this.identity} already exists without common history`;
   }
 }
-
-// -- Library synchronization conflicts -----------------------------------------------------------------
-
-export class TakeRemoteInvalid extends Data.TaggedError("TakeRemoteInvalid")<{
-  reason: "wildcard" | "binding" | "malformed" | "not-entry" | "no-three-way";
-  key?: string;
-}> {
-  readonly code = "INVALID_ARGUMENT" as const;
-  get message(): string {
-    switch (this.reason) {
-      case "wildcard":
-        return "--take-remote requires explicit Entry conflict keys; wildcards and `all` are not allowed";
-      case "binding":
-        return "Binding conflicts are resolved with `skit enable` or `skit disable`, not --take-remote";
-      case "malformed":
-        return "--take-remote values must be explicit `entry:<collection-ref>` conflict keys";
-      case "not-entry":
-        return `${this.key} is not an ordinary Entry conflict and cannot be resolved with --take-remote`;
-      default:
-        return "--take-remote requires a current three-way Entry conflict; run `skit sync` to review fresh conflicts";
-    }
-  }
-}
-
-export class ConflictKeyStale extends Data.TaggedError("ConflictKeyStale")<{ key: string }> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `${this.key} is not a current Library conflict; run \`skit sync\` to review fresh conflicts`;
-  }
-}

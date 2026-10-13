@@ -148,7 +148,6 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
             roots,
             variantsPath: options.variantsPath,
             invocation: {
-              subjects: [collection.collection_id],
               scope: { kind: "global" },
               enabled: true,
               dryRun: false,

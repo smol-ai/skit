@@ -9,13 +9,6 @@
 // once, rather than the failure's entire identity repeated at every site.
 
 import { Data } from "effect";
-import type { SkitErrorCode } from "./shared/skit-error.js";
-
-/** A domain failure: named, described by its own fields, and classifiable by callers. */
-export interface NamedFailure {
-  readonly code: SkitErrorCode;
-  readonly message: string;
-}
 
 // -- Descriptor declarations ------------------------------------------------------------------
 
@@ -213,25 +206,6 @@ export class ContentAddressCollision extends Data.TaggedError("ContentAddressCol
   readonly code = "CONFLICT" as const;
   get message(): string {
     return "Canonical library content-address collision";
-  }
-}
-
-/**
- * A local Source was edited while it was being acquired.
- *
- * The normalized release and the verbatim Original are hashed by separate passes over the same
- * live directory. Publishing an Entry whose two content addresses came from different states of
- * that directory would describe an acquisition that never existed, so the observation is rejected
- * instead. Retrying against a settled directory is the remedy.
- */
-export class SourceChangedDuringAcquisition extends Data.TaggedError(
-  "SourceChangedDuringAcquisition",
-)<{
-  root: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `Source changed while it was being retained: ${this.root}`;
   }
 }
 

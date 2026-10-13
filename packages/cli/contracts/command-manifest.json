@@ -1988,7 +1988,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v8"
+        "skit.library.sync.v9"
       ],
       "exitCodes": [
         0,

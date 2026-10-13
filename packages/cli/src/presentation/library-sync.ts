@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v8">;
+type SyncData = ContractDataForId<"skit.library.sync.v9">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -70,16 +70,9 @@ export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false
 export function renderLibrarySync(data: SyncData, color = createColors(false)): string {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
   // What syncing did to this device, when it did anything worth knowing.
-  const notes = [
-    ...(data.retired
-      ? [`Removed ${plural(data.retired, "Skill")} no longer enabled from this device.`]
-      : []),
-    ...(data.projection_drift?.length
-      ? [
-          `${plural(data.projection_drift.length, "enabled Skill")} differ from the synced Version: ${data.projection_drift.join(", ")}`,
-        ]
-      : []),
-  ];
+  const notes = data.retired
+    ? [`Removed ${plural(data.retired, "Skill")} no longer enabled from this device.`]
+    : [];
   const withNotes = (message: string) =>
     notes.length ? `${message}\n\n${notes.join("\n")}` : message;
   const plan = data.plan ? `${renderLibrarySyncPlan(data.plan, color)}\n\n` : "";
@@ -97,12 +90,7 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
     case "pushed":
     case "pulled":
     case "merged":
-    case "upgraded":
       return withNotes("Library synced.");
-    case "upgrade_ready":
-      return "The remote Library uses an older sync format. Run skit sync --apply to upgrade it.";
-    case "local_migration_required":
-      return "Update this device's Library before syncing.";
     case "local_bytes_changed":
       return "A stored Skill copy on this device changed unexpectedly; sync stopped.";
     case "adoption_required":

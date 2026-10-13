@@ -87,51 +87,31 @@ const gitLinkFixture = Effect.gen(function* () {
 });
 
 describe("source contracts", () => {
-  it.effect("preserves normalized relative paths for explicit member selections", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* scratch("skit-selected-path-normalization-");
-      yield* fs.makeDirectory(join(root, "x"));
-      yield* writeText(join(root, "x/SKILL.md"), "---\nname: review\ndescription: Review.\n---\n");
-      for (const path of ["./x/SKILL.md", "x//SKILL.md"]) {
-        const resolved = yield* resolve(root, { agentSkillPaths: [path] });
-        expect(resolved.observedSkillPaths).toEqual(["x"]);
-      }
-    }).pipe(provide),
-  );
   it.effect(
     "retains selected Git directory links as Skill content through subpaths and member selections",
     () =>
       Effect.gen(function* () {
         const fixture = yield* gitLinkFixture;
         const selections = [
-          { source: { subpath: fixture.selectedPath }, options: {}, path: "." },
+          { source: { subpath: fixture.selectedPath }, path: "." },
           {
             source: { subpath: fixture.selectedPath, skillDirectories: ["."] },
-            options: {},
             path: ".",
           },
-          { source: { subpath: "plugins/linked/skills/review" }, options: {}, path: "." },
+          { source: { subpath: "plugins/linked/skills/review" }, path: "." },
           {
             source: { skillDirectories: ["plugins/linked/skills/review"] },
-            options: {},
             path: "plugins/linked/skills/review",
           },
-          { source: { subpath: "contained-chain" }, options: {}, path: "." },
+          { source: { subpath: "contained-chain" }, path: "." },
           {
             source: { skillDirectories: [fixture.selectedPath] },
-            options: {},
-            path: fixture.selectedPath,
-          },
-          {
-            source: {},
-            options: { agentSkillPaths: [`${fixture.selectedPath}/SKILL.md`] },
             path: fixture.selectedPath,
           },
         ];
         for (const selected of selections) {
           const source = { type: "git" as const, remote: fixture.remote, ...selected.source };
-          const observed = yield* resolve(source, selected.options);
+          const observed = yield* resolve(source);
           expect(observed.observedSkillPaths).toEqual([selected.path]);
           const sourcePath = join(observed.originalRoot, selected.path);
           const prepared = yield* prepareObservedCollectionEffect([
@@ -161,44 +141,33 @@ describe("source contracts", () => {
         "plugins/escape/skills/review",
       ]) {
         for (const selection of [
-          { source: { subpath: path }, options: {} },
-          { source: { skillDirectories: [path] }, options: {} },
-          {
-            source: {},
-            options: { agentSkillPaths: [`${path}/SKILL.md`], allowMissingAgentSkillPaths: true },
-          },
+          { source: { subpath: path } },
+          { source: { skillDirectories: [path] } },
         ]) {
-          const error = yield* resolve(
-            { type: "git", remote: fixture.remote, ...selection.source },
-            selection.options,
-          ).pipe(Effect.flip);
+          const error = yield* resolve({
+            type: "git",
+            remote: fixture.remote,
+            ...selection.source,
+          }).pipe(Effect.flip);
           assert.strictEqual(error._tag, "SourcePolicyViolation");
           assert.include(error.message, "outside the checkout");
         }
       }
     }).pipe(provide),
   );
-  it.effect(
-    "reports dangling Git selections clearly while preserving missing locked-member recovery",
-    () =>
-      Effect.gen(function* () {
-        const fixture = yield* gitLinkFixture;
-        const source = { type: "git" as const, remote: fixture.remote };
-        const subpathError = yield* resolve({ ...source, subpath: "dangling" }).pipe(Effect.flip);
-        assert.strictEqual(subpathError._tag, "SourcePolicyViolation");
-        assert.include(subpathError.message, "symlink target is unavailable: dangling");
-        const memberError = yield* resolve({ ...source, skillDirectories: ["dangling"] }).pipe(
-          Effect.flip,
-        );
-        assert.strictEqual(memberError._tag, "SourcePolicyViolation");
-        assert.include(memberError.message, "Locked Skill path is missing");
-        const recovered = yield* resolve(source, {
-          agentSkillPaths: ["dangling/SKILL.md", `${fixture.selectedPath}/SKILL.md`],
-          allowMissingAgentSkillPaths: true,
-        });
-        expect(recovered.observedSkillPaths).toEqual([fixture.selectedPath]);
-        expect(recovered.missingAgentSkillPaths).toEqual(["dangling/SKILL.md"]);
-      }).pipe(provide),
+  it.effect("reports dangling Git selections clearly", () =>
+    Effect.gen(function* () {
+      const fixture = yield* gitLinkFixture;
+      const source = { type: "git" as const, remote: fixture.remote };
+      const subpathError = yield* resolve({ ...source, subpath: "dangling" }).pipe(Effect.flip);
+      assert.strictEqual(subpathError._tag, "SourcePolicyViolation");
+      assert.include(subpathError.message, "symlink target is unavailable: dangling");
+      const memberError = yield* resolve({ ...source, skillDirectories: ["dangling"] }).pipe(
+        Effect.flip,
+      );
+      assert.strictEqual(memberError._tag, "SourcePolicyViolation");
+      assert.include(memberError.message, "Locked Skill path is missing");
+    }).pipe(provide),
   );
   it.effect("accepts confined Git targets when the workspace has a symlinked parent", () =>
     Effect.gen(function* () {
@@ -258,7 +227,7 @@ describe("source contracts", () => {
       ]);
     }).pipe(provide),
   );
-  it.effect("allows an explicitly selected plugin Skill, including locked member paths", () =>
+  it.effect("allows an explicitly selected plugin Skill", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const root = yield* scratch("skit-explicit-plugin-");
@@ -274,10 +243,6 @@ describe("source contracts", () => {
       const linked = yield* resolve(join(root, "selected-link"));
       expect(linked.originalRoot).toEqual(yield* fs.realPath(join(root, path)));
       expect(linked.observedSkillPaths).toEqual(["."]);
-      const locked = yield* resolve(root, {
-        agentSkillPaths: [`${path}/SKILL.md`],
-      });
-      expect(locked.observedSkillPaths).toEqual([path]);
     }).pipe(provide),
   );
   it.effect("imports plugin-only Sources with their original member paths", () =>

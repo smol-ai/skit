@@ -72,7 +72,6 @@ it.effect(
             roots,
             variantsPath,
             invocation: {
-              subjects: [collectionId],
               scope: { kind: "global" },
               enabled: true,
               dryRun: false,
