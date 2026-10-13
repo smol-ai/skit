@@ -312,6 +312,14 @@ export const layer = (configuration: BetterAuthConfiguration) =>
         rateLimit: { enabled: false },
       });
 
+      // Finish initialization inside the acquiring request before caching this service across
+      // Worker requests. Otherwise a completed request can strand Better Auth's context promise.
+      // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth owns this Promise-only initialization boundary.
+      yield* Effect.tryPromise({
+        try: () => auth.$context,
+        catch: (cause) => new BetterAuthError({ operation: "initialize", cause }),
+      });
+
       const handle = Effect.fn("BetterAuth.handle")((request: Request) =>
         // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth exposes a Promise-only Fetch handler; this adapter owns that integration boundary.
         Effect.tryPromise({
