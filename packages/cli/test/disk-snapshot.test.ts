@@ -110,3 +110,26 @@ it.effect("tells a missing root from an empty one in both directions", () =>
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("reports an atomic rewrite of identical bytes only when asked for file identity", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* workspace;
+    const path = join(root, "state.json");
+    yield* fs.writeFileString(path, "same bytes\n");
+    const bytesOnly = yield* captureDisk([root]);
+    const withIdentity = yield* captureDisk([root], { identity: true });
+    yield* fs.writeFileString(join(root, "state.json.tmp"), "same bytes\n");
+    yield* fs.rename(join(root, "state.json.tmp"), path);
+    assert.deepStrictEqual(yield* diskChanges(bytesOnly), noDiskChanges);
+    const changes = yield* diskChanges(withIdentity);
+    assert.deepStrictEqual(
+      changes.changed.map((item) => item.path),
+      [[root, "state.json"]],
+    );
+    const [rewritten] = changes.changed;
+    assert.ok(rewritten?.before.type === "file" && rewritten.after.type === "file");
+    assert.strictEqual(rewritten.before.content, rewritten.after.content);
+    assert.notStrictEqual(rewritten.before.identity, rewritten.after.identity);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

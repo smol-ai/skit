@@ -11,6 +11,7 @@ import {
   retainedTreePath,
   type SkillId,
 } from "@smolai/skit-core";
+import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 // Every expected identity below is derived by hand from the alias rules in
@@ -60,7 +61,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 const retainedDigests = (device: Device) =>
   Effect.map(device.state, (state) => state.retained_copies.map((copy) => copy.digest));
 
-/** Raw state bytes, so a stopped sync is checked without going through the loader. */
+/** Raw state text, so retired handles are checked without going through the loader. */
 const stateBytes = (fs: FileSystem.FileSystem, device: Device) =>
   fs.readFileString(join(device.home, "state.json"));
 
@@ -276,14 +277,14 @@ it.effect(
         (item) => item.acquisition_id,
       );
 
-      const text = yield* stateBytes(fs, b);
+      const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
       for (const apply of [false, true]) {
         const stopped = yield* b.sync({ apply });
         assert.strictEqual(stopped.status, "conflicted");
         if (stopped.status === "conflicted")
           assert.deepStrictEqual(stopped.conflicts, [`skill:${skillId}`]);
-        assert.strictEqual(yield* stateBytes(fs, b), text);
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, stored);
       }
 
@@ -432,7 +433,7 @@ it.effect(
       const before = yield* b.state;
       const retained = yield* retainedDigests(b);
       const key = `collection:${published.collection.collection_id}`;
-      const text = yield* stateBytes(fs, b);
+      const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
       for (const apply of [false, true]) {
         const stopped = yield* b.sync({ adopt: true, apply });
@@ -442,7 +443,7 @@ it.effect(
           assert.deepStrictEqual(stopped.conflicts, [key]);
           assert.strictEqual(stopped.conflict_details?.[0]?.resolution, "take-remote");
         }
-        assert.strictEqual(yield* stateBytes(fs, b), text);
+        yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, stored);
         assert.strictEqual(yield* fs.readFileString(join(b.root, "same", "SKILL.md")), "local\n");
       }
@@ -482,13 +483,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const homes = yield* devices;
-      const { fs, a, b, server } = homes;
+      const { a, b, server } = homes;
       const published = yield* a.retain("same", { bytes: "published\n" });
       yield* b.retain("same", { bytes: "local\n" });
       yield* a.sync();
       const retained = yield* retainedDigests(b);
       const key = `collection:${published.collection.collection_id}`;
-      const text = yield* stateBytes(fs, b);
+      const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
       const stopped = yield* b.sync({ adopt: true, apply: false });
       assert.strictEqual(stopped.status, "conflicted");
@@ -502,7 +503,7 @@ it.effect(
           (yield* b.sync({ adopt: true, apply, takeRemote: [key] })).status,
           "resolution_invalid",
         );
-      assert.strictEqual(yield* stateBytes(fs, b), text);
+      yield* assertDiskUnchanged(unchanged);
       assert.deepStrictEqual(server.stored, stored);
       yield* assertIntact(homes, b, retained);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

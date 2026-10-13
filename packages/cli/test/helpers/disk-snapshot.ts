@@ -1,5 +1,5 @@
 import { assert } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { LinkStat } from "@smolai/skit-core";
@@ -9,7 +9,13 @@ import { LinkStat } from "@smolai/skit-core";
  * files keep their bytes so a diff shows them; larger ones keep a digest.
  */
 export type DiskEntry =
-  | { readonly type: "file"; readonly mode: number; readonly content: string }
+  | {
+      readonly type: "file";
+      readonly mode: number;
+      readonly content: string;
+      /** Device and inode, recorded only on request: a rewrite of identical bytes changes it. */
+      readonly identity?: string;
+    }
   | { readonly type: "directory"; readonly mode: number }
   | { readonly type: "symlink"; readonly mode: number; readonly target: string }
   | { readonly type: "other"; readonly mode: number };
@@ -20,6 +26,7 @@ export type DiskEntry =
  */
 export interface DiskSnapshot {
   readonly roots: readonly string[];
+  readonly identity?: boolean;
   readonly entries: readonly { readonly path: readonly string[]; readonly entry: DiskEntry }[];
 }
 
@@ -39,9 +46,14 @@ const INLINE_BYTES = 4096;
 
 /**
  * Read the roots without a loader, a tree hasher, or anything that follows a link: the oracle must
- * not share the exclusions or migrations of the code it checks.
+ * not share the exclusions or migrations of the code it checks. With `identity`, each file also
+ * records its device and inode, so an atomic rewrite of identical bytes shows as a change; by
+ * default only content, mode and type count.
  */
-export const captureDisk = Effect.fn("Test.captureDisk")(function* (roots: readonly string[]) {
+export const captureDisk = Effect.fn("Test.captureDisk")(function* (
+  roots: readonly string[],
+  options: { readonly identity?: boolean } = {},
+) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const entries: { path: readonly string[]; entry: DiskEntry }[] = [];
@@ -70,6 +82,7 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (roots: reado
             bytes.length <= INLINE_BYTES
               ? `base64:${bytes.toString("base64")}`
               : `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+          ...(options.identity ? { identity: `${info.dev}:${Option.getOrThrow(info.ino)}` } : {}),
         },
       });
     } else if (info.type === "Directory") {
@@ -78,7 +91,7 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (roots: reado
     } else entries.push({ path: segments, entry: { type: "other", mode } });
   });
   for (const root of roots) yield* visit([root]);
-  return { roots, entries } satisfies DiskSnapshot;
+  return { roots, ...(options.identity ? { identity: true } : {}), entries } satisfies DiskSnapshot;
 });
 
 // No name contains NUL, so joining on it keeps every path distinct.
@@ -111,7 +124,9 @@ export const diffDisk = (before: DiskSnapshot, after: DiskSnapshot): DiskDiff =>
 
 /** What changed under the roots `before` declared since it was captured. */
 export const diskChanges = (before: DiskSnapshot) =>
-  Effect.map(captureDisk(before.roots), (after) => diffDisk(before, after));
+  Effect.map(captureDisk(before.roots, { identity: before.identity === true }), (after) =>
+    diffDisk(before, after),
+  );
 
 /** Every declared root is exactly as it was: no path created, deleted, or changed in any way. */
 export const assertDiskUnchanged = (before: DiskSnapshot) =>

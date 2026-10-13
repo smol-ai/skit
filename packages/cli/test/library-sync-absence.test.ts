@@ -1,8 +1,8 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Option } from "effect";
-import { join } from "node:path";
+import { Effect } from "effect";
 import { currentLibraryManifest, type LibraryManifest } from "@smolai/skit-core";
+import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 // An absent remote, an existing remote holding an empty Library, an absent state.json, an empty
@@ -23,39 +23,29 @@ const empty: LibraryManifest = currentLibraryManifest({
 });
 
 /**
- * Every path inside a device's home and projection root, with its file identity and bytes. An atomic
- * rewrite of identical bytes changes the inode, so this also catches writes that change nothing.
+ * Assert that a sync wrote nothing on the device or the Registry. File identity is captured, so an
+ * atomic rewrite of identical bytes also counts as a write. Taking the writer lock creates the home
+ * when it did not exist yet, as the fault-matrix rows allow; it must stay empty.
  */
-const capture = Effect.fn("Test.captureDevice")(function* (device: Device) {
-  const fs = yield* FileSystem.FileSystem;
-  const entries: Record<string, string> = {};
-  const walk = Effect.fn("Test.capturePath")(function* (
-    path: string,
-  ): Effect.fn.Return<void, unknown, FileSystem.FileSystem> {
-    const info = yield* fs.stat(path);
-    const identity = `${info.mode}:${Option.getOrUndefined(info.ino)}`;
-    // The writer lock's file comes and goes inside the home, so a directory's mtime is not a write;
-    // its entries are captured individually instead.
-    if (info.type === "Directory") {
-      entries[path] = `directory:${identity}`;
-      for (const name of yield* fs.readDirectory(path)) yield* walk(join(path, name));
-    } else
-      entries[path] =
-        `${info.type}:${identity}:${Option.getOrUndefined(info.mtime)?.getTime()}:${Buffer.from(yield* fs.readFile(path)).toString("base64")}`;
-  });
-  // Taking the writer lock may create an empty home; only what a root holds is durable.
-  for (const root of [device.home, device.root])
-    if (yield* fs.exists(root))
-      for (const name of yield* fs.readDirectory(root)) yield* walk(join(root, name));
-  return entries;
-});
-
-/** Assert that a sync wrote nothing on the device or the Registry. */
 const unwritten = Effect.fn("Test.unwritten")(function* ({ server }: Homes, device: Device) {
-  const files = yield* capture(device);
+  const before = yield* captureDisk(device.disk, { identity: true });
   const stored = server.stored;
   return Effect.gen(function* () {
-    assert.deepStrictEqual(yield* capture(device), files);
+    const changes = yield* diskChanges(before);
+    assert.deepStrictEqual(
+      {
+        ...changes,
+        created: changes.created.filter(
+          (item) =>
+            !(
+              item.path.length === 1 &&
+              item.path[0] === device.home &&
+              item.after.type === "directory"
+            ),
+        ),
+      },
+      noDiskChanges,
+    );
     assert.deepStrictEqual(server.stored, stored);
   });
 });
@@ -85,7 +75,8 @@ it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
       assert.deepStrictEqual(result, { status: "clean", changed: false });
       yield* unchanged;
     }
-    assert.isFalse(yield* homes.fs.exists(join(a.home, "state.json")));
+    // Only the writer lock's home exists afterwards, and it holds nothing.
+    assert.deepStrictEqual(yield* homes.fs.readDirectory(a.home), []);
     assert.strictEqual(server.remote, null);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -176,13 +167,10 @@ it.effect("an anchored home that matches the remote: clean with zero writes", ()
     yield* a.project();
     assert.strictEqual((yield* a.sync()).status, "pushed");
     assert.strictEqual((yield* a.sync()).status, "clean");
-    const statePath = join(a.home, "state.json");
     const unchanged = yield* unwritten(homes, a);
     assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
     yield* unchanged;
-    const bytes = yield* homes.fs.readFile(statePath);
-    const inode = (yield* homes.fs.stat(statePath)).ino;
-    const { [statePath]: _before, ...others } = yield* capture(a);
+    const before = yield* captureDisk(a.disk, { identity: true });
     const result = yield* a.sync();
     assert.deepStrictEqual(result, {
       status: "clean",
@@ -191,13 +179,19 @@ it.effect("an anchored home that matches the remote: clean with zero writes", ()
       projected: 0,
       retired: 0,
     });
-    assert.deepStrictEqual(yield* homes.fs.readFile(statePath), bytes);
-    const { [statePath]: _after, ...othersAfter } = yield* capture(a);
-    assert.deepStrictEqual(othersAfter, others);
     // BUG characterization: an applied clean sync republishes identical state, replacing the file.
     // A clean no-op should write nothing; when sync unification skips the publish once B already
-    // equals R and the state is unchanged, this inode stays the same and `unchanged` holds here too.
-    assert.notDeepEqual((yield* homes.fs.stat(statePath)).ino, inode);
+    // equals R and the state is unchanged, this diff is empty and `unchanged` holds here too.
+    const changes = yield* diskChanges(before);
+    assert.deepStrictEqual({ ...changes, changed: [] }, noDiskChanges);
+    assert.deepStrictEqual(
+      changes.changed.map((item) => item.path),
+      [[a.home, "state.json"]],
+    );
+    const [rewritten] = changes.changed;
+    assert.ok(rewritten?.before.type === "file" && rewritten.after.type === "file");
+    assert.strictEqual(rewritten.after.content, rewritten.before.content);
+    assert.notStrictEqual(rewritten.after.identity, rewritten.before.identity);
     assert.strictEqual(server.writes, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
