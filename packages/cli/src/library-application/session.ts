@@ -343,7 +343,6 @@ export function proposeLibraryEnable(
   },
 ) {
   const invocation: SetEnabledInvocation = {
-    subjects: [row.skillVersionId],
     scope: selection.scope,
     enabled: true,
     ...(selection.invocation === undefined ? {} : { invocation: selection.invocation }),
@@ -370,7 +369,6 @@ export function proposeLibraryDisable(
     [...byScope.values()].map((scope) => ({
       query: row.skillVersionId,
       invocation: {
-        subjects: [row.skillVersionId],
         scope,
         enabled: false,
         dryRun: false,
@@ -405,7 +403,7 @@ export function proposeLibraryCollectionChange(
     [...uniqueScopes.values()].map((scope) => ({
       query: collectionId,
       all: true,
-      invocation: { subjects: [collectionId], scope, enabled, dryRun: false },
+      invocation: { scope, enabled, dryRun: false },
     })),
   );
 }
@@ -424,7 +422,6 @@ export function proposeLibraryInvocation(
       {
         query: row.skillVersionId,
         invocation: {
-          subjects: [row.skillVersionId],
           scope: binding.scope,
           enabled: true,
           invocation,

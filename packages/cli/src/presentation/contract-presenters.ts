@@ -531,68 +531,6 @@ const setupGitStateOrder = [
 ] as const;
 const setupExpandedSkillLimit = 5;
 
-type SetupDiscoveryInput = {
-  readonly instances: ReadonlyArray<{ readonly name: string; readonly path: string }>;
-  readonly locks: ReadonlyArray<{
-    readonly path: string;
-    readonly status: string;
-    readonly entries: ReadonlyArray<{
-      readonly name: string;
-      readonly source: string;
-      readonly computedHash?: string;
-      readonly skillFolderHash?: string;
-    }>;
-  }>;
-};
-
-export function setupDiscoverySummary(data: SetupDiscoveryInput) {
-  const skills = new Map<string, string[]>();
-  for (const instance of data.instances)
-    skills.set(instance.name, [...(skills.get(instance.name) ?? []), instance.path]);
-
-  return {
-    skills: {
-      count: skills.size,
-      locations: data.instances.length,
-      expanded: skills.size <= setupExpandedSkillLimit,
-      items: [...skills]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([name, paths]) => ({ name, paths: paths.sort() })),
-    },
-    lockFiles: [...data.locks]
-      .sort((left, right) => left.path.localeCompare(right.path))
-      .map((lock) => {
-        const collections = new Map<
-          string,
-          Array<{ name: string; computedHash?: string; skillFolderHash?: string }>
-        >();
-        for (const entry of lock.entries)
-          collections.set(entry.source, [
-            ...(collections.get(entry.source) ?? []),
-            {
-              name: entry.name,
-              ...(entry.computedHash ? { computedHash: entry.computedHash } : {}),
-              ...(entry.skillFolderHash ? { skillFolderHash: entry.skillFolderHash } : {}),
-            },
-          ]);
-        return {
-          directory: dirname(lock.path),
-          status: lock.status,
-          collections: [...collections]
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([source, entries]) => {
-              const skills = entries.sort((left, right) => left.name.localeCompare(right.name));
-              return {
-                source,
-                skills,
-                expanded: skills.length <= setupExpandedSkillLimit,
-              };
-            }),
-        };
-      }),
-  };
-}
-
 function renderSetupCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {

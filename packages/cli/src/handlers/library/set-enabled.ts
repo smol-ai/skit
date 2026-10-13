@@ -397,7 +397,6 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             all: wholeCollection,
             ...(wholeCollection ? {} : { selectedSkills: names }),
             invocation: {
-              subjects: [binding.collectionId],
               scope: binding.scope,
               enabled: false,
               dryRun: input.dryRun,
@@ -450,7 +449,6 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       allowDuplicate: input.allowDuplicate,
       ...(selectedSkills === undefined ? {} : { selectedSkills }),
       invocation: {
-        subjects: [query],
         scope,
         enabled: input.enabled,
         ...(input.invocation === undefined ? {} : { invocation: input.invocation }),

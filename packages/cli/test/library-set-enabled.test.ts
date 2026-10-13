@@ -81,7 +81,6 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       now: () => "2026-09-16T00:00:00.000Z",
     };
     const invocation = {
-      subjects: [collection.collection?.collection_id ?? ""],
       harnesses: ["codex" as const],
       scope: { kind: "global" as const },
       enabled: true,
@@ -256,7 +255,6 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
             },
             variantsPath: join(home, "variants"),
             invocation: {
-              subjects: [query],
               scope: { kind: "global" as const },
               enabled,
               dryRun: false,

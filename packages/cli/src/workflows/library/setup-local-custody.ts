@@ -245,7 +245,7 @@ export const bindSetupCopy = Effect.fn("Setup.bindCopy")(function* (
         }
       : {}),
     selectedSkills: [selection.name],
-    invocation: { subjects: [subjectId], scope: { kind: "global" }, enabled: true, dryRun: false },
+    invocation: { scope: { kind: "global" }, enabled: true, dryRun: false },
     roots: options.bindings,
     variantsPath: options.bindings.variantsPath,
     adoption,

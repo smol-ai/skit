@@ -7,9 +7,7 @@ import {
   type DeviceBinding,
   type RepositoryBinding,
   type Digest,
-  type ProjectionId,
   type ProjectionTarget,
-  type OwnershipMarker,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
@@ -26,11 +24,6 @@ export interface LibraryProjectionReconciliationOptions {
   readonly variantsPath: string;
   readonly desiredGlobalBindings?: readonly Binding[];
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
-  readonly retireOnly?: boolean;
-  readonly acceptedObservations?: ReadonlyMap<
-    ProjectionId,
-    { readonly observedHash: Digest; readonly marker: OwnershipMarker }
-  >;
   readonly adoption?: { readonly path: string; readonly observedHash: Digest };
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
@@ -58,7 +51,6 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
       : { desiredBindings: options.desiredGlobalBindings }),
     inactiveOnly: options.onlyBindings !== undefined && options.desiredGlobalBindings === undefined,
   });
-  if (options.retireOnly) return { projected: 0, retired, outcomes: [] };
 
   const state = yield* (yield* LibraryStore).load;
   let projected = 0;
@@ -86,9 +78,6 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
         root,
         variantsPath: options.variantsPath,
         restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
-        ...(options.acceptedObservations === undefined
-          ? {}
-          : { acceptedObservations: options.acceptedObservations }),
         ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
       });
       outcomes.push({ target, scope: binding.scope });

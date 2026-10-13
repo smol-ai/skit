@@ -365,7 +365,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         yield* reconcileLibraryProjections({
           ...projectionOptions,
           desiredGlobalBindings: desired.bindings,
-          onlyBindings: desired.bindings,
           includeRepositoryBindings: true,
         }),
       );
@@ -469,7 +468,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
             yield* reconcileLibraryProjections({
               ...projectionOptions,
               desiredGlobalBindings: remoteManifest.bindings,
-              onlyBindings: remoteManifest.bindings,
               includeRepositoryBindings: true,
             }),
           )
@@ -622,7 +620,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       yield* reconcileLibraryProjections({
         ...projectionOptions,
         desiredGlobalBindings: merged.manifest.bindings,
-        onlyBindings: merged.manifest.bindings,
         includeRepositoryBindings: true,
       }),
     );
