@@ -14,12 +14,7 @@ export type {
   AuditMcpServerV1Alpha4,
   AuditSkillV1Alpha4,
 } from "./audit/schema.js";
-export {
-  isProbeableHarness,
-  probeHarnessEffect,
-  type HarnessProbeResult,
-  type ProbeableHarness,
-} from "./harness/probe.js";
+export { probeHarnessEffect, type HarnessProbeResult } from "./harness/probe.js";
 export * from "./library-application/index.js";
 
 export {

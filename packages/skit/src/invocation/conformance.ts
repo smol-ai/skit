@@ -1,16 +1,12 @@
 import { posix } from "node:path";
-import { Result, Schema } from "effect";
+import { Record, Result, Schema } from "effect";
 import type { SkitDescriptor } from "../contracts.js";
 import type { HarnessMetadataInvalid } from "../failures.js";
-import { InvocationPolicy } from "../vocabulary.js";
+import { HarnessName, InvocationPolicy } from "../vocabulary.js";
 import {
-  expectedNativeInvocation,
-  INVOCATION_HARNESSES,
+  AuthoredInvocationHarness,
   invocationMetadataAdapters,
-  InvocationHarness,
-  AUTHORED_INVOCATION_HARNESSES,
-  type AuthoredInvocationHarness,
-  requiresAuthoredInvocation,
+  type NativeInvocationPolicy,
 } from "../harnesses/invocation-metadata.js";
 
 /** The command an Author runs to bring a Skill's native metadata into conformance. */
@@ -25,8 +21,9 @@ export interface InvocationConformanceIssue {
   path: string;
   field: string;
   policy: InvocationPolicy;
-  expected: boolean | undefined;
-  actual: boolean | undefined;
+  /** The policy the native field must state; `undefined` means the field must be absent. */
+  expected: NativeInvocationPolicy | undefined;
+  actual: NativeInvocationPolicy | undefined;
 }
 
 /**
@@ -41,12 +38,12 @@ export function assessInvocationConformance(
     const issues: InvocationConformanceIssue[] = [];
     for (const skill of skills) {
       if (!skill.invocation) continue;
-      for (const harness of AUTHORED_INVOCATION_HARNESSES) {
+      for (const harness of AuthoredInvocationHarness.literals) {
         const adapter = invocationMetadataAdapters[harness];
         const path = posix.join(skill.path, adapter.file);
         const text = readText(path);
         if (text === undefined && adapter.required) continue;
-        const expected = expectedNativeInvocation(harness, skill.invocation);
+        const expected = skill.invocation === "host-policy" ? undefined : skill.invocation;
         const actual = yield* adapter.read(text, path);
         if (actual === expected) continue;
         issues.push({
@@ -65,11 +62,13 @@ export function assessInvocationConformance(
 }
 
 export function describeInvocationConformanceIssue(issue: InvocationConformanceIssue): string {
+  const adapter = invocationMetadataAdapters[issue.harness];
   const requirement =
     issue.expected === undefined
       ? `must not set ${issue.field}`
-      : `must set ${issue.field}: ${issue.expected}`;
-  const found = issue.actual === undefined ? "the field is absent" : `found ${issue.actual}`;
+      : `must set ${issue.field}: ${adapter.notation(issue.expected)}`;
+  const found =
+    issue.actual === undefined ? "the field is absent" : `found ${adapter.notation(issue.actual)}`;
   return `${issue.skill} declares invocation ${issue.policy}, so its ${issue.harness} metadata ${issue.path} ${requirement} (${found}); run \`${INVOCATION_GENERATION_COMMAND}\` to write it`;
 }
 
@@ -127,7 +126,7 @@ export const InvocationConformance = Schema.Union([
 export type InvocationConformance = typeof InvocationConformance.Type;
 
 export const DeclaredInvocationResolution = Schema.Struct({
-  harness: InvocationHarness,
+  harness: HarnessName,
   /** The author's declared policy for this Harness, or `unspecified` when neither form declares. */
   policy: ResolvedDeclaredPolicy,
   source: DeclaredPolicySource,
@@ -137,23 +136,16 @@ export const DeclaredInvocationResolution = Schema.Struct({
 });
 export type DeclaredInvocationResolution = typeof DeclaredInvocationResolution.Type;
 
-/** The policy a Harness's native field states. Absence declares nothing: it is not `host-policy`. */
-function nativePolicy(harness: InvocationHarness, value: boolean | undefined) {
-  if (value === undefined) return undefined;
-  if (harness === "claude-code") return value ? "explicit" : "implicit";
-  return value ? "implicit" : "explicit";
-}
-
+/** `native` is what the Harness's field states; absence declares nothing: it is not `host-policy`. */
 function resolveConformance(
   declared: InvocationPolicy | undefined,
-  native: InvocationPolicy | undefined,
-  harness: InvocationHarness,
+  native: NativeInvocationPolicy | undefined,
+  authored: boolean,
   path: string,
   field: string,
 ): InvocationConformance {
-  if (!declared || !requiresAuthoredInvocation(harness)) return { state: "conforming" };
-  const expected = expectedNativeInvocation(harness, declared);
-  if (expected === undefined)
+  if (!declared || !authored) return { state: "conforming" };
+  if (declared === "host-policy")
     return native === undefined
       ? { state: "conforming" }
       : { state: "non-conforming", path, field, declared, native };
@@ -173,14 +165,13 @@ function resolveConformance(
 export function resolveDeclaredInvocation(
   skill: DeclaringSkill,
   readText: (path: string) => string | undefined,
-): Result.Result<Record<InvocationHarness, DeclaredInvocationResolution>, HarnessMetadataInvalid> {
-  const resolutions = {} as Record<InvocationHarness, DeclaredInvocationResolution>;
-  for (const harness of INVOCATION_HARNESSES) {
-    const adapter = invocationMetadataAdapters[harness];
+): Result.Result<Record<HarnessName, DeclaredInvocationResolution>, HarnessMetadataInvalid> {
+  const resolutions = {} as Record<HarnessName, DeclaredInvocationResolution>;
+  for (const [harness, adapter] of Record.toEntries(invocationMetadataAdapters)) {
     const path = posix.join(skill.path, adapter.file);
     const read = adapter.read(readText(path), path);
     if (Result.isFailure(read)) return Result.fail(read.failure);
-    const native = nativePolicy(harness, read.success);
+    const native = read.success;
     const declarations: DeclaredInvocation[] = [];
     if (skill.invocation)
       declarations.push({ origin: "skit-declaration", policy: skill.invocation });
@@ -196,7 +187,13 @@ export function resolveDeclaredInvocation(
           ? { kind: "native-metadata", path, field: adapter.field }
           : { kind: "unspecified" },
       declarations,
-      conformance: resolveConformance(skill.invocation, native, harness, path, adapter.field),
+      conformance: resolveConformance(
+        skill.invocation,
+        native,
+        adapter.authored,
+        path,
+        adapter.field,
+      ),
     };
   }
   return Result.succeed(resolutions);

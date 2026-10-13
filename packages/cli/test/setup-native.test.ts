@@ -129,7 +129,7 @@ const fixture = Effect.fn("Test.setupFixture")(function* () {
     inventory: {
       home: root,
       configHome: join(root, "config"),
-      overrides: { codex, claude, opencode, devin: [devin] },
+      overrides: { codex: [codex], "claude-code": [claude], opencode: [opencode], devin: [devin] },
     },
   };
   return { fs, root, libraryHome, work, repository, codex, claude, options };

@@ -14,7 +14,7 @@ import {
   classifyOpenCodeWarnings,
   type HarnessDoctorCheck,
   readClaudeCommands,
-  readNativeSkills,
+  nativeDiscovery,
 } from "../src/workflows/library/doctor-harnesses.js";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
 
@@ -39,7 +39,7 @@ const processLayer = (stdout: unknown, exitCode = 0, stderr = "") =>
 
 it.effect("keeps OpenCode resolved metadata and warnings, excluding full skill bodies", () =>
   Effect.gen(function* () {
-    const result = yield* readNativeSkills("opencode", "opencode", "/project");
+    const result = yield* nativeDiscovery.opencode.read("opencode", "/project");
     expect(result.skills).toEqual([
       { name: "review", description: "Review", path: "/skill/SKILL.md", warnings: [], errors: [] },
     ]);
@@ -65,7 +65,7 @@ it.effect("keeps OpenCode resolved metadata and warnings, excluding full skill b
 
 it.effect("preserves Devin triggers, ownership metadata and per-skill diagnostics", () =>
   Effect.gen(function* () {
-    const result = yield* readNativeSkills("devin", "devin", "/project");
+    const result = yield* nativeDiscovery.devin.read("devin", "/project");
     expect(result.skills[0]).toEqual({
       name: "review",
       path: "/skill",
@@ -96,7 +96,7 @@ it.effect.each(["nonzero", "malformed"])(
   "reports native %s failure rather than an empty healthy list",
   (kind) =>
     Effect.gen(function* () {
-      const result = yield* Effect.result(readNativeSkills("opencode", "opencode", "/project"));
+      const result = yield* Effect.result(nativeDiscovery.opencode.read("opencode", "/project"));
       expect(Result.isFailure(result)).toBe(true);
     }).pipe(
       Effect.provide(processLayer({ invalid: true }, kind === "nonzero" ? 1 : 0, "native failure")),
@@ -173,7 +173,7 @@ process.exit(0);
 `,
     );
     yield* fs.chmod(executable, 0o755);
-    const result = yield* readNativeSkills("opencode", executable, f.root);
+    const result = yield* nativeDiscovery.opencode.read(executable, f.root);
     expect(result.skills).toEqual([
       { name: "large", description: "Large", path: "/large/SKILL.md", warnings: [], errors: [] },
     ]);
@@ -225,9 +225,9 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
       );
       yield* fs.chmod(executable, 0o755);
       if (kind === "cancelled") {
-        const fiber = yield* readNativeSkills("opencode", executable, f.root, "2.0.20").pipe(
-          Effect.forkScoped,
-        );
+        const fiber = yield* nativeDiscovery.opencode
+          .read(executable, f.root, "2.0.20")
+          .pipe(Effect.forkScoped);
         yield* fs
           .exists(polling)
           .pipe(
@@ -239,7 +239,7 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
         return;
       }
       const result = yield* Effect.result(
-        readNativeSkills("opencode", executable, f.root, "2.0.20"),
+        nativeDiscovery.opencode.read(executable, f.root, "2.0.20"),
       );
       if (kind === "success") {
         expect(Result.isSuccess(result), String(result)).toBe(true);

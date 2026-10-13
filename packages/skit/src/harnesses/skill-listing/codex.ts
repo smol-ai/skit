@@ -1,20 +1,16 @@
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { parseDocument } from "yaml";
 import { modelContextWindow } from "../../models/model-context-windows.js";
 import type { LibraryState } from "../../library/library-state.js";
-import {
-  CodexListingBudget,
-  estimateCodexListing,
-  type CodexSkillDemand,
-  type CodexListingSkill,
-} from "./codex-allocation.js";
-import { CodexDoctorFailure, readCodexSkills } from "./codex-discovery.js";
+import type { HarnessRootOverrides } from "../contracts.js";
+import { invocationMetadataAdapters } from "../invocation-metadata.js";
+import { estimateCodexListing, type CodexListingSkill } from "./codex-allocation.js";
+import type { ListingBudget } from "./contracts.js";
+import { readCodexSkills } from "./codex-discovery.js";
 
 export interface CodexListingOptions {
   readonly cwd: string;
-  readonly home: string;
-  readonly overrideRoot?: string;
+  readonly overrides?: HarnessRootOverrides;
 }
 
 const Configuration = Schema.Struct({
@@ -28,56 +24,36 @@ const Configuration = Schema.Struct({
     ),
   }),
 });
-const MetadataPolicy = Schema.Struct({
-  policy: Schema.optionalKey(
-    Schema.Struct({ allow_implicit_invocation: Schema.optionalKey(Schema.Boolean) }),
-  ),
-});
 const positive = (value: number | null | undefined): number | null =>
   value !== undefined && value !== null && Number.isSafeInteger(value) && value > 0 ? value : null;
 
+/** Whether Codex may list the Skill for implicit invocation, as its own metadata states. */
 export const implicitInvocationAllowed = Effect.fn("CodexListing.implicitInvocationAllowed")(
   function* (path: string) {
     const fs = yield* FileSystem.FileSystem;
-    const metadataPath = join(dirname(path), "agents", "openai.yaml");
-    if (!(yield* fs.exists(metadataPath))) return true;
-    const content = yield* fs.readFileString(metadataPath);
-    const document = yield* Effect.try({
-      try: () => parseDocument(content),
-      catch: (error) =>
-        new CodexDoctorFailure({
-          message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
-        }),
-    });
-    if (document.errors.length)
-      return yield* new CodexDoctorFailure({
-        message: `Cannot read invocation policy at ${metadataPath}`,
-      });
-    const value = yield* Effect.try({
-      try: () => document.toJS(),
-      catch: (error) =>
-        new CodexDoctorFailure({
-          message: `Cannot read invocation policy at ${metadataPath}: ${String(error)}`,
-        }),
-    });
-    const metadata = yield* Schema.decodeUnknownEffect(MetadataPolicy)(value);
-    return metadata.policy?.allow_implicit_invocation !== false;
+    const adapter = invocationMetadataAdapters.codex;
+    const metadataPath = join(dirname(path), ...adapter.file.split("/"));
+    const text = (yield* fs.exists(metadataPath))
+      ? yield* fs.readFileString(metadataPath)
+      : undefined;
+    return (yield* Effect.fromResult(adapter.read(text, metadataPath))) !== "explicit";
   },
 );
 
 /** Read-only native discovery, configuration and local model catalog; never starts an inference turn. */
-export const readLibraryCodexListingSnapshot = Effect.fn("Library.codexListingSnapshot")(function* (
+export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(function* (
   state: LibraryState,
   options: CodexListingOptions,
   executable?: string,
   suppliedDiscovery?: Effect.Success<ReturnType<typeof readCodexSkills>>,
 ) {
-  const unavailable = (detail: string): CodexListingSnapshot => ({
-    budget: { status: "unavailable", cwd: options.cwd, detail },
-    skills: [],
-    skillDemands: [],
+  const unavailable = (detail: string): ListingBudget => ({
+    _tag: "Unavailable",
+    harness: "codex",
+    cwd: options.cwd,
+    detail,
   });
-  if (options.overrideRoot !== undefined)
+  if (options.overrides?.codex !== undefined)
     return unavailable("A custom Codex root does not describe native discovery.");
   return yield* Effect.gen(function* () {
     const command = executable ?? "codex";
@@ -120,35 +96,13 @@ export const readLibraryCodexListingSnapshot = Effect.fn("Library.codexListingSn
       });
     }
     const maxContextTokens = positive(configuration.config.skills?.max_context_tokens);
-    const estimate = estimateCodexListing({
+    return estimateCodexListing({
       cwd: options.cwd,
       model,
       contextWindow,
       ...(maxContextTokens === null ? {} : { maxContextTokens }),
       skills,
-    });
-    return {
-      skills,
-      skillDemands: estimate.skills,
-      ...(maxContextTokens === null ? {} : { maxContextTokens }),
-      budget: estimate.budget,
       warnings: discovery.errors.map((error) => `Skipped skill ${error.path}: ${error.message}`),
-    } satisfies CodexListingSnapshot;
+    });
   }).pipe(Effect.catch((error) => Effect.succeed(unavailable(String(error)))));
-});
-
-export interface CodexListingSnapshot {
-  readonly warnings?: readonly string[];
-  readonly budget: CodexListingBudget;
-  readonly skills: readonly CodexListingSkill[];
-  readonly maxContextTokens?: number;
-  readonly skillDemands?: readonly CodexSkillDemand[];
-}
-
-export const readLibraryCodexListingBudget = Effect.fn("Library.codexListingBudget")(function* (
-  state: LibraryState,
-  options: CodexListingOptions,
-  executable?: string,
-) {
-  return (yield* readLibraryCodexListingSnapshot(state, options, executable)).budget;
 });

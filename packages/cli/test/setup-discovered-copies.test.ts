@@ -47,7 +47,7 @@ for (const scenario of [
       const home = yield* libraryHome({
         home: join(root, "library"),
         inventoryHome: root,
-        roots: { codex: codexRoot, claude: claudeRoot },
+        roots: { codex: [codexRoot], "claude-code": [claudeRoot] },
       });
       const firstRoot = repositories.length
         ? join(repositories[0], ".claude", "skills")

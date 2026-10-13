@@ -19,8 +19,10 @@ import { pathExists, read, readJson as json } from "./io.js";
 import { runAuditProbesEffect, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
 import type { AuditFinding, AuditObservation } from "./types.js";
-import { deferredAuditHarnesses } from "../harness/catalog.js";
 import { normalizeAuditReport } from "./normalize.js";
+
+/** Harnesses that read Agent Skills but that SKIT does not yet audit or drive. */
+const deferredAuditHarnesses = ["cursor", "pi"];
 
 export interface AuditOptions {
   home?: string;

@@ -2,17 +2,16 @@ import { basename, dirname, join } from "node:path";
 import {
   auditSkill,
   evaluateSkillFrontmatter,
-  harnessProfile,
+  harnessDrivers,
+  HarnessName,
   observationPathIdentityEffect,
   resolveHarnessRoot,
   type HarnessProfile,
   type HarnessRoot,
   type HarnessRootRole,
-  type HarnessName,
   type JsonObject,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { auditHarnesses } from "../harness/catalog.js";
 import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
 import { makePnpmSkillObserver } from "../projection/pnpm-skills.js";
@@ -111,7 +110,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
   lock: JsonObject,
   additional: readonly SkillCandidate[] = [],
 ) {
-  const profiles = auditHarnesses.map((entry) => harnessProfile(entry.id));
+  const profiles = HarnessName.literals.map((harness) => harnessDrivers[harness].profile);
   const roots = new Map<string, AuditedRoot>();
   const context = { home, configHome: join(home, ".config"), repository: cwd };
   for (const profile of profiles)

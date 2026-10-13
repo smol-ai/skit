@@ -1,9 +1,6 @@
 import { expect, test } from "vitest";
 import { estimateCodexListing } from "../src/harnesses/skill-listing/codex-allocation.js";
-import {
-  codexListingResult,
-  largeListingEntries,
-} from "../src/harnesses/skill-listing/contracts.js";
+import { largeListingEntries } from "../src/harnesses/skill-listing/contracts.js";
 import {
   claudeEntry,
   claudeListingResult,
@@ -27,21 +24,14 @@ test("shared Codex results preserve demand and allocation; list large contributo
       path: `/skills/${i}/SKILL.md`,
       scope: "repo",
     }));
-    const result = estimateCodexListing({
+    const budget = estimateCodexListing({
       cwd: "/work",
       model: "test",
       contextWindow: 50000,
       skills,
     });
-    const budget = codexListingResult({
-      skills,
-      budget: result.budget,
-      skillDemands: result.skills,
-    });
-    expect(budget._tag).toBe("Estimated");
-    if (budget._tag !== "Estimated") throw new Error("Expected estimate");
-    expect(budget.demand).toBe(result.budget.requested);
-    expect(budget.fitted).toBe(result.budget.used);
+    expect(budget.entries.reduce((sum, entry) => sum + entry.demand, 0)).toBe(budget.demand);
+    expect(budget.fitted).toBeLessThanOrEqual(budget.limit);
     expect(largeListingEntries(budget)).toHaveLength(count);
     expect(budget.demand > budget.limit).toBe(count !== 1);
     const threshold = {

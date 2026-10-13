@@ -71,9 +71,9 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
         home: workspace,
         configHome: join(workspace, "config"),
         overrides: {
-          codex: roots.codexRoot,
-          claude: roots.claudeRoot,
-          opencode: roots.opencodeRoot,
+          codex: [roots.codexRoot],
+          "claude-code": [roots.claudeRoot],
+          opencode: [roots.opencodeRoot],
           devin: roots.devinRoots,
         },
       },
@@ -251,7 +251,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
             roots: {
               home: workspace,
               configHome: join(workspace, "config"),
-              overrides: { codex: roots.codexRoot },
+              overrides: { codex: [roots.codexRoot] },
             },
             variantsPath: join(home, "variants"),
             invocation: {

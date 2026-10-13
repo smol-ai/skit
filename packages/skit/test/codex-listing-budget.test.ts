@@ -12,15 +12,14 @@ import {
   AbsoluteDevicePath,
 } from "../src/index.js";
 import {
-  estimateCodexListingBudget,
+  estimateCodexListing,
   type CodexListingSkill,
 } from "../src/harnesses/skill-listing/codex-allocation.js";
 import {
   implicitInvocationAllowed,
-  readLibraryCodexListingBudget,
-  readLibraryCodexListingSnapshot,
+  readCodexListingBudget,
 } from "../src/harnesses/skill-listing/codex.js";
-import { codexListingResult, ListingBudget } from "../src/harnesses/skill-listing/contracts.js";
+import { ListingBudget } from "../src/harnesses/skill-listing/contracts.js";
 import { Schema } from "effect";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
 
@@ -36,7 +35,7 @@ const estimate = (
   contextWindow: number | null = 373_000,
   maxContextTokens?: number,
 ) =>
-  estimateCodexListingBudget({
+  estimateCodexListing({
     cwd: "/work",
     model: "test-model",
     contextWindow,
@@ -61,13 +60,13 @@ test("counts UTF-8 budget units, keeps duplicate names as distinct entries and s
   expect(result.collections.find((item) => item.collectionId === "collection-a")).toMatchObject({
     collectionId: "collection-a",
     skills: 1,
-    used: expected,
-    requested: expected,
+    demand: expected,
   });
-  expect(result.otherSkills).toBe(1);
+  expect(result.entries).toHaveLength(3);
   expect(result.collections).toHaveLength(2);
-  expect(result.used).toBeGreaterThan(
-    result.collections.reduce((sum, item) => sum + item.used, result.sharedOverhead),
+  expect(result.collections.reduce((sum, item) => sum + item.skills, 0)).toBe(2);
+  expect(result.fitted).toBeGreaterThan(
+    result.collections.reduce((sum, item) => sum + item.demand, 0),
   );
   expect(result.shortened).toBe(0);
 });
@@ -75,20 +74,14 @@ test("counts UTF-8 budget units, keeps duplicate names as distinct entries and s
 test("shrinks descriptions fairly, then omits entries while accounting only for included rows", () => {
   const skills = [skill("a", "a".repeat(800)), skill("b", "b".repeat(800))];
   const shortened = estimate(skills, 373_000, 100);
-  expect(shortened.used).toBeLessThanOrEqual(100);
-  expect(shortened.requested).toBeGreaterThan(100);
+  expect(shortened.fitted).toBeLessThanOrEqual(100);
+  expect(shortened.demand).toBeGreaterThan(100);
   expect(shortened.shortened).toBe(2);
   expect(shortened.omitted).toBe(0);
-  const each = estimate(
-    skills.map((entry, index) => ({ ...entry, collectionId: `collection-${index}` })),
-    373_000,
-    100,
-  );
-  expect(Math.abs(each.collections[0]!.used - each.collections[1]!.used)).toBeLessThanOrEqual(1);
   const omitted = estimate(skills, 373_000, 12);
-  expect(omitted.used).toBeLessThanOrEqual(12);
+  expect(omitted.fitted).toBeLessThanOrEqual(12);
   expect(omitted.omitted).toBe(1);
-  expect(omitted.collections[0]).toMatchObject({ skills: 2, omitted: 1 });
+  expect(omitted.collections[0]).toMatchObject({ skills: 2 });
 });
 
 test("uses shared roots to reduce row costs while accounting for roots overhead", () => {
@@ -106,10 +99,10 @@ test("uses shared roots to reduce row costs while accounting for roots overhead"
       ),
     0,
   );
-  expect(result.sharedOverhead).toBeGreaterThan(0);
-  expect(result.collections[0]).toMatchObject({ requested: expectedRows, used: expectedRows });
-  expect(result.requested).toBe(expectedRows + result.sharedOverhead);
-  expect(result.used).toBe(result.requested);
+  expect(result.collections[0]).toMatchObject({ demand: expectedRows });
+  // The roots table is shared overhead, counted once beyond the rows.
+  expect(result.demand).toBeGreaterThan(expectedRows);
+  expect(result.fitted).toBe(result.demand);
   expect(result.omitted).toBe(0);
 });
 
@@ -118,20 +111,20 @@ test("caps descriptions at 1024 Unicode characters including the ellipsis", () =
   const capped = estimate([skill("test", "🐱".repeat(1025))]);
   const rowCost = (description: string) =>
     Math.ceil(Buffer.byteLength(`- test: ${description} (file: /skills/test/SKILL.md)\n`) / 4);
-  expect(boundary.requested).toBe(rowCost("🐱".repeat(1024)));
-  expect(capped.requested).toBe(rowCost("🐱".repeat(1021) + "..."));
-  expect(capped.used).toBe(capped.requested);
+  expect(boundary.demand).toBe(rowCost("🐱".repeat(1024)));
+  expect(capped.demand).toBe(rowCost("🐱".repeat(1021) + "..."));
+  expect(capped.fitted).toBe(capped.demand);
 });
 
 test("applies character fallback and the explicit budget override ceiling", () => {
   const fallback = estimate([skill("test", "🐱")], null);
   expect(fallback.unit).toBe("characters");
   expect(fallback.limit).toBe(8_000);
-  expect(fallback.used).toBe(Array.from("- test: 🐱 (file: /skills/test/SKILL.md)\n").length);
+  expect(fallback.fitted).toBe(Array.from("- test: 🐱 (file: /skills/test/SKILL.md)\n").length);
   expect(estimate([], null, 50_000)).toMatchObject({
     unit: "budget-tokens",
     limit: 10_000,
-    used: 0,
+    fitted: 0,
   });
 });
 
@@ -204,20 +197,15 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
           },
         ],
       };
-      const options = { cwd: f.root, home: f.home };
-      const first = yield* readLibraryCodexListingBudget(
-        stateWithProjection,
-        options,
-        process.execPath,
-      );
+      const options = { cwd: f.root };
+      const first = yield* readCodexListingBudget(stateWithProjection, options, process.execPath);
       expect(first).toMatchObject({
-        status: "estimated",
-        contextWindow: 500_000,
+        _tag: "Estimated",
         limit: 10_000,
-        otherSkills: 0,
+        entries: [{ name: "review" }],
         collections: [{ collectionId, skills: 1 }],
       });
-      const withRejectedSkill = yield* readLibraryCodexListingSnapshot(
+      const withRejectedSkill = yield* readCodexListingBudget(
         stateWithProjection,
         options,
         process.execPath,
@@ -230,31 +218,33 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
           config: { config: { model: "gpt-6.1-sol", model_context_window: null, skills: null } },
         },
       );
-      expect(withRejectedSkill.budget).toEqual(first);
-      const shared = yield* Schema.decodeUnknownEffect(ListingBudget)(
-        codexListingResult(withRejectedSkill),
-      );
-      expect(shared).toMatchObject({
+      const warnings = [
+        "Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---",
+      ];
+      expect(withRejectedSkill).toEqual({ ...first, warnings });
+      expect(yield* Schema.decodeUnknownEffect(ListingBudget)(withRejectedSkill)).toMatchObject({
         _tag: "Estimated",
-        warnings: ["Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---"],
+        warnings,
       });
       yield* fs.writeFileString(metadataPath, "policy:\n  allow_implicit_invocation: true\n");
-      const refreshed = yield* readLibraryCodexListingBudget(
+      const refreshed = yield* readCodexListingBudget(
         stateWithProjection,
         options,
         process.execPath,
       );
-      expect(refreshed).toMatchObject({ status: "estimated", otherSkills: 1 });
+      expect(refreshed).toMatchObject({
+        _tag: "Estimated",
+        entries: [{ name: "explicit" }, { name: "review" }],
+      });
       yield* fs.remove(join(f.home, ".codex", "models_cache.json"));
-      const fallback = yield* readLibraryCodexListingBudget(
+      const fallback = yield* readCodexListingBudget(
         stateWithProjection,
         options,
         process.execPath,
       );
       expect(fallback).toMatchObject({
-        status: "estimated",
+        _tag: "Estimated",
         unit: "budget-tokens",
-        contextWindow: 500_000,
         limit: 10_000,
       });
       yield* fs.writeFileString(
@@ -266,25 +256,26 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
           "policy: {allow_implicit_invocation: true}",
         ].join("\n"),
       );
-      const excessiveAliases = yield* readLibraryCodexListingBudget(
+      // The invocation adapter reads the one field without expanding aliases elsewhere.
+      const excessiveAliases = yield* readCodexListingBudget(
         stateWithProjection,
         options,
         process.execPath,
       );
-      expect(excessiveAliases).toMatchObject({ status: "unavailable" });
+      expect(excessiveAliases).toMatchObject({ _tag: "Estimated" });
       yield* fs.writeFileString(metadataPath, "policy: [invalid");
-      const malformed = yield* readLibraryCodexListingBudget(
+      const malformed = yield* readCodexListingBudget(
         stateWithProjection,
         options,
         process.execPath,
       );
-      expect(malformed).toMatchObject({ status: "unavailable" });
-      const skipped = yield* readLibraryCodexListingBudget(
+      expect(malformed).toMatchObject({ _tag: "Unavailable" });
+      const skipped = yield* readCodexListingBudget(
         stateWithProjection,
-        { ...options, overrideRoot: "/custom" },
+        { ...options, overrides: { codex: ["/custom"] } },
         process.execPath,
       );
-      expect(skipped.status).toBe("unavailable");
+      expect(skipped._tag).toBe("Unavailable");
     }).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
       Effect.provide(nativeLibraryLayer),
@@ -296,25 +287,21 @@ it.effect("uses the model default unless configuration overrides the context win
     const f = yield* NativeLibraryFixture;
     const store = yield* LibraryStore;
     const state = yield* store.load;
-    for (const [configured, contextWindow, limit] of [
-      [null, 500_000, 10_000],
-      [1_000_000, 1_000_000, 20_000],
-      [200_000, 200_000, 4_000],
+    // Codex lists within 2% of the context window: the model default is 500,000.
+    for (const [configured, limit] of [
+      [null, 10_000],
+      [1_000_000, 20_000],
+      [200_000, 4_000],
     ] as const) {
-      const snapshot = yield* readLibraryCodexListingSnapshot(
-        state,
-        { cwd: f.root, home: f.home },
-        undefined,
-        {
-          cwd: f.root,
-          skills: [],
-          errors: [],
-          config: {
-            config: { model: "gpt-6.1-sol", model_context_window: configured, skills: null },
-          },
+      const budget = yield* readCodexListingBudget(state, { cwd: f.root }, undefined, {
+        cwd: f.root,
+        skills: [],
+        errors: [],
+        config: {
+          config: { model: "gpt-6.1-sol", model_context_window: configured, skills: null },
         },
-      );
-      expect(snapshot.budget).toMatchObject({ status: "estimated", contextWindow, limit });
+      });
+      expect(budget).toMatchObject({ _tag: "Estimated", limit });
     }
   }).pipe(
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),

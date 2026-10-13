@@ -40,7 +40,7 @@ const fixture = Effect.gen(function* () {
   const home = yield* libraryHome({
     home: join(root, "library"),
     inventoryHome: root,
-    roots: { codex: agentRoot },
+    roots: { codex: [agentRoot] },
   });
   const options = {
     libraryHome: home.home,
@@ -252,7 +252,7 @@ it.effect("removing one duplicate row preserves the independent copy in another 
     const home = yield* libraryHome({
       home: f.home.home,
       inventoryHome: f.root,
-      roots: { codex: f.agentRoot, claude },
+      roots: { codex: [f.agentRoot], "claude-code": [claude] },
     });
     const path = yield* f.fs.realPath(f.copy);
     const interaction = yield* makeScriptedInteraction([[`remove\0copied\0${path}`], true]);

@@ -23,6 +23,8 @@ import {
   readSkitDescriptorEffect,
   validateSkitDirectoryEffect,
   type HarnessName,
+  type HarnessRootOverrides,
+  projectionTargetProfiles,
   type LibraryState,
   makeMachineId,
   retainObservedCollectionEffect,
@@ -34,12 +36,7 @@ import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
-export type HarnessRoots = {
-  readonly codex?: string;
-  readonly claude?: string;
-  readonly opencode?: string;
-  readonly devin?: string[];
-};
+export type HarnessRoots = HarnessRootOverrides;
 
 export interface LibraryHomeInput {
   readonly home: string;
@@ -77,13 +74,12 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
   const home = input.home;
   const harnessRoot = input.harnessRoot ?? join(home, "harnesses");
   const harnesses = input.harnesses ?? [];
-  const derived: HarnessRoots = {
-    ...(harnesses.includes("codex") ? { codex: join(harnessRoot, "codex") } : {}),
-    ...(harnesses.includes("claude-code") ? { claude: join(harnessRoot, "claude") } : {}),
-    ...(harnesses.includes("opencode") ? { opencode: join(harnessRoot, "opencode") } : {}),
-    ...(harnesses.includes("devin") ? { devin: [join(harnessRoot, "devin")] } : {}),
+  const roots: HarnessRoots = {
+    ...Object.fromEntries(
+      harnesses.map((harness) => [harness, [join(harnessRoot, directoryFor(harness))]]),
+    ),
+    ...input.roots,
   };
-  const roots: HarnessRoots = { ...derived, ...input.roots };
   yield* fs.makeDirectory(home, { recursive: true });
   for (const harness of harnesses)
     yield* fs.makeDirectory(join(harnessRoot, directoryFor(harness)), { recursive: true });
@@ -108,7 +104,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     installation: {
       statePath,
       variantsPath: bindings.variantsPath,
-      rootFor: (target) => (target === "agents" ? roots.codex : roots.claude),
+      rootFor: (target) => roots[projectionTargetProfiles[target]]?.[0],
     },
     originalsPath: join(home, "originals"),
   };

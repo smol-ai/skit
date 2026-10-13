@@ -130,7 +130,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
   it.effect(`repairs bound projections after ${failurePhase} failure with a current Source`, () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const roots = { ...f.options.roots, overrides: { codex: join(f.root, "codex") } };
+      const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
       const options = { ...f.options, roots };
       const collection = f.before.collections[0]!;
       yield* writingTo(

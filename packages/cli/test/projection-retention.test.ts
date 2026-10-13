@@ -93,9 +93,9 @@ it.effect(
           home: workspace,
           configHome: join(workspace, "config"),
           overrides: {
-            codex: roots.codexRoot,
-            claude: roots.claudeRoot,
-            opencode: roots.opencodeRoot,
+            codex: [roots.codexRoot],
+            "claude-code": [roots.claudeRoot],
+            opencode: [roots.opencodeRoot],
             devin: roots.devinRoots,
           },
         },

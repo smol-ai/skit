@@ -1,13 +1,15 @@
 import { resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, Record } from "effect";
 import {
-  harnessProfile,
+  HarnessName,
+  harnessDrivers,
   projectionRoot,
+  projectionTargetProfiles,
   projectionTargetRoot,
   resolveHarnessRoot,
   deduplicateInventoryRoots,
   pathIsWithin,
-  type HarnessName,
+  type HarnessRootOverrides,
   type ProjectionTarget,
   type SkitBindingScope,
   type LibraryState,
@@ -18,13 +20,8 @@ import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
 export interface InventoryRootOptions {
   readonly home: string;
   readonly configHome: string;
-  readonly overrides: {
-    /** The shared `.agents/skills` root, which Codex reads natively. */
-    readonly codex?: string;
-    readonly claude?: string;
-    readonly opencode?: string;
-    readonly devin?: string[];
-  };
+  /** Codex's override is the shared `.agents/skills` root, which Codex reads natively. */
+  readonly overrides: HarnessRootOverrides;
 }
 
 /** Reuse a repository's own route, excluding routes owned by a nested repository Binding. */
@@ -52,7 +49,7 @@ export function bindingRoot(
   scope: SkitBindingScope,
   options: InventoryRootOptions,
 ): string {
-  const override = target === "agents" ? options.overrides.codex : options.overrides.claude;
+  const override = options.overrides[projectionTargetProfiles[target]]?.[0];
   if (scope.kind === "global" && override !== undefined) return resolve(override);
   return resolve(
     projectionTargetRoot(target, scope.kind === "global" ? "global" : "project", {
@@ -70,7 +67,7 @@ export const activeProjectionTargetsEffect = Effect.fn("Projection.activeTargets
   const detected = yield* detectInstalledHarnessesEffect({
     home: options.home,
     configHome: options.configHome,
-    ...(options.overrides.claude === undefined ? {} : { claudeRoot: options.overrides.claude }),
+    overrides: options.overrides,
   });
   return activeProjectionTargets(detected);
 });
@@ -86,24 +83,28 @@ export function selectInventoryRoots(
   options: InventoryRootOptions,
 ): InventoryScanRoot[] {
   const context = { home: options.home, configHome: options.configHome };
-  const devin = harnessProfile("devin");
   return deduplicateInventoryRoots([
-    { harness: "codex", root: bindingRoot("agents", { kind: "global" }, options) },
-    { harness: "claude-code", root: bindingRoot("claude", { kind: "global" }, options) },
-    {
-      harness: "opencode",
-      root: resolve(options.overrides.opencode ?? projectionRoot("opencode", "global", context)!),
-    },
-    ...devin.roots
-      .filter((root) => root.scope === "global" && root.readable)
-      .map((root) => ({ harness: "devin" as const, root: resolveHarnessRoot(root, context) })),
-    ...(options.overrides.devin ?? []).map((root) => ({
-      harness: "devin" as const,
-      root: resolve(root),
-    })),
-    ...state.local_bindings.flatMap((binding) => [
-      { harness: "codex" as const, root: bindingRoot("agents", binding.scope, options) },
-      { harness: "claude-code" as const, root: bindingRoot("claude", binding.scope, options) },
-    ]),
+    ...HarnessName.literals.flatMap((harness) => {
+      const driver = harnessDrivers[harness];
+      const overrides = options.overrides[harness] ?? [];
+      const roots =
+        driver.rootOverride === "extends"
+          ? [
+              ...driver.profile.roots
+                .filter((root) => root.scope === "global" && root.readable)
+                .map((root) => resolveHarnessRoot(root, context)),
+              ...overrides,
+            ]
+          : overrides.length > 0
+            ? overrides
+            : [projectionRoot(harness, "global", context)];
+      return roots.flatMap((root) => (root === null ? [] : [{ harness, root: resolve(root) }]));
+    }),
+    ...state.local_bindings.flatMap((binding) =>
+      Record.toEntries(projectionTargetProfiles).map(([target, harness]) => ({
+        harness,
+        root: bindingRoot(target, binding.scope, options),
+      })),
+    ),
   ]);
 }

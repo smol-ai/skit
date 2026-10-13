@@ -59,7 +59,7 @@ it.effect(
       const roots = {
         home: root,
         configHome: join(root, "config"),
-        overrides: { codex: join(root, "codex") },
+        overrides: { codex: [join(root, "codex")] },
       };
       const variantsPath = join(home, "variants");
       const loaded = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));

@@ -11,8 +11,7 @@ import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import {
   readCodexSkills,
-  codexListingResult,
-  readLibraryCodexListingSnapshot,
+  readCodexListingBudget,
   type ListingBudget,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -171,9 +170,9 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       })));
     const aliasIndex = yield* observeHarnessSkills(
       [
-        ...readableHarnessRoots(roots, { kind: "global" }),
-        ...readableHarnessRoots(roots, { kind: "repository", root: cwd }),
-      ].filter((root) => root.harness === "codex"),
+        ...readableHarnessRoots(roots, { kind: "global" }, ["codex"]),
+        ...readableHarnessRoots(roots, { kind: "repository", root: cwd }, ["codex"]),
+      ],
       { errors },
     ).pipe(
       Effect.catchTag("PlatformError", (error) => {
@@ -214,9 +213,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
           };
         }),
     );
-    const listingBudget = codexListingResult(
-      yield* readLibraryCodexListingSnapshot(state, { cwd, home: roots.home }, executable, entry),
-    );
+    const listingBudget = yield* readCodexListingBudget(state, { cwd }, executable, entry);
     return {
       ...empty,
       ...version,

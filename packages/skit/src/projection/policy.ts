@@ -32,8 +32,7 @@ export function applyInvocationPolicyEffect(
   // Each reader's native field lives in its own file or key, so one copy carries them all.
   return Effect.forEach(
     projectionTargetHarnesses[target],
-    (harness) =>
-      applyHarnessInvocationPolicyEffect(directory, harness, { source: intent.source, policy }),
+    (harness) => applyHarnessInvocationPolicyEffect(directory, harness, policy),
     { discard: true },
   );
 }

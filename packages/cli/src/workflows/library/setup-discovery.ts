@@ -15,6 +15,7 @@ import {
   sourceLocator,
   SourceIdentity,
   SourceProcess,
+  HarnessName,
   type HarnessName as Harness,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -39,7 +40,6 @@ import type {
   SetupSkillsLockEntry,
   SetupSuppressed,
 } from "./setup-contract.js";
-const HARNESSES = ["codex", "claude-code", "opencode", "devin"] as const;
 const SUPPRESSED_NAMES = new Map<string, SetupSuppressed["reason"]>([
   ["node_modules", "dependency"],
   [".venv", "dependency"],
@@ -208,21 +208,6 @@ const nearestRepository = (path: string, repositories: readonly string[]) =>
   repositories
     .filter((repository) => pathIsWithin(repository, path))
     .sort((left, right) => right.length - left.length)[0];
-
-function overrideRoots(
-  harness: Harness,
-  options: InventoryRootOptions,
-): readonly string[] | undefined {
-  if (harness === "codex")
-    return options.overrides.codex ? [resolve(options.overrides.codex)] : undefined;
-  if (harness === "claude-code")
-    return options.overrides.claude ? [resolve(options.overrides.claude)] : undefined;
-  if (harness === "opencode")
-    return options.overrides.opencode ? [resolve(options.overrides.opencode)] : undefined;
-  return options.overrides.devin?.length
-    ? options.overrides.devin.map((root) => resolve(root))
-    : undefined;
-}
 
 function catalogRoots(
   harness: Harness,
@@ -508,9 +493,9 @@ export const collectHarnessRoots = (
   repositories: readonly string[],
 ) => {
   const roots: Array<{ harness: Harness; scope: "global" | "project"; root: string }> = [];
-  for (const harness of HARNESSES) {
+  for (const harness of HarnessName.literals) {
     const global =
-      overrideRoots(harness, inventory) ??
+      inventory.overrides[harness]?.map((root) => resolve(root)) ??
       catalogRoots(harness, "global", {
         home: inventory.home,
         configHome: inventory.configHome,

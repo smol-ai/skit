@@ -1,56 +1,40 @@
-import { Result, Schema } from "effect";
+import { Record, Result, Schema } from "effect";
 import { isMap, parseDocument, type Document } from "yaml";
-import type { InvocationPolicy } from "../contracts.js";
+import type { HarnessName, InvocationPolicy } from "../contracts.js";
 import { HarnessMetadataInvalid } from "../failures.js";
 
-/** Harnesses whose native metadata can express a SKIT invocation declaration. */
-export const INVOCATION_HARNESSES = ["claude-code", "codex", "opencode", "devin"] as const;
+/**
+ * The policy a native field can state: the model may choose the Skill on its own (`implicit`), or
+ * only explicit invocation runs it. Absence states nothing, which is how `host-policy` is expressed:
+ * it delegates to the Harness, and a lingering field would keep constraining it.
+ */
+export type NativeInvocationPolicy = Exclude<InvocationPolicy, "host-policy">;
 
 /**
- * Harnesses whose declaration SKIT holds the author to. Devin is deliberately absent: its
- * `triggers` field names permitted invokers rather than a SKIT-owned switch, so SKIT reads what
- * the author wrote and writes it into Projections, but never demands the artifact carry it.
+ * One Harness's native invocation metadata, read and written in SKIT's terms. Each adapter owns its
+ * field's polarity, so no consumer needs to know which way a native boolean points.
  */
-export const AUTHORED_INVOCATION_HARNESSES = ["claude-code", "codex"] as const;
-export const AuthoredInvocationHarness = Schema.Literals(AUTHORED_INVOCATION_HARNESSES);
-export type AuthoredInvocationHarness = typeof AuthoredInvocationHarness.Type;
-
-export function requiresAuthoredInvocation(harness: InvocationHarness): boolean {
-  return (AUTHORED_INVOCATION_HARNESSES as readonly string[]).includes(harness);
-}
-export const InvocationHarness = Schema.Literals(INVOCATION_HARNESSES);
-export type InvocationHarness = typeof InvocationHarness.Type;
-
-/**
- * The native value a Harness must carry for a declared policy. `undefined` means the field is
- * absent: `host-policy` delegates to the Harness, and a lingering field would keep constraining it.
- */
-export function expectedNativeInvocation(
-  harness: InvocationHarness,
-  policy: InvocationPolicy,
-): boolean | undefined {
-  if (policy === "host-policy") return undefined;
-  return harness === "claude-code" ? policy === "explicit" : policy === "implicit";
-}
-
 export interface InvocationMetadataAdapter {
-  readonly harness: InvocationHarness;
   /** Native field, in the Harness's own notation. */
   readonly field: string;
   /** Metadata file, relative to the Skill directory. */
   readonly file: string;
   /** Whether the file must already exist for the Skill to be usable at all. */
   readonly required: boolean;
+  /** Whether SKIT holds the author's artifact to carry a declared policy in this metadata. */
+  readonly authored: boolean;
   read(
     text: string | undefined,
     path: string,
-  ): Result.Result<boolean | undefined, HarnessMetadataInvalid>;
-  /** The file's new text, or `null` when the file should not exist. */
+  ): Result.Result<NativeInvocationPolicy | undefined, HarnessMetadataInvalid>;
+  /** The file's new text, or `null` when the file should not exist. `host-policy` clears the field. */
   write(
     text: string | undefined,
-    value: boolean | undefined,
+    policy: InvocationPolicy,
     path: string,
   ): Result.Result<string | null, HarnessMetadataInvalid>;
+  /** The native value that states a policy, as an author writes it. */
+  notation(policy: NativeInvocationPolicy): string;
 }
 
 function emptyDocument(document: Document): boolean {
@@ -61,21 +45,23 @@ function emptyDocument(document: Document): boolean {
 const CLAUDE_FRONTMATTER = /^---\r?\n([\s\S]*?)^---(?=\r?\n|$)/m;
 const CLAUDE_FIELD = "disable-model-invocation";
 
+/** Claude's field disables model invocation, so `true` states `explicit`. */
 const claudeAdapter: InvocationMetadataAdapter = {
-  harness: "claude-code",
   field: CLAUDE_FIELD,
   file: "SKILL.md",
   required: true,
+  authored: true,
   read: (text, path) =>
     Result.gen(function* () {
       const match = text?.match(CLAUDE_FRONTMATTER);
       if (!match) return undefined;
       const value = (yield* claudeDocumentResult(match[1], path)).get(CLAUDE_FIELD);
-      return typeof value === "boolean" ? value : undefined;
+      return typeof value === "boolean" ? (value ? "explicit" : "implicit") : undefined;
     }),
-  write: (text, value, path) =>
+  write: (text, policy, path) =>
     Result.gen(function* () {
       const body = text ?? "";
+      const value = policy === "host-policy" ? undefined : policy === "explicit";
       const newline = body.includes("\r\n") ? "\r\n" : "\n";
       const match = body.match(CLAUDE_FRONTMATTER);
       if (!match)
@@ -92,6 +78,7 @@ const claudeAdapter: InvocationMetadataAdapter = {
         : document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
       return `---${newline}${serialized}---${body.slice(match[0].length)}`;
     }),
+  notation: (policy) => String(policy === "explicit"),
 };
 
 const CODEX_FIELD = ["policy", "allow_implicit_invocation"] as const;
@@ -116,32 +103,37 @@ const codexDocumentResult = (
     : Result.succeed(document);
 };
 
+/**
+ * Codex reads `agents/openai.yaml`, the only file its loader consults for invocation policy; the
+ * field allows implicit invocation, so `true` states `implicit`.
+ */
 const codexAdapter: InvocationMetadataAdapter = {
-  harness: "codex",
   field: "policy.allow_implicit_invocation",
   file: "agents/openai.yaml",
   required: false,
+  authored: true,
   read: (text, path) =>
     Result.gen(function* () {
       if (text === undefined) return undefined;
       const value = (yield* codexDocumentResult(text, path)).getIn([...CODEX_FIELD]);
-      return typeof value === "boolean" ? value : undefined;
+      return typeof value === "boolean" ? (value ? "implicit" : "explicit") : undefined;
     }),
-  write: (text, value, path) =>
+  write: (text, policy, path) =>
     Result.gen(function* () {
       const document = yield* codexDocumentResult(text ?? "", path);
-      if (value === undefined) {
+      if (policy === "host-policy") {
         if (text === undefined) return null;
         if (document.getIn([...CODEX_FIELD]) === undefined) return text;
         document.deleteIn([...CODEX_FIELD]);
-        const policy = document.get("policy") as { items?: unknown[] } | undefined;
-        if (policy && Array.isArray(policy.items) && policy.items.length === 0)
+        const policyNode = document.get("policy") as { items?: unknown[] } | undefined;
+        if (policyNode && Array.isArray(policyNode.items) && policyNode.items.length === 0)
           document.delete("policy");
         return emptyDocument(document) ? null : document.toString();
       }
-      document.setIn([...CODEX_FIELD], value);
+      document.setIn([...CODEX_FIELD], policy === "implicit");
       return document.toString();
     }),
+  notation: (policy) => String(policy === "implicit"),
 };
 
 const OPENCODE_FIELD = ["metadata", "opencode/autoinvoke"] as const;
@@ -161,10 +153,10 @@ const opencodeDocumentResult = (frontmatter: string, path: string) =>
  * is not. Strings keep the metadata map valid for other Agent Skills consumers.
  */
 const opencodeAdapter: InvocationMetadataAdapter = {
-  harness: "opencode",
   field: "metadata.opencode/autoinvoke",
   file: "SKILL.md",
   required: true,
+  authored: false,
   read: (text, path) =>
     Result.gen(function* () {
       const match = text?.match(CLAUDE_FRONTMATTER);
@@ -172,14 +164,17 @@ const opencodeAdapter: InvocationMetadataAdapter = {
       const document = yield* claudeDocumentResult(match[1], path);
       if (!isMap(document.get("metadata", true))) return undefined;
       const value = document.getIn([...OPENCODE_FIELD]);
-      if (typeof value === "boolean") return value;
-      if (typeof value !== "string") return undefined;
-      const normalized = value.toLowerCase();
-      return normalized === "true" ? true : normalized === "false" ? false : undefined;
+      const normalized = typeof value === "string" ? value.toLowerCase() : value;
+      return normalized === true || normalized === "true"
+        ? "implicit"
+        : normalized === false || normalized === "false"
+          ? "explicit"
+          : undefined;
     }),
-  write: (text, value, path) =>
+  write: (text, policy, path) =>
     Result.gen(function* () {
       const body = text ?? "";
+      const value = policy === "host-policy" ? undefined : policy === "implicit";
       const newline = body.includes("\r\n") ? "\r\n" : "\n";
       const match = body.match(CLAUDE_FRONTMATTER);
       if (!match)
@@ -196,22 +191,29 @@ const opencodeAdapter: InvocationMetadataAdapter = {
       const serialized = document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
       return `---${newline}${emptyDocument(document) ? "" : serialized}---${body.slice(match[0].length)}`;
     }),
+  notation: (policy) => `"${policy === "implicit"}"`,
 };
 
 const DEVIN_FIELD = "triggers";
 const DEVIN_MODEL_TRIGGER = "model";
 const DEVIN_USER_TRIGGER = "user";
+const devinTriggers = (policy: NativeInvocationPolicy) =>
+  policy === "implicit" ? [DEVIN_USER_TRIGGER, DEVIN_MODEL_TRIGGER] : [DEVIN_USER_TRIGGER];
 
 /**
  * Devin reads `triggers` from the Skill's own frontmatter: `["user", "model"]` lets Devin choose
  * the Skill on its own, `["user"]` restricts it to explicit invocation.
  * See https://docs.devin.ai/product-guides/skills.
+ *
+ * SKIT never holds the author to it: `triggers` names permitted invokers rather than a SKIT-owned
+ * switch, so SKIT reads what the author wrote and writes it into Projections, but never demands the
+ * artifact carry it.
  */
 const devinAdapter: InvocationMetadataAdapter = {
-  harness: "devin",
   field: DEVIN_FIELD,
   file: "SKILL.md",
   required: true,
+  authored: false,
   read: (text, path) =>
     Result.gen(function* () {
       const match = text?.match(CLAUDE_FRONTMATTER);
@@ -220,14 +222,15 @@ const devinAdapter: InvocationMetadataAdapter = {
         | { toJSON?: () => unknown }
         | undefined;
       const triggers = value?.toJSON?.() ?? value;
-      return Array.isArray(triggers) ? triggers.includes(DEVIN_MODEL_TRIGGER) : undefined;
+      if (!Array.isArray(triggers)) return undefined;
+      return triggers.includes(DEVIN_MODEL_TRIGGER) ? "implicit" : "explicit";
     }),
-  write: (text, value, path) =>
+  write: (text, policy, path) =>
     Result.gen(function* () {
       const body = text ?? "";
       // `host-policy` defers to Devin, and Devin's default is whatever `triggers` already says.
-      if (value === undefined) return body;
-      const triggers = value ? [DEVIN_USER_TRIGGER, DEVIN_MODEL_TRIGGER] : [DEVIN_USER_TRIGGER];
+      if (policy === "host-policy") return body;
+      const triggers = devinTriggers(policy);
       const newline = body.includes("\r\n") ? "\r\n" : "\n";
       const match = body.match(CLAUDE_FRONTMATTER);
       if (!match)
@@ -237,11 +240,20 @@ const devinAdapter: InvocationMetadataAdapter = {
       const serialized = document.toString({ lineWidth: 0 }).replace(/\n/g, newline);
       return `---${newline}${serialized}---${body.slice(match[0].length)}`;
     }),
+  notation: (policy) => `[${devinTriggers(policy).join(", ")}]`,
 };
 
-export const invocationMetadataAdapters: Record<InvocationHarness, InvocationMetadataAdapter> = {
+export const invocationMetadataAdapters: Record<HarnessName, InvocationMetadataAdapter> = {
   "claude-code": claudeAdapter,
   codex: codexAdapter,
   opencode: opencodeAdapter,
   devin: devinAdapter,
 };
+
+/** The Harnesses whose declaration SKIT holds the author to, in the adapters' order. */
+export const AuthoredInvocationHarness = Schema.Literals(
+  Record.keys(invocationMetadataAdapters).filter(
+    (harness) => invocationMetadataAdapters[harness].authored,
+  ),
+);
+export type AuthoredInvocationHarness = typeof AuthoredInvocationHarness.Type;

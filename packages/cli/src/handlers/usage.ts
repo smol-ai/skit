@@ -1,5 +1,12 @@
 import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
-import { LibraryStore, SkillUsage, skillUsageLayer } from "@smolai/skit-core";
+import {
+  LibraryStore,
+  SkillUsage,
+  UsageHarness,
+  harnessDrivers,
+  skillUsageLayer,
+  type UsageRoot,
+} from "@smolai/skit-core";
 import { Config, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";
@@ -23,7 +30,7 @@ export const usageCliCommand = Command.make(
       Flag.withDefault(7),
       Flag.withDescription("Scan this many rolling days (1–3650)."),
     ),
-    harness: Flag.Literals("harness", ["all", "codex", "claude-code"]).pipe(
+    harness: Flag.Literals("harness", ["all", ...UsageHarness.literals]).pipe(
       Flag.withDefault("all"),
       Flag.withDescription("Select local transcript harnesses."),
     ),
@@ -47,27 +54,22 @@ export const usageCliCommand = Command.make(
           const usage = yield* SkillUsage;
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          const codex =
-            Option.getOrUndefined(input.codexHome) ??
-            (yield* Config.String("CODEX_HOME").pipe(
-              Config.withDefault(join(paths.userHome, ".codex")),
-            ));
-          const claude =
-            Option.getOrUndefined(input.claudeHome) ??
-            (yield* Config.String("CLAUDE_CONFIG_DIR").pipe(
-              Config.withDefault(join(paths.userHome, ".claude")),
-            ));
-          const roots = [
-            ...(input.harness === "all" || input.harness === "codex"
-              ? [
-                  { harness: "codex" as const, root: join(resolve(codex), "sessions") },
-                  { harness: "codex" as const, root: join(resolve(codex), "archived_sessions") },
-                ]
-              : []),
-            ...(input.harness === "all" || input.harness === "claude-code"
-              ? [{ harness: "claude-code" as const, root: join(resolve(claude), "projects") }]
-              : []),
-          ];
+          const homes: Record<UsageHarness, Option.Option<string>> = {
+            codex: input.codexHome,
+            "claude-code": input.claudeHome,
+          };
+          const roots: UsageRoot[] = [];
+          for (const harness of UsageHarness.literals) {
+            if (input.harness !== "all" && input.harness !== harness) continue;
+            const transcripts = harnessDrivers[harness].transcripts;
+            const home =
+              Option.getOrUndefined(homes[harness]) ??
+              (yield* Config.String(transcripts.home.variable).pipe(
+                Config.withDefault(join(paths.userHome, transcripts.home.directory)),
+              ));
+            for (const directory of transcripts.directories)
+              roots.push({ harness, root: join(resolve(home), directory) });
+          }
           const projections = state.projections.flatMap((projection) => {
             const skill = state.skills.find((s) => s.skill_id === projection.skill_id);
             return skill

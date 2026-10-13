@@ -1,7 +1,9 @@
 import { Data, Schema } from "effect";
+import { HarnessName } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export const UsageHarness = Schema.Literals(["codex", "claude-code"]);
+/** The Harnesses whose transcripts SKIT reads; each one's driver carries the grammar. */
+export const UsageHarness = HarnessName.pick(["codex", "claude-code"]);
 export type UsageHarness = typeof UsageHarness.Type;
 export const UsageKind = Schema.Literals(["calls", "loads", "reads"]);
 export type UsageKind = typeof UsageKind.Type;

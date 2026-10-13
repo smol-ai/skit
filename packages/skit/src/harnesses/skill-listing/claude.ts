@@ -1,7 +1,8 @@
 import { Config, Effect, FileSystem, Option, Schema } from "effect";
 import { basename, dirname, join, resolve } from "node:path";
 import { platform } from "node:os";
-import { harnessProfile, resolveHarnessRoot } from "../catalog.js";
+import { harnessProfiles, resolveHarnessRoot } from "../catalog.js";
+import type { HarnessRootOverrides, SkillListingContract } from "../contracts.js";
 import { parseSkillFrontmatter } from "../frontmatter.js";
 import { modelContextWindow } from "../../models/model-context-windows.js";
 import type { LibraryState } from "../../library/library-state.js";
@@ -11,7 +12,7 @@ export interface ClaudeListingOptions {
   readonly cwd: string;
   readonly home: string;
   readonly configHome: string;
-  readonly overrides: { readonly claude?: string };
+  readonly overrides?: HarnessRootOverrides;
 }
 
 const Settings = Schema.Struct({
@@ -176,7 +177,7 @@ export function claudeEntry(
 }
 
 export function resolveClaudeListingSettings(
-  contract: NonNullable<ReturnType<typeof harnessProfile>["skillListing"]>,
+  contract: SkillListingContract,
   settings: typeof Settings.Type,
   sources: ReadonlyMap<string, string>,
   overrideSources: number,
@@ -295,13 +296,8 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       alias !== undefined && ["opus", "sonnet", "haiku", "fable"].includes(alias)
         ? Option.getOrNull(yield* Config.option(Config.String(pinSource)))
         : null;
-    const contract = harnessProfile("claude-code").skillListing;
-    if (contract === undefined)
-      return yield* new ListingReadFailure({
-        detail: "Claude Code listing contract is unavailable.",
-      });
     const resolved = resolveClaudeListingSettings(
-      contract,
+      harnessProfiles["claude-code"].skillListing,
       settings,
       sources,
       overrideSources,
@@ -320,12 +316,12 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       "Built-in skills, legacy commands, remote/synced and dynamically loaded nested skills may add demand. This is a partial filesystem estimate; full instructions loaded later are additional.",
     ];
     const roots: { root: string; namespace?: string }[] = [
-      { root: resolve(options.overrides.claude ?? join(configDir, "skills")) },
+      { root: resolve(options.overrides?.["claude-code"]?.[0] ?? join(configDir, "skills")) },
     ];
     for (let current = resolve(options.cwd); current !== options.home; current = dirname(current)) {
       roots.push(
-        ...harnessProfile("claude-code")
-          .roots.filter((root) => root.readable && root.scope === "project")
+        ...harnessProfiles["claude-code"].roots
+          .filter((root) => root.readable && root.scope === "project")
           .map((root) => ({
             root: resolveHarnessRoot(root, {
               home: options.home,
