@@ -63,6 +63,7 @@ export interface BetterAuthService {
     userId: string,
     username: string,
   ) => Effect.Effect<string, InvalidUsername | UsernameUnavailable | BetterAuthError>;
+  readonly provisionedUsername: (userId: string) => Effect.Effect<string | null, BetterAuthError>;
   readonly sendVerificationEmail: (email: string) => Effect.Effect<boolean, BetterAuthError>;
 }
 
@@ -393,7 +394,17 @@ export const layer = (configuration: BetterAuthConfiguration) =>
               }).pipe(Effect.as(true)),
       );
 
-      return BetterAuth.of({ handle, getSession, claimUsername, sendVerificationEmail });
+      const provisionedUsername = Effect.fn("BetterAuth.provisionedUsername")((userId: string) =>
+        readProvisioning(userId).pipe(Effect.map(({ namespace_slug }) => namespace_slug)),
+      );
+
+      return BetterAuth.of({
+        handle,
+        getSession,
+        claimUsername,
+        provisionedUsername,
+        sendVerificationEmail,
+      });
     }),
   );
 
@@ -503,3 +514,30 @@ export const handleUsernameClaim = Effect.fn("BetterAuthHttp.handleUsernameClaim
     { status: 201, headers: { "cache-control": "no-store" } },
   );
 });
+
+export const handleProvisionedUsername = Effect.fn("BetterAuthHttp.handleProvisionedUsername")(
+  function* () {
+    const betterAuth = yield* BetterAuth;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const session = yield* betterAuth
+      .getSession(new Headers(request.headers))
+      .pipe(Effect.catchTag("BetterAuth.AdapterError", () => Effect.succeed(undefined)));
+    if (session === undefined)
+      return yield* HttpServerResponse.json(
+        { error: "unauthorized" },
+        { status: 401, headers: { "cache-control": "no-store" } },
+      );
+    const username = yield* betterAuth.provisionedUsername(session.userId).pipe(Effect.result);
+    if (username._tag === "Failure") {
+      yield* Effect.logError("provisioned username read failed", username.failure);
+      return yield* HttpServerResponse.json(
+        { error: "storage_failure" },
+        { status: 500, headers: { "cache-control": "no-store" } },
+      );
+    }
+    return yield* HttpServerResponse.json(
+      { username: username.success },
+      { status: 200, headers: { "cache-control": "no-store" } },
+    );
+  },
+);

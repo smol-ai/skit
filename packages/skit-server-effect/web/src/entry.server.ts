@@ -12,6 +12,7 @@ const Session = S.NullOr(
     user: S.optional(S.Struct({ username: S.NullOr(S.String), name: S.NullOr(S.String) })),
   }),
 );
+const ProvisionedUsername = S.Struct({ username: S.NullOr(S.String) });
 const BootstrapStatus = S.Struct({ needed: S.Boolean });
 
 type RequestHandler = (request: Request) => Promise<Response>;
@@ -42,7 +43,10 @@ const requestFor = (request: Request, pathname: string): Request => {
   return new Request(url, { headers: request.headers });
 };
 
-const flagsForRequest = (request: Request, handler: RequestHandler): Effect.Effect<Flags, Error> =>
+export const flagsForRequest = (
+  request: Request,
+  handler: RequestHandler,
+): Effect.Effect<Flags, Error> =>
   Effect.gen(function* () {
     const url = new URL(request.url);
     const page = url.pathname === "/setup" ? "setup" : "home";
@@ -64,6 +68,19 @@ const flagsForRequest = (request: Request, handler: RequestHandler): Effect.Effe
           )
         : false;
     const user = session?.user;
+    // A stored username is only a Registry identity once its Namespace is provisioned; until
+    // then the user needs the claim form, which also repairs a half-provisioned account.
+    const username =
+      user === undefined
+        ? ""
+        : yield* requestJson(
+            handler,
+            requestFor(request, "/api/onboarding/username"),
+            ProvisionedUsername,
+          ).pipe(
+            Effect.map((provisioned) => provisioned.username ?? ""),
+            Effect.catch(() => Effect.succeed(user.username ?? "")),
+          );
     return {
       page,
       origin: url.origin,
@@ -71,8 +88,8 @@ const flagsForRequest = (request: Request, handler: RequestHandler): Effect.Effe
       emailEnabled: configuration.email,
       registrationEnabled: configuration.registration,
       signedIn: user !== undefined,
-      username: user?.username ?? "",
-      suggestedUsername: user?.name ?? "",
+      username,
+      suggestedUsername: user?.username ?? user?.name ?? "",
       setupNeeded,
     };
   });

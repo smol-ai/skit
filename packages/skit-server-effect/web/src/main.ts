@@ -310,6 +310,7 @@ export const update = (model: Model, message: Message): Update =>
           INVALID_EMAIL: "Enter a valid email address.",
           USER_ALREADY_EXISTS: "An account already exists for that email.",
           INVALID_USERNAME: "Choose a username using letters, numbers, and hyphens.",
+          USERNAME_UNAVAILABLE: "That username is already claimed.",
         };
         return {
           model: { ...model, pending: false, message: messages[message] ?? "The request failed." },
