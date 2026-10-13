@@ -7,6 +7,8 @@ import { commandContractArtifacts } from "../src/commands/artifacts.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { result } from "../src/handlers/contracts.js";
+import { renderContract } from "../src/presentation/contract-presenters.js";
+import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { writeCommandContractArtifacts } from "../src/commands/contract-writer.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");
@@ -90,11 +92,31 @@ describe("generated command contracts", () => {
   });
 
   test("encodes producer data at the command-result boundary", () => {
-    const value = result("version", outputContracts.version, { version: "1.2.3" });
+    const value = result("version", { version: "1.2.3" });
     expect(value).toMatchObject({
       schema: "skit.version.v1",
       data: { version: "1.2.3" },
       encodedData: { version: "1.2.3" },
     });
+  });
+
+  test("pairs a contract key only with its own contract's data", () => {
+    // Typecheck is the assertion: a key that may name either contract cannot carry one branch's data.
+    const render = (key: "version" | "list") => {
+      const data = { version: "1.2.3" };
+      // @ts-expect-error a union key is not one contract
+      result(key, data);
+      renderContract(
+        // @ts-expect-error the contract and data come from different branches
+        { contract: key, schema: "skit.version.v1", data, encodedData: data },
+        { color: false, detail: "summary" },
+      );
+      renderResultFrame(
+        // @ts-expect-error the contract and data come from different branches
+        { contract: key, schema: "skit.version.v1", data, encodedData: data },
+        defaultTerminalEnvironment,
+      );
+    };
+    render("version");
   });
 });

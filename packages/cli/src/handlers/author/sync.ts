@@ -98,9 +98,7 @@ export const authorSyncCliCommand = Command.make(
             authState,
           });
           const conflicted = value.status === "conflicted" || value.status === "unbound_conflict";
-          yield* renderer.result(
-            result("sync", outputContracts.sync, value, conflicted ? 12 : undefined),
-          );
+          yield* renderer.result(result("sync", value, conflicted ? 12 : undefined));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

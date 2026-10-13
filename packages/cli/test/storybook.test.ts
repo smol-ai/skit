@@ -26,22 +26,26 @@ describe("CLI storybook catalogs", () => {
           "audit/findings-v1alpha4",
         ]),
       );
-      const coveredContracts = new Set(
-        outputStories.filter(OutputStory.$is("Result")).map((story) => story.result.schema),
-      );
-      expect(coveredContracts).toEqual(new Set(Object.values(outputContracts).map(({ id }) => id)));
       for (const story of outputStories) {
         for (const environment of [
           defaultTerminalEnvironment,
           { ...defaultTerminalEnvironment, format: "json" as const, detail: "full" as const },
         ]) {
-          const frame = OutputStory.$match(story, {
+          OutputStory.$match(story, {
             Result: ({ result }) => renderResultFrame(result, environment),
             Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
           });
-          expect(frame).toBeDefined();
         }
       }
+    }),
+  );
+
+  it.effect("has an output story for every contract", () =>
+    Effect.sync(() => {
+      const covered = new Set(
+        outputStories.filter(OutputStory.$is("Result")).map((story) => story.result.contract),
+      );
+      expect(covered).toEqual(new Set(Object.keys(outputContracts)));
     }),
   );
 

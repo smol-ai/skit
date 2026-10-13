@@ -97,7 +97,6 @@ export const librarySyncCliCommand = Command.make(
         yield* renderer.result(
           result(
             "librarySync",
-            outputContracts.librarySync,
             value,
             value.status === "conflicted" ||
               value.status === "adoption_required" ||

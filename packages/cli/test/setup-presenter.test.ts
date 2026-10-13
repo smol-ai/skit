@@ -7,6 +7,7 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract } from "../src/presentation/contract-presenters.js";
+import { result } from "../src/handlers/contracts.js";
 import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
@@ -155,18 +156,22 @@ it("separates installed, repository-authored, and loose skills", () => {
   const managedSkillId = makeSkillId();
   const managedSkillVersionId = makeSkillVersionId();
   const output = renderContract(
-    "skit.setup.v7",
-    {
+    result("setup", {
       machineConfig: {
         path: "/home/.skit/machine.json",
         repositoryRoots: ["/work"],
+        repositoryDecisions: [],
         persisted: false,
       },
       probes: [],
       scan: { complete: true, directoriesExamined: 3, repositorySearchDepth: 1 },
       repositories: [
-        { path: "/work/large-collection", skills: ["review", "write", "edit"] },
-        { path: "/work/single-skill", skills: ["local-only"] },
+        {
+          path: "/work/large-collection",
+          skills: ["review", "write", "edit"],
+          status: "undecided",
+        },
+        { path: "/work/single-skill", skills: ["local-only"], status: "undecided" },
       ],
       repositoryConfigs: [],
       authoredCollections: [],
@@ -197,6 +202,8 @@ it("separates installed, repository-authored, and loose skills", () => {
             {
               scope: "project",
               lockPath: "/work/large-collection/skills-lock.json",
+              lockVersion: 1,
+              lockContentHash: `sha256:${"0".repeat(64)}`,
               content: "agrees",
               entry: {
                 name: "review",
@@ -249,7 +256,7 @@ it("separates installed, repository-authored, and loose skills", () => {
             observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             libraryMatches: [
               {
-                collectionId: makeCollectionId(),
+                subjectId: makeCollectionId(),
                 skillId: makeSkillId(),
                 skillVersionId: makeSkillVersionId(),
                 name: "already-there",
@@ -272,6 +279,8 @@ it("separates installed, repository-authored, and loose skills", () => {
             {
               scope: "global",
               lockPath: "/home/.agents/.skill-lock.json",
+              lockVersion: 1,
+              lockContentHash: `sha256:${"0".repeat(64)}`,
               content: "unverifiable",
               entry: {
                 name: "find-skills",
@@ -306,7 +315,7 @@ it("separates installed, repository-authored, and loose skills", () => {
       ],
       brokenLinks: [],
       suppressed: [],
-    },
+    }),
     { color: false, detail: "summary" },
   );
 
@@ -332,7 +341,7 @@ it("separates installed, repository-authored, and loose skills", () => {
 });
 
 it("rolls up collections with more than five skill names", () => {
-  const instances = Array.from({ length: 6 }, (_, index) => ({
+  const instances = Array.from({ length: 6 }, (_, index): SetupSkillInstance => ({
     name: `skill-${index + 1}`,
     path: `/work/project/.agents/skills/skill-${index + 1}`,
     aliases: [`/work/project/.agents/skills/skill-${index + 1}`],
@@ -345,6 +354,8 @@ it("rolls up collections with more than five skill names", () => {
       {
         scope: "project",
         lockPath: "/work/project/skills-lock.json",
+        lockVersion: 1,
+        lockContentHash: `sha256:${"0".repeat(64)}`,
         content: "agrees",
         entry: {
           name: `skill-${index + 1}`,
@@ -356,16 +367,22 @@ it("rolls up collections with more than five skill names", () => {
     ],
   }));
   const output = renderContract(
-    "skit.setup.v7",
-    {
+    result("setup", {
       machineConfig: {
         path: "/home/.skit/machine.json",
         repositoryRoots: ["/work"],
+        repositoryDecisions: [],
         persisted: false,
       },
       probes: [],
       scan: { complete: true, directoriesExamined: 1, repositorySearchDepth: 1 },
-      repositories: [{ path: "/work/project", skills: instances.map((instance) => instance.name) }],
+      repositories: [
+        {
+          path: "/work/project",
+          skills: instances.map((instance) => instance.name),
+          status: "undecided",
+        },
+      ],
       repositoryConfigs: [],
       authoredCollections: [],
       projections: [],
@@ -374,7 +391,7 @@ it("rolls up collections with more than five skill names", () => {
       instances,
       brokenLinks: [],
       suppressed: [],
-    },
+    }),
     { color: false, detail: "summary" },
   );
 
@@ -387,16 +404,16 @@ it("presents authored SKITs without treating their source skills as inferred col
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const output = renderContract(
-    "skit.setup.v7",
-    {
+    result("setup", {
       machineConfig: {
         path: "/home/.skit/machine.json",
         repositoryRoots: ["/work"],
+        repositoryDecisions: [],
         persisted: false,
       },
       probes: [],
       scan: { complete: true, directoriesExamined: 1, repositorySearchDepth: 1 },
-      repositories: [{ path: "/work/skills", skills: ["council"] }],
+      repositories: [{ path: "/work/skills", skills: ["council"], status: "undecided" }],
       repositoryConfigs: [],
       authoredCollections: [
         {
@@ -437,7 +454,7 @@ it("presents authored SKITs without treating their source skills as inferred col
             observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             libraryMatches: [
               {
-                collectionId: makeCollectionId(),
+                subjectId: makeCollectionId(),
                 skillId: makeSkillId(),
                 skillVersionId: makeSkillVersionId(),
                 name: "council",
@@ -450,7 +467,7 @@ it("presents authored SKITs without treating their source skills as inferred col
       ],
       brokenLinks: [],
       suppressed: [],
-    },
+    }),
     { color: false, detail: "summary" },
   );
 

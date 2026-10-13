@@ -5,7 +5,6 @@ import type { HelpDoc } from "effect/cli";
 import { renderCommandFailures } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";
 import { result } from "../handlers/contracts.js";
-import { outputContracts } from "./output-contracts.js";
 
 /** The command line did not parse; the parser's own sentences are the message. */
 export class CommandLineInvalid
@@ -82,8 +81,6 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
     );
     if (help) yield* renderer.help(formatHelpDocument(help));
     if (requestedVersion !== undefined)
-      yield* renderer.result(
-        result("version", outputContracts.version, { version: requestedVersion }),
-      );
+      yield* renderer.result(result("version", { version: requestedVersion }));
   }).pipe(renderCommandFailures);
 }

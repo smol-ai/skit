@@ -36,7 +36,7 @@ export const securityReviewCliCommand = Command.make(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* securityReviewCommand({ securityReviewEffect: reviewSecurity }, skill);
-        yield* renderer.result(result("securityReview", outputContracts.securityReview, value));
+        yield* renderer.result(result("securityReview", value));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(

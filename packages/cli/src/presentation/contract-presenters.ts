@@ -1,10 +1,11 @@
 import { renderUsage } from "./usage.js";
 import { renderDoctorListingBudget } from "./doctor-listing-budget.js";
 import {
-  outputContracts,
+  type ContractData,
   type ContractDataForId,
-  type ContractId,
+  type ContractKey,
 } from "../commands/output-contracts.js";
+import type { CommandResult } from "../commands/types.js";
 import { basename, dirname, relative, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
 import { harnessLabel } from "../harness/catalog.js";
@@ -24,7 +25,7 @@ export interface RenderContext {
 }
 
 type ContractPresenters = {
-  [I in ContractId]?: (data: ContractDataForId<I>, context: RenderContext) => string;
+  [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => string;
 };
 
 const renderLibraryHistoryEvent = (
@@ -836,7 +837,7 @@ function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
 }
 
 const contractPresenters: ContractPresenters = {
-  [outputContracts.versionReport.id]: (data) =>
+  versionReport: (data) =>
     [
       `${data.version} (${data.build.kind})`,
       ...(data.build.commit ? [`Commit: ${data.build.commit}`] : []),
@@ -852,31 +853,29 @@ const contractPresenters: ContractPresenters = {
                 ? `Ahead of ${data.update.channel} (${data.update.available}).`
                 : `Up to date on ${data.update.channel}.`,
     ].join("\n"),
-  [outputContracts.version.id]: (data) => data.version,
-  [outputContracts.init.id]: renderAuthorInit,
-  [outputContracts.authorInvocation.id]: renderAuthorInvocation,
-  [outputContracts.authorDelete.id]: renderAuthorDelete,
-  [outputContracts.publish.id]: (data) =>
+  version: (data) => data.version,
+  init: renderAuthorInit,
+  authorInvocation: renderAuthorInvocation,
+  authorDelete: renderAuthorDelete,
+  publish: (data) =>
     `Published ${data.release.version}${data.release.revision_id ? ` from ${data.release.revision_id}` : ""}`,
-  [outputContracts.sync.id]: renderAuthorSync,
-  [outputContracts.librarySync.id]: (data, context) =>
-    renderLibrarySync(data, createColors(context.color)),
-  [outputContracts.libraryHistory.id]: (data) =>
+  sync: renderAuthorSync,
+  librarySync: (data, context) => renderLibrarySync(data, createColors(context.color)),
+  libraryHistory: (data) =>
     data.events.length
       ? data.events.map(renderLibraryHistoryEvent).join("\n")
       : "No Library history recorded.",
-  [outputContracts.list.id]: (data, context) =>
-    renderLibraryList(data, createColors(context.color)),
-  [outputContracts.experimentalAuditV1Alpha4.id]: renderAuditV1Alpha4,
-  [outputContracts.authorList.id]: renderAuthorList,
-  [outputContracts.add.id]: (data) => {
+  list: (data, context) => renderLibraryList(data, createColors(context.color)),
+  experimentalAuditV1Alpha4: renderAuditV1Alpha4,
+  authorList: renderAuthorList,
+  add: (data) => {
     const count = data.skills.length;
     return [
       `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`,
       ...sourceDiagnosticLines(data.diagnostics),
     ].join("\n");
   },
-  [outputContracts.addPreview.id]: (data) => {
+  addPreview: (data) => {
     const count = data.skills.length;
     return [
       `${count} ${count === 1 ? "skill" : "skills"}`,
@@ -885,9 +884,9 @@ const contractPresenters: ContractPresenters = {
       ...sourceDiagnosticLines(data.diagnostics),
     ].join("\n");
   },
-  [outputContracts.update.id]: renderUpdate,
-  [outputContracts.updatePlan.id]: renderUpdatePlan,
-  [outputContracts.projectionRetentionPlan.id]: (data) =>
+  update: renderUpdate,
+  updatePlan: renderUpdatePlan,
+  projectionRetentionPlan: (data) =>
     [
       `Would retain changed ${data.skill_name} bytes from ${data.selected_projection_id}`,
       `Observed: ${data.observed_digest}`,
@@ -897,7 +896,7 @@ const contractPresenters: ContractPresenters = {
         (projection) => `${projection.target} · ${projection.path} · ${projection.agreement}`,
       ),
     ].join("\n"),
-  [outputContracts.projectionRetention.id]: (data) =>
+  projectionRetention: (data) =>
     [
       data.retained
         ? `Retained ${data.skill_name} as ${data.retained_skill_version_id}`
@@ -907,18 +906,17 @@ const contractPresenters: ContractPresenters = {
         (projection) => `${projection.target} · ${projection.path} · ${projection.status}`,
       ),
     ].join("\n"),
-  [outputContracts.remove.id]: renderRemove,
-  [outputContracts.removePlan.id]: renderRemovePlan,
-  [outputContracts.enable.id]: (data) => renderSetEnabled(data, true),
-  [outputContracts.enablePlan.id]: (data) => renderSetEnabled(data, false),
-  [outputContracts.disable.id]: (data) => renderSetEnabled(data, true),
-  [outputContracts.disablePlan.id]: (data) => renderSetEnabled(data, false),
-  [outputContracts.doctor.id]: renderDoctor,
-  [outputContracts.usage.id]: (data, context) => renderUsage(data, context.detail === "full"),
-  [outputContracts.inventory.id]: (data, context) =>
-    renderInventory(data, data.machine, createColors(context.color)),
-  [outputContracts.setup.id]: renderSetup,
-  [outputContracts.repositoryPolicy.id]: (data) =>
+  remove: renderRemove,
+  removePlan: renderRemovePlan,
+  enable: (data) => renderSetEnabled(data, true),
+  enablePlan: (data) => renderSetEnabled(data, false),
+  disable: (data) => renderSetEnabled(data, true),
+  disablePlan: (data) => renderSetEnabled(data, false),
+  doctor: renderDoctor,
+  usage: (data, context) => renderUsage(data, context.detail === "full"),
+  inventory: (data, context) => renderInventory(data, data.machine, createColors(context.color)),
+  setup: renderSetup,
+  repositoryPolicy: (data) =>
     data.action === "list"
       ? data.repositories.length
         ? data.repositories
@@ -926,29 +924,27 @@ const contractPresenters: ContractPresenters = {
             .join("\n")
         : "No repository decisions are stored for this machine."
       : `${data.action} · ${data.path}`,
-  [outputContracts.authLogout.id]: (data) => `Logged out from ${data.origin}`,
-  [outputContracts.authStatus.id]: renderAuthStatus,
-  [outputContracts.authLogin.id]: renderAuthLogin,
-  [outputContracts.registryRemote.id]: renderRegistryChange,
-  [outputContracts.registryList.id]: renderRegistryList,
-  [outputContracts.serverBootstrap.id]: (data) =>
+  authLogout: (data) => `Logged out from ${data.origin}`,
+  authStatus: renderAuthStatus,
+  authLogin: renderAuthLogin,
+  registryRemote: renderRegistryChange,
+  registryList: renderRegistryList,
+  serverBootstrap: (data) =>
     `${
       data.status === "already_complete"
         ? `Server setup was already complete at ${data.origin}`
         : `Server setup complete at ${data.origin}`
     }\nIf email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.\nNext: skit auth login ${data.origin}`,
-  [outputContracts.check.id]: renderCheck,
-  [outputContracts.experimentalHarnessProbe.id]: renderHarnessProbe,
-  [outputContracts.validate.id]: renderValidation,
-  [outputContracts.securityReview.id]: renderSecurityReview,
-  [outputContracts.securityAccept.id]: renderSecurityReview,
+  check: renderCheck,
+  experimentalHarnessProbe: renderHarnessProbe,
+  validate: renderValidation,
+  securityReview: renderSecurityReview,
+  securityAccept: renderSecurityReview,
 };
 
-export function renderContract(
-  id: ContractId,
-  data: unknown,
+export function renderContract<K extends ContractKey>(
+  result: CommandResult<K>,
   context: RenderContext,
-): string | undefined {
-  const presenter = contractPresenters[id];
-  return presenter?.(data as never, context);
+): string {
+  return contractPresenters[result.contract](result.data, context);
 }

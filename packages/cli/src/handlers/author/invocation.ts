@@ -36,7 +36,7 @@ export const authorInvocationCliCommand = Command.make(
           dryRun,
         );
         yield* renderer.result(
-          result("authorInvocation", outputContracts.authorInvocation, {
+          result("authorInvocation", {
             path: root,
             dryRun,
             generated,

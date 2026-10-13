@@ -406,7 +406,7 @@ export const serverBootstrapCliCommand = Command.make(
           origin: Option.getOrUndefined(url),
         });
         yield* renderer.result(
-          result("serverBootstrap", outputContracts.serverBootstrap, {
+          result("serverBootstrap", {
             origin: value.origin,
             status: value.status,
           }),

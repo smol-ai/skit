@@ -57,31 +57,25 @@ export const updateCliCommand = Command.make(
               "Inspecting changed Projection bytes",
               planProjectionRetention(state, options, query, projectionSelector),
             );
-            return yield* renderer.result(
-              result("update", outputContracts.projectionRetentionPlan, value),
-            );
+            return yield* renderer.result(result("projectionRetentionPlan", value));
           }
           const value = yield* renderer.withStatus(
             "Retaining changed Projection bytes",
             applyProjectionRetention(state, options, query, projectionSelector),
           );
-          return yield* renderer.result(
-            result("update", outputContracts.projectionRetention, value),
-          );
+          return yield* renderer.result(result("projectionRetention", value));
         }
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
             planUpdatesEffect(state, options, query),
           );
-          return yield* renderer.result(result("update", outputContracts.updatePlan, value));
+          return yield* renderer.result(result("updatePlan", value));
         }
         const value = yield* updateSubjectsEffect(state, options, query).pipe(
           Effect.provide(terminalLibraryProgressLayer),
         );
-        yield* renderer.result(
-          result("update", outputContracts.update, value, updateExitCode(value)),
-        );
+        yield* renderer.result(result("update", value, updateExitCode(value)));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(

@@ -33,7 +33,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
             name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
           );
           yield* renderer.result(
-            result("repositoryPolicy", outputContracts.repositoryPolicy, {
+            result("repositoryPolicy", {
               action: name,
               path: repository,
               repositories: config.repositories,
@@ -68,7 +68,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
         const renderer = yield* Renderer;
         const config = yield* readSetupMachineConfig(selectedHome);
         yield* renderer.result(
-          result("repositoryPolicy", outputContracts.repositoryPolicy, {
+          result("repositoryPolicy", {
             action: "list",
             path: "",
             repositories: [...setupRepositoryDecisions(config)],

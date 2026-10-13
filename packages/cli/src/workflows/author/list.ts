@@ -204,7 +204,7 @@ export const authorListCliCommand = Command.make(
             registry: selectedRegistry,
             home: selectedHome,
           });
-          yield* renderer.result(result("authorList", outputContracts.authorList, value));
+          yield* renderer.result(result("authorList", value));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

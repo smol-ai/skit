@@ -5,10 +5,6 @@ import { Renderer, type RendererShape } from "./renderer.js";
 
 /** One scripted answer: a value to choose, or a cancellation. */
 export type ScriptedAnswer = string | readonly string[] | boolean | "cancel" | "escape";
-export type RecordedCommandResult = Pick<
-  CommandResult,
-  "schema" | "data" | "encodedData" | "exitCode"
->;
 
 export type PromptKind =
   | "select"
@@ -39,7 +35,7 @@ export type InteractionEvent = Data.TaggedEnum<{
   StatusStarted: { readonly message: string };
   StatusUpdated: { readonly message: string };
   StatusEnded: {};
-  Result: { readonly result: RecordedCommandResult };
+  Result: { readonly result: CommandResult };
   Failure: { readonly failure: CommandFailure };
   Help: { readonly text: string };
 }>;
@@ -55,7 +51,7 @@ export interface ScriptedInteraction {
   >;
   readonly notes: Effect.Effect<ReadonlyArray<Extract<InteractionEvent, { _tag: "Note" }>>>;
   readonly steps: Effect.Effect<ReadonlyArray<Extract<InteractionEvent, { _tag: "Step" }>>>;
-  readonly results: Effect.Effect<ReadonlyArray<RecordedCommandResult>>;
+  readonly results: Effect.Effect<ReadonlyArray<CommandResult>>;
   readonly failures: Effect.Effect<ReadonlyArray<CommandFailure>>;
 }
 
@@ -180,8 +176,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
   };
 
   const renderer: RendererShape = {
-    result: ({ schema, data, encodedData, exitCode }) =>
-      record(InteractionEvent.Result({ result: { schema, data, encodedData, exitCode } })),
+    result: (result) => record(InteractionEvent.Result({ result })),
     failure: (failure) => record(InteractionEvent.Failure({ failure })),
     help: (text) => record(InteractionEvent.Help({ text })),
     note: (body, title, options) =>

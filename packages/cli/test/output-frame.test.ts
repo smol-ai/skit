@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
-import { outputContracts } from "../src/commands/output-contracts.js";
 import { result } from "../src/handlers/contracts.js";
 import {
   defaultTerminalEnvironment,
@@ -12,7 +11,7 @@ import {
 describe("terminal output frames", () => {
   it.effect("renders human and JSON output from the same command result", () =>
     Effect.sync(() => {
-      const commandResult = result("version", outputContracts.version, { version: "1.2.3" });
+      const commandResult = result("version", { version: "1.2.3" });
       expect(renderResultFrame(commandResult, defaultTerminalEnvironment)).toEqual({
         stdout: "1.2.3\n",
         stderr: "",

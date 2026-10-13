@@ -98,7 +98,7 @@ export const securityAcceptCliCommand = Command.make(
             expiresAt: Option.getOrUndefined(expiresAt),
           },
         );
-        yield* renderer.result(result("securityAccept", outputContracts.securityAccept, value));
+        yield* renderer.result(result("securityAccept", value));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(

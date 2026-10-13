@@ -72,7 +72,7 @@ export const publishCliCommand = Command.make(
           version,
           revision: Option.getOrUndefined(revision),
         });
-        yield* renderer.result(result("publish", outputContracts.publish, value));
+        yield* renderer.result(result("publish", value));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer())),
 ).pipe(

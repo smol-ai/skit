@@ -14,7 +14,6 @@ import { updateSubjectsEffect, updateExitCode } from "../src/library-application
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { result } from "../src/handlers/contracts.js";
-import { outputContracts } from "../src/commands/output-contracts.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -115,18 +114,13 @@ it.effect(
       assert.strictEqual(after.skills.find((s) => s.name === "healthy")!.versions.length, 2);
       assert.strictEqual(updateExitCode(outcomes), 1);
       assert.strictEqual(updateExitCode([outcomes[0]]), 65);
-      const commandResult = result(
-        "update",
-        outputContracts.update,
-        outcomes,
-        updateExitCode(outcomes),
-      );
-      const human = renderResultFrame(commandResult, defaultTerminalEnvironment)!;
+      const commandResult = result("update", outcomes, updateExitCode(outcomes));
+      const human = renderResultFrame(commandResult, defaultTerminalEnvironment);
       assert.strictEqual(human.exitCode, 1);
       const json = renderResultFrame(commandResult, {
         ...defaultTerminalEnvironment,
         format: "json",
-      })!;
+      });
       assert.strictEqual(JSON.parse(json.stdout).data[0].status, "failed");
       assert.strictEqual(json.exitCode, 1);
     }).pipe(Effect.provide(testPlatformLayer)),

@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { skitLayer } from "@smolai/skit-core";
 import { renderContract } from "../src/presentation/contract-presenters.js";
+import { result } from "../src/handlers/contracts.js";
 import {
   BootstrapCleanupFailed,
   BootstrapConfigInvalid,
@@ -55,8 +56,7 @@ describe("server bootstrap journey", () => {
   it("hands completed setup off to login", () => {
     assert.strictEqual(
       renderContract(
-        "skit.server.bootstrap.v1",
-        { origin: "https://skit.example", status: "complete" },
+        result("serverBootstrap", { origin: "https://skit.example", status: "complete" }),
         { color: false, detail: "summary" },
       ),
       "Server setup complete at https://skit.example\nIf email verification is enabled, follow the browser result. If delivery failed, use Resend on the sign-in page.\nNext: skit auth login https://skit.example",

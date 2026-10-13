@@ -28,7 +28,7 @@ export const authStatusCliCommand = Command.make(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const value = yield* authStatusCommand(selectedHome, optionValue(registry));
-          yield* renderer.result(result("authStatus", outputContracts.authStatus, value));
+          yield* renderer.result(result("authStatus", value));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

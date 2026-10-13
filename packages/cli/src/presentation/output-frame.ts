@@ -1,3 +1,4 @@
+import type { ContractKey } from "../commands/output-contracts.js";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { renderContract } from "./contract-presenters.js";
 
@@ -19,18 +20,17 @@ export const defaultTerminalEnvironment: TerminalEnvironment = {
   format: "human",
 };
 
-export function renderResultFrame(
-  result: CommandResult,
+export function renderResultFrame<K extends ContractKey>(
+  result: CommandResult<K>,
   environment: TerminalEnvironment,
-): TerminalFrame | undefined {
+): TerminalFrame {
   const body =
     environment.format === "json"
       ? JSON.stringify({ schema: result.schema, data: result.encodedData }, null, 2)
-      : renderContract(result.schema, result.data, {
+      : renderContract(result, {
           ...environment,
           detail: result.detail ?? environment.detail,
         });
-  if (body === undefined) return undefined;
   return { stdout: `${body}\n`, stderr: "", exitCode: result.exitCode };
 }
 

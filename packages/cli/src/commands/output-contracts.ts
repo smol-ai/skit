@@ -190,3 +190,9 @@ export type ContractId = AnyOutputContract["id"];
 export type ContractFor<I extends ContractId> = Extract<AnyOutputContract, { readonly id: I }>;
 export type ContractDataOf<C extends AnyOutputContract> = C["schema"]["Type"];
 export type ContractDataForId<I extends ContractId> = ContractDataOf<ContractFor<I>>;
+export type ContractKey = keyof typeof outputContracts;
+export type ContractData<K extends ContractKey> = ContractDataOf<(typeof outputContracts)[K]>;
+/** K itself when it names one contract, `never` for a union, so a key cannot pair with another key's data. */
+export type SingleContractKey<K extends ContractKey> = {
+  [P in K]: [Exclude<K, P>] extends [never] ? P : never;
+}[K];

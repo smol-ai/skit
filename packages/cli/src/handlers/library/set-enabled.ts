@@ -416,11 +416,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     for (const outcome of outcomes) {
       if (outcome === undefined) continue;
       yield* renderer.result(
-        result(
-          input.action,
-          outcome.kind === "plan" ? outputContracts.disablePlan : outputContracts.disable,
-          outcome.value,
-        ),
+        outcome.kind === "plan"
+          ? result("disablePlan", outcome.value)
+          : result("disable", outcome.value),
       );
     }
     return;
@@ -469,20 +467,12 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   }
   if (outcome.kind === "plan") {
     yield* renderer.result(
-      result(
-        input.action,
-        input.enabled ? outputContracts.enablePlan : outputContracts.disablePlan,
-        outcome.value,
-      ),
+      input.enabled ? result("enablePlan", outcome.value) : result("disablePlan", outcome.value),
     );
     return;
   }
   yield* renderer.result(
-    result(
-      input.action,
-      input.enabled ? outputContracts.enable : outputContracts.disable,
-      outcome.value,
-    ),
+    input.enabled ? result("enable", outcome.value) : result("disable", outcome.value),
   );
 });
 

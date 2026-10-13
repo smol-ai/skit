@@ -18,9 +18,7 @@ export const libraryHistoryCliCommand = Command.make(
         const audit = yield* LibraryAuditLog;
         const renderer = yield* Renderer;
         const events = yield* audit.list();
-        yield* renderer.result(
-          result("libraryHistory", outputContracts.libraryHistory, { events }),
-        );
+        yield* renderer.result(result("libraryHistory", { events }));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(

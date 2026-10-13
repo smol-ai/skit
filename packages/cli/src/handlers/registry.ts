@@ -29,9 +29,7 @@ export const registryAddCliCommand = Command.make(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const value = yield* addRegistryRemoteEffect(name, origin, selectedHome);
-          yield* renderer.result(
-            result("registryAdd", outputContracts.registryRemote, { ...value, action: "added" }),
-          );
+          yield* renderer.result(result("registryRemote", { ...value, action: "added" }));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
@@ -57,9 +55,7 @@ export const registryListCliCommand = Command.make(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const registries = yield* listRegistryRemotesEffect(selectedHome);
-          yield* renderer.result(
-            result("registryList", outputContracts.registryList, { registries }),
-          );
+          yield* renderer.result(result("registryList", { registries }));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
@@ -86,7 +82,7 @@ export const registryDefaultCliCommand = Command.make(
           const renderer = yield* Renderer;
           const value = yield* defaultRegistryRemoteEffect(name, selectedHome);
           yield* renderer.result(
-            result("registryDefault", outputContracts.registryRemote, {
+            result("registryRemote", {
               ...value,
               action: "defaulted",
             }),
@@ -117,7 +113,7 @@ export const registryRemoveCliCommand = Command.make(
           const renderer = yield* Renderer;
           const value = yield* removeRegistryRemoteEffect(name, selectedHome);
           yield* renderer.result(
-            result("registryRemove", outputContracts.registryRemote, {
+            result("registryRemote", {
               ...value,
               action: "removed",
             }),
