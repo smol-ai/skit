@@ -364,6 +364,65 @@ it.effect("a failed additive stage leaves every selected removal in place", () =
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+// Removal consent covers the approved bytes, not only the directory's identity: a copy edited in
+// place after the apply-time scan stays where it is.
+it.effect("a removal selection edited after the first additive stage stays in place", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: true });
+    const changed = skillBytes("gamma", "edited after the first stage");
+    const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+      published: f.fs.writeFileString(join(f.path("gamma"), "SKILL.md"), changed),
+    });
+    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.strictEqual(yield* f.fs.readFileString(join(f.path("gamma"), "SKILL.md")), changed);
+    assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// Each entry is checked again immediately before its own move, so a later entry replaced while an
+// earlier one moves is left alone; the earlier move stays, recorded in the receipt.
+it.effect("a removal entry replaced during an earlier move stays untouched", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: true });
+    let replaced: string | undefined;
+    const { exit } = yield* f.setup([["remove\0beta", "remove\0gamma"], true], {
+      rename: (from) =>
+        replaced === undefined && from.startsWith(f.path(""))
+          ? Effect.gen(function* () {
+              replaced = from === f.path("beta") ? f.path("gamma") : f.path("beta");
+              // Keep the displaced inode alive so the replacement cannot reuse its identity.
+              yield* f.fs.rename(replaced, `${replaced}.displaced`);
+              yield* f.fs.makeDirectory(replaced);
+              yield* f.fs.writeFileString(
+                join(replaced, "SKILL.md"),
+                skillBytes(basename(replaced)),
+              );
+            }).pipe(Effect.orDie)
+          : Effect.void,
+    });
+    assert.instanceOf(failure(exit), PlanIsStale);
+    const receipt = yield* readReceipt(f.home.home);
+    assert.deepStrictEqual(
+      receipt.entries.map((entry) => [entry.path === replaced, entry.moved]),
+      [
+        [false, true],
+        [true, false],
+      ],
+    );
+    const [moved, kept] = receipt.entries;
+    assert.strictEqual(
+      yield* f.fs.readFileString(join(moved!.recoveryPath, "SKILL.md")),
+      skillBytes(basename(moved!.path)),
+    );
+    assert.isFalse(yield* f.fs.exists(kept!.recoveryPath));
+    assert.strictEqual(
+      yield* f.fs.readFileString(join(kept!.path, "SKILL.md")),
+      skillBytes(basename(kept!.path)),
+    );
+    assert.isTrue(yield* f.fs.exists(`${kept!.path}.displaced`));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("a failed removal move leaves a moved prefix, the rest in place, and a receipt", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
