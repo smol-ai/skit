@@ -1,0 +1,15 @@
+{
+  "profile": "verbatim/v1",
+  "digest": "sha256:252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111",
+  "entries": [
+    { "path": "SKILL.md", "kind": "file", "mode": 420, "content_base64": "ZWRpdGVkCg==" },
+    { "path": "scripts", "kind": "directory" },
+    {
+      "path": "scripts/run.sh",
+      "kind": "file",
+      "mode": 493,
+      "content_base64": "IyEvYmluL3NoCmVjaG8gcnVuCg=="
+    },
+    { "path": "guide.md", "kind": "symlink", "target": "SKILL.md" }
+  ]
+}
