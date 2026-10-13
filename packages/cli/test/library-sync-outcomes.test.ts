@@ -620,7 +620,9 @@ it.effect("oracle: every applying path commits remote before local, on the revis
     const committed = <A, E, R>(sync: Effect.Effect<A, E, R>) =>
       Effect.gen(function* () {
         events.length = 0;
-        yield* Effect.exit(sync);
+        const exit = yield* Effect.exit(sync);
+        // A failure after the last expected publication must not leave the order looking right.
+        assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
         return [...events];
       });
     yield* a.retain("first");

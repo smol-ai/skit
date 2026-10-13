@@ -268,6 +268,40 @@ it.effect("sync publishes only declared fields, and writes nothing that would dr
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+for (const ancestry of ["missing", "stale"] as const)
+  it.effect(
+    `a clean sync anchoring ${ancestry} ancestry publishes once, without undeclared fields`,
+    () =>
+      Effect.gen(function* () {
+        const { a, remote } = yield* devices;
+        yield* a.retain("first");
+        yield* a.sync();
+        const head = (yield* remote)!;
+        // L and R match; only the ancestry differs from what a clean sync anchors.
+        yield* a.edit(
+          ({ sync_ancestry, ...state }) =>
+            ({
+              ...state,
+              ...(ancestry === "stale" && sync_ancestry !== undefined
+                ? { sync_ancestry: { ...sync_ancestry, revision_id: "revision_stale" } }
+                : {}),
+              extension: { kept: true },
+            }) as LibraryState,
+        );
+        const before = yield* a.state;
+        const publishes = a.publishes;
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
+        assert.strictEqual(a.publishes, publishes);
+        assert.deepStrictEqual(yield* a.state, before);
+
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual(a.publishes, publishes + 1);
+        const anchored = yield* a.state;
+        assert.isFalse(Object.hasOwn(anchored, "extension"));
+        assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
 it.effect("a projection failure after sync publishes leaves state and ancestry coherent", () =>
   Effect.gen(function* () {
     const { fs, a, b, remote } = yield* devices;
