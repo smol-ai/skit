@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { skitLayer } from "@smolai/skit-core";
+import { classifyFailure } from "../src/failure-classification.js";
 import {
   DedicatedInstallerRequired,
   dedicatedInstallerForSource,
@@ -22,7 +23,7 @@ it.effect("rejects known GitHub Sources with their dedicated installer guidance"
       assert.strictEqual(failure.sourceCoordinate, "github:pbakaus/impeccable");
       assert.strictEqual(failure.command, "npx impeccable install");
       assert.strictEqual(failure.code, "INVALID_ARGUMENT");
-      assert.strictEqual(failure.exitCode, 64);
+      assert.strictEqual(classifyFailure(failure).exitCode, 64);
     }
   }).pipe(Effect.provide(skitLayer)),
 );

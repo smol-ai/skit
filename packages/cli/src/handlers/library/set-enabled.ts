@@ -12,7 +12,7 @@ import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { handleLibraryCommand } from "../../application.js";
-import { MissingRequirement } from "../failures.js";
+import { MissingRequirement } from "../../workflows/failures.js";
 import { NothingToSelect } from "../../presentation/interaction-failures.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";

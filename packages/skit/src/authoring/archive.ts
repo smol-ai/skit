@@ -3,8 +3,12 @@ import { systemError, type PlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { ZipFile } from "yazl";
-import { SkitError } from "../shared/skit-error.js";
-import type { DescriptorFailure } from "../failures.js";
+import type {
+  DescriptorFailure,
+  HarnessMetadataInvalid,
+  ProjectedPathCollision,
+  SharedTargetCollision,
+} from "../failures.js";
 import { SkitValidationFailed } from "../failures.js";
 import { validateSkitDirectoryEffect } from "../artifact/skit.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
@@ -15,7 +19,13 @@ export function createSkitArchiveEffect(
   outputPath: string,
 ): Effect.Effect<
   { path: string; bytes: number },
-  DescriptorFailure | SkitValidationFailed | SkitError | TreeError | PlatformError,
+  | DescriptorFailure
+  | SkitValidationFailed
+  | HarnessMetadataInvalid
+  | ProjectedPathCollision
+  | SharedTargetCollision
+  | TreeError
+  | PlatformError,
   TreeRequirements | FileSystem.FileSystem
 > {
   return Effect.scoped(

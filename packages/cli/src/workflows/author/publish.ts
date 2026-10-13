@@ -10,7 +10,6 @@ import {
   type DescriptorFailure,
   type ReleasePublishResponse,
   type SkitValidationFailed,
-  type SkitError,
   type TreeError,
   type TreeRequirements,
   parseContractEffect,
@@ -53,14 +52,21 @@ import {
   PrincipalNotAuthorized,
   PublicationBlocked,
 } from "../../registry/failures.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class PublicationResponseError extends Data.TaggedError("PublicationResponseError")<{
-  message: string;
-}> {}
+export class PublicationResponseError
+  extends Data.TaggedError("PublicationResponseError")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check the Registry's reason, then publish again.";
+}
 export type PublicationFailure =
   | DescriptorFailure
   | SkitValidationFailed
-  | SkitError
   | TreeError
   | PlatformError
   | AuthorRemoteMetadataInvalid
@@ -230,7 +236,10 @@ export const publishEffect = Effect.fn("publishEffect")(function* (
         return new DraftOutOfSync({ commandPath });
       if (isRegistryTransportError(error)) return error;
       if (isSuccessfulResponseDecodeFailure(error, [201]))
-        return new SkitContractError("publish response", [{ path: "", message: String(error) }]);
+        return new SkitContractError({
+          contract: "publish response",
+          issues: [{ path: "", message: String(error) }],
+        });
       const failure = registryApiFailure(error, { defaultStatus: 400 });
       const detail = registryApiFailureMessage("SKIT publish", error, { defaultStatus: 400 });
       if (failure.status === 409 || Schema.is(ReleaseConflictResponse)(error))

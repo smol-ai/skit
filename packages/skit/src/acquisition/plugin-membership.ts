@@ -8,13 +8,18 @@ import {
   type PluginUnit,
 } from "./plugin-manifests.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class PluginSkillConflict extends Data.TaggedError("PluginSkillConflict")<{
-  name: string;
-  paths: readonly string[];
-  directories: readonly string[];
-  locators?: readonly string[];
-}> {
+export class PluginSkillConflict
+  extends Data.TaggedError("PluginSkillConflict")<{
+    name: string;
+    paths: readonly string[];
+    directories: readonly string[];
+    locators?: readonly string[];
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
   readonly remediation = "Add one of the available selections instead.";
   get message() {

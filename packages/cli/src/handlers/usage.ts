@@ -7,7 +7,6 @@ import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
-import { InvalidArgument } from "../presentation/command-errors.js";
 import { Renderer } from "../presentation/renderer.js";
 import { result } from "./contracts.js";
 
@@ -77,21 +76,15 @@ export const usageCliCommand = Command.make(
           });
           const report = yield* renderer.withStatus(
             "Scanning local transcripts",
-            usage
-              .scan({
-                roots,
-                days: input.days,
-                end: Option.getOrUndefined(input.end),
-                project: Option.getOrUndefined(input.project),
-                projections,
-                progress: (completed, total) =>
-                  renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
-              })
-              .pipe(
-                Effect.catchTag("InvalidUsageOptions", (error) =>
-                  Effect.fail(new InvalidArgument({ message: error.message })),
-                ),
-              ),
+            usage.scan({
+              roots,
+              days: input.days,
+              end: Option.getOrUndefined(input.end),
+              project: Option.getOrUndefined(input.project),
+              projections,
+              progress: (completed, total) =>
+                renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
+            }),
           );
           yield* renderer.result({
             ...result("usage", outputContracts.usage, report),

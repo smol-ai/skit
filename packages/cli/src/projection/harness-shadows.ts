@@ -1,7 +1,7 @@
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Data, Effect, FileSystem, Schema } from "effect";
 import {
   LinkStat,
   harnessProfile,
@@ -11,6 +11,7 @@ import {
   type SkitBindingScope,
 } from "@smolai/skit-core";
 import { activeProjectionTargetsEffect, bindingRoot, type InventoryRootOptions } from "./roots.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export const SkillAlias = Schema.Struct({
   path: Schema.String,
@@ -143,12 +144,15 @@ export const observeHarnessSkills = Effect.fn("Projection.observeHarnessSkills")
   );
 });
 
-export class ShadowObservationIncomplete extends Schema.TaggedError<ShadowObservationIncomplete>()(
-  "ShadowObservationIncomplete",
-  { path: Schema.String, message: Schema.String },
-) {
+export class ShadowObservationIncomplete
+  extends Data.TaggedError("ShadowObservationIncomplete")<{
+    path: string;
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation = "Inspect the skill root before enabling another copy.";
 }
 
@@ -206,12 +210,14 @@ export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(func
     .filter((instance) => instance.aliases.length > 0);
 });
 
-export class ProjectionWouldDuplicate extends Schema.TaggedError<ProjectionWouldDuplicate>()(
-  "ProjectionWouldDuplicate",
-  { shadows: Schema.Array(HarnessShadow) },
-) {
+export class ProjectionWouldDuplicate
+  extends Data.TaggedError("ProjectionWouldDuplicate")<{
+    shadows: readonly HarnessShadow[];
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation =
     "Remove the redundant agent location, retain without enabling, or explicitly use --allow-duplicate.";
   get message() {

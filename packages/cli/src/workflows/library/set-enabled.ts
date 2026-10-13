@@ -13,9 +13,9 @@ import {
   type Digest,
   type SkitBindingScope,
 } from "@smolai/skit-core";
-import { Effect, FileSystem, Schema } from "effect";
+import { Data, Effect, FileSystem, Schema } from "effect";
 import { resolve } from "node:path";
-import { OptionCombinationInvalid } from "../../handlers/failures.js";
+import { OptionCombinationInvalid } from "../failures.js";
 import {
   validateSetEnabledInvocation,
   type SetEnabledInvocation,
@@ -28,6 +28,7 @@ import {
   type ShadowObservationError,
 } from "../../projection/harness-shadows.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export interface SetEnabledOptions {
   readonly query: string;
@@ -48,12 +49,12 @@ export interface SetEnabledOptions {
   readonly adoption?: { readonly path: string; readonly observedHash: Digest };
 }
 
-export class SetEnabledStale extends Schema.TaggedError<SetEnabledStale>()(
-  "Library.SetEnabledStale",
-  { message: Schema.String },
-) {
+export class SetEnabledStale
+  extends Data.TaggedError("Library.SetEnabledStale")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation = "Preview the Binding change again.";
 }
 

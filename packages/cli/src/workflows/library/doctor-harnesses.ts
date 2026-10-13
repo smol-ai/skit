@@ -1,5 +1,5 @@
 import { HarnessShadow } from "../../projection/harness-shadows.js";
-import { Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
@@ -11,11 +11,18 @@ import {
 import { probeHarnessEffect, type ProbeableHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class HarnessDiscoveryFailure extends Schema.TaggedError<HarnessDiscoveryFailure>()(
-  "HarnessDiscoveryFailure",
-  { message: Schema.String },
-) {}
+export class HarnessDiscoveryFailure
+  extends Data.TaggedError("HarnessDiscoveryFailure")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that the Harness runs, then retry.";
+}
 
 export const HarnessDoctorSkill = Schema.Struct({
   id: Schema.optionalKey(Schema.String),

@@ -8,7 +8,7 @@ import { librarySyncCommand } from "../src/handlers/library/sync.js";
 import { CredentialsUnusable } from "../src/registry/failures.js";
 import { RegistryHttp, registryClient } from "../src/registry/registry-http.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
-import { MissingRequirement } from "../src/handlers/failures.js";
+import { MissingRequirement } from "../src/workflows/failures.js";
 
 const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "invalid" });
 

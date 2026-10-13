@@ -1,5 +1,6 @@
 import { sourceAcquisitions, type LibraryState } from "@smolai/skit-core";
-import { Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 type Collection = LibraryState["collections"][number];
 type Skill = LibraryState["skills"][number];
@@ -20,24 +21,28 @@ export type LibrarySubject =
       readonly skills: readonly [Skill];
     };
 
-export class LibrarySubjectNotFound extends Schema.TaggedError<LibrarySubjectNotFound>()(
-  "Library.SubjectNotFound",
-  { query: Schema.String },
-) {
+export class LibrarySubjectNotFound
+  extends Data.TaggedError("Library.SubjectNotFound")<{
+    query: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly exitCode = 11;
   readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
   get message(): string {
     return `No retained Skill or Collection matches ${this.query}`;
   }
 }
 
-export class LibrarySubjectAmbiguous extends Schema.TaggedError<LibrarySubjectAmbiguous>()(
-  "Library.SubjectAmbiguous",
-  { query: Schema.String },
-) {
+export class LibrarySubjectAmbiguous
+  extends Data.TaggedError("Library.SubjectAmbiguous")<{
+    query: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation = "Use a Skill or Collection ID to select one subject.";
   get message(): string {
     return `More than one retained Skill or Collection matches ${this.query}`;

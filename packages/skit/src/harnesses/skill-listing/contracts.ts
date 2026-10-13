@@ -1,10 +1,19 @@
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
 import type { CodexListingSnapshot } from "./codex.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
-export class ListingReadFailure extends Schema.TaggedError<ListingReadFailure>()(
-  "ListingReadFailure",
-  { detail: Schema.String },
-) {}
+export class ListingReadFailure
+  extends Data.TaggedError("ListingReadFailure")<{ detail: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "Check that the Harness's skill directories and settings are readable, then retry.";
+  get message(): string {
+    return this.detail;
+  }
+}
 
 export const ListingEntry = Schema.Struct({
   name: Schema.String,

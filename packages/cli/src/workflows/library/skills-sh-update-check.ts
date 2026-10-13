@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
-import { Clock, Effect, FileSystem, Result, Schema } from "effect";
+import { Data, Clock, Effect, FileSystem, Result } from "effect";
 import {
   LibraryStore,
   retainedTreePath,
@@ -9,6 +9,7 @@ import {
 } from "@smolai/skit-core";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import type { LibrarySubject } from "./subject-resolution.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export type SkillsShUpdateStatus =
   | "current"
@@ -32,10 +33,19 @@ export interface SkillsShUpdateMember {
   readonly reason?: string;
 }
 
-export class GitInspectionFailed extends Schema.TaggedError<GitInspectionFailed>()(
-  "SkillsSh.GitInspectionFailed",
-  { operation: Schema.String },
-) {}
+export class GitInspectionFailed
+  extends Data.TaggedError("SkillsSh.GitInspectionFailed")<{
+    operation: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that git is installed and the repository is readable, then retry.";
+  get message(): string {
+    return `git ${this.operation} failed`;
+  }
+}
 
 const gitBytes = Effect.fn("SkillsSh.gitBytes")(function* (
   gitDirectory: string | undefined,

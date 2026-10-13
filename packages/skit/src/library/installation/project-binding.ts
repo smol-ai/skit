@@ -1,4 +1,4 @@
-import { Clock, Effect, Schema } from "effect";
+import { Data, Clock, Effect } from "effect";
 import { resolve } from "node:path";
 import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
@@ -15,11 +15,21 @@ import type { Digest, ProjectionTarget } from "../store/state-schema.js";
 import type { ManagedProjection } from "../library-state.js";
 import { makeProjectionId } from "../entity-ids.js";
 import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
-export class ProjectionInvalid extends Schema.TaggedError<ProjectionInvalid>()(
-  "Library.ProjectionInvalid",
-  { detail: Schema.String },
-) {}
+export class ProjectionInvalid
+  extends Data.TaggedError("Library.ProjectionInvalid")<{
+    detail: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit doctor` to inspect the Library, then retry.";
+  get message(): string {
+    return this.detail;
+  }
+}
 
 /** Reconcile one Binding; return the number of Skill copies written. Caller owns the writer lock. */
 export const projectBindingEffect = Effect.fn("Library.projectBinding")(function* (options: {

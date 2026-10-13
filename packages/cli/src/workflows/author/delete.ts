@@ -9,15 +9,23 @@ import {
   SkitNotFoundResponse,
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
-import { Option, Data, Effect, Result, Schema, Scope } from "effect";
+import { Data, Option, Effect, Result, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
-import { AuthorSkitDeleteResponse, SkitContractError } from "@smolai/skit-core";
+import {
+  AuthorSkitDeleteResponse,
+  SkitContractError,
+  FailureTypeId,
+  type SkitFailure,
+} from "@smolai/skit-core";
 import type { AuthorRemoteHome } from "./sync.js";
 import { parseAuthorDestinationEffect } from "./sync.js";
-import { NothingToSelect } from "../../presentation/interaction-failures.js";
-import { DeleteRequiresPrivate } from "../../registry/failures.js";
-import { AuthenticationRequired, CredentialLacksScope } from "../../registry/failures.js";
+import {
+  AuthenticationRequired,
+  CredentialLacksScope,
+  DeleteRequiresPrivate,
+  RegistryUnreachable,
+} from "../../registry/failures.js";
 import { resolveAuthForOriginEffect, type ResolvedAuth } from "../../registry/auth.js";
 import {
   authenticatedApiMiddleware,
@@ -33,13 +41,28 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 
-export class AuthorDeleteHttpError extends Data.TaggedError("AuthorDeleteHttpError")<{
-  message: string;
-  cause: Error;
-}> {}
-export class AuthorDeleteResponseError extends Data.TaggedError("AuthorDeleteResponseError")<{
-  message: string;
-}> {}
+export class AuthorSkitNotFound
+  extends Data.TaggedError("AuthorSkitNotFound")<{}>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "NOT_FOUND" as const;
+  readonly remediation =
+    "Check the destination, and that you are signed in as its owner, then retry.";
+  get message(): string {
+    return "The private SKIT was not found or is not owned by you";
+  }
+}
+export class AuthorDeleteResponseError
+  extends Data.TaggedError("AuthorDeleteResponseError")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check the Registry's reason, then retry.";
+}
 
 /**
  * Delete one private SKIT, or plan the deletion under `dryRun`.
@@ -56,8 +79,8 @@ export const deleteAuthorSkitEffect = Effect.fn("deleteAuthorSkitEffect")(functi
   | AuthenticationRequired
   | CredentialLacksScope
   | DeleteRequiresPrivate
-  | NothingToSelect
-  | AuthorDeleteHttpError
+  | AuthorSkitNotFound
+  | RegistryUnreachable
   | AuthorDeleteResponseError
   | SkitContractError,
   RegistryHttp | Scope.Scope
@@ -79,10 +102,7 @@ export const deleteAuthorSkitEffect = Effect.fn("deleteAuthorSkitEffect")(functi
     .pipe(
       Effect.mapError((error) => {
         if (isRegistryTransportError(error))
-          return new AuthorDeleteHttpError({
-            message: `Unable to reach Registry ${remote.origin}: ${error.message}`,
-            cause: error,
-          });
+          return new RegistryUnreachable({ origin: remote.origin, cause: error });
         if (Schema.is(UnauthorizedResponse)(error))
           return new AuthenticationRequired({
             origin: remote.origin,
@@ -90,15 +110,13 @@ export const deleteAuthorSkitEffect = Effect.fn("deleteAuthorSkitEffect")(functi
           });
         if (Schema.is(InsufficientScopeResponse)(error))
           return new CredentialLacksScope({ scope: "authoring:write", origin: remote.origin });
-        if (Schema.is(SkitNotFoundResponse)(error))
-          return new NothingToSelect({
-            detail: "The private SKIT was not found or is not owned by you",
-          });
+        if (Schema.is(SkitNotFoundResponse)(error)) return new AuthorSkitNotFound();
         if (Schema.is(DeleteRequiresPrivateResponse)(error)) return new DeleteRequiresPrivate();
         if (isSuccessfulResponseDecodeFailure(error, [200]))
-          return new SkitContractError("author SKIT delete response", [
-            { path: "", message: String(error) },
-          ]);
+          return new SkitContractError({
+            contract: "author SKIT delete response",
+            issues: [{ path: "", message: String(error) }],
+          });
         return new AuthorDeleteResponseError({
           message: registryApiFailureMessage("Author SKIT delete", error),
         });

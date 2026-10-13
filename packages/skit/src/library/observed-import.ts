@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema, SchemaIssue } from "effect";
+import { Data, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../artifact/skit.js";
 import { InvalidLibraryState } from "../failures.js";
@@ -38,6 +38,7 @@ import {
   type SourceDeclaration,
 } from "./source-identity.js";
 import type { Digest, SkillsShProvenanceObservation } from "./store/state-schema.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(function* (
   libraryHome: string,
@@ -81,12 +82,14 @@ const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(functio
   return machineId;
 });
 
-export class ObservedImportInvalid extends Schema.TaggedError<ObservedImportInvalid>()(
-  "Library.ObservedImportInvalid",
-  { reason: Schema.String },
-) {
+export class ObservedImportInvalid
+  extends Data.TaggedError("Library.ObservedImportInvalid")<{
+    reason: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
-  readonly exitCode = 65;
   readonly remediation =
     "Inspect the reported Skill paths in the source, correct the content, and retry.";
   get message(): string {
@@ -365,10 +368,17 @@ export const retainObservedCollectionEffect = Effect.fn("Library.retainObservedC
   },
 );
 
-export class ProjectionObservationChanged extends Schema.TaggedError<ProjectionObservationChanged>()(
-  "Library.ProjectionObservationChanged",
-  { path: Schema.String },
-) {}
+export class ProjectionObservationChanged
+  extends Data.TaggedError("Library.ProjectionObservationChanged")<{ path: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Preview the Projection retention again.";
+  get message(): string {
+    return `Projection changed after it was observed: ${this.path}`;
+  }
+}
 
 /**
  * Retain one explicitly selected managed Projection as a new Version of its existing Skill.

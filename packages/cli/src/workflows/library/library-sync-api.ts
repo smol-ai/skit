@@ -7,13 +7,14 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "@smolai/skit-core/universal/api";
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { LibraryWriteRequest } from "@smolai/skit-core/universal/consumer";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
   LibraryChangedOnServer,
+  RegistryUnreachable,
 } from "../../registry/failures.js";
 import {
   authenticatedApiMiddleware,
@@ -25,23 +26,47 @@ import {
   RegistryHttp,
   RegistryTransportError,
 } from "../../registry/registry-http.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class LibraryApiUnreachable extends Schema.TaggedError<LibraryApiUnreachable>()(
-  "Library.LibraryApiUnreachable",
-  { origin: Schema.String, cause: Schema.Defect() },
-) {}
-export class LibraryApiRejected extends Schema.TaggedError<LibraryApiRejected>()(
-  "Library.LibraryApiRejected",
-  { status: Schema.Number, code: Schema.optionalKey(Schema.String) },
-) {}
-export class LibraryApiInvalidResponse extends Schema.TaggedError<LibraryApiInvalidResponse>()(
-  "Library.LibraryApiInvalidResponse",
-  { operation: Schema.String },
-) {}
-export class LibraryApiInvalidRequest extends Schema.TaggedError<LibraryApiInvalidRequest>()(
-  "Library.LibraryApiInvalidRequest",
-  {},
-) {}
+export class LibraryApiRejected
+  extends Data.TaggedError("Library.LibraryApiRejected")<{
+    status: number;
+    reason?: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "Check the Registry's reason and the active credential, then run `skit sync` again.";
+  get message(): string {
+    return `The Registry rejected the Library request (${this.status})${this.reason === undefined ? "" : `: ${this.reason}`}`;
+  }
+}
+export class LibraryApiInvalidResponse
+  extends Data.TaggedError("Library.LibraryApiInvalidResponse")<{
+    operation: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that the Registry runs a compatible SKIT server, then retry.";
+  get message(): string {
+    return `The Registry returned an invalid ${this.operation} response`;
+  }
+}
+export class LibraryApiInvalidRequest
+  extends Data.TaggedError("Library.LibraryApiInvalidRequest")<{}>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit doctor` to inspect the Library, then run `skit sync` again.";
+  get message(): string {
+    return "The Library could not be encoded as a Registry request";
+  }
+}
 
 /** All private Library requests use one generated client in the caller's scope. */
 export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function* (options: {
@@ -55,7 +80,7 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
     baseUrl: origin,
   }).pipe(Effect.provide(authenticatedApiMiddleware(options.token)));
   const transportFailure = (error: RegistryTransportError) =>
-    new LibraryApiUnreachable({ origin, cause: new Error(error.message, { cause: error }) });
+    new RegistryUnreachable({ origin, cause: error });
   const invalidResponse = (operation: string) => new LibraryApiInvalidResponse({ operation });
   const mapGeneratedFailure = (operation: string, error: unknown) => {
     if (isRegistryTransportError(error)) return transportFailure(error);
@@ -67,7 +92,7 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
     if (failure.status !== undefined)
       return new LibraryApiRejected({
         status: failure.status,
-        ...(failure.code === undefined ? {} : { code: failure.code }),
+        ...(failure.code === undefined ? {} : { reason: failure.code }),
       });
     return invalidResponse(operation);
   };

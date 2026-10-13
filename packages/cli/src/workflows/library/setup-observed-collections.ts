@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Effect, FileSystem, Schema } from "effect";
+import { Data, Effect, FileSystem, Schema } from "effect";
 import {
   retainObservedCollectionEffect,
   LibraryStore,
@@ -15,24 +15,31 @@ import {
   type SetupResult,
 } from "./setup-contract.js";
 import { resolveSkillsShSelectedSource } from "./skills-sh-lock-source.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class SetupObservedCollectionInvalid extends Schema.TaggedError<SetupObservedCollectionInvalid>()(
-  "SetupObservedCollectionInvalid",
-  {
-    name: Schema.String,
-    reason: Schema.Literals([
-      "duplicate-selection",
-      "candidate-not-found",
-      "candidate-not-importable",
-      "machine-identity-missing",
-      "observation-missing",
-      "contested-observation",
-      "source-unresolvable",
-      "lock-changed",
-      "retention-missing",
-    ]),
-  },
-) {}
+export class SetupObservedCollectionInvalid
+  extends Data.TaggedError("SetupObservedCollectionInvalid")<{
+    name: string;
+    reason:
+      | "duplicate-selection"
+      | "candidate-not-found"
+      | "candidate-not-importable"
+      | "machine-identity-missing"
+      | "observation-missing"
+      | "contested-observation"
+      | "source-unresolvable"
+      | "lock-changed"
+      | "retention-missing";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit setup` again and review the current plan.";
+  get message(): string {
+    return `Cannot import ${this.name} during setup: ${this.reason}`;
+  }
+}
 
 export interface SetupObservedCollectionOptions {
   readonly setup: SetupOptions;

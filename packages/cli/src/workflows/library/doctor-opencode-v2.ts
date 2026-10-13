@@ -1,12 +1,19 @@
-import { Effect, FileSystem, Option, Schedule, Schema, Stream } from "effect";
+import { Data, Effect, FileSystem, Option, Schedule, Schema, Stream } from "effect";
 import { randomBytes } from "node:crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class OpenCodeDiscoveryFailure extends Schema.TaggedError<OpenCodeDiscoveryFailure>()(
-  "OpenCodeDiscoveryFailure",
-  { message: Schema.String },
-) {}
+export class OpenCodeDiscoveryFailure
+  extends Data.TaggedError("OpenCodeDiscoveryFailure")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that OpenCode runs, then retry.";
+}
 const Ready = Schema.Struct({ url: Schema.String });
 const Plugins = Schema.Array(
   Schema.Struct({

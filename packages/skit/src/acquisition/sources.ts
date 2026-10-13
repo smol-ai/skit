@@ -1,13 +1,12 @@
 import type { DescriptorFailure } from "../failures.js";
 import { semver } from "../distribution/api-contracts.js";
-import { Effect, FileSystem, Path, Predicate, Schema, Scope, Stream } from "effect";
+import { Data, Effect, FileSystem, Path, Predicate, Schema, Scope, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { SkitSource, type SourceRevision } from "../library/library-contracts.js";
-import { Data } from "effect";
 import {
   ArchiveEntryLimitExceeded,
   DirectSkillDocumentInvalid,
@@ -32,6 +31,7 @@ import { PluginSkillConflict, selectPluginMembersEffect } from "./plugin-members
 export { PluginSkillConflict } from "./plugin-membership.js";
 export { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const ownerRepository = /^([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)$/;
 const MAX_ARCHIVE_FILES = 1_000;
@@ -451,11 +451,17 @@ export function sourceLocator(source: SkitSource): string {
 }
 
 /** A source subprocess exited non-zero. Carries the command and its captured stderr. */
-export class CommandFailed extends Data.TaggedError("CommandFailed")<{
-  command: string;
-  exitCode: number;
-  stderr: string;
-}> {
+export class CommandFailed
+  extends Data.TaggedError("CommandFailed")<{
+    command: string;
+    exitCode: number;
+    stderr: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check the command's output above, then retry.";
   get message(): string {
     return `${this.command} failed (${this.exitCode}): ${this.stderr}`;
   }
@@ -481,10 +487,19 @@ export const SourcePolicyViolationReason = Schema.Union([
 ]);
 export type SourcePolicyViolationReason = typeof SourcePolicyViolationReason.Type;
 
-export class SourcePolicyViolation extends Schema.TaggedError<SourcePolicyViolation>()(
-  "SourcePolicyViolation",
-  { reason: SourcePolicyViolationReason },
-) {
+export class SourcePolicyViolation
+  extends Data.TaggedError("SourcePolicyViolation")<{
+    reason: SourcePolicyViolationReason;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get remediation(): string {
+    return this.reason._tag === "Transport"
+      ? "Check that the source is reachable and that you can access it, then retry."
+      : "Choose a source that stays within SKIT's acquisition limits and pins, then retry.";
+  }
   get message() {
     return this.reason.detail;
   }

@@ -1,9 +1,9 @@
 import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import {
+  Data,
   Cause,
   Clock,
   Context,
-  Data,
   Effect,
   Exit,
   FileSystem,
@@ -32,6 +32,7 @@ import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
 import { result } from "../handlers/contracts.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 const SECRET_NAME = "SKIT_BOOTSTRAP_SECRET";
 
@@ -41,31 +42,71 @@ export interface BootstrapResult {
   readonly status: "complete" | "already_complete";
 }
 
-export class BootstrapOriginInvalid extends Data.TaggedError("BootstrapOriginInvalid")<{
-  readonly origin: string;
-}> {
+export class BootstrapOriginInvalid
+  extends Data.TaggedError("BootstrapOriginInvalid")<{
+    readonly origin: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Pass --url as the server's full https:// origin.";
   get message() {
     return `Invalid server origin: ${this.origin}`;
   }
 }
-export class BootstrapConfigInvalid extends Data.TaggedError("BootstrapConfigInvalid")<{
-  readonly message: string;
-}> {}
-export class BootstrapExternalFailure extends Data.TaggedError("BootstrapExternalFailure")<{
-  readonly operation: "install-secret" | "remove-secret" | "open-browser" | "status";
-  readonly message: string;
-}> {}
-export class BootstrapStatusInvalid extends Data.TaggedError("BootstrapStatusInvalid")<{
-  readonly message: string;
-}> {}
-export class BootstrapTimedOut extends Data.TaggedError("BootstrapTimedOut")<{}> {
+export class BootstrapConfigInvalid
+  extends Data.TaggedError("BootstrapConfigInvalid")<{
+    readonly message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Correct the Wrangler configuration passed with --config, then retry.";
+}
+export class BootstrapExternalFailure
+  extends Data.TaggedError("BootstrapExternalFailure")<{
+    readonly operation: "install-secret" | "remove-secret" | "open-browser" | "status";
+    readonly message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that Wrangler is installed and signed in, then retry.";
+}
+export class BootstrapStatusInvalid
+  extends Data.TaggedError("BootstrapStatusInvalid")<{
+    readonly message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that --url names a SKIT server, then retry.";
+}
+export class BootstrapTimedOut
+  extends Data.TaggedError("BootstrapTimedOut")<{}>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "Finish operator setup in the browser, then run `skit server bootstrap` again.";
   readonly message = "Timed out waiting for initial operator setup";
 }
-export class BootstrapCleanupFailed extends Data.TaggedError("BootstrapCleanupFailed")<{
-  readonly configPath: string;
-  readonly cleanup: BootstrapExternalFailure;
-  readonly original?: BootstrapPrimaryFailure;
-}> {
+export class BootstrapCleanupFailed
+  extends Data.TaggedError("BootstrapCleanupFailed")<{
+    readonly configPath: string;
+    readonly cleanup: BootstrapExternalFailure;
+    readonly original?: BootstrapPrimaryFailure;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Remove the bootstrap secret with the wrangler command above.";
   get message(): string {
     const original: string = this.original ? ` Original error: ${this.original.message}.` : "";
     return `Bootstrap secret cleanup failed: ${this.cleanup.message}.${original} Remove it manually with: wrangler secret delete ${SECRET_NAME} --config ${this.configPath}`;

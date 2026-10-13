@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
 import { materializeVerifiedSnapshotEffect } from "./snapshot-archive.js";
@@ -12,10 +12,19 @@ import {
   type SnapshotArchive,
 } from "./library-contracts.js";
 import { repositorySelectsProjection } from "./installation/retire-unbound.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class RestoreInvalid extends Schema.TaggedError<RestoreInvalid>()("Library.RestoreInvalid", {
-  detail: Schema.String,
-}) {}
+export class RestoreInvalid
+  extends Data.TaggedError("Library.RestoreInvalid")<{ detail: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit doctor` to inspect the Library, then run `skit sync` again.";
+  get message(): string {
+    return `Cannot restore the Library: ${this.detail}`;
+  }
+}
 
 /** Complete a restore set without treating retrievable source bytes as private snapshots. */
 export const completeRestoreArchivesEffect = <E, R>(

@@ -1,11 +1,21 @@
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Option } from "effect";
 import { CliOutput, Command } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class HelpDocumentMissing extends Schema.TaggedError<HelpDocumentMissing>()(
-  "CLI.HelpDocumentMissing",
-  { command: Schema.String },
-) {}
+export class HelpDocumentMissing
+  extends Data.TaggedError("CLI.HelpDocumentMissing")<{
+    command: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Reinstall SKIT; its help documents are missing.";
+  get message(): string {
+    return `No help document for ${this.command}`;
+  }
+}
 
 /**
  * Ask Effect CLI to build its structured help model without parsing rendered text.

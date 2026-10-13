@@ -2,7 +2,7 @@ import { skitConfigurationLayer } from "../../configuration/skit-configuration.j
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
-import { MissingRequirement } from "../failures.js";
+import { MissingRequirement } from "../../workflows/failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";

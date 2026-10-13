@@ -8,20 +8,29 @@ import { hostname } from "node:os";
 import { dirname } from "node:path";
 import { isErrno } from "../platform/errno.js";
 import {
+  CredentialsUnusable,
+  DefaultRegistryNotConfigured,
   InsecureOrigin,
   NoStoredCredentials,
+  RegistryAliasConflict,
+  RegistryAliasInvalid,
+  RegistryAliasNotFound,
   RegistryOriginInvalid,
   RegistrySelectionAmbiguous,
+  RegistrySelectionConflict,
+  RegistrySelectionRequiresRegistrySource,
+  RegistryUnreachable,
+  SignInFailed,
+  SignInRejected,
+  SignOutRejected,
   TooManyAuthAttempts,
 } from "./failures.js";
-import { CredentialsUnusable } from "./failures.js";
-import { SignInRejected } from "./failures.js";
 import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
 import { Renderer } from "../presentation/renderer.js";
-import { Data } from "effect";
 import type { RegistryRemote } from "./contracts.js";
 import { serverDiscoverySchema } from "@smolai/skit-core";
 import {
+  ApiErrorBody,
   ConsumerAuthenticatedApi,
   RateLimitedResponse,
   UnauthorizedResponse,
@@ -32,34 +41,6 @@ import {
   registryApiFailureMessage,
   sessionApiMiddleware,
 } from "./api-client.js";
-
-export class SignOutUnreachable extends Data.TaggedError("SignOutUnreachable")<{
-  origin: string;
-  cause: Error;
-}> {
-  get message() {
-    return `Unable to reach Registry ${this.origin}: ${this.cause.message}`;
-  }
-}
-export class SignOutRejected extends Data.TaggedError("SignOutRejected")<{ message: string }> {}
-
-export class SignInUnreachable extends Data.TaggedError("SignInUnreachable")<{
-  origin: string;
-  cause: Error;
-}> {
-  get message() {
-    return `Unable to reach Registry ${this.origin}: ${this.cause.message}`;
-  }
-}
-
-/**
- * Sign-in got far enough to say something specific, and the sentence is the value.
- *
- * These were bare `throw new Error(...)` before the conversion, so they classify as
- * OperationFailed exactly as they did. Naming them keeps the error channel truthful without
- * moving any of them onto a different exit code.
- */
-export class SignInFailed extends Data.TaggedError("SignInFailed")<{ message: string }> {}
 
 /** Every Registry status this module treats as success. */
 const ok = (response: HttpClientResponse) => response.status >= 200 && response.status < 300;
@@ -90,8 +71,6 @@ const AuthConfig = Schema.fromJsonString(
   }),
 );
 
-const RegistryErrorResponse = Schema.Struct({ error: Schema.String });
-const decodeRegistryErrorResponse = Schema.decodeUnknownEffect(RegistryErrorResponse);
 type StoredCredential = typeof StoredCredential.Type;
 type AuthConfig = typeof AuthConfig.Type;
 
@@ -245,60 +224,6 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
     source: useEnvironment ? "environment" : stored ? "stored" : "none",
   };
 });
-
-export class RegistryAliasInvalid extends Data.TaggedError("RegistryAliasInvalid")<{
-  name: string;
-}> {
-  readonly code = "INVALID_ARGUMENT" as const;
-  get message() {
-    return `Invalid Registry name: ${this.name}`;
-  }
-}
-
-export class RegistryAliasConflict extends Data.TaggedError("RegistryAliasConflict")<{
-  name: string;
-}> {
-  readonly code = "CONFLICT" as const;
-  get message() {
-    return `Registry name already exists: ${this.name}`;
-  }
-}
-
-export class RegistryAliasNotFound extends Data.TaggedError("RegistryAliasNotFound")<{
-  name: string;
-}> {
-  readonly code = "NOT_FOUND" as const;
-  get message() {
-    return `Unknown Registry name: ${this.name}`;
-  }
-}
-
-export class DefaultRegistryNotConfigured extends Data.TaggedError(
-  "DefaultRegistryNotConfigured",
-)<{}> {
-  readonly code = "NOT_FOUND" as const;
-  get message() {
-    return "No default Registry is configured; pass a Registry alias or HTTPS origin";
-  }
-}
-
-export class RegistrySelectionConflict extends Data.TaggedError("RegistrySelectionConflict")<{
-  locator: string;
-}> {
-  readonly code = "INVALID_ARGUMENT" as const;
-  get message(): string {
-    return `A concrete Registry locator cannot be combined with --registry: ${this.locator}`;
-  }
-}
-
-export class RegistrySelectionRequiresRegistrySource extends Data.TaggedError(
-  "RegistrySelectionRequiresRegistrySource",
-)<{ source: string }> {
-  readonly code = "INVALID_ARGUMENT" as const;
-  get message(): string {
-    return `--registry requires a Registry source: ${this.source}`;
-  }
-}
 
 const validateRegistryAlias = (name: string) =>
   /^[a-z][a-z0-9-]*$/.test(name)
@@ -481,11 +406,11 @@ export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
         HttpClientRequest.bearerToken(auth.token),
       ),
     )
-    .pipe(Effect.mapError((cause) => new SignInUnreachable({ origin: input.origin, cause })));
+    .pipe(Effect.mapError((cause) => new RegistryUnreachable({ origin: input.origin, cause })));
   if (response.status === 401) return undefined;
   if (response.status !== 200) {
     const body = yield* response.json.pipe(
-      Effect.flatMap(decodeRegistryErrorResponse),
+      Effect.flatMap(Schema.decodeUnknownEffect(ApiErrorBody)),
       Effect.mapError(
         () => new SignInFailed({ message: `Credential check failed (${response.status})` }),
       ),
@@ -604,13 +529,13 @@ export const loginEffect = Effect.fn("Auth.login")(
         readonly headers?: Readonly<Record<string, string>>;
         readonly body?: string;
       } = {},
-    ): Effect.Effect<HttpClientResponse, SignInUnreachable> => {
+    ): Effect.Effect<HttpClientResponse, RegistryUnreachable> => {
       let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
       if (init.body !== undefined)
         request = HttpClientRequest.bodyText(request, init.body, "application/json");
       return http
         .execute(request)
-        .pipe(Effect.mapError((error) => new SignInUnreachable({ origin, cause: error.cause })));
+        .pipe(Effect.mapError((error) => new RegistryUnreachable({ origin, cause: error.cause })));
     };
 
     const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
@@ -639,7 +564,7 @@ export const loginEffect = Effect.fn("Auth.login")(
       );
       if (response.status === 401) return yield* new SignInRejected({ context });
       if (response.status === 429) return yield* new TooManyAuthAttempts();
-      const detail = yield* decodeRegistryErrorResponse(body).pipe(
+      const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
         Effect.map(({ error }) => error),
         Effect.orElseSucceed(() => "unknown_error"),
       );
@@ -672,7 +597,7 @@ export const loginEffect = Effect.fn("Auth.login")(
         ),
         Effect.mapError((error) =>
           isRegistryTransportError(error)
-            ? new SignInUnreachable({ origin, cause: error.cause })
+            ? new RegistryUnreachable({ origin, cause: error.cause })
             : new SignInFailed({ message: "Credential cleanup request could not be encoded" }),
         ),
       );
@@ -852,7 +777,7 @@ export const logoutEffect = Effect.fn("Auth.logout")(
       .pipe(
         Effect.mapError((error) =>
           isRegistryTransportError(error)
-            ? new SignOutUnreachable({ origin, cause: error.cause })
+            ? new RegistryUnreachable({ origin, cause: error.cause })
             : new SignOutRejected({ message: "Logout request could not be encoded" }),
         ),
       );
@@ -862,7 +787,7 @@ export const logoutEffect = Effect.fn("Auth.logout")(
         Effect.catchTag("HttpClientError", () => Effect.succeed({})),
       );
       if (response.status === 429) return yield* new TooManyAuthAttempts();
-      const detail = yield* decodeRegistryErrorResponse(body).pipe(
+      const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
         Effect.map(({ error }) => error),
         Effect.orElseSucceed(() => "unknown_error"),
       );

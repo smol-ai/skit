@@ -1,6 +1,7 @@
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
 import { encodeHashParts, sha256Digest } from "../shared/digest.js";
 import { SnapshotArchive } from "./library-contracts.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const MAX_TREE_BYTES = 32 * 1024 * 1024;
 const parentOf = (path: string) =>
@@ -20,10 +21,19 @@ const safeLink = (path: string, target: string): boolean => {
   return true;
 };
 
-export class SnapshotArchiveInvalid extends Schema.TaggedError<SnapshotArchiveInvalid>()(
-  "Library.SnapshotArchiveInvalid",
-  { reason: Schema.String },
-) {}
+export class SnapshotArchiveInvalid
+  extends Data.TaggedError("Library.SnapshotArchiveInvalid")<{
+    reason: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit sync` again; if it persists, the stored snapshot is damaged.";
+  get message(): string {
+    return `Invalid Library snapshot archive: ${this.reason}`;
+  }
+}
 
 const fromBase64 = (value: string) =>
   Effect.try({

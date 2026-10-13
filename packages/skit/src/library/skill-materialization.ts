@@ -1,12 +1,20 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Data, Effect, FileSystem } from "effect";
 import { dirname, join, relative, resolve } from "node:path";
 import { deterministicTreeHashEffect } from "../artifact/skit.js";
 import { copyLocalTreeEffect } from "../platform/copy-tree.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class SkillMaterializationInvalid extends Schema.TaggedError<SkillMaterializationInvalid>()(
-  "Library.SkillMaterializationInvalid",
-  { detail: Schema.String },
-) {}
+export class SkillMaterializationInvalid
+  extends Data.TaggedError("Library.SkillMaterializationInvalid")<{ detail: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Correct the Skill's shared mappings in the source, then retry.";
+  get message(): string {
+    return this.detail;
+  }
+}
 
 /** Build the self-contained Skill artifact whose digest defines a Skill Version. */
 export const materializedSkillDigestEffect = Effect.fn("Library.materializedSkillDigest")(

@@ -1,26 +1,56 @@
-import type { SkitErrorCode } from "@smolai/skit-core";
+import { isSkitFailure, type FailureCode } from "@smolai/skit-core";
 import { Cause, Predicate } from "effect";
-import { errorMessage, toCommandError } from "./presentation/command-errors.js";
+
+/**
+ * The exit status each failure code ends a command with. Command metadata separately publishes
+ * the statuses callers may branch on, and the exit-code tests hold the two together.
+ */
+export const failureExitCodes = {
+  NOT_FOUND: 11,
+  CONFLICT: 12,
+  TARGET_COLLISION: 12,
+  INVALID_ARGUMENT: 64,
+  VALIDATION_FAILED: 65,
+  OPERATION_FAILED: 1,
+} as const satisfies Record<FailureCode, number>;
 
 export interface ClassifiedFailure {
-  code: SkitErrorCode | "OPERATION_FAILED";
+  code: FailureCode;
   exitCode: number;
   message: string;
   remediation: string;
 }
 
+/** The message of any failed or thrown value, without assuming its prototype. */
+export function errorMessage(error: unknown): string {
+  if (
+    Predicate.hasProperty(error, "message") &&
+    typeof error.message === "string" &&
+    error.message.length > 0
+  )
+    return error.message;
+  if (Predicate.hasProperty(error, "detail") && typeof error.detail === "string")
+    return error.detail;
+  if (Predicate.hasProperty(error, "_tag") && typeof error._tag === "string") return error._tag;
+  return String(error);
+}
+
 /** One failure classification shared by every executable front end. */
 export function classifyFailure(error: unknown): ClassifiedFailure {
-  const classified = toCommandError(error);
+  if (isSkitFailure(error))
+    return {
+      code: error.code,
+      exitCode: failureExitCodes[error.code],
+      message: error.message,
+      remediation: error.remediation,
+    };
+  // Anything not named as a failure is a defect or a platform error nothing translated. It ends
+  // the command with exit 1, as an unclassified failure always has.
   return {
-    code: classified.code,
-    exitCode: classified.exitCode,
-    message: classified.message,
-    // A domain failure may name its own next step; the code supplies a generic one otherwise.
-    remediation:
-      Predicate.hasProperty(error, "remediation") && typeof error.remediation === "string"
-        ? error.remediation
-        : classified.remediation,
+    code: "OPERATION_FAILED",
+    exitCode: failureExitCodes.OPERATION_FAILED,
+    message: errorMessage(error),
+    remediation: "Check the reported failure and retry.",
   };
 }
 

@@ -7,7 +7,7 @@
 export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 
 export { detectInstalledHarnessesEffect } from "./harness/catalog.js";
-export { errorMessage } from "./presentation/command-errors.js";
+export { errorMessage } from "./failure-classification.js";
 export { auditLocalCapabilitiesV1Alpha4Effect } from "./audit/local.js";
 export type {
   AuditEntryV1Alpha4,

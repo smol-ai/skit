@@ -4,7 +4,7 @@ import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { resolveAuthForOriginEffect } from "../../registry/auth.js";
-import { MissingRequirement } from "../failures.js";
+import { MissingRequirement } from "../../workflows/failures.js";
 import { publishEffect } from "../../workflows/author/publish.js";
 import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
