@@ -189,10 +189,10 @@ it.effect("an anchored home that matches the remote: a clean preview writes noth
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-// BUG characterization: an applied clean sync publishes identical state twice, once to anchor
-// ancestry that already names the head and once from projection reconciliation, replacing the file.
-// The desired outcome is zero publications: once sync unification skips both when B already equals
-// R and nothing changed, this flips to `unwritten` holding as it does for a preview.
+// BUG characterization: an applied clean sync publishes identical state once, to anchor ancestry
+// that already names the head, replacing the file. Projection reconciliation that changes nothing no
+// longer publishes. The desired outcome is zero publications: once sync unification skips anchoring
+// when B already equals R, this flips to `unwritten` holding as it does for a preview.
 it.effect("BUG: an anchored home that matches the remote republishes on an applied clean", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
@@ -210,10 +210,10 @@ it.effect("BUG: an anchored home that matches the remote republishes on an appli
       projected: 0,
       retired: 0,
     });
-    assert.strictEqual(a.publishes, publishes + 2);
+    assert.strictEqual(a.publishes, publishes + 1);
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.deepStrictEqual(server.stored, stored);
-    // The publications atomically replace state.json with identical bytes. The publication count
+    // The publication atomically replaces state.json with identical bytes. The publication count
     // above is the evidence; file identity cannot be, because a filesystem may hand the replaced
     // inode number to the next temporary file (Linux does), so only content is compared here.
     const changes = yield* diskChanges(before);

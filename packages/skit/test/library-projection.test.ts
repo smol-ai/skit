@@ -17,12 +17,20 @@ import {
 } from "../src/library/observed-import.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
-import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
+import {
+  LibraryStore,
+  lastPublishedLibraryState,
+  libraryStoreLayer,
+  withLibraryWriter,
+} from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
 import { backUpProjectionEffect, projectionWorkDirectory } from "../src/projection/backups.js";
-import { inspectOwnershipMarkerEffect } from "../src/projection/mutation.js";
+import {
+  inspectOwnershipMarkerEffect,
+  withProjectionMutationEffect,
+} from "../src/projection/mutation.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -1030,6 +1038,132 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       assert.strictEqual((yield* load).projections[0]?.suppression_reason, "native_delete");
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
   );
+
+/** The fixture's store, counting every publication a workflow attempts through it. */
+const countingStore = (storeLayer: Layer.Layer<LibraryStore, never, FileSystem.FileSystem>) => {
+  const counter = { publishes: 0 };
+  const layer = Layer.effect(
+    LibraryStore,
+    Effect.map(LibraryStore, (store) => ({
+      ...store,
+      publish: (next: LibraryState, base: LibraryState) => {
+        counter.publishes++;
+        return store.publish(next, base);
+      },
+    })),
+  ).pipe(Layer.provide(storeLayer));
+  return { counter, layer };
+};
+
+it.effect("a batch that changes nothing on disk or in state publishes nothing", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, storeLayer, variantsPath, load, project } =
+      yield* projectionFixture();
+    yield* project();
+    const before = yield* load;
+    const bytes = yield* fs.readFileString(join(home, "state.json"));
+    const { counter, layer } = countingStore(storeLayer);
+    yield* withLibraryWriterLock(
+      home,
+      projectBindingEffect({ target: "agents", variantsPath, root: targetRoot }).pipe(
+        Effect.provide(layer),
+      ),
+    );
+    assert.strictEqual(counter.publishes, 0);
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+    assert.deepStrictEqual(yield* load, before);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("an unchanged batch still publishes onto its loaded state before settling a backup", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, storeLayer, variantsPath, load, project } =
+      yield* projectionFixture();
+    yield* project();
+    const projection = (yield* load).projections[0]!;
+    // Killed after moving the intact copy aside and restoring it, before publishing anything.
+    yield* fs.copy(yield* backUpProjectionEffect(projection, "replace"), projection.path);
+    const { counter, layer } = countingStore(storeLayer);
+    yield* withLibraryWriterLock(
+      home,
+      projectBindingEffect({ target: "agents", variantsPath, root: targetRoot }).pipe(
+        Effect.provide(layer),
+      ),
+    );
+    // The publication proves the state the backup is judged against is still the Library's.
+    assert.strictEqual(counter.publishes, 1);
+    assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a backup is never settled against a state the Library has moved on from", () =>
+  Effect.gen(function* () {
+    const { home, targetRoot, storeLayer, variantsPath, load, edit, project } =
+      yield* projectionFixture();
+    yield* project();
+    const loaded = yield* load;
+    const projection = loaded.projections[0]!;
+    // A reproducible copy moved aside, then a writer without the lock changes the Library.
+    yield* backUpProjectionEffect(projection, "replace");
+    yield* edit(explicitPolicies);
+    const failed = yield* withLibraryWriterLock(
+      home,
+      LibraryStore.use((store) =>
+        withProjectionMutationEffect(
+          loaded,
+          {
+            rootFor: () => undefined,
+            variantsPath,
+            originalsPath: store.originalsPath,
+            publish: store.publish,
+          },
+          (mutation) => mutation.retire(projection, "report", "unexpected conflict"),
+        ),
+      ).pipe(Effect.provide(storeLayer), Effect.flip),
+    );
+    assert.strictEqual(failed._tag, "LibraryChanged");
+    assert.deepStrictEqual(
+      (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
+      ["pending"],
+    );
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("the last published state stays the Library's across unchanged and changed batches", () =>
+  Effect.gen(function* () {
+    const { targetRoot, storeLayer, variantsPath, load, project } = yield* projectionFixture();
+    yield* project();
+    const initial = yield* load;
+    const projectAgain = projectBindingEffect({ target: "agents", variantsPath, root: targetRoot });
+    yield* withLibraryWriter(
+      Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        // What a caller applying several operations takes as the state the next one plans from.
+        const expected = Effect.map(lastPublishedLibraryState, (published) => published ?? initial);
+        const current = Effect.gen(function* () {
+          assert.deepStrictEqual(yield* expected, yield* store.load);
+        });
+        // Unchanged, then changed.
+        yield* projectAgain;
+        assert.strictEqual(yield* lastPublishedLibraryState, undefined);
+        yield* current;
+        yield* store.publish(explicitPolicies(yield* expected), yield* expected);
+        yield* projectAgain;
+        assert.notDeepEqual(yield* expected, initial);
+        yield* current;
+        // Changed, unchanged, then changed again.
+        const changed = yield* expected;
+        yield* projectAgain;
+        assert.deepStrictEqual(yield* expected, changed);
+        yield* current;
+        yield* store.publish(unbound(yield* expected), yield* expected);
+        yield* retireUnboundGlobalProjectionsEffect({ variantsPath, activeTargets: ["agents"] });
+        assert.deepStrictEqual((yield* expected).projections, []);
+        yield* current;
+      }),
+    ).pipe(Effect.provide(storeLayer));
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
 
 it.effect("publishes nothing for a replacement whose successor fails verification", () =>
   Effect.gen(function* () {
