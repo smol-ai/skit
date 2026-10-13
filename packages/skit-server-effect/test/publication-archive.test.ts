@@ -5,7 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
 import { readArchive, verifyReleaseArchive } from "../src/publication/archive.js";
-import { sha256 } from "../src/integrity/crypto.js";
+import { sha256Digest } from "@smolai/skit-core/universal/consumer";
 import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
@@ -70,7 +70,7 @@ describe("Publication release archives", () => {
         ]),
       );
       for (const [path, content] of contents) {
-        const digest = yield* sha256(content);
+        const digest = yield* sha256Digest(content);
         yield* Effect.flatMap(
           D1Client.D1Client,
           (sql) =>

@@ -3,9 +3,10 @@ import {
   parseSkitConfig,
   parseSkitReadme,
   projectSkillFiles,
+  sha256Digest,
   type SkitDescriptor,
 } from "@smolai/skit-core/universal/consumer";
-import { Crypto, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
 
 export const AGENT_SKILLS_DISCOVERY_SCHEMA =
@@ -42,7 +43,6 @@ const releaseDescriptor = (files: Record<string, Uint8Array>): SkitDescriptor =>
 export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(function* (
   release: Uint8Array,
 ) {
-  const crypto = yield* Crypto.Crypto;
   const { descriptor, entries } = yield* attempt(() => {
     const files = unzipSync(release);
     return {
@@ -72,9 +72,12 @@ export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(fu
         { level: 0, mtime: ARTIFACT_TIMESTAMP },
       ),
     );
-    const digest = yield* crypto.digest("SHA-256", artifact);
-    const hex = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    skills.push({ name: skill.name, description, artifact, digest: `sha256:${hex}` });
+    skills.push({
+      name: skill.name,
+      description,
+      artifact,
+      digest: yield* sha256Digest(artifact),
+    });
   }
   return skills;
 });

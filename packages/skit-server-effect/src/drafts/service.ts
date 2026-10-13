@@ -1,4 +1,6 @@
 import { D1Client } from "@effect/sql-d1";
+import { MAX_ARTIFACT_CONTENT_BYTES } from "@smolai/skit-core/universal/authoring";
+import { sha256Digest } from "@smolai/skit-core/universal/consumer";
 import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
 import type { CloudflareBindings } from "../platform/cloudflare.js";
 import {
@@ -12,14 +14,12 @@ import {
 } from "../platform/cloudflare.js";
 import { IntegrityError } from "../integrity/contracts.js";
 import { validateArtifactBundle } from "../integrity/validate.js";
-import { sha256 } from "../integrity/crypto.js";
 import {
   Diagnostic,
   type DraftCreateRequest,
   type DraftReadResponse,
   type DraftRevision,
   type DraftUpdateRequest,
-  MAX_DRAFT_CONTENT_BYTES,
   WireDescriptor,
 } from "./contracts.js";
 
@@ -126,7 +126,7 @@ export const layer = Layer.effect(
               Uint8Array.from(atob(file.content_base64), (character) => character.charCodeAt(0)),
             catch: (cause) => new DraftEncodingError({ path: file.path, cause }),
           });
-          const blobDigest = yield* sha256(bytes).pipe(
+          const blobDigest = yield* sha256Digest(bytes).pipe(
             Effect.provideService(Crypto.Crypto, crypto),
           );
           return {
@@ -152,7 +152,7 @@ export const layer = Layer.effect(
         )
         .sort()
         .join("\n");
-      const bundleDigest = yield* sha256(new TextEncoder().encode(manifest)).pipe(
+      const bundleDigest = yield* sha256Digest(new TextEncoder().encode(manifest)).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
       const revisionId = `draft_${(yield* crypto.randomUUIDv4()).replaceAll("-", "")}`;
@@ -206,7 +206,7 @@ export const layer = Layer.effect(
       return {
         skit_id: `${input.owner}/${input.slug}`,
         revision_id: revisionId,
-        manifest_digest: yield* sha256(new TextEncoder().encode(manifest)).pipe(
+        manifest_digest: yield* sha256Digest(new TextEncoder().encode(manifest)).pipe(
           Effect.provideService(Crypto.Crypto, crypto),
         ),
         bundle_digest: bundleDigest,
@@ -251,7 +251,8 @@ export const layer = Layer.effect(
         ),
       );
       if (
-        storedFiles.reduce((total, file) => total + file.byte_length, 0) > MAX_DRAFT_CONTENT_BYTES
+        storedFiles.reduce((total, file) => total + file.byte_length, 0) >
+        MAX_ARTIFACT_CONTENT_BYTES
       )
         return yield* new DraftTooLarge();
       const files = yield* Effect.forEach(storedFiles, (file) =>

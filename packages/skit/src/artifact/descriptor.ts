@@ -6,6 +6,7 @@ import { Effect, Result, Schema } from "effect";
 // Hashing is deterministic computation, not IO, so it stays on node:crypto.
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
+import { encodeHashParts } from "../shared/digest.js";
 import type { Digest, SkillExampleManifest, SkitDescriptor } from "../contracts.js";
 import {
   containedSkillSchema,
@@ -214,15 +215,7 @@ export function parseSkillExample(text: string): SkillExampleManifest {
 }
 
 export function hashParts(parts: Array<string | Uint8Array>): Digest {
-  const hash = createHash("sha256");
-  for (const part of parts) {
-    const bytes = Buffer.isBuffer(part) ? part : Buffer.from(part);
-    hash.update(String(bytes.length));
-    hash.update(":");
-    hash.update(bytes);
-    hash.update("\0");
-  }
-  return `sha256:${hash.digest("hex")}`;
+  return `sha256:${createHash("sha256").update(encodeHashParts(parts)).digest("hex")}`;
 }
 
 export interface ProjectedSkillFile {

@@ -7,11 +7,10 @@ import {
   draftWriteResponseSchema,
   skitDescriptorRequestSchema,
   skitValidationDiagnosticSchema,
+  MAX_ARTIFACT_CONTENT_BYTES,
 } from "@smolai/skit-core/universal/authoring";
-import { MAX_ARTIFACT_CONTENT_BYTES } from "../integrity/contracts.js";
 
-export const MAX_DRAFT_CONTENT_BYTES = MAX_ARTIFACT_CONTENT_BYTES;
-export const MAX_DRAFT_REQUEST_BYTES = Math.ceil(MAX_DRAFT_CONTENT_BYTES / 3) * 4 + 1024 * 1024;
+export const MAX_DRAFT_REQUEST_BYTES = Math.ceil(MAX_ARTIFACT_CONTENT_BYTES / 3) * 4 + 1024 * 1024;
 
 export const WireDescriptor = skitDescriptorRequestSchema;
 export type WireDescriptor = typeof WireDescriptor.Type;

@@ -1,8 +1,8 @@
 import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import { verifyReleaseArchive } from "./archive.js";
-import { type Digest, IntegrityError, ValidationDiagnostic } from "../integrity/contracts.js";
-import { sha256 } from "../integrity/crypto.js";
+import { type Digest, sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { IntegrityError, ValidationDiagnostic } from "../integrity/contracts.js";
 import {
   Bindings,
   type BlobStorageError,
@@ -127,7 +127,7 @@ export const layer = Layer.effect(
       if ((yield* findRelease(input.owner, input.slug, input.version)) !== undefined)
         return yield* new ReleaseConflict();
 
-      const archiveDigest = yield* sha256(input.archive).pipe(
+      const archiveDigest = yield* sha256Digest(input.archive).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
       const releaseId = `rel_${yield* crypto.randomUUIDv4()}`;

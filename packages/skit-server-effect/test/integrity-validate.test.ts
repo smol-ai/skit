@@ -1,7 +1,7 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { sha256 } from "../src/integrity/crypto.js";
+import { sha256Digest } from "@smolai/skit-core/universal/consumer";
 import { validateArtifactBundle } from "../src/integrity/validate.js";
 
 const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
@@ -9,7 +9,7 @@ const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
   return {
     path,
     bytes,
-    digest: yield* sha256(bytes),
+    digest: yield* sha256Digest(bytes),
     media_type: "text/plain",
     executable: false,
   };
@@ -115,5 +115,24 @@ describe("Integrity draft validation", () => {
           "INVOCATION_METADATA_MISMATCH",
         ]);
       }).pipe(Effect.provide(BrowserCrypto.layer)),
+  );
+
+  it.effect("rejects malformed native invocation metadata", () =>
+    Effect.gen(function* () {
+      const bundle = yield* validBundle;
+      const files = [...bundle.files];
+      const codexIndex = files.findIndex(({ path }) => path === "skills/review/agents/openai.yaml");
+      files[codexIndex] = yield* file("skills/review/agents/openai.yaml", "policy: [");
+      const outcome = yield* Effect.result(
+        validateArtifactBundle("alice", "tools", bundle.descriptor, files),
+      );
+
+      expect(outcome._tag).toBe("Failure");
+      if (outcome._tag === "Failure" && outcome.failure._tag === "Integrity.Error")
+        expect(outcome.failure).toMatchObject({
+          code: "INVALID_INVOCATION_METADATA",
+          detail: "skills/review/agents/openai.yaml",
+        });
+    }).pipe(Effect.provide(BrowserCrypto.layer)),
   );
 });

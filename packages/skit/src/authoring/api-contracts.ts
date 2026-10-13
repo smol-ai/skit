@@ -97,6 +97,9 @@ export const AuthorSkitDeleteResponse = Schema.Struct({
   archive_cleanup: Schema.optionalKey(Schema.Literals(["complete", "deferred"])),
 });
 export type AuthorSkitDeleteResponse = typeof AuthorSkitDeleteResponse.Type;
+/** The most files, and uncompressed bytes in total, one Draft revision or Release may carry. */
+export const MAX_ARTIFACT_FILES = 5_000;
+export const MAX_ARTIFACT_CONTENT_BYTES = 25 * 1024 * 1024;
 export const MAX_RELEASE_ARCHIVE_BYTES = 25 * 1024 * 1024;
 export const MAX_RELEASE_ARCHIVE_BASE64_LENGTH = Math.ceil(MAX_RELEASE_ARCHIVE_BYTES / 3) * 4;
 export const releasePublishRequestSchema = Schema.Struct({
