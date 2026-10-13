@@ -577,7 +577,8 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     return Schema.decodeUnknownSync(
       Schema.Struct({
         schema: Schema.String,
-        data: Schema.Unknown,
+        data: Schema.optionalKey(Schema.Unknown),
+        error: Schema.optionalKey(Schema.Unknown),
       }),
     )(JSON.parse(processResult.stdout || processResult.stderr));
   };
@@ -858,7 +859,13 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     )(await head.json()).library.manifest.collections;
     expect(committedCollections).toHaveLength(2);
 
-    // The retry reclaims the dead writer's lock and finds the remote already holds its state.
+    // The dead writer's lock fails closed: the retry is refused and changes nothing.
+    expect(first(["sync", "--apply"], 12)).toMatchObject({ error: { code: "CONFLICT" } });
+    expect(existsSync(join(firstHome, ".lock"))).toBe(true);
+    expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
+    // Once its owner is known to be stopped, removing the lock lets the retry find the remote
+    // already holds its state.
+    await rm(join(firstHome, ".lock"));
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
     expect(existsSync(join(firstHome, ".lock"))).toBe(false);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
