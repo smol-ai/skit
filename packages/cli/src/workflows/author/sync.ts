@@ -47,32 +47,31 @@ import {
   type SyncFileVersion,
   SkitContractError,
 } from "@smolai/skit-core";
-import { MissingRequirement } from "../../handlers/failures.js";
+import { MissingRequirement } from "../failures.js";
 import {
   DestinationExistsWithoutHistory,
   DestinationFormInvalid,
   DraftSlugMismatch,
   RegistryMismatch,
   RegistryRejectedWrite,
+  RegistryUnreachable,
 } from "../../registry/failures.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
   PrincipalNotAuthorized,
 } from "../../registry/failures.js";
-
-/** The Registry could not be reached for a Draft request. */
-export class SyncUnreachable extends Data.TaggedError("SyncUnreachable")<{
-  origin: string;
-  cause: Error;
-}> {
-  get message() {
-    return `Unable to reach Registry ${this.origin}: ${this.cause.message}`;
-  }
-}
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 /** A Draft request the Registry answered, with its own words for why it refused. */
-export class SyncRejected extends Data.TaggedError("SyncRejected")<{ message: string }> {}
+export class SyncRejected
+  extends Data.TaggedError("SyncRejected")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check the Registry's reason, then sync again.";
+}
 
 type StoredFile = { digest: Digest; mediaType: string; contentBase64: string };
 type SyncBinding = {
@@ -407,7 +406,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
   const mapAuthorFailure = (context: string, successStatus: number, error: unknown) => {
     if (isRegistryTransportError(error))
-      return new SyncUnreachable({ origin: base, cause: error.cause });
+      return new RegistryUnreachable({ origin: base, cause: error.cause });
     if (Schema.is(UnauthorizedResponse)(error))
       return new AuthenticationRequired({ scopes: "library:sync,authoring:write" });
     if (Schema.is(InsufficientScopeResponse)(error))
@@ -418,7 +417,10 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
       return new PrincipalNotAuthorized({ action: "author this Namespace or SKIT" });
     if (isSuccessfulResponseDecodeFailure(error, [successStatus]))
-      return new SkitContractError(`${context} response`, [{ path: "", message: String(error) }]);
+      return new SkitContractError({
+        contract: `${context} response`,
+        issues: [{ path: "", message: String(error) }],
+      });
     return new SyncRejected({
       message: registryApiFailureMessage(context, error, { defaultStatus: 400 }),
     });

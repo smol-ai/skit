@@ -6,7 +6,6 @@ import { expect } from "vitest";
 import {
   authorListCommand,
   listAuthorSkitsEffect,
-  AuthorListHttpError,
   AuthorListIdentityError,
 } from "../src/workflows/author/list.js";
 import { SkitContractError } from "@smolai/skit-core";
@@ -15,7 +14,11 @@ import { renderCommandFailures } from "../src/application.js";
 import type { ResolvedAuth } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { registryApiFailureMessage } from "../src/registry/api-client.js";
-import { CredentialsUnusable, RegistryOriginInvalid } from "../src/registry/failures.js";
+import {
+  CredentialsUnusable,
+  RegistryOriginInvalid,
+  RegistryUnreachable,
+} from "../src/registry/failures.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
@@ -236,7 +239,7 @@ it.effect("expected transport, contract and identity failures use declared chann
               }),
             }),
           ),
-        AuthorListHttpError,
+        RegistryUnreachable,
       ],
       [() => Effect.succeed(new Response("broken")), SkitContractError],
       [() => Effect.succeed(Response.json(null)), SkitContractError],

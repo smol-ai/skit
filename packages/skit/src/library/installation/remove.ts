@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
@@ -7,16 +7,38 @@ import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { InvocationPolicy } from "../store/state-schema.js";
 import type { BindingEntry } from "../library-contracts.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
-export class CollectionRemovalMissing extends Schema.TaggedError<CollectionRemovalMissing>()(
-  "Library.CollectionRemovalMissing",
-  { collection_id: Schema.String },
-) {}
+export class CollectionRemovalMissing
+  extends Data.TaggedError("Library.CollectionRemovalMissing")<{
+    collection_id: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit list` to see the retained Collections.";
+  get message(): string {
+    return `Collection is no longer retained: ${this.collection_id}`;
+  }
+}
 
-export class SkillRemovalRequiresCollection extends Schema.TaggedError<SkillRemovalRequiresCollection>()(
-  "Library.SkillRemovalRequiresCollection",
-  { skill_id: Schema.String, collection_id: Schema.String },
-) {}
+export class SkillRemovalRequiresCollection
+  extends Data.TaggedError("Library.SkillRemovalRequiresCollection")<{
+    skill_id: string;
+    collection_id: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get remediation(): string {
+    return `Remove the whole Collection with \`skit remove ${this.collection_id}\`, or disable just this Skill.`;
+  }
+  get message(): string {
+    return `${this.skill_id} can be removed only with its Collection ${this.collection_id}`;
+  }
+}
 
 /**
  * Remove a Collection with its Skills, Acquisitions, Binding entries and Projections, exactly as

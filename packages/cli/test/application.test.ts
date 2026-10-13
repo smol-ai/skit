@@ -2,14 +2,14 @@ import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { commandFailure, renderCommandFailures } from "../src/application.js";
-import { Conflict } from "../src/presentation/command-errors.js";
+import { RegistryRejectedWrite } from "../src/registry/failures.js";
 import { Renderer, consoleRenderer } from "../src/presentation/renderer.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 
 it.effect("presentation retains primary and cleanup failures", () =>
   Effect.gen(function* () {
     const exit = yield* Effect.exit(
-      Effect.fail(new Conflict({ message: "Registry rejected" })).pipe(
+      Effect.fail(new RegistryRejectedWrite({ detail: "Registry rejected" })).pipe(
         Effect.ensuring(Effect.die(new Error("temporary cleanup failed"))),
       ),
     );

@@ -10,7 +10,7 @@ import {
 } from "@smolai/skit-core";
 import type { AuditFinding, AuditObservation } from "./types.js";
 import { Effect } from "effect";
-import { errorMessage } from "../presentation/command-errors.js";
+import { errorMessage } from "../failure-classification.js";
 import { canonical, read, walk } from "./io.js";
 import { addMcp } from "./mcp.js";
 

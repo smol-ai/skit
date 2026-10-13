@@ -21,6 +21,7 @@ import {
 import { Prompt } from "effect/cli";
 import { terminalColors } from "./terminal-style.js";
 import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export interface Choice<Value> {
   value: Value;
@@ -47,10 +48,20 @@ export interface Choice<Value> {
 }
 
 /** The person answering went back with Escape or interrupted the prompt with Ctrl+C/Ctrl+D. */
-export class PromptCancelled extends Data.TaggedError("PromptCancelled")<{
-  prompt: string;
-  reason: "back" | "interrupt";
-}> {}
+export class PromptCancelled
+  extends Data.TaggedError("PromptCancelled")<{
+    prompt: string;
+    reason: "back" | "interrupt";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run the command again to make a choice.";
+  get message(): string {
+    return `${this.prompt} cancelled`;
+  }
+}
 
 // Every prompt in this CLI chooses among string values: skill refs, harness names, action verbs.
 export interface PrompterShape {

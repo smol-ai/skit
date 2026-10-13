@@ -1,11 +1,7 @@
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { assert, it } from "@effect/vitest";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import {
-  LibraryApiInvalidResponse,
-  LibraryApiRejected,
-  librarySyncApiEffect,
-} from "../src/workflows/library/library-sync-api.js";
+import { librarySyncApiEffect } from "../src/workflows/library/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 
 it.effect("retains an undeclared response status without inventing an error code", () =>
@@ -17,10 +13,10 @@ it.effect("retains an undeclared response status without inventing an error code
       });
       const failure = yield* Effect.flip(api.read());
 
-      assert.isTrue(Schema.is(LibraryApiRejected)(failure));
-      if (Schema.is(LibraryApiRejected)(failure)) {
+      assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
+      if (failure._tag === "Library.LibraryApiRejected") {
         assert.strictEqual(failure.status, 502);
-        assert.isFalse(Object.hasOwn(failure, "code"));
+        assert.isFalse(Object.hasOwn(failure, "reason"));
       }
     }).pipe(
       Effect.provide(
@@ -41,7 +37,7 @@ it.effect("rejects an undecodable remote Library instead of returning it", () =>
       });
       const failure = yield* Effect.flip(api.read());
 
-      assert.isTrue(Schema.is(LibraryApiInvalidResponse)(failure));
+      assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse");
     }).pipe(
       Effect.provide(
         registryHttpLayer(

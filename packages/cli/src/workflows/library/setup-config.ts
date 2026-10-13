@@ -1,7 +1,7 @@
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { hostname } from "node:os";
 import { join, matchesGlob, posix, resolve, sep } from "node:path";
-import { Effect, FileSystem, Result, Schema } from "effect";
+import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import {
   MachineDocumentJson,
   MachineDocumentV4,
@@ -11,6 +11,7 @@ import {
 } from "@smolai/skit-core";
 import { isErrno } from "../../platform/errno.js";
 import type { SetupRepositoryConfig } from "./setup-contract.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 const MACHINE_CONFIG_FILE = "machine.json";
 
 const RepositoryRelativeGlob = Schema.String.check(
@@ -30,10 +31,15 @@ const RepositoryConfigDocument = Schema.fromJsonString(
   }),
 );
 
-export class SetupConfigUnusable extends Schema.TaggedError<SetupConfigUnusable>()(
-  "SetupConfigUnusable",
-  { path: Schema.String },
-) {
+export class SetupConfigUnusable
+  extends Data.TaggedError("SetupConfigUnusable")<{ path: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get remediation(): string {
+    return `Correct or move aside ${this.path}, then run \`skit setup\` again.`;
+  }
   get message() {
     return `SKIT machine configuration is invalid: ${this.path}`;
   }

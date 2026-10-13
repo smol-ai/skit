@@ -1,15 +1,23 @@
-import { Clock, Config, Context, Effect, FileSystem, Layer, Schema } from "effect";
+import { Data, Clock, Config, Context, Effect, FileSystem, Layer, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { gt, prerelease, valid } from "semver";
 import { BuildInfo } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-class UpdateCheckTimedOut extends Schema.TaggedError<UpdateCheckTimedOut>()(
-  "UpdateCheckTimedOut",
-  {},
-) {}
+class UpdateCheckTimedOut
+  extends Data.TaggedError("UpdateCheckTimedOut")<{}>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Retry when the network is available.";
+  get message(): string {
+    return "The release check timed out";
+  }
+}
 
 const DAY = 86_400_000;
 export const DistTags = Schema.Record(Schema.String, Schema.String);

@@ -1,6 +1,7 @@
-import { Context, Data, Effect, Layer, Stream } from "effect";
+import { Data, Context, Effect, Layer, Stream } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_STDOUT_BYTES = 4_000_000;
@@ -20,18 +21,32 @@ export interface SourceProcessResult {
   readonly exitCode: number;
 }
 
-export class SourceProcessOutputTooLarge extends Data.TaggedError("SourceProcess.OutputTooLarge")<{
-  invocation: string;
-  stream: "stdout" | "stderr";
-  limit: number;
-  message: string;
-}> {}
+export class SourceProcessOutputTooLarge
+  extends Data.TaggedError("SourceProcess.OutputTooLarge")<{
+    invocation: string;
+    stream: "stdout" | "stderr";
+    limit: number;
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Choose a smaller source, then retry.";
+}
 
-export class SourceProcessTimedOut extends Data.TaggedError("SourceProcess.TimedOut")<{
-  invocation: string;
-  timeoutMs: number;
-  message: string;
-}> {}
+export class SourceProcessTimedOut
+  extends Data.TaggedError("SourceProcess.TimedOut")<{
+    invocation: string;
+    timeoutMs: number;
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that the source is reachable, then retry.";
+}
 
 export type SourceProcessFailure =
   | PlatformError

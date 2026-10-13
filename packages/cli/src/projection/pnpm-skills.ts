@@ -2,6 +2,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Cache, Data, Duration, Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { LinkStat, pathIsWithin } from "@smolai/skit-core";
 import { parseDocument } from "yaml";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export const PnpmSkillOwner = Schema.Struct({
   kind: Schema.tag("pnpm"),
@@ -147,12 +148,15 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
   return yield* observe(directory);
 });
 
-export class PnpmSkillManaged extends Schema.TaggedError<PnpmSkillManaged>()("PnpmSkillManaged", {
-  path: Schema.String,
-  package: Schema.String,
-}) {
+export class PnpmSkillManaged
+  extends Data.TaggedError("PnpmSkillManaged")<{
+    path: string;
+    package: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation = "Manage this Skill through pnpm's dependency and permission settings.";
   get message() {
     return `${this.path} is managed by pnpm (${this.package}); SKIT leaves it in place.`;

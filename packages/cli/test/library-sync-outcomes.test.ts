@@ -9,11 +9,8 @@ import {
   retainedTreePath,
   libraryManifestFromLocalStateEffect,
 } from "@smolai/skit-core";
-import { LibraryChangedOnServer } from "../src/registry/failures.js";
-import {
-  LibraryApiRejected,
-  LibraryApiUnreachable,
-} from "../src/workflows/library/library-sync-api.js";
+import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
+import { LibraryApiRejected } from "../src/workflows/library/library-sync-api.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import { devices, untouched } from "./helpers/library-sync-devices.js";
 
@@ -77,7 +74,7 @@ const cases: readonly {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         inject({ _tag: "FailUpload" });
-        assert.ok(Schema.is(LibraryApiRejected)(yield* Effect.flip(a.sync())));
+        assert.ok((yield* Effect.flip(a.sync())) instanceof LibraryApiRejected);
         yield* unchanged;
         assert.strictEqual(server.remote, null);
         assert.strictEqual((yield* a.sync()).status, "pushed");
@@ -119,8 +116,8 @@ const cases: readonly {
         const unchanged = yield* untouched(a);
         inject({ _tag: "ErrorAfterCommit" });
         const error = yield* Effect.flip(a.sync());
-        assert.ok(Schema.is(LibraryApiRejected)(error));
-        if (Schema.is(LibraryApiRejected)(error)) assert.strictEqual(error.status, 500);
+        assert.strictEqual(error._tag, "Library.LibraryApiRejected");
+        if (error._tag === "Library.LibraryApiRejected") assert.strictEqual(error.status, 500);
         yield* unchanged;
         assert.ok(server.remote);
         assert.strictEqual((yield* a.sync()).status, "clean");
@@ -133,7 +130,7 @@ const cases: readonly {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         inject({ _tag: "DropAfterCommit" });
-        assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
+        assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
         yield* unchanged;
         const committed = server.remote;
         assert.ok(committed);
@@ -163,7 +160,7 @@ const cases: readonly {
         yield* a.retain("first");
         const unchanged = yield* untouched(a);
         inject({ _tag: "DropAfterCommit" });
-        assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(a.sync())));
+        assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
         yield* unchanged;
         yield* b.sync();
         yield* b.retain("second");
@@ -205,7 +202,7 @@ const cases: readonly {
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
         inject({ _tag: "ChangeStateWhenHeadRead", home: b.home, state: concurrent });
         const head = server.remote;
-        assert.ok(Schema.is(SyncLocalChanged)(yield* Effect.flip(b.sync())));
+        assert.ok((yield* Effect.flip(b.sync())) instanceof SyncLocalChanged);
         assert.strictEqual(
           yield* fs.readFileString(join(b.home, "state.json")),
           Schema.encodeSync(Schema.fromJsonString(LibraryState))(concurrent),
@@ -234,7 +231,7 @@ const cases: readonly {
         const markerBefore = yield* fs.readFile(join(a.root, "first", ".skit-ownership.json"));
         const skillBefore = yield* fs.readFile(join(a.root, "first", "SKILL.md"));
         const head = server.remote;
-        assert.ok(Schema.is(SyncLocalChanged)(yield* Effect.flip(a.sync())));
+        assert.ok((yield* Effect.flip(a.sync())) instanceof SyncLocalChanged);
         assert.strictEqual(
           yield* fs.readFileString(join(a.home, "state.json")),
           Schema.encodeSync(Schema.fromJsonString(LibraryState))(concurrent),
@@ -316,7 +313,7 @@ const cases: readonly {
         const unchanged = yield* untouched(a);
         const head = server.remote;
         inject({ _tag: "FailUpload" });
-        assert.ok(Schema.is(LibraryApiRejected)(yield* Effect.flip(a.sync())));
+        assert.ok((yield* Effect.flip(a.sync())) instanceof LibraryApiRejected);
         yield* unchanged;
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* a.sync()).status, "merged");

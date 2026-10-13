@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { HttpClient } from "effect/http";
-import { MissingRequirement } from "../src/handlers/failures.js";
+import { MissingRequirement } from "../src/workflows/failures.js";
 import { publishCommand } from "../src/handlers/author/publish.js";
 import { RegistryHttp, registryClient } from "../src/registry/registry-http.js";
 import { rendererTestLayer } from "./helpers/renderer.js";

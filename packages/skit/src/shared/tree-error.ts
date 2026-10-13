@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
+import { FailureTypeId, type SkitFailure } from "./failure.js";
 
 export const TreeErrorReason = Schema.Union([
   Schema.Struct({
@@ -48,9 +49,13 @@ const renderReason = (reason: TreeErrorReason): string => {
 };
 
 /** Content that cannot be published as a SKIT tree. */
-export class TreeError extends Schema.TaggedError<TreeError>()("TreeError", {
-  reason: TreeErrorReason,
-}) {
+export class TreeError
+  extends Data.TaggedError("TreeError")<{ reason: TreeErrorReason }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Remove or replace the reported entry in the SKIT, then retry.";
   get message() {
     return renderReason(this.reason);
   }

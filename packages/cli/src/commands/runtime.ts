@@ -1,11 +1,21 @@
-import { Console, Effect } from "effect";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { Data, Console, Effect } from "effect";
 import { CliError, CliOutput, Command } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
-import { InvalidArgument } from "../presentation/command-errors.js";
 import { renderCommandFailures } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";
 import { result } from "../handlers/contracts.js";
 import { outputContracts } from "./output-contracts.js";
+
+/** The command line did not parse; the parser's own sentences are the message. */
+export class CommandLineInvalid
+  extends Data.TaggedError("CommandLineInvalid")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation = "Run `skit --help` to review command usage.";
+}
 
 const quietConsole: Console.Console = Object.assign(Object.create(console), {
   log: () => undefined,
@@ -63,7 +73,7 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
         (request) =>
           request.errors.length
             ? Effect.fail(
-                new InvalidArgument({
+                new CommandLineInvalid({
                   message: request.errors.map((error) => error.message).join("\n"),
                 }),
               )

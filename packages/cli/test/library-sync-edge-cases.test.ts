@@ -1,6 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit } from "effect";
 import { join } from "node:path";
 import {
   currentSkillVersion,
@@ -10,7 +10,7 @@ import {
   retainedTreePath,
   type SkillId,
 } from "@smolai/skit-core";
-import { LibraryApiUnreachable } from "../src/workflows/library/library-sync-api.js";
+import { RegistryUnreachable } from "../src/registry/failures.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 const enable = (ids: readonly SkillId[]) => ({
@@ -157,7 +157,7 @@ it.effect(
       assert.equal((yield* b.sync({ adopt: true, apply: false })).status, "adoption_ready");
       assert.deepEqual(yield* b.state, before);
       inject({ _tag: "DropAfterCommit" });
-      assert.ok(Schema.is(LibraryApiUnreachable)(yield* Effect.flip(b.sync({ adopt: true }))));
+      assert.ok((yield* Effect.flip(b.sync({ adopt: true }))) instanceof RegistryUnreachable);
       assert.deepEqual(yield* b.state, before);
       assert.equal((yield* b.sync({ adopt: true })).status, "merged");
       const after = yield* b.state;

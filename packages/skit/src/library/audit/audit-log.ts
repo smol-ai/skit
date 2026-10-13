@@ -1,8 +1,9 @@
-import { Context, Effect, FileSystem, Layer, Schema } from "effect";
+import { Data, Context, Effect, FileSystem, Layer, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join } from "node:path";
 import { Digest } from "../../contracts.js";
 import { OperationId, makeOperationId } from "../entity-ids.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 export const LibraryAuditChange = Schema.Struct({
   entity: Schema.Literals([
@@ -37,10 +38,23 @@ export interface LibraryAuditEvent extends Schema.Schema.Type<typeof LibraryAudi
 const AuditLine = Schema.fromJsonString(LibraryAuditEvent);
 export type LibraryAuditDraft = Omit<LibraryAuditEvent, "eventId">;
 
-export class LibraryAuditInvalid extends Schema.TaggedError<LibraryAuditInvalid>()(
-  "LibraryAuditInvalid",
-  { path: Schema.String, line: Schema.optionalKey(Schema.Number), cause: Schema.Defect() },
-) {}
+export class LibraryAuditInvalid
+  extends Data.TaggedError("LibraryAuditInvalid")<{
+    path: string;
+    line?: number;
+    cause: unknown;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get remediation(): string {
+    return `Move ${this.path} aside to start a new audit log, then retry.`;
+  }
+  get message(): string {
+    return `Invalid Library audit log at ${this.path}${this.line === undefined ? "" : `:${this.line}`}`;
+  }
+}
 
 export interface LibraryAuditLogService {
   readonly append: (

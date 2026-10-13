@@ -1,5 +1,6 @@
 import { parseSkitSourceEffect, type SkitSource } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export interface DedicatedInstallerGuidance {
   readonly sourceCoordinate: string;
@@ -20,11 +21,12 @@ const catalog = new Map<string, DedicatedInstallerGuidance>([
   ],
 ]);
 
-export class DedicatedInstallerRequired extends Data.TaggedError(
-  "Library.DedicatedInstallerRequired",
-)<DedicatedInstallerGuidance> {
+export class DedicatedInstallerRequired
+  extends Data.TaggedError("Library.DedicatedInstallerRequired")<DedicatedInstallerGuidance>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly exitCode = 64;
 
   get message(): string {
     return `${this.displayName} publishes harness-specific builds and cannot be added as one portable Skill Collection.`;

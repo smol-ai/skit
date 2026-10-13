@@ -11,7 +11,7 @@ export * from "./authoring/api-contracts.js";
 export * from "./auditing/skill-audit.js";
 export * from "./artifact/control-files.js";
 export * from "./contracts.js";
-export * from "./shared/skit-error.js";
+export * from "./shared/failure.js";
 export * from "./failures.js";
 export * from "./harnesses/contracts.js";
 export * from "./harnesses/catalog.js";

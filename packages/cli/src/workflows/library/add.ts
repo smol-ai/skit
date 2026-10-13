@@ -15,18 +15,36 @@ import {
   type SkitSource,
   type ResolvedSkitSource,
 } from "@smolai/skit-core";
-import { Clock, Effect, FileSystem, Schema } from "effect";
+import { Data, Clock, Effect, FileSystem } from "effect";
 import { basename, dirname, join, relative } from "node:path";
 import { RegistryAuth } from "../../registry/auth-service.js";
 import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class AddNoSkills extends Schema.TaggedError<AddNoSkills>()("Library.AddNoSkills", {
-  source: Schema.String,
-}) {}
-export class AddRetainedVersionMissing extends Schema.TaggedError<AddRetainedVersionMissing>()(
-  "Library.AddRetainedVersionMissing",
-  { source: Schema.String },
-) {}
+export class AddNoSkills
+  extends Data.TaggedError("Library.AddNoSkills")<{ source: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Choose a source that contains a SKILL.md.";
+  get message(): string {
+    return `No Skills found in ${this.source}`;
+  }
+}
+export class AddRetainedVersionMissing
+  extends Data.TaggedError("Library.AddRetainedVersionMissing")<{
+    source: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Add the source without --version to acquire it again.";
+  get message(): string {
+    return `The retained version of ${this.source} is missing`;
+  }
+}
 
 /** Check every selected local member before retaining any bytes, including declared collections.
  * Preserve the caller's dependency view when resolution canonicalizes or stages directory links.

@@ -1,6 +1,7 @@
-import { Effect, Schema, Stream } from "effect";
+import { Data, Effect, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { resolve } from "node:path";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 const NativeSkill = Schema.Struct({
   name: Schema.String,
@@ -32,10 +33,14 @@ const Envelope = Schema.Struct({
   error: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
 });
 
-export class CodexDoctorFailure extends Schema.TaggedError<CodexDoctorFailure>()(
-  "CodexDoctorFailure",
-  { message: Schema.String },
-) {}
+export class CodexDoctorFailure
+  extends Data.TaggedError("CodexDoctorFailure")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that Codex runs (`codex app-server`), then retry.";
+}
 
 /** Native discovery only: no thread, model turn, or skill invocation. The scope kills the server. */
 export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (

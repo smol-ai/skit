@@ -1,5 +1,5 @@
 import { emptyLibraryState, withLibraryWriter } from "@smolai/skit-core";
-import { Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import {
   canonicalJson,
   blendRestoredStateEffect,
@@ -46,6 +46,7 @@ import {
   retireSyncProjectionsEffect,
 } from "./library-sync-projections.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({
   status: "conflicted" as const,
@@ -68,14 +69,32 @@ const projectionCounts = (result: { readonly projected: number; readonly retired
   projected: result.projected,
   retired: result.retired,
 });
-export class SyncLocalChanged extends Schema.TaggedError<SyncLocalChanged>()(
-  "Library.SyncLocalChanged",
-  {},
-) {}
-export class SyncSourceRestoreInvalid extends Schema.TaggedError<SyncSourceRestoreInvalid>()(
-  "Library.SyncSourceRestoreInvalid",
-  { digest: Schema.String, detail: Schema.String },
-) {}
+export class SyncLocalChanged
+  extends Data.TaggedError("Library.SyncLocalChanged")<{}>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit sync` again.";
+  get message(): string {
+    return "The local Library changed while sync was running";
+  }
+}
+export class SyncSourceRestoreInvalid
+  extends Data.TaggedError("Library.SyncSourceRestoreInvalid")<{
+    digest: string;
+    detail: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "Restore access to the source, or run `skit update` on the Collection, then run `skit sync` again.";
+  get message(): string {
+    return this.detail;
+  }
+}
 
 /**
  * The Source to reacquire an Acquisition's exact bytes from: its recorded identity at its

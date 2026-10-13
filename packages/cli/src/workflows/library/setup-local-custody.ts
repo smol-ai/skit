@@ -12,7 +12,7 @@ import {
   readableHarnessRoots,
   type HarnessShadow,
 } from "../../projection/harness-shadows.js";
-import { Effect, FileSystem, Schema } from "effect";
+import { Data, Effect, FileSystem, Schema } from "effect";
 import {
   LibraryStore,
   LinkStat,
@@ -41,24 +41,27 @@ import {
   SetupCopySelection,
   SetupApprovedAlias,
 } from "./setup-decisions.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 const SetupLocalCustodySelections = Schema.Array(SetupCopySelection);
 
-export class SetupLocalCustodySelectionInvalid extends Schema.TaggedError<SetupLocalCustodySelectionInvalid>()(
-  "SetupLocalCustodySelectionInvalid",
-  {
-    name: Schema.String,
-    reason: Schema.Literals([
-      "duplicate-selection",
-      "candidate-not-found",
-      "candidate-not-manageable",
-      "source-not-candidate",
-      "machine-identity-required",
-      "duplicate-action-required",
-      "aliases-not-retirable",
-    ]),
-  },
-) {
+export class SetupLocalCustodySelectionInvalid
+  extends Data.TaggedError("SetupLocalCustodySelectionInvalid")<{
+    name: string;
+    reason:
+      | "duplicate-selection"
+      | "candidate-not-found"
+      | "candidate-not-manageable"
+      | "source-not-candidate"
+      | "machine-identity-required"
+      | "duplicate-action-required"
+      | "aliases-not-retirable";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit setup` again and review the current plan.";
   get message() {
     return `Cannot manage ${this.name} locally during setup: ${this.reason}`;
   }

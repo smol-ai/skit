@@ -19,7 +19,7 @@ import {
   type RepositoryBinding,
   type ProjectionId,
 } from "@smolai/skit-core";
-import { Clock, Effect, Schema } from "effect";
+import { Data, Clock, Effect } from "effect";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import type { InventoryRootOptions } from "../../projection/roots.js";
@@ -27,31 +27,34 @@ import type {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
 } from "./projection-retention-contract.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class ProjectionRetentionMissing extends Schema.TaggedError<ProjectionRetentionMissing>()(
-  "Library.ProjectionRetentionMissing",
-  { message: Schema.String },
-) {
+export class ProjectionRetentionMissing
+  extends Data.TaggedError("Library.ProjectionRetentionMissing")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly exitCode = 11;
   readonly remediation = "Run `skit doctor` to inspect changed Projections.";
 }
 
-export class ProjectionRetentionAmbiguous extends Schema.TaggedError<ProjectionRetentionAmbiguous>()(
-  "Library.ProjectionRetentionAmbiguous",
-  { message: Schema.String },
-) {
+export class ProjectionRetentionAmbiguous
+  extends Data.TaggedError("Library.ProjectionRetentionAmbiguous")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation = "Use an exact Projection ID or path with `--from-projection`.";
 }
 
-export class ProjectionRetentionStale extends Schema.TaggedError<ProjectionRetentionStale>()(
-  "Library.ProjectionRetentionStale",
-  { message: Schema.String },
-) {
+export class ProjectionRetentionStale
+  extends Data.TaggedError("Library.ProjectionRetentionStale")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   readonly remediation = "Preview the Projection retention again.";
 }
 

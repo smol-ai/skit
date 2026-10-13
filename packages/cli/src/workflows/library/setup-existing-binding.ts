@@ -3,28 +3,31 @@ import {
   approveSetupCopy,
   bindSetupCopy,
 } from "./setup-local-custody.js";
-import { Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import { type Digest } from "@smolai/skit-core";
 import type { ProjectionOptions } from "./projection-options.js";
 import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
 
 import type { SetupCopySelection } from "./setup-decisions.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class SetupExistingBindingInvalid extends Schema.TaggedError<SetupExistingBindingInvalid>()(
-  "SetupExistingBindingInvalid",
-  {
-    name: Schema.String,
-    reason: Schema.Literals([
-      "duplicate-selection",
-      "candidate-not-found",
-      "candidate-not-bindable",
-      "path-not-projection-target",
-      "content-identity-missing",
-      "duplicate-action-required",
-      "aliases-not-retirable",
-    ]),
-  },
-) {
+export class SetupExistingBindingInvalid
+  extends Data.TaggedError("SetupExistingBindingInvalid")<{
+    name: string;
+    reason:
+      | "duplicate-selection"
+      | "candidate-not-found"
+      | "candidate-not-bindable"
+      | "path-not-projection-target"
+      | "content-identity-missing"
+      | "duplicate-action-required"
+      | "aliases-not-retirable";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit setup` again and review the current plan.";
   get message() {
     return `Cannot bind ${this.name} to an existing Library entry during setup: ${this.reason}`;
   }

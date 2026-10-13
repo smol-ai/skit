@@ -15,7 +15,7 @@ export * from "./library/snapshot-archive-universal.js";
 export * from "./auditing/skill-audit.js";
 export * from "./contracts.js";
 export * from "./artifact/descriptor.js";
-export * from "./shared/skit-error.js";
+export * from "./shared/failure.js";
 export * from "./failures.js";
 export * from "./harnesses/contracts.js";
 export * from "./harnesses/frontmatter.js";

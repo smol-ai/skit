@@ -1,7 +1,7 @@
 import { Result } from "effect";
 import type { SkitBindingScope as Scope } from "@smolai/skit-core";
 import { type InvocationOption } from "../../invocation/policy.js";
-import { OptionCombinationInvalid } from "../../handlers/failures.js";
+import { OptionCombinationInvalid } from "../failures.js";
 
 export interface SetEnabledInvocation {
   scope: Scope;

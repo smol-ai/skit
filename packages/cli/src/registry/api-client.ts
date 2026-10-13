@@ -1,4 +1,9 @@
-import { PrincipalAuthentication, RequestDecoding } from "@smolai/skit-core/universal/api";
+import {
+  ApiErrorBody,
+  apiErrorStatuses,
+  PrincipalAuthentication,
+  RequestDecoding,
+} from "@smolai/skit-core/universal/api";
 import { Layer, Schema } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiMiddleware } from "effect/http-api";
@@ -24,35 +29,6 @@ export const sessionApiMiddleware = (cookie: string, origin: string) =>
     ),
   );
 
-const RegistryErrorBody = Schema.Struct({ error: Schema.String });
-
-const registryErrorStatuses: Readonly<Record<string, number>> = {
-  unauthorized: 401,
-  insufficient_scope: 403,
-  session_required: 403,
-  forbidden: 403,
-  forbidden_origin: 403,
-  invalid_cursor: 400,
-  invalid_request: 400,
-  skit_not_found: 404,
-  delete_requires_private: 409,
-  archive_too_large: 413,
-  draft_not_found: 404,
-  stale_draft_revision: 409,
-  release_conflict: 409,
-  publish_blocked: 422,
-  rate_limited: 429,
-  INVALID_SCOPE: 400,
-  invalid_expiry: 400,
-  UNAUTHORIZED: 400,
-  token_not_found: 404,
-  library_not_found: 404,
-  LIBRARY_CREATE_FAILED: 400,
-  REVISION_CONFLICT: 409,
-  DRAFT_TOO_LARGE: 413,
-  storage_failure: 500,
-};
-
 export interface RegistryApiFailure {
   readonly status?: number;
   readonly code?: string;
@@ -63,10 +39,12 @@ export const registryApiFailure = (
   error: unknown,
   options: { readonly defaultStatus?: number } = {},
 ): RegistryApiFailure => {
-  if (Schema.is(RegistryErrorBody)(error))
+  if (Schema.is(ApiErrorBody)(error))
     return {
       code: error.error,
-      status: registryErrorStatuses[error.error] ?? options.defaultStatus,
+      status:
+        Object.entries(apiErrorStatuses).find(([code]) => code === error.error)?.[1] ??
+        options.defaultStatus,
     };
   if (HttpClientError.isHttpClientError(error)) return { status: error.response?.status };
   return { status: options.defaultStatus };

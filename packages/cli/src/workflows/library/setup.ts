@@ -1,5 +1,5 @@
 import { withConfigurationWriter } from "../../configuration-writer.js";
-import { Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import { canonicalJson, Digest, hashParts } from "@smolai/skit-core";
 import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
@@ -7,6 +7,7 @@ import type { SetupResult } from "./setup-contract.js";
 import { collectSetupEvidence, collectBrokenLinks } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 export {
   SetupConfigUnusable,
   readSetupMachineConfig,
@@ -19,10 +20,16 @@ export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboar
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
 export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
 export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
-export class SetupPlanStale extends Schema.TaggedError<SetupPlanStale>()("SetupPlanStale", {
-  approvedPlanId: Digest,
-  currentPlanId: Digest,
-}) {
+export class SetupPlanStale
+  extends Data.TaggedError("SetupPlanStale")<{
+    approvedPlanId: typeof Digest.Type;
+    currentPlanId: typeof Digest.Type;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit setup` again and review the current plan.";
   get message() {
     return "The setup plan changed after it was reviewed. Review the current plan before applying.";
   }

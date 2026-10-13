@@ -21,65 +21,75 @@ import {
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { skitLocator } from "./sync.js";
-import { AuthenticationRequired, CredentialLacksScope } from "../../registry/failures.js";
+import {
+  AuthenticationRequired,
+  CredentialLacksScope,
+  RegistryOriginInvalid,
+  RegistryUnreachable,
+} from "../../registry/failures.js";
 import { handleRegistryCommand } from "../../application.js";
 import { resolveAuthEffect } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export type AuthorSkitInventory = typeof outputContracts.authorList.schema.Type;
 
-export class AuthorListHttpError extends Data.TaggedError("AuthorListHttpError")<{
-  message: string;
-  cause: Error;
-}> {}
-export class AuthorListResponseError extends Data.TaggedError("AuthorListResponseError")<{
-  message: string;
-}> {}
-export class AuthorListPaginationError extends Data.TaggedError("AuthorListPaginationError")<{
-  origin: string;
-}> {
+export class AuthorListResponseError
+  extends Data.TaggedError("AuthorListResponseError")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check the Registry's reason, then retry.";
+}
+export class AuthorListPaginationError
+  extends Data.TaggedError("AuthorListPaginationError")<{
+    origin: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Retry; if it persists, report the Registry's inventory to its operator.";
   get message() {
     return `Registry ${this.origin} returned non-progressing or excessive inventory pages`;
   }
 }
-export class AuthorListIdentityError extends Data.TaggedError("AuthorListIdentityError")<{
-  identity: string;
-}> {
+export class AuthorListIdentityError
+  extends Data.TaggedError("AuthorListIdentityError")<{
+    identity: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Report the invalid identity to the Registry's operator.";
   get message() {
     return `Registry returned invalid SKIT identity: ${this.identity}`;
-  }
-}
-export class AuthorListOriginInvalid extends Data.TaggedError("AuthorListOriginInvalid")<{
-  origin: string;
-}> {
-  get message() {
-    return `Invalid Registry URL: ${this.origin}`;
   }
 }
 export type AuthorListFailure =
   | AuthenticationRequired
   | CredentialLacksScope
-  | AuthorListHttpError
+  | RegistryUnreachable
   | AuthorListResponseError
   | SkitContractError
   | AuthorListPaginationError
   | AuthorListIdentityError
-  | AuthorListOriginInvalid;
+  | RegistryOriginInvalid;
 
 const parseUrl = (input: string) =>
   Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
-    Effect.mapError(() => new AuthorListOriginInvalid({ origin: input })),
+    Effect.mapError(() => new RegistryOriginInvalid({ origin: input })),
   );
 
 const classifyListFailure = (origin: string, error: unknown): AuthorListFailure => {
-  if (isRegistryTransportError(error))
-    return new AuthorListHttpError({
-      message: `Unable to reach Registry ${origin}: ${error.message}`,
-      cause: error,
-    });
+  if (isRegistryTransportError(error)) return new RegistryUnreachable({ origin, cause: error });
   if (Schema.is(UnauthorizedResponse)(error))
     return new AuthenticationRequired({ origin, scopes: "authoring:write" });
   if (Schema.is(InsufficientScopeResponse)(error))
@@ -88,9 +98,10 @@ const classifyListFailure = (origin: string, error: unknown): AuthorListFailure 
   if (failure.status === 401)
     return new AuthenticationRequired({ origin, scopes: "authoring:write" });
   if (isSuccessfulResponseDecodeFailure(error, [200]))
-    return new SkitContractError("author SKIT list response", [
-      { path: "", message: String(error) },
-    ]);
+    return new SkitContractError({
+      contract: "author SKIT list response",
+      issues: [{ path: "", message: String(error) }],
+    });
   if (failure.status !== undefined || failure.code !== undefined)
     return new AuthorListResponseError({
       message: registryApiFailureMessage("Author SKIT list", error),

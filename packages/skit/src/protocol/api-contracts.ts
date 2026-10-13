@@ -1,10 +1,11 @@
-import { Effect, Result, Schema, SchemaIssue, type SchemaAST } from "effect";
+import { Data, Effect, Result, Schema, SchemaIssue, type SchemaAST } from "effect";
 import {
   registrySkitSlugSchema,
   skitDescriptorWireSchema,
   skitValidationDiagnosticSchema,
   type SkitWireDescriptor,
 } from "../schemas.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 /** Capability-neutral primitives shared by consumer and optional write protocols. */
 export const SKIT_API_CONTRACT_VERSION = "1" as const;
@@ -50,17 +51,19 @@ export const skitApiErrorSchema = Schema.Struct({
 });
 export type SkitApiError = typeof skitApiErrorSchema.Type;
 
-export class SkitContractError extends Error {
-  readonly issues: Array<{ path: string; message: string }>;
-  constructor(
-    readonly contract: string,
-    issues: Array<{ path: string; message: string }>,
-  ) {
-    super(
-      `${contract} does not match the SKIT API contract: ${issues.map((issue) => `${issue.path || "<root>"}: ${issue.message}`).join("; ")}`,
-    );
-    this.name = "SkitContractError";
-    this.issues = issues;
+/** A Registry response that does not match the SKIT API contract it claims. */
+export class SkitContractError
+  extends Data.TaggedError("SkitContractError")<{
+    contract: string;
+    issues: ReadonlyArray<{ path: string; message: string }>;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Check that the Registry runs a compatible SKIT server, then retry.";
+  get message(): string {
+    return `${this.contract} does not match the SKIT API contract: ${this.issues.map((issue) => `${issue.path || "<root>"}: ${issue.message}`).join("; ")}`;
   }
 }
 const formatContractIssues = SchemaIssue.makeFormatterStandardSchemaV1();
@@ -77,6 +80,8 @@ export function parseContractEffect<S extends Schema.ConstraintDecoder<unknown>>
   options?: SchemaAST.ParseOptions,
 ): Effect.Effect<S["Type"], SkitContractError> {
   return Schema.decodeUnknownEffect(schema, { errors: "all", ...options })(value).pipe(
-    Effect.mapError((failure) => new SkitContractError(contract, contractIssues(failure))),
+    Effect.mapError(
+      (failure) => new SkitContractError({ contract, issues: contractIssues(failure) }),
+    ),
   );
 }

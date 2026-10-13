@@ -4,12 +4,17 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { LinkStat } from "../platform/link-stat.js";
 import { isJsonObject, type JsonObject } from "../shared/json.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class PluginManifestInvalid extends Data.TaggedError("PluginManifestInvalid")<{
-  path: string;
-  detail: string;
-  reason?: "escape";
-}> {
+export class PluginManifestInvalid
+  extends Data.TaggedError("PluginManifestInvalid")<{
+    path: string;
+    detail: string;
+    reason?: "escape";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
   get remediation(): string {
     return `Correct the plugin declaration at ${this.path}, then retry.`;

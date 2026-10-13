@@ -4,7 +4,7 @@ import {
   LibraryStore,
   type LibraryState,
 } from "@smolai/skit-core";
-import { Cause, Effect, FileSystem, Predicate, Schema } from "effect";
+import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
 import type { InventoryRootOptions } from "../projection/roots.js";
 import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "../workflows/library/add.js";
 import type { UpdateFailure, UpdateResult } from "../workflows/library/update-contract.js";
@@ -20,17 +20,18 @@ import { isPlatformError } from "effect/PlatformError";
 import { commandFailure } from "../failure-classification.js";
 import { sourceLocator } from "@smolai/skit-core";
 import { sourceFromUpstream } from "../workflows/library/upstream-source.js";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class UpdateNotRefreshable extends Schema.TaggedError<UpdateNotRefreshable>()(
-  "Library.UpdateNotRefreshable",
-  {
-    subject_id: Schema.String,
-    label: Schema.String,
-    source: Schema.optionalKey(Schema.String),
-  },
-) {
+export class UpdateNotRefreshable
+  extends Data.TaggedError("Library.UpdateNotRefreshable")<{
+    subject_id: string;
+    label: string;
+    source?: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly exitCode = 12;
   get message(): string {
     return `${this.label} has no upstream source`;
   }

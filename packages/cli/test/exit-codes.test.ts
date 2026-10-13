@@ -22,34 +22,18 @@ import { productionUrlTestClient } from "./helpers/http-test-client.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
-import { classifyFailure } from "../src/failure-classification.js";
+import { classifyFailure, failureExitCodes } from "../src/failure-classification.js";
 import { SyncSourceRestoreInvalid } from "../src/workflows/library/library-sync.js";
-import {
-  Conflict,
-  InvalidArgument,
-  NotFound,
-  OperationFailed,
-  TargetCollision,
-  ValidationFailed,
-  errorMessage,
-} from "../src/presentation/command-errors.js";
+import { NoStoredCredentials, RegistryUnreachable } from "../src/registry/failures.js";
 
-const taxonomy = [
-  new NotFound({ message: "" }),
-  new Conflict({ message: "" }),
-  new InvalidArgument({ message: "" }),
-  new ValidationFailed({ message: "" }),
-  new TargetCollision({ message: "" }),
-  new OperationFailed({ message: "" }),
-];
+const produced = new Set<number>(Object.values(failureExitCodes));
 
 /** Success, and the policy-blocked outcome a command reports through its result rather than a failure. */
 const NON_FAILURE_CODES = new Set([0, 77]);
 
 describe("declared exit codes", () => {
-  it.effect("every declared failure code is one the taxonomy can produce", () =>
+  it.effect("every declared failure code is one the table can produce", () =>
     Effect.gen(function* () {
-      const produced = new Set<number>(taxonomy.map((error) => error.exitCode));
       const commands = yield* commandDescriptions(skitCommand);
       const declared = new Set<number>(commands.flatMap((command) => command.successExitCodes));
       const unproducible = [...declared].filter(
@@ -59,36 +43,41 @@ describe("declared exit codes", () => {
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-codes-test"))),
   );
 
-  it.effect("every semantic taxonomy code is declared, including partial update failure", () =>
+  it.effect("every exit status in the table is declared, including partial update failure", () =>
     Effect.gen(function* () {
       const commands = yield* commandDescriptions(skitCommand);
       const declared = new Set<number>(commands.flatMap((command) => command.successExitCodes));
-      const undeclared = taxonomy
-        .filter((error) => !declared.has(error.exitCode))
-        .map((error) => error.code);
+      expect([...produced].filter((code) => !declared.has(code))).toEqual([]);
       // Exit 1 is also an intentional result for a partially failed update batch,
       // rather than only a shared unexpected failure.
-      expect(undeclared).toEqual([]);
       const update = commands.find((command) => command.path.join(" ") === "update");
       expect(update?.successExitCodes).toContain(1);
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-taxonomy-test"))),
   );
 
-  test("each error carries a distinct code with remediation", () => {
-    for (const error of taxonomy) {
-      expect(error.remediation).not.toBe("");
-      expect(error.exitCode).toBeGreaterThan(0);
-    }
-    expect(new Set(taxonomy.map((error) => error.code)).size).toBe(taxonomy.length);
+  test("a named failure classifies by its own code and remediation", () => {
+    for (const failure of [
+      new NoStoredCredentials(),
+      new RegistryUnreachable({ origin: "https://registry.example", cause: new Error("offline") }),
+      new SyncSourceRestoreInvalid({
+        digest: `sha256:${"a".repeat(64)}`,
+        detail: "pinned Git acquisition has no commit",
+      }),
+    ])
+      expect(classifyFailure(failure)).toEqual({
+        code: failure.code,
+        exitCode: failureExitCodes[failure.code],
+        message: failure.message,
+        remediation: failure.remediation,
+      });
   });
 
-  test("message-less tagged failures retain their detail", () => {
-    const failure = new SyncSourceRestoreInvalid({
-      digest: `sha256:${"a".repeat(64)}`,
-      detail: "pinned Git acquisition has no commit",
-    });
-    expect(failure.message).toBe("");
-    expect(errorMessage(failure)).toBe("pinned Git acquisition has no commit");
+  test("anything not named as a failure ends the command with exit 1", () => {
+    for (const value of [new Error("boom"), { code: "NOT_FOUND", message: "lookalike" }, "text"]) {
+      const classified = classifyFailure(value);
+      expect(classified).toMatchObject({ code: "OPERATION_FAILED", exitCode: 1 });
+      expect(classified.remediation).not.toBe("");
+    }
   });
 });
 

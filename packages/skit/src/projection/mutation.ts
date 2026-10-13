@@ -45,6 +45,7 @@ import {
   pendingProjectionBackupsEffect,
   projectionWorkDirectoryEffect,
 } from "./backups.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 
@@ -92,9 +93,16 @@ export interface MaterializeProjectionRequest {
 export interface ProjectionState extends LibraryState {}
 
 /** A projection could not be materialized or verified. */
-export class ProjectionFailure extends Data.TaggedError("ProjectionFailure")<{
-  message: string;
-}> {}
+export class ProjectionFailure
+  extends Data.TaggedError("ProjectionFailure")<{
+    message: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit doctor` to inspect the Projection, then retry.";
+}
 
 function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.FileSystem> {
   return Effect.gen(function* () {

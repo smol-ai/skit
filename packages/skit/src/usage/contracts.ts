@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export const UsageHarness = Schema.Literals(["codex", "claude-code"]);
 export type UsageHarness = typeof UsageHarness.Type;
@@ -51,12 +52,14 @@ export const UsageReport = Schema.Struct({
   durationMs: Schema.Number,
 });
 export interface UsageReport extends Schema.Schema.Type<typeof UsageReport> {}
-export class InvalidUsageOptions extends Schema.TaggedError<InvalidUsageOptions>()(
-  "InvalidUsageOptions",
-  {
-    message: Schema.String,
-  },
-) {}
+export class InvalidUsageOptions
+  extends Data.TaggedError("InvalidUsageOptions")<{ message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation = "Run `skit usage --help` to review its options.";
+}
 export interface UsageRoot {
   readonly harness: UsageHarness;
   readonly root: string;
