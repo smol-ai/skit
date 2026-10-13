@@ -163,7 +163,6 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(f
         registryBaseUrl: options.origin,
         ...(options.token === undefined ? {} : { registryToken: options.token }),
         ...(git === undefined ? {} : { git, requireGitRevision: true }),
-        verbatimOnly: true,
       });
       // Declared imports retain the whole resolved SKIT root, including shared and non-Skill files.
       if (profiles.has("declared-skit-skill/v1")) {

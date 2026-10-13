@@ -8,16 +8,14 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import {
   assertArchivePaths,
-  AGENT_SKILLS_NORMALIZATION_PROFILE,
   auditExtractedSourceEffect,
   parseSkitSourceEffect,
   sourceLocator,
   sourceLocatorProfiles,
   sourceInputWithVersionEffect,
   resolveSkitSourceEffect,
-  normalizeObservedAgentSkillsEffect,
 } from "../src/acquisition/sources.js";
-import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
 import { prepareObservedCollectionEffect } from "../src/library/observed-import.js";
 
@@ -29,12 +27,14 @@ const readText = (path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path));
 const writeText = (path: string, text: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.writeFileString(path, text));
-/** A resolved Source whose workspace the surrounding test Scope releases. */
-const resolve = (root: string) => resolveSkitSourceEffect(root);
-const releaseHash = (root: string, context: "author" | "retain") =>
-  validateSkitDirectoryEffect(root, context === "author" ? "draft" : "source", {
-    assessmentContext: context,
-  }).pipe(Effect.map((validated) => validated.identity.releaseContentHash));
+/** A Source of plain Agent Skills whose workspace the surrounding test Scope releases. */
+const resolve = (...args: Parameters<typeof resolveSkitSourceEffect>) =>
+  resolveSkitSourceEffect(...args).pipe(
+    Effect.map((resolved) => {
+      assert(resolved.descriptorKind === "observed");
+      return resolved;
+    }),
+  );
 const provide = <A, E>(effect: Effect.Effect<A, E, SkitServices | Scope.Scope>) =>
   effect.pipe(Effect.provide(skitLayer), Effect.scoped);
 
@@ -94,10 +94,7 @@ describe("source contracts", () => {
       yield* fs.makeDirectory(join(root, "x"));
       yield* writeText(join(root, "x/SKILL.md"), "---\nname: review\ndescription: Review.\n---\n");
       for (const path of ["./x/SKILL.md", "x//SKILL.md"]) {
-        const resolved = yield* resolveSkitSourceEffect(root, {
-          verbatimOnly: true,
-          agentSkillPaths: [path],
-        });
+        const resolved = yield* resolve(root, { agentSkillPaths: [path] });
         expect(resolved.observedSkillPaths).toEqual(["x"]);
       }
     }).pipe(provide),
@@ -134,10 +131,7 @@ describe("source contracts", () => {
         ];
         for (const selected of selections) {
           const source = { type: "git" as const, remote: fixture.remote, ...selected.source };
-          const observed = yield* resolveSkitSourceEffect(source, {
-            ...selected.options,
-            verbatimOnly: true,
-          });
+          const observed = yield* resolve(source, selected.options);
           expect(observed.observedSkillPaths).toEqual([selected.path]);
           const sourcePath = join(observed.originalRoot, selected.path);
           const prepared = yield* prepareObservedCollectionEffect([
@@ -154,11 +148,6 @@ describe("source contracts", () => {
           expect(
             yield* readText(join(prepared.staged, selected.path, "references/guide.md")),
           ).toEqual("Supporting reference.\n");
-          const normalized = yield* resolveSkitSourceEffect(source, selected.options);
-          expect(yield* readText(join(normalized.root, "skills/review/SKILL.md"))).toEqual(
-            fixture.content,
-          );
-          yield* releaseHash(normalized.root, "retain");
         }
       }).pipe(provide),
   );
@@ -179,9 +168,9 @@ describe("source contracts", () => {
             options: { agentSkillPaths: [`${path}/SKILL.md`], allowMissingAgentSkillPaths: true },
           },
         ]) {
-          const error = yield* resolveSkitSourceEffect(
+          const error = yield* resolve(
             { type: "git", remote: fixture.remote, ...selection.source },
-            { ...selection.options, verbatimOnly: true },
+            selection.options,
           ).pipe(Effect.flip);
           assert.strictEqual(error._tag, "SourcePolicyViolation");
           assert.include(error.message, "outside the checkout");
@@ -195,20 +184,15 @@ describe("source contracts", () => {
       Effect.gen(function* () {
         const fixture = yield* gitLinkFixture;
         const source = { type: "git" as const, remote: fixture.remote };
-        const subpathError = yield* resolveSkitSourceEffect(
-          { ...source, subpath: "dangling" },
-          { verbatimOnly: true },
-        ).pipe(Effect.flip);
+        const subpathError = yield* resolve({ ...source, subpath: "dangling" }).pipe(Effect.flip);
         assert.strictEqual(subpathError._tag, "SourcePolicyViolation");
         assert.include(subpathError.message, "symlink target is unavailable: dangling");
-        const memberError = yield* resolveSkitSourceEffect(
-          { ...source, skillDirectories: ["dangling"] },
-          { verbatimOnly: true },
-        ).pipe(Effect.flip);
+        const memberError = yield* resolve({ ...source, skillDirectories: ["dangling"] }).pipe(
+          Effect.flip,
+        );
         assert.strictEqual(memberError._tag, "SourcePolicyViolation");
         assert.include(memberError.message, "Locked Skill path is missing");
-        const recovered = yield* resolveSkitSourceEffect(source, {
-          verbatimOnly: true,
+        const recovered = yield* resolve(source, {
           agentSkillPaths: ["dangling/SKILL.md", `${fixture.selectedPath}/SKILL.md`],
           allowMissingAgentSkillPaths: true,
         });
@@ -224,10 +208,11 @@ describe("source contracts", () => {
       yield* fs.makeDirectory(join(root, "real"));
       const alias = join(root, "alias");
       yield* fs.symlink(join(root, "real"), alias);
-      const resolved = yield* resolveSkitSourceEffect(
-        { type: "git", remote: fixture.remote, subpath: fixture.selectedPath },
-        { verbatimOnly: true },
-      ).pipe(
+      const resolved = yield* resolve({
+        type: "git",
+        remote: fixture.remote,
+        subpath: fixture.selectedPath,
+      }).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectoryScoped: (options) =>
@@ -241,10 +226,7 @@ describe("source contracts", () => {
   it.effect("does not infer plugin ownership from a directory name in a selected Git subpath", () =>
     Effect.gen(function* () {
       const fixture = yield* gitLinkFixture;
-      const selected = yield* resolveSkitSourceEffect(
-        { type: "git", remote: fixture.remote, subpath: "example" },
-        { verbatimOnly: true },
-      );
+      const selected = yield* resolve({ type: "git", remote: fixture.remote, subpath: "example" });
       expect(selected.observedSkillPaths?.toSorted()).toEqual([
         "plugins/bundle/skills/review",
         "skills/review",
@@ -267,7 +249,7 @@ describe("source contracts", () => {
           "---\nname: review\ndescription: Review.\n---\n",
         );
       }
-      const discovered = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+      const discovered = yield* resolve(root);
       expect(discovered.observedSkillPaths?.toSorted()).toEqual([
         ".github/plugins/bundle/skills/review",
         "examples/plugins/demo",
@@ -286,16 +268,13 @@ describe("source contracts", () => {
         join(root, path, "SKILL.md"),
         "---\nname: review\ndescription: Review.\n---\n",
       );
-      const direct = yield* resolveSkitSourceEffect(join(root, path), { verbatimOnly: true });
+      const direct = yield* resolve(join(root, path));
       expect(direct.observedSkillPaths).toEqual(["."]);
       yield* fs.symlink(join(root, path), join(root, "selected-link"));
-      const linked = yield* resolveSkitSourceEffect(join(root, "selected-link"), {
-        verbatimOnly: true,
-      });
+      const linked = yield* resolve(join(root, "selected-link"));
       expect(linked.originalRoot).toEqual(yield* fs.realPath(join(root, path)));
       expect(linked.observedSkillPaths).toEqual(["."]);
-      const locked = yield* resolveSkitSourceEffect(root, {
-        verbatimOnly: true,
+      const locked = yield* resolve(root, {
         agentSkillPaths: [`${path}/SKILL.md`],
       });
       expect(locked.observedSkillPaths).toEqual([path]);
@@ -310,7 +289,7 @@ describe("source contracts", () => {
         join(root, "plugins/bundle/skills/review/SKILL.md"),
         "---\nname: review\ndescription: Review.\n---\n",
       );
-      const source = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+      const source = yield* resolve(root);
       expect(source.observedSkillPaths).toEqual(["plugins/bundle/skills/review"]);
     }).pipe(provide),
   );
@@ -332,7 +311,7 @@ describe("source contracts", () => {
           join(root, "dev-skills/doc-skills"),
           join(root, ".claude/skills/dev-link"),
         );
-        const discovered = yield* resolveSkitSourceEffect(root, { verbatimOnly: true });
+        const discovered = yield* resolve(root);
         expect(discovered.observedSkillPaths?.toSorted()).toEqual([
           ".claude/skills/asb-positioning",
           "dev-skills/doc-skills",
@@ -348,113 +327,6 @@ describe("source contracts", () => {
       expect(new Set(aliases).size).toBe(aliases.length);
     }),
   );
-  it.effect("normalizes colliding Skill names independent of installation layout", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* scratch("skit-skill-name-collision-");
-      const upstream = join(root, "upstream");
-      const installed = join(root, "installed");
-      const pairs = [
-        { name: "foo_bar", upstream: "a/foo_bar", installed: "z/foo_bar" },
-        { name: "foo-bar", upstream: "z/foo-bar", installed: "a/foo-bar" },
-      ];
-      for (const pair of pairs) {
-        const text = `---\nname: ${pair.name}\ndescription: Test Skill.\n---\n\n# ${pair.name}\n`;
-        for (const directory of [join(upstream, pair.upstream), join(installed, pair.installed)]) {
-          yield* fs.makeDirectory(directory, { recursive: true });
-          yield* writeText(join(directory, "SKILL.md"), text);
-        }
-      }
-      const acquired = yield* normalizeObservedAgentSkillsEffect(
-        pairs.map((pair) => join(upstream, pair.upstream)),
-        join(root, "acquired"),
-        upstream,
-      );
-      const adopted = yield* normalizeObservedAgentSkillsEffect(
-        pairs.map((pair) => join(installed, pair.installed)),
-        join(root, "adopted"),
-        installed,
-      );
-      expect(yield* deterministicTreeHashEffect(adopted.root)).toBe(
-        yield* deterministicTreeHashEffect(acquired.root),
-      );
-    }).pipe(provide),
-  );
-  it.effect(
-    "normalizes Agent Skills without laundering inferred capabilities into declarations",
-    () =>
-      Effect.gen(function* () {
-        expect(AGENT_SKILLS_NORMALIZATION_PROFILE).toBe("agent-skills/v1");
-        const root = yield* scratch("skit-agent-skill-evidence-");
-        yield* writeText(
-          join(root, "SKILL.md"),
-          '---\nname: review\ndescription: Review.\n---\n\nCall spawn("bash", ["-c", command]).\n',
-        );
-
-        const resolved = yield* resolve(root);
-        const readme = yield* readText(join(resolved.root, "README.md"));
-        expect(readme).toContain("slug: internal-normalized");
-        expect(readme).not.toContain("id: local/");
-        expect(readme).not.toContain("capabilities:");
-        expect(readme).not.toContain("mutation_scopes:");
-
-        const validation = yield* validateSkitDirectoryEffect(resolved.root, "source", {
-          assessmentContext: "retain",
-        });
-        expect(validation.diagnostics).toContainEqual(
-          expect.objectContaining({ code: "SECURITY_ASSESSMENT_WARNING", severity: "warning" }),
-        );
-        expect(validation.diagnostics).not.toContainEqual(
-          expect.objectContaining({ severity: "error" }),
-        );
-      }).pipe(provide),
-  );
-
-  it.effect("keeps generated declarations independent of detector-sensitive prose", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const fixedTime = new Date("2026-01-01T00:00:00.000Z");
-      const makeSkill = Effect.fn("Test.makeSkill")(function* (body: string) {
-        const root = yield* scratch("skit-agent-skill-profile-");
-        const path = join(root, "SKILL.md");
-        yield* fs.writeFileString(
-          path,
-          `---\nname: review\ndescription: Review.\n---\n\n${body}\n`,
-        );
-        yield* fs.utimes(path, fixedTime, fixedTime);
-        return root;
-      });
-      const benignRoot = yield* makeSkill("Review subprocess boundaries.");
-      const executableRoot = yield* makeSkill('Call spawn("bash", ["-c", command]).');
-      const benign = yield* resolve(benignRoot);
-      const executable = yield* resolve(executableRoot);
-      expect(yield* readText(join(benign.root, "README.md"))).toBe(
-        yield* readText(join(executable.root, "README.md")),
-      );
-      expect(yield* releaseHash(benign.root, "author")).not.toBe(
-        yield* releaseHash(executable.root, "author"),
-      );
-    }).pipe(provide),
-  );
-
-  it.effect("wraps identical Agent Skill bytes deterministically", () =>
-    Effect.gen(function* () {
-      const root = yield* scratch("skit-agent-skill-repeat-");
-      yield* writeText(
-        join(root, "SKILL.md"),
-        "---\nname: review\ndescription: Review.\n---\n\n# Review\n",
-      );
-      const first = yield* resolve(root);
-      const second = yield* resolve(root);
-      expect(yield* readText(join(first.root, "README.md"))).toBe(
-        yield* readText(join(second.root, "README.md")),
-      );
-      expect(yield* releaseHash(first.root, "author")).toBe(
-        yield* releaseHash(second.root, "author"),
-      );
-    }).pipe(provide),
-  );
-
   it.effect("resolves shorthand deterministically before acquisition", () =>
     Effect.gen(function* () {
       expect(yield* parseSkitSourceEffect("tim/dad-joke@1.0.0")).toEqual({
@@ -589,7 +461,7 @@ describe("source contracts", () => {
     }).pipe(provide),
   );
 
-  it.effect("reacquires only locked Git Skill paths without inventing a timestamp", () =>
+  it.effect("reacquires only locked Git Skill paths", () =>
     Effect.gen(function* () {
       const fixture = yield* scratch("skit-git-locked-members-");
       const fs = yield* FileSystem.FileSystem;
@@ -626,12 +498,13 @@ describe("source contracts", () => {
         remote: fixture,
         skillDirectories: ["skills/review"],
       };
-      const first = yield* resolveSkitSourceEffect(source);
-      const firstHash = yield* releaseHash(first.root, "retain");
-      expect(yield* readText(join(first.root, "skills", "review", "SKILL.md"))).toContain(
+      const first = yield* resolve(source);
+      expect(first.observedSkillPaths).toEqual(["skills/review"]);
+      const firstHash = yield* deterministicTreeHashEffect(first.originalRoot);
+      expect(yield* readText(join(first.originalRoot, "skills", "review", "SKILL.md"))).toContain(
         "# review",
       );
-      expect(yield* fs.exists(join(first.root, "skills", "other"))).toBe(false);
+      expect(yield* fs.exists(join(first.originalRoot, "skills", "other"))).toBe(false);
       yield* writeText(
         join(fixture, "skills", "other", "SKILL.md"),
         "---\nname: other\ndescription: Other.\n---\n\nChanged unrelated Skill.\n",
@@ -655,8 +528,8 @@ describe("source contracts", () => {
         "-qm",
         "second",
       );
-      const second = yield* resolveSkitSourceEffect(source);
-      expect(yield* releaseHash(second.root, "retain")).toBe(firstHash);
+      const second = yield* resolve(source);
+      expect(yield* deterministicTreeHashEffect(second.originalRoot)).toBe(firstHash);
       expect(second.revision).not.toEqual(first.revision);
     }).pipe(provide),
   );
@@ -712,13 +585,14 @@ describe("source contracts", () => {
         type: "well-known",
         origin: base,
       });
-      const resolved = yield* resolveSkitSourceEffect(base).pipe(
+      const resolved = yield* resolve(base).pipe(
         Effect.provideService(HttpClient.HttpClient, client(skill)),
       );
       expect(resolved.source.type).toBe("well-known");
       expect(sourceLocator(resolved.source)).toBe(`wellknown:${base}`);
-      expect(yield* readText(join(resolved.root, "skills", "review", "SKILL.md"))).toBe(skill);
-      const failure = yield* resolveSkitSourceEffect(`wellknown:${base}`).pipe(
+      expect(resolved.observedSkillPaths).toEqual(["review"]);
+      expect(yield* readText(join(resolved.originalRoot, "review", "SKILL.md"))).toBe(skill);
+      const failure = yield* resolve(`wellknown:${base}`).pipe(
         Effect.provideService(HttpClient.HttpClient, client(`${skill}changed`)),
         Effect.flip,
       );
@@ -778,20 +652,20 @@ describe("source contracts", () => {
             ),
           );
         });
-      const first = yield* resolveSkitSourceEffect(`wellknown:${base}`).pipe(
+      const first = yield* resolve(`wellknown:${base}`).pipe(
         Effect.provideService(HttpClient.HttpClient, client("first")),
       );
-      const second = yield* resolveSkitSourceEffect(first.source).pipe(
+      const second = yield* resolve(first.source).pipe(
         Effect.provideService(HttpClient.HttpClient, client("second")),
       );
-      expect(yield* readText(join(first.root, "skills", "review", "references", "guide.md"))).toBe(
+      expect(yield* readText(join(first.originalRoot, "review", "references", "guide.md"))).toBe(
         "first",
       );
-      expect(yield* readText(join(second.root, "skills", "review", "references", "guide.md"))).toBe(
+      expect(yield* readText(join(second.originalRoot, "review", "references", "guide.md"))).toBe(
         "second",
       );
-      expect(yield* releaseHash(first.root, "retain")).not.toBe(
-        yield* releaseHash(second.root, "retain"),
+      expect(yield* deterministicTreeHashEffect(first.originalRoot)).not.toBe(
+        yield* deterministicTreeHashEffect(second.originalRoot),
       );
     }).pipe(provide),
   );
@@ -849,12 +723,12 @@ describe("source contracts", () => {
       expect(rejected._tag).toBe("UnsafeSourceUrl");
       const parsed = { type: "well-known" as const, origin: base, skillNames: ["review"] };
       expect(sourceLocator(parsed)).toBe(`wellknown:${base}`);
-      const resolved = yield* resolveSkitSourceEffect(parsed).pipe(
+      const resolved = yield* resolve(parsed).pipe(
         Effect.provideService(HttpClient.HttpClient, client),
       );
-      expect(
-        yield* readText(join(resolved.root, "skills", "review", "references", "guide.md")),
-      ).toBe("Guide");
+      expect(yield* readText(join(resolved.originalRoot, "review", "references", "guide.md"))).toBe(
+        "Guide",
+      );
       expect(requested).not.toContain(`${base}/other/SKILL.md`);
     }).pipe(provide),
   );
@@ -890,7 +764,7 @@ describe("source contracts", () => {
           ),
         ),
       );
-      const failure = yield* resolveSkitSourceEffect(`wellknown:${base}`).pipe(
+      const failure = yield* resolve(`wellknown:${base}`).pipe(
         Effect.provideService(HttpClient.HttpClient, client),
         Effect.flip,
       );
@@ -918,7 +792,7 @@ describe("source contracts", () => {
           ),
         ),
       );
-      const failure = yield* resolveSkitSourceEffect("wellknown:https://reset.example").pipe(
+      const failure = yield* resolve("wellknown:https://reset.example").pipe(
         Effect.provideService(HttpClient.HttpClient, client),
         Effect.flip,
       );
@@ -971,12 +845,13 @@ describe("source contracts", () => {
             ),
           ),
         );
-      const resolved = yield* resolveSkitSourceEffect(url).pipe(
+      const resolved = yield* resolve(url).pipe(
         Effect.provideService(HttpClient.HttpClient, client(skill, "text/plain")),
       );
-      expect(yield* readText(join(resolved.root, "skills", "review", "SKILL.md"))).toBe(skill);
+      expect(resolved.observedSkillPaths).toEqual(["."]);
+      expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toBe(skill);
 
-      const failure = yield* resolveSkitSourceEffect(url).pipe(
+      const failure = yield* resolve(url).pipe(
         Effect.provideService(
           HttpClient.HttpClient,
           client("<!doctype html><title>GitHub</title>", "text/html"),

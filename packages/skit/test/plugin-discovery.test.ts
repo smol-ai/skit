@@ -17,7 +17,12 @@ const fixture = Effect.gen(function* () {
     write(`${path}/SKILL.md`, `---\nname: ${name}\ndescription: Review changes.\n---\n\n${body}\n`);
   const json = (path: string, value: unknown) => write(path, JSON.stringify(value));
   const discover = (previousSkillPaths?: readonly string[]) =>
-    resolveSkitSourceEffect(root, { verbatimOnly: true, previousSkillPaths });
+    resolveSkitSourceEffect(root, { previousSkillPaths }).pipe(
+      Effect.map((resolved) => {
+        assert(resolved.descriptorKind === "observed");
+        return resolved;
+      }),
+    );
   return { fs, root, write, skill, json, discover };
 });
 
@@ -93,9 +98,8 @@ it.effect("does not merge different same-name Skills across plugin namespaces", 
         ["commercial", "finance", "legal"].map((name) => join(f.root, "plugins", name)),
       );
     }
-    const selected = yield* resolveSkitSourceEffect(join(f.root, "plugins/legal"), {
-      verbatimOnly: true,
-    });
+    const selected = yield* resolveSkitSourceEffect(join(f.root, "plugins/legal"));
+    assert(selected.descriptorKind === "observed");
     assert.deepStrictEqual(selected.observedSkillPaths, ["skills/review"]);
     // Equal names and bytes alone do not establish an alias between separate packages.
     for (const name of ["legal", "finance", "commercial"]) {
@@ -186,10 +190,9 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
     const discovered = yield* f.discover();
     assert.deepStrictEqual(discovered.observedSkillPaths, ["tools/skills/review"]);
     assert.include(discovered.diagnostics?.[0]?.message ?? "", "strict:false");
-    const error = yield* resolveSkitSourceEffect(f.root, {
-      verbatimOnly: true,
-      strictPluginManifests: true,
-    }).pipe(Effect.flip);
+    const error = yield* resolveSkitSourceEffect(f.root, { strictPluginManifests: true }).pipe(
+      Effect.flip,
+    );
     assert.strictEqual(error._tag, "PluginManifestInvalid");
     assert.include(error.message, "strict:false");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -316,10 +319,6 @@ it.effect(
         yield* f.fs.readFileString(join(retained.originalRoot, "tools/skills/review/SKILL.md")),
         yield* f.fs.readFileString(join(f.root, ".claude/skills/review/SKILL.md")),
       );
-      const normalized = yield* resolveSkitSourceEffect(f.root, {
-        previousSkillPaths: ["tools/skills/review"],
-      });
-      assert.isTrue(yield* f.fs.exists(join(normalized.root, "skills/review/SKILL.md")));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -332,8 +331,8 @@ it.effect("keeps declared SKIT descriptor precedence inside plugin directories",
       slug: "tools",
       skills: [{ name: "review", path: "skills/review" }],
     });
-    const resolved = yield* f.discover();
-    assert.strictEqual(resolved.descriptorKind, "declared");
+    const resolved = yield* resolveSkitSourceEffect(f.root);
+    assert(resolved.descriptorKind === "declared");
     assert.strictEqual(resolved.root, join(f.root, "plugins/tools"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
