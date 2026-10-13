@@ -154,7 +154,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        store.publish({ ...state, custodyIssues: state.custodyIssues ?? [] }),
+        store.publish({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
       ).pipe(Effect.provide(layer)),
     );
     const stale = yield* applyLibraryBindings(state, {
@@ -164,7 +164,9 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(stale._tag, "Library.SetEnabledStale");
     yield* writingTo(
       home,
-      LibraryStore.use((store) => store.publish(state)).pipe(Effect.provide(layer)),
+      LibraryStore.use((store) =>
+        Effect.flatMap(store.load, (current) => store.publish(state, current)),
+      ).pipe(Effect.provide(layer)),
     );
 
     const apply = (enabled: boolean) =>

@@ -12,4 +12,6 @@ export const inspectLibrary = (home: string) =>
   Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(inLibrary(home));
 
 export const publishLibrary = (home: string, state: LibraryState) =>
-  Effect.flatMap(LibraryStore, (store) => store.publish(state)).pipe(inLibrary(home));
+  Effect.flatMap(LibraryStore, (store) =>
+    Effect.flatMap(store.load, (base) => store.publish(state, base)),
+  ).pipe(inLibrary(home));

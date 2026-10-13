@@ -3,6 +3,8 @@ import {
   bindingSkillIds,
   currentCollectionSkills,
   withLibraryWriter,
+  lastPublishedLibraryState,
+  libraryStateRevision,
   LibraryStore,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
@@ -22,11 +24,7 @@ import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js"
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
 import { result } from "../contracts.js";
-import {
-  applyLibraryBindings,
-  libraryStateRevision,
-  SetEnabledStale,
-} from "../../workflows/library/set-enabled.js";
+import { applyLibraryBindings, SetEnabledStale } from "../../workflows/library/set-enabled.js";
 import {
   largeCollectionWarning,
   readDescriptionLoad,
@@ -378,10 +376,12 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     const outcomes = yield* renderer.withStatus(
       input.dryRun ? "Planning Collection Bindings" : "Removing retained Projections",
       Effect.gen(function* () {
-        if (!input.dryRun && libraryStateRevision(yield* store.load) !== expectedRevision)
+        let expected = yield* store.load;
+        if (!input.dryRun && libraryStateRevision(expected) !== expectedRevision)
           return yield* new SetEnabledStale({
             message: "Library changed after this Binding change was previewed",
           });
+        // Each Binding change applies only onto the state the previous one left.
         return yield* Effect.forEach(selectedBindings, (binding) => {
           const names = selectedSkills?.filter((name) => {
             const skill = state.skills.find(
@@ -392,20 +392,22 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           });
           if (!wholeCollection && (names === undefined || names.length === 0))
             return Effect.succeed(undefined);
-          return store.load.pipe(
-            Effect.flatMap((current) =>
-              applyLibraryBindings(current, {
-                query: binding.collectionId,
-                all: wholeCollection,
-                ...(wholeCollection ? {} : { selectedSkills: names }),
-                invocation: {
-                  subjects: [binding.collectionId],
-                  scope: binding.scope,
-                  enabled: false,
-                  dryRun: input.dryRun,
-                },
-                roots: input.configuration.inventory,
-                variantsPath: input.configuration.pull.bindings.variantsPath,
+          return applyLibraryBindings(expected, {
+            query: binding.collectionId,
+            all: wholeCollection,
+            ...(wholeCollection ? {} : { selectedSkills: names }),
+            invocation: {
+              subjects: [binding.collectionId],
+              scope: binding.scope,
+              enabled: false,
+              dryRun: input.dryRun,
+            },
+            roots: input.configuration.inventory,
+            variantsPath: input.configuration.pull.bindings.variantsPath,
+          }).pipe(
+            Effect.tap(() =>
+              Effect.map(lastPublishedLibraryState, (published) => {
+                if (published !== undefined) expected = published;
               }),
             ),
           );

@@ -283,14 +283,17 @@ export const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections
   return yield* SyncProjectionPlan.makeEffect({ projections, retire, remove, conflicts });
 });
 
-/** Keep old references durable until portable state and ancestry can be published together. */
+/**
+ * Keep old references durable until portable state and ancestry can be published together.
+ * Publishes only onto `current`, the state sync planned from, and returns the state it published.
+ */
 export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProjections")(function* (
   plan: SyncProjectionPlan,
   variantsPath: string,
+  current: LibraryState,
 ) {
   const store = yield* LibraryStore;
-  if (plan.retire.length === 0) return 0;
-  const current = yield* store.load;
+  if (plan.retire.length === 0) return { retired: 0, state: current };
   const pending = {
     ...current,
     projections: current.projections.map((projection) =>
@@ -303,7 +306,7 @@ export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProject
   };
   // Persist the intent before removing an aliased copy, so an intervening inventory scan cannot
   // mistake an interrupted managed relocation for a user's native deletion.
-  yield* store.publish(pending);
+  yield* store.publish(pending, current);
   const result = yield* withProjectionMutationEffect(
     pending,
     { rootFor: () => undefined, variantsPath, publish: store.publish },
@@ -330,5 +333,5 @@ export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProject
         return retired;
       }),
   );
-  return result.value;
+  return { retired: result.value, state: result.state };
 });

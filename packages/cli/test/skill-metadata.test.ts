@@ -95,7 +95,7 @@ it.effect(
       yield* home.owned(
         writingTo(
           home.home,
-          LibraryStore.use((store) => store.publish(selected)),
+          LibraryStore.use((store) => store.publish(selected, state)),
         ),
       );
       const interaction = yield* makeScriptedInteraction([]);

@@ -423,14 +423,17 @@ it.effect(
             expect(state.projections.some((projection) => projection.target === "claude")).toBe(
               true,
             );
-            yield* store.publish({
-              ...state,
-              projections: state.projections.map((projection) =>
-                projection.target === "claude"
-                  ? { ...projection, status: "suppressed", suppression_reason: "native_delete" }
-                  : projection,
-              ),
-            });
+            yield* store.publish(
+              {
+                ...state,
+                projections: state.projections.map((projection) =>
+                  projection.target === "claude"
+                    ? { ...projection, status: "suppressed", suppression_reason: "native_delete" }
+                    : projection,
+                ),
+              },
+              state,
+            );
             const shadows = yield* observeHarnessShadows(f.home.inventory, { kind: "global" }, [
               "review",
             ]);

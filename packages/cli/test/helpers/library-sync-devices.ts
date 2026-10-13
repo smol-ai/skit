@@ -66,7 +66,10 @@ export const devices = Effect.gen(function* () {
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
         ...store,
-        publish: Effect.fn("Test.LibraryStore.publish")(function* (state: LibraryState) {
+        publish: Effect.fn("Test.LibraryStore.publish")(function* (
+          state: LibraryState,
+          base: LibraryState,
+        ) {
           if (
             faults.take(
               "FailPublish",
@@ -79,7 +82,7 @@ export const devices = Effect.gen(function* () {
               path: home,
               detail: "Test interruption before merged state publication",
             });
-          yield* store.publish(state);
+          yield* store.publish(state, base);
           const obstruction = faults.take("ObstructAfterPublish", (fault) => fault.home === home);
           if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
@@ -115,7 +118,7 @@ export const devices = Effect.gen(function* () {
       edit: (change: (state: LibraryState) => LibraryState) =>
         withLibraryWriter(
           Effect.flatMap(LibraryStore, (store) =>
-            Effect.flatMap(store.load, (state) => store.publish(change(state))),
+            Effect.flatMap(store.load, (state) => store.publish(change(state), state)),
           ),
         ).pipe(Effect.provide(layer)),
       retain: (
@@ -146,7 +149,10 @@ export const devices = Effect.gen(function* () {
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       remove: (collectionId: string) =>
-        removeCollectionEffect({ collectionId, variantsPath: join(home, "variants") }).pipe(
+        Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+          Effect.flatMap((state) =>
+            removeCollectionEffect(state, { collectionId, variantsPath: join(home, "variants") }),
+          ),
           withLibraryWriter,
           Effect.provide(layer),
         ),

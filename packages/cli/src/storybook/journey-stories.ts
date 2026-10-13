@@ -116,7 +116,7 @@ const previewEnable = Effect.scoped(
     });
     return yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
-      yield* store.publish(storyState);
+      yield* store.publish(storyState, yield* store.load);
       yield* presentSetEnabled({
         action: "enable",
         enabled: true,

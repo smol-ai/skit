@@ -22,8 +22,6 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         load: Effect.die("unreachable"),
         inspect: Effect.die("unreachable"),
         publish: () => Effect.die("unreachable"),
-        snapshot: Effect.succeed(undefined),
-        recordChangesSince: () => Effect.void,
         home: "/unreachable",
         originalsPath: "/unreachable/originals",
       }),

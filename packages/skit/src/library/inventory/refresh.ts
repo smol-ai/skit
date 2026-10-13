@@ -226,6 +226,6 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   const store = yield* LibraryStore;
   const roots = deduplicateInventoryRoots(selectRoots(loaded));
   const state = yield* observeInventory(loaded, roots);
-  yield* store.publish(state);
+  yield* store.publish(state, loaded);
   return { state, roots };
 });

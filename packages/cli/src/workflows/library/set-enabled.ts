@@ -2,9 +2,9 @@ import {
   BindingEntry,
   bindingSkillIds,
   LinkStat,
-  canonicalJson,
   currentCollectionSkills,
   LibraryStore,
+  libraryStateRevision,
   type SkillId,
   withLibraryWriter,
   type LibraryState,
@@ -14,7 +14,6 @@ import {
   type SkitBindingScope,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { OptionCombinationInvalid } from "../../handlers/failures.js";
 import {
@@ -57,9 +56,6 @@ export class SetEnabledStale extends Schema.TaggedError<SetEnabledStale>()(
   readonly exitCode = 12;
   readonly remediation = "Preview the Binding change again.";
 }
-
-export const libraryStateRevision = (state: LibraryState): string =>
-  createHash("sha256").update(canonicalJson(state)).digest("hex");
 
 const isDeviceBinding = (binding: DeviceBinding | RepositoryBinding): binding is DeviceBinding =>
   binding.scope.kind === "global";
@@ -291,7 +287,16 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
             else local_bindings[index] = binding;
           }
         }
-        yield* store.publish({ ...current, global_bindings, local_bindings });
+        // Publishing onto `current`, the previewed revision, makes the check above atomic.
+        yield* store.publish({ ...current, global_bindings, local_bindings }, current).pipe(
+          Effect.catchTag("LibraryChanged", () =>
+            Effect.fail(
+              new SetEnabledStale({
+                message: "Library changed after this Binding change was previewed",
+              }),
+            ),
+          ),
+        );
       }
       const selected = yield* resolveLibrarySubject(current, options.query);
       const reconciled = yield* reconcileLibraryProjections({
@@ -318,7 +323,7 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
           global_bindings.length !== settled.global_bindings.length ||
           local_bindings.length !== settled.local_bindings.length
         )
-          yield* store.publish({ ...settled, global_bindings, local_bindings });
+          yield* store.publish({ ...settled, global_bindings, local_bindings }, settled);
         result = {
           ...plan,
           bindings: plan.bindings.filter((binding) => binding.entries.length > 0),

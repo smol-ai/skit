@@ -128,18 +128,21 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const restored = yield* store.load;
-          yield* store.publish({
-            ...restored,
-            global_bindings: [
-              {
-                scope: { kind: "global" },
-                entries: restored.skills.map((skill) => ({
-                  kind: "skill" as const,
-                  skill_id: skill.skill_id,
-                })),
-              },
-            ],
-          });
+          yield* store.publish(
+            {
+              ...restored,
+              global_bindings: [
+                {
+                  scope: { kind: "global" },
+                  entries: restored.skills.map((skill) => ({
+                    kind: "skill" as const,
+                    skill_id: skill.skill_id,
+                  })),
+                },
+              ],
+            },
+            restored,
+          );
           yield* projectBindingEffect({
             target: "agents",
             root: targetRoot,

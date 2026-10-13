@@ -58,15 +58,18 @@ it.effect(
       yield* writingTo(
         home,
         LibraryStore.use((store) =>
-          store.publish({
-            ...initial,
-            global_bindings: [
-              {
-                scope: { kind: "global" as const },
-                entries: [{ kind: "skill" as const, skill_id: skill.skill_id }],
-              },
-            ],
-          }),
+          store.publish(
+            {
+              ...initial,
+              global_bindings: [
+                {
+                  scope: { kind: "global" as const },
+                  entries: [{ kind: "skill" as const, skill_id: skill.skill_id }],
+                },
+              ],
+            },
+            initial,
+          ),
         ).pipe(Effect.provide(storeLayer)),
       );
       const rootByTarget = { agents: roots.codexRoot, claude: roots.claudeRoot } as const;

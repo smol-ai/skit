@@ -143,8 +143,6 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
         load: Effect.succeed(localState),
         inspect: Effect.succeed({ present: true as const, state: localState }),
         publish: (next) => Ref.set(published, next),
-        snapshot: Effect.succeed(undefined),
-        recordChangesSince: () => Effect.void,
         home: home.home,
         originalsPath: home.originals,
       }),
@@ -161,12 +159,7 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
     expect(checked[0]?.skills_sh?.members[0]?.baseline_commit).not.toBe(
       checked[0]?.skills_sh?.members[0]?.upstream_commit,
     );
-    expect((yield* Ref.get(published))?.acquisitions[0]?.observations[0]).toMatchObject({
-      upstream_baseline: {
-        lock_hash_kind: "computedHash",
-        verification: "lock+retained-bytes",
-        search_scope: "ref-path-history",
-      },
-    });
+    // Checking only reports: the Library it read is left exactly as it was.
+    expect(yield* Ref.get(published)).toBeUndefined();
   }).pipe(Effect.provide(skitLayer)),
 );

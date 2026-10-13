@@ -50,7 +50,7 @@ Preflight writes nothing. Each row is checked in order; the first match returns.
 | B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id), without `--adopt` | `base_mismatch` |
 | Neither L nor R exists | `clean` (nothing written) |
 
-With `--adopt`, mismatched ancestry is set aside and sync continues as if B were absent, so the merge can only add records. Then exactly one of the paths below runs. Every path holds the home's writer lock for its whole duration when entered through `handleCommand`; `syncLibraryEffect` does not take the lock itself, so any other caller must.
+With `--adopt`, mismatched ancestry is set aside and sync continues as if B were absent, so the merge can only add records. Then exactly one of the paths below runs. Every applying path holds the home's writer lock for its whole duration: `syncLibraryEffect` acquires it when applying, and reuses it reentrantly when its caller already holds it. Each local publish is also checked against the local state the path planned from: if that state has changed, which only a caller without the writer lock can allow, the publish is refused with `SyncLocalChanged` and changes no local state.
 
 Every ready/apply path also checks enabled destinations using filesystem identity and previews affected projection custody before committing. A collision reports the Skill IDs and Collection labels. `--keep-enabled <skill-id>` keeps one competing Skill enabled and retains the others without enabling them; invalid or competing choices return `resolution_invalid`. Modified copies and repository Bindings that would lose their selected entities report device conflicts with specific remediation. These checks are read-only.
 
@@ -72,6 +72,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 | P2 loses the CAS | Orphan uploads; `LibraryChangedOnServer` | `adoption_required` |
 | After P2, before P4, or P2's response lost | R = desired, no B | `clean` if L = R; otherwise `--adopt` with the same Binding choice |
 | As above, and another home writes R before the retry | R ≠ L, no B | `adoption_required`; `--adopt` merges against an empty base |
+| P3 or P4 is refused because L changed since the plan | R = desired, no B; `SyncLocalChanged`; L as the other writer left it | As after P2, before P4, against the new L |
 | After P4, before P5 | Projections stale | `clean`, which reconciles |
 
 ## Pull — R present, L absent
@@ -87,14 +88,14 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
 | Before U4 | Orphan originals | Pull again |
-| U3 finds a concurrent local write | Orphan originals; `SyncLocalChanged` | Whatever the new L dictates |
+| U3 finds a concurrent local write, or U4 is refused because L now exists | Orphan originals; `SyncLocalChanged` | Whatever the new L dictates |
 | After U4, before U5 | Projections stale | `clean`, which reconciles |
 
 When `--keep-enabled` changes the pulled Binding, a CAS write of that choice occurs after U3 and before U4, and U4 anchors the resulting revision. A lost response leaves no local state; the next pull reads the already-resolved head. A CAS loser publishes no state and touches no projections.
 
 ## Clean — L and R are equal after normalization
 
-Preview writes nothing. Apply publishes state with B = R, then reconciles projections. This is also how a home without ancestry anchors when it already matches the remote. Interruption between the two leaves stale projections, which the next `clean` repairs.
+Preview writes nothing. Apply publishes state with B = R, then reconciles projections. If L changed after it was compared with R, the publish is refused with `SyncLocalChanged` and B is unchanged. This is also how a home without ancestry anchors when it already matches the remote. Interruption between the two leaves stale projections, which the next `clean` repairs.
 
 ## Adoption gate — L and R differ, no B
 
@@ -130,9 +131,10 @@ Apply:
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
 | Before M5 | Orphan originals and uploads | The same merge, or a new merge if R advanced |
-| The process is killed after M5 commits | As the row below, plus the writer's `.lock` naming a dead PID | The next command reclaims the lock; then as below |
+| The process is killed after M5 commits | As the row below, plus the writer's `.lock` naming the dead process | Later commands that need the writer lock fail `LibraryBusy`, naming the lock and its recorded owner; reads still work. Once that process is confirmed stopped, remove the lock by hand; then as below |
 | M5 loses the CAS | Orphan originals and uploads; `LibraryChangedOnServer`; L, B, projections unchanged | A merge against the new R |
 | After M5 (or M5's response lost), before M7 | R = merged; L and B old; some projections possibly retired | Re-merge of (B, L, merged). If merged equals L this is `clean`; otherwise it yields merged and M5 is skipped. A `--take-remote` resolution must be repeated. If another home advanced R, a genuine `conflicted` is legal. |
+| M6 or M7 is refused because L changed since the plan | R = merged; L as the other writer left it, B old; `SyncLocalChanged` | As after M5, before M7, against the new L |
 | After M7, before M8 | Projections stale | `clean`, which reconciles |
 
 An intact projection whose previous Version is dropped by a remote Skill choice is carried into M7 with the merged selected Version, preserving its projection ID, expected digest and repository root. M8 then rewrites it under ordinary marker/hash custody checks. A reidentified Skill instead retires its old on-disk identity at M6; its old state references remain valid until M7. Pending missing copies remain pending during inventory scans and are recreated on retry. Native-deletion suppression is carried through identity alignment.

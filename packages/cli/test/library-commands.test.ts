@@ -94,10 +94,13 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish({
-            ...beforeStaleChange,
-            custodyIssues: beforeStaleChange.custodyIssues ?? [],
-          }),
+          store.publish(
+            {
+              ...beforeStaleChange,
+              custodyIssues: beforeStaleChange.custodyIssues ?? [],
+            },
+            beforeStaleChange,
+          ),
         ),
       ),
     );
@@ -108,7 +111,9 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     yield* home.owned(
       writingTo(
         home.home,
-        LibraryStore.use((store) => store.publish(beforeStaleChange)),
+        LibraryStore.use((store) =>
+          Effect.flatMap(store.load, (base) => store.publish(beforeStaleChange, base)),
+        ),
       ),
     );
 
@@ -178,18 +183,21 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish({
-            ...state,
-            global_bindings: [
-              { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
-            ],
-            local_bindings: [
-              {
-                scope: { kind: "repository", root },
-                entries: [{ kind: "skill", skill_id: reviewId }],
-              },
-            ],
-          }),
+          store.publish(
+            {
+              ...state,
+              global_bindings: [
+                { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
+              ],
+              local_bindings: [
+                {
+                  scope: { kind: "repository", root },
+                  entries: [{ kind: "skill", skill_id: reviewId }],
+                },
+              ],
+            },
+            state,
+          ),
         ),
       ),
     );
@@ -438,7 +446,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
         },
       ],
     };
-    yield* home.owned(LibraryStore.use((store) => store.publish(state)));
+    yield* home.owned(LibraryStore.use((store) => store.publish(state, retained)));
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -546,18 +554,21 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish({
-            ...state,
-            global_bindings: [
-              { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
-            ],
-            local_bindings: [
-              {
-                scope: { kind: "repository", root },
-                entries: [{ kind: "skill", skill_id: reviewId }],
-              },
-            ],
-          }),
+          store.publish(
+            {
+              ...state,
+              global_bindings: [
+                { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
+              ],
+              local_bindings: [
+                {
+                  scope: { kind: "repository", root },
+                  entries: [{ kind: "skill", skill_id: reviewId }],
+                },
+              ],
+            },
+            state,
+          ),
         ),
       ),
     );
@@ -611,7 +622,9 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     );
     const current = yield* home.durable;
     const concurrent = { ...current, global_bindings: [] };
-    yield* home.owned(withLibraryWriter(LibraryStore.use((store) => store.publish(concurrent))));
+    yield* home.owned(
+      withLibraryWriter(LibraryStore.use((store) => store.publish(concurrent, current))),
+    );
     yield* Deferred.succeed(resume, undefined);
     const outcome = yield* Fiber.join(command);
     assert.isTrue(Result.isFailure(outcome));

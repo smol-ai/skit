@@ -24,19 +24,8 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
   }) => Effect.Effect<void>,
 ) {
   const store = yield* LibraryStore;
-  const baselineUpdates: Array<{
-    acquisitionId: string;
-    skillName: string;
-    skillPath: string;
-    hashKind: "computedHash" | "skillFolderHash";
-    hash: string;
-    commit: string;
-    tree: string;
-    verification: "lock-only" | "lock+retained-bytes";
-    establishedAt: string;
-  }> = [];
   const subjects = yield* resolveOwningLibrarySubjects(state, query);
-  const checked = yield* Effect.forEach(subjects, (subject) =>
+  return yield* Effect.forEach(subjects, (subject) =>
     Effect.gen(function* () {
       if (
         subject.kind === "collection" &&
@@ -77,38 +66,6 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
         });
       }
       const skillsSh = yield* checkSkillsShSubjectEffect(subject, acquisition, currentCopy);
-      if (skillsSh && acquisition)
-        for (const member of skillsSh.members)
-          if (
-            member.skill_path &&
-            member.hash_kind &&
-            member.baseline_commit &&
-            member.baseline_tree &&
-            member.baseline_verification
-          ) {
-            const observation = acquisition.observations.find(
-              (candidate) =>
-                candidate.type === "skills.sh-lock" &&
-                candidate.skill_name === member.skill_name &&
-                candidate.skill_path === member.skill_path,
-            );
-            const hash =
-              member.hash_kind === "computedHash"
-                ? observation?.computed_hash
-                : observation?.skill_folder_hash;
-            if (hash)
-              baselineUpdates.push({
-                acquisitionId: acquisition.acquisition_id,
-                skillName: member.skill_name,
-                skillPath: member.skill_path,
-                hashKind: member.hash_kind,
-                hash,
-                commit: member.baseline_commit,
-                tree: member.baseline_tree,
-                verification: member.baseline_verification,
-                establishedAt: skillsSh.checked_at,
-              });
-          }
       return {
         subject_id: subject.subjectId,
         subject_kind: subject.kind,
@@ -136,35 +93,4 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
       };
     }),
   );
-  if (baselineUpdates.length) {
-    const acquisitions = state.acquisitions.map((acquisition) => ({
-      ...acquisition,
-      observations: acquisition.observations.map((observation) => {
-        if (observation.type !== "skills.sh-lock") return observation;
-        const update = baselineUpdates.find(
-          (candidate) =>
-            candidate.acquisitionId === acquisition.acquisition_id &&
-            candidate.skillName === observation.skill_name &&
-            candidate.skillPath === observation.skill_path,
-        );
-        return update
-          ? {
-              ...observation,
-              upstream_baseline: {
-                source_revision: update.commit,
-                skill_path: update.skillPath,
-                tree_oid: update.tree,
-                lock_hash_kind: update.hashKind,
-                lock_hash: update.hash,
-                verification: update.verification,
-                established_at: update.establishedAt,
-                search_scope: "ref-path-history" as const,
-              },
-            }
-          : observation;
-      }),
-    }));
-    yield* store.publish({ ...state, acquisitions });
-  }
-  return checked;
 });

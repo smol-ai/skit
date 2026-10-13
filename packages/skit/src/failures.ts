@@ -382,9 +382,17 @@ export class InvalidLibraryState extends Data.TaggedError("InvalidLibraryState")
   }
 }
 
-export class LibraryBusy extends Data.TaggedError("LibraryBusy")<{ path: string }> {
+export class LibraryBusy extends Data.TaggedError("LibraryBusy")<{ path: string; owner: string }> {
   readonly code = "CONFLICT" as const;
   get message(): string {
-    return `Another SKIT command is using this Library: ${this.path}`;
+    return `Another SKIT process (${this.owner}, as pid@host) holds this Library's writer lock at ${this.path}. Remove that file only after confirming that process has stopped, then retry`;
+  }
+}
+
+/** The Library moved on since the state a change was planned from; nothing was published. */
+export class LibraryChanged extends Data.TaggedError("LibraryChanged")<{ path: string }> {
+  readonly code = "CONFLICT" as const;
+  get message(): string {
+    return `The Library changed while this command ran; run it again: ${this.path}`;
   }
 }

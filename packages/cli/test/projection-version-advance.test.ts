@@ -53,17 +53,20 @@ const boundRawReview = Effect.gen(function* () {
   yield* writingTo(
     home,
     LibraryStore.use((store) =>
-      store.publish({
-        ...bound,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: bound.skills
-              .filter((skill) => skill.collection_id === first.collection?.collection_id)
-              .map((skill) => ({ kind: "skill" as const, skill_id: skill.skill_id })),
-          },
-        ],
-      }),
+      store.publish(
+        {
+          ...bound,
+          global_bindings: [
+            {
+              scope: { kind: "global" },
+              entries: bound.skills
+                .filter((skill) => skill.collection_id === first.collection?.collection_id)
+                .map((skill) => ({ kind: "skill" as const, skill_id: skill.skill_id })),
+            },
+          ],
+        },
+        bound,
+      ),
     ).pipe(Effect.provide(layer)),
   );
   const project = writingTo(
@@ -139,14 +142,17 @@ it.effect("heals an untouched Projection already recorded as conflicted", () =>
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        store.publish({
-          ...state,
-          projections: state.projections.map((row) => ({
-            ...row,
-            skill_version_id: selected,
-            status: "conflicted" as const,
-          })),
-        }),
+        store.publish(
+          {
+            ...state,
+            projections: state.projections.map((row) => ({
+              ...row,
+              skill_version_id: selected,
+              status: "conflicted" as const,
+            })),
+          },
+          state,
+        ),
       ).pipe(Effect.provide(layer)),
     );
     yield* project;
@@ -228,23 +234,26 @@ for (const followedCollection of [false, true])
         yield* writingTo(
           home,
           LibraryStore.use((store) =>
-            store.publish({
-              ...withOther,
-              global_bindings: withOther.global_bindings.map((binding) => ({
-                ...binding,
-                entries: [
-                  ...(followedCollection
-                    ? [
-                        {
-                          kind: "collection" as const,
-                          collection_id: selectedSkill.collection_id,
-                        },
-                      ]
-                    : binding.entries),
-                  { kind: "skill" as const, skill_id: otherId },
-                ],
-              })),
-            }),
+            store.publish(
+              {
+                ...withOther,
+                global_bindings: withOther.global_bindings.map((binding) => ({
+                  ...binding,
+                  entries: [
+                    ...(followedCollection
+                      ? [
+                          {
+                            kind: "collection" as const,
+                            collection_id: selectedSkill.collection_id,
+                          },
+                        ]
+                      : binding.entries),
+                    { kind: "skill" as const, skill_id: otherId },
+                  ],
+                })),
+              },
+              withOther,
+            ),
           ).pipe(Effect.provide(layer)),
         );
         yield* project;

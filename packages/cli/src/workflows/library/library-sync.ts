@@ -1,4 +1,4 @@
-import { withLibraryWriter } from "@smolai/skit-core";
+import { emptyLibraryState, withLibraryWriter } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import {
   canonicalJson,
@@ -332,30 +332,35 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       if (!options.apply)
         return { status: "push_ready" as const, snapshots: snapshots.length, plan };
       if (options.onPlan) yield* options.onPlan(plan);
-      // The writer lock held for the whole sync keeps `local.state` the state this plan describes.
       yield* uploadArchives(snapshots);
       yield* progress("Saving remote Library");
       const saved = yield* api.write(null, desired);
-      const retired = yield* retireSyncProjectionsEffect(
-        devicePlan,
-        projectionOptions.variantsPath,
-      );
-      const afterRetirement = yield* store.load;
-      const policies = local.state.global_bindings[0]?.invocation_policies;
-      yield* store.publish(
-        anchored(
-          {
-            ...afterRetirement,
-            global_bindings: desired.bindings.map((binding) => ({
-              ...binding,
-              ...(policies === undefined ? {} : { invocation_policies: policies }),
-            })),
-          },
-          saved.library_id,
-          saved.revision_id,
-          desired,
-        ),
-      );
+      // Local state is published only onto exactly what this plan describes. If it moved, the
+      // device keeps its old ancestry and the next sync merges both changes.
+      const retired = yield* Effect.gen(function* () {
+        const retirement = yield* retireSyncProjectionsEffect(
+          devicePlan,
+          projectionOptions.variantsPath,
+          local.state,
+        );
+        const policies = local.state.global_bindings[0]?.invocation_policies;
+        yield* store.publish(
+          anchored(
+            {
+              ...retirement.state,
+              global_bindings: desired.bindings.map((binding) => ({
+                ...binding,
+                ...(policies === undefined ? {} : { invocation_policies: policies }),
+              })),
+            },
+            saved.library_id,
+            saved.revision_id,
+            desired,
+          ),
+          retirement.state,
+        );
+        return retirement.retired;
+      }).pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       yield* progress("Enabling synced Skills");
       const projections = projectionCounts(
         yield* reconcileLibraryProjections({
@@ -411,7 +416,12 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         ? remote
         : yield* api.write(remote.revision_id, desired);
       yield* progress("Saving this device’s Library");
-      yield* store.publish(anchored(restored.state, saved.library_id, saved.revision_id, desired));
+      yield* store
+        .publish(
+          anchored(restored.state, saved.library_id, saved.revision_id, desired),
+          emptyLibraryState(),
+        )
+        .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       yield* progress("Enabling synced Skills");
       const projections = projectionCounts(
         yield* reconcileLibraryProjections({
@@ -446,11 +456,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         options.projection?.rootFor,
       );
       if (devicePlan.conflicts.length) return conflicted(devicePlan.conflicts, remote.revision_id);
-      // As for a push, the writer lock keeps `local.state` the state that equals the remote.
+      // Advance ancestry only if the state this sync compared is still the local state.
       if (options.apply)
-        yield* store.publish(
-          anchored(local.state, remote.library_id, remote.revision_id, remoteManifest),
-        );
+        yield* store
+          .publish(
+            anchored(local.state, remote.library_id, remote.revision_id, remoteManifest),
+            local.state,
+          )
+          .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       if (options.apply) yield* progress("Checking enabled Skills");
       const projections = options.apply
         ? projectionCounts(
@@ -582,23 +595,29 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const saved = same(merged.manifest, remoteManifest)
       ? remote
       : yield* api.write(remote.revision_id, merged.manifest);
-    const retiredBeforeMerge = yield* retireSyncProjectionsEffect(
-      devicePlan,
-      projectionOptions.variantsPath,
-    );
-    const afterRetirement = yield* store.inspect;
-    if (!afterRetirement.present) return yield* new SyncLocalChanged();
-    const blended = yield* blendRestoredStateEffect(
-      {
-        ...applyDeviceVersionAliases(
-          yield* applyDeviceIdentityAliasesEffect(afterRetirement.state, identities.aliases),
-          aligned.aliases,
-        ),
-        projections: [...devicePlan.projections],
-      },
-      restored.state,
-    );
-    yield* store.publish(anchored(blended, saved.library_id, saved.revision_id, merged.manifest));
+    // As for a push, local state is published only onto exactly what this merge planned from.
+    const retiredBeforeMerge = yield* Effect.gen(function* () {
+      const retirement = yield* retireSyncProjectionsEffect(
+        devicePlan,
+        projectionOptions.variantsPath,
+        local.state,
+      );
+      const blended = yield* blendRestoredStateEffect(
+        {
+          ...applyDeviceVersionAliases(
+            yield* applyDeviceIdentityAliasesEffect(retirement.state, identities.aliases),
+            aligned.aliases,
+          ),
+          projections: [...devicePlan.projections],
+        },
+        restored.state,
+      );
+      yield* store.publish(
+        anchored(blended, saved.library_id, saved.revision_id, merged.manifest),
+        retirement.state,
+      );
+      return retirement.retired;
+    }).pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
     yield* progress("Enabling synced Skills");
     const projections = projectionCounts(
       yield* reconcileLibraryProjections({

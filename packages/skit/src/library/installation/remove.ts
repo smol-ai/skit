@@ -1,6 +1,9 @@
 import { Effect, Schema } from "effect";
+import { join } from "node:path";
+import { LibraryChanged } from "../../failures.js";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import type { SkillId } from "../entity-ids.js";
+import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { InvocationPolicy } from "../store/state-schema.js";
 import type { BindingEntry } from "../library-contracts.js";
@@ -15,18 +18,25 @@ export class SkillRemovalRequiresCollection extends Schema.TaggedError<SkillRemo
   { skill_id: Schema.String, collection_id: Schema.String },
 ) {}
 
-/** Remove a Collection with its Skills, Acquisitions, Binding entries and Projections. */
-export const removeCollectionEffect = Effect.fn("Library.removeCollection")(function* (options: {
-  collectionId: string;
-  variantsPath: string;
-}) {
+/**
+ * Remove a Collection with its Skills, Acquisitions, Binding entries and Projections, exactly as
+ * `planned` records them. The caller holds the writer lock; a Library that moved on since it was
+ * planned is refused before any Projection is touched, so nothing outside the plan is removed.
+ */
+export const removeCollectionEffect = Effect.fn("Library.removeCollection")(function* (
+  planned: LibraryState,
+  options: { collectionId: string; variantsPath: string },
+) {
   const store = yield* LibraryStore;
-  const loaded = yield* store.load;
-  const collection = loaded.collections.find((item) => item.collection_id === options.collectionId);
+  if (libraryStateRevision(yield* store.load) !== libraryStateRevision(planned))
+    return yield* new LibraryChanged({ path: join(store.home, "state.json") });
+  const collection = planned.collections.find(
+    (item) => item.collection_id === options.collectionId,
+  );
   if (collection === undefined)
     return yield* new CollectionRemovalMissing({ collection_id: options.collectionId });
   const removedSkillIds = new Set<string>(
-    loaded.skills
+    planned.skills
       .filter((skill) => skill.collection_id === options.collectionId)
       .map((skill) => skill.skill_id),
   );
@@ -41,43 +51,48 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
     return Object.keys(invocation_policies).length === 0 ? {} : { invocation_policies };
   };
   const result = yield* withProjectionMutationEffect(
-    loaded,
+    planned,
     {
       rootFor: () => undefined,
       variantsPath: options.variantsPath,
-      publish: (candidate) => {
+      publish: (candidate, base) => {
         const acquisitions = candidate.acquisitions.filter(
           (acquisition) => acquisition.collection_id !== options.collectionId,
         );
         const survivingCopyIds = new Set(
           acquisitions.map((acquisition) => acquisition.retained_copy_id),
         );
-        return store.publish({
-          ...candidate,
-          collections: candidate.collections.filter(
-            (item) => item.collection_id !== options.collectionId,
-          ),
-          global_bindings: candidate.global_bindings
-            .map(({ invocation_policies, ...binding }) => ({
-              ...binding,
-              entries: binding.entries.filter(keepEntry),
-              ...remainingPolicies(invocation_policies),
-            }))
-            .filter((item) => item.entries.length > 0),
-          local_bindings: candidate.local_bindings
-            .map(({ invocation_policies, ...binding }) => ({
-              ...binding,
-              entries: binding.entries.filter(keepEntry),
-              ...remainingPolicies(invocation_policies),
-            }))
-            .filter((item) => item.entries.length > 0),
-          projections: candidate.projections.filter((item) => !removedSkillIds.has(item.skill_id)),
-          skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
-          acquisitions,
-          retained_copies: candidate.retained_copies.filter((copy) =>
-            survivingCopyIds.has(copy.retained_copy_id),
-          ),
-        });
+        return store.publish(
+          {
+            ...candidate,
+            collections: candidate.collections.filter(
+              (item) => item.collection_id !== options.collectionId,
+            ),
+            global_bindings: candidate.global_bindings
+              .map(({ invocation_policies, ...binding }) => ({
+                ...binding,
+                entries: binding.entries.filter(keepEntry),
+                ...remainingPolicies(invocation_policies),
+              }))
+              .filter((item) => item.entries.length > 0),
+            local_bindings: candidate.local_bindings
+              .map(({ invocation_policies, ...binding }) => ({
+                ...binding,
+                entries: binding.entries.filter(keepEntry),
+                ...remainingPolicies(invocation_policies),
+              }))
+              .filter((item) => item.entries.length > 0),
+            projections: candidate.projections.filter(
+              (item) => !removedSkillIds.has(item.skill_id),
+            ),
+            skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
+            acquisitions,
+            retained_copies: candidate.retained_copies.filter((copy) =>
+              survivingCopyIds.has(copy.retained_copy_id),
+            ),
+          },
+          base,
+        );
       },
     },
     (mutation) =>

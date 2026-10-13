@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { projectBindingEffect } from "../src/library/installation/project-binding.js";
+import { removeCollectionEffect } from "../src/library/installation/remove.js";
 import type { BindingEntry } from "../src/library/library-contracts.js";
 import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
@@ -62,10 +63,13 @@ const upstream = Effect.gen(function* () {
       yield* withLibraryWriterLock(
         home,
         Effect.flatMap(LibraryStore, (store) =>
-          store.publish({
-            ...state,
-            global_bindings: [{ scope: { kind: "global" }, entries }],
-          }),
+          store.publish(
+            {
+              ...state,
+              global_bindings: [{ scope: { kind: "global" }, entries }],
+            },
+            state,
+          ),
         ).pipe(Effect.provide(storeLayer)),
       );
     });
@@ -80,7 +84,7 @@ const upstream = Effect.gen(function* () {
   const installed = Effect.gen(function* () {
     return (yield* fs.readDirectory(root)).sort();
   });
-  return { refresh, load, enable, project, installed };
+  return { refresh, load, enable, project, installed, home, storeLayer };
 });
 
 it.effect("a whole-Collection entry installs Skills added upstream and retires deleted ones", () =>
@@ -113,5 +117,30 @@ it.effect("an individually enabled Skill deleted upstream stays installed", () =
     assert.ok(state.skills.some((skill) => skill.skill_id === beta.skill_id));
     yield* project;
     assert.deepStrictEqual(yield* installed, ["beta"]);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("refuses to remove a Collection that gained a member after removal was planned", () =>
+  Effect.gen(function* () {
+    const { refresh, load, enable, project, installed, home, storeLayer } = yield* upstream;
+    const first = yield* refresh(["alpha"]);
+    assert.ok(first.collection);
+    const collectionId = first.collection.collection_id;
+    yield* enable([{ kind: "collection", collection_id: collectionId }]);
+    yield* project;
+    const planned = yield* load;
+
+    yield* refresh(["alpha", "beta"]);
+    yield* project;
+    const error = yield* withLibraryWriterLock(
+      home,
+      removeCollectionEffect(planned, { collectionId, variantsPath: join(home, "variants") }),
+    ).pipe(Effect.provide(storeLayer), Effect.flip);
+
+    assert.strictEqual(error._tag, "LibraryChanged");
+    const state = yield* load;
+    assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
+    assert.strictEqual(state.projections.length, 2);
+    assert.deepStrictEqual(yield* installed, ["alpha", "beta"]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
