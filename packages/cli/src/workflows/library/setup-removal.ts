@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { LinkStat, pathIsWithin, writeJsonAtomicEffect } from "@smolai/skit-core";
+import {
+  deterministicTreeHashEffect,
+  LinkStat,
+  pathIsWithin,
+  writeJsonAtomicEffect,
+} from "@smolai/skit-core";
 import { PlanIsStale } from "../../library/failures.js";
 import { collectHarnessRoots, type SetupOptions } from "./setup.js";
+import { custodyAt } from "./setup-discovery.js";
 import type { SetupResult } from "./setup-contract.js";
 import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 
@@ -15,6 +21,8 @@ export interface SetupRemoval {
   dev: number;
   ino: number;
   linkTarget?: string;
+  /** A moved directory's approved content hash; a moved link leaves its target in place. */
+  observedHash?: string;
 }
 
 /** Only observed, unmanaged agent locations are removable. Canonical source trees stay put. */
@@ -76,8 +84,13 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
   for (const selection of selections) {
     const instancePaths = observed.instances
       .filter((instance) => selection.paths.includes(instance.path))
-      .flatMap((instance) => removablePaths.get(instance.path) ?? []);
-    for (const path of instancePaths) {
+      .flatMap((instance) =>
+        (removablePaths.get(instance.path) ?? []).map((path) => ({
+          path,
+          observedHash: instance.contentIdentity.observedHash,
+        })),
+      );
+    for (const { path, observedHash } of instancePaths) {
       if (seen.has(path)) continue;
       seen.add(path);
       const info = yield* links.identity.lstat(path);
@@ -90,20 +103,28 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
         type: info.type,
         dev: info.dev,
         ino: info.ino,
-        ...(info.type === "SymbolicLink" ? { linkTarget: yield* fs.readLink(path) } : {}),
+        ...(info.type === "SymbolicLink"
+          ? { linkTarget: yield* fs.readLink(path) }
+          : observedHash === undefined
+            ? {}
+            : { observedHash }),
       });
     }
   }
   return { recoveryDirectory, entries };
 });
 
-/** The caller revalidates the entire setup observation immediately before applying this plan. */
+/**
+ * Move each entry to recovery only while it is still the approved file: the same identity and link
+ * target, and for a directory the same bytes and no new custody. Every entry is checked before any
+ * moves, and each again immediately before its own move.
+ */
 export const applySetupRemovals = Effect.fn("Setup.applyRemovals")(function* (
   plan: Effect.Success<ReturnType<typeof planSetupRemovals>>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  for (const entry of plan.entries) {
+  const checkApproved = Effect.fn("Setup.checkApprovedRemoval")(function* (entry: SetupRemoval) {
     yield* leavePnpmSkillEffect(entry.path);
     const current = yield* links.identity.lstat(entry.path);
     if (
@@ -113,7 +134,16 @@ export const applySetupRemovals = Effect.fn("Setup.applyRemovals")(function* (
       (entry.linkTarget !== undefined && (yield* fs.readLink(entry.path)) !== entry.linkTarget)
     )
       return yield* new PlanIsStale();
-  }
+    if (entry.type !== "Directory") return;
+    const hash = yield* Effect.result(deterministicTreeHashEffect(entry.path));
+    if (
+      hash._tag === "Failure" ||
+      hash.success !== entry.observedHash ||
+      (yield* custodyAt(entry.path)).custody !== "unmanaged"
+    )
+      return yield* new PlanIsStale();
+  });
+  for (const entry of plan.entries) yield* checkApproved(entry);
   if (!plan.entries.length) return;
   yield* fs.makeDirectory(plan.recoveryDirectory, { recursive: true, mode: 0o700 });
   const moved: string[] = [];
@@ -124,6 +154,7 @@ export const applySetupRemovals = Effect.fn("Setup.applyRemovals")(function* (
     });
   yield* receipt();
   for (const entry of plan.entries) {
+    yield* checkApproved(entry);
     // rename moves the symlink itself. It neither dereferences nor rewrites the target.
     yield* fs.rename(entry.path, entry.recoveryPath);
     moved.push(entry.path);

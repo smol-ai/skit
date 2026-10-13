@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { basename, dirname, join, posix, relative, resolve, sep } from "node:path";
-import { Effect, FileSystem, Result, Schema } from "effect";
+import { Context, Effect, FileSystem, Result, Schema } from "effect";
 import {
   LinkStat,
   LibraryStore,
@@ -16,9 +16,11 @@ import {
   SourceIdentity,
   SourceProcess,
   HarnessName,
+  type CurrentMachineDocument,
   type HarnessName as Harness,
   type LibraryState,
 } from "@smolai/skit-core";
+import { withConfigurationWriter } from "../../configuration-writer.js";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import { readableHarnessRoots } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
@@ -589,10 +591,8 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
   return collections.sort((left, right) => left.repository.localeCompare(right.repository));
 });
 
-export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (
-  options: SetupOptions,
-) {
-  const prior = yield* readSetupMachineConfig(options.libraryHome);
+/** The repository roots and decisions a setup run observes: its options over the saved config. */
+const setupMachineScope = (options: SetupOptions, prior: CurrentMachineDocument) => {
   const discoveryRoots = [
     ...new Set(
       (options.repositoryRoots ?? setupDiscoveryRoots(prior)).map((path) => resolve(path)),
@@ -603,6 +603,33 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
   );
   for (const decision of options.repositoryDecisions ?? [])
     existingDecisions.set(resolve(decision.path), decision.status);
+  return { discoveryRoots, existingDecisions };
+};
+
+/** Save the roots and repository decisions setup observes, creating this machine's identity. */
+export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(
+  function* (options: SetupOptions) {
+    const prior = yield* readSetupMachineConfig(options.libraryHome);
+    const { discoveryRoots, existingDecisions } = setupMachineScope(options, prior);
+    return yield* writeSetupMachineConfig(
+      options.libraryHome,
+      // Setup never clears saved discovery roots; an empty list only narrows this scan.
+      discoveryRoots.length ? discoveryRoots : setupDiscoveryRoots(prior),
+      [...existingDecisions]
+        .map(([path, status]) => ({ path, status }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+      prior,
+      options.machineDisplayName ?? hostname(),
+    );
+  },
+  (effect, options) => withConfigurationWriter(options.libraryHome, effect),
+);
+
+export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (
+  options: SetupOptions,
+) {
+  const prior = yield* readSetupMachineConfig(options.libraryHome);
+  const { discoveryRoots, existingDecisions } = setupMachineScope(options, prior);
   const discovering =
     !options.scanDecidedRepositories ||
     (!prior.repositoryDecisionsInitialized && existingDecisions.size === 0);
@@ -611,18 +638,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     : yield* inspectWatchedRepositories(
         [...existingDecisions].filter(([, status]) => status === "watched").map(([path]) => path),
       );
-  const machineConfig = options.persistRoots
-    ? yield* writeSetupMachineConfig(
-        options.libraryHome,
-        // Setup never clears saved discovery roots; an empty list only narrows this scan.
-        discoveryRoots.length ? discoveryRoots : setupDiscoveryRoots(prior),
-        [...existingDecisions]
-          .map(([path, status]) => ({ path, status }))
-          .sort((left, right) => left.path.localeCompare(right.path)),
-        prior,
-        options.machineDisplayName ?? hostname(),
-      )
-    : prior;
+  const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
   const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
   const repositoryConfigByPath = new Map(
     repositoryConfigs.map((config) => [config.repository, config] as const),
@@ -707,3 +723,11 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
 });
 
 export type SetupEvidence = Effect.Success<ReturnType<typeof collectSetupEvidence>>;
+
+/**
+ * The full setup discovery scan: every harness root, git in every repository, and a tree hash per
+ * Skill. Setup scans through this reference so a caller can observe how often it scans.
+ */
+export const SetupDiscovery = Context.Reference<{
+  readonly collect: (options: SetupOptions) => ReturnType<typeof collectSetupEvidence>;
+}>("skit/setup/SetupDiscovery", { defaultValue: () => ({ collect: collectSetupEvidence }) });

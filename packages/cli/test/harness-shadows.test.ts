@@ -227,7 +227,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
                 setup: options,
                 adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
               },
-              observed.onboarding.planId,
+              observed,
               [{ name: "review", sourcePath: f.source }],
             ),
           );
@@ -276,7 +276,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
                 setup: options,
                 adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
               },
-              observed.onboarding.planId,
+              observed,
               [{ name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" }],
             ).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
           );
@@ -485,7 +485,7 @@ it.effect(
                 setup: options,
                 adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
               },
-              observed.onboarding.planId,
+              observed,
               [
                 { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
                 { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
@@ -710,14 +710,12 @@ for (const operation of ["add", "bind"] as const) {
                         setup,
                         adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
                       },
-                      fresh.onboarding.planId,
+                      fresh,
                       [selection],
                     ).pipe(Effect.asVoid, Effect.result)
-                  : yield* applySetupExistingBindings(
-                      { setup, bindings: f.home.bindings },
-                      fresh.onboarding.planId,
-                      [selection],
-                    ).pipe(Effect.asVoid, Effect.result);
+                  : yield* applySetupExistingBindings({ setup, bindings: f.home.bindings }, fresh, [
+                      selection,
+                    ]).pipe(Effect.asVoid, Effect.result);
               expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
               expect(yield* (yield* LibraryStore).load).toEqual(before);
               expect(yield* f.fs.exists(f.alias)).toBe(change !== "removed");

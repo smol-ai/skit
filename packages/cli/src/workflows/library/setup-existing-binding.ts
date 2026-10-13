@@ -4,9 +4,9 @@ import {
   bindSetupCopy,
 } from "./setup-local-custody.js";
 import { Data, Effect } from "effect";
-import { type Digest } from "@smolai/skit-core";
 import type { ProjectionOptions } from "./projection-options.js";
-import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
+import type { SetupOptions } from "./setup.js";
+import type { SetupResult } from "./setup-contract.js";
 
 import type { SetupCopySelection } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -38,13 +38,12 @@ export interface SetupExistingBindingOptions {
   readonly bindings: ProjectionOptions;
 }
 
-/** Revalidate setup consent, then take custody using an exact existing Library Artifact. */
+/** Take custody using an exact existing Library Artifact, from the approved setup observation. */
 export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings")(function* (
   options: SetupExistingBindingOptions,
-  approvedPlanId: Digest,
+  current: SetupResult,
   selectedCopies: readonly SetupCopySelection[],
 ) {
-  const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   const selections = yield* Effect.forEach(selectedCopies, (selection) =>
     approveSetupCopy(
       current,

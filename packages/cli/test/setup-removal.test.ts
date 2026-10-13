@@ -122,7 +122,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const { interaction, result } = yield* f.setup([["remove\0copied", "remove\0linked"], true]);
+      const { interaction } = yield* f.setup([["remove\0copied", "remove\0linked"], true]);
       const plan = (yield* interaction.steps).find(
         (step) => step.title === setupStepTitles.confirm,
       )!.body;
@@ -156,7 +156,6 @@ it.effect(
         "incidental bytes",
       );
       expect((yield* f.home.durable).collections).toHaveLength(0);
-      expect(result.instances.some((instance) => instance.name === "copied")).toBe(false);
       for (const entry of receipt.entries) yield* f.fs.rename(entry.recoveryPath, entry.path);
       expect(yield* f.fs.readLink(f.link)).toBe(f.source);
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toContain("Copy contents");

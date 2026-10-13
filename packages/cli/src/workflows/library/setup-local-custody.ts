@@ -17,8 +17,8 @@ import {
   LibraryStore,
   LinkStat,
   hasHarnessProfile,
+  deterministicTreeHashEffect,
   type HarnessName,
-  type Digest,
 } from "@smolai/skit-core";
 import {
   localAdoptionPlanIdentity,
@@ -31,7 +31,7 @@ import { addLibrarySourceEffect } from "./add.js";
 import { applyLibraryBindings, type SetEnabledOptions } from "./set-enabled.js";
 import type { SetupResult } from "./setup-contract.js";
 import type { ProjectionOptions } from "./projection-options.js";
-import { revalidateSetupPlan, type SetupOptions } from "./setup.js";
+import type { SetupOptions } from "./setup.js";
 import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 
 import {
@@ -72,14 +72,13 @@ export interface SetupLocalCustodyOptions {
   readonly adoption: LocalAdoptionOptions;
 }
 
-/** Revalidate setup consent, then apply each explicitly selected local-custody candidate. */
+/** Apply each explicitly selected local-custody candidate from the approved setup observation. */
 export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(function* (
   options: SetupLocalCustodyOptions,
-  approvedPlanId: Digest,
+  current: SetupResult,
   selectionInput: readonly SetupCopySelection[],
 ) {
   const decoded = yield* Schema.decodeUnknownEffect(SetupLocalCustodySelections)(selectionInput);
-  const current = yield* revalidateSetupPlan(options.setup, approvedPlanId);
   yield* (yield* LibraryStore).load;
   const selections = yield* Effect.forEach(decoded, (selection) =>
     approveSetupCopy(
@@ -120,6 +119,12 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(funct
       });
     const sourcePath = selection.sourcePath;
     const selectedInstance = current.instances.find((instance) => instance.path === sourcePath);
+    // The approved observation can be stages old; retain only the bytes that were approved.
+    if (
+      (yield* deterministicTreeHashEffect(sourcePath)) !==
+      selectedInstance?.contentIdentity.observedHash
+    )
+      return yield* new PlanIsStale();
     if (
       selection.duplicateAction === "retain-only" ||
       candidate.action === "repository-owned" ||

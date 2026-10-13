@@ -1,10 +1,10 @@
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
-import { canonicalJson, Digest, hashParts } from "@smolai/skit-core";
+import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
 import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
-import { collectSetupEvidence, collectBrokenLinks } from "./setup-discovery.js";
+import { collectBrokenLinks, SetupDiscovery } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -15,7 +15,7 @@ export {
   setupDiscoveryRoots,
   setupRepositoryDecisions,
 } from "./setup-config.js";
-export { collectHarnessRoots } from "./setup-discovery.js";
+export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
 export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
@@ -50,9 +50,10 @@ export interface SetupOptions {
   readonly scanDecidedRepositories?: boolean;
 }
 
-export const runSetup = Effect.fn("Library.setup")(
+/** One full setup scan, and the Library state its plan was made against. */
+const observeSetup = Effect.fn("Library.setup")(
   function* (options: SetupOptions) {
-    const evidence = yield* collectSetupEvidence(options);
+    const evidence = yield* (yield* SetupDiscovery).collect(options);
     const {
       machineConfig,
       discoveryRoots,
@@ -98,6 +99,8 @@ export const runSetup = Effect.fn("Library.setup")(
         candidates: onboarding,
         instances: sortedInstances,
         repositoryConfigs,
+        // Consent covers the Library the plan was made against, not only the disk it observed.
+        library: libraryStateRevision(library),
       }),
     ]);
     const missingRepositories = !discovering
@@ -106,7 +109,7 @@ export const runSetup = Effect.fn("Library.setup")(
           .map(([path]) => path)
           .sort()
       : [];
-    return {
+    const observed = {
       machineConfig: {
         path: machineConfig.path,
         ...(machineConfig.machineId === undefined ? {} : { machineId: machineConfig.machineId }),
@@ -162,19 +165,24 @@ export const runSetup = Effect.fn("Library.setup")(
       brokenLinks: yield* collectBrokenLinks(harnessRoots),
       suppressed: walk.suppressed,
     } satisfies SetupResult;
+    return { observed, library };
   },
   (effect, options) =>
     options.persistRoots ? withConfigurationWriter(options.libraryHome, effect) : effect,
 );
 
+export const runSetup = (options: SetupOptions) =>
+  Effect.map(observeSetup(options), (scan) => scan.observed);
+
+/** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,
   approvedPlanId: typeof Digest.Type,
 ) {
-  const current = yield* runSetup({ ...options, persistRoots: false });
-  if (current.onboarding.planId !== approvedPlanId)
+  const current = yield* observeSetup({ ...options, persistRoots: false });
+  if (current.observed.onboarding.planId !== approvedPlanId)
     return yield* Effect.fail(
-      new SetupPlanStale({ approvedPlanId, currentPlanId: current.onboarding.planId }),
+      new SetupPlanStale({ approvedPlanId, currentPlanId: current.observed.onboarding.planId }),
     );
   return current;
 });
