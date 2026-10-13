@@ -105,24 +105,6 @@ export const readArchive = Effect.fn("Integrity.readArchive")(function* (archive
   return { names, files };
 });
 
-export const verifyReleaseSnapshot = Effect.fn("Integrity.verifyReleaseSnapshot")(function* (
-  expected: ReadonlyMap<string, Uint8Array>,
-  archive: Uint8Array,
-) {
-  const { names, files } = yield* readArchive(archive);
-  if (expected.size !== names.length || names.some((name) => !expected.has(name)))
-    return yield* manifestMismatch();
-  for (const [path, stored] of expected) {
-    const candidate = files[path];
-    if (
-      !candidate ||
-      candidate.byteLength !== stored.byteLength ||
-      candidate.some((byte, index) => byte !== stored[index])
-    )
-      return yield* manifestMismatch();
-  }
-});
-
 const DraftFileRow = Schema.Struct({
   path: Schema.String,
   blob_digest: Digest,

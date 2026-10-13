@@ -4,11 +4,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
-import {
-  readArchive,
-  verifyReleaseArchive,
-  verifyReleaseSnapshot,
-} from "../src/publication/archive.js";
+import { readArchive, verifyReleaseArchive } from "../src/publication/archive.js";
 import { sha256 } from "../src/integrity/crypto.js";
 import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
 
@@ -20,31 +16,6 @@ const bindingsLayer = Layer.merge(
 const testLayer = Layer.merge(bindingsLayer, BrowserCrypto.layer);
 
 describe("Publication release archives", () => {
-  it.effect("accepts an archive whose files exactly match the retained snapshot", () =>
-    Effect.gen(function* () {
-      const expected = new Map([
-        ["README.md", bytes("readme")],
-        ["skills/review/SKILL.md", bytes("skill")],
-      ]);
-      const archive = zipSync(Object.fromEntries(expected));
-
-      yield* verifyReleaseSnapshot(expected, archive);
-    }),
-  );
-
-  it.effect("rejects archive content drift", () =>
-    Effect.gen(function* () {
-      const archive = zipSync({ "README.md": bytes("changed") });
-      const outcome = yield* Effect.result(
-        verifyReleaseSnapshot(new Map([["README.md", bytes("original")]]), archive),
-      );
-
-      expect(outcome._tag).toBe("Failure");
-      if (outcome._tag === "Failure")
-        expect(outcome.failure.code).toBe("ARCHIVE_MANIFEST_MISMATCH");
-    }),
-  );
-
   it.effect("rejects traversal paths even when the inflater accepts them", () =>
     Effect.gen(function* () {
       const outcome = yield* Effect.result(readArchive(zipSync({ "../escape": bytes("no") })));
@@ -63,7 +34,7 @@ describe("Publication release archives", () => {
     }),
   );
 
-  it.effect("verifies the archive against its persisted draft revision", () =>
+  it.effect("verifies the archive against its persisted draft revision and rejects drift", () =>
     Effect.gen(function* () {
       const descriptor = {
         skit: 1,
@@ -111,6 +82,15 @@ describe("Publication release archives", () => {
       expect(
         yield* verifyReleaseArchive("draft_test", zipSync(Object.fromEntries(contents))),
       ).toEqual([]);
+      const drifted = yield* Effect.result(
+        verifyReleaseArchive(
+          "draft_test",
+          zipSync({ ...Object.fromEntries(contents), "skills/review/SKILL.md": bytes("changed") }),
+        ),
+      );
+      expect(drifted._tag).toBe("Failure");
+      if (drifted._tag === "Failure")
+        expect(drifted.failure).toMatchObject({ code: "ARCHIVE_MANIFEST_MISMATCH" });
     }).pipe(Effect.provide(testLayer)),
   );
 });
