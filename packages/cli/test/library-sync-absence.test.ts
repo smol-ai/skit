@@ -23,14 +23,21 @@ const empty: LibraryManifest = currentLibraryManifest({
 });
 
 /**
- * Assert that a sync wrote nothing on the device or the Registry. File identity is captured, so an
- * atomic rewrite of identical bytes also counts as a write. Taking the writer lock creates the home
- * when it did not exist yet, as the fault-matrix rows allow; it must stay empty.
+ * Assert that a sync published no local state, sent the Registry no write request, and left the
+ * durable state of both unchanged. The counters see every publication and write request, including
+ * an identical rewrite in place or an idempotent write the Registry answers with its head. The
+ * snapshot captures file identity, so it also sees an atomic replacement of identical bytes. Taking
+ * the writer lock creates the home when it did not exist yet, as the fault-matrix rows allow; it
+ * must stay empty.
  */
 const unwritten = Effect.fn("Test.unwritten")(function* ({ server }: Homes, device: Device) {
   const before = yield* captureDisk(device.disk, { identity: true });
   const stored = server.stored;
+  const publishes = device.publishes;
+  const writeRequests = server.writeRequests;
   return Effect.gen(function* () {
+    assert.strictEqual(device.publishes, publishes);
+    assert.strictEqual(server.writeRequests, writeRequests);
     const changes = yield* diskChanges(before);
     assert.deepStrictEqual(
       {
@@ -144,33 +151,57 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
     const unchanged = yield* unwritten(homes, a);
     assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
     yield* unchanged;
+    const publishes = a.publishes;
+    const writeRequests = server.writeRequests;
     assert.strictEqual((yield* a.sync()).status, "clean");
+    // Anchoring is one local publication and no Registry write.
+    assert.strictEqual(a.publishes, publishes + 1);
+    assert.strictEqual(server.writeRequests, writeRequests);
     assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
     assert.strictEqual(server.writes, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("an anchored home that matches the remote: clean with zero writes", () =>
+/** A home whose state, projections and ancestry already match the remote head. */
+const anchored = Effect.fn("Test.anchoredHome")(function* (device: Device) {
+  yield* device.retain("first");
+  yield* device.edit((state) => ({
+    ...state,
+    global_bindings: [
+      {
+        scope: { kind: "global" },
+        entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
+      },
+    ],
+  }));
+  yield* device.project();
+  assert.strictEqual((yield* device.sync()).status, "pushed");
+  assert.strictEqual((yield* device.sync()).status, "clean");
+});
+
+it.effect("an anchored home that matches the remote: a clean preview writes nothing", () =>
+  Effect.gen(function* () {
+    const homes = yield* devices;
+    yield* anchored(homes.a);
+    const unchanged = yield* unwritten(homes, homes.a);
+    assert.strictEqual((yield* homes.a.sync({ apply: false })).status, "clean");
+    yield* unchanged;
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+// BUG characterization: an applied clean sync publishes identical state twice, once to anchor
+// ancestry that already names the head and once from projection reconciliation, replacing the file.
+// The desired outcome is zero publications: once sync unification skips both when B already equals
+// R and nothing changed, this flips to `unwritten` holding as it does for a preview.
+it.effect("BUG: an anchored home that matches the remote republishes on an applied clean", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
-    yield* a.retain("first");
-    yield* a.edit((state) => ({
-      ...state,
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-        },
-      ],
-    }));
-    yield* a.project();
-    assert.strictEqual((yield* a.sync()).status, "pushed");
-    assert.strictEqual((yield* a.sync()).status, "clean");
-    const unchanged = yield* unwritten(homes, a);
-    assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
-    yield* unchanged;
+    yield* anchored(a);
     const before = yield* captureDisk(a.disk, { identity: true });
+    const stored = server.stored;
+    const publishes = a.publishes;
+    const writeRequests = server.writeRequests;
     const result = yield* a.sync();
     assert.deepStrictEqual(result, {
       status: "clean",
@@ -179,9 +210,10 @@ it.effect("an anchored home that matches the remote: clean with zero writes", ()
       projected: 0,
       retired: 0,
     });
-    // BUG characterization: an applied clean sync republishes identical state, replacing the file.
-    // A clean no-op should write nothing; when sync unification skips the publish once B already
-    // equals R and the state is unchanged, this diff is empty and `unchanged` holds here too.
+    assert.strictEqual(a.publishes, publishes + 2);
+    assert.strictEqual(server.writeRequests, writeRequests);
+    assert.deepStrictEqual(server.stored, stored);
+    // The publications atomically replace state.json with identical bytes.
     const changes = yield* diskChanges(before);
     assert.deepStrictEqual({ ...changes, changed: [] }, noDiskChanges);
     assert.deepStrictEqual(
@@ -192,7 +224,6 @@ it.effect("an anchored home that matches the remote: clean with zero writes", ()
     assert.ok(rewritten?.before.type === "file" && rewritten.after.type === "file");
     assert.strictEqual(rewritten.after.content, rewritten.before.content);
     assert.notStrictEqual(rewritten.after.identity, rewritten.before.identity);
-    assert.strictEqual(server.writes, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

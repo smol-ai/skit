@@ -62,6 +62,7 @@ export const devices = Effect.gen(function* () {
   );
   const device = (name: string) => {
     const home = join(workspace, name);
+    let publishes = 0;
     const layer = Layer.effect(
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
@@ -70,6 +71,7 @@ export const devices = Effect.gen(function* () {
           state: LibraryState,
           base: LibraryState,
         ) {
+          publishes++;
           if (
             faults.take(
               "FailPublish",
@@ -95,6 +97,10 @@ export const devices = Effect.gen(function* () {
       root,
       /** Every root a sync may write: the home, its projections, and their backups. */
       disk: [home, root, join(workspace, ".skit-backups")],
+      /** Local state publications attempted through this home's LibraryStore, refused or not. */
+      get publishes() {
+        return publishes;
+      },
       corruptOriginal: Effect.gen(function* () {
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.provide(layer),

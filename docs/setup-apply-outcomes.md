@@ -4,13 +4,13 @@ This document is the test oracle for guided `skit setup`. It lists the durable e
 
 | Coverage | Where |
 | --- | --- |
-| Consent, staleness, ordering, partial failure, and scan counts of guided apply, with lossless disk snapshots | `packages/cli/test/setup-apply-outcomes.test.ts` |
+| Consent, staleness, ordering, partial failure, and global lock reads (a scan-count characterization) of guided apply, with lossless disk snapshots | `packages/cli/test/setup-apply-outcomes.test.ts` |
 | Lossless snapshot of declared roots (type, mode, link target, bytes) and its self-test | `packages/cli/test/helpers/disk-snapshot.ts`, `packages/cli/test/disk-snapshot.test.ts` |
 | Removal previews, archive layout, linked sources, and stale removal plans | `packages/cli/test/setup-removal.test.ts` |
 | skills.sh lock adoption and observed-source imports | `packages/cli/test/setup-lock-source-adoption.test.ts` |
 | Local custody, alias retirement, and duplicate choices | `packages/cli/test/setup-local-custody.test.ts`, `packages/cli/test/setup-discovered-copies.test.ts` |
 
-The acceptance tests drive `setupCommand` itself with `interactive: true`, a scripted prompter and renderer (`makeScriptedInteraction`), a real temporary filesystem and real Library services. `skit setup --json` cannot reach guided apply: it forces a dry run. Tests assert the typed `Exit`, validate a successful `SetupResult` against `outputContracts.setup`, and compare `captureDisk` snapshots of the Library home, the agent roots with their backups, and the skills.sh state directory. A full discovery scan is counted as one read of the global skills.sh lock, which every `collectSetupEvidence` makes once and no safety check makes. Changes "after approval" and "after the first additive stage" are made at explicit gates (the approving prompt, the first Library publication, a named rename), never after a delay.
+The acceptance tests drive `setupCommand` itself with `interactive: true`, a scripted prompter and renderer (`makeScriptedInteraction`), a real temporary filesystem and real Library services. `skit setup --json` cannot reach guided apply: it forces a dry run. Tests assert the typed `Exit`, validate a successful `SetupResult` against `outputContracts.setup`, and compare `captureDisk` snapshots of the Library home, the agent roots with their backups, and the skills.sh state directory. Scan counts are characterized by reads of the global skills.sh lock: every `collectSetupEvidence` reads it once and no safety check does, so today the read count tracks full discovery scans. This is a lock-read characterization, not an acceptance-level scan observer: caching the lock would lower the count while repository traversal still repeats. `collectSetupEvidence` is a plain function with no injectable seam, so the setup-apply refactor must introduce a stable scan seam and an observer counter on it, and its one-scan requirement is asserted through that counter. Changes "after approval" and "after the first additive stage" are made at explicit gates (the approving prompt, the first Library publication, a named rename), never after a delay.
 
 ## Durable state
 
@@ -46,12 +46,12 @@ Preview runs without the Library writer lock. On approval, everything up to the 
 
 | Condition | State left | Test |
 | --- | --- | --- |
-| Guided preview declined, or a dry run | Nothing written; exactly one full scan | `declining or previewing the plan applies nothing after one scan` |
+| Guided preview declined, or a dry run | Nothing written; one global lock read (one full scan) | `declining or previewing the plan applies nothing after one global lock read` |
 | Any read of a legacy `state.json`, including a preview | Loader maintenance only: `state.json` migrated and its pre-migration bytes kept beside it as a backup | `declining over a legacy Library writes only the loader's backed-up migration` |
 | Non-interactive setup with `--work-dir` | A separate path: the first observation itself writes `machine.json`; nothing else | `non-interactive setup with a work dir saves machine configuration while observing` |
-| A selected file changes after approval, before S2 | `SetupPlanStale`; only the outside change is on disk; two scans | `a selected file changed after approval fails stale before any effect` |
+| A selected file changes after approval, before S2 | `SetupPlanStale`; only the outside change is on disk; two global lock reads | `a selected file changed after approval fails stale before any effect` |
 | S3: a later rename fails | A prefix of entries moved into recovery with their bytes; the rest untouched; the receipt records `moved: true` for the prefix only. No rollback | `a failed removal move leaves a moved prefix, the rest in place, and a receipt` |
-| S3: the receipt rewrite after a move fails | The entry is moved but recorded `moved: false`. Nothing reads the receipt, so recovery must inspect both the original and recovery paths | `BUG: a failed receipt rewrite records a moved copy as not moved` |
+| S3: the receipt rewrite after a move fails | The entry is moved, whole, but recorded `moved: false`. No bytes are lost. Nothing reads the receipt back, so a manual recovery must inspect both the original and recovery paths of every entry rather than trust `moved` | `a failed receipt rewrite leaves a moved copy recorded as not moved, bytes intact` (recovery-evidence characterization) |
 | S4 then a later stage fails | `machine.json` created; the removals already applied stay applied | `BUG: a failed additive stage after removals leaves the removals applied` |
 | An additive publication fails after its retention | Orphan originals; Library state unchanged | As above |
 | S5: a later import group fails | Earlier groups stay retained and published; the failing group may leave orphan originals | Not covered here; needs a skills.sh lock fixture |
@@ -59,7 +59,7 @@ Preview runs without the Library writer lock. On approval, everything up to the 
 | S2 passes, then a selected file changes before S6/S7 observe | The stage's fresh observation yields a new plan ID that its revalidation accepts: consent silently follows the changed bytes | `BUG: a stage's own observation refreshes consent for bytes changed after approval` |
 | A selected copy changes after an earlier selection in S7 committed | Retained as changed: each selection plans from the disk as it is then | `BUG: a selected copy changed after the first additive stage is still retained` |
 | Another writer commits a Library revision after approval | Apply reloads the Library per stage and builds on the new revision | `BUG: a Library change committed after approval is silently rebased onto` |
-| Any approved apply | One full scan for S2, one for S4 when it runs, two each for S6 and S7, and one for S8 | `BUG: an approved apply runs a full discovery scan per stage` (five scans for custody alone) |
+| Any approved apply | One full scan for S2, one for S4 when it runs, two each for S6 and S7, and one for S8 | `BUG: an approved apply reads the global lock once per stage's discovery scan` (five lock reads for custody alone) |
 | S8 writes `machine.json` and then fails | `machine.json` updated; every earlier stage applied | Not covered here |
 | S9 fails or is cancelled after a successful apply | The command fails, but nothing is undone: every stage before it is durable | Not covered here |
 
@@ -69,11 +69,11 @@ The setup-apply refactor moves guided apply out of the handler into one workflow
 
 | Requirement | Status today |
 | --- | --- |
-| Exactly one full discovery scan after approval, distinct from the preview scan. Cheap identity and hash checks immediately before touching bytes are still required | Violated: `BUG: an approved apply runs a full discovery scan per stage` |
+| Exactly one full discovery scan after approval, distinct from the preview scan, asserted by an observer counter on the stable scan seam the refactor introduces (the lock-read count is only today's proxy). Cheap identity and hash checks immediately before touching bytes are still required | Violated: `BUG: an approved apply reads the global lock once per stage's discovery scan` |
 | The approved plan ID stays fixed; internal re-observation never refreshes consent | Violated: `BUG: a stage's own observation refreshes consent for bytes changed after approval` |
 | A stale approval, or a change after an additive stage (a selected file, lockfile, symlink target or Library revision), means no further effects and a clear stale failure | Holds before S2. Violated after it: `BUG: a selected copy changed after the first additive stage is still retained`, `BUG: a Library change committed after approval is silently rebased onto` |
 | Additive stages run before removals; an additive failure means no removals | Violated: `BUG: a failed additive stage after removals leaves the removals applied` |
-| If a removal fails, the durable partial state is documented and a recovery receipt is kept | Holds when a move fails. Violated when a receipt rewrite fails: `BUG: a failed receipt rewrite records a moved copy as not moved` |
+| If a removal fails, the durable partial state is documented and a recovery receipt is kept | Holds. When a receipt rewrite fails, the receipt can lag the disk by one move; no bytes are lost and a recovery must inspect both paths, so this is recovery evidence, not a violation |
 | A concurrent Library change is never silently rebased | Violated: `BUG: a Library change committed after approval is silently rebased onto` |
 
 In every row, current and desired, bytes that cannot be reproduced are kept: a removed copy is moved, never deleted, and the tests compare its recovered bytes and mode with the original.

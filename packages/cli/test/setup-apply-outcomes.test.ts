@@ -62,7 +62,10 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  // Every full discovery scan reads the global skills.sh lock once; safety checks never do.
+  // Lock-read characterization, not a scan observer: today every `collectSetupEvidence` reads the
+  // global skills.sh lock once and safety checks never do, so reads track full discovery scans.
+  // Caching the lock would lower this count while traversal still repeats. The scan has no
+  // injectable seam yet; the setup-apply refactor must add one and count scans through it.
   const globalLock = join(options.skillsStateHome, "skills", ".skill-lock.json");
   const setup = (
     answers: readonly ScriptedAnswer[],
@@ -70,7 +73,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     flags: { interactive?: boolean; dryRun?: boolean; workDirFlag?: string } = {},
   ) =>
     Effect.gen(function* () {
-      let scans = 0;
+      let lockReads = 0;
       let publishes = 0;
       const interaction = yield* makeScriptedInteraction(answers);
       const exit = yield* Effect.exit(
@@ -118,7 +121,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
                 readFileString: (path: string, encoding?: string) =>
                   Effect.andThen(
                     Effect.sync(() => {
-                      if (path === globalLock) scans++;
+                      if (path === globalLock) lockReads++;
                     }),
                     files.readFileString(path, encoding),
                   ),
@@ -131,7 +134,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
         ),
       );
       if (Exit.isSuccess(exit)) assert.isTrue(Schema.is(outputContracts.setup.schema)(exit.value));
-      return { exit, scans, interaction };
+      return { exit, lockReads, interaction };
     });
   return {
     fs,
@@ -192,17 +195,17 @@ const holds = (changes: DiskDiff, bytes: string) =>
       after.content === `base64:${Buffer.from(bytes).toString("base64")}`,
   );
 
-it.effect("declining or previewing the plan applies nothing after one scan", () =>
+it.effect("declining or previewing the plan applies nothing after one global lock read", () =>
   Effect.gen(function* () {
     for (const decline of [true, false]) {
       const f = yield* fixture({ machine: true });
       const before = yield* captureDisk(f.disk);
-      const { exit, scans } = decline
+      const { exit, lockReads } = decline
         ? yield* f.setup([["alpha", "remove\0gamma"], false])
         : yield* f.setup([], {}, { dryRun: true });
       assert.isTrue(Exit.isSuccess(exit));
       assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-      assert.strictEqual(scans, 1);
+      assert.strictEqual(lockReads, 1);
     }
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -235,7 +238,7 @@ it.effect("non-interactive setup with a work dir saves machine configuration whi
     const work = join(f.root, "work");
     yield* f.fs.makeDirectory(work);
     const before = yield* captureDisk(f.disk);
-    const { exit, scans } = yield* f.setup([], {}, { interactive: false, workDirFlag: work });
+    const { exit, lockReads } = yield* f.setup([], {}, { interactive: false, workDirFlag: work });
     assert.isTrue(Exit.isSuccess(exit));
     if (Exit.isSuccess(exit)) {
       assert.isTrue(exit.value.machineConfig.persisted);
@@ -246,7 +249,7 @@ it.effect("non-interactive setup with a work dir saves machine configuration whi
       deleted: [],
       changed: ["library/machine.json"],
     });
-    assert.strictEqual(scans, 1);
+    assert.strictEqual(lockReads, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -254,7 +257,7 @@ it.effect("a selected file changed after approval fails stale before any effect"
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const before = yield* captureDisk(f.disk);
-    const { exit, scans } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+    const { exit, lockReads } = yield* f.setup([["alpha", "remove\0gamma"], true], {
       approved: f.fs.writeFileString(
         join(f.path("alpha"), "SKILL.md"),
         skillBytes("alpha", "changed after approval"),
@@ -266,23 +269,24 @@ it.effect("a selected file changed after approval fails stale before any effect"
       deleted: [],
       changed: [".codex/skills/alpha/SKILL.md"],
     });
-    assert.strictEqual(scans, 2);
+    assert.strictEqual(lockReads, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization: the setup-apply refactor scans once after approval, which flips this to 2
-// (the preview and the one apply-time scan). Today revalidation, the custody stage's own
-// observation and revalidation, and the closing verification each rescan.
-it.effect("BUG: an approved apply runs a full discovery scan per stage", () =>
+// BUG characterization, by global lock reads: today revalidation, the custody stage's own
+// observation and revalidation, and the closing verification each rescan. The setup-apply refactor
+// scans once after approval (the preview and the one apply-time scan), asserted through the scan
+// observer it adds rather than through this lock-read count.
+it.effect("BUG: an approved apply reads the global lock once per stage's discovery scan", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
-    const { exit, scans } = yield* f.setup([["alpha"], true]);
+    const { exit, lockReads } = yield* f.setup([["alpha"], true]);
     assert.isTrue(Exit.isSuccess(exit));
     assert.deepStrictEqual(
       (yield* f.home.durable).skills.map((skill) => skill.name),
       ["alpha"],
     );
-    assert.strictEqual(scans, 5);
+    assert.strictEqual(lockReads, 5);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -392,10 +396,11 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization: the receipt is rewritten after each move, so a failed rewrite leaves a
-// moved copy recorded as `moved: false`, and nothing reads the receipt back; recovery must inspect
-// both paths. The setup-apply refactor must keep a receipt that documents the durable partial state.
-it.effect("BUG: a failed receipt rewrite records a moved copy as not moved", () =>
+// Recovery-evidence characterization: the receipt is rewritten after each move, so a failed rewrite
+// leaves a moved copy recorded as `moved: false`. No bytes are lost: the copy is whole at its
+// recovery path. Nothing reads the receipt back, so a manual recovery must inspect both the
+// original and recovery paths of every entry rather than trust `moved`.
+it.effect("a failed receipt rewrite leaves a moved copy recorded as not moved, bytes intact", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     let receipts = 0;

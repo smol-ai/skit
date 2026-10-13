@@ -31,9 +31,10 @@ const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (
   const changes = yield* diskChanges(before);
   assert.deepStrictEqual({ ...changes, created: [] }, noDiskChanges);
   // The writer lock creates a home that did not exist yet.
-  for (const { path } of changes.created)
+  for (const { path, after } of changes.created)
     assert.isTrue(
-      path[0] === home && (path.length === 1 || path[1] === "originals"),
+      path[0] === home &&
+        ((path.length === 1 && after.type === "directory") || path[1] === "originals"),
       path.join("/"),
     );
 });
