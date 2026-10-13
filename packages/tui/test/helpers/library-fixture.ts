@@ -1,9 +1,10 @@
 import { join } from "node:path";
-import { Effect, FileSystem, Layer, Result } from "effect";
+import { Effect, FileSystem, Layer } from "effect";
 import {
   deterministicTreeHashEffect,
   libraryStoreLayer,
   LibraryStore,
+  LinkStat,
   makeMachineId,
   retainObservedCollectionEffect,
   withLibraryWriter,
@@ -106,18 +107,16 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     ),
     /** The host the TUI builds for this Library, over the production application layer. */
     host: () => createLibraryHost(application, openLibrarySession()),
-    /** Every path under the fixture with its type, mode, link target and bytes, lstat-based. */
+    /** Every path under the fixture, by lstat: its type, mode, link target and bytes. */
     tree: Effect.gen(function* () {
+      const links = yield* LinkStat;
       const entries = new Map<string, string>();
       const walk = (path: string): Effect.Effect<void, unknown> =>
         Effect.gen(function* () {
-          const link = yield* Effect.result(fs.readLink(path));
-          if (Result.isSuccess(link)) {
-            entries.set(path, `link ${link.success}`);
-            return;
-          }
-          const info = yield* fs.stat(path);
-          if (info.type === "Directory") {
+          const info = yield* links.lstat(path);
+          if (info.type === "SymbolicLink")
+            entries.set(path, `link ${info.mode} ${yield* fs.readLink(path)}`);
+          else if (info.type === "Directory") {
             entries.set(path, `directory ${info.mode}`);
             for (const name of yield* fs.readDirectory(path)) yield* walk(join(path, name));
           } else

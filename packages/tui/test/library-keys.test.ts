@@ -16,6 +16,9 @@ type TuiLibrary = Effect.Success<ReturnType<typeof tuiLibrary>>;
 /** Each test starts Bun and runs the audit, which a loaded machine can stretch past 5s. */
 const subprocessTimeout = 30_000;
 
+/** A hung child is killed with time left for the fixture and assertions inside the test budget. */
+const childTimeout = subprocessTimeout - 5_000;
+
 /** Run the TUI over `library` to the end of its key script. */
 const replay = Effect.fn("Test.replayTuiKeys")(function* (
   library: TuiLibrary,
@@ -39,7 +42,7 @@ const replay = Effect.fn("Test.replayTuiKeys")(function* (
     {
       cwd: library.cwd,
       encoding: "utf8",
-      timeout: 60_000,
+      timeout: childTimeout,
       env: {
         // Only the Harness executables a test provides: listing budgets would otherwise start
         // the developer's own `codex app-server`, which writes its state under the fixture home.
