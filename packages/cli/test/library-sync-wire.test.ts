@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { acquisitionIsSourceRestorable, librarySnapshotDigests } from "@smolai/skit-core";
 import { LibraryChangedOnServer } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { librarySyncApiEffect } from "../src/workflows/library/library-sync-api.js";
+import {
+  LibraryManifestTooNew,
+  librarySyncApiEffect,
+} from "../src/workflows/library/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -84,13 +87,70 @@ it.effect("reads a literal library_not_found as an absent remote", () =>
 
 it.effect("rejects a literal skit.library.v2 head instead of reading it", () =>
   Effect.gen(function* () {
+    const head = yield* wire("portable-v2.json");
     const failure = yield* Effect.flip(
       exchange(
-        () => Response.json(wire("portable-v2.json")),
+        () => Response.json(head),
         (api) => api.read(),
       ),
     );
     assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("refuses a literal skit.library.v8 head as written by a newer SKIT", () =>
+  Effect.gen(function* () {
+    const head = yield* wire("portable-v8.json");
+    const failure = yield* Effect.flip(
+      exchange(
+        () => Response.json(head),
+        (api) => api.read(),
+      ),
+    );
+    assert.instanceOf(failure, LibraryManifestTooNew);
+    assert.strictEqual(failure.code, "VALIDATION_FAILED");
+    assert.deepStrictEqual(
+      [failure.observed, failure.supported],
+      ["skit.library.v8", "skit.library.v7"],
+    );
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("refuses a literal skit.library.v8 write receipt as written by a newer SKIT", () =>
+  Effect.gen(function* () {
+    const current = yield* wire("portable-v7.json");
+    const head = yield* wire("portable-v8.json");
+    const failure = yield* Effect.flip(
+      exchange(
+        () => Response.json(head),
+        (api) => api.write("revision_7", current.library.manifest),
+      ),
+    );
+    assert.instanceOf(failure, LibraryManifestTooNew);
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("reads a missing, foreign or malformed manifest schema as an invalid response", () =>
+  Effect.gen(function* () {
+    const head = yield* wire("portable-v8.json");
+    for (const schema of [
+      undefined,
+      8,
+      "other.library.v9",
+      "skit.library.v9-beta",
+      "skit.library.v",
+    ]) {
+      const failure = yield* Effect.flip(
+        exchange(
+          () =>
+            Response.json({
+              library: { ...head.library, manifest: { ...head.library.manifest, schema } },
+            }),
+          (api) => api.read(),
+        ),
+      );
+      assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse", String(schema));
+    }
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 

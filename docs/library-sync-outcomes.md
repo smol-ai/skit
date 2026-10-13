@@ -12,7 +12,7 @@ This document is the test oracle for `skit sync`. It lists every path through `s
 | Hand-derived alias cases: the same upstream under different Collection IDs (with device policy, repository Binding, projection and ancestry remapping), distinct upstreams with identical bytes, an equal artifact digest with a different validation digest, many homes converging on one identity, `local_version_id`, and a divergent import with and without a takeable remote choice | `packages/cli/test/library-sync-aliases.test.ts` |
 | Independently constructed conflict-free and conflicting merge families, including aligned-import families (same selection, older local history, equal artifact with a different source digest, a selected retained edit), alone and in combination | `packages/cli/test/library-merge-families.test.ts` |
 | Absent versus empty remote, absent versus empty local state, an empty accepted base, and no-op syncs that publish nothing locally and send no Registry write | `packages/cli/test/library-sync-absence.test.ts` |
-| Literal supported-wire bodies decoded and encoded by the client | `packages/cli/test/library-sync-wire.test.ts` |
+| Literal supported-wire bodies decoded and encoded by the client; a literal newer head and receipt refused | `packages/cli/test/library-sync-wire.test.ts` |
 | A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
 
 The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards, merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
@@ -31,6 +31,12 @@ If a committed write's response is lost, immediately retrying with its original 
 
 `/api/library/portable` is the only Library head API; the server no longer accepts or serves `skit.library.v2` manifests. A v2 revision already stored as a head is not rewritten: the portable GET fails with `500` and the client stops before writing anything.
 
+## Remote manifest version
+
+The client reads a successful head response's `manifest.schema` from the raw body before decoding the manifest, and only that field. A schema of the form `skit.library.v<N>` with N newer than the manifest schema this CLI supports fails with `LibraryManifestTooNew` (`VALIDATION_FAILED`), naming the observed and supported schemas and asking for an upgrade. A missing, foreign or malformed schema is `LibraryApiInvalidResponse`, as is a supported or older one the full decode rejects. The server's build and discovery document are not compatibility signals. The same check applies to the receipt of a successful write, where it diagnoses the response but cannot undo the write.
+
+The refusal comes from the head read, so it happens before sync plans, uploads, writes or publishes anything: zero local publications, zero Registry write requests (uploads included) and no remote change, for a preview or an apply, whether the home is current, legacy or absent. Loader maintenance that precedes the read is permitted and is the only durable change: taking the writer lock creates an absent home, and opening a legacy `state.json` migrates it in place and keeps the pre-migration file as `state.json.v<N>.backup-<time>`. A retained copy whose bytes changed is still reported first as `local_bytes_changed`, because local verification precedes the head read. `packages/cli/test/library-sync-outcomes.test.ts` pins this with a literal `skit.library.v8` head for each home and mode.
+
 ## Durable state
 
 | Store | Where | Written by | Atomicity |
@@ -47,11 +53,12 @@ Notation: **L** is the local portable manifest, **R** the remote head, **B** the
 
 ## Preflight
 
-Preflight writes nothing. Each row is checked in order; the first match returns.
+Preflight writes nothing beyond the loader maintenance described under [Remote manifest version](#remote-manifest-version). Each row is checked in order; the first match returns.
 
 | Condition | Outcome |
 | --- | --- |
 | A retained copy's bytes no longer hash to its digest | `local_bytes_changed` |
+| R's manifest schema is newer than this CLI supports | `LibraryManifestTooNew` (see [Remote manifest version](#remote-manifest-version)) |
 | B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id), without `--adopt` | `base_mismatch` |
 | Neither L nor R exists | `clean` (nothing written) |
 

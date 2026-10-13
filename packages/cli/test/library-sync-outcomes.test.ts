@@ -10,7 +10,10 @@ import {
   libraryManifestFromLocalStateEffect,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
-import { LibraryApiRejected } from "../src/workflows/library/library-sync-api.js";
+import {
+  LibraryApiRejected,
+  LibraryManifestTooNew,
+} from "../src/workflows/library/library-sync-api.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import {
   assertDiskUnchanged,
@@ -491,6 +494,69 @@ for (const scenario of cases)
       yield* scenario.run(yield* devices);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
+
+// A head another SKIT wrote in a newer manifest schema is refused before sync plans, uploads, writes
+// or publishes anything. Only loader maintenance may touch the home: the writer lock creates an
+// absent home, and opening a legacy state.json migrates it and keeps the pre-migration file.
+for (const home of ["current", "legacy", "absent"] as const)
+  for (const apply of [false, true])
+    it.effect(
+      `oracle row: Preflight: a newer remote manifest is refused (${home} home, ${apply ? "apply" : "preview"})`,
+      () =>
+        Effect.gen(function* () {
+          const { fs, a, inject, server } = yield* devices;
+          if (home !== "absent") {
+            yield* a.retain("first");
+            yield* a.edit((state) => ({
+              ...state,
+              global_bindings: [
+                {
+                  scope: { kind: "global" },
+                  entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
+                },
+              ],
+            }));
+          }
+          if (home === "legacy")
+            yield* fs.writeFileString(
+              join(a.home, "state.json"),
+              JSON.stringify({ ...(yield* a.state), schemaVersion: 7 }),
+            );
+          const before = yield* captureDisk(a.disk);
+          const stored = server.stored;
+          const publishes = a.publishes;
+          const writeRequests = server.writeRequests;
+          inject({
+            _tag: "ServeHead",
+            body: JSON.parse(
+              yield* fs.readFileString(
+                join(import.meta.dirname, "fixtures/library-wire/portable-v8.json"),
+              ),
+            ),
+          });
+          const failure = yield* Effect.flip(a.sync({ apply }));
+          assert.instanceOf(failure, LibraryManifestTooNew);
+          assert.strictEqual(failure.code, "VALIDATION_FAILED");
+          assert.strictEqual(a.publishes, publishes);
+          // Snapshot uploads and Library writes are both write requests.
+          assert.strictEqual(server.writeRequests, writeRequests);
+          assert.deepStrictEqual(server.stored, stored);
+          const changes = yield* diskChanges(before);
+          const paths = (items: readonly { path: readonly string[] }[]) =>
+            items.map((item) => item.path.slice(1).join("/"));
+          assert.deepStrictEqual(paths(changes.deleted), []);
+          if (home === "current") assert.deepStrictEqual(changes, noDiskChanges);
+          if (home === "absent") {
+            assert.deepStrictEqual([changes.changed, paths(changes.created)], [[], [""]]);
+            assert.strictEqual(changes.created[0]!.path[0], a.home);
+          }
+          if (home === "legacy") {
+            assert.deepStrictEqual(paths(changes.changed), ["state.json"]);
+            assert.strictEqual(changes.created.length, 1);
+            assert.match(paths(changes.created)[0]!, /^state\.json\.v7\.backup-/);
+          }
+        }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    );
 
 it.effect(
   "fresh-device sync reports completed transfers after the plan and before restoration",
