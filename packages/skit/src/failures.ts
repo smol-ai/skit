@@ -44,6 +44,7 @@ export class ConflictingInvocationDeclaration extends Data.TaggedError(
 
 export class ReadmeFrontmatterMissing extends Data.TaggedError("ReadmeFrontmatterMissing")<{}> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation = "Begin the source's README.md with YAML frontmatter, then retry.";
   get message(): string {
     return "README.md must begin with YAML frontmatter";
   }
@@ -54,6 +55,7 @@ export class DescriptorMalformed extends Data.TaggedError("DescriptorMalformed")
   detail: string;
 }> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation = "Correct the SKIT Descriptor in the source, then retry.";
   get message(): string {
     return `Malformed ${this.format.toUpperCase()} SKIT Descriptor: ${this.detail}`;
   }
@@ -149,6 +151,7 @@ export class GitSourceFragment extends Data.TaggedError("GitSourceFragment")<{ s
 
 export class DirectSkillDocumentInvalid extends Data.TaggedError("DirectSkillDocumentInvalid")<{}> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation = "Give the SKILL.md frontmatter a name and description, then retry.";
   get message(): string {
     return "Direct SKILL.md must be Markdown with name and description frontmatter";
   }
@@ -156,6 +159,7 @@ export class DirectSkillDocumentInvalid extends Data.TaggedError("DirectSkillDoc
 
 export class NoSkitDescriptorFound extends Data.TaggedError("NoSkitDescriptorFound")<{}> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation = "Choose a source containing a SKILL.md or a SKIT README.md, then retry.";
   get message(): string {
     return "Source contains no valid SKIT README.md or Agent Skills SKILL.md";
   }
@@ -331,6 +335,7 @@ export class ProjectionFileMissing extends Data.TaggedError("ProjectionFileMissi
   path: string;
 }> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation = "Run `skit doctor` to inspect the Projection, then retry.";
   get message(): string {
     return `Projection is missing ${this.path}`;
   }
@@ -341,6 +346,9 @@ export class HarnessMetadataInvalid extends Data.TaggedError("HarnessMetadataInv
   kind: "SKILL.md frontmatter" | "Codex metadata" | "OpenCode metadata";
 }> {
   readonly code = "VALIDATION_FAILED" as const;
+  get remediation(): string {
+    return `Correct the YAML in ${this.path}, then retry.`;
+  }
   get message(): string {
     return `Invalid ${this.kind}: ${this.path}`;
   }
@@ -377,6 +385,8 @@ export class InvalidLibraryState extends Data.TaggedError("InvalidLibraryState")
   detail: string;
 }> {
   readonly code = "VALIDATION_FAILED" as const;
+  readonly remediation =
+    "Back up the state file before recovery. To reset an alpha Library, move it aside and run `skit setup`; keep installed Skill files.";
   get message(): string {
     return `Invalid Library state at ${this.path}: ${this.detail}`;
   }

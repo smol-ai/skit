@@ -11,6 +11,9 @@ export class PluginManifestInvalid extends Data.TaggedError("PluginManifestInval
   reason?: "escape";
 }> {
   readonly code = "VALIDATION_FAILED" as const;
+  get remediation(): string {
+    return `Correct the plugin declaration at ${this.path}, then retry.`;
+  }
   get message() {
     return `Invalid plugin declaration at ${this.path}: ${this.detail}`;
   }

@@ -25,7 +25,7 @@ export class InvalidArgument extends Data.TaggedError("InvalidArgument")<{ messa
 export class ValidationFailed extends Data.TaggedError("ValidationFailed")<{ message: string }> {
   readonly code = "VALIDATION_FAILED" as const;
   readonly exitCode = 65;
-  readonly remediation = "Run `skit author validate <path>` to inspect the diagnostics.";
+  readonly remediation = "Correct the reported content, then retry the command.";
 }
 
 export class TargetCollision extends Data.TaggedError("TargetCollision")<{ message: string }> {
