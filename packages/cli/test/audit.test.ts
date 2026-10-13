@@ -297,6 +297,39 @@ describe("experimental capability audit", () => {
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
+  it.effect("migrates a legacy Library through the store and keeps its backup", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-audit-legacy-");
+      const home = join(root, "home");
+      const library = join(root, "library");
+      const legacy = yield* fs.readFileString(
+        join(
+          import.meta.dirname,
+          "../../skit/test/fixtures/library-state/v4-well-known-subset.json",
+        ),
+      );
+      yield* write(join(library, "state.json"), legacy);
+
+      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root }).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: library }))),
+      );
+
+      expect(report.findings.some((finding) => finding.code === "unreadable-library-ledger")).toBe(
+        false,
+      );
+      const migrated = JSON.parse(yield* fs.readFileString(join(library, "state.json")));
+      expect(migrated.schemaVersion).toBe(8);
+      const backups = (yield* fs.readDirectory(library)).filter((name) =>
+        name.startsWith("state.json.v4.backup-"),
+      );
+      expect(backups).toHaveLength(1);
+      expect(JSON.parse(yield* fs.readFileString(join(library, backups[0]!)))).toEqual(
+        JSON.parse(legacy),
+      );
+    }).pipe(Effect.provide(testPlatformLayer)),
+  );
+
   it.effect("separates Codex configured, cached, and MCP state", () =>
     Effect.gen(function* () {
       const root = yield* scratch("skit-audit-");
