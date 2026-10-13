@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
 import { Server } from "foldkit/experimental";
-import { renderPageEffect } from "../web/src/entry.server.js";
+import { flagsForRequest, renderPageEffect } from "../web/src/entry.server.js";
 import { Flags, init, Message, update, view } from "../web/src/main.js";
 
 const template = `<!doctype html><html><head><title>SKIT</title></head><body><div id="root"></div><script type="module" src="/src/entry.ts"></script></body></html>`;
@@ -154,6 +154,51 @@ describe("Foldkit server rendering", () => {
       expect(html).not.toContain("private-token");
     }),
   );
+
+  it.effect("offers the username claim to a user whose stored username is unprovisioned", () =>
+    Effect.gen(function* () {
+      const flags = yield* flagsForRequest(new Request("https://registry.example/"), (request) =>
+        new URL(request.url).pathname === "/api/onboarding/username"
+          ? Promise.resolve(Response.json({ username: null }))
+          : handler(request),
+      );
+
+      expect(flags).toMatchObject({ signedIn: true, username: "", suggestedUsername: "tim" });
+    }),
+  );
+
+  it.effect("reports the provisioned username for a provisioned user", () =>
+    Effect.gen(function* () {
+      const flags = yield* flagsForRequest(new Request("https://registry.example/"), (request) =>
+        new URL(request.url).pathname === "/api/onboarding/username"
+          ? Promise.resolve(Response.json({ username: "tim" }))
+          : handler(request),
+      );
+
+      expect(flags).toMatchObject({ signedIn: true, username: "tim" });
+    }),
+  );
+
+  it("explains a signup username that is already claimed", () => {
+    const flags: Flags = {
+      page: "home",
+      origin: "https://registry.example",
+      github: false,
+      emailEnabled: false,
+      registrationEnabled: true,
+      signedIn: false,
+      username: "",
+      suggestedUsername: "",
+      setupNeeded: false,
+    };
+    const finished = (message: string) =>
+      update(
+        init(flags).model,
+        Message.ActionFinished({ action: "signup", ok: false, message, redirect: "" }),
+      ).model.message;
+
+    expect(finished("USERNAME_UNAVAILABLE")).toBe(finished("username_unavailable"));
+  });
 
   it.effect("renders username claim for a verified account without a Registry identity", () =>
     Effect.gen(function* () {

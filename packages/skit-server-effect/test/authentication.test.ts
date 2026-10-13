@@ -21,6 +21,8 @@ const betterAuthTestLayer = (
       handle: () => Effect.die(new Error("BetterAuth.handle is outside this test surface")),
       claimUsername: () =>
         Effect.die(new Error("BetterAuth.claimUsername is outside this test surface")),
+      provisionedUsername: () =>
+        Effect.die(new Error("BetterAuth.provisionedUsername is outside this test surface")),
       sendVerificationEmail: () =>
         Effect.die(new Error("BetterAuth.sendVerificationEmail is outside this test surface")),
     }),

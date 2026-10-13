@@ -24,7 +24,11 @@ import { skitDeleteHandlers } from "./api/skit-delete-http.js";
 import { makeSystemHandlers, systemApi } from "./api/system-http.js";
 import { teamHandlers } from "./api/teams-http.js";
 import { tokenHandlers } from "./api/tokens-http.js";
-import { handleRequest as handleAuthRequest, handleUsernameClaim } from "./auth/better-auth.js";
+import {
+  handleProvisionedUsername,
+  handleRequest as handleAuthRequest,
+  handleUsernameClaim,
+} from "./auth/better-auth.js";
 import type { RuntimeEnv } from "./platform/cloudflare.js";
 import { artifactResponse, indexResponse } from "./releases/agent-skills-http.js";
 import { makeServerDiscovery, type ServerCapabilities } from "./discovery.js";
@@ -116,11 +120,18 @@ const authenticatedRoutes = (env: RuntimeEnv) =>
 
 const onboardingRoutes = (application: AuthenticatedApplication) =>
   HttpRouter.use((router) =>
-    router.add(
-      "POST",
-      "/api/onboarding/username",
-      handleUsernameClaim().pipe(Effect.provide(application)),
-    ),
+    Effect.gen(function* () {
+      yield* router.add(
+        "GET",
+        "/api/onboarding/username",
+        handleProvisionedUsername().pipe(Effect.provide(application)),
+      );
+      yield* router.add(
+        "POST",
+        "/api/onboarding/username",
+        handleUsernameClaim().pipe(Effect.provide(application)),
+      );
+    }),
   );
 
 const uiConfigurationRoutes = (env: RuntimeEnv) =>

@@ -1295,3 +1295,244 @@ describe("Better Auth adapter", () => {
     }).pipe(Effect.provide(bindingsLayer)),
   );
 });
+
+describe("Principal provisioning", () => {
+  const openWeb = makeWebHandler({
+    ...env,
+    ACCOUNT_REGISTRATION_MODE: "open",
+    PUBLIC_APP_ORIGIN: "https://registry.test",
+    BETTER_AUTH_SECRET: "skit-worker-test-secret-that-is-at-least-thirty-two-characters",
+    SKIT_BOOTSTRAP_SECRET: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+  });
+  const send = (path: string, init?: RequestInit) =>
+    webPromise(() => openWeb.handler(new Request(`https://registry.test${path}`, init)));
+  const json = { "content-type": "application/json", origin: "https://registry.test" };
+  const signUp = (username: string) =>
+    send("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": `192.0.2.${username.length + 130}` },
+      body: JSON.stringify({
+        name: username,
+        username,
+        email: `${username}@example.test`,
+        password: "password1234",
+      }),
+    });
+  const signIn = Effect.fn(function* (username: string) {
+    const signedIn = yield* send("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": `192.0.2.${username.length + 160}` },
+      body: JSON.stringify({ email: `${username}@example.test`, password: "password1234" }),
+    });
+    expect(signedIn.status).toBe(200);
+    return (signedIn.headers.get("set-cookie") ?? "").split(";", 1)[0]!;
+  });
+  const libraryStatus = (cookie: string) =>
+    send("/api/library/portable", { headers: { cookie } }).pipe(
+      Effect.map((response) => response.status),
+    );
+  const failPrincipalInserts = Effect.flatMap(
+    D1Client.D1Client,
+    (sql) =>
+      sql`CREATE TRIGGER fail_principal_insert BEFORE INSERT ON principals
+          BEGIN SELECT RAISE(ABORT, 'injected provisioning failure'); END`,
+  );
+  const restorePrincipalInserts = Effect.flatMap(
+    D1Client.D1Client,
+    (sql) => sql`DROP TRIGGER fail_principal_insert`,
+  );
+  const provisionedRows = Effect.flatMap(
+    D1Client.D1Client,
+    (sql) =>
+      sql`SELECT u.username, p.state, p.authorization_generation, n.namespace_slug,
+                 n.subject_kind, n.subject_id = p.principal_id owned,
+                 (SELECT COUNT(*) FROM namespaces x
+                  WHERE x.subject_kind = 'principal' AND x.subject_id = p.principal_id) namespaces
+          FROM user u
+          LEFT JOIN principals p ON p.better_auth_user_id = u.id
+          LEFT JOIN namespaces n ON n.namespace_slug = u.username
+          ORDER BY u.username`,
+  );
+  const provisioned = (username: string) => ({
+    username,
+    state: "active",
+    authorization_generation: 1,
+    namespace_slug: username,
+    subject_kind: "principal",
+    owned: 1,
+    namespaces: 1,
+  });
+
+  it.effect("repairs a signup whose provisioning failed on the next sign-in", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      yield* failPrincipalInserts;
+      expect((yield* signUp("author")).status).not.toBe(200);
+      yield* restorePrincipalInserts;
+
+      const cookie = yield* signIn("author");
+
+      expect(yield* libraryStatus(cookie)).toBe(404);
+      expect(yield* provisionedRows).toEqual([provisioned("author")]);
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
+  it.effect("lets a username claim repair a user that sign-in could not provision", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      yield* failPrincipalInserts;
+      expect((yield* signUp("author")).status).not.toBe(200);
+      const cookie = yield* signIn("author");
+      expect(yield* libraryStatus(cookie)).toBe(401);
+      yield* restorePrincipalInserts;
+
+      const claimed = yield* send("/api/onboarding/username", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ username: "author" }),
+      });
+
+      expect(claimed.status).toBe(201);
+      expect(yield* webPromise(() => claimed.json())).toEqual({ username: "author" });
+      expect(yield* libraryStatus(cookie)).toBe(404);
+      expect(yield* provisionedRows).toEqual([provisioned("author")]);
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
+  it.effect("reports a username to onboarding only once it is provisioned", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const onboarding = (cookie?: string) =>
+        send("/api/onboarding/username", { headers: cookie ? { cookie } : {} }).pipe(
+          Effect.flatMap((response) =>
+            webPromise(() => response.json()).pipe(
+              Effect.map((body) => ({ status: response.status, body })),
+            ),
+          ),
+        );
+      expect((yield* onboarding()).status).toBe(401);
+      yield* failPrincipalInserts;
+      expect((yield* signUp("author")).status).not.toBe(200);
+      const cookie = yield* signIn("author");
+      yield* restorePrincipalInserts;
+
+      expect(yield* onboarding(cookie)).toEqual({ status: 200, body: { username: null } });
+      const claimed = yield* send("/api/onboarding/username", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ username: "author" }),
+      });
+      expect(claimed.status).toBe(201);
+      expect(yield* onboarding(cookie)).toEqual({ status: 200, body: { username: "author" } });
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
+  it.effect("refuses a signup whose username is another subject's Namespace", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      expect((yield* signUp("owner")).status).toBe(200);
+      const cookie = yield* signIn("owner");
+      const created = yield* send("/api/teams", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ slug: "tool-makers", name: "Tool Makers" }),
+      });
+      expect(created.status).toBe(201);
+
+      const refused = yield* signUp("tool-makers");
+
+      expect(refused.status).toBe(400);
+      expect(yield* webPromise(() => refused.json())).toMatchObject({
+        code: "USERNAME_UNAVAILABLE",
+      });
+      expect(yield* provisionedRows).toEqual([provisioned("owner")]);
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
+  it.effect("provisions the same rows through bootstrap, signup, and username claim", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const bootstrap = yield* send("/api/bootstrap", {
+        method: "POST",
+        headers: { ...json, "cf-connecting-ip": "192.0.2.150" },
+        body: JSON.stringify({
+          token: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+          username: "operator",
+          email: "operator@example.test",
+          password: "password1234",
+        }),
+      });
+      expect(bootstrap.status).toBe(201);
+      expect((yield* signUp("author")).status).toBe(200);
+      expect((yield* signUp("claimer")).status).toBe(200);
+      // Stand in for an OAuth signup, which arrives without a username.
+      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+        sql.batch([
+          sql`DELETE FROM namespaces WHERE namespace_slug = 'claimer'`,
+          sql`DELETE FROM principals WHERE better_auth_user_id =
+                (SELECT id FROM user WHERE username = 'claimer')`,
+          sql`UPDATE user SET username = NULL WHERE username = 'claimer'`,
+        ]),
+      );
+      const cookie = yield* signIn("claimer");
+      const claimed = yield* send("/api/onboarding/username", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ username: "claimer" }),
+      });
+      expect(claimed.status).toBe(201);
+
+      expect(yield* provisionedRows).toEqual([
+        provisioned("author"),
+        provisioned("claimer"),
+        provisioned("operator"),
+      ]);
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
+  it.effect("never demotes a team owner while adding a member", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      expect((yield* signUp("owner")).status).toBe(200);
+      expect((yield* signUp("member")).status).toBe(200);
+      const cookie = yield* signIn("owner");
+      const created = yield* send("/api/teams", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ slug: "tool-makers", name: "Tool Makers" }),
+      });
+      expect(created.status).toBe(201);
+      const addMember = send("/api/teams/tool-makers/members", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ email: "member@example.test" }),
+      });
+      expect((yield* addMember).status).toBe(201);
+      // Promote the member between addMember's read and its write, as a concurrent owner
+      // change would.
+      yield* Effect.flatMap(
+        D1Client.D1Client,
+        (sql) =>
+          sql`CREATE TRIGGER promote_member BEFORE INSERT ON team_memberships
+              BEGIN
+                UPDATE team_memberships SET role = 'owner'
+                WHERE team_id = NEW.team_id AND principal_id = NEW.principal_id;
+              END`,
+      );
+
+      expect((yield* addMember).status).toBe(400);
+      const roles = yield* Effect.flatMap(
+        D1Client.D1Client,
+        (sql) =>
+          sql`SELECT u.username, m.role FROM team_memberships m
+              JOIN principals p ON p.principal_id = m.principal_id
+              JOIN user u ON u.id = p.better_auth_user_id
+              ORDER BY u.username`,
+      );
+      expect(roles).toEqual([
+        { username: "member", role: "owner" },
+        { username: "owner", role: "owner" },
+      ]);
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+});
