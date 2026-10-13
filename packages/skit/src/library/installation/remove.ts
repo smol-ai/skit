@@ -55,45 +55,8 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
     {
       rootFor: () => undefined,
       variantsPath: options.variantsPath,
-      publish: (candidate, base) => {
-        const acquisitions = candidate.acquisitions.filter(
-          (acquisition) => acquisition.collection_id !== options.collectionId,
-        );
-        const survivingCopyIds = new Set(
-          acquisitions.map((acquisition) => acquisition.retained_copy_id),
-        );
-        return store.publish(
-          {
-            ...candidate,
-            collections: candidate.collections.filter(
-              (item) => item.collection_id !== options.collectionId,
-            ),
-            global_bindings: candidate.global_bindings
-              .map(({ invocation_policies, ...binding }) => ({
-                ...binding,
-                entries: binding.entries.filter(keepEntry),
-                ...remainingPolicies(invocation_policies),
-              }))
-              .filter((item) => item.entries.length > 0),
-            local_bindings: candidate.local_bindings
-              .map(({ invocation_policies, ...binding }) => ({
-                ...binding,
-                entries: binding.entries.filter(keepEntry),
-                ...remainingPolicies(invocation_policies),
-              }))
-              .filter((item) => item.entries.length > 0),
-            projections: candidate.projections.filter(
-              (item) => !removedSkillIds.has(item.skill_id),
-            ),
-            skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
-            acquisitions,
-            retained_copies: candidate.retained_copies.filter((copy) =>
-              survivingCopyIds.has(copy.retained_copy_id),
-            ),
-          },
-          base,
-        );
-      },
+      originalsPath: store.originalsPath,
+      publish: store.publish,
     },
     (mutation) =>
       Effect.gen(function* () {
@@ -110,6 +73,40 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
           );
           if (outcome.kind === "retired") retired++;
         }
+        // Only a batch that retired every copy removes the Collection. A failed one publishes just
+        // the copies it moved aside.
+        const candidate = mutation.state;
+        const acquisitions = candidate.acquisitions.filter(
+          (acquisition) => acquisition.collection_id !== options.collectionId,
+        );
+        const survivingCopyIds = new Set(
+          acquisitions.map((acquisition) => acquisition.retained_copy_id),
+        );
+        Object.assign(candidate, {
+          collections: candidate.collections.filter(
+            (item) => item.collection_id !== options.collectionId,
+          ),
+          global_bindings: candidate.global_bindings
+            .map(({ invocation_policies, ...binding }) => ({
+              ...binding,
+              entries: binding.entries.filter(keepEntry),
+              ...remainingPolicies(invocation_policies),
+            }))
+            .filter((item) => item.entries.length > 0),
+          local_bindings: candidate.local_bindings
+            .map(({ invocation_policies, ...binding }) => ({
+              ...binding,
+              entries: binding.entries.filter(keepEntry),
+              ...remainingPolicies(invocation_policies),
+            }))
+            .filter((item) => item.entries.length > 0),
+          projections: candidate.projections.filter((item) => !removedSkillIds.has(item.skill_id)),
+          skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
+          acquisitions,
+          retained_copies: candidate.retained_copies.filter((copy) =>
+            survivingCopyIds.has(copy.retained_copy_id),
+          ),
+        });
         return retired;
       }),
   );

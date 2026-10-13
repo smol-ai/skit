@@ -7,9 +7,14 @@ import { deterministicTreeHashEffect } from "../../artifact/skit.js";
 import { observationPathIdentityEffect, pathIsWithin } from "../../platform/path-identity.js";
 import {
   expectedProjectionHashResult,
+  projectionDisplacedEffect,
   readOwnershipMarkerEffect,
   inspectOwnershipMarkerEffect,
 } from "../../projection/mutation.js";
+import {
+  keepProjectionBackupEffect,
+  pendingProjectionBackupsEffect,
+} from "../../projection/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {
   readonly harness: HarnessName;
@@ -46,8 +51,10 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
     if (!(yield* fs.exists(projection.path))) {
       // Pending copies may be between managed retirement and sync rematerialization. Their
       // absence is not evidence that the user deleted an installed copy.
-      if (projection.status === "pending") continue;
-      if (projection.status !== "suppressed") {
+      if (projection.status === "pending" || projection.status === "suppressed") continue;
+      // Nor is the absence of the very copy SKIT moved aside before it could publish why.
+      if (yield* projectionDisplacedEffect(projection)) projection.status = "pending";
+      else {
         projection.status = "suppressed";
         projection.suppression_reason = "native_delete";
         projection.suppressed_at = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -227,5 +234,18 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   const roots = deduplicateInventoryRoots(selectRoots(loaded));
   const state = yield* observeInventory(loaded, roots);
   yield* store.publish(state, loaded);
+  // A verified installation resolves every older displacement of its Projection. Those backups
+  // no longer explain an absence, so they are kept, never discarded.
+  for (const projection of state.projections) {
+    if (projection.status !== "installed") continue;
+    const marker = yield* readOwnershipMarkerEffect(projection.path);
+    if (
+      marker?.projection_id === projection.projection_id &&
+      marker.skill_id === projection.skill_id &&
+      projection.observed_digest === projection.expected_digest
+    )
+      for (const backup of yield* pendingProjectionBackupsEffect(projection))
+        yield* keepProjectionBackupEffect(backup);
+  }
   return { state, roots };
 });
