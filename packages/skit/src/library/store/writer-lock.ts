@@ -1,71 +1,144 @@
-import { Context, Effect, FileSystem } from "effect";
+import { Context, Deferred, Effect, FileSystem, Semaphore } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { LibraryBusy } from "../../failures.js";
 import { writeRawAtomicEffect } from "../../platform/atomic-write.js";
 
-/** The Library root whose writer lock is held by the current fiber scope. */
-export const CurrentLibraryWriterRoot = Context.Reference<string | undefined>(
-  "@smolai/skit/CurrentLibraryWriterRoot",
+/**
+ * Authority over a held writer lock: the owner's, or a lease of it. Forked fibers inherit it, so
+ * reentry takes a lease. An authority stops granting leases when it starts to end and ends only
+ * once its leases have, so the owner keeps the lock until every lease is over, and a fiber that
+ * arrives after that must acquire the lock itself.
+ */
+interface WriterAuthority {
+  readonly root: string;
+  live: boolean;
+  leases: number;
+  readonly drained: Deferred.Deferred<void>;
+}
+
+const CurrentLibraryWriter = Context.Reference<WriterAuthority | undefined>(
+  "@smolai/skit/CurrentLibraryWriter",
   { defaultValue: () => undefined },
 );
 
+const authorityOver = (root: string): WriterAuthority => ({
+  root,
+  live: true,
+  leases: 0,
+  drained: Deferred.makeUnsafe<void>(),
+});
+
+/** Stop granting leases, then wait for those already granted to end. */
+const endAuthority = (authority: WriterAuthority) =>
+  Effect.suspend(() => {
+    authority.live = false;
+    return authority.leases === 0 ? Effect.void : Deferred.await(authority.drained);
+  });
+
+/** Writers in this process queue for a Library; the lock file only has to exclude other ones. */
+const processWriters = new Map<string, Semaphore.Semaphore>();
+/** Every read-compare-write of a Library's state in this process, held or inherited writer alike. */
+const processPublishers = new Map<string, Semaphore.Semaphore>();
+
+const semaphoreFor = (semaphores: Map<string, Semaphore.Semaphore>, root: string) => {
+  let semaphore = semaphores.get(root);
+  if (semaphore === undefined) {
+    semaphore = Semaphore.makeUnsafe(1);
+    semaphores.set(root, semaphore);
+  }
+  return semaphore;
+};
+
+/**
+ * Hold a Library's exclusive writer lock while `program` runs. The lock is never reclaimed
+ * automatically: a lock left by a process that died fails closed as `LibraryBusy`, naming the
+ * file and its recorded owner so a person can remove it once that owner is confirmed stopped.
+ */
 export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(function* <A, E, R>(
   home: string,
   program: Effect.Effect<A, E, R>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const root = resolve(home);
-  if ((yield* CurrentLibraryWriterRoot) === root) return yield* program;
   const path = join(root, ".lock");
+  const ownership = `${process.pid}@${hostname()} ${randomUUID()}\n`;
   const acquire = Effect.fn("Library.acquireWriterLock")(function* (): Effect.fn.Return<
     void,
     PlatformError | LibraryBusy
   > {
-    // Publish complete ownership atomically. A contender must never observe a created-but-empty
-    // lock file and mistake a live writer for stale residue.
+    yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
+    // Publish complete ownership atomically, so a contender never reads a half-written owner.
     const attempt = yield* Effect.result(
-      writeRawAtomicEffect(path, `${process.pid}\n`, true).pipe(
+      writeRawAtomicEffect(path, ownership, true).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       ),
     );
     if (attempt._tag === "Success") return;
-    const error = attempt.failure;
-    if (error.reason._tag !== "AlreadyExists") return yield* error;
+    if (attempt.failure.reason._tag !== "AlreadyExists") return yield* attempt.failure;
     const owner = yield* fs
       .readFileString(path)
       .pipe(
-        Effect.catchTag("PlatformError", (readError) =>
-          readError.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(readError),
+        Effect.catchTag("PlatformError", (error) =>
+          error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(error),
         ),
       );
-    const pid = /^\d+$/.test(owner.trim()) ? Number(owner.trim()) : undefined;
-    // Empty and unparseable locks include locks held by older SKIT versions. Without a PID there
-    // is no safe proof that the owner is dead, so fail closed.
-    if (pid === undefined || processIsAlive(pid)) return yield* new LibraryBusy({ path });
-    const stale = join(root, `.lock-stale-${randomUUID()}`);
-    const moved = yield* Effect.result(fs.rename(path, stale));
-    if (moved._tag === "Failure") {
-      if (moved.failure.reason._tag === "NotFound") return yield* acquire();
-      return yield* moved.failure;
-    }
-    yield* fs.remove(stale, { force: true });
-    return yield* acquire();
+    return yield* new LibraryBusy({ path, owner: owner.trim().split(/\s/)[0] || "unrecorded" });
   });
+  // Remove only the lock this acquisition wrote. Reading then removing is not one atomic step, so
+  // this relies on every writer following the protocol: nothing else removes a live owner's lock.
+  const release = fs.readFileString(path).pipe(
+    Effect.flatMap((recorded) =>
+      recorded === ownership ? fs.remove(path, { force: true }) : Effect.void,
+    ),
+    Effect.catchTag("PlatformError", (error) =>
+      error.reason._tag === "NotFound" ? Effect.void : Effect.fail(error),
+    ),
+  );
+  const exclusive = semaphoreFor(processWriters, root).withPermit(
+    Effect.acquireUseRelease(
+      acquire().pipe(Effect.map(() => authorityOver(root))),
+      (authority) => program.pipe(Effect.provideService(CurrentLibraryWriter, authority)),
+      (authority) => endAuthority(authority).pipe(Effect.andThen(release)),
+    ),
+  );
+  const current = yield* CurrentLibraryWriter;
+  if (current?.root !== root) return yield* exclusive;
   return yield* Effect.acquireUseRelease(
-    fs.makeDirectory(root, { recursive: true, mode: 0o700 }).pipe(Effect.andThen(acquire())),
-    () => program.pipe(Effect.provideService(CurrentLibraryWriterRoot, root)),
-    () => fs.remove(path, { force: true }),
+    // Checking the authority is live and taking a lease is one step; every exit returns the lease.
+    Effect.sync(() => {
+      if (!current.live) return undefined;
+      current.leases++;
+      return authorityOver(root);
+    }),
+    (lease) =>
+      lease === undefined
+        ? exclusive
+        : program.pipe(Effect.provideService(CurrentLibraryWriter, lease)),
+    (lease) =>
+      lease === undefined
+        ? Effect.void
+        : endAuthority(lease).pipe(
+            Effect.andThen(
+              Effect.suspend(() =>
+                --current.leases === 0 && !current.live
+                  ? Deferred.succeed(current.drained, undefined)
+                  : Effect.void,
+              ),
+            ),
+          ),
   );
 });
 
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code !== "ESRCH";
-  }
-}
+/**
+ * Hold the writer lock and this process's publish mutex for one replacement of a Library's state.
+ * The mutex serializes concurrent fibers that share one inherited writer lock; it is taken inside
+ * the lock and never held while acquiring it, so a nested publish cannot deadlock.
+ */
+export const withLibraryStateReplacement = <A, E, R>(
+  home: string,
+  program: Effect.Effect<A, E, R>,
+) =>
+  withLibraryWriterLock(home, semaphoreFor(processPublishers, resolve(home)).withPermit(program));

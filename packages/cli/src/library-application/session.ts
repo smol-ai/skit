@@ -12,6 +12,8 @@ import {
   versionBacking,
   LibraryStore,
   withLibraryWriter,
+  lastPublishedLibraryState,
+  libraryStateRevision,
   type LibraryState,
   type SourceIdentity,
   type SkitBindingScope as Scope,
@@ -31,7 +33,6 @@ import { unspecifiedDeclaredInvocation } from "../invocation/library-source.js";
 import type { ProjectionOptions } from "../workflows/library/projection-options.js";
 import {
   applyLibraryBindings,
-  libraryStateRevision,
   SetEnabledStale,
   previewLibraryBindings,
 } from "../workflows/library/set-enabled.js";
@@ -458,23 +459,23 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
   const applied = yield* Effect.result(
     withLibraryWriter(
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        if (libraryStateRevision(yield* store.load) !== pending.libraryRevision)
+        let expected = yield* (yield* LibraryStore).load;
+        if (libraryStateRevision(expected) !== pending.libraryRevision)
           return yield* new SetEnabledStale({
             message: "Library changed after this Binding change was previewed",
           });
-        yield* Effect.forEach(pending.operations, ({ query, invocation, all }) =>
-          Effect.gen(function* () {
-            const current = yield* (yield* LibraryStore).load;
-            yield* applyLibraryBindings(current, {
-              query,
-              all: all ?? false,
-              invocation,
-              roots: configuration,
-              variantsPath: configuration.variantsPath,
-            });
-          }),
-        );
+        // Each operation applies only onto the state the previous one left, starting from the
+        // previewed revision; any other change in between makes the confirmation stale.
+        for (const { query, invocation, all } of pending.operations) {
+          yield* applyLibraryBindings(expected, {
+            query,
+            all: all ?? false,
+            invocation,
+            roots: configuration,
+            variantsPath: configuration.variantsPath,
+          });
+          expected = (yield* lastPublishedLibraryState) ?? expected;
+        }
       }),
     ),
   );

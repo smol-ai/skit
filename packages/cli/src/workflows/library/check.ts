@@ -164,7 +164,7 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
           : observation;
       }),
     }));
-    yield* store.publish({ ...state, acquisitions });
+    yield* store.publish({ ...state, acquisitions }, state);
   }
   return checked;
 });

@@ -143,8 +143,6 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
         load: Effect.succeed(localState),
         inspect: Effect.succeed({ present: true as const, state: localState }),
         publish: (next) => Ref.set(published, next),
-        snapshot: Effect.succeed(undefined),
-        recordChangesSince: () => Effect.void,
         home: home.home,
         originalsPath: home.originals,
       }),

@@ -575,7 +575,8 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
 >(
   loaded: S,
   context: NativeProjectionContext & {
-    readonly publish: (state: S) => Effect.Effect<void, PE, PR>;
+    /** Publish `next` only if the Library is still `base`, the state this mutation loaded. */
+    readonly publish: (next: S, base: S) => Effect.Effect<void, PE, PR>;
   },
   stage: (mutation: ProjectionMutation<S>) => Effect.Effect<T, SE, SR>,
 ) {
@@ -599,6 +600,6 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
     }),
   };
   const value = yield* stage(mutation);
-  yield* context.publish(candidate);
+  yield* context.publish(candidate, loaded);
   return { state: candidate, value, projected: changedProjections.size };
 });

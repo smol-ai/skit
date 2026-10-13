@@ -130,7 +130,8 @@ it.effect(
       const writer = yield* withLibraryWriter(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
-          yield* store.publish(yield* store.load);
+          const state = yield* store.load;
+          yield* store.publish(state, state);
           yield* Deferred.succeed(ready, undefined);
           yield* Deferred.await(release);
         }),

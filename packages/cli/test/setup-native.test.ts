@@ -1079,7 +1079,7 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     });
     const observed = yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
-      yield* store.publish(state);
+      yield* store.publish(state, yield* store.load);
       return yield* runSetup(f.options);
     }).pipe(
       Effect.provide(
@@ -1374,7 +1374,7 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
     });
     const observed = yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
-      yield* store.publish(state);
+      yield* store.publish(state, yield* store.load);
       return yield* runSetup(f.options);
     }).pipe(
       Effect.provide(

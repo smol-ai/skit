@@ -4,7 +4,6 @@ import {
 } from "../../library/author-workspace.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
-  LibraryStore,
   bindingSkillIds,
   removeCollectionEffect,
   SkillRemovalRequiresCollection,
@@ -63,11 +62,11 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
 
 export const executeRemoveEffect = Effect.fn("Library.executeRemove")(
   function* (state: LibraryState, options: RemoveOptions) {
-    if (!options.dryRun) state = yield* (yield* LibraryStore).load;
     const plan = yield* planRemoveEffect(state, options.query);
     if (options.dryRun) return { kind: "plan" as const, value: plan };
     // Planning only admits a Skill that is its Collection's only Skill, so removal is of a Collection.
-    const removed = yield* removeCollectionEffect({
+    // It removes exactly what was planned, and is refused if the Library has since moved on.
+    const removed = yield* removeCollectionEffect(state, {
       collectionId:
         plan.subject_kind === "collection"
           ? plan.subject_id

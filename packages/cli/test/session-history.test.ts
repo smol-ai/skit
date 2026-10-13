@@ -7,6 +7,7 @@ import {
   LibraryStore,
   LibraryAuditLog,
   skitLayer,
+  type LibraryState,
 } from "@smolai/skit-core";
 import {
   confirmLibraryChange,
@@ -166,12 +167,18 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish({
-            ...withLeftover,
-            global_bindings: [
-              { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: beta.skill_id }] },
-            ],
-          }),
+          store.publish(
+            {
+              ...withLeftover,
+              global_bindings: [
+                {
+                  scope: { kind: "global" },
+                  entries: [{ kind: "skill", skill_id: beta.skill_id }],
+                },
+              ],
+            },
+            withLeftover,
+          ),
         ),
       ),
     );
@@ -198,5 +205,150 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const disabled = yield* home.owned(confirmLibraryChange(removal, home.bindings));
     assert.strictEqual(disabled.outcome?.kind, "applied");
     assert.ok(disabled.skills.every((row) => row.bindings.length === 0));
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+/** One Skill, with a proposal to enable its Collection globally and then in a repository. */
+const twoScopeProposal = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-session-stale-" });
+  const home = yield* libraryHome({ home: join(root, "home") });
+  yield* initializeLibraryMachine(home.home);
+  const source = join(root, "source");
+  const repository = join(root, "repository");
+  yield* fs.makeDirectory(source, { recursive: true });
+  yield* fs.makeDirectory(repository, { recursive: true });
+  yield* fs.writeFileString(join(source, "SKILL.md"), "# review\n");
+  yield* home.owned(
+    writingTo(
+      home.home,
+      retainObservedIn(home.home)({
+        source: { type: "local", path: source },
+        input: source,
+        retainedAt: "2026-10-13T00:00:00.000Z",
+        skills: [
+          {
+            name: "review",
+            sourcePath: source,
+            relativePath: ".",
+            observedHash: yield* deterministicTreeHashEffect(source),
+          },
+        ],
+        observations: [],
+      }),
+    ),
+  );
+  const session = yield* home.owned(openLibrarySession());
+  const proposed = yield* home.owned(
+    proposeLibraryCollectionChange(
+      session,
+      home.bindings,
+      (yield* home.durable).collections[0]!.collection_id,
+      true,
+      [{ kind: "global" }, { kind: "repository", root: repository }],
+    ),
+  );
+  assert.strictEqual(proposed.pending?.operations.length, 2);
+  return { home, proposed };
+});
+
+/** A change from outside the confirming action: it toggles whether custody issues were recorded. */
+const unplanned = (state: LibraryState): LibraryState => {
+  if (state.custodyIssues === undefined) return { ...state, custodyIssues: [] };
+  const { custodyIssues: _custodyIssues, ...rest } = state;
+  return rest;
+};
+
+const confirmThrough = (
+  home: Effect.Success<typeof twoScopeProposal>["home"],
+  proposed: Parameters<typeof confirmLibraryChange>[0],
+  wrap: (store: LibraryStore["Service"]) => LibraryStore["Service"],
+) =>
+  home.owned(
+    Effect.flatMap(LibraryStore, (store) =>
+      confirmLibraryChange(proposed, home.bindings).pipe(
+        Effect.provideService(LibraryStore, wrap(store)),
+      ),
+    ),
+  );
+
+it.effect("refuses a confirmation when the Library changes after its revision check", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const fixture = yield* twoScopeProposal;
+    let loads = 0;
+    const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
+      ...store,
+      // The first load is the revision check; another writer changes the Library right after it.
+      load: Effect.gen(function* () {
+        if (++loads === 2) {
+          const current = yield* store.load;
+          yield* fixture.home
+            .writeDurable(unplanned(current))
+            .pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.orDie);
+        }
+        return yield* store.load;
+      }),
+    }));
+    assert.strictEqual(confirmed.outcome?.kind, "failed");
+    if (confirmed.outcome?.kind === "failed")
+      assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
+    const state = yield* fixture.home.durable;
+    assert.deepStrictEqual(state.global_bindings, []);
+    assert.deepStrictEqual(state.local_bindings, []);
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("refuses an operation that would apply onto a change made after the previous one", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    // Count the publishes of the first operation alone, on an identical Library.
+    const measured = yield* twoScopeProposal;
+    let firstOperationPublishes = 0;
+    yield* confirmThrough(
+      measured.home,
+      {
+        ...measured.proposed,
+        pending: {
+          ...measured.proposed.pending!,
+          operations: measured.proposed.pending!.operations.slice(0, 1),
+        },
+      },
+      (store) => ({
+        ...store,
+        publish: (next, base) =>
+          store.publish(next, base).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                firstOperationPublishes++;
+              }),
+            ),
+          ),
+      }),
+    );
+
+    const fixture = yield* twoScopeProposal;
+    let publishes = 0;
+    const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
+      ...store,
+      publish: (next, base) =>
+        store
+          .publish(next, base)
+          .pipe(
+            Effect.andThen(
+              ++publishes === firstOperationPublishes
+                ? fixture.home
+                    .writeDurable(unplanned(next))
+                    .pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.orDie)
+                : Effect.void,
+            ),
+          ),
+    }));
+    assert.strictEqual(confirmed.outcome?.kind, "failed");
+    if (confirmed.outcome?.kind === "failed")
+      assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
+    const state = yield* fixture.home.durable;
+    assert.strictEqual(state.global_bindings.length, 1);
+    assert.deepStrictEqual(state.local_bindings, []);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

@@ -4,19 +4,21 @@
 import { Clock, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import { InvalidLibraryState, LibraryBusy } from "../../failures.js";
+import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
 import { writeJsonAtomicEffect, writeRawAtomicEffect } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
   encodeLibraryState,
   CURRENT_LIBRARY_STATE_VERSION,
+  emptyLibraryState,
   LibraryState,
   libraryManifestFromLocalStateEffect,
+  libraryStateRevision,
 } from "../library-state.js";
 import { LibraryStateV4, migrateLibraryStateFromV4 } from "./state-schema-v4.js";
 import { LibraryStateV5, migrateLibraryStateFromV5 } from "./state-schema-v5.js";
 import { LibraryStateV6, migrateLibraryStateFromV6 } from "./state-schema-v6.js";
-import { withLibraryWriterLock } from "./writer-lock.js";
+import { withLibraryStateReplacement } from "./writer-lock.js";
 
 export type InspectedLibraryState =
   | { readonly present: false }
@@ -138,7 +140,7 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
       path,
       detail: `unsupported Library state schema v${version.schemaVersion}; this CLI supports v4–v${CURRENT_LIBRARY_STATE_VERSION}`,
     });
-  return yield* withLibraryWriterLock(
+  return yield* withLibraryStateReplacement(
     home,
     Effect.gen(function* () {
       const lockedValue = yield* readStateValue(path);
@@ -184,17 +186,39 @@ export const inspectLocalLibraryStateEffect = Effect.fn("Library.inspectState")(
   return { present: true as const, state: yield* openPresentState(home, path, value) };
 });
 
+/**
+ * Replace `base` with `next`, checking and writing under the writer lock and publish mutex. Fails
+ * with `LibraryChanged`, writing nothing, when the Library on disk is no longer `base`.
+ */
 export const publishLibraryStateEffect = Effect.fn("Library.publishState")(function* (
   home: string,
-  state: LibraryState,
+  next: LibraryState,
+  base: LibraryState,
 ) {
   const path = join(resolve(home), "state.json");
   // Refuse what the loader would refuse, so a publish can never strand the Library unreadable.
-  yield* decodeCurrentState(path, state);
-  const text = yield* encodeLibraryState(state).pipe(
+  yield* decodeCurrentState(path, next);
+  const text = yield* encodeLibraryState(next).pipe(
     Effect.mapError(
       () => new InvalidLibraryState({ path, detail: "refusing invalid Library state" }),
     ),
   );
-  yield* writeRawAtomicEffect(path, `${text}\n`);
+  yield* withLibraryStateReplacement(
+    home,
+    Effect.gen(function* () {
+      const value = yield* readStateValue(path);
+      const current =
+        value === undefined
+          ? yield* emptyLibraryStateEffect(path)
+          : yield* decodeCurrentState(path, value);
+      if (libraryStateRevision(current) !== libraryStateRevision(base))
+        return yield* new LibraryChanged({ path });
+      yield* writeRawAtomicEffect(path, `${text}\n`);
+    }),
+  );
 });
+
+export const emptyLibraryStateEffect = (path: string) =>
+  LibraryState.makeEffect(emptyLibraryState()).pipe(
+    Effect.mapError((error) => new InvalidLibraryState({ path, detail: String(error) })),
+  );

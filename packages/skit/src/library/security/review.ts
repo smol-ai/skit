@@ -144,6 +144,6 @@ export const acceptSecurityFindingFromStateEffect = Effect.fn(
     ...state,
     assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
   };
-  yield* (yield* LibraryStore).publish(next);
+  yield* (yield* LibraryStore).publish(next, state);
   return yield* securityReviewFromStateEffect(next, review.skill_version_id);
 });

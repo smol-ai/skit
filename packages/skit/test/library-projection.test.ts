@@ -77,18 +77,21 @@ const boundCollectionWith = (second = false) =>
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish({
-          ...initial,
-          global_bindings: [
-            {
-              scope: { kind: "global" },
-              entries: retained.skills.map((skill) => ({
-                kind: "skill" as const,
-                skill_id: skill.skill_id,
-              })),
-            },
-          ],
-        }),
+        store.publish(
+          {
+            ...initial,
+            global_bindings: [
+              {
+                scope: { kind: "global" },
+                entries: retained.skills.map((skill) => ({
+                  kind: "skill" as const,
+                  skill_id: skill.skill_id,
+                })),
+              },
+            ],
+          },
+          initial,
+        ),
       ).pipe(Effect.provide(storeLayer)),
     );
 
@@ -136,10 +139,13 @@ it.effect(
       yield* withLibraryWriterLock(
         home,
         Effect.flatMap(LibraryStore, (store) =>
-          store.publish({
-            ...installed,
-            global_bindings: [],
-          }),
+          store.publish(
+            {
+              ...installed,
+              global_bindings: [],
+            },
+            installed,
+          ),
         ).pipe(Effect.provide(storeLayer)),
       );
       const retire = retireUnboundGlobalProjectionsEffect({
@@ -197,17 +203,20 @@ it.effect("refreshes an equivalent Version handle only on an intact owned projec
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish({
-          ...before,
-          skills: before.skills.map((skill) => ({
-            ...skill,
-            versions: skill.versions.map((version) => ({ ...version, skill_version_id: newId })),
-          })),
-          projections: before.projections.map((projection) => ({
-            ...projection,
-            skill_version_id: newId,
-          })),
-        }),
+        store.publish(
+          {
+            ...before,
+            skills: before.skills.map((skill) => ({
+              ...skill,
+              versions: skill.versions.map((version) => ({ ...version, skill_version_id: newId })),
+            })),
+            projections: before.projections.map((projection) => ({
+              ...projection,
+              skill_version_id: newId,
+            })),
+          },
+          before,
+        ),
       ).pipe(Effect.provide(storeLayer)),
     );
     yield* withLibraryWriterLock(home, project);
@@ -227,17 +236,23 @@ it.effect("refreshes an equivalent Version handle only on an intact owned projec
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish({
-          ...installed,
-          skills: installed.skills.map((skill) => ({
-            ...skill,
-            versions: skill.versions.map((version) => ({ ...version, skill_version_id: editedId })),
-          })),
-          projections: installed.projections.map((projection) => ({
-            ...projection,
-            skill_version_id: editedId,
-          })),
-        }),
+        store.publish(
+          {
+            ...installed,
+            skills: installed.skills.map((skill) => ({
+              ...skill,
+              versions: skill.versions.map((version) => ({
+                ...version,
+                skill_version_id: editedId,
+              })),
+            })),
+            projections: installed.projections.map((projection) => ({
+              ...projection,
+              skill_version_id: editedId,
+            })),
+          },
+          installed,
+        ),
       ).pipe(Effect.provide(storeLayer)),
     );
     yield* fs.writeFileString(join(target, "SKILL.md"), "user edited bytes\n");
@@ -341,10 +356,13 @@ for (const alias of [false, true])
         yield* withLibraryWriterLock(
           home,
           LibraryStore.use((store) =>
-            store.publish({
-              ...state,
-              local_bindings: [{ scope: { kind: "repository", root: bindingRoot }, entries }],
-            }),
+            store.publish(
+              {
+                ...state,
+                local_bindings: [{ scope: { kind: "repository", root: bindingRoot }, entries }],
+              },
+              state,
+            ),
           ).pipe(Effect.provide(storeLayer)),
         );
         const project = (
@@ -549,7 +567,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish({ ...state, global_bindings: [] }),
+        store.publish({ ...state, global_bindings: [] }, state),
       ).pipe(Effect.provide(storeLayer)),
     );
     const retired = yield* withLibraryWriterLock(

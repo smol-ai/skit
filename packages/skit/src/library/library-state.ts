@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Effect, Schema, Struct } from "effect";
 import { isAbsolute, resolve } from "node:path";
 import { ProjectionId, SkillId, SkillVersionId } from "./entity-ids.js";
@@ -19,6 +20,7 @@ import {
   LibraryDeviceStateFields,
   RecordedProjectionTarget,
 } from "./store/state-schema.js";
+import { canonicalJson } from "../shared/json.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
   Schema.makeFilter(isAbsolute, { message: "Expected an absolute device path" }),
@@ -116,6 +118,23 @@ export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">)
   ...fields,
   schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
 });
+
+/** What a Library that has never been written loads as. */
+export const emptyLibraryState = (): LibraryState =>
+  currentLibraryState({
+    collections: [],
+    skills: [],
+    retained_copies: [],
+    acquisitions: [],
+    global_bindings: [],
+    local_bindings: [],
+    projections: [],
+    unmanaged: [],
+  });
+
+/** Content identity of a state; a publish is accepted only onto the revision it was planned from. */
+export const libraryStateRevision = (state: LibraryState): string =>
+  createHash("sha256").update(canonicalJson(state)).digest("hex");
 
 export const LibraryInventory = LibraryState.mapFields(
   Struct.omit([

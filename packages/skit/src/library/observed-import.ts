@@ -208,7 +208,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 ) {
   const store = yield* LibraryStore;
   const machineId = request.machineId ?? (yield* readOrCreateMachineId(store.home));
-  const state = yield* store.load;
+  const base = yield* store.load;
+  const state = structuredClone(base);
   const source =
     request.sourceIdentity ??
     sourceIdentityFromSource(request.source, machineId, request.declaration);
@@ -341,7 +342,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         }),
     ),
   );
-  yield* store.publish(successor);
+  yield* store.publish(successor, base);
   return {
     collection,
     skills: persistedSkills.map((skill) =>
@@ -471,7 +472,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
           }),
       ),
     );
-    yield* store.publish(successor);
+    yield* store.publish(successor, current.state);
     return {
       skillVersionId: version.skill_version_id,
       retainedCopyId,

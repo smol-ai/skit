@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { LibraryAuditLog, libraryAuditLogLayer } from "../src/library/audit/audit-log.js";
@@ -12,6 +12,8 @@ import {
   libraryStoreLayer,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
+import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import type { LibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "library-history-test");
@@ -77,6 +79,11 @@ const library = Effect.gen(function* () {
   return { inLibrary, retain, history, home };
 });
 
+const globalBinding = (state: LibraryState) => ({
+  scope: { kind: "global" as const },
+  entries: state.skills.map((skill) => ({ kind: "skill" as const, skill_id: skill.skill_id })),
+});
+
 it.effect("records one event for one action, however many writers it nests", () =>
   Effect.gen(function* () {
     const { inLibrary, retain, history } = yield* library;
@@ -87,18 +94,21 @@ it.effect("records one event for one action, however many writers it nests", () 
           const store = yield* LibraryStore;
           const state = yield* store.load;
           yield* withLibraryWriter(
-            store.publish({
-              ...state,
-              global_bindings: [
-                {
-                  scope: { kind: "global" },
-                  entries: state.skills.map((skill) => ({
-                    kind: "skill" as const,
-                    skill_id: skill.skill_id,
-                  })),
-                },
-              ],
-            }),
+            store.publish(
+              {
+                ...state,
+                global_bindings: [
+                  {
+                    scope: { kind: "global" },
+                    entries: state.skills.map((skill) => ({
+                      kind: "skill" as const,
+                      skill_id: skill.skill_id,
+                    })),
+                  },
+                ],
+              },
+              state,
+            ),
           );
         }),
       ),
@@ -149,5 +159,84 @@ it.effect("keeps a committed mutation successful when its history cannot be writ
     const retained = yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
     const state = yield* inLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(state.collections[0]?.collection_id, retained.collection?.collection_id);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.live("records a forked publish under way at release in its action's event", () =>
+  Effect.gen(function* () {
+    const { inLibrary, retain, history, home } = yield* library;
+    yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
+    const before = (yield* history).length;
+    const store = yield* inLibrary(Effect.service(LibraryStore));
+    const entered = yield* Deferred.make<void>();
+    const resume = yield* Deferred.make<void>();
+    let child: Fiber.Fiber<void, unknown> | undefined;
+    const action = yield* inLibrary(
+      withLibraryWriter(
+        Effect.gen(function* () {
+          const state = yield* store.load;
+          const bound = { ...state, global_bindings: [globalBinding(state)] };
+          yield* store.publish(bound, state);
+          // The forked publish takes its lease now and finishes only after the action's program.
+          child = yield* withLibraryWriterLock(
+            home,
+            Deferred.succeed(entered, undefined).pipe(
+              Effect.andThen(Deferred.await(resume)),
+              Effect.andThen(store.publish({ ...bound, global_bindings: [] }, bound)),
+            ),
+          ).pipe(Effect.forkDetach);
+          yield* Deferred.await(entered);
+        }),
+      ),
+    ).pipe(Effect.forkChild);
+    yield* Effect.sleep("20 millis");
+    yield* Deferred.succeed(resume, undefined);
+    yield* Fiber.join(child!);
+    yield* Fiber.join(action);
+
+    const events = (yield* history).slice(before);
+    assert.strictEqual(events.length, 1);
+    assert.deepStrictEqual(
+      events[0]?.changes.map((change) => `${change.entity}:${change.action}`),
+      ["binding:enabled", "binding:disabled"],
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.live("records a writer that outlives its action as an action of its own", () =>
+  Effect.gen(function* () {
+    const { inLibrary, retain, history } = yield* library;
+    yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
+    const before = (yield* history).length;
+    const store = yield* inLibrary(Effect.service(LibraryStore));
+    const resume = yield* Deferred.make<void>();
+    const late = yield* inLibrary(
+      withLibraryWriter(
+        Effect.gen(function* () {
+          const state = yield* store.load;
+          yield* store.publish({ ...state, global_bindings: [globalBinding(state)] }, state);
+          return yield* Deferred.await(resume).pipe(
+            Effect.andThen(
+              withLibraryWriter(
+                Effect.gen(function* () {
+                  const bound = yield* store.load;
+                  yield* store.publish({ ...bound, global_bindings: [] }, bound);
+                }),
+              ),
+            ),
+            Effect.forkDetach,
+          );
+        }),
+      ),
+    );
+    assert.strictEqual((yield* history).length, before + 1);
+    yield* Deferred.succeed(resume, undefined);
+    yield* Fiber.join(late);
+
+    const events = (yield* history).slice(before);
+    assert.deepStrictEqual(
+      events.map((event) => event.changes.map((change) => `${change.entity}:${change.action}`)),
+      [["binding:enabled"], ["binding:disabled"]],
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
