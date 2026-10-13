@@ -125,6 +125,41 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("retains the exact bytes of a direct SKILL.md URL", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-add-direct-" });
+    const home = join(root, "home");
+    yield* initializeLibraryMachine(home);
+    const bytes = "---\nname: review\ndescription: Review carefully\n---\n\nDo the review.\n";
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(bytes, { headers: { "content-type": "text/plain" } }),
+        ),
+      ),
+    );
+    const source = "https://github.com/acme/skills/blob/main/skills/review/SKILL.md";
+    assert.deepStrictEqual(
+      yield* previewLibrarySourceEffect(source).pipe(
+        Effect.provideService(HttpClient.HttpClient, client),
+      ),
+      { kind: "plain", skills: [{ name: "review", verbatim_path: "." }] },
+    );
+    const added = yield* addLibrarySourceEffect(source).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provideService(HttpClient.HttpClient, client),
+    );
+    assert.strictEqual(
+      yield* fs.readFileString(
+        join(retainedTreePath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+      ),
+      bytes,
+    );
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("runs the complete lifecycle for a selected well-known Collection member", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

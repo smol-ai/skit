@@ -1506,6 +1506,15 @@ export function resolveSkitSourceEffect(
         const skillText = new TextDecoder().decode(body);
         yield* assertDirectSkillDocument(skillText, type);
         yield* fs.writeFileString(join(directory, "SKILL.md"), skillText);
+        if (options.verbatimOnly)
+          return {
+            source: acquiredSource,
+            revision,
+            root: directory,
+            originalRoot: directory,
+            descriptorKind: "generated" as const,
+            observedSkillPaths: ["."],
+          };
         // A downloaded document has no modification time of its own beyond what the server
         // reports; the file we just wrote only records when we wrote it.
         const lastModified = response.headers["last-modified"];

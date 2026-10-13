@@ -975,6 +975,12 @@ describe("source contracts", () => {
         Effect.provideService(HttpClient.HttpClient, client(skill, "text/plain")),
       );
       expect(yield* readText(join(resolved.root, "skills", "review", "SKILL.md"))).toBe(skill);
+      const observed = yield* resolveSkitSourceEffect(url, { verbatimOnly: true }).pipe(
+        Effect.provideService(HttpClient.HttpClient, client(skill, "text/plain")),
+      );
+      expect(observed.descriptorKind).toBe("generated");
+      expect(observed.observedSkillPaths).toEqual(["."]);
+      expect(yield* readText(join(observed.originalRoot, "SKILL.md"))).toBe(skill);
 
       const failure = yield* resolveSkitSourceEffect(url).pipe(
         Effect.provideService(
