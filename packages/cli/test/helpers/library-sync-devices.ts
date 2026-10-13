@@ -62,6 +62,7 @@ export const devices = Effect.gen(function* () {
   );
   const device = (name: string) => {
     const home = join(workspace, name);
+    let publishes = 0;
     const layer = Layer.effect(
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
@@ -70,6 +71,7 @@ export const devices = Effect.gen(function* () {
           state: LibraryState,
           base: LibraryState,
         ) {
+          publishes++;
           if (
             faults.take(
               "FailPublish",
@@ -93,6 +95,12 @@ export const devices = Effect.gen(function* () {
     return {
       home,
       root,
+      /** Every root a sync may write: the home, its projections, and their backups. */
+      disk: [home, root, join(workspace, ".skit-backups")],
+      /** Local state publications attempted through this home's LibraryStore, refused or not. */
+      get publishes() {
+        return publishes;
+      },
       corruptOriginal: Effect.gen(function* () {
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.provide(layer),
@@ -203,40 +211,4 @@ export const devices = Effect.gen(function* () {
       () => server.remote?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
     ),
   };
-});
-
-/** Capture state and owned projection bytes, then assert that a stopped sync leaves them intact. */
-export const untouched = Effect.fn("Test.untouched")(function* (device: {
-  home: string;
-  state: Effect.Effect<LibraryState, unknown, FileSystem.FileSystem>;
-}) {
-  const fs = yield* FileSystem.FileSystem;
-  const statePath = join(device.home, "state.json");
-  const stateBytes = (yield* fs.exists(statePath))
-    ? Array.from(yield* fs.readFile(statePath))
-    : null;
-  const paths =
-    stateBytes === null ? [] : (yield* device.state).projections.map((item) => item.path);
-  const readTree = Effect.fn("Test.projectionBytes")(function* (
-    root: string,
-  ): Effect.fn.Return<Record<string, readonly number[]>, unknown, FileSystem.FileSystem> {
-    const result: Record<string, readonly number[]> = {};
-    if (!(yield* fs.exists(root))) return result;
-    for (const name of (yield* fs.readDirectory(root)).sort()) {
-      const path = join(root, name);
-      if ((yield* fs.stat(path)).type === "Directory") {
-        for (const [child, bytes] of Object.entries(yield* readTree(path)))
-          result[join(name, child)] = bytes;
-      } else result[name] = Array.from(yield* fs.readFile(path));
-    }
-    return result;
-  });
-  const before = yield* Effect.forEach(paths, readTree);
-  return Effect.gen(function* () {
-    assert.deepStrictEqual(
-      (yield* fs.exists(statePath)) ? Array.from(yield* fs.readFile(statePath)) : null,
-      stateBytes,
-    );
-    assert.deepStrictEqual(yield* Effect.forEach(paths, readTree), before);
-  });
 });

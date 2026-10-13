@@ -74,6 +74,7 @@ export function librarySyncServer(faults = faultQueue()) {
   const snapshots = new Map<string, SnapshotArchive>();
   const revisions: { revision_id: string; parent_revision_id: string | null }[] = [];
   let libraryId = "library_test";
+  let writeRequests = 0;
 
   const write = (request: typeof LibraryWriteRequest.Type): Response => {
     if (request.expected_revision_id !== (head?.revision_id ?? null))
@@ -96,6 +97,7 @@ export function librarySyncServer(faults = faultQueue()) {
   };
 
   const respond = (method: string, path: string, payload?: unknown): Response => {
+    if (method !== "GET") writeRequests++;
     if (method === "GET" && path.startsWith("/api/libraries/")) {
       const archive = snapshots.get(decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)));
       return archive === undefined
@@ -154,8 +156,13 @@ export function librarySyncServer(faults = faultQueue()) {
     get remote() {
       return head;
     },
+    /** Revisions committed; an idempotent write answered with the current head adds none. */
     get writes() {
       return revisions.length;
+    },
+    /** Write requests received (snapshot uploads and Library writes), whatever they committed. */
+    get writeRequests() {
+      return writeRequests;
     },
     get stored() {
       return { head, revisions: [...revisions], snapshots: [...snapshots.entries()] };

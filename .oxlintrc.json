@@ -134,7 +134,10 @@
       }
     },
     {
-      "files": ["packages/tui/test/library-host.test.ts"],
+      "files": [
+        "packages/tui/test/library-host.test.ts",
+        "packages/tui/test/library-actions.test.ts"
+      ],
       "rules": {
         "skit/no-async-test-callback": "off"
       }

@@ -26,6 +26,14 @@ export function createLibraryHost<R, E, OpenError>(
   return {
     /** Run one workflow on the host runtime; it is aborted with the host on disposal. */
     run,
+    /** Resolve once no workflow is running, including any that a finished one started in turn. */
+    async settled() {
+      do {
+        await Promise.allSettled(active.values());
+        // Continuations of what just finished start their follow-up workflows before this turn.
+        await new Promise((resolve) => setImmediate(resolve));
+      } while (active.size > 0);
+    },
     get state() {
       return state;
     },
