@@ -277,7 +277,7 @@ it.effect("binds setup consent to current discovery evidence", () =>
     const preview = yield* observeSetup(f.options);
 
     const unchanged = yield* revalidateSetup(f.options, preview.onboarding.planId);
-    expect(unchanged.onboarding.planId).toBe(preview.onboarding.planId);
+    expect(unchanged.observed.onboarding.planId).toBe(preview.onboarding.planId);
 
     yield* f.fs.writeFileString(
       join(skill, "SKILL.md"),

@@ -11,7 +11,8 @@ import {
 } from "../src/presentation/interaction-recorder.js";
 import { Prompter } from "../src/presentation/prompter.js";
 import { setupPrompts } from "../src/presentation/setup-steps.js";
-import { SetupPlanStale } from "../src/workflows/library/setup.js";
+import { PlanIsStale } from "../src/library/failures.js";
+import { SetupDiscovery, SetupPlanStale } from "../src/workflows/library/setup.js";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
   deterministicTreeHashEffect,
@@ -23,9 +24,7 @@ import {
   writingTo,
 } from "./helpers/library-home.js";
 
-// Acceptance oracle for guided `skit setup` apply: docs/setup-apply-outcomes.md. Rows marked BUG
-// characterize current behaviour that the setup-apply refactor (one apply workflow, one apply-time
-// scan, additive stages before removals) must flip; they are not safety guarantees.
+// Acceptance oracle for guided `skit setup` apply: docs/setup-apply-outcomes.md.
 
 const skillBytes = (name: string, body = `${name} body`) =>
   `---\nname: ${name}\ndescription: ${name} fixture\n---\n\n${body}\n`;
@@ -62,18 +61,15 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  // Lock-read characterization, not a scan observer: today every `collectSetupEvidence` reads the
-  // global skills.sh lock once and safety checks never do, so reads track full discovery scans.
-  // Caching the lock would lower this count while traversal still repeats. The scan has no
-  // injectable seam yet; the setup-apply refactor must add one and count scans through it.
-  const globalLock = join(options.skillsStateHome, "skills", ".skill-lock.json");
   const setup = (
     answers: readonly ScriptedAnswer[],
     gates: Gates = {},
     flags: { interactive?: boolean; dryRun?: boolean; workDirFlag?: string } = {},
   ) =>
     Effect.gen(function* () {
-      let lockReads = 0;
+      // Full discovery scans, counted at the setup scan seam, in all and after approval.
+      let scans = 0;
+      let approvedAt: number | undefined;
       let publishes = 0;
       const interaction = yield* makeScriptedInteraction(answers);
       const exit = yield* Effect.exit(
@@ -92,7 +88,12 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
                 confirm: (message: string) =>
                   Effect.tap(prompter.confirm(message), (approved) =>
                     approved && message === setupPrompts.confirm
-                      ? Effect.orDie(gates.approved ?? Effect.void)
+                      ? Effect.andThen(
+                          Effect.sync(() => {
+                            approvedAt = scans;
+                          }),
+                          Effect.orDie(gates.approved ?? Effect.void),
+                        )
                       : Effect.void,
                   ),
               })),
@@ -115,16 +116,21 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               })),
             ),
             Effect.provideServiceEffect(
+              SetupDiscovery,
+              Effect.map(SetupDiscovery, (discovery) => ({
+                collect: (scanned: Parameters<typeof discovery.collect>[0]) =>
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      scans++;
+                    }),
+                    discovery.collect(scanned),
+                  ),
+              })),
+            ),
+            Effect.provideServiceEffect(
               FileSystem.FileSystem,
               Effect.map(FileSystem.FileSystem, (files) => ({
                 ...files,
-                readFileString: (path: string, encoding?: string) =>
-                  Effect.andThen(
-                    Effect.sync(() => {
-                      if (path === globalLock) lockReads++;
-                    }),
-                    files.readFileString(path, encoding),
-                  ),
                 rename: (from: string, to: string) =>
                   Effect.andThen(gates.rename?.(from, to) ?? Effect.void, files.rename(from, to)),
               })),
@@ -134,7 +140,12 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
         ),
       );
       if (Exit.isSuccess(exit)) assert.isTrue(Schema.is(outputContracts.setup.schema)(exit.value));
-      return { exit, lockReads, interaction };
+      return {
+        exit,
+        scans,
+        scansAfterApproval: approvedAt === undefined ? undefined : scans - approvedAt,
+        interaction,
+      };
     });
   return {
     fs,
@@ -195,17 +206,17 @@ const holds = (changes: DiskDiff, bytes: string) =>
       after.content === `base64:${Buffer.from(bytes).toString("base64")}`,
   );
 
-it.effect("declining or previewing the plan applies nothing after one global lock read", () =>
+it.effect("declining or previewing the plan applies nothing after one scan", () =>
   Effect.gen(function* () {
     for (const decline of [true, false]) {
       const f = yield* fixture({ machine: true });
       const before = yield* captureDisk(f.disk);
-      const { exit, lockReads } = decline
+      const { exit, scans } = decline
         ? yield* f.setup([["alpha", "remove\0gamma"], false])
         : yield* f.setup([], {}, { dryRun: true });
       assert.isTrue(Exit.isSuccess(exit));
       assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-      assert.strictEqual(lockReads, 1);
+      assert.strictEqual(scans, 1);
     }
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -238,7 +249,7 @@ it.effect("non-interactive setup with a work dir saves machine configuration whi
     const work = join(f.root, "work");
     yield* f.fs.makeDirectory(work);
     const before = yield* captureDisk(f.disk);
-    const { exit, lockReads } = yield* f.setup([], {}, { interactive: false, workDirFlag: work });
+    const { exit, scans } = yield* f.setup([], {}, { interactive: false, workDirFlag: work });
     assert.isTrue(Exit.isSuccess(exit));
     if (Exit.isSuccess(exit)) {
       assert.isTrue(exit.value.machineConfig.persisted);
@@ -249,7 +260,7 @@ it.effect("non-interactive setup with a work dir saves machine configuration whi
       deleted: [],
       changed: ["library/machine.json"],
     });
-    assert.strictEqual(lockReads, 1);
+    assert.strictEqual(scans, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -257,7 +268,7 @@ it.effect("a selected file changed after approval fails stale before any effect"
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const before = yield* captureDisk(f.disk);
-    const { exit, lockReads } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+    const { exit, scansAfterApproval } = yield* f.setup([["alpha", "remove\0gamma"], true], {
       approved: f.fs.writeFileString(
         join(f.path("alpha"), "SKILL.md"),
         skillBytes("alpha", "changed after approval"),
@@ -269,99 +280,86 @@ it.effect("a selected file changed after approval fails stale before any effect"
       deleted: [],
       changed: [".codex/skills/alpha/SKILL.md"],
     });
-    assert.strictEqual(lockReads, 2);
+    assert.strictEqual(scansAfterApproval, 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization, by global lock reads: today revalidation, the custody stage's own
-// observation and revalidation, and the closing verification each rescan. The setup-apply refactor
-// scans once after approval (the preview and the one apply-time scan), asserted through the scan
-// observer it adds rather than through this lock-read count.
-it.effect("BUG: an approved apply reads the global lock once per stage's discovery scan", () =>
+// One scan after approval however many stages run: here machine identity, custody and a removal.
+// The stages work from that scan and never observe again.
+it.effect("an approved apply scans once after approval, whatever stages it runs", () =>
   Effect.gen(function* () {
-    const f = yield* fixture({ machine: true });
-    const { exit, lockReads } = yield* f.setup([["alpha"], true]);
+    const f = yield* fixture({ machine: false });
+    const { exit, scans, scansAfterApproval } = yield* f.setup([["alpha", "remove\0gamma"], true]);
     assert.isTrue(Exit.isSuccess(exit));
     assert.deepStrictEqual(
       (yield* f.home.durable).skills.map((skill) => skill.name),
       ["alpha"],
     );
-    assert.strictEqual(lockReads, 5);
+    assert.isFalse(yield* f.fs.exists(f.path("gamma")));
+    assert.strictEqual(scansAfterApproval, 1);
+    assert.strictEqual(scans, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization: the custody stage observes again after the removals and revalidates
-// against that new plan, so consent silently follows bytes changed after approval. The
-// setup-apply refactor keeps the approved plan ID, which flips this to SetupPlanStale with alpha
-// left out of the Library.
-it.effect("BUG: a stage's own observation refreshes consent for bytes changed after approval", () =>
+// No stage observes again, so a selected copy changed after the apply-time scan, here while machine
+// identity is written ahead of custody, cannot pass as approved: custody checks its bytes first.
+it.effect("bytes changed between the apply-time scan and a later stage fail stale", () =>
   Effect.gen(function* () {
-    const f = yield* fixture({ machine: true });
+    const f = yield* fixture({ machine: false });
     const changed = skillBytes("alpha", "changed after approval");
     const before = yield* captureDisk(f.disk);
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
-      rename: (from) =>
-        from === f.path("gamma")
+      rename: (_from, to) =>
+        basename(to) === "machine.json"
           ? f.fs.writeFileString(join(f.path("alpha"), "SKILL.md"), changed)
           : Effect.void,
     });
-    assert.isTrue(Exit.isSuccess(exit));
-    assert.deepStrictEqual(
-      (yield* f.home.durable).skills.map((skill) => skill.name),
-      ["alpha"],
-    );
-    assert.isTrue(holds(yield* diskChanges(before), changed));
+    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.deepStrictEqual((yield* f.home.durable).skills, []);
+    const changes = yield* diskChanges(before);
+    assert.isFalse(holds(changes, changed));
+    assert.deepStrictEqual(changedPaths(f.root, changes), {
+      created: ["library/machine.json"],
+      deleted: [],
+      changed: [".codex/skills/alpha/SKILL.md"],
+    });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization: custody plans each selection from the disk as it is then, so a selected
-// copy changed after an earlier selection committed is retained as changed. The setup-apply
-// refactor checks each selection against the approved identity before touching bytes, which flips
-// this to a stale failure with beta left out of the Library.
-it.effect("BUG: a selected copy changed after the first additive stage is still retained", () =>
+it.effect("a selected copy changed after the first additive stage fails stale", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const changed = skillBytes("beta", "changed after the first stage");
     const before = yield* captureDisk(f.disk);
-    const { exit } = yield* f.setup([["alpha", "beta"], true], {
+    const { exit } = yield* f.setup([["alpha", "beta", "remove\0gamma"], true], {
       published: f.fs.writeFileString(join(f.path("beta"), "SKILL.md"), changed),
     });
-    assert.isTrue(Exit.isSuccess(exit));
-    assert.deepStrictEqual((yield* f.home.durable).skills.map((skill) => skill.name).sort(), [
-      "alpha",
-      "beta",
-    ]);
-    assert.isTrue(holds(yield* diskChanges(before), changed));
+    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.deepStrictEqual(
+      (yield* f.home.durable).skills.map((skill) => skill.name),
+      ["alpha"],
+    );
+    assert.isFalse(holds(yield* diskChanges(before), changed));
+    assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization: removals run first, so a failed additive stage leaves the copy moved to
-// recovery. Machine identity and orphan originals are also written before the failure. The
-// setup-apply refactor runs additive stages first, which flips this to gamma left in place.
-it.effect("BUG: a failed additive stage after removals leaves the removals applied", () =>
+// Additive stages run before removals, so a failed additive stage removes nothing. Machine identity
+// and orphan originals may already be written; neither loses anything.
+it.effect("a failed additive stage leaves every selected removal in place", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
     const before = yield* captureDisk(f.disk);
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], { failPublish: 1 });
     assert.instanceOf(failure(exit), InvalidLibraryState);
-    const changes = yield* diskChanges(before);
-    const paths = changedPaths(f.root, changes);
+    const paths = changedPaths(f.root, yield* diskChanges(before));
     assert.deepStrictEqual(paths.changed, []);
-    assert.deepStrictEqual(paths.deleted, [".codex/skills/gamma", ".codex/skills/gamma/SKILL.md"]);
+    assert.deepStrictEqual(paths.deleted, []);
     assert.deepStrictEqual(
       [...new Set(paths.created.map((path) => path.split("/").slice(0, 2).join("/")))],
-      ["library/machine.json", "library/originals", "library/removed"],
+      ["library/machine.json", "library/originals"],
     );
-    // The moved copy keeps its bytes and mode: nothing that cannot be reproduced is lost.
-    assert.deepStrictEqual(
-      changes.created.find(({ path }) => path.at(-2) === "1-gamma" && path.at(-1) === "SKILL.md")
-        ?.after,
-      changes.deleted.find(({ path }) => path.at(-1) === "SKILL.md")?.before,
-    );
-    assert.deepStrictEqual(
-      (yield* readReceipt(f.home.home)).entries.map((entry) => [entry.path, entry.moved]),
-      [[f.path("gamma"), true]],
-    );
+    assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
     assert.isFalse(yield* f.fs.exists(f.home.statePath));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -419,41 +417,64 @@ it.effect("a failed receipt rewrite leaves a moved copy recorded as not moved, b
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// BUG characterization: apply reloads the Library at each stage, so a revision another writer
-// commits after approval is silently rebased onto. The setup-apply refactor binds the approved
-// plan to the Library revision, which flips this to a stale failure with no effects.
-it.effect("BUG: a Library change committed after approval is silently rebased onto", () =>
+/** Another writer retains `delta` into the same Library, through its own Library services. */
+const retainDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
   Effect.gen(function* () {
-    const f = yield* fixture({ machine: true });
     const source = join(f.root, "sources", "delta");
     yield* f.fs.makeDirectory(source, { recursive: true });
     yield* f.fs.writeFileString(join(source, "SKILL.md"), skillBytes("delta"));
-    const { exit } = yield* f.setup([["alpha"], true], {
-      approved: writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          yield* retainObservedIn(f.home.home)({
-            machineId: testMachineId,
-            source: { type: "github", owner: "fixture", repository: "delta" },
-            input: source,
-            retainedAt: "2026-01-01T00:00:00.000Z",
-            skills: [
-              {
-                name: "delta",
-                sourcePath: source,
-                relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(source),
-              },
-            ],
-            observations: [],
-          });
-        }),
-      ).pipe(Effect.scoped, Effect.provide(skitLayer)),
+    yield* writingTo(
+      f.home.home,
+      Effect.gen(function* () {
+        yield* retainObservedIn(f.home.home)({
+          machineId: testMachineId,
+          source: { type: "github", owner: "fixture", repository: "delta" },
+          input: source,
+          retainedAt: "2026-01-01T00:00:00.000Z",
+          skills: [
+            {
+              name: "delta",
+              sourcePath: source,
+              relativePath: ".",
+              observedHash: yield* deterministicTreeHashEffect(source),
+            },
+          ],
+          observations: [],
+        });
+      }),
+    );
+  }).pipe(Effect.scoped, Effect.provide(skitLayer));
+
+// The approved plan ID covers the Library revision it was planned against.
+it.effect("a Library change committed after approval fails stale before any effect", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: true });
+    const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+      approved: retainDelta(f),
     });
-    assert.isTrue(Exit.isSuccess(exit));
+    assert.instanceOf(failure(exit), SetupPlanStale);
+    assert.deepStrictEqual(
+      (yield* f.home.durable).skills.map((skill) => skill.name),
+      ["delta"],
+    );
+    assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// Every publication must build on the approved revision or on the apply's own previous one, so a
+// Library change between stages is never rebased onto and stops every further effect. The stage
+// whose publication meets the changed base reports it as its own conflict.
+it.effect("a Library change committed after the first additive stage stops the apply", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: true });
+    const { exit } = yield* f.setup([["alpha", "beta", "remove\0gamma"], true], {
+      published: retainDelta(f),
+    });
+    assert.propertyVal(failure(exit), "code", "CONFLICT");
     assert.deepStrictEqual((yield* f.home.durable).skills.map((skill) => skill.name).sort(), [
       "alpha",
       "delta",
     ]);
+    assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -2,7 +2,6 @@ import {
   SkitConfiguration,
   skitConfigurationLayer,
 } from "../../configuration/skit-configuration.js";
-import { withLibraryWriter } from "@smolai/skit-core";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -24,35 +23,23 @@ import {
 import {
   readSetupMachineConfig,
   setupRepositoryDecisions,
-  revalidateSetupPlan,
   runSetup,
   type SetupOptions,
 } from "../../workflows/library/setup.js";
-import {
-  applySetupLocalCustody,
-  type SetupLocalCustodyOptions,
-} from "../../workflows/library/setup-local-custody.js";
+import { applySetupPlan, type SetupApproval } from "../../workflows/library/setup-apply.js";
+import type { SetupLocalCustodyOptions } from "../../workflows/library/setup-local-custody.js";
 import type { SetupResult } from "../../workflows/library/setup-contract.js";
-import { applySetupExistingBindings } from "../../workflows/library/setup-existing-binding.js";
-import { applySetupObservedCollections } from "../../workflows/library/setup-observed-collections.js";
 import { result } from "../contracts.js";
 import { LibraryStore } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupDiscoveredSkillChoices } from "../../presentation/setup-skills.js";
-import {
-  applySetupRemovals,
-  planSetupRemovals,
-  setupRemovablePaths,
-} from "../../workflows/library/setup-removal.js";
+import { planSetupRemovals, setupRemovablePaths } from "../../workflows/library/setup-removal.js";
 
-import {
-  setupSelectedCopies,
-  isSetupProjectionTarget,
-} from "../../workflows/library/setup-decisions.js";
+import { setupSelectedCopies } from "../../workflows/library/setup-decisions.js";
 import {
   chooseSetupCopyDecisions,
-  setupDuplicatePlanLines,
+  setupPlanLines,
   renderSetupAliasRecovery,
 } from "../../presentation/setup-choice-presentation.js";
 
@@ -140,7 +127,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots = !input.dryRun && (persistRoots || decisionsChanged);
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
-  const retainedSourceSelections = yield* chooseKnownSources(steps, observed);
+  const imports = yield* chooseKnownSources(steps, observed);
   const { bind, add, remove, removablePaths } = yield* chooseDiscoveredSkills(
     steps,
     setupOptions,
@@ -150,17 +137,22 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     setupSelectedCopies(observed, add, bind),
     displayPath,
   );
-  const localCustodySelections = decisions.filter((copy) => copy.operation === "add");
-  const existingBindingSelections = decisions.filter((copy) => copy.operation === "bind");
-  const removalPlan = yield* planSetupRemovals(setupOptions, observed, remove, removablePaths);
-  const prompter = yield* Prompter;
-  const hasChanges =
-    persistRoots ||
-    retainedSourceSelections.length > 0 ||
-    existingBindingSelections.length > 0 ||
-    localCustodySelections.length > 0 ||
-    removalPlan.entries.length > 0;
-  if (!hasChanges) {
+  const approval: SetupApproval = {
+    setup: setupOptions,
+    planId: observed.onboarding.planId,
+    persistRoots,
+    imports,
+    bindings: decisions.filter((copy) => copy.operation === "bind"),
+    custody: decisions.filter((copy) => copy.operation === "add"),
+    removals: yield* planSetupRemovals(setupOptions, observed, remove, removablePaths),
+  };
+  if (
+    !persistRoots &&
+    !imports.length &&
+    !approval.bindings.length &&
+    !approval.custody.length &&
+    !approval.removals.entries.length
+  ) {
     yield* renderer.step(
       steps.step("confirm"),
       "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
@@ -168,199 +160,35 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     yield* offerSkillsShUpdateCheck();
     return observed;
   }
-  const imports = observed.onboarding.candidates.filter(
-    (candidate) => candidate.action === "import-observed-collection",
+  yield* renderer.step(
+    steps.step("confirm"),
+    setupPlanLines({
+      approval,
+      observed,
+      decisions,
+      repositoryDecisions,
+      displayRoots,
+      displayPath,
+    }).join("\n"),
   );
-  const retainedBySource = [
-    ...new Set(retainedSourceSelections.map((selection) => selection.groupKey)),
-  ].map((groupKey) => ({
-    source: imports.find((candidate) => candidate.groupKey === groupKey)!,
-    names: retainedSourceSelections
-      .filter((selection) => selection.groupKey === groupKey)
-      .map((selection) => selection.name)
-      .sort(),
-  }));
-  const repositorySelections = localCustodySelections.filter((selection) =>
-    observed.instances.some(
-      (instance) =>
-        instance.path === selection.sourcePath &&
-        (instance.git.repository !== undefined || !isSetupProjectionTarget(instance)),
-    ),
-  );
-  const custodySelections = localCustodySelections.filter(
-    (selection) =>
-      !repositorySelections.includes(selection) && selection.duplicateAction !== "retain-only",
-  );
-  const reconnectSelections = existingBindingSelections.filter(
-    (selection) => selection.duplicateAction !== "retain-only",
-  );
-  const planLines = [
-    ...(persistRoots ? [`Save discovery roots: ${displayRoots}`] : []),
-    ...repositoryDecisions.map(
-      (decision) =>
-        `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${displayPath(decision.path)}`,
-    ),
-    ...(retainedSourceSelections.length && !observed.machineConfig.machineId
-      ? ["Create this machine's stable Library identity"]
-      : []),
-    ...(retainedBySource.length
-      ? [
-          `Import installed skills.sh Collections into the SKIT Library: ${retainedBySource.length}`,
-          ...retainedBySource.flatMap(({ source, names }) => [
-            `  ${source.source} · observed lock ${source.lockContentHash.slice(0, 14)} · ${names.length} skill${names.length === 1 ? "" : "s"}`,
-            ...(names.length <= 5 ? [`    ${names.join(", ")}`] : []),
-          ]),
-        ]
-      : []),
-    ...(reconnectSelections.length
-      ? [
-          `Reconnect existing Library matches: ${reconnectSelections.length}`,
-          ...reconnectSelections
-            .slice(0, 5)
-            .map(({ name, sourcePath }) => `  ${name} · ${displayPath(sourcePath)}`),
-          ...(reconnectSelections.length > 5
-            ? [`  … and ${reconnectSelections.length - 5} more`]
-            : []),
-        ]
-      : []),
-    ...(localCustodySelections.length
-      ? [
-          `Add to Library: ${localCustodySelections.length}`,
-          ...localCustodySelections
-            .slice(0, 5)
-            .map((selection) => `  ${selection.name} · ${displayPath(selection.sourcePath)}`),
-          ...(localCustodySelections.length > 5
-            ? [`  … and ${localCustodySelections.length - 5} more`]
-            : []),
-        ]
-      : []),
-    ...setupDuplicatePlanLines(decisions),
-    ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
-    ...localCustodySelections.flatMap((selection) => {
-      const candidate = observed.onboarding.candidates.find((item) =>
-        item.paths.includes(selection.sourcePath),
-      );
-      return candidate?.action === "blocked" && candidate.reason === "divergent-copies"
-        ? [
-            `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
-            "  Other copies stay in place unless explicitly marked Remove.",
-          ]
-        : [];
-    }),
-    ...(removalPlan.entries.length
-      ? [
-          `Remove installed copies: ${removalPlan.entries.length}`,
-          ...removalPlan.entries.map(
-            (entry) =>
-              `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
-          ),
-          `Recovery folder: ${removalPlan.recoveryDirectory}`,
-          "Library entries and source files outside these locations stay in place.",
-        ]
-      : []),
-    ...(repositorySelections.length
-      ? [
-          "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
-        ]
-      : []),
-  ];
-  yield* renderer.step(steps.step("confirm"), planLines.join("\n"));
-  const approved = yield* prompter.confirm(setupPrompts.confirm);
-  if (!approved) {
+  const prompter = yield* Prompter;
+  if (!(yield* prompter.confirm(setupPrompts.confirm))) {
     yield* renderer.note("No changes were applied.", "Setup cancelled");
     return observed;
   }
-  const localCustody = input.localCustody;
-  const completed = yield* withLibraryWriter(
-    Effect.gen(function* () {
-      observed = yield* renderer.withStatus(
-        "Revalidating the approved setup plan",
-        revalidateSetupPlan(setupOptions, observed.onboarding.planId),
-      );
-      if (removalPlan.entries.length) {
-        yield* renderer.withStatus(
-          `Removing ${removalPlan.entries.length} installed cop${removalPlan.entries.length === 1 ? "y" : "ies"}`,
-          applySetupRemovals(removalPlan),
-        );
-        yield* renderer.note(
-          `Removed installed locations are saved at ${removalPlan.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
-          "Removed copies saved",
-        );
-      }
-      if (
-        (retainedSourceSelections.length || localCustodySelections.length) &&
-        !observed.machineConfig.machineId
-      )
-        observed = yield* renderer.withStatus(
-          "Creating this machine's Library identity",
-          runSetup({ ...setupOptions, persistRoots: true }),
-        );
-      if (retainedSourceSelections.length) {
-        const retainedSkillCount = retainedBySource.reduce(
-          (count, item) => count + item.names.length,
-          0,
-        );
-        yield* renderer.withStatus(
-          `Importing ${retainedBySource.length} installed Collection${retainedBySource.length === 1 ? "" : "s"} (${retainedSkillCount} Skill${retainedSkillCount === 1 ? "" : "s"})`,
-          applySetupObservedCollections(
-            { setup: setupOptions, retention: localCustody.acquisition },
-            observed,
-            retainedSourceSelections,
-          ),
-        );
-      }
-      if (existingBindingSelections.length) {
-        observed = yield* observe(setupOptions);
-        const applied = yield* renderer.withStatus(
-          reconnectSelections.length
-            ? `Reconnecting ${reconnectSelections.length} existing Library match${reconnectSelections.length === 1 ? "" : "es"}`
-            : "Keeping existing Library matches without enabling",
-          applySetupExistingBindings(
-            { setup: setupOptions, bindings: localCustody.bindings },
-            observed.onboarding.planId,
-            existingBindingSelections,
-          ),
-        );
-        yield* renderSetupAliasRecovery(applied);
-      }
-      if (localCustodySelections.length) {
-        observed = yield* observe(setupOptions);
-        const names =
-          localCustodySelections.length <= 5
-            ? `: ${localCustodySelections.map((selection) => selection.name).join(", ")}`
-            : "";
-        const applied = yield* renderer.withStatus(
-          `Taking custody of ${localCustodySelections.length} local Skill${localCustodySelections.length === 1 ? "" : "s"}${names}`,
-          applySetupLocalCustody(
-            { setup: setupOptions, adoption: localCustody },
-            observed.onboarding.planId,
-            localCustodySelections,
-          ),
-        );
-        yield* renderSetupAliasRecovery(applied);
-      }
-      if (
-        retainedSourceSelections.length &&
-        !persistRoots &&
-        !existingBindingSelections.length &&
-        !localCustodySelections.length &&
-        !removalPlan.entries.length
-      ) {
-        // The import checked the staged bytes and the saved Library Versions. Interactive setup does
-        // not render this pre-apply observation, so a global rescan adds no user-visible result.
-        yield* renderer.note("Selected setup changes were applied.", "Setup complete");
-        return observed;
-      }
-      const refreshed = yield* renderer.withStatus(
-        "Verifying the completed setup",
-        runSetup({ ...setupOptions, persistRoots }),
-      );
-      yield* renderer.note("Selected setup changes were applied.", "Setup complete");
-      return refreshed;
-    }),
+  const applied = yield* applySetupPlan(
+    { adoption: input.localCustody, withStatus: renderer.withStatus },
+    approval,
   );
+  yield* renderSetupAliasRecovery(applied);
+  if (approval.removals.entries.length)
+    yield* renderer.note(
+      `Removed installed locations are saved at ${approval.removals.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
+      "Removed copies saved",
+    );
+  yield* renderer.note("Selected setup changes were applied.", "Setup complete");
   yield* offerSkillsShUpdateCheck();
-  return completed;
+  return applied.observed;
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {

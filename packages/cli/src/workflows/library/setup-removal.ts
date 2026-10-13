@@ -97,7 +97,7 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
   return { recoveryDirectory, entries };
 });
 
-/** The caller revalidates the entire setup observation immediately before applying this plan. */
+/** Check every entry is still the approved file before moving any; the caller applies this last. */
 export const applySetupRemovals = Effect.fn("Setup.applyRemovals")(function* (
   plan: Effect.Success<ReturnType<typeof planSetupRemovals>>,
 ) {

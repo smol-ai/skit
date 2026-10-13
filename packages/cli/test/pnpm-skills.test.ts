@@ -386,7 +386,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
       home.owned(
         applySetupLocalCustody(
           { setup: options, adoption: { acquisition: home.addOptions, bindings: home.bindings } },
-          observed.onboarding.planId,
+          observed,
           [{ name: "demo-guide", sourcePath: f.skill }],
         ),
       ),

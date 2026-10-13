@@ -148,8 +148,8 @@ for (const skillCount of [1, 12]) {
           "Observing local skills",
           "Observing local skills",
           "Revalidating the approved setup plan",
+          "Saving this machine's discovery roots",
           `Importing 1 installed Collection (${skillCount} Skill${skillCount === 1 ? "" : "s"})`,
-          "Verifying the completed setup",
         ]);
         const sourcePicker = (yield* interaction.prompts).find(
           (prompt) => prompt.message === setupPrompts.collections,
