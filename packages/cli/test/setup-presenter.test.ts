@@ -7,6 +7,7 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core";
 import { renderContract } from "../src/presentation/contract-presenters.js";
+import { result } from "../src/handlers/contracts.js";
 import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
@@ -155,8 +156,7 @@ it("separates installed, repository-authored, and loose skills", () => {
   const managedSkillId = makeSkillId();
   const managedSkillVersionId = makeSkillVersionId();
   const output = renderContract(
-    "setup",
-    {
+    result("setup", {
       machineConfig: {
         path: "/home/.skit/machine.json",
         repositoryRoots: ["/work"],
@@ -315,7 +315,7 @@ it("separates installed, repository-authored, and loose skills", () => {
       ],
       brokenLinks: [],
       suppressed: [],
-    },
+    }),
     { color: false, detail: "summary" },
   );
 
@@ -367,8 +367,7 @@ it("rolls up collections with more than five skill names", () => {
     ],
   }));
   const output = renderContract(
-    "setup",
-    {
+    result("setup", {
       machineConfig: {
         path: "/home/.skit/machine.json",
         repositoryRoots: ["/work"],
@@ -392,7 +391,7 @@ it("rolls up collections with more than five skill names", () => {
       instances,
       brokenLinks: [],
       suppressed: [],
-    },
+    }),
     { color: false, detail: "summary" },
   );
 
@@ -405,8 +404,7 @@ it("presents authored SKITs without treating their source skills as inferred col
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const output = renderContract(
-    "setup",
-    {
+    result("setup", {
       machineConfig: {
         path: "/home/.skit/machine.json",
         repositoryRoots: ["/work"],
@@ -469,7 +467,7 @@ it("presents authored SKITs without treating their source skills as inferred col
       ],
       brokenLinks: [],
       suppressed: [],
-    },
+    }),
     { color: false, detail: "summary" },
   );
 

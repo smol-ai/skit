@@ -10,6 +10,7 @@ import {
 import { journeyStories } from "../src/storybook/journey-stories.js";
 import { renderJourney } from "../src/storybook/journey-runner.js";
 import { OutputStory, outputStories, outputStoryKey } from "../src/storybook/output-stories.js";
+import { outputContracts } from "../src/commands/output-contracts.js";
 
 describe("CLI storybook catalogs", () => {
   it.effect("has unique output story keys and renders every story", () =>
@@ -36,6 +37,15 @@ describe("CLI storybook catalogs", () => {
           });
         }
       }
+    }),
+  );
+
+  it.effect("has an output story for every contract", () =>
+    Effect.sync(() => {
+      const covered = new Set(
+        outputStories.filter(OutputStory.$is("Result")).map((story) => story.result.contract),
+      );
+      expect(covered).toEqual(new Set(Object.keys(outputContracts)));
     }),
   );
 

@@ -5,6 +5,7 @@ import {
   type ContractDataForId,
   type ContractKey,
 } from "../commands/output-contracts.js";
+import type { CommandResult } from "../commands/types.js";
 import { basename, dirname, relative, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
 import { harnessLabel } from "../harness/catalog.js";
@@ -942,9 +943,8 @@ const contractPresenters: ContractPresenters = {
 };
 
 export function renderContract<K extends ContractKey>(
-  contract: K,
-  data: ContractData<K>,
+  result: CommandResult<K>,
   context: RenderContext,
 ): string {
-  return contractPresenters[contract](data, context);
+  return contractPresenters[result.contract](result.data, context);
 }
