@@ -5,11 +5,7 @@
 export * from "./build-info.js";
 export * from "./distribution/api-contracts.js";
 export * from "./library/library-contracts.js";
-export {
-  LibraryHead,
-  LibraryManifestAnyVersion,
-  LibraryReadResponse,
-} from "./library/library-contracts-v4.js";
+export { StoredLibraryManifest } from "./library/store/stored-manifest.js";
 export * from "./library/entity-ids.js";
 export * from "./library/snapshot-archive-universal.js";
 export * from "./auditing/skill-audit.js";

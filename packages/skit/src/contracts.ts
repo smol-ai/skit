@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 import {
   SKILL_EXAMPLE_SCHEMA_VERSION,
   SKIT_DESCRIPTOR_VERSION,
@@ -8,16 +8,18 @@ import {
   type SkitDescriptor,
 } from "./schemas.js";
 import {
+  SkillsShProvenanceObservation,
+  SkillAssessmentAcceptance,
+} from "./library/store/state-schema.js";
+import {
   Digest,
   HarnessName,
   InvocationPolicy,
   ProjectionTarget,
   RecordedProjectionTarget,
-  SkillsShProvenanceObservation,
   SkitBindingScope,
-  SkillAssessmentAcceptance,
   SkitValidationDiagnostic,
-} from "./library/store/state-schema.js";
+} from "./vocabulary.js";
 import { CollectionId, ProjectionId, SkillId, SkillVersionId } from "./library/entity-ids.js";
 export {
   Digest,
@@ -96,7 +98,7 @@ export interface SkitReleaseIdentity {
   }>;
 }
 
-export const OwnershipMarkerV2 = Schema.Struct({
+const OwnershipMarkerV2 = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   projectionPolicyVersion: Schema.Literal(1),
   projection_id: ProjectionId,
@@ -106,9 +108,8 @@ export const OwnershipMarkerV2 = Schema.Struct({
   expected_digest: Digest,
   harness: HarnessName,
 });
-export type OwnershipMarkerV2 = typeof OwnershipMarkerV2.Type;
 
-export const OwnershipMarkerV3 = Schema.Struct({
+const OwnershipMarkerV3 = Schema.Struct({
   schemaVersion: Schema.Literal(3),
   projectionPolicyVersion: Schema.Literal(1),
   projection_id: ProjectionId,
@@ -117,9 +118,8 @@ export const OwnershipMarkerV3 = Schema.Struct({
   expected_digest: Digest,
   harness: HarnessName,
 });
-export type OwnershipMarkerV3 = typeof OwnershipMarkerV3.Type;
 
-export const OwnershipMarkerV4 = Schema.Struct({
+export const OwnershipMarker = Schema.Struct({
   schemaVersion: Schema.Literal(4),
   projectionPolicyVersion: Schema.Literal(1),
   projection_id: ProjectionId,
@@ -127,11 +127,38 @@ export const OwnershipMarkerV4 = Schema.Struct({
   skill_version_id: SkillVersionId,
   expected_digest: Digest,
 });
-export type OwnershipMarkerV4 = typeof OwnershipMarkerV4.Type;
-
-/** V2 and V3 remain readable because ownership markers live outside versioned Library state. */
-export const OwnershipMarker = OwnershipMarkerV4;
 export type OwnershipMarker = typeof OwnershipMarker.Type;
+
+// Older markers named the Harness a copy was written for; custody never depended on it.
+const OwnershipMarkerFromV3 = OwnershipMarkerV3.pipe(
+  Schema.decodeTo(OwnershipMarker, {
+    decode: SchemaGetter.transform(({ harness: _harness, ...marker }) => ({
+      ...marker,
+      schemaVersion: 4 as const,
+    })),
+    encode: SchemaGetter.forbidden(() => "v3 ownership markers are decode-only"),
+  }),
+);
+const OwnershipMarkerFromV2 = OwnershipMarkerV2.pipe(
+  Schema.decodeTo(OwnershipMarkerFromV3, {
+    decode: SchemaGetter.transform(({ collection_id: _collectionId, ...marker }) => ({
+      ...marker,
+      schemaVersion: 3 as const,
+    })),
+    encode: SchemaGetter.forbidden(() => "v2 ownership markers are decode-only"),
+  }),
+);
+
+/**
+ * A marker as written by any SKIT since v2, brought to the current one through the linear
+ * v2 → v3 → v4 chain. Markers live in Projections, outside versioned Library state, so every
+ * released version stays readable.
+ */
+export const StoredOwnershipMarker = Schema.Union([
+  OwnershipMarker,
+  OwnershipMarkerFromV3,
+  OwnershipMarkerFromV2,
+]);
 
 export const SkillAuditFinding = Schema.Struct({
   fingerprint: Schema.optionalKey(Digest),

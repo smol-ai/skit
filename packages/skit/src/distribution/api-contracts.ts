@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Digest } from "../library/store/state-schema.js";
+import { Digest } from "../vocabulary.js";
 import {
   apiSemverPattern,
   parseContractEffect,

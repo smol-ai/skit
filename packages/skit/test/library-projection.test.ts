@@ -16,7 +16,7 @@ import {
   retainObservedCollectionEffect,
 } from "../src/library/observed-import.js";
 import type { LibraryState } from "../src/library/library-state.js";
-import { Digest } from "../src/library/store/state-schema.js";
+import { Digest } from "../src/vocabulary.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";

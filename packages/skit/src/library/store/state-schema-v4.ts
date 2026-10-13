@@ -1,14 +1,5 @@
-import { Schema } from "effect";
-import {
-  AcquisitionV4,
-  BindingV4,
-  CollectionV4,
-  RetainedCopyV4,
-  SkillV4,
-  migrateLibraryEntitiesFromV4,
-} from "../library-contracts-v4.js";
+import { Schema, SchemaGetter } from "effect";
 import { AbsoluteDevicePath } from "../library-state.js";
-import type { LibraryStateV5 } from "./state-schema-v5.js";
 import {
   AdoptionReceiptId,
   CollectionId,
@@ -17,13 +8,17 @@ import {
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
+import { Digest, HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
-  Digest,
-  HarnessInstallStatus,
-  HarnessName,
-  InvocationPolicy,
-  LibraryDeviceStateFields,
-} from "./state-schema.js";
+  AcquisitionV4,
+  BindingV4,
+  CollectionV4,
+  RetainedCopyV4,
+  SkillV4,
+  migrateLibraryEntitiesFromV4,
+} from "./manifest-v4.js";
+import { HarnessInstallStatus, LibraryDeviceStateFields } from "./state-schema.js";
+import { LibraryStateFromV5, type LibraryStateV5 } from "./state-schema-v5.js";
 
 const SkillAssessmentAcceptanceV4 = Schema.Struct({
   fingerprint: Digest,
@@ -89,7 +84,7 @@ export const LibraryStateV4 = Schema.Struct({
 });
 export type LibraryStateV4 = typeof LibraryStateV4.Type;
 
-export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryStateV5 => {
+const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryStateV5 => {
   const migrated = migrateLibraryEntitiesFromV4({
     collections: state.collections,
     skills: state.skills,
@@ -161,3 +156,12 @@ export const migrateLibraryStateFromV4 = (state: LibraryStateV4): LibraryStateV5
     projections: projections.map(({ collection_id: _collectionId, ...projection }) => projection),
   };
 };
+
+/** v4 → v5: legacy well-known selections become Sources and duplicate upstreams merge. */
+export const LibraryStateFromV4 = Schema.Unknown.pipe(
+  Schema.refine(Schema.is(LibraryStateV4)),
+  Schema.decodeTo(LibraryStateFromV5, {
+    decode: SchemaGetter.transform(migrateLibraryStateFromV4),
+    encode: SchemaGetter.forbidden(() => "v4 Library state is decode-only"),
+  }),
+);

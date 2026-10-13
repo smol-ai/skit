@@ -8,7 +8,7 @@ import {
   SkillId,
   SkillVersionId,
 } from "./entity-ids.js";
-import { Digest } from "./store/state-schema.js";
+import { Digest } from "../vocabulary.js";
 
 export const SourceRelativePath = Schema.String.check(
   Schema.makeFilter(

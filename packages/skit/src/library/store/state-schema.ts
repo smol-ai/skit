@@ -7,29 +7,12 @@ import {
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
+import { Digest, HarnessName } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
 // the schema records exactly which parts of a snapshot the reconciler is allowed to touch.
 // Schema.optional retains existing candidate undefined values; JSON omits those keys.
-export const Digest = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
-export type Digest = typeof Digest.Type;
-export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
-export type HarnessName = typeof HarnessName.Type;
-/**
- * Where SKIT materializes Skills. `agents` is the shared `.agents/skills` root read by Codex,
- * OpenCode, Devin, Cursor, and Pi; `claude` exists because Claude Code does not read it.
- */
-export const ProjectionTarget = Schema.Literals(["agents", "claude"]);
-export type ProjectionTarget = typeof ProjectionTarget.Type;
-/**
- * A recorded Projection's target. `legacy` marks a copy at a former per-Harness root; it is
- * never desired, so reconciliation retires it under the ordinary custody checks.
- */
-export const RecordedProjectionTarget = Schema.Literals(["agents", "claude", "legacy"]);
-export type RecordedProjectionTarget = typeof RecordedProjectionTarget.Type;
-export const InvocationPolicy = Schema.Literals(["explicit", "implicit", "host-policy"]);
-export type InvocationPolicy = typeof InvocationPolicy.Type;
 export const InventoryScanIssue = Schema.Union([
   Schema.Struct({
     path: Schema.String,
@@ -72,20 +55,6 @@ export const SkillsShProvenanceObservation = Schema.Struct({
   originalEntry: Schema.JsonObject,
 });
 export type SkillsShProvenanceObservation = typeof SkillsShProvenanceObservation.Type;
-
-export const SkitBindingScope = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("global") }),
-  Schema.Struct({ kind: Schema.Literal("repository"), root: Schema.String }),
-]);
-export type SkitBindingScope = typeof SkitBindingScope.Type;
-
-export const SkitValidationDiagnostic = Schema.Struct({
-  code: Schema.String,
-  severity: Schema.Literals(["info", "warning", "error"]),
-  message: Schema.String,
-  path: Schema.optionalKey(Schema.String),
-});
-export type SkitValidationDiagnostic = typeof SkitValidationDiagnostic.Type;
 export const SkillAssessmentAcceptance = Schema.Struct({
   fingerprint: Digest,
   artifactContentDigest: Digest,

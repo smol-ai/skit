@@ -1,16 +1,17 @@
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 import { SkillId } from "../entity-ids.js";
 import { RetainedCopy } from "../library-contracts.js";
+import { AbsoluteDevicePath } from "../library-state.js";
+import { HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
   AcquisitionV5,
   BindingV5,
   CollectionV5,
   migrateLibraryEntitiesFromV5,
   SkillV5,
-} from "../library-contracts-v5.js";
-import { AbsoluteDevicePath } from "../library-state.js";
-import { HarnessName, InvocationPolicy, LibraryDeviceStateFields } from "./state-schema.js";
-import { LibraryStateV6 } from "./state-schema-v6.js";
+} from "./manifest-v5.js";
+import { LibraryDeviceStateFields } from "./state-schema.js";
+import { LibraryStateFromV6, LibraryStateV6 } from "./state-schema-v6.js";
 
 const DeviceBindingV5 = Schema.Struct({
   ...BindingV5.fields,
@@ -36,7 +37,7 @@ export const LibraryStateV5 = Schema.Struct({
 });
 export type LibraryStateV5 = typeof LibraryStateV5.Type;
 
-export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryStateV6 => {
+const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryStateV6 => {
   const {
     schemaVersion: _legacyVersion,
     collections: _collections,
@@ -67,3 +68,12 @@ export const migrateLibraryStateFromV5 = (state: LibraryStateV5): LibraryStateV6
     projections: [...projections],
   };
 };
+
+/** v5 → v6: entities take the current model and Bindings become entries. */
+export const LibraryStateFromV5 = Schema.Unknown.pipe(
+  Schema.refine(Schema.is(LibraryStateV5)),
+  Schema.decodeTo(LibraryStateFromV6, {
+    decode: SchemaGetter.transform(migrateLibraryStateFromV5),
+    encode: SchemaGetter.forbidden(() => "v5 Library state is decode-only"),
+  }),
+);

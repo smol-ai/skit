@@ -2,9 +2,8 @@ import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import {
   LibraryManifest,
-  LibraryManifestAnyVersion,
-  LibraryHead,
   LibraryReceipt,
+  StoredLibraryManifest,
 } from "@smolai/skit-core/universal/consumer";
 import type { Principal } from "../auth/authentication.js";
 import { DatabaseError, databaseError } from "../platform/cloudflare.js";
@@ -13,7 +12,7 @@ import { findOwnedLibrary } from "./owner.js";
 
 const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
 const CountRow = Schema.Struct({ n: Schema.Number });
-const StoredManifest = Schema.fromJsonString(LibraryManifestAnyVersion);
+const StoredManifest = Schema.fromJsonString(StoredLibraryManifest);
 
 export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(
   "Library.LibraryRevisionConflict",
@@ -30,7 +29,7 @@ export class LibraryRevisionInvalid extends Schema.TaggedError<LibraryRevisionIn
 export interface LibrarySyncService {
   readonly read: (
     principal: Principal,
-  ) => Effect.Effect<LibraryHead | undefined, DatabaseError | LibraryRevisionInvalid>;
+  ) => Effect.Effect<LibraryReceipt | undefined, DatabaseError | LibraryRevisionInvalid>;
   readonly write: (
     principal: Principal,
     expected: string | null,

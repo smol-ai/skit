@@ -13,7 +13,11 @@ import {
   makeSkillVersionId,
   MachineId,
 } from "./entity-ids.js";
-import { MachineDocumentJson, MachineDocumentV4 } from "./machine-document.js";
+import {
+  currentMachineDocument,
+  MachineDocumentJson,
+  MachineDocumentV4,
+} from "./machine-document.js";
 import { acquisitionObservations } from "./acquisition-evidence.js";
 import {
   Acquisition,
@@ -37,7 +41,8 @@ import {
   sourceIdentityFromSource,
   type SourceDeclaration,
 } from "./source-identity.js";
-import type { Digest, SkillsShProvenanceObservation } from "./store/state-schema.js";
+import type { SkillsShProvenanceObservation } from "./store/state-schema.js";
+import type { Digest } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(function* (
@@ -58,26 +63,28 @@ const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(functio
     const machineId = makeMachineId();
     const upgraded = yield* Schema.encodeEffect(
       Schema.fromJsonString(MachineDocumentV4, { space: 2 }),
-    )({
-      schemaVersion: 4,
-      machineId,
-      displayName: document.displayName ?? "SKIT machine",
-      discoveryRoots: document.discoveryRoots,
-      repositories: document.repositories,
-    });
+    )(
+      currentMachineDocument({
+        machineId,
+        displayName: document.displayName ?? "SKIT machine",
+        discoveryRoots: document.discoveryRoots,
+        repositories: document.repositories,
+      }),
+    );
     yield* writeRawAtomicEffect(path, `${upgraded}\n`);
     return machineId;
   }
   const machineId = makeMachineId();
   const created = yield* Schema.encodeEffect(
     Schema.fromJsonString(MachineDocumentV4, { space: 2 }),
-  )({
-    schemaVersion: 4,
-    machineId,
-    displayName: "SKIT machine",
-    discoveryRoots: [],
-    repositories: [],
-  });
+  )(
+    currentMachineDocument({
+      machineId,
+      displayName: "SKIT machine",
+      discoveryRoots: [],
+      repositories: [],
+    }),
+  );
   yield* writeRawAtomicEffect(path, `${created}\n`);
   return machineId;
 });

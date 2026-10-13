@@ -5,7 +5,7 @@ import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import type { SkillId } from "../entity-ids.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { InvocationPolicy } from "../store/state-schema.js";
+import type { InvocationPolicy } from "../../vocabulary.js";
 import type { BindingEntry } from "../library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 

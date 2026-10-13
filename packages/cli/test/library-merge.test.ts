@@ -8,7 +8,6 @@ import {
   makeSkillId,
   makeSkillVersionId,
   LibraryManifest,
-  LibraryManifestAnyVersion,
   LibraryState,
   makeProjectionId,
   restoreCustodyConflicts,
@@ -373,36 +372,6 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         action: "add",
         entries_added: [{ kind: "skill", label: "review" }],
         entries_removed: [],
-      },
-    ]);
-  }),
-);
-
-it.effect("merges a v6 manifest's per-Harness Bindings into one global Binding", () =>
-  Effect.gen(function* () {
-    const v6 = {
-      ...manifest(),
-      schema: "skit.library.v6",
-      bindings: [
-        {
-          harness: "codex",
-          scope: { kind: "global" },
-          entries: [{ kind: "collection", collection_id: collectionId }],
-        },
-        {
-          harness: "claude-code",
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: skillId }],
-        },
-      ],
-    };
-    const decoded = yield* Schema.decodeUnknownEffect(LibraryManifestAnyVersion)(v6);
-    assert.strictEqual(decoded.schema, "skit.library.v7");
-    // The Skill entry is covered by its whole-Collection entry, so only the Collection remains.
-    assert.deepEqual(decoded.bindings, [
-      {
-        scope: { kind: "global" },
-        entries: [{ kind: "collection", collection_id: collectionId }],
       },
     ]);
   }),

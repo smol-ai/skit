@@ -1,27 +1,18 @@
 import { Schema, SchemaGetter } from "effect";
-import { canonicalJson } from "../shared/json.js";
-import { CollectionId, SkillId, SkillVersionId } from "./entity-ids.js";
-import {
-  CollectionRelativePath,
-  CURRENT_PORTABLE_LIBRARY_SCHEMA,
-  LibraryManifest,
-  librarySnapshotDigests,
-  mergeGlobalBindings,
-  RetainedCopy,
-  SourceRelativePath,
-} from "./library-contracts.js";
+import { canonicalJson } from "../../shared/json.js";
+import { CollectionId, SkillId, SkillVersionId } from "../entity-ids.js";
+import { CollectionRelativePath, RetainedCopy, SourceRelativePath } from "../library-contracts.js";
 import {
   AcquisitionV5,
   BindingV5,
   type CollectionV5,
   LibraryManifestFromV5,
-  migrateLibraryEntitiesFromV5,
+  type LibraryManifestV5,
   type SkillV5,
   SkillVersionV5,
   UpstreamV5,
-} from "./library-contracts-v5.js";
-import { LibraryManifestFromV6 } from "./library-contracts-v6.js";
-import { Digest, HarnessName } from "./store/state-schema.js";
+} from "./manifest-v5.js";
+import { Digest, HarnessName } from "../../vocabulary.js";
 
 export const RetainedCopyV4 = Schema.Struct({
   ...RetainedCopy.fields,
@@ -248,47 +239,23 @@ export const migrateLibraryEntitiesFromV4 = (input: {
   return { collections, skills, acquisitions, bindings: [...bindingsByHarness.values()] };
 };
 
-const LibraryManifestFromV4 = LibraryManifestV4.pipe(
-  Schema.decodeTo(LibraryManifest, {
-    decode: SchemaGetter.transform((manifest) => {
-      const v5 = migrateLibraryEntitiesFromV4(manifest);
-      const migrated = migrateLibraryEntitiesFromV5({
-        ...v5,
+/** v4 → v5: legacy well-known selections become Sources, duplicate upstreams merge. */
+export const LibraryManifestFromV4 = LibraryManifestV4.pipe(
+  Schema.decodeTo(LibraryManifestFromV5, {
+    decode: SchemaGetter.transform((manifest): LibraryManifestV5 => {
+      const migrated = migrateLibraryEntitiesFromV4(manifest);
+      return {
+        schema: "skit.library.v5",
+        collections: migrated.collections,
+        skills: migrated.skills,
         retained_copies: manifest.retained_copies.map(
           ({ v3_normalized_tree: _legacyNormalizedTree, ...copy }) => copy,
         ),
-      });
-      return {
-        schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
-        collections: migrated.collections,
-        skills: migrated.skills,
-        retained_copies: migrated.retained_copies,
         acquisitions: migrated.acquisitions,
-        snapshot_digests: librarySnapshotDigests(migrated),
-        bindings: mergeGlobalBindings(
-          migrated,
-          v5.bindings.map((binding) => ({ entries: migrated.entries(binding.skills) })),
-        ),
+        snapshot_digests: manifest.snapshot_digests,
+        bindings: migrated.bindings,
       };
     }),
     encode: SchemaGetter.forbidden(() => "v4 portable Library manifests are decode-only"),
   }),
 );
-
-/** Accept every supported wire version and expose only the current manifest model. */
-// Decode the legacy discriminator before the structurally overlapping current manifest so the
-// v4 transformation and its post-migration checks run as one branch.
-export const LibraryManifestAnyVersion = Schema.Union([
-  LibraryManifestFromV4,
-  LibraryManifestFromV5,
-  LibraryManifestFromV6,
-  LibraryManifest,
-]);
-
-export const LibraryHead = Schema.Struct({
-  library_id: Schema.String,
-  revision_id: Schema.String,
-  manifest: LibraryManifestAnyVersion,
-});
-export interface LibraryHead extends Schema.Schema.Type<typeof LibraryHead> {}
-export const LibraryReadResponse = Schema.Struct({ library: LibraryHead });

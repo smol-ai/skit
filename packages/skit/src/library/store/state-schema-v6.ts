@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
 import { resolve } from "node:path";
 import { SkillId } from "../entity-ids.js";
 import {
@@ -10,19 +10,11 @@ import {
   RetainedCopy,
   Skill,
 } from "../library-contracts.js";
-import {
-  AbsoluteDevicePath,
-  currentLibraryState,
-  ManagedProjection,
-  type LibraryState,
-} from "../library-state.js";
-import { BindingV6 } from "../library-contracts-v6.js";
-import {
-  HarnessName,
-  InvocationPolicy,
-  LibraryDeviceStateFields,
-  type RecordedProjectionTarget,
-} from "./state-schema.js";
+import { AbsoluteDevicePath, ManagedProjection } from "../library-state.js";
+import { HarnessName, InvocationPolicy, type RecordedProjectionTarget } from "../../vocabulary.js";
+import { BindingV6 } from "./manifest-v6.js";
+import { LibraryDeviceStateFields } from "./state-schema.js";
+import { LibraryStateFromV7, type LibraryStateV7 } from "./state-schema-v7.js";
 
 const DeviceBindingV6 = Schema.Struct({
   ...BindingV6.fields,
@@ -81,7 +73,7 @@ const mergeScopeBindings = (
   return { entries, ...(Object.keys(policies).length ? { invocation_policies: policies } : {}) };
 };
 
-export const migrateLibraryStateFromV6 = (state: LibraryStateV6): LibraryState => {
+const migrateLibraryStateFromV6 = (state: LibraryStateV6): LibraryStateV7 => {
   const { schemaVersion: _legacyVersion, global_bindings, local_bindings, ...fields } = state;
   const global = mergeScopeBindings(state, global_bindings);
   const roots = new Map<string, (typeof local_bindings)[number][]>();
@@ -89,8 +81,9 @@ export const migrateLibraryStateFromV6 = (state: LibraryStateV6): LibraryState =
     const root = resolve(binding.scope.root);
     roots.set(root, [...(roots.get(root) ?? []), binding]);
   }
-  return currentLibraryState({
+  return {
     ...fields,
+    schemaVersion: 7,
     collections: [...state.collections],
     skills: [...state.skills],
     retained_copies: [...state.retained_copies],
@@ -106,5 +99,14 @@ export const migrateLibraryStateFromV6 = (state: LibraryStateV6): LibraryState =
       ...projection,
       target: projectionTargets[harness],
     })),
-  });
+  };
 };
+
+/** v6 → v7: per-Harness Bindings merge per Scope and Projections record a target. */
+export const LibraryStateFromV6 = Schema.Unknown.pipe(
+  Schema.refine(Schema.is(LibraryStateV6)),
+  Schema.decodeTo(LibraryStateFromV7, {
+    decode: SchemaGetter.transform(migrateLibraryStateFromV6),
+    encode: SchemaGetter.forbidden(() => "v6 Library state is decode-only"),
+  }),
+);

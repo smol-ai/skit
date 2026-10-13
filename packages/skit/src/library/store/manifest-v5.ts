@@ -6,18 +6,15 @@ import {
   RetainedCopyId,
   SkillId,
   SkillVersionId,
-} from "./entity-ids.js";
+} from "../entity-ids.js";
 import {
   type Acquisition,
   type BindingEntry,
   type Collection,
   CollectionRelativePath,
   currentCollectionSkills,
-  CURRENT_PORTABLE_LIBRARY_SCHEMA,
   HistoricalLocator,
-  LibraryManifest,
   librarySnapshotDigests,
-  mergeGlobalBindings,
   MaterializationProfile,
   RetainedCopy,
   type Skill,
@@ -25,8 +22,9 @@ import {
   SourceIdentity,
   SourceRelativePath,
   SourceTracking,
-} from "./library-contracts.js";
-import { Digest, HarnessName } from "./store/state-schema.js";
+} from "../library-contracts.js";
+import { Digest, HarnessName } from "../../vocabulary.js";
+import { LibraryManifestFromV6, type LibraryManifestV6 } from "./manifest-v6.js";
 
 /** Frozen `skit.library.v5` entities, decoded only to migrate them to the current model. */
 export const AcquisitionSelectionV5 = Schema.Union([
@@ -224,21 +222,23 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
   return { ...migrated, entries };
 };
 
+/** v5 → v6: entities take the current model; each per-Harness Binding becomes entries. */
 export const LibraryManifestFromV5 = LibraryManifestV5.pipe(
-  Schema.decodeTo(LibraryManifest, {
-    decode: SchemaGetter.transform((manifest) => {
+  Schema.decodeTo(LibraryManifestFromV6, {
+    decode: SchemaGetter.transform((manifest): LibraryManifestV6 => {
       const migrated = migrateLibraryEntitiesFromV5(manifest);
       return {
-        schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
+        schema: "skit.library.v6",
         collections: migrated.collections,
         skills: migrated.skills,
         retained_copies: migrated.retained_copies,
         acquisitions: migrated.acquisitions,
         snapshot_digests: librarySnapshotDigests(migrated),
-        bindings: mergeGlobalBindings(
-          migrated,
-          manifest.bindings.map((binding) => ({ entries: migrated.entries(binding.skills) })),
-        ),
+        bindings: manifest.bindings.map((binding) => ({
+          harness: binding.harness,
+          scope: binding.scope,
+          entries: migrated.entries(binding.skills),
+        })),
       };
     }),
     encode: SchemaGetter.forbidden(() => "v5 portable Library manifests are decode-only"),
