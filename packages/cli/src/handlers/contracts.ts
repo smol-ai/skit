@@ -1,17 +1,17 @@
 import { Schema } from "effect";
-import { type AnyOutputContract, type ContractDataOf } from "../commands/output-contracts.js";
-import type { CommandResult } from "../commands/types.js";
+import {
+  outputContracts,
+  type ContractData,
+  type ContractKey,
+} from "../commands/output-contracts.js";
+import type { ContractResult } from "../commands/types.js";
 
-export function result<C extends AnyOutputContract>(
-  _command: string,
-  contract: C,
-  data: ContractDataOf<NoInfer<C>>,
+export function result<K extends ContractKey>(
+  contract: K,
+  data: ContractData<NoInfer<K>>,
   exitCode?: number,
-): CommandResult & {
-  readonly schema: C["id"];
-  readonly data: ContractDataOf<C>;
-  readonly encodedData: C["schema"]["Encoded"];
-} {
-  const encodedData = Schema.encodeUnknownSync(contract.schema)(data);
-  return { schema: contract.id, data, encodedData, exitCode };
+): ContractResult<K> {
+  const { id, schema } = outputContracts[contract];
+  const encodedData = Schema.encodeUnknownSync(schema)(data);
+  return { contract, schema: id, data, encodedData, exitCode };
 }

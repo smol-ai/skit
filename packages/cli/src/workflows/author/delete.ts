@@ -171,7 +171,7 @@ export const authorDeleteCliCommand = Command.make(
             home: selectedHome,
             dryRun,
           });
-          yield* renderer.result(result("authorDelete", outputContracts.authorDelete, value));
+          yield* renderer.result(result("authorDelete", value));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

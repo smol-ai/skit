@@ -49,12 +49,7 @@ export const auditCliCommand = Command.make(
         });
         const failed = value.findings.some((finding) => finding.severity === "error");
         yield* renderer.result(
-          result(
-            "audit",
-            outputContracts.experimentalAuditV1Alpha4,
-            value,
-            failed ? 12 : undefined,
-          ),
+          result("experimentalAuditV1Alpha4", value, failed ? 12 : undefined),
           { detail: input.verbose ? "full" : "summary" },
         );
       }),

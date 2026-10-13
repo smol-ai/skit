@@ -16,7 +16,7 @@ export const versionCliCommand = Command.make("version", { json: jsonFlag }, () 
       const checker = yield* ReleaseChecker;
       const update = yield* checker.check(cliBuild, true);
       yield* renderer.result(
-        result("version", outputContracts.versionReport, {
+        result("versionReport", {
           version: cliBuild.version,
           build: cliBuild,
           update,

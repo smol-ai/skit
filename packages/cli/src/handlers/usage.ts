@@ -87,7 +87,7 @@ export const usageCliCommand = Command.make(
             }),
           );
           yield* renderer.result({
-            ...result("usage", outputContracts.usage, report),
+            ...result("usage", report),
             ...(input.details ? { detail: "full" as const } : {}),
           });
         }).pipe(Effect.provide(skillUsageLayer)),

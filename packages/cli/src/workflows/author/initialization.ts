@@ -197,7 +197,7 @@ export const authorInitCliCommand = Command.make(
           ...value,
           library_registration: entry ? ("registered" as const) : ("removed" as const),
         };
-        yield* renderer.result(result("init", outputContracts.init, output));
+        yield* renderer.result(result("init", output));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(

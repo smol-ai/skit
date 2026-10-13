@@ -43,7 +43,6 @@ export function renderOutput(index: number, environment: TerminalEnvironment): s
     Result: ({ result }) => renderResultFrame(result, environment),
     Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
   });
-  if (!frame) return "No presenter registered";
   return [
     frame.stdout && frame.stdout.trimEnd(),
     frame.stderr && `STDERR\n${frame.stderr.trimEnd()}`,

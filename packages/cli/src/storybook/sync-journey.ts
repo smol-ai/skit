@@ -20,7 +20,6 @@ import {
 } from "@smolai/skit-core/universal/api";
 import { librarySyncCommand } from "../handlers/library/sync.js";
 import { result } from "../handlers/contracts.js";
-import { outputContracts } from "../commands/output-contracts.js";
 import { commandFailure } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";
 import { registryHttpLayer } from "../registry/registry-http.js";
@@ -137,7 +136,7 @@ export const syncJourney = (failDownload: boolean) =>
           renderer.failure(commandFailure(cause)).pipe(Effect.andThen(Effect.failCause(cause))),
         ),
       );
-      yield* renderer.result(result("librarySync", outputContracts.librarySync, synced));
+      yield* renderer.result(result("librarySync", synced));
       return "3 Collections · 3 Skills · enabled on the fixture device";
     }),
   ).pipe(Effect.provide(skitLayer));

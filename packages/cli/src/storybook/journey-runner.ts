@@ -39,7 +39,6 @@ function renderEvent(
     StatusEnded: () => "status cleared",
     Result: ({ result }) => {
       const frame = renderResultFrame(result, environment);
-      if (!frame) return `result ${result.schema}`;
       return [frame.stdout, frame.stderr].filter(Boolean).join("\n");
     },
     Failure: ({ failure }) => {

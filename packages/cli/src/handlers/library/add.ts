@@ -69,14 +69,14 @@ export const addCliCommand = Command.make(
             `Inspecting ${selectedSource}`,
             withSelectedRegistry(previewLibrarySourceEffect(selectedSource, requestedVersion)),
           );
-          return yield* renderer.result(result("add", outputContracts.addPreview, value));
+          return yield* renderer.result(result("addPreview", value));
         }
         const retained = yield* renderer.withStatus(
           "Retaining source",
           withSelectedRegistry(addLibrarySourceEffect(selectedSource, requestedVersion)),
         );
         yield* renderer.result(
-          result("add", outputContracts.add, {
+          result("add", {
             ...(retained.collection_id === undefined
               ? {}
               : { collection_id: retained.collection_id }),

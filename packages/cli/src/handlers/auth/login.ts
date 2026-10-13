@@ -108,7 +108,7 @@ export const authLoginCliCommand = Command.make(
             relogin,
             interactive: !jsonRequested() && Boolean(process.stdin.isTTY && process.stderr.isTTY),
           });
-          yield* renderer.result(result("authLogin", outputContracts.authLogin, value));
+          yield* renderer.result(result("authLogin", value));
         }).pipe(Effect.provide(terminalPrompterLayer)),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

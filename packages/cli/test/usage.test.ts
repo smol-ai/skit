@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { commandApplicationLayer } from "../src/application.js";
-import { outputContracts } from "../src/commands/output-contracts.js";
 import { result } from "../src/handlers/contracts.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { renderUsage } from "../src/presentation/usage.js";
@@ -24,7 +23,7 @@ test("presents separate evidence and diagnostics; encodes the public JSON contra
   expect(body).toContain("1 unsupported tool wrappers");
   expect(body).toContain("report is incomplete");
   expect(body).toContain("same invocation");
-  const json = renderResultFrame(result("usage", outputContracts.usage, observedUsageStory), {
+  const json = renderResultFrame(result("usage", observedUsageStory), {
     ...defaultTerminalEnvironment,
     format: "json",
   });
@@ -84,12 +83,12 @@ test("summarizes by name without dumping paths, scan internals, or test-fixture 
   expect(body).not.toContain("bytes read");
   expect(body).toContain("--details");
   const detailed = renderResultFrame(
-    { ...result("usage", outputContracts.usage, report), detail: "full" },
+    { ...result("usage", report), detail: "full" },
     defaultTerminalEnvironment,
   );
   // JSON retains all observations even with the terminal details flag.
   const json = renderResultFrame(
-    { ...result("usage", outputContracts.usage, report), detail: "full" },
+    { ...result("usage", report), detail: "full" },
     { ...defaultTerminalEnvironment, format: "json" },
   );
   expect(JSON.parse(json?.stdout ?? "{}").data.rows).toHaveLength(4);

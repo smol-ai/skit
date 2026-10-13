@@ -10,7 +10,6 @@ import {
 import { journeyStories } from "../src/storybook/journey-stories.js";
 import { renderJourney } from "../src/storybook/journey-runner.js";
 import { OutputStory, outputStories, outputStoryKey } from "../src/storybook/output-stories.js";
-import { outputContracts } from "../src/commands/output-contracts.js";
 
 describe("CLI storybook catalogs", () => {
   it.effect("has unique output story keys and renders every story", () =>
@@ -26,20 +25,15 @@ describe("CLI storybook catalogs", () => {
           "audit/findings-v1alpha4",
         ]),
       );
-      const coveredContracts = new Set(
-        outputStories.filter(OutputStory.$is("Result")).map((story) => story.result.schema),
-      );
-      expect(coveredContracts).toEqual(new Set(Object.values(outputContracts).map(({ id }) => id)));
       for (const story of outputStories) {
         for (const environment of [
           defaultTerminalEnvironment,
           { ...defaultTerminalEnvironment, format: "json" as const, detail: "full" as const },
         ]) {
-          const frame = OutputStory.$match(story, {
+          OutputStory.$match(story, {
             Result: ({ result }) => renderResultFrame(result, environment),
             Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
           });
-          expect(frame).toBeDefined();
         }
       }
     }),

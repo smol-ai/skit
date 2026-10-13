@@ -20,12 +20,7 @@ export const harnessProbeCliCommand = Command.make(
         const probes = yield* probeRequestedHarnessesEffect(Option.getOrUndefined(harness));
         const failed = probes.some((probe) => probe.status === "failed");
         yield* renderer.result(
-          result(
-            "harnessProbe",
-            outputContracts.experimentalHarnessProbe,
-            { probes },
-            failed ? 12 : undefined,
-          ),
+          result("experimentalHarnessProbe", { probes }, failed ? 12 : undefined),
         );
       }),
     ),

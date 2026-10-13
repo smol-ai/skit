@@ -34,12 +34,7 @@ function options(argv: ReadonlyArray<string>): Options {
 
 function storyFrame(story: OutputStory, environment: TerminalEnvironment): TerminalFrame {
   return OutputStory.$match(story, {
-    Result: ({ result }) =>
-      renderResultFrame(result, environment) ?? {
-        stdout: "",
-        stderr: `No presenter registered for ${result.schema}\n`,
-        exitCode: 1,
-      },
+    Result: ({ result }) => renderResultFrame(result, environment),
     Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
   });
 }

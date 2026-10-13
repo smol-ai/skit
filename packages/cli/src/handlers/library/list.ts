@@ -69,7 +69,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
     })),
   };
   const renderer = yield* Renderer;
-  yield* renderer.result(result("list", outputContracts.list, value));
+  yield* renderer.result(result("list", value));
 });
 
 export const listCliCommand = Command.make("list", localFlags, (input) =>

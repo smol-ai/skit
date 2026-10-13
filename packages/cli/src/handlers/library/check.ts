@@ -24,7 +24,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );
-      yield* renderer.result(result("check", outputContracts.check, value));
+      yield* renderer.result(result("check", value));
     }),
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(

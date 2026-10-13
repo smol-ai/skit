@@ -55,7 +55,7 @@ describe("server bootstrap journey", () => {
   it("hands completed setup off to login", () => {
     assert.strictEqual(
       renderContract(
-        "skit.server.bootstrap.v1",
+        "serverBootstrap",
         { origin: "https://skit.example", status: "complete" },
         { color: false, detail: "summary" },
       ),

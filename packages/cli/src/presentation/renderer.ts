@@ -87,8 +87,6 @@ export function consoleRenderer(json: boolean): RendererShape {
           detail: options?.detail ?? "summary",
           format,
         });
-        if (frame === undefined)
-          return yield* Effect.die(`No text presenter registered for ${result.schema}`);
         yield* write(process.stdout, frame.stdout);
         if (frame.exitCode !== undefined) process.exitCode = frame.exitCode;
       }),

@@ -36,10 +36,8 @@ export const removeCliCommand = Command.make(
           }),
         );
         if (outcome.kind === "plan")
-          return yield* renderer.result(
-            result("remove", outputContracts.removePlan, outcome.value),
-          );
-        yield* renderer.result(result("remove", outputContracts.remove, outcome.value));
+          return yield* renderer.result(result("removePlan", outcome.value));
+        yield* renderer.result(result("remove", outcome.value));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(

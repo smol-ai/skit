@@ -213,7 +213,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
           local_bindings: ____,
           ...inventory
         } = value;
-        yield* renderer.result(result("inventory", outputContracts.inventory, inventory));
+        yield* renderer.result(result("inventory", inventory));
       }),
     );
   }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
@@ -238,9 +238,7 @@ export const doctorCliCommand = Command.make("doctor", localFlags, (input) =>
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* doctorCommand(options);
-        yield* renderer.result(
-          result("doctor", outputContracts.doctor, value, value.ok ? undefined : 12),
-        );
+        yield* renderer.result(result("doctor", value, value.ok ? undefined : 12));
       }),
     );
   }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),

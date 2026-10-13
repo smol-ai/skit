@@ -90,7 +90,7 @@ describe("generated command contracts", () => {
   });
 
   test("encodes producer data at the command-result boundary", () => {
-    const value = result("version", outputContracts.version, { version: "1.2.3" });
+    const value = result("version", { version: "1.2.3" });
     expect(value).toMatchObject({
       schema: "skit.version.v1",
       data: { version: "1.2.3" },

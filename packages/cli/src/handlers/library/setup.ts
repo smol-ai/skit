@@ -560,7 +560,7 @@ export const setupCliCommand = Command.make(
               bindings: configuration.pull.bindings,
             },
           });
-          if (!interactive) yield* renderer.result(result("setup", outputContracts.setup, value));
+          if (!interactive) yield* renderer.result(result("setup", value));
         }).pipe(Effect.provide(terminalPrompterLayer)),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),

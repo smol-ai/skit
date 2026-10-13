@@ -51,7 +51,6 @@ export const validateCliCommand = Command.make(
         yield* renderer.result(
           result(
             "validate",
-            outputContracts.validate,
             { valid: status !== "invalid", status, ...value },
             status === "invalid" ? 65 : status === "policy-blocked" ? 77 : undefined,
           ),

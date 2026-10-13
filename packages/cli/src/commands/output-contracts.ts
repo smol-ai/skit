@@ -190,3 +190,5 @@ export type ContractId = AnyOutputContract["id"];
 export type ContractFor<I extends ContractId> = Extract<AnyOutputContract, { readonly id: I }>;
 export type ContractDataOf<C extends AnyOutputContract> = C["schema"]["Type"];
 export type ContractDataForId<I extends ContractId> = ContractDataOf<ContractFor<I>>;
+export type ContractKey = keyof typeof outputContracts;
+export type ContractData<K extends ContractKey> = ContractDataOf<(typeof outputContracts)[K]>;

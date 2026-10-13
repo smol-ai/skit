@@ -26,7 +26,7 @@ export const authLogoutCliCommand = Command.make(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const value = yield* authLogoutCommand(selectedHome, Option.getOrUndefined(origin));
-          yield* renderer.result(result("authLogout", outputContracts.authLogout, value));
+          yield* renderer.result(result("authLogout", value));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

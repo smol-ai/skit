@@ -88,7 +88,7 @@ export function journeyFrames(
       },
       Result: ({ result }) => {
         const frame = renderResultFrame(result, environment);
-        if (frame) output += frame.stdout + frame.stderr;
+        output += frame.stdout + frame.stderr;
         status = undefined;
         label = "Result";
       },
