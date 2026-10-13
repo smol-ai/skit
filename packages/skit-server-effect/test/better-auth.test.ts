@@ -1399,6 +1399,34 @@ describe("Principal provisioning", () => {
     }).pipe(Effect.provide(bindingsLayer)),
   );
 
+  it.effect("reports a username to onboarding only once it is provisioned", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const onboarding = (cookie?: string) =>
+        send("/api/onboarding/username", { headers: cookie ? { cookie } : {} }).pipe(
+          Effect.flatMap((response) =>
+            webPromise(() => response.json()).pipe(
+              Effect.map((body) => ({ status: response.status, body })),
+            ),
+          ),
+        );
+      expect((yield* onboarding()).status).toBe(401);
+      yield* failPrincipalInserts;
+      expect((yield* signUp("author")).status).not.toBe(200);
+      const cookie = yield* signIn("author");
+      yield* restorePrincipalInserts;
+
+      expect(yield* onboarding(cookie)).toEqual({ status: 200, body: { username: null } });
+      const claimed = yield* send("/api/onboarding/username", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ username: "author" }),
+      });
+      expect(claimed.status).toBe(201);
+      expect(yield* onboarding(cookie)).toEqual({ status: 200, body: { username: "author" } });
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
   it.effect("refuses a signup whose username is another subject's Namespace", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
