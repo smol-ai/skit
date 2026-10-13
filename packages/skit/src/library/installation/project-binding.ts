@@ -11,7 +11,7 @@ import { ProjectionRetireConflict } from "../../failures.js";
 import { repositorySelectsProjection } from "./retire-unbound.js";
 import { projectionSourceEffect } from "./projection-source.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { Digest, ProjectionTarget } from "../store/state-schema.js";
+import type { Digest, ProjectionTarget } from "../../vocabulary.js";
 import type { ManagedProjection } from "../library-state.js";
 import { makeProjectionId } from "../entity-ids.js";
 import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";

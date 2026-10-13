@@ -1,5 +1,5 @@
 import { Crypto, Effect } from "effect";
-import type { Digest } from "../library/store/state-schema.js";
+import type { Digest } from "../vocabulary.js";
 
 /**
  * Length-framed digest input: each part is `<byte length>:<bytes>\0`, so `["ab", "c"]` and

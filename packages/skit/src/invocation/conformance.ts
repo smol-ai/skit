@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import { Result, Schema } from "effect";
 import type { SkitDescriptor } from "../contracts.js";
 import type { HarnessMetadataInvalid } from "../failures.js";
-import { InvocationPolicy } from "../library/store/state-schema.js";
+import { InvocationPolicy } from "../vocabulary.js";
 import {
   expectedNativeInvocation,
   INVOCATION_HARNESSES,

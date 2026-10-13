@@ -1,6 +1,6 @@
 import { parse as parseYaml } from "yaml";
 import { Schema } from "effect";
-import { HarnessName } from "../library/store/state-schema.js";
+import { HarnessName } from "../vocabulary.js";
 import type { YamlMapping } from "../shared/json.js";
 import type {
   FrontmatterConstraint,

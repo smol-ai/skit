@@ -3,9 +3,8 @@ import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-  OwnershipMarker,
-  OwnershipMarkerV2,
-  OwnershipMarkerV3,
+  type OwnershipMarker,
+  StoredOwnershipMarker,
   type ProjectionTarget,
   type Digest,
   type InvocationPolicy,
@@ -166,19 +165,8 @@ export type OwnershipMarkerInspection =
 export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return { kind: "invalid", detail: "Ownership marker must be a JSON object" };
-  const decoded = Schema.decodeUnknownOption(OwnershipMarker)(value);
+  const decoded = Schema.decodeUnknownOption(StoredOwnershipMarker)(value);
   if (decoded._tag === "Some") return { kind: "valid", marker: decoded.value };
-  // Older markers named the Harness a copy was written for; custody never depended on it.
-  const v3 = Schema.decodeUnknownOption(OwnershipMarkerV3)(value);
-  if (v3._tag === "Some") {
-    const { harness: _harness, ...fields } = v3.value;
-    return { kind: "valid", marker: { ...fields, schemaVersion: 4 } };
-  }
-  const v2 = Schema.decodeUnknownOption(OwnershipMarkerV2)(value);
-  if (v2._tag === "Some") {
-    const { collection_id: _collectionId, harness: _harness, ...fields } = v2.value;
-    return { kind: "valid", marker: { ...fields, schemaVersion: 4 } };
-  }
   return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
 }
 

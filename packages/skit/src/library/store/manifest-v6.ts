@@ -8,8 +8,8 @@ import {
   mergeGlobalBindings,
   RetainedCopy,
   Skill,
-} from "./library-contracts.js";
-import { Digest, HarnessName } from "./store/state-schema.js";
+} from "../library-contracts.js";
+import { Digest, HarnessName } from "../../vocabulary.js";
 
 /** Frozen `skit.library.v6` Binding: one per Harness, decoded only to merge them. */
 export const BindingV6 = Schema.Struct({
@@ -30,6 +30,7 @@ export const LibraryManifestV6 = Schema.Struct({
 });
 export type LibraryManifestV6 = typeof LibraryManifestV6.Type;
 
+/** v6 → v7: per-Harness Bindings merge into the one global Binding. */
 export const LibraryManifestFromV6 = LibraryManifestV6.pipe(
   Schema.decodeTo(LibraryManifest, {
     decode: SchemaGetter.transform((manifest) => ({

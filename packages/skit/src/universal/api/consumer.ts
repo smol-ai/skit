@@ -6,7 +6,6 @@ import {
   SnapshotArchive,
   SnapshotUploadResponse,
 } from "../../library/library-contracts.js";
-import { LibraryReadResponse } from "../../library/library-contracts-v4.js";
 import {
   CreatedPat,
   ListedPat,
@@ -189,7 +188,7 @@ export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
 export class LibrarySyncApi extends HttpApiGroup.make("librarySync")
   .add(
     HttpApiEndpoint.get("read", "/api/library/portable", {
-      success: LibraryReadResponse,
+      success: LibraryResponse,
       error: [InsufficientScopeResponse, LibraryNotFoundResponse, StorageFailureResponse],
     }),
     HttpApiEndpoint.put("write", "/api/library/portable", {

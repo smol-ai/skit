@@ -15,9 +15,10 @@ import {
   libraryManifestFromLocalStateEffect,
   libraryStateRevision,
 } from "../library-state.js";
-import { LibraryStateV4, migrateLibraryStateFromV4 } from "./state-schema-v4.js";
-import { LibraryStateV5, migrateLibraryStateFromV5 } from "./state-schema-v5.js";
-import { LibraryStateV6, migrateLibraryStateFromV6 } from "./state-schema-v6.js";
+import { LibraryStateFromV4 } from "./state-schema-v4.js";
+import { LibraryStateFromV5 } from "./state-schema-v5.js";
+import { LibraryStateFromV6 } from "./state-schema-v6.js";
+import { LibraryStateFromV7 } from "./state-schema-v7.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 
 export type InspectedLibraryState =
@@ -60,63 +61,17 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
   return state;
 });
 
-/** A legacy state document brought to the current schema; each case decodes what it reads. */
-const currentFromLegacyState = Effect.fn("Library.currentFromLegacyState")(function* (
-  path: string,
-  version: number,
-  value: unknown,
-) {
-  switch (version) {
-    case 7:
-      // v8 adds only optional sync ancestry, which a v7 document never has.
-      return {
-        ...(yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(
-          value,
-        ).pipe(
-          Effect.mapError(
-            () => new InvalidLibraryState({ path, detail: "invalid v7 Library state" }),
-          ),
-        )),
-        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
-      };
-    case 6:
-      return migrateLibraryStateFromV6(
-        yield* Schema.decodeUnknownEffect(
-          Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryStateV6))),
-        )(value).pipe(
-          Effect.mapError(
-            () => new InvalidLibraryState({ path, detail: "invalid v6 Library state" }),
-          ),
-        ),
-      );
-    case 5:
-      return migrateLibraryStateFromV6(
-        migrateLibraryStateFromV5(
-          yield* Schema.decodeUnknownEffect(
-            Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryStateV5))),
-          )(value).pipe(
-            Effect.mapError(
-              () => new InvalidLibraryState({ path, detail: "invalid v5 Library state" }),
-            ),
-          ),
-        ),
-      );
-    default:
-      return migrateLibraryStateFromV6(
-        migrateLibraryStateFromV5(
-          migrateLibraryStateFromV4(
-            yield* Schema.decodeUnknownEffect(
-              Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryStateV4))),
-            )(value).pipe(
-              Effect.mapError(
-                () => new InvalidLibraryState({ path, detail: "invalid v4 Library state" }),
-              ),
-            ),
-          ),
-        ),
-      );
-  }
-});
+/**
+ * v4 is what the first public SKIT wrote. Each legacy version steps through the linear
+ * v4 → v5 → v6 → v7 → v8 chain, decoding what it reads at every step.
+ */
+const OLDEST_LIBRARY_STATE_VERSION = 4;
+const LegacyLibraryState = Schema.Union([
+  LibraryStateFromV7,
+  LibraryStateFromV6,
+  LibraryStateFromV5,
+  LibraryStateFromV4,
+]);
 
 const openPresentState = Effect.fn("Library.openPresentState")(function* (
   home: string,
@@ -133,12 +88,12 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
   if (version.schemaVersion > CURRENT_LIBRARY_STATE_VERSION)
     return yield* new InvalidLibraryState({
       path,
-      detail: `Library state schema v${version.schemaVersion} was written by a newer SKIT; this CLI supports v4–v${CURRENT_LIBRARY_STATE_VERSION}`,
+      detail: `Library state schema v${version.schemaVersion} was written by a newer SKIT; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
     });
-  if (![4, 5, 6, 7].includes(version.schemaVersion))
+  if (version.schemaVersion < OLDEST_LIBRARY_STATE_VERSION)
     return yield* new InvalidLibraryState({
       path,
-      detail: `unsupported Library state schema v${version.schemaVersion}; this CLI supports v4–v${CURRENT_LIBRARY_STATE_VERSION}`,
+      detail: `unsupported Library state schema v${version.schemaVersion}; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
     });
   return yield* withLibraryStateReplacement(
     home,
@@ -153,14 +108,25 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
       );
       if (lockedVersion.schemaVersion === CURRENT_LIBRARY_STATE_VERSION)
         return yield* decodeCurrentState(path, lockedValue);
-      if (![4, 5, 6, 7].includes(lockedVersion.schemaVersion))
+      if (
+        lockedVersion.schemaVersion < OLDEST_LIBRARY_STATE_VERSION ||
+        lockedVersion.schemaVersion > CURRENT_LIBRARY_STATE_VERSION
+      )
         return yield* new InvalidLibraryState({
           path,
           detail: "Library state changed while opening",
         });
       const migrated = yield* decodeCurrentState(
         path,
-        yield* currentFromLegacyState(path, lockedVersion.schemaVersion, lockedValue),
+        yield* Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue).pipe(
+          Effect.mapError(
+            () =>
+              new InvalidLibraryState({
+                path,
+                detail: `invalid v${lockedVersion.schemaVersion} Library state`,
+              }),
+          ),
+        ),
       );
       // Keep the pre-migration file: migration drops history it can no longer represent.
       yield* writeJsonAtomicEffect(

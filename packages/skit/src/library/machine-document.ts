@@ -118,6 +118,18 @@ const fromV4 = MachineDocumentV4.pipe(
 export const MachineDocument = Schema.Union([fromV4, fromV3, fromV2, fromV1]);
 export const MachineDocumentJson = Schema.fromJsonString(MachineDocument);
 
+/** What a machine reads as before it has written `machine.json`. */
+export const emptyMachineDocument = (): CurrentMachineDocument => ({
+  schemaVersion: 4,
+  discoveryRoots: [],
+  repositories: [],
+  repositoryDecisionsInitialized: false,
+});
+
+export const currentMachineDocument = (
+  fields: Omit<MachineDocumentV4, "schemaVersion">,
+): MachineDocumentV4 => ({ ...fields, schemaVersion: 4 });
+
 export const machineDocumentIdentity = (
   document: CurrentMachineDocument,
 ):

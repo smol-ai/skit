@@ -4,7 +4,7 @@ import type { LibraryState, ManagedProjection } from "../library-state.js";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import { LibraryStore } from "../store/library-store.js";
 import { bindingSkillIds, type Binding } from "../library-contracts.js";
-import type { ProjectionTarget } from "../store/state-schema.js";
+import type { ProjectionTarget } from "../../vocabulary.js";
 
 /** A repository Binding owns its selected installations beneath that repository. */
 export const repositorySelectsProjection = (state: LibraryState, projection: ManagedProjection) =>

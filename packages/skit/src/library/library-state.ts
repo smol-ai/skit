@@ -13,13 +13,8 @@ import {
   Skill,
   librarySnapshotDigests,
 } from "./library-contracts.js";
-import {
-  Digest,
-  HarnessInstallStatus,
-  InvocationPolicy,
-  LibraryDeviceStateFields,
-  RecordedProjectionTarget,
-} from "./store/state-schema.js";
+import { HarnessInstallStatus, LibraryDeviceStateFields } from "./store/state-schema.js";
+import { Digest, InvocationPolicy, RecordedProjectionTarget } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
@@ -152,10 +147,10 @@ export type LibraryInventory = typeof LibraryInventory.Type;
 
 // State schemas validate JSON without transformations. Refining the original value keeps
 // unknown fields at every depth now that Effect no longer offers `preserve` parsing.
-const libraryStateDocument = Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState)));
-export const decodeLibraryState = Schema.decodeUnknownEffect(libraryStateDocument);
+export const LibraryStateDocument = Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState)));
+export const decodeLibraryState = Schema.decodeUnknownEffect(LibraryStateDocument);
 export const encodeLibraryState = Schema.encodeEffect(
-  Schema.fromJsonString(libraryStateDocument, { space: 2 }),
+  Schema.fromJsonString(LibraryStateDocument, { space: 2 }),
 );
 
 export const libraryManifestFromLocalStateEffect = Effect.fn(

@@ -9,7 +9,7 @@ import {
   semver,
   skitDescriptorRequestSchema,
 } from "../src/protocol/api-contracts.js";
-import { Digest } from "../src/library/store/state-schema.js";
+import { Digest } from "../src/vocabulary.js";
 import { kebabNameSchema } from "../src/schemas.js";
 
 const ExampleContract = Schema.Struct({

@@ -16,7 +16,7 @@ import {
   type LibraryManifest,
   type RetainedCopy,
 } from "../src/library/library-contracts.js";
-import { LibraryManifestAnyVersion } from "../src/library/library-contracts-v4.js";
+import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
 import { completeRestoreArchivesEffect } from "../src/library/library-restore.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
@@ -145,7 +145,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
     machine_id: machineId,
     observations: [],
   };
-  const decoded = Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
+  const decoded = Schema.decodeUnknownSync(StoredLibraryManifest)({
     schema: "skit.library.v4",
     collections: [{ collection_id: collectionId, display_name: "review" }],
     skills: [
@@ -197,7 +197,7 @@ it("rejects a Skill Version that no Acquisition of its Collection backs", () => 
   const versionId = makeSkillVersionId();
   const otherDigest = `sha256:${"c".repeat(64)}`;
   assert.throws(() =>
-    Schema.decodeUnknownSync(LibraryManifestAnyVersion)({
+    Schema.decodeUnknownSync(StoredLibraryManifest)({
       ...mixedManifest,
       skills: [
         {

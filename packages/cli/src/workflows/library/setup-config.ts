@@ -3,6 +3,8 @@ import { hostname } from "node:os";
 import { join, matchesGlob, posix, resolve, sep } from "node:path";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import {
+  currentMachineDocument,
+  emptyMachineDocument,
   MachineDocumentJson,
   MachineDocumentV4,
   makeMachineId,
@@ -68,14 +70,7 @@ export const readSetupMachineConfig = Effect.fn("Setup.readMachineConfig")(funct
           : Effect.fail(new SetupConfigUnusable({ path })),
       ),
     );
-  if (text === undefined)
-    return {
-      path,
-      schemaVersion: 4 as const,
-      discoveryRoots: [],
-      repositories: [],
-      repositoryDecisionsInitialized: false,
-    };
+  if (text === undefined) return { path, ...emptyMachineDocument() };
   return yield* Schema.decodeUnknownEffect(MachineDocumentJson)(text).pipe(
     Effect.mapError(() => new SetupConfigUnusable({ path })),
     Effect.map((config) => ({ path, ...config })),
@@ -90,13 +85,14 @@ export const writeSetupMachineConfig = Effect.fn("Setup.writeMachineConfig")(fun
   displayName: string,
 ) {
   const path = machineConfigPath(libraryHome);
-  const config = yield* MachineDocumentV4.makeEffect({
-    schemaVersion: 4,
-    machineId: prior.machineId ?? makeMachineId(),
-    displayName: prior.displayName ?? displayName,
-    discoveryRoots: [...discoveryRoots],
-    repositories: [...repositories],
-  });
+  const config = yield* MachineDocumentV4.makeEffect(
+    currentMachineDocument({
+      machineId: prior.machineId ?? makeMachineId(),
+      displayName: prior.displayName ?? displayName,
+      discoveryRoots: [...discoveryRoots],
+      repositories: [...repositories],
+    }),
+  );
   yield* writeJsonAtomicEffect(path, config);
   return { path, ...config };
 });
