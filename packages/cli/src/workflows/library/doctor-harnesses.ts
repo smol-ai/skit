@@ -212,17 +212,6 @@ if (result.error || result.status !== 0) {
 
 const NATIVE_LIST_LIMITS = { timeoutMs: 15_000, maxOutputBytes: 4_000_000, maxErrorBytes: 32_000 };
 
-/** A native skill list's JSON, or the failure its exit status reports. */
-function nativeListText(harness: NativeDoctorHarness, output: SourceProcessResult) {
-  return output.exitCode === 0
-    ? Effect.succeed(new TextDecoder().decode(output.stdout))
-    : Effect.fail(
-        new HarnessDiscoveryFailure({
-          message: `${harness} discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
-        }),
-      );
-}
-
 const nativeListWarnings = (output: SourceProcessResult) =>
   output.stderr.trim() ? [output.stderr.trim()] : [];
 
@@ -243,8 +232,12 @@ export const readOpenCodeSkills = Effect.fn("Doctor.readOpenCodeSkills")(functio
       );
     }),
   );
+  if (output.exitCode !== 0)
+    return yield* new HarnessDiscoveryFailure({
+      message: `opencode discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
+    });
   const skills: HarnessDoctorSkill[] = (yield* decodeOpenCodeSkills(
-    yield* nativeListText("opencode", output),
+    new TextDecoder().decode(output.stdout),
   )).map((skill) => ({
     name: skill.name,
     ...(skill.description === undefined ? {} : { description: skill.description }),
@@ -264,8 +257,12 @@ export const readDevinSkills = Effect.fn("Doctor.readDevinSkills")(function* (
     cwd,
     ...NATIVE_LIST_LIMITS,
   });
+  if (output.exitCode !== 0)
+    return yield* new HarnessDiscoveryFailure({
+      message: `devin discovery exited ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ""}`,
+    });
   const skills: HarnessDoctorSkill[] = (yield* decodeDevinSkills(
-    yield* nativeListText("devin", output),
+    new TextDecoder().decode(output.stdout),
   )).map((skill) => ({
     name: skill.name,
     ...(skill.description === null ? {} : { description: skill.description }),

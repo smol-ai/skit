@@ -62,3 +62,66 @@ describe("invocation metadata writes", () => {
     }),
   );
 });
+
+describe("Codex invocation metadata reads", () => {
+  const codex = invocationMetadataAdapters.codex;
+  const read = (text: string) => codex.read(text, "agents/openai.yaml");
+
+  it.effect("resolves an aliased value and an aliased policy mapping", () =>
+    Effect.sync(() => {
+      assert.deepStrictEqual(
+        read("disabled: &off false\npolicy:\n  allow_implicit_invocation: *off\n"),
+        Result.succeed("explicit"),
+      );
+      assert.deepStrictEqual(
+        read("shared: &policy {allow_implicit_invocation: false}\npolicy: *policy\n"),
+        Result.succeed("explicit"),
+      );
+    }),
+  );
+
+  it.effect("treats a present value that is not a boolean as invalid, not absent", () =>
+    Effect.sync(() => {
+      for (const text of [
+        "policy: {allow_implicit_invocation: no-policy}\n",
+        'policy: {allow_implicit_invocation: "false"}\n',
+        "policy: {allow_implicit_invocation: null}\n",
+        "policy: [allow_implicit_invocation]\n",
+        "policy: implicit\n",
+      ])
+        assert.strictEqual(tagOf(read(text)), "HarnessMetadataInvalid", text);
+      assert.deepStrictEqual(
+        read("interface: {display_name: Review}\n"),
+        Result.succeed(undefined),
+      );
+      assert.deepStrictEqual(read(""), Result.succeed(undefined));
+    }),
+  );
+
+  it.effect("reads the field without expanding unrelated aliases", () =>
+    Effect.sync(() => {
+      const bomb = [
+        "a: &a [1,2,3,4,5,6,7,8,9,10]",
+        "b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a,*a]",
+        "c: &c [*b,*b,*b,*b,*b,*b,*b,*b,*b,*b]",
+        "d: [*c,*c,*c,*c,*c,*c,*c,*c,*c,*c]",
+        "policy: {allow_implicit_invocation: false}",
+      ].join("\n");
+      assert.deepStrictEqual(read(bomb), Result.succeed("explicit"));
+    }),
+  );
+
+  it.effect("refuses to rewrite invalid metadata or an aliased policy mapping", () =>
+    Effect.sync(() => {
+      for (const text of [
+        "policy: {allow_implicit_invocation: no-policy}\n",
+        "shared: &policy {allow_implicit_invocation: false}\npolicy: *policy\n",
+      ])
+        for (const policy of ["implicit", "host-policy"] as const)
+          assert.strictEqual(
+            tagOf(codex.write(text, policy, "agents/openai.yaml")),
+            "HarnessMetadataInvalid",
+          );
+    }),
+  );
+});

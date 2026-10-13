@@ -263,6 +263,23 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         process.execPath,
       );
       expect(excessiveAliases).toMatchObject({ _tag: "Estimated" });
+      yield* fs.writeFileString(
+        metadataPath,
+        "disabled: &off false\npolicy:\n  allow_implicit_invocation: *off\n",
+      );
+      const aliasedExplicit = yield* readCodexListingBudget(
+        stateWithProjection,
+        options,
+        process.execPath,
+      );
+      expect(aliasedExplicit).toMatchObject({ _tag: "Estimated", entries: [{ name: "review" }] });
+      yield* fs.writeFileString(metadataPath, "policy: {allow_implicit_invocation: no-policy}\n");
+      const unreadable = yield* readCodexListingBudget(
+        stateWithProjection,
+        options,
+        process.execPath,
+      );
+      expect(unreadable).toMatchObject({ _tag: "Unavailable" });
       yield* fs.writeFileString(metadataPath, "policy: [invalid");
       const malformed = yield* readCodexListingBudget(
         stateWithProjection,

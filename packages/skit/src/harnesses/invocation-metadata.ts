@@ -1,5 +1,5 @@
 import { Record, Result, Schema } from "effect";
-import { isMap, parseDocument, type Document } from "yaml";
+import { isAlias, isMap, isScalar, parseDocument, type Document } from "yaml";
 import type { HarnessName, InvocationPolicy } from "../contracts.js";
 import { HarnessMetadataInvalid } from "../failures.js";
 
@@ -104,6 +104,27 @@ const codexDocumentResult = (
 };
 
 /**
+ * The Codex field's value as Codex's loader sees it. An alias resolves to its anchored node, which
+ * expands nothing else; a `policy` that is not a mapping, or a value that is not a boolean, is
+ * invalid metadata rather than an absent policy.
+ */
+const codexFieldResult = (
+  document: Document,
+  path: string,
+): Result.Result<boolean | undefined, HarnessMetadataInvalid> => {
+  const invalid = Result.fail(new HarnessMetadataInvalid({ path, kind: "Codex metadata" }));
+  const resolved = (node: unknown) => (isAlias(node) ? node.resolve(document) : node);
+  let node = resolved(document.contents);
+  for (const key of CODEX_FIELD) {
+    if (node === null || node === undefined) return Result.succeed(undefined);
+    if (!isMap(node)) return invalid;
+    node = resolved(node.get(key, true));
+  }
+  if (node === undefined) return Result.succeed(undefined);
+  return isScalar(node) && typeof node.value === "boolean" ? Result.succeed(node.value) : invalid;
+};
+
+/**
  * Codex reads `agents/openai.yaml`, the only file its loader consults for invocation policy; the
  * field allows implicit invocation, so `true` states `implicit`.
  */
@@ -115,15 +136,19 @@ const codexAdapter: InvocationMetadataAdapter = {
   read: (text, path) =>
     Result.gen(function* () {
       if (text === undefined) return undefined;
-      const value = (yield* codexDocumentResult(text, path)).getIn([...CODEX_FIELD]);
-      return typeof value === "boolean" ? (value ? "implicit" : "explicit") : undefined;
+      const value = yield* codexFieldResult(yield* codexDocumentResult(text, path), path);
+      return value === undefined ? undefined : value ? "implicit" : "explicit";
     }),
   write: (text, policy, path) =>
     Result.gen(function* () {
       const document = yield* codexDocumentResult(text ?? "", path);
+      const current = yield* codexFieldResult(document, path);
+      // Rewriting through an aliased mapping would change every other reference to its anchor.
+      if (isAlias(document.contents) || isAlias(document.get("policy", true)))
+        return yield* Result.fail(new HarnessMetadataInvalid({ path, kind: "Codex metadata" }));
       if (policy === "host-policy") {
         if (text === undefined) return null;
-        if (document.getIn([...CODEX_FIELD]) === undefined) return text;
+        if (current === undefined) return text;
         document.deleteIn([...CODEX_FIELD]);
         const policyNode = document.get("policy") as { items?: unknown[] } | undefined;
         if (policyNode && Array.isArray(policyNode.items) && policyNode.items.length === 0)

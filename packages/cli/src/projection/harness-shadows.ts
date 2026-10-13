@@ -35,22 +35,25 @@ export function readableHarnessRoots(
   harnesses: readonly HarnessName[] = HarnessName.literals,
 ) {
   return harnesses.flatMap((harness) => {
-    const override = options.overrides[harness];
+    const driver = harnessDrivers[harness];
+    const own = driver.profile.roots
+      .filter(
+        (root) => root.readable && root.scope === (scope.kind === "global" ? "global" : "project"),
+      )
+      .map((root) =>
+        resolveHarnessRoot(root, {
+          home: options.home,
+          configHome: options.configHome,
+          ...(scope.kind === "repository" ? { repository: scope.root } : {}),
+        }),
+      );
+    const override = scope.kind === "global" ? options.overrides[harness] : undefined;
     const roots =
-      scope.kind === "global" && override !== undefined
-        ? override
-        : harnessDrivers[harness].profile.roots
-            .filter(
-              (root) =>
-                root.readable && root.scope === (scope.kind === "global" ? "global" : "project"),
-            )
-            .map((root) =>
-              resolveHarnessRoot(root, {
-                home: options.home,
-                configHome: options.configHome,
-                ...(scope.kind === "repository" ? { repository: scope.root } : {}),
-              }),
-            );
+      override === undefined
+        ? own
+        : driver.rootOverride === "extends"
+          ? [...own, ...override]
+          : override;
     return roots.map((root) => ({ harness, root: resolve(root) }));
   });
 }

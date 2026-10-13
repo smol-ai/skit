@@ -20,6 +20,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
+import { readableHarnessRoots } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import {
   readSetupMachineConfig,
@@ -494,13 +495,8 @@ export const collectHarnessRoots = (
 ) => {
   const roots: Array<{ harness: Harness; scope: "global" | "project"; root: string }> = [];
   for (const harness of HarnessName.literals) {
-    const global =
-      inventory.overrides[harness]?.map((root) => resolve(root)) ??
-      catalogRoots(harness, "global", {
-        home: inventory.home,
-        configHome: inventory.configHome,
-      });
-    for (const root of global) roots.push({ harness, scope: "global", root });
+    for (const { root } of readableHarnessRoots(inventory, { kind: "global" }, [harness]))
+      roots.push({ harness, scope: "global", root });
     for (const repository of repositories)
       for (const root of catalogRoots(harness, "project", {
         home: inventory.home,
