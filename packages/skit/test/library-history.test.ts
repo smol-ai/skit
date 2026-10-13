@@ -170,7 +170,7 @@ it.live("records a forked publish under way at release in its action's event", (
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const entered = yield* Deferred.make<void>();
     const resume = yield* Deferred.make<void>();
-    let child: Fiber.Fiber<void, unknown> | undefined;
+    const forked = yield* Deferred.make<Fiber.Fiber<void, unknown>>();
     const action = yield* inLibrary(
       withLibraryWriter(
         Effect.gen(function* () {
@@ -178,20 +178,23 @@ it.live("records a forked publish under way at release in its action's event", (
           const bound = { ...state, global_bindings: [globalBinding(state)] };
           yield* store.publish(bound, state);
           // The forked publish takes its lease now and finishes only after the action's program.
-          child = yield* withLibraryWriterLock(
+          const child = yield* withLibraryWriterLock(
             home,
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(resume)),
               Effect.andThen(store.publish({ ...bound, global_bindings: [] }, bound)),
             ),
           ).pipe(Effect.forkDetach);
+          yield* Deferred.succeed(forked, child);
           yield* Deferred.await(entered);
         }),
       ),
     ).pipe(Effect.forkChild);
+    const child = yield* Deferred.await(forked);
+    yield* Deferred.await(entered);
     yield* Effect.sleep("20 millis");
     yield* Deferred.succeed(resume, undefined);
-    yield* Fiber.join(child!);
+    yield* Fiber.join(child);
     yield* Fiber.join(action);
 
     const events = (yield* history).slice(before);
