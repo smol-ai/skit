@@ -136,10 +136,13 @@ export const applySetupRemovals = Effect.fn("Setup.applyRemovals")(function* (
       return yield* new PlanIsStale();
     if (entry.type !== "Directory") return;
     const hash = yield* Effect.result(deterministicTreeHashEffect(entry.path));
+    const custody = yield* custodyAt(entry.path).pipe(
+      Effect.catchTag("PlatformError", () => Effect.fail(new PlanIsStale())),
+    );
     if (
       hash._tag === "Failure" ||
       hash.success !== entry.observedHash ||
-      (yield* custodyAt(entry.path)).custody !== "unmanaged"
+      custody.custody !== "unmanaged"
     )
       return yield* new PlanIsStale();
   });

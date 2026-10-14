@@ -481,7 +481,11 @@ export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const marker = yield* fs
     .readFileString(join(path, ".skit-ownership.json"))
-    .pipe(Effect.orElseSucceed(() => undefined));
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+      ),
+    );
   if (marker === undefined) return { custody: "unmanaged" as const };
   const document = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(marker);
   if (Result.isFailure(document)) return { custody: "invalid-marker" as const };
