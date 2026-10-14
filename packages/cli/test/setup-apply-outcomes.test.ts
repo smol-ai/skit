@@ -398,6 +398,25 @@ it.effect("a removal selection that gains a custody marker after the scan stays 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect(
+  "a removal selection whose marker becomes unreadable after the scan stays untouched",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ machine: true });
+      const copy = f.path("gamma");
+      let before: Effect.Success<ReturnType<typeof captureDisk>> | undefined;
+      const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+        published: Effect.gen(function* () {
+          yield* f.fs.makeDirectory(join(copy, ".skit-ownership.json"));
+          before = yield* captureDisk([copy], { identity: true }).pipe(Effect.provide(skitLayer));
+        }),
+      });
+      assert.instanceOf(failure(exit), PlanIsStale);
+      assert.deepStrictEqual(yield* captureDisk([copy], { identity: true }), before);
+      assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 // Each entry is checked again immediately before its own move, so a later entry replaced while an
 // earlier one moves is left alone; the earlier move stays, recorded in the receipt.
 it.effect("a removal entry replaced during an earlier move stays untouched", () =>
