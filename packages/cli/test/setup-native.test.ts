@@ -136,31 +136,33 @@ const fixture = Effect.fn("Test.setupFixture")(function* () {
   return { fs, root, libraryHome, work, repository, codex, claude, options };
 });
 
-it.effect("setup refuses an unreadable ownership marker instead of offering unmanaged actions", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const copy = join(f.codex, "review");
-    yield* f.fs.makeDirectory(copy);
-    yield* f.fs.writeFileString(
-      join(copy, "SKILL.md"),
-      "---\nname: review\ndescription: Review fixture\n---\n\nReview bytes\n",
-    );
-    const missing = yield* observeSetup(f.options);
-    expect(missing.instances.find((instance) => instance.aliases.includes(copy))?.owner).toEqual({
-      kind: "unknown",
-    });
-    expect(yield* custodyAt(copy)).toEqual({ custody: "unmanaged" });
-    yield* f.fs.makeDirectory(join(copy, ".skit-ownership.json"));
-    expect(yield* Effect.result(custodyAt(copy))).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "PlatformError" },
-    });
-    const unreadable = yield* Effect.result(observeSetup(f.options));
-    expect(unreadable).toMatchObject({
-      _tag: "Failure",
-      failure: { _tag: "PlatformError" },
-    });
-  }).pipe(Effect.provide(testPlatformLayer)),
+it.effect(
+  "setup refuses an unreadable ownership marker instead of offering unmanaged actions",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const copy = join(f.codex, "review");
+      yield* f.fs.makeDirectory(copy);
+      yield* f.fs.writeFileString(
+        join(copy, "SKILL.md"),
+        "---\nname: review\ndescription: Review fixture\n---\n\nReview bytes\n",
+      );
+      const missing = yield* observeSetup(f.options);
+      expect(missing.instances.find((instance) => instance.aliases.includes(copy))?.owner).toEqual({
+        kind: "unknown",
+      });
+      expect(yield* custodyAt(copy)).toEqual({ custody: "unmanaged" });
+      yield* f.fs.makeDirectory(join(copy, ".skit-ownership.json"));
+      expect(yield* Effect.result(custodyAt(copy))).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "PlatformError" },
+      });
+      const unreadable = yield* Effect.result(observeSetup(f.options));
+      expect(unreadable).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "PlatformError" },
+      });
+    }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("persists repository roots only when requested and reuses the machine config", () =>
