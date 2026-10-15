@@ -89,6 +89,14 @@ Setup retains the policy that an empty root selection narrows the scan without c
 Failures to read shared machine settings stop an update batch rather than being treated as failures
 of an individual Source.
 
+Core's `prepareRestoreEffect` owns completion of a manifest's retained content: it combines
+available archives with reconstruction from exact source acquisitions, handles materialization
+profiles, verifies digests and member bytes, and retains the verified content. It returns prepared
+state without publishing it or rewriting acquisition provenance. Archive completion and source
+translation are private; callers provide a destination and source access rather than a callback
+implementing reconstruction. Sync still owns remote snapshot downloads, conflict decisions, and
+the remote-write, projection-retirement, local-publication, reconciliation order.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.

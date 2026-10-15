@@ -214,52 +214,67 @@ it.effect("a declared copy rejects a source that no longer declares a SKIT", () 
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("declared Git subpath restoration captures the resolved root at its pinned commit", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const repo = join(f.workspace, "repo");
-    yield* f.fs.makeDirectory(repo);
-    yield* f.fs.copy(f.sourceRoot, join(repo, "nested"));
-    yield* f.fs.writeFileString(join(repo, "outside.txt"), "Outside Collection\n");
-    yield* Effect.sync(() => {
-      const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
-      git("init", "-q");
-      git("add", ".");
-      git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture");
-    });
-    const remote = "https://example.invalid/tools.git";
-    const process = yield* SourceProcess;
-    const route = (args: readonly string[]) => args.map((arg) => (arg === remote ? repo : arg));
-    const localGit = Layer.succeed(SourceProcess, {
-      run: (command, args, options) => process.run(command, route(args), options),
-      output: (command, args, options) => process.output(command, route(args), options),
-    });
-    const state = yield* f
-      .seed({ type: "git", remote, subpath: "nested" })
-      .pipe(Effect.provide(localGit));
-    yield* Effect.sync(() =>
-      execFileSync(
-        "git",
-        [
+it.effect.each(["git", "github"] as const)(
+  "declared %s subpath restoration captures the resolved root at its pinned commit",
+  (kind) =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const repo = join(f.workspace, "repo");
+      yield* f.fs.makeDirectory(repo);
+      yield* f.fs.copy(f.sourceRoot, join(repo, "nested"));
+      yield* f.fs.writeFileString(join(repo, "outside.txt"), "Outside Collection\n");
+      yield* Effect.sync(() => {
+        const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
+        git("init", "-q");
+        git("add", ".");
+        git(
           "-c",
           "user.name=Test",
           "-c",
           "user.email=test@example.com",
           "commit",
-          "--allow-empty",
           "-qm",
-          "later",
-        ],
-        { cwd: repo },
-      ),
-    );
-    yield* f.sync().pipe(Effect.provide(localGit));
-    const digest = state.retained_copies[0]!.digest;
-    assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
-    assert.strictEqual(
-      yield* f.fs.readFileString(join(f.root(digest), "skit.json")),
-      f.files["skit.json"],
-    );
-    assert.isFalse(yield* f.fs.exists(join(f.root(digest), "outside.txt")));
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+          "fixture",
+        );
+      });
+      const remote =
+        kind === "github" ? "https://github.com/acme/tools" : "https://example.invalid/tools.git";
+      const process = yield* SourceProcess;
+      const route = (args: readonly string[]) => args.map((arg) => (arg === remote ? repo : arg));
+      const localGit = Layer.succeed(SourceProcess, {
+        run: (command, args, options) => process.run(command, route(args), options),
+        output: (command, args, options) => process.output(command, route(args), options),
+      });
+      const state = yield* f
+        .seed(
+          kind === "github"
+            ? { type: "github", owner: "acme", repository: "tools", subpath: "nested" }
+            : { type: "git", remote, subpath: "nested" },
+        )
+        .pipe(Effect.provide(localGit));
+      yield* f.fs.writeFileString(
+        join(repo, "nested", "README.md"),
+        `${f.files["README.md"]}\nLater source bytes\n`,
+      );
+      yield* Effect.sync(() => execFileSync("git", ["add", "nested/README.md"], { cwd: repo }));
+      yield* Effect.sync(() =>
+        execFileSync(
+          "git",
+          ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "later"],
+          { cwd: repo },
+        ),
+      );
+      yield* f.sync().pipe(Effect.provide(localGit));
+      const digest = state.retained_copies[0]!.digest;
+      assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.root(digest), "skit.json")),
+        f.files["skit.json"],
+      );
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.root(digest), "README.md")),
+        f.files["README.md"],
+      );
+      assert.isFalse(yield* f.fs.exists(join(f.root(digest), "outside.txt")));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

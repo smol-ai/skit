@@ -23,7 +23,7 @@ import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { classifyFailure, failureExitCodes } from "../src/failure-classification.js";
-import { SyncSourceRestoreInvalid } from "../src/workflows/library/library-sync.js";
+import { SourceRestoreInvalid } from "@smolai/skit-core";
 import { NoStoredCredentials, RegistryUnreachable } from "../src/registry/failures.js";
 
 const produced = new Set<number>(Object.values(failureExitCodes));
@@ -59,7 +59,7 @@ describe("declared exit codes", () => {
     for (const failure of [
       new NoStoredCredentials(),
       new RegistryUnreachable({ origin: "https://registry.example", cause: new Error("offline") }),
-      new SyncSourceRestoreInvalid({
+      new SourceRestoreInvalid({
         digest: `sha256:${"a".repeat(64)}`,
         detail: "pinned Git acquisition has no commit",
       }),

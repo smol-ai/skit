@@ -64,7 +64,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
     const archive = yield* captureSnapshotArchiveEffect(firstOriginal);
     const restored = yield* Effect.scoped(
-      prepareRestoreEffect(manifest, [archive], join(secondHome, "originals")),
+      prepareRestoreEffect(manifest, [archive], { originalsPath: join(secondHome, "originals") }),
     );
     yield* publishLibrary(secondHome, restored.state);
     const second = yield* inspectLibrary(secondHome);
