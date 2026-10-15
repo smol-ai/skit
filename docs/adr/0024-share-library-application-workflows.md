@@ -237,6 +237,14 @@ writer scopes and login resource cleanup. Selection and credential lookup, inclu
 share one file read. Explicit-origin environment credentials still bypass an unusable credential
 file. Account edits strip legacy `activeOrigin`; removing a default alias never recreates it.
 
+The TUI presentation model derives audit inventory, Library collection/member rows, list labels,
+detail receipt fields, action guidance, probe display facts and confirmation copy from explicit
+inputs. It returns plain data without importing a terminal renderer or running effects. The TUI
+entry point supplies the current session/navigation and applies layout, colors and key bindings;
+it retains async content reads and probe execution. Receipt formatting uses one renderer adapter.
+Presentation tests assert derived facts, while key replay continues to verify writes and cancellation
+against real Library storage.
+
 ## Validation
 
 Boundary tests run a real parsed listing while another fiber holds the writer and exercise

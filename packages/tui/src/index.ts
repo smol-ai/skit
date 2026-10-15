@@ -42,7 +42,6 @@ import {
   type LibraryActionOutcome,
   type LibraryBindingRow,
   type LibrarySkillRow,
-  type PendingLibraryChange,
   type Scope,
   type InvocationOption,
 } from "../../cli/src/library-application/index";
@@ -50,8 +49,6 @@ import {
   errorMessage,
   auditLocalCapabilitiesV1Alpha4Effect,
   probeHarnessEffect,
-  type AuditEntryV1Alpha4,
-  type AuditMcpServerV1Alpha4,
   type HarnessProbeResult,
 } from "../../cli/src/front-end";
 import {
@@ -77,57 +74,22 @@ import {
   surface,
   tone,
 } from "./theme";
+import { groupForSkill } from "./skill-groups";
 import {
-  groupForSkill,
-  groupKindLabel,
-  groupLocation,
-  groupSkills,
-  type SkillGroup,
-} from "./skill-groups";
+  auditPresentation,
+  inventoryPresentation,
+  libraryRows,
+  detailPresentation,
+  confirmationPresentation,
+  harnessProbePresentation,
+  type AuditItem,
+  type InventoryItem,
+  type LibraryCollectionRow,
+  type SkillNavigation,
+  type ReceiptField,
+} from "./presentation";
 
-type CapabilityKind = "skill" | "plugin" | "mcp-server" | "rule" | "marketplace";
-
-type AuditItem = {
-  name: string;
-  kind: CapabilityKind | "finding" | "harness";
-  location: string;
-  status: "clear" | "warning" | "error";
-  summary: string;
-  evidence: string[];
-  agents: readonly string[];
-  findingCount?: number;
-  findingCodes?: string[];
-  riskFlagCount?: number;
-  provenance?: AuditEntryV1Alpha4["provenance"];
-  canonicalLocation?: string;
-  harnessProbe?: HarnessProbeResult;
-  mcp?: Pick<AuditMcpServerV1Alpha4, "transport" | "command" | "args" | "cwd" | "url">;
-};
-
-type SkillItem = AuditItem & {
-  kind: "skill";
-  provenance: NonNullable<AuditItem["provenance"]>;
-};
-
-type SkillGroupRow = Omit<AuditItem, "kind"> & {
-  kind: "skill-group";
-  group: SkillGroup<SkillItem>;
-};
-
-type LibraryRow = Omit<AuditItem, "kind"> & {
-  kind: "library-skill";
-  row: LibrarySkillRow;
-};
-
-type LibraryCollectionRow = Omit<AuditItem, "kind"> & {
-  kind: "library-collection";
-  collectionId: string;
-  source?: LibrarySkillRow["collectionSource"];
-};
-type InventoryItem = AuditItem | SkillGroupRow | LibraryRow | LibraryCollectionRow;
 let libraryCollectionId: string | undefined;
-
-type SkillNavigation = { view: "groups" } | { view: "skills"; group: SkillGroup<SkillItem> };
 
 const args = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -190,233 +152,8 @@ try {
   libraryOpenError = errorMessage(error);
 }
 
-interface UnknownFields {
-  [key: string]: unknown;
-}
-
-function stringListAt(value: unknown, key: string): string[] {
-  if (!value || typeof value !== "object") return [];
-  const candidate = (value as UnknownFields)[key];
-  return Array.isArray(candidate)
-    ? candidate.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
-function capabilitySummary(kind: CapabilityKind, capability: AuditEntryV1Alpha4): string {
-  switch (kind) {
-    case "skill": {
-      const capabilities =
-        ("staticAudit" in capability ? capability.staticAudit?.inferredCapabilities : undefined) ??
-        [];
-      return capabilities.length
-        ? `Skill may exercise ${capabilities.join(", ")}.`
-        : "Skill instructions expose no statically inferred capabilities.";
-    }
-    case "mcp-server":
-      return `${"active" in capability && capability.active ? "Active" : "Inactive"} MCP registration in ${capability.scope} scope.`;
-    case "plugin":
-      return `Plugin is ${"installed" in capability && capability.installed ? "installed" : "not installed"} and ${"enabled" in capability && capability.enabled === true ? "enabled" : "enabled" in capability && capability.enabled === false ? "disabled" : "has unknown enablement"}.`;
-    case "marketplace":
-      return "Configured plugin marketplace or catalogue.";
-    case "rule":
-      return "Harness rule contributes ambient instructions and capability references.";
-  }
-}
-
-function itemFromCapability(kind: CapabilityKind, capability: AuditEntryV1Alpha4): AuditItem {
-  const related = report.findings.filter((finding) => finding.entryIds.includes(capability.id));
-  const staticAudit = "staticAudit" in capability ? capability.staticAudit : undefined;
-  const riskFlags = stringListAt(staticAudit, "riskFlags");
-  const staticFindings =
-    kind === "skill"
-      ? (staticAudit?.findings ?? []).map((finding) => {
-          const location = finding.location;
-          return `${finding.confidence} confidence · ${location.path ?? capability.location ?? "unknown"}:${location.line}:${location.column} · ${location.excerpt}`;
-        })
-      : [];
-  const status: AuditItem["status"] = related.some((finding) => finding.severity === "error")
-    ? "error"
-    : related.length
-      ? "warning"
-      : "clear";
-  const evidence = [
-    `Scope: ${{ user: "User configuration", project: "Project configuration", legacy: "Legacy configuration" }[capability.scope]}`,
-    `harnesses: ${capability.harnessIds.join(", ") || "none"}`,
-    `Provenance: ${{ exact: "Exact match", matched: "Inferred match", unknown: "Unknown" }[capability.provenance.confidence]} · ${capability.provenance.source ?? "source unavailable"}`,
-    ...related.map((finding) => `${finding.severity}: ${finding.problem}`),
-    ...staticFindings,
-    ...riskFlags.map(() => "Risk indicator detected; inspect the supporting evidence."),
-  ];
-  return {
-    name: capability.name,
-    kind,
-    location: capability.location ?? "unresolved",
-    status,
-    summary: capabilitySummary(kind, capability),
-    evidence,
-    agents: capability.harnessIds,
-    findingCount: related.length,
-    findingCodes: related.map((finding) => finding.code),
-    riskFlagCount: riskFlags.length,
-    provenance: capability.provenance,
-    ...(capability.canonicalLocation ? { canonicalLocation: capability.canonicalLocation } : {}),
-    ...(kind === "mcp-server" && "transport" in capability
-      ? {
-          mcp: {
-            transport: capability.transport,
-            ...(capability.command ? { command: capability.command } : {}),
-            args: capability.args,
-            ...(capability.cwd ? { cwd: capability.cwd } : {}),
-            ...(capability.url ? { url: capability.url } : {}),
-          },
-        }
-      : {}),
-  };
-}
-
-const capabilityGroups: Array<[CapabilityKind, readonly AuditEntryV1Alpha4[]]> = [
-  ["skill", report.skills],
-  ["plugin", report.plugins],
-  ["mcp-server", report.mcpServers],
-  ["rule", report.rules],
-  ["marketplace", report.marketplaces],
-];
-const observedItems = capabilityGroups.flatMap(([kind, capabilities]) =>
-  capabilities.map((capability) => itemFromCapability(kind, capability)),
-);
-const unmatchedFindings = report.findings.filter((finding) => finding.entryIds.length === 0);
-const items: AuditItem[] = [
-  ...observedItems,
-  ...unmatchedFindings.map((finding): AuditItem => ({
-    name: finding.unresolvedSubject ?? finding.code,
-    kind: "finding",
-    location:
-      typeof finding.details.configPath === "string" ? finding.details.configPath : "audit report",
-    status: finding.severity === "error" ? "error" : "warning",
-    summary: finding.code.replaceAll("-", " "),
-    evidence: Object.entries(finding.details).map(
-      ([key, value]) => `${key}: ${JSON.stringify(value)}`,
-    ),
-    agents: [],
-  })),
-];
-if (items.length === 0) {
-  items.push({
-    name: "No capabilities discovered",
-    kind: "finding",
-    location: report.roots.cwd,
-    status: "warning",
-    summary: "The supported Harness roots contained no auditable entries.",
-    evidence: [`deferred harnesses: ${report.coverage.deferredHarnessIds.join(", ") || "none"}`],
-    agents: [],
-  });
-}
-
-const capabilitiesById = new Map(
-  capabilityGroups.flatMap(([, capabilities]) =>
-    capabilities.map((capability) => [capability.id, capability] as const),
-  ),
-);
-const harnessItems: AuditItem[] = report.harnesses
-  .filter((harness) => harness.detected)
-  .map((harness) => {
-    const capabilities = harness.entryIds.flatMap((id) => capabilitiesById.get(id) ?? []);
-    const roots = [
-      ...new Set(
-        capabilities
-          .map((capability) => capability.location)
-          .filter((path): path is string => path !== null),
-      ),
-    ];
-    const detectionSources = roots.filter((root) => /\.(?:json|toml)$/.test(root)).slice(0, 4);
-    return {
-      name: harness.id,
-      kind: "harness",
-      location: roots[0] ?? "detected from shared capability roots",
-      status: "clear",
-      summary: `${harness.entryIds.length} audit entries across ${roots.length} configuration or content roots.`,
-      evidence: [
-        "installation probe: not run · press p",
-        `audit profile: ${harness.profileId}`,
-        `audit profile version: ${harness.profileVersion}`,
-        ...detectionSources.map((root) => `detection source: ${root}`),
-      ],
-      agents: [harness.id],
-    };
-  });
-
-const skillItems = items.filter(
-  (item): item is SkillItem => item.kind === "skill" && item.provenance !== undefined,
-);
-const skillGroups = groupSkills(skillItems);
+const { sections, skillItems, skillGroups } = auditPresentation(report);
 let skillNavigation: SkillNavigation = { view: "groups" };
-
-function groupStatus(skills: AuditItem[]): AuditItem["status"] {
-  if (skills.some((skill) => skill.status === "error")) return "error";
-  if (skills.some((skill) => skill.status === "warning")) return "warning";
-  return "clear";
-}
-
-function groupRow(group: SkillGroup<SkillItem>): SkillGroupRow {
-  const { skills } = group;
-  const findings = skills.reduce((total, skill) => total + (skill.findingCount ?? 0), 0);
-  return {
-    name: group.label,
-    kind: "skill-group",
-    location: groupLocation(group.identity),
-    status: groupStatus(skills),
-    summary: `${skills.length} discovered Skill${skills.length === 1 ? "" : "s"} in this group.`,
-    evidence: [
-      `skills: ${skills.length}`,
-      `findings: ${findings}`,
-      `harnesses: ${[...new Set(skills.flatMap((skill) => skill.agents))].join(", ") || "none"}`,
-    ],
-    agents: [...new Set(skills.flatMap((skill) => skill.agents))],
-    findingCount: findings,
-    findingCodes: [...new Set(skills.flatMap((skill) => skill.findingCodes ?? []))],
-    group,
-  };
-}
-
-const sections = [
-  {
-    key: "library",
-    title: "Library",
-    subtitle: "Enable, disable, and choose when agents may use a skill",
-    items: [] as AuditItem[],
-  },
-
-  {
-    key: "harnesses",
-    title: "Harnesses",
-    subtitle: "Detected agent harnesses",
-    items: harnessItems,
-  },
-  {
-    key: "skills",
-    title: "Skills",
-    subtitle: "All discovered Skills",
-    items: skillItems,
-  },
-  {
-    key: "claude-plugins",
-    title: "Claude plugins",
-    subtitle: "Plugins installed for Claude Code",
-    items: items.filter((item) => item.kind === "plugin" && item.agents.includes("claude-code")),
-  },
-  {
-    key: "codex-plugins",
-    title: "Codex plugins",
-    subtitle: "Plugins installed for Codex",
-    items: items.filter((item) => item.kind === "plugin" && item.agents.includes("codex")),
-  },
-  {
-    key: "mcps",
-    title: "MCPs",
-    subtitle: "MCP registrations across all harnesses",
-    items: items.filter((item) => item.kind === "mcp-server"),
-  },
-] as const;
 
 const snapshotPath = process.env.SKIT_TUI_SNAPSHOT;
 const { renderer, test } = await createRenderer(
@@ -449,14 +186,14 @@ const requestedItemIndex =
 let selectedItem =
   requestedItemIndex !== undefined && requestedItemIndex >= 0 ? requestedItemIndex : 0;
 if (sections[variant]?.key === "library" && requestedItem) {
-  const rows = libraryRows();
+  const rows = libraryRows(libraryHost.state?.skills ?? [], libraryCollectionId);
   const collectionIndex = rows.findIndex((row) => row.name === requestedItem);
   if (collectionIndex >= 0) selectedItem = collectionIndex;
   else {
     const skill = libraryHost.state?.skills.find((row) => row.name === requestedItem);
     if (skill) {
       libraryCollectionId = skill.collectionId;
-      selectedItem = libraryRows().findIndex(
+      selectedItem = libraryRows(libraryHost.state?.skills ?? [], libraryCollectionId).findIndex(
         (row) => row.kind === "library-skill" && row.row.skillVersionId === skill.skillVersionId,
       );
     }
@@ -501,19 +238,16 @@ function statusColor(status: AuditItem["status"]): string {
   }[status];
 }
 
-function statusMark(status: AuditItem["status"]): string {
-  return { clear: "●", warning: "◆", error: "▲" }[status];
-}
-
-function findingLabel(item: { status: AuditItem["status"]; findingCount?: number }): string {
-  if (item.status === "error") return "ERROR";
-  if (item.status === "warning")
-    return `${item.findingCount ?? 1} WARNING${(item.findingCount ?? 1) === 1 ? "" : "S"}`;
-  return "NO FINDINGS";
-}
-
-function abbreviatedHash(hash: string): string {
-  return hash.length > 24 ? `${hash.slice(0, 23)}…` : hash;
+function receiptFields(fields: readonly ReceiptField[]) {
+  return receipt(
+    fields.map((field) =>
+      kv(
+        field.label,
+        field.status ? chip(field.value, statusColor(field.status)) : field.value,
+        14,
+      ),
+    ),
+  );
 }
 
 let narrowDetails = false;
@@ -619,69 +353,19 @@ function footer(label: string): BoxRenderable {
   return result;
 }
 
-function libraryRow(row: LibrarySkillRow): LibraryRow {
-  const enabled = row.bindings.length > 0;
-  return {
-    name: row.name,
-    kind: "library-skill",
-    location: row.heading,
-    status: "clear",
-    summary: enabled
-      ? `Active in ${row.bindings.length} place${row.bindings.length === 1 ? "" : "s"}.`
-      : "Not active anywhere.",
-    evidence: enabled
-      ? row.bindings.map((binding) => binding.label)
-      : ["not active anywhere · press e to enable"],
-    agents: enabled ? ["every agent"] : [],
-    row,
-  };
-}
-
-function libraryRows(): (LibraryRow | LibraryCollectionRow)[] {
-  const skills = [...(libraryHost.state?.skills ?? [])].sort((left, right) =>
-    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
-  );
-  if (libraryCollectionId !== undefined)
-    return skills.filter((row) => row.collectionId === libraryCollectionId).map(libraryRow);
-  const collections = new Map<string, LibrarySkillRow[]>();
-  for (const row of skills) {
-    if (row.hasCollection === false) continue;
-    const members = collections.get(row.collectionId) ?? [];
-    members.push(row);
-    collections.set(row.collectionId, members);
-  }
-  const grouped = [...collections]
-    .sort(([, left], [, right]) =>
-      left[0]!.heading.localeCompare(right[0]!.heading, undefined, { sensitivity: "base" }),
-    )
-    .map(([collectionId, members]): LibraryCollectionRow => {
-      const enabled = members.filter((row) => row.bindings.length > 0).length;
-      return {
-        kind: "library-collection",
-        collectionId,
-        source: members[0]?.collectionSource,
-        name: members[0]!.heading,
-        location: collectionId,
-        status: "clear",
-        summary: `${members.length} Skill${members.length === 1 ? "" : "s"} · ${enabled} enabled`,
-        evidence: members.map(
-          (row) => `${row.name} · ${row.bindings.length ? "enabled" : "not enabled"}`,
-        ),
-        agents: [],
-      };
-    });
-  return [...grouped, ...skills.filter((row) => row.hasCollection === false).map(libraryRow)].sort(
-    (left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
-  );
+function currentSectionPresentation() {
+  return inventoryPresentation(sections[variant]!, {
+    skills: libraryHost.state?.skills ?? [],
+    collectionId: libraryCollectionId,
+    skillGroups,
+    skillNavigation,
+    findings: report.summary.findings,
+    libraryError: libraryOpenError,
+  });
 }
 
 function currentSectionItems(): InventoryItem[] {
-  const section = sections[variant]!;
-  if (section.key === "library") return libraryRows();
-  if (section.key !== "skills") return [...section.items];
-  return skillNavigation.view === "groups"
-    ? skillGroups.map(groupRow)
-    : skillNavigation.group.skills;
+  return currentSectionPresentation().items;
 }
 
 function selectedLibraryRow(): LibrarySkillRow | undefined {
@@ -690,20 +374,11 @@ function selectedLibraryRow(): LibrarySkillRow | undefined {
   return item?.kind === "library-skill" ? item.row : undefined;
 }
 
-/** The TUI writes its own copy from structured facts rather than reusing CLI output prose. */
-function changeSummary(pending: PendingLibraryChange): string {
-  return pending.facts
-    .map(
-      (fact) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every agent (${fact.destination})`,
-    )
-    .join("; ");
-}
-
 function inventoryView(): BoxRenderable {
   detailsScroll = null;
   const section = sections[variant]!;
-  const sectionItems = currentSectionItems();
+  const model = currentSectionPresentation();
+  const sectionItems = model.items;
   selectedItem = Math.min(selectedItem, Math.max(0, sectionItems.length - 1));
   const root = box("inventory-root", {
     width: "100%",
@@ -711,18 +386,7 @@ function inventoryView(): BoxRenderable {
     flexDirection: "column",
     backgroundColor: surface.canvas,
   });
-  root.add(
-    header(
-      section.title,
-      section.key === "library"
-        ? libraryCollectionId === undefined
-          ? `${sectionItems.length} Collections · ${libraryHost.state?.skills.length ?? 0} Skills`
-          : `${libraryHost.state?.skills.find((row) => row.collectionId === libraryCollectionId)?.heading ?? "Collection"} · ${sectionItems.length} Skills`
-        : section.key === "skills" && skillNavigation.view === "skills"
-          ? `${skillNavigation.group.label} · ${sectionItems.length} entries · ${report.summary.findings} findings`
-          : `${section.subtitle} · ${sectionItems.length} entries · ${report.summary.findings} findings`,
-    ),
-  );
+  root.add(header(section.title, model.subtitle));
 
   if (section.key === "library" && showNoChangeNotice)
     root.add(
@@ -753,17 +417,7 @@ function inventoryView(): BoxRenderable {
     border: true,
     ...panelColors(true),
     title: panelTitle(
-      fitLabel(
-        section.key === "library"
-          ? libraryCollectionId === undefined
-            ? "collections"
-            : (libraryHost.state?.skills.find((row) => row.collectionId === libraryCollectionId)
-                ?.heading ?? "collection")
-          : section.key === "skills" && skillNavigation.view === "skills"
-            ? `skills / ${skillNavigation.group.label} · ${sectionItems.length}`
-            : `${section.key} · ${sectionItems.length}`,
-        listWidth - 4,
-      ),
+      fitLabel(model.listTitle, listWidth - 4),
       section.key === "library" && libraryCollectionId !== undefined,
     ),
   });
@@ -772,20 +426,11 @@ function inventoryView(): BoxRenderable {
     width: "100%",
     height: "100%",
     selectedIndex: selectedItem,
-    showDescription: !(section.key === "library" && libraryCollectionId !== undefined),
+    showDescription: model.showDescription,
     itemSpacing: 0,
-    options: sectionItems.map((item, index) => ({
-      name: fitLabel(
-        section.key === "library" ? item.name : `${statusMark(item.status)} ${item.name}`,
-        listWidth - 6,
-      ),
-      description:
-        item.kind === "library-collection"
-          ? item.summary
-          : item.kind === "library-skill"
-            ? ""
-            : `${(item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind).toUpperCase()}  ${findingLabel(item).toLowerCase()}`,
-      value: `${item.kind}:${index}`,
+    options: model.options.map((option) => ({
+      ...option,
+      name: fitLabel(option.name, listWidth - 6),
     })),
     textColor: ink.DEFAULT,
     descriptionColor: ink.faint,
@@ -822,17 +467,9 @@ function inventoryView(): BoxRenderable {
       padding: 2,
     });
     empty.add(
-      text(
-        "inventory-empty-text",
-        section.key === "library"
-          ? libraryOpenError
-            ? `Library unavailable\n${libraryOpenError}`
-            : "Your Library is empty. Add a source with skit add <source>."
-          : `No ${section.title.toLowerCase()} detected.`,
-        {
-          fg: ink.faint,
-        },
-      ),
+      text("inventory-empty-text", model.emptyMessage, {
+        fg: ink.faint,
+      }),
     );
     if (!isNarrow()) body.add(listPanel);
     body.add(empty);
@@ -897,157 +534,46 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
     );
     return;
   }
-  if (item.kind === "library-collection") {
-    const sourceNames = {
-      github: "GitHub",
-      git: "Git",
-      registry: "SKIT registry",
-      url: "URL",
-      archive: "Archive",
-      local: "Local",
-      "authored-workspace": "Authored workspace",
-      "well-known": "Well-known endpoint",
-    };
+  const model = detailPresentation(item, section.key === "library", listingBudgets);
+  if (model.source !== undefined) {
     details.add(text("collection-source-title", "Source", { fg: tone.accentSoft }));
-    details.add(
-      text(
-        "collection-source",
-        item.source ? `${sourceNames[item.source.kind]}\n${item.source.locator}` : "Unknown",
-      ),
-    );
+    details.add(text("collection-source", model.source));
   } else {
     details.add(text("detail-name", item.name, { fg: statusColor(item.status) }));
     details.add(
-      new TextRenderable(renderer, {
-        id: "detail-receipt",
-        content: receipt([
-          kv(
-            "kind",
-            item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind,
-            14,
-          ),
-          ...(section.key === "library"
-            ? []
-            : [kv("findings", chip(findingLabel(item), statusColor(item.status)), 14)]),
-          kv(
-            item.kind === "mcp-server"
-              ? "configured in"
-              : item.kind === "harness"
-                ? "executable"
-                : "location",
-            item.kind === "harness"
-              ? (item.harnessProbe?.executablePath ?? "not probed · press p")
-              : item.location,
-            14,
-          ),
-          ...(section.key === "library"
-            ? []
-            : [
-                kv(
-                  item.kind === "harness" ? "harness id" : "harnesses",
-                  item.agents.join(", ") || "n/a",
-                  14,
-                ),
-              ]),
-          ...(item.harnessProbe
-            ? [
-                kv("probe status", item.harnessProbe.status, 14),
-                kv("version", item.harnessProbe.version ?? "unknown", 14),
-                ...(item.harnessProbe.resolvedPath
-                  ? [kv("resolved", item.harnessProbe.resolvedPath, 14)]
-                  : []),
-              ]
-            : []),
-          ...(item.provenance
-            ? [
-                kv("source", item.provenance.source ?? "unknown", 14),
-                kv("confidence", item.provenance.confidence, 14),
-                ...(item.provenance.collectionId
-                  ? [kv("collection", item.provenance.collectionId, 14)]
-                  : []),
-                ...(item.provenance.skillId ? [kv("origin", item.provenance.skillId, 14)] : []),
-                ...(item.provenance.expectedHash
-                  ? [kv("expected hash", abbreviatedHash(item.provenance.expectedHash), 14)]
-                  : []),
-              ]
-            : []),
-          ...(item.mcp
-            ? [
-                kv("transport", item.mcp.transport, 14),
-                ...(item.mcp.command ? [kv("command", item.mcp.command, 14)] : []),
-                ...(item.mcp.args.length ? [kv("arguments", item.mcp.args.join(" "), 14)] : []),
-                ...(item.mcp.cwd ? [kv("working dir", item.mcp.cwd, 14)] : []),
-                ...(item.mcp.url ? [kv("url", item.mcp.url, 14)] : []),
-              ]
-            : []),
-        ]),
-      }),
+      new TextRenderable(renderer, { id: "detail-receipt", content: receiptFields(model.fields) }),
     );
   }
   details.add(text("detail-summary", item.summary));
-  if (item.kind === "harness") {
-    const budget = listingBudgets.find((budget) => budget.harness === item.name);
-    if (budget) {
-      details.add(
-        text("harness-listing-budget-title", "Skill listing budget", { fg: tone.accentSoft }),
-      );
-      details.add(
-        new TextRenderable(renderer, {
-          id: "harness-listing-budget",
-          content: budgetReceipt(budget),
-        }),
-      );
-    }
-  }
-  const addEvidence = () => {
+  if (model.budget) {
     details.add(
-      text("detail-evidence-title", item.kind === "library-collection" ? "Skills" : "Evidence", {
-        fg: tone.accentSoft,
+      text("harness-listing-budget-title", "Skill listing budget", { fg: tone.accentSoft }),
+    );
+    details.add(
+      new TextRenderable(renderer, {
+        id: "harness-listing-budget",
+        content: budgetReceipt(model.budget),
       }),
     );
-    details.add(text("detail-evidence", item.evidence.map((line) => `· ${line}`).join("\n")));
+  }
+  const addEvidence = () => {
+    details.add(text("detail-evidence-title", model.evidenceTitle, { fg: tone.accentSoft }));
+    details.add(text("detail-evidence", model.evidence));
   };
-  if (item.kind !== "library-collection") addEvidence();
+  if (!model.evidenceLast) addEvidence();
   details.add(text("detail-action-title", "Actions", { fg: tone.accentSoft }));
-  const shortcuts: [string, string][] =
-    item.kind === "library-collection"
-      ? [
-          ["enter", "browse Skills"],
-          ["e", "enable Collection"],
-          ["d", "disable Collection"],
-        ]
-      : [];
-  if (shortcuts.length) {
+  if (model.shortcuts.length) {
     const actions = box("detail-actions", { flexDirection: "column", gap: 0, flexShrink: 0 });
-    for (const [index, shortcut] of shortcuts.entries()) {
+    for (const [index, shortcut] of model.shortcuts.entries()) {
       actions.add(
-        new TextRenderable(renderer, {
-          id: `detail-action-${index}`,
-          content: keybar([shortcut]),
-        }),
+        new TextRenderable(renderer, { id: `detail-action-${index}`, content: keybar([shortcut]) }),
       );
     }
     details.add(actions);
   } else {
-    details.add(
-      text(
-        "detail-action",
-        item.status === "clear"
-          ? item.riskFlagCount
-            ? "Review inferred capabilities and risk signals"
-            : "No audit findings"
-          : item.status === "error"
-            ? item.findingCodes?.some((code) =>
-                ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
-              )
-              ? "Inspect custody evidence; this legacy marker does not authorize removal"
-              : "Disable projection and inspect content"
-            : "Inspect the warnings listed above",
-      ),
-    );
+    details.add(text("detail-action", model.action));
   }
-
-  if (item.kind === "library-collection") addEvidence();
+  if (model.evidenceLast) addEvidence();
 }
 
 function render(): void {
@@ -1275,24 +801,7 @@ async function runHarnessProbe(item: AuditItem): Promise<void> {
   } finally {
     probing.delete(item.name);
   }
-  item.harnessProbe = result;
-  item.status =
-    result.status === "failed" ? "error" : result.status === "missing" ? "warning" : "clear";
-  item.summary =
-    result.status === "installed"
-      ? `${result.version ? `Version ${result.version}` : "Installed"}.`
-      : (result.error ?? `Harness probe ${result.status}.`);
-  item.evidence = [
-    `probe: ${result.status}`,
-    `command: ${result.command} --version`,
-    ...(result.versionOutput
-      ? [
-          `version output: ${result.versionOutput.split("\n").find(Boolean) ?? result.versionOutput}`,
-        ]
-      : []),
-    ...(result.error ? [`probe error: ${result.error}`] : []),
-    ...item.evidence.filter((line) => !line.startsWith("installation probe:")),
-  ];
+  Object.assign(item, harnessProbePresentation(item, result));
 }
 
 function probeSelectedHarness(all: boolean): void {
@@ -1408,49 +917,12 @@ function closeConfirm(): void {
   render();
 }
 
-function confirmationReceiptContent(pending: PendingLibraryChange) {
-  return receipt(
-    pending.facts.flatMap((fact, index) => [
-      ...(fact.collectionLabel === undefined
-        ? [kv("skills", fact.skills.join(", "), 14)]
-        : [
-            kv("collection", fact.collectionLabel, 14),
-            kv("skills", String(fact.skills.length), 14),
-            ...(confirmShowSkills ? [kv("included", fact.skills.join(", "), 14)] : []),
-          ]),
-      kv("agents", "every agent", 14),
-      kv("applies to", fact.destination, 14),
-      ...(fact.action === "enable" && (pending.policies[index] ?? pending.policies[0])
-        ? [
-            kv(
-              "behaviour",
-              invocationRowSummary((pending.policies[index] ?? pending.policies[0])!),
-              14,
-            ),
-          ]
-        : []),
-      ...(fact.wholeCollection
-        ? [
-            kv(
-              "updates",
-              fact.action === "enable"
-                ? "includes new skills and removes deleted ones when you update"
-                : "every skill is disabled",
-              14,
-            ),
-          ]
-        : []),
-      kv("writes", fact.writes, 14),
-    ]),
-  );
-}
-
 /** Every Library write passes through this preview before it is applied. */
 function openConfirm(): void {
   const pending = libraryHost.state?.pending;
   if (!pending) return;
   closeConfirm();
-  const enabling = pending.facts.every((fact) => fact.action === "enable");
+  const model = confirmationPresentation(pending, confirmShowSkills, isCompact());
   const overlay = box("library-confirm", {
     position: "absolute",
     ...modalWidth(),
@@ -1460,7 +932,7 @@ function openConfirm(): void {
     border: true,
     backgroundColor: surface.canvas,
     ...panelColors(true),
-    title: panelTitle(enabling ? "confirm enable" : "confirm disable"),
+    title: panelTitle(model.title),
     flexDirection: "column",
     padding: 1,
     gap: 1,
@@ -1473,25 +945,17 @@ function openConfirm(): void {
     scrollX: false,
     contentOptions: { gap: 1, flexShrink: 0 },
   });
-  scroll.add(text("library-confirm-summary", changeSummary(pending), { fg: ink.strong }));
+  scroll.add(text("library-confirm-summary", model.summary, { fg: ink.strong }));
   confirmReceipt = new TextRenderable(renderer, {
     id: "library-confirm-receipt",
-    content: confirmationReceiptContent(pending),
+    content: receiptFields(model.fields),
   });
   scroll.add(confirmReceipt);
   overlay.add(scroll);
-  confirmHelp = text(
-    "library-confirm-help",
-    pending.facts.some((fact) => fact.wholeCollection)
-      ? `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`
-      : isCompact()
-        ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
-        : "enter apply   esc cancel — nothing is written until you apply",
-    {
-      fg: ink.faint,
-      flexShrink: 0,
-    },
-  );
+  confirmHelp = text("library-confirm-help", model.help, {
+    fg: ink.faint,
+    flexShrink: 0,
+  });
   overlay.add(confirmHelp);
   confirmView = overlay;
   confirmScroll = scroll;
@@ -1835,15 +1299,19 @@ function handleGlobalKey(key: KeyEvent): void {
       void applyPending();
     } else if (
       key.name === "s" &&
-      libraryHost.state?.pending?.facts.some((fact) => fact.wholeCollection)
+      libraryHost.state?.pending &&
+      confirmationPresentation(libraryHost.state.pending, confirmShowSkills, isCompact())
+        .canShowSkills
     ) {
       key.preventDefault();
       key.stopPropagation();
       confirmShowSkills = !confirmShowSkills;
       const pending = libraryHost.state?.pending;
-      if (pending && confirmReceipt) confirmReceipt.content = confirmationReceiptContent(pending);
-      if (confirmHelp)
-        confirmHelp.content = `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`;
+      if (pending) {
+        const model = confirmationPresentation(pending, confirmShowSkills, isCompact());
+        if (confirmReceipt) confirmReceipt.content = receiptFields(model.fields);
+        if (confirmHelp) confirmHelp.content = model.help;
+      }
     } else if (["pageup", "pagedown", "home", "end"].includes(key.name)) {
       key.preventDefault();
       if (key.name === "home") confirmScroll?.scrollTo(0);
@@ -1909,7 +1377,7 @@ function handleGlobalKey(key: KeyEvent): void {
   ) {
     const previous = libraryCollectionId;
     libraryCollectionId = undefined;
-    selectedItem = libraryRows().findIndex(
+    selectedItem = libraryRows(libraryHost.state?.skills ?? [], libraryCollectionId).findIndex(
       (row) => row.kind === "library-collection" && row.collectionId === previous,
     );
     key.preventDefault();
