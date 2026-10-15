@@ -122,6 +122,13 @@ invalid resolution, or described conflicts. Raw alias maps, preliminary merge re
 merge needed for conflict resolution stay inside the merge implementation. Sync retains ancestry
 and adoption gates, filesystem collision checks, transfer planning and publication order.
 
+The skills.sh lock module owns decoding supported lock versions, matching installed copies,
+resolving selected source claims, revalidating lock snapshots and translating provenance.
+Discovery supplies lock locations and installed copies; setup validates selections and groups
+candidates, then requests import evidence before handing installed bytes to core retention.
+Changed or missing locks fail before retention. Lock claims remain observations, including unknown
+entry fields; preparing evidence does not fetch upstream content or verify a revision.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.

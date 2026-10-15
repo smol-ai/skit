@@ -1,6 +1,15 @@
-import { Data, Schema } from "effect";
+import { createHash } from "node:crypto";
+import { basename, dirname } from "node:path";
+import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import { sourceLocator, SkitSource } from "@smolai/skit-core";
-import type { SetupLockMatch } from "./setup-contract.js";
+import type { MachineId, SkillsShProvenanceObservation } from "@smolai/skit-core";
+import type {
+  SetupLockMatch,
+  SetupSkillsLock,
+  SetupSkillsLockEntry,
+  SetupSkillInstance,
+} from "./setup-contract.js";
+import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 
 const namePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -121,3 +130,254 @@ export const setupLockGroupKey = (lock: SetupLockMatch) => {
     ? `${lock.lockPath}\0${collection.sourceKey}\0${lock.entry.ref ?? ""}\0${lock.lockContentHash}`
     : undefined;
 };
+
+const SkillsLockEntry = Schema.StructWithRest(
+  Schema.Struct({
+    source: Schema.String,
+    sourceType: Schema.String,
+    sourceUrl: Schema.optionalKey(Schema.String),
+    sourceBaseUrl: Schema.optionalKey(Schema.String),
+    ref: Schema.optionalKey(Schema.String),
+    updatedAt: Schema.optionalKey(Schema.String),
+    skillPath: Schema.optionalKey(Schema.String),
+    computedHash: Schema.optionalKey(Schema.String),
+    skillFolderHash: Schema.optionalKey(Schema.String),
+    wellKnownDigest: Schema.optionalKey(Schema.String),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+
+const SkillsLockDocument = Schema.fromJsonString(
+  Schema.Struct({
+    version: Schema.Number,
+    skills: Schema.Record(Schema.String, SkillsLockEntry),
+  }),
+);
+
+export const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
+  scope: SetupSkillsLock["scope"],
+  path: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
+  if (text === undefined) return undefined;
+  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text);
+  if (Result.isFailure(decoded)) return { scope, path, status: "malformed" as const, entries: [] };
+  const expected = scope === "project" ? 1 : 3;
+  if (decoded.success.version !== expected)
+    return {
+      scope,
+      path,
+      status: "unsupported" as const,
+      version: decoded.success.version,
+      entries: [] as SetupSkillsLockEntry[],
+    };
+  const entries: SetupSkillsLockEntry[] = [];
+  for (const [name, entry] of Object.entries(decoded.success.skills).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    const originalEntry = Schema.decodeUnknownResult(Schema.JsonObject)(entry);
+    if (Result.isFailure(originalEntry))
+      return { scope, path, status: "malformed" as const, entries: [] };
+    entries.push({
+      name,
+      source: entry.source,
+      sourceType: entry.sourceType,
+      ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}),
+      ...(entry.sourceBaseUrl ? { sourceBaseUrl: entry.sourceBaseUrl } : {}),
+      ...(entry.ref ? { ref: entry.ref } : {}),
+      ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
+      ...(entry.skillPath ? { skillPath: entry.skillPath } : {}),
+      ...(entry.computedHash ? { computedHash: entry.computedHash } : {}),
+      ...(entry.skillFolderHash ? { skillFolderHash: entry.skillFolderHash } : {}),
+      ...(entry.wellKnownDigest ? { wellKnownDigest: entry.wellKnownDigest } : {}),
+      originalEntry: originalEntry.success,
+    });
+  }
+  return {
+    scope,
+    path,
+    status: "valid" as const,
+    version: decoded.success.version,
+    contentHash: `sha256:${createHash("sha256").update(text).digest("hex")}`,
+    entries,
+  };
+});
+
+export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
+  hit: { name: string; path: string; realPath: string; repository?: string },
+  locks: readonly SetupSkillsLock[],
+  includeGlobal: boolean,
+) {
+  const matches: SetupLockMatch[] = [];
+  const names = new Set([hit.name.toLowerCase(), basename(hit.path).toLowerCase()]);
+  for (const lock of locks) {
+    if (lock.status !== "valid" || lock.version === undefined || lock.contentHash === undefined)
+      continue;
+    if (lock.scope === "global" && !includeGlobal) continue;
+    if (lock.scope === "project" && hit.repository && dirname(lock.path) !== hit.repository)
+      continue;
+    if (lock.scope === "project" && !hit.repository) continue;
+    const entry = lock.entries.find((candidate) => names.has(candidate.name.toLowerCase()));
+    if (!entry) continue;
+    let content: SetupLockMatch["content"] = "unverifiable";
+    const recordedHash = entry.computedHash ?? entry.skillFolderHash;
+    if (lock.scope === "project" && recordedHash) {
+      const observedHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
+      if (observedHash !== undefined)
+        content = observedHash === recordedHash ? "agrees" : "mismatch";
+    }
+    matches.push({
+      scope: lock.scope,
+      lockPath: lock.path,
+      lockVersion: lock.version,
+      lockContentHash: lock.contentHash,
+      content,
+      entry,
+    });
+  }
+  return matches;
+});
+
+export class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShImportEvidenceInvalid>()(
+  "SkillsShImportEvidenceInvalid",
+  {
+    name: Schema.String,
+    reason: Schema.Literals([
+      "observation-missing",
+      "contested-observation",
+      "source-unresolvable",
+      "lock-changed",
+    ]),
+  },
+) {}
+
+const retainedSkillPath = (lockPath: string | undefined, name: string) => {
+  if (!lockPath) return name;
+  const normalized = lockPath.replaceAll("\\", "/").replace(/^\.\//, "");
+  return normalized.endsWith("/SKILL.md") ? normalized.slice(0, -"/SKILL.md".length) : normalized;
+};
+
+const observationFor = (
+  lock: SetupLockMatch,
+  machineId: MachineId,
+  observedAt: string,
+  skillName: string,
+): SkillsShProvenanceObservation => ({
+  type: "skills.sh-lock",
+  machineId,
+  observedAt,
+  ...(lock.entry.updatedAt ? { sourceUpdatedAt: lock.entry.updatedAt } : {}),
+  lockPath: lock.lockPath,
+  lockVersion: lock.lockVersion,
+  lockScope: lock.scope,
+  lockContentHash: lock.lockContentHash,
+  source: lock.entry.source,
+  sourceType: lock.entry.sourceType,
+  ...(lock.entry.sourceUrl ? { sourceUrl: lock.entry.sourceUrl } : {}),
+  ...(lock.entry.sourceBaseUrl ? { sourceBaseUrl: lock.entry.sourceBaseUrl } : {}),
+  ...(lock.entry.ref ? { ref: lock.entry.ref } : {}),
+  skillName,
+  ...(lock.entry.skillPath ? { skillPath: lock.entry.skillPath } : {}),
+  ...(lock.entry.computedHash ? { computedHash: lock.entry.computedHash } : {}),
+  ...(lock.entry.skillFolderHash ? { skillFolderHash: lock.entry.skillFolderHash } : {}),
+  ...(lock.entry.wellKnownDigest ? { wellKnownDigest: lock.entry.wellKnownDigest } : {}),
+  contentAgreement: lock.content,
+  originalEntry: lock.entry.originalEntry,
+});
+
+/** Revalidate lock claims and prepare evidence for retention, without fetching upstream bytes. */
+export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImportEvidence")(
+  function* (
+    groupKey: string,
+    candidates: readonly { name: string; paths: readonly string[]; skillPath?: string }[],
+    instances: readonly Pick<SetupSkillInstance, "name" | "path" | "locks" | "contentIdentity">[],
+    machineId: MachineId,
+    observedAt: string,
+  ) {
+    const first = candidates[0];
+    if (!first)
+      return yield* new SkillsShImportEvidenceInvalid({
+        name: "collection",
+        reason: "observation-missing",
+      });
+    const observedSkills = [];
+    const provenance = [];
+    const claimedMembers: Array<{ lock: SetupLockMatch; name: string }> = [];
+    const fs = yield* FileSystem.FileSystem;
+    for (const candidate of candidates) {
+      const matchingInstances = instances.filter(
+        (item) =>
+          item.name === candidate.name &&
+          candidate.paths.includes(item.path) &&
+          item.locks.some((lock) => setupLockGroupKey(lock) === groupKey),
+      );
+      const matchingClaims = matchingInstances.flatMap((item) =>
+        item.locks.filter((lock) => setupLockGroupKey(lock) === groupKey),
+      );
+      const claimVariants = new Set(
+        matchingClaims.map((lock) =>
+          [
+            lock.entry.sourceType,
+            lock.entry.source,
+            lock.entry.sourceUrl ?? "",
+            lock.entry.sourceBaseUrl ?? "",
+            lock.entry.ref ?? "",
+            lock.entry.skillPath ?? "",
+          ].join("\0"),
+        ),
+      );
+      if (claimVariants.size > 1)
+        return yield* new SkillsShImportEvidenceInvalid({
+          name: candidate.name,
+          reason: "contested-observation",
+        });
+      const instance = [...matchingInstances].sort((left, right) =>
+        left.path.localeCompare(right.path),
+      )[0];
+      const observedHash = instance?.contentIdentity.observedHash;
+      const lock = instance?.locks.find((item) => setupLockGroupKey(item) === groupKey);
+      if (!instance || !observedHash || !lock)
+        return yield* new SkillsShImportEvidenceInvalid({
+          name: candidate.name,
+          reason: "observation-missing",
+        });
+      claimedMembers.push({ lock, name: candidate.name });
+      observedSkills.push({
+        name: candidate.name,
+        sourcePath: instance.path,
+        relativePath:
+          lock.entry.sourceType === "well-known"
+            ? candidate.name
+            : retainedSkillPath(candidate.skillPath, candidate.name),
+        observedHash,
+      });
+      for (const observation of matchingInstances.flatMap((item) =>
+        item.locks.filter((candidateLock) => setupLockGroupKey(candidateLock) === groupKey),
+      ))
+        provenance.push(observationFor(observation, machineId, observedAt, candidate.name));
+    }
+    for (const lock of new Map(claimedMembers.map(({ lock }) => [lock.lockPath, lock])).values()) {
+      const text = yield* fs
+        .readFileString(lock.lockPath)
+        .pipe(
+          Effect.catchTag("PlatformError", (error) =>
+            error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(error),
+          ),
+        );
+      if (`sha256:${createHash("sha256").update(text).digest("hex")}` !== lock.lockContentHash)
+        return yield* new SkillsShImportEvidenceInvalid({
+          name: first.name,
+          reason: "lock-changed",
+        });
+    }
+    const resolution = resolveSkillsShSelectedSource(claimedMembers);
+    if (resolution._tag !== "Resolved")
+      return yield* new SkillsShImportEvidenceInvalid({
+        name: first.name,
+        reason: "source-unresolvable",
+      });
+    const source = resolution.source;
+    return { source, skills: observedSkills, observations: provenance };
+  },
+);

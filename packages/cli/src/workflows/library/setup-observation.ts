@@ -10,7 +10,8 @@ import {
   projectionTargetHarnesses,
 } from "@smolai/skit-core";
 import { sourceIdentityLabel } from "../../library-application/skill-metadata.js";
-import { custodyAt, lockMatches, type SetupEvidence } from "./setup-discovery.js";
+import { custodyAt, type SetupEvidence } from "./setup-discovery.js";
+import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
 import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
 import { probeHarnessesEffect } from "../../harness/probe.js";

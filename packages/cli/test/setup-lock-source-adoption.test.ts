@@ -227,6 +227,30 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     );
     expect(candidate?.action).toBe("import-observed-collection");
     if (!candidate || candidate.action !== "import-observed-collection") return;
+    const lockPath = join(repository, "skills-lock.json");
+    const lockSnapshot = yield* fs.readFileString(lockPath);
+    for (const change of ["changed", "missing"] as const) {
+      if (change === "changed") yield* fs.writeFileString(lockPath, "changed lock snapshot\n");
+      else yield* fs.remove(lockPath);
+      const stale = yield* Effect.result(
+        home.owned(
+          writingTo(
+            home.home,
+            applySetupObservedCollections({ setup }, preview, [
+              { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
+            ]),
+          ),
+        ),
+      );
+      expect(stale).toMatchObject({
+        _tag: "Failure",
+        failure: { reason: "lock-changed" },
+      });
+      expect(yield* fs.exists(join(home.home, "state.json"))).toBe(false);
+      expect(yield* fs.exists(home.originals)).toBe(false);
+      expect(yield* fs.readFileString(join(installed, "SKILL.md"))).toBe(installedText);
+      yield* fs.writeFileString(lockPath, lockSnapshot);
+    }
     const adopted = yield* home.owned(
       writingTo(
         home.home,
@@ -281,21 +305,6 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     if (!reloaded.present) return;
     expect(reloaded.state.skills[0]?.versions).toHaveLength(1);
     expect(reloaded.state.acquisitions[0]?.input.value).toContain(base);
-    yield* fs.writeFileString(join(repository, "skills-lock.json"), "changed lock snapshot\n");
-    const stale = yield* Effect.result(
-      home.owned(
-        writingTo(
-          home.home,
-          applySetupObservedCollections({ setup }, preview, [
-            { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
-          ]),
-        ),
-      ),
-    );
-    expect(stale).toMatchObject({
-      _tag: "Failure",
-      failure: { reason: "lock-changed" },
-    });
   }).pipe(Effect.provide(skitLayer)),
 );
 

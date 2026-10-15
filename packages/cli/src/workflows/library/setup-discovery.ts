@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { basename, dirname, join, posix, relative, resolve, sep } from "node:path";
+import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Context, Effect, FileSystem, Result, Schema } from "effect";
 import {
   LinkStat,
@@ -19,7 +18,7 @@ import {
   type HarnessName as Harness,
   type LibraryState,
 } from "@smolai/skit-core";
-import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
+import { readSkillsLock } from "./skills-sh-lock-source.js";
 import { readableHarnessRoots } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
@@ -28,10 +27,7 @@ import type {
   SetupBrokenLink,
   SetupAuthoredCollection,
   SetupGitPreservation,
-  SetupLockMatch,
   SetupRepositoryConfig,
-  SetupSkillsLock,
-  SetupSkillsLockEntry,
   SetupSuppressed,
 } from "./setup-contract.js";
 const SUPPRESSED_NAMES = new Map<string, SetupSuppressed["reason"]>([
@@ -66,29 +62,6 @@ const PROJECT_COLLECTION_ROOTS = [
   "skills/.experimental",
   "skills/.system",
 ] as const;
-
-const SkillsLockEntry = Schema.StructWithRest(
-  Schema.Struct({
-    source: Schema.String,
-    sourceType: Schema.String,
-    sourceUrl: Schema.optionalKey(Schema.String),
-    sourceBaseUrl: Schema.optionalKey(Schema.String),
-    ref: Schema.optionalKey(Schema.String),
-    updatedAt: Schema.optionalKey(Schema.String),
-    skillPath: Schema.optionalKey(Schema.String),
-    computedHash: Schema.optionalKey(Schema.String),
-    skillFolderHash: Schema.optionalKey(Schema.String),
-    wellKnownDigest: Schema.optionalKey(Schema.String),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-
-const SkillsLockDocument = Schema.fromJsonString(
-  Schema.Struct({
-    version: Schema.Number,
-    skills: Schema.Record(Schema.String, SkillsLockEntry),
-  }),
-);
 
 const AuthorRemoteDocument = Schema.fromJsonString(
   Schema.Struct({
@@ -381,91 +354,6 @@ const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")
     });
   }
   return { hits, complete: Result.isSuccess(statusResult) };
-});
-
-const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
-  scope: SetupSkillsLock["scope"],
-  path: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
-  if (text === undefined) return undefined;
-  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text);
-  if (Result.isFailure(decoded)) return { scope, path, status: "malformed" as const, entries: [] };
-  const expected = scope === "project" ? 1 : 3;
-  if (decoded.success.version !== expected)
-    return {
-      scope,
-      path,
-      status: "unsupported" as const,
-      version: decoded.success.version,
-      entries: [] as SetupSkillsLockEntry[],
-    };
-  const entries: SetupSkillsLockEntry[] = [];
-  for (const [name, entry] of Object.entries(decoded.success.skills).sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    const originalEntry = Schema.decodeUnknownResult(Schema.JsonObject)(entry);
-    if (Result.isFailure(originalEntry))
-      return { scope, path, status: "malformed" as const, entries: [] };
-    entries.push({
-      name,
-      source: entry.source,
-      sourceType: entry.sourceType,
-      ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}),
-      ...(entry.sourceBaseUrl ? { sourceBaseUrl: entry.sourceBaseUrl } : {}),
-      ...(entry.ref ? { ref: entry.ref } : {}),
-      ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
-      ...(entry.skillPath ? { skillPath: entry.skillPath } : {}),
-      ...(entry.computedHash ? { computedHash: entry.computedHash } : {}),
-      ...(entry.skillFolderHash ? { skillFolderHash: entry.skillFolderHash } : {}),
-      ...(entry.wellKnownDigest ? { wellKnownDigest: entry.wellKnownDigest } : {}),
-      originalEntry: originalEntry.success,
-    });
-  }
-  return {
-    scope,
-    path,
-    status: "valid" as const,
-    version: decoded.success.version,
-    contentHash: `sha256:${createHash("sha256").update(text).digest("hex")}`,
-    entries,
-  };
-});
-
-export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
-  hit: SkillHit,
-  locks: readonly SetupSkillsLock[],
-  includeGlobal: boolean,
-) {
-  const matches: SetupLockMatch[] = [];
-  const names = new Set([hit.name.toLowerCase(), basename(hit.path).toLowerCase()]);
-  for (const lock of locks) {
-    if (lock.status !== "valid" || lock.version === undefined || lock.contentHash === undefined)
-      continue;
-    if (lock.scope === "global" && !includeGlobal) continue;
-    if (lock.scope === "project" && hit.repository && dirname(lock.path) !== hit.repository)
-      continue;
-    if (lock.scope === "project" && !hit.repository) continue;
-    const entry = lock.entries.find((candidate) => names.has(candidate.name.toLowerCase()));
-    if (!entry) continue;
-    let content: SetupLockMatch["content"] = "unverifiable";
-    const recordedHash = entry.computedHash ?? entry.skillFolderHash;
-    if (lock.scope === "project" && recordedHash) {
-      const observedHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
-      if (observedHash !== undefined)
-        content = observedHash === recordedHash ? "agrees" : "mismatch";
-    }
-    matches.push({
-      scope: lock.scope,
-      lockPath: lock.path,
-      lockVersion: lock.version,
-      lockContentHash: lock.contentHash,
-      content,
-      entry,
-    });
-  }
-  return matches;
 });
 
 export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
