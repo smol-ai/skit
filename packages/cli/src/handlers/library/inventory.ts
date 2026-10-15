@@ -3,14 +3,8 @@ import {
   skitConfigurationLayer,
 } from "../../configuration/skit-configuration.js";
 import { withLibraryWriter } from "@smolai/skit-core";
-import { readClaudeListingSnapshot } from "@smolai/skit-core";
-import {
-  observeHarnessSkills,
-  readableHarnessRoots,
-  type ShadowObservationError,
-} from "../../projection/harness-shadows.js";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
-import { Option, Effect, Record } from "effect";
+import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import {
   libraryDoctorReport,
@@ -27,8 +21,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
-import { nativeDiscovery, doctorHarnessCheck } from "../../workflows/library/doctor-harnesses.js";
-import { doctorCodexCheck } from "../../workflows/library/doctor-codex.js";
+import { inspectNativeDiscovery } from "../../workflows/library/doctor-harnesses.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 
@@ -116,56 +109,11 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
   const inventory = yield* refreshLibraryInventoryCommand(options);
   const report = libraryDoctorReport(inventory);
   const renderer = yield* Renderer;
-  const { codex, claude, harnesses } = yield* renderer.withStatus(
+  const native = yield* renderer.withStatus(
     "Checking native harness skill discovery",
-    Effect.all(
-      {
-        codex: doctorCodexCheck(inventory, process.cwd(), options.overrides.codex?.[0], options),
-        claude: readClaudeListingSnapshot(inventory, { ...options, cwd: process.cwd() }),
-        harnesses: Effect.forEach(
-          Record.keys(nativeDiscovery),
-          (harness) => doctorHarnessCheck(harness, process.cwd(), options.overrides[harness]),
-          { concurrency: 3 },
-        ),
-      },
-      { concurrency: 3 },
-    ),
+    inspectNativeDiscovery(inventory, { ...options, cwd: process.cwd() }),
   );
-  const aliasErrors: ShadowObservationError[] = [];
-  const locations = yield* observeHarnessSkills(
-    [
-      ...readableHarnessRoots(options, { kind: "global" }),
-      ...readableHarnessRoots(options, { kind: "repository", root: process.cwd() }),
-    ],
-    { errors: aliasErrors },
-  );
-  const { listingBudget, ...nativeCodex } = codex;
-  return {
-    ...report,
-    codex: nativeCodex,
-    listing_budgets: [
-      listingBudget ?? {
-        _tag: "Unavailable" as const,
-        harness: "codex" as const,
-        cwd: process.cwd(),
-        detail: "detail" in codex ? codex.detail : "Native discovery unavailable",
-      },
-      claude.budget,
-    ],
-    harnesses: harnesses.map((check) => {
-      const located = {
-        ...check,
-        locations: locations.filter((location) => location.harness === check.harness),
-        warnings: [
-          ...check.warnings,
-          ...aliasErrors.map(
-            (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
-          ),
-        ],
-      };
-      return nativeDiscovery[check.harness].classifyWarnings?.(located, inventory) ?? located;
-    }),
-  };
+  return { ...report, ...native };
 });
 
 const localInventoryMetadata = {

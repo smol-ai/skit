@@ -80,6 +80,14 @@ filesystem and Git evidence into one hit per installed path, retaining filesyste
 unavailable Git status when Git fails. The collector receives hits, configuration diagnostics and
 one discovery-completeness result; it does not interpret exclusions or combine provisional hits.
 
+Native diagnostics are assembled by `inspectNativeDiscovery` in `doctor-harnesses.ts`. The command
+refreshes Library inventory under its writer, then supplies that observation, explicit working
+directory and roots to native inspection after releasing the writer. The diagnostics boundary
+owns Harness enumeration, bounded concurrency, listing-budget fallbacks, filesystem locations,
+alias warnings and expected-collision classification. It does not refresh or publish Library state.
+Custom-root probe skipping and individual native adapters retain their existing behavior; the
+command only renders progress and combines the returned native facts with the Library report.
+
 Registry credential/alias and repository-decision mutations use the same root storage
 mutex through `withConfigurationWriter`, preserving exclusion with existing writers.
 This adapter does not open Library state or record Library history. Login questions run
