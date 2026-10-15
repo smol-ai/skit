@@ -129,6 +129,12 @@ candidates, then requests import evidence before handing installed bytes to core
 Changed or missing locks fail before retention. Lock claims remain observations, including unknown
 entry fields; preparing evidence does not fetch upstream content or verify a revision.
 
+Git inspection for skills.sh update checks owns mirror storage, clone/fetch, ref resolution,
+tree hashing and one baseline search. It returns evidence pinned to the resolved commit, with
+baseline lookup deferred until needed. Update checking selects observations, compares retained
+bytes and decides status without handling Git commands or mirror paths. A matching Git tree claim
+remains lock-only evidence; filesystem-byte verification remains a separate decision.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.
