@@ -18,6 +18,7 @@ import {
 /** Every one-shot failure a sync test can inject, each consumed at the boundary it targets. */
 export type Fault =
   | { readonly _tag: "FailUpload" }
+  | { readonly _tag: "FailDownload"; readonly digest: string }
   | { readonly _tag: "RejectWrite" }
   /** Another home commits this manifest just before the next write is evaluated. */
   | { readonly _tag: "CompetingWrite"; readonly manifest: LibraryManifest }
@@ -102,7 +103,10 @@ export function librarySyncServer(faults = faultQueue(), events: string[] = []) 
   const respond = (method: string, path: string, payload?: unknown): Response => {
     if (method !== "GET") writeRequests++;
     if (method === "GET" && path.startsWith("/api/libraries/")) {
-      const archive = snapshots.get(decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)));
+      const digest = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
+      if (faults.take("FailDownload", (fault) => fault.digest === digest))
+        return reply(StorageFailureResponse, { error: "storage_failure" });
+      const archive = snapshots.get(digest);
       return archive === undefined
         ? reply(LibraryNotFoundResponse, { error: "library_not_found" })
         : reply(SnapshotArchive, archive);

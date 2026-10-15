@@ -120,7 +120,7 @@ identities with remote records, carries that alignment into device references, d
 imported records, and validates requested remote conflict choices before returning a ready merge,
 invalid resolution, or described conflicts. Raw alias maps, preliminary merge results and the second
 merge needed for conflict resolution stay inside the merge implementation. Sync retains ancestry
-and adoption gates, filesystem collision checks, transfer planning and publication order.
+and adoption gates, filesystem collision checks and publication order.
 
 The skills.sh lock module owns decoding supported lock versions, matching installed copies,
 resolving selected source claims, revalidating lock snapshots and translating provenance.
@@ -148,6 +148,13 @@ resolution and staging lifetime. Resolved paths remain inside that scope; only i
 durable retention receipts leave it. Retention holds writer authority through cleanup, while
 inspection does not publish Library state. Command handlers consume facts without owning source
 preparation or importing another command's workflow.
+
+Sync snapshot handling owns local archive capture and digest verification, archive deduplication,
+transfer selection, download concurrency and transfer progress. A verified inventory prepares a
+transfer that exposes its snapshot count, restoration and upload operations, keeping archives and
+digest indexes private. Restoration waits for all downloads before delegating byte retention and
+source reconstruction to core. Sync retains the local-state recheck between restoration and upload,
+and the remote-head, projection-retirement, local-state and reconciliation commit sequence.
 
 ## Command environments
 

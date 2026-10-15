@@ -3,16 +3,13 @@ import { Data, Effect } from "effect";
 import {
   canonicalJson,
   blendRestoredStateEffect,
-  captureSnapshotArchiveEffect,
   currentLibraryManifest,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
-  prepareRestoreEffect,
-  retainedTreePath,
   type LibraryManifest,
   type ProjectionTarget,
-  type SnapshotArchive,
 } from "@smolai/skit-core";
+import { inspectSyncSnapshots } from "./library-sync-snapshots.js";
 import { librarySyncApiEffect } from "./library-sync-api.js";
 import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
@@ -88,25 +85,16 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     };
     const api = yield* librarySyncApiEffect({ origin: options.origin, token: options.token });
     const local = yield* store.inspect;
-    let manifest = emptyManifest;
-    const localArchives: SnapshotArchive[] = [];
-    if (local.present) {
-      manifest = yield* libraryManifestFromLocalStateEffect(local.state);
-      let verified = 0;
-      for (const tree of local.state.retained_copies) {
-        yield* progress(
-          `Verifying retained copies · ${verified}/${local.state.retained_copies.length}`,
-        );
-        const archive = yield* captureSnapshotArchiveEffect(
-          retainedTreePath(store.originalsPath, tree.digest),
-        );
-        if (archive.digest !== tree.digest)
-          return { status: "local_bytes_changed" as const, digest: tree.digest };
-        if (!localArchives.some((candidate) => candidate.digest === archive.digest))
-          localArchives.push(archive);
-        verified++;
-      }
-    }
+    const manifest = local.present
+      ? yield* libraryManifestFromLocalStateEffect(local.state)
+      : emptyManifest;
+    const inventory = yield* inspectSyncSnapshots(
+      local.present ? local.state.retained_copies : [],
+      store.originalsPath,
+      progress,
+    );
+    if (inventory._tag === "Changed")
+      return { status: "local_bytes_changed" as const, digest: inventory.digest };
     yield* progress("Reading remote Library");
     const remote = yield* api.read();
     yield* progress("Planning Library sync");
@@ -208,19 +196,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
 
     // Equivalent handle alignment alone is not a Collection content or evidence change.
     const plan = planLibrarySync(merge.alignedLocal, remoteManifest, desired);
-    const required = [...new Set(desired.retained_copies.map((tree) => tree.digest))];
-    const snapshotSet = new Set(desired.snapshot_digests);
-    const localArchiveByDigest = new Map(localArchives.map((archive) => [archive.digest, archive]));
-    const downloads = required.filter(
-      (digest) => !localArchiveByDigest.has(digest) && snapshotSet.has(digest),
-    );
-    const uploads = [...localArchiveByDigest.values()].filter(
-      (archive) =>
-        required.includes(archive.digest) &&
-        snapshotSet.has(archive.digest) &&
-        !remoteManifest.snapshot_digests.includes(archive.digest),
-    );
-    const snapshots = remote === null ? uploads.length : downloads.length;
+    const transfer = inventory.prepareTransfer(desired, remote, api, options);
+    const snapshots = transfer.snapshotCount;
     if (!options.apply)
       return remote === null
         ? { status: "push_ready" as const, snapshots, plan }
@@ -248,32 +225,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     // revision, onto exactly the state this sync planned from, (6) reconcile Projections. Remote
     // commits before local, so an interruption leaves R ahead of B and the next sync re-derives
     // the same result from the old base; local state never names a revision R does not hold.
-    let completed = 0;
-    if (downloads.length) yield* progress(`Downloading Skill copies · 0/${downloads.length}`);
-    const downloaded =
-      remote === null
-        ? []
-        : yield* Effect.forEach(
-            downloads,
-            (digest) =>
-              api
-                .download(remote.library_id, digest)
-                .pipe(
-                  Effect.tap(() =>
-                    progress(`Downloading Skill copies · ${++completed}/${downloads.length}`),
-                  ),
-                ),
-            // Nothing is written until every archive arrives, so a failed download aborts cleanly.
-            { concurrency: 4 },
-          );
-    yield* progress("Restoring retained Skill copies");
-    const restored = yield* Effect.scoped(
-      prepareRestoreEffect(desired, [...localArchiveByDigest.values(), ...downloaded], {
-        originalsPath: store.originalsPath,
-        registryBaseUrl: options.origin,
-        ...(options.token === undefined ? {} : { registryToken: options.token }),
-      }),
-    );
+    const restored = yield* transfer.restore();
     // A merge or pull rechecks L before the remote write; a push relies on the publish check.
     if (remote !== null) {
       const fresh = yield* store.inspect;
@@ -283,11 +235,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       )
         return yield* new SyncLocalChanged();
     }
-    for (const [index, archive] of uploads.entries()) {
-      yield* progress(`Uploading Skill copies · ${index}/${uploads.length}`);
-      yield* api.upload(archive);
-      yield* progress(`Uploading Skill copies · ${index + 1}/${uploads.length}`);
-    }
+    yield* transfer.upload();
     yield* progress("Saving Library sync");
     const saved =
       remote !== null && same(desired, remoteManifest)

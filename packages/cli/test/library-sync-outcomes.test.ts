@@ -781,3 +781,30 @@ it.effect(
       assert.strictEqual((yield* b.state).collections.length, 2);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+it.effect("a failed snapshot download retains nothing and leaves the remote unchanged", () =>
+  Effect.gen(function* () {
+    const { a, b, fs, inject, server } = yield* devices;
+    yield* a.retain("first");
+    yield* a.retain("second");
+    yield* a.sync();
+    const before = server.stored;
+    inject({ _tag: "FailDownload", digest: server.remote!.manifest.snapshot_digests[1]! });
+    const progress: string[] = [];
+    const failure = yield* Effect.flip(
+      b.sync({
+        onProgress: (message) =>
+          Effect.sync(() => {
+            progress.push(message);
+          }),
+      }),
+    );
+    assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
+    assert.notInclude(progress, "Restoring retained Skill copies");
+    assert.isFalse(yield* fs.exists(join(b.home, "originals")));
+    assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
+    assert.strictEqual(b.publishes, 0);
+    assert.deepStrictEqual(server.stored, before);
+    assert.strictEqual((yield* b.sync()).status, "pulled");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
