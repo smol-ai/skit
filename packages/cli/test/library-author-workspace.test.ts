@@ -80,20 +80,18 @@ const workspaceFixture = Effect.gen(function* () {
   const path = join(source, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
   const ensure = (options: AuthorWorkspaceOptions = {}) =>
     home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
-  const metadata = fs
-    .readFileString(path)
-    .pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.fromJsonString(
-            Schema.Struct({
-              workspace_id: Schema.String,
-              registration: Schema.optionalKey(Schema.String),
-            }),
-          ),
+  const metadata = fs.readFileString(path).pipe(
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(
+        Schema.fromJsonString(
+          Schema.Struct({
+            workspace_id: Schema.String,
+            registration: Schema.optionalKey(Schema.String),
+          }),
         ),
       ),
-    );
+    ),
+  );
   return { fs, root, source, home, path, ensure, metadata };
 });
 
