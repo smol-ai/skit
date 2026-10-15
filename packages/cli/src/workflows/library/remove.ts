@@ -1,7 +1,4 @@
-import {
-  readAuthorWorkspaceEffect,
-  writeAuthorWorkspaceEffect,
-} from "../../library/author-workspace.js";
+import { markAuthorWorkspaceRemovedEffect } from "../../library/author-workspace.js";
 import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import {
   bindingSkillIds,
@@ -73,27 +70,8 @@ export const executeRemoveEffect = Effect.fn("Library.executeRemove")(
             plan.subject_id),
       variantsPath: (yield* LibraryStore).variantsPath,
     });
-    const removedCollection =
-      plan.subject_kind === "collection"
-        ? state.collections.find((collection) => collection.collection_id === plan.subject_id)
-        : undefined;
-    if (removedCollection?.upstream?.source_identity.kind === "authored-workspace") {
-      const workspacePath = state.acquisitions.find(
-        (acquisition) =>
-          acquisition.collection_id === removedCollection.collection_id &&
-          acquisition.source_identity.kind === "authored-workspace",
-      )?.input.value;
-      const workspace =
-        workspacePath === undefined ? undefined : yield* readAuthorWorkspaceEffect(workspacePath);
-      if (
-        workspacePath !== undefined &&
-        workspace?.workspace_id === removedCollection.upstream.source_identity.workspace_id
-      )
-        yield* writeAuthorWorkspaceEffect(workspacePath, {
-          ...workspace,
-          registration: "removed",
-        });
-    }
+    if (plan.subject_kind === "collection")
+      yield* markAuthorWorkspaceRemovedEffect(state, plan.subject_id);
     return { kind: "removed" as const, value: { ...plan, retired: removed.retired } };
   },
   (effect, _state, options) => (options.dryRun ? effect : withLibraryWriter(effect)),

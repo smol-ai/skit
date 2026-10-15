@@ -156,6 +156,13 @@ digest indexes private. Restoration waits for all downloads before delegating by
 source reconstruction to core. Sync retains the local-state recheck between restoration and upload,
 and the remote-head, projection-retirement, local-state and reconciliation commit sequence.
 
+Author workspace registration owns identity creation/recovery, physical-directory conflicts,
+registration metadata and Library retention. It checks conflicts before optional scaffolding,
+retains bytes before marking registration complete, and preserves explicit re-registration of
+removed workspaces. Removal delegates the identity-checked metadata transition after removing
+the Collection. Metadata codecs and raw writes stay private; callers supply lifecycle choices,
+while LibraryStore supplies storage without projection or home configuration plumbing.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.
