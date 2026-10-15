@@ -97,6 +97,15 @@ translation are private; callers provide a destination and source access rather 
 implementing reconstruction. Sync still owns remote snapshot downloads, conflict decisions, and
 the remote-write, projection-retirement, local-publication, reconciliation order.
 
+Local adoption owns physical custody transfer for setup's newly retained and existing Library
+matches. Setup validates candidate eligibility and approves duplicate decisions for every selected
+copy before applying any. A prepared adoption captures the selection, observed content and routing;
+its apply operation owns the Library writer, fresh alias checks, lossless retention or reuse,
+Binding changes, replacement-readability checks and recovery moves. Alias retirement plans and
+adoption-plan comparisons are private. Setup workflows return warnings and recovery locations
+without importing each other's mutation helpers. Presentation captures alias consent through the
+adoption boundary, independently of later setup stages.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.

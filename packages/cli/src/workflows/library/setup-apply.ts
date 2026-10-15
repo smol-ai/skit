@@ -93,11 +93,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           reconnects
             ? `Reconnecting ${reconnects} existing Library match${reconnects === 1 ? "" : "es"}`
             : "Keeping existing Library matches without enabling",
-          applySetupExistingBindings(
-            { setup: approval.setup, bindings: options.adoption.bindings },
-            current,
-            approval.bindings,
-          ),
+          applySetupExistingBindings(options.adoption, current, approval.bindings),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
@@ -109,11 +105,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             : "";
         const applied = yield* options.withStatus(
           `Taking custody of ${approval.custody.length} local Skill${approval.custody.length === 1 ? "" : "s"}${names}`,
-          applySetupLocalCustody(
-            { setup: approval.setup, adoption: options.adoption },
-            current,
-            approval.custody,
-          ),
+          applySetupLocalCustody(options.adoption, current, approval.custody),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);

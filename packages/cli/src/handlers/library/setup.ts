@@ -22,7 +22,7 @@ import {
 } from "../../presentation/setup-steps.js";
 import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
 import { applySetupPlan, type SetupApproval } from "../../workflows/library/setup-apply.js";
-import type { SetupLocalCustodyOptions } from "../../workflows/library/setup-local-custody.js";
+import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
 import type { SetupResult } from "../../workflows/library/setup-contract.js";
 import { result } from "../contracts.js";
 import { LibraryStore, MachineSettings } from "@smolai/skit-core";
@@ -57,7 +57,7 @@ export const shouldSetupInteractively = (input: {
 
 export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody?: SetupLocalCustodyOptions["adoption"];
+  readonly localCustody?: LocalAdoptionOptions;
   readonly interactive: boolean;
   readonly dryRun: boolean;
   readonly workDirFlag?: string;

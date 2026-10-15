@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { captureSetupAliasApproval } from "../workflows/library/setup-local-custody.js";
+import { captureLocalAdoptionAliases } from "../workflows/library/local-adoption.js";
 import type { SetupApproval } from "../workflows/library/setup-apply.js";
 import type { SetupResult } from "../workflows/library/setup-contract.js";
 import {
@@ -25,12 +25,12 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
     action: SetupDuplicateAction | undefined,
   ): Effect.fn.Return<
     SetupCopyDecision,
-    Effect.Error<ReturnType<typeof captureSetupAliasApproval>>,
-    Effect.Services<ReturnType<typeof captureSetupAliasApproval>>
+    Effect.Error<ReturnType<typeof captureLocalAdoptionAliases>>,
+    Effect.Services<ReturnType<typeof captureLocalAdoptionAliases>>
   > {
     if (action === undefined) return copy;
     if (action !== "retire-aliases") return { ...copy, duplicateAction: action };
-    const approvedAliases = yield* captureSetupAliasApproval(
+    const approvedAliases = yield* captureLocalAdoptionAliases(
       copy.sourcePath,
       copy.conflict.kind === "none" ? [] : copy.conflict.shadows,
     );
