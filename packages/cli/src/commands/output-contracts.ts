@@ -23,7 +23,7 @@ import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.js";
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
-import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
+import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled.js";
 import { RepositoryPolicyResult, SetupResult } from "../workflows/library/setup-contract.js";
 import {
   ProjectionRetentionPlan,

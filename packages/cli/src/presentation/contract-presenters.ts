@@ -10,7 +10,7 @@ import { basename, dirname, relative, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
 import { harnessLabel } from "../harness/catalog.js";
 import { renderInventory } from "./inventory.js";
-import { renderSetEnabled } from "./set-enabled.js";
+import { renderSetEnabled } from "../workflows/library/set-enabled.js";
 import { renderRemove, renderRemovePlan } from "./remove.js";
 import { renderCheck } from "./check.js";
 import { renderLibrarySync } from "./library-sync.js";

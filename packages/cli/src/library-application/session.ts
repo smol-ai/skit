@@ -11,8 +11,6 @@ import {
   retainedTreePath,
   versionBacking,
   LibraryStore,
-  withLibraryWriter,
-  lastPublishedLibraryState,
   libraryStateRevision,
   type LibraryState,
   type SourceIdentity,
@@ -31,12 +29,8 @@ import { bindingRowLabel, destinationLabel, scopeKey } from "./read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
 import { unspecifiedDeclaredInvocation } from "../invocation/library-source.js";
 import type { ProjectionOptions } from "../workflows/library/projection-options.js";
-import {
-  applyLibraryBindings,
-  SetEnabledStale,
-  previewLibraryBindings,
-} from "../workflows/library/set-enabled.js";
-import type { SetEnabledInvocation } from "../workflows/library/set-enabled-invocation.js";
+import { applyBindingChanges, previewLibraryBindings } from "../workflows/library/set-enabled.js";
+import type { SetEnabledInvocation } from "../workflows/library/set-enabled.js";
 
 export interface LibraryBindingRow {
   readonly scope: Scope;
@@ -454,26 +448,15 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
   if (pending === undefined)
     return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
   const applied = yield* Effect.result(
-    withLibraryWriter(
-      Effect.gen(function* () {
-        let expected = yield* (yield* LibraryStore).load;
-        if (libraryStateRevision(expected) !== pending.libraryRevision)
-          return yield* new SetEnabledStale({
-            message: "Library changed after this Binding change was previewed",
-          });
-        // Each operation applies only onto the state the previous one left, starting from the
-        // previewed revision; any other change in between makes the confirmation stale.
-        for (const { query, invocation, all } of pending.operations) {
-          yield* applyLibraryBindings(expected, {
-            query,
-            all: all ?? false,
-            invocation,
-            roots: configuration,
-            variantsPath: configuration.variantsPath,
-          });
-          expected = (yield* lastPublishedLibraryState) ?? expected;
-        }
-      }),
+    applyBindingChanges(
+      pending.libraryRevision,
+      pending.operations.map(({ query, invocation, all }) => ({
+        query,
+        all: all ?? false,
+        invocation,
+        roots: configuration,
+        variantsPath: configuration.variantsPath,
+      })),
     ),
   );
   const refreshed = yield* openLibrarySession();

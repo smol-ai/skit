@@ -3,32 +3,72 @@ import {
   bindingSkillIds,
   LinkStat,
   currentCollectionSkills,
+  DeviceBinding,
+  InvocationPolicy,
+  lastPublishedLibraryState,
   LibraryStore,
   libraryStateRevision,
+  ProjectionTarget,
+  RepositoryBinding,
   type SkillId,
   withLibraryWriter,
   type LibraryState,
-  type DeviceBinding,
-  type RepositoryBinding,
   type Digest,
   type SkitBindingScope,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem, Schema } from "effect";
 import { resolve } from "node:path";
 import { OptionCombinationInvalid } from "../failures.js";
-import {
-  validateSetEnabledInvocation,
-  type SetEnabledInvocation,
-} from "./set-enabled-invocation.js";
+import type { InvocationOption } from "../../invocation/policy.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import {
+  HarnessShadow,
   observeHarnessShadows,
   ProjectionWouldDuplicate,
-  type ShadowObservationError,
+  ShadowObservationError,
 } from "../../projection/harness-shadows.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+
+// The published output contract constrains every map value. Use string keys for this
+// wire view: Effect 4's JSON Schema exporter otherwise opens records whose custom
+// TypeID key check cannot be represented, dropping the value constraint as well.
+const invocationPolicies = Schema.optionalKey(Schema.Record(Schema.String, InvocationPolicy));
+const deviceBindingOutput = DeviceBinding.pipe(
+  Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
+);
+const repositoryBindingOutput = RepositoryBinding.pipe(
+  Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
+);
+
+export const SetEnabledPlan = Schema.Struct({
+  subject_id: Schema.String,
+  skills: Schema.Array(Schema.String),
+  scope: Schema.Union([DeviceBinding.fields.scope, RepositoryBinding.fields.scope]),
+  enabled: Schema.Boolean,
+  invocation: Schema.optionalKey(Schema.String),
+  changed: Schema.Boolean,
+  shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
+  bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
+});
+export type SetEnabledPlan = typeof SetEnabledPlan.Type;
+
+export const SetEnabledResult = SetEnabledPlan.pipe(
+  Schema.fieldsAssign({
+    /** Each target this change materialized; `.claude` appears only when Claude Code is present. */
+    projections: Schema.Array(Schema.Struct({ target: ProjectionTarget })),
+  }),
+);
+export type SetEnabledResult = typeof SetEnabledResult.Type;
+
+export interface SetEnabledInvocation {
+  scope: SkitBindingScope;
+  enabled: boolean;
+  invocation?: InvocationOption;
+  dryRun: boolean;
+}
 
 export interface SetEnabledOptions {
   readonly query: string;
@@ -58,6 +98,9 @@ export class SetEnabledStale
   readonly remediation = "Preview the Binding change again.";
 }
 
+const stale = () =>
+  new SetEnabledStale({ message: "Library changed after this Binding change was previewed" });
+
 const isDeviceBinding = (binding: DeviceBinding | RepositoryBinding): binding is DeviceBinding =>
   binding.scope.kind === "global";
 
@@ -75,7 +118,10 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   state: LibraryState,
   options: SetEnabledOptions,
 ) {
-  yield* Effect.fromResult(validateSetEnabledInvocation(options.invocation));
+  if (options.invocation.invocation !== undefined && !options.invocation.enabled)
+    return yield* new OptionCombinationInvalid({
+      detail: "--invocation applies only when enabling a Projection",
+    });
   const subject = yield* resolveLibrarySubject(state, options.query);
   const collection = subject.kind === "collection" ? subject.collection : undefined;
   const skill = subject.kind === "skill" ? subject.skill : undefined;
@@ -232,10 +278,7 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
     Effect.gen(function* () {
       const store = yield* LibraryStore;
       const current = yield* store.load;
-      if (libraryStateRevision(current) !== expectedRevision)
-        return yield* new SetEnabledStale({
-          message: "Library changed after this Binding change was previewed",
-        });
+      if (libraryStateRevision(current) !== expectedRevision) return yield* stale();
       if (options.invocation.enabled && !options.allowDuplicate) {
         const selected = yield* resolveLibrarySubject(current, options.query);
         const existing = scopeBinding(current, plan.scope);
@@ -289,15 +332,9 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
           }
         }
         // Publishing onto `current`, the previewed revision, makes the check above atomic.
-        yield* store.publish({ ...current, global_bindings, local_bindings }, current).pipe(
-          Effect.catchTag("LibraryChanged", () =>
-            Effect.fail(
-              new SetEnabledStale({
-                message: "Library changed after this Binding change was previewed",
-              }),
-            ),
-          ),
-        );
+        yield* store
+          .publish({ ...current, global_bindings, local_bindings }, current)
+          .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(stale())));
       }
       const selected = yield* resolveLibrarySubject(current, options.query);
       const reconciled = yield* reconcileLibraryProjections({
@@ -340,3 +377,51 @@ export const applyLibraryBindings = Effect.fn("LibraryBindings.apply")(function*
     }),
   );
 });
+
+/** Apply previewed changes in order, each onto the state the previous one left; any other change since the preview is stale. */
+export const applyBindingChanges = Effect.fn("LibraryBindings.applyAll")(function* (
+  previewedRevision: string,
+  changes: readonly SetEnabledOptions[],
+) {
+  return yield* withLibraryWriter(
+    Effect.gen(function* () {
+      let expected = yield* (yield* LibraryStore).load;
+      if (libraryStateRevision(expected) !== previewedRevision) return yield* stale();
+      const outcomes = [];
+      for (const change of changes) {
+        outcomes.push(yield* applyLibraryBindings(expected, change));
+        expected = (yield* lastPublishedLibraryState) ?? expected;
+      }
+      return outcomes;
+    }),
+  );
+});
+
+export function renderSetEnabled(
+  data: SetEnabledPlan | SetEnabledResult,
+  applied: boolean,
+): string {
+  const verb = applied
+    ? data.enabled
+      ? "Enabled"
+      : "Disabled"
+    : data.enabled
+      ? "Would enable"
+      : "Would disable";
+  const skills =
+    data.skills.length > 3
+      ? `${data.skills.length} skills`
+      : data.skills.length
+        ? data.skills.join(", ")
+        : "no skills";
+  const destination = data.scope.kind === "global" ? "" : ` in ${data.scope.root}`;
+  const change = data.changed ? "" : data.enabled ? " · Already enabled" : " · Already disabled";
+  const shadows = data.shadows ?? [];
+  const warning = shadows.length
+    ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
+    : "";
+  const warnings = data.warnings
+    ?.map((warning) => `Could not inspect ${warning.path}: ${warning.message}`)
+    .join("\n");
+  return `${verb} ${skills}${destination}${change}${warning}${warnings ? `\n${warnings}` : ""}`;
+}
