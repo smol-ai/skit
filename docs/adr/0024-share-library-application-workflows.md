@@ -245,6 +245,16 @@ it retains async content reads and probe execution. Receipt formatting uses one 
 Presentation tests assert derived facts, while key replay continues to verify writes and cancellation
 against real Library storage.
 
+The TUI interaction controller owns one active mode (`browse`, `chooser`, `confirm`, `document`
+or `palette`), overlay replacement/disposal, focus restoration and mode-specific key routing.
+Overlays expose only mount/dispose/focus/resize plus selection, scrolling or confirmation updates;
+renderer handles stay in the rendering adapter. The controller emits commands for Library work and
+navigation rather than performing effects. Confirmation member visibility belongs to its mode and
+resets on replacement. Async document reads capture the browsing revision, so a modal transition,
+selection change invalidates their permission to open a document; resize and background renders
+leave that permission intact. The read also checks that the selected Skill path is unchanged. Library
+writes and revision checks remain in the application workflows.
+
 ## Validation
 
 Boundary tests run a real parsed listing while another fiber holds the writer and exercise

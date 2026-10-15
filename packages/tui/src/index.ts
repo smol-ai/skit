@@ -60,6 +60,7 @@ import {
 import { budgetReceipt } from "./budget/receipt";
 import { createLibraryHost } from "./library-host";
 import { createRenderer, writeFrame } from "./snapshot";
+import { createInteractionController, type Overlay, type ScrollKey } from "./interaction";
 import { copySelectedText, isCopySelectionKey } from "./selection-copy";
 import {
   chip,
@@ -200,10 +201,7 @@ if (sections[variant]?.key === "library" && requestedItem) {
   }
 }
 let currentView: BoxRenderable | null = null;
-let paletteView: BoxRenderable | null = null;
-let paletteSelect: SelectRenderable | null = null;
-let documentView: BoxRenderable | null = null;
-let documentScroll: ScrollBoxRenderable | null = null;
+const interaction = createInteractionController(renderInventory);
 let pendingSkillPreview: Promise<void> | undefined;
 
 function box(
@@ -440,6 +438,7 @@ function inventoryView(): BoxRenderable {
     wrapSelection: true,
   });
   select.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
+    if (selectedItem !== index) interaction.navigationChanged();
     selectedItem = index;
     const item = sectionItems[index];
     if (detailsScroll && item) populateDetails(detailsScroll, item);
@@ -577,6 +576,15 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
 }
 
 function render(): void {
+  interaction.renderBrowse();
+}
+
+function renderNavigation(): void {
+  interaction.navigationChanged();
+  render();
+}
+
+function renderInventory(): void {
   if (currentView) {
     renderer.root.remove(currentView);
     currentView.destroyRecursively();
@@ -592,7 +600,7 @@ function switchVariant(next: number): void {
   libraryCollectionId = undefined;
   narrowDetails = false;
   selectedItem = 0;
-  render();
+  renderNavigation();
 }
 
 const keymap = createDefaultOpenTuiKeymap(renderer);
@@ -677,12 +685,7 @@ function commandField(
 }
 
 function closePalette(): void {
-  if (!paletteView) return;
-  renderer.root.remove(paletteView);
-  paletteView.destroyRecursively();
-  paletteView = null;
-  paletteSelect = null;
-  render();
+  interaction.close("palette");
 }
 
 function runPaletteCommand(name: string): void {
@@ -690,18 +693,9 @@ function runPaletteCommand(name: string): void {
   keymap.runCommand(name);
 }
 
-function closeDocument(): void {
-  if (!documentView) return;
-  renderer.root.remove(documentView);
-  documentView.destroyRecursively();
-  documentView = null;
-  documentScroll = null;
-  render();
-}
-
 function openSelectedSkill(): void {
   if (
-    documentView ||
+    interaction.kind !== "browse" ||
     (!isNarrow() && !(sections[variant]?.key === "library" || sections[variant]?.key === "skills"))
   )
     return;
@@ -710,23 +704,24 @@ function openSelectedSkill(): void {
     libraryCollectionId = item.collectionId;
     narrowDetails = false;
     selectedItem = 0;
-    render();
+    renderNavigation();
     return;
   }
   if (item?.kind === "skill-group") {
     skillNavigation = { view: "skills", group: item.group };
     selectedItem = 0;
-    render();
+    renderNavigation();
     return;
   }
   if (item && isNarrow() && !narrowDetails) {
     narrowDetails = true;
-    render();
+    renderNavigation();
     return;
   }
   if (!item || item.kind !== "skill") return;
   const location = item.location;
   const name = item.name;
+  const stillBrowsing = interaction.captureBrowse();
   void libraryHost
     .run(
       Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(location)).pipe(
@@ -734,7 +729,8 @@ function openSelectedSkill(): void {
       ),
     )
     .then((content) => {
-      if (documentView) return;
+      const selected = currentSectionItems()[selectedItem];
+      if (!stillBrowsing() || selected?.kind !== "skill" || selected.location !== location) return;
       showDocument(name, location, content);
     });
 }
@@ -778,10 +774,13 @@ function showDocument(name: string, location: string, content: string): void {
       height: 1,
     }),
   );
-  documentView = overlay;
-  documentScroll = scroll;
-  renderer.root.add(overlay);
-  scroll.focus();
+  interaction.open({
+    kind: "document",
+    view: {
+      ...overlayHandle(overlay, () => scroll.focus(), false),
+      scroll: (key) => scrollOverlay(scroll, key),
+    },
+  });
 }
 
 /** Harnesses with a probe already running, so a repeated key cannot start a second one. */
@@ -832,26 +831,13 @@ interface Chooser {
   choose: (value: string) => void | Promise<void>;
 }
 
-let chooserView: BoxRenderable | null = null;
-let chooserSelect: SelectRenderable | null = null;
-let confirmView: BoxRenderable | null = null;
-let confirmScroll: ScrollBoxRenderable | null = null;
-let confirmShowSkills = false;
 let showNoChangeNotice = false;
-let confirmReceipt: TextRenderable | null = null;
-let confirmHelp: TextRenderable | null = null;
 
 function closeChooser(): void {
-  if (!chooserView) return;
-  renderer.root.remove(chooserView);
-  chooserView.destroyRecursively();
-  chooserView = null;
-  chooserSelect = null;
-  render();
+  interaction.close("chooser");
 }
 
 function openChooser(chooser: Chooser): void {
-  closeChooser();
   const overlay = box("library-chooser", {
     position: "absolute",
     ...modalWidth(),
@@ -900,29 +886,24 @@ function openChooser(chooser: Chooser): void {
   overlay.add(
     text("library-chooser-help", "↑↓ browse   enter select   esc cancel", { fg: ink.faint }),
   );
-  chooserView = overlay;
-  chooserSelect = select;
-  renderer.root.add(overlay);
-  select.focus();
+  interaction.open({
+    kind: "chooser",
+    view: {
+      ...overlayHandle(overlay, () => select.focus()),
+      move: (direction) => (direction === "up" ? select.moveUp() : select.moveDown()),
+    },
+  });
 }
 
 function closeConfirm(): void {
-  if (!confirmView) return;
-  renderer.root.remove(confirmView);
-  confirmView.destroyRecursively();
-  confirmView = null;
-  confirmScroll = null;
-  confirmReceipt = null;
-  confirmHelp = null;
-  render();
+  interaction.close("confirm");
 }
 
 /** Every Library write passes through this preview before it is applied. */
 function openConfirm(): void {
   const pending = libraryHost.state?.pending;
   if (!pending) return;
-  closeConfirm();
-  const model = confirmationPresentation(pending, confirmShowSkills, isCompact());
+  const model = confirmationPresentation(pending, false, isCompact());
   const overlay = box("library-confirm", {
     position: "absolute",
     ...modalWidth(),
@@ -946,21 +927,30 @@ function openConfirm(): void {
     contentOptions: { gap: 1, flexShrink: 0 },
   });
   scroll.add(text("library-confirm-summary", model.summary, { fg: ink.strong }));
-  confirmReceipt = new TextRenderable(renderer, {
+  const confirmReceipt = new TextRenderable(renderer, {
     id: "library-confirm-receipt",
     content: receiptFields(model.fields),
   });
   scroll.add(confirmReceipt);
   overlay.add(scroll);
-  confirmHelp = text("library-confirm-help", model.help, {
+  const confirmHelp = text("library-confirm-help", model.help, {
     fg: ink.faint,
     flexShrink: 0,
   });
   overlay.add(confirmHelp);
-  confirmView = overlay;
-  confirmScroll = scroll;
-  renderer.root.add(overlay);
-  scroll.focus();
+  interaction.open({
+    kind: "confirm",
+    canShowSkills: model.canShowSkills,
+    view: {
+      ...overlayHandle(overlay, () => scroll.focus()),
+      scroll: (key) => scrollOverlay(scroll, key),
+      update: (showSkills) => {
+        const next = confirmationPresentation(pending, showSkills, isCompact());
+        confirmReceipt.content = receiptFields(next.fields);
+        confirmHelp.content = next.help;
+      },
+    },
+  });
 }
 
 function afterProposal(outcome: LibraryActionOutcome | undefined): void {
@@ -968,7 +958,6 @@ function afterProposal(outcome: LibraryActionOutcome | undefined): void {
   showNoChangeNotice = outcome.kind === "unchanged";
   render();
   if (outcome.kind === "preview") {
-    confirmShowSkills = false;
     openConfirm();
   }
 }
@@ -1199,7 +1188,7 @@ async function refreshLibrary(): Promise<void> {
 }
 
 function openPalette(): void {
-  if (paletteView) return;
+  if (interaction.kind === "palette") return;
 
   const overlay = box("command-palette", {
     position: "absolute",
@@ -1257,176 +1246,121 @@ function openPalette(): void {
   overlay.add(input);
   overlay.add(select);
   overlay.add(text("command-palette-help", "↑↓ browse   enter run   esc close", { fg: ink.faint }));
-  paletteView = overlay;
-  paletteSelect = select;
-  renderer.root.add(overlay);
-  input.focus();
+  interaction.open({
+    kind: "palette",
+    view: {
+      ...overlayHandle(overlay, () => input.focus()),
+      move: (direction) => (direction === "up" ? select.moveUp() : select.moveDown()),
+    },
+  });
+}
+
+/** Translate renderer handles to the small capabilities each mode needs. */
+function overlayHandle(overlay: BoxRenderable, focus: () => void, modal = true): Overlay {
+  return {
+    mount: () => renderer.root.add(overlay),
+    dispose: () => {
+      renderer.root.remove(overlay);
+      overlay.destroyRecursively();
+    },
+    focus,
+    resize: () => {
+      if (!modal) return;
+      const dimensions = modalWidth();
+      overlay.left = dimensions.left;
+      overlay.width = dimensions.width;
+    },
+  };
+}
+
+function scrollOverlay(scroll: ScrollBoxRenderable, key: ScrollKey): void {
+  if (key === "home") scroll.scrollTo(0);
+  else if (key === "end") scroll.scrollTo(scroll.scrollHeight);
+  else scroll.scrollBy(key === "pageup" ? -1 : 1, "viewport");
 }
 
 function handleGlobalKey(key: KeyEvent): void {
-  if (key.ctrl && key.name === "c") {
-    key.preventDefault();
-    keymap.runCommand("app.quit", { event: key });
-    return;
-  }
-  if (isCopySelectionKey(key, renderer.hasSelection)) {
-    key.preventDefault();
-    copySelectedText(renderer);
-    return;
-  }
-  if (documentView) {
-    if (key.name === "escape") {
-      key.preventDefault();
-      key.stopPropagation();
-      closeDocument();
-    } else if (key.name === "home") {
-      key.preventDefault();
-      documentScroll?.scrollTo(0);
-    } else if (key.name === "end") {
-      key.preventDefault();
-      documentScroll?.scrollTo(documentScroll.scrollHeight);
-    }
-    return;
-  }
-  if (confirmView) {
-    if (key.name === "escape") {
-      key.preventDefault();
-      key.stopPropagation();
-      cancelPending();
-    } else if (key.name === "return" || key.name === "enter") {
-      key.preventDefault();
-      key.stopPropagation();
+  const result = interaction.handleKey(key, {
+    section: sections[variant]!.key,
+    variant,
+    viewCount: sections.length,
+    narrow: isNarrow(),
+    narrowDetails,
+    hasDetails: detailsScroll !== null,
+    insideSkillGroup: skillNavigation.view === "skills",
+    insideCollection: libraryCollectionId !== undefined,
+    copySelection: isCopySelectionKey(key, renderer.hasSelection),
+  });
+  if (result.preventDefault) key.preventDefault();
+  if (result.stopPropagation) key.stopPropagation();
+  const command = result.command;
+  if (!command) return;
+  switch (command.kind) {
+    case "quit":
+      keymap.runCommand("app.quit", { event: key });
+      break;
+    case "copy":
+      copySelectedText(renderer);
+      break;
+    case "apply":
       void applyPending();
-    } else if (
-      key.name === "s" &&
-      libraryHost.state?.pending &&
-      confirmationPresentation(libraryHost.state.pending, confirmShowSkills, isCompact())
-        .canShowSkills
-    ) {
-      key.preventDefault();
-      key.stopPropagation();
-      confirmShowSkills = !confirmShowSkills;
-      const pending = libraryHost.state?.pending;
-      if (pending) {
-        const model = confirmationPresentation(pending, confirmShowSkills, isCompact());
-        if (confirmReceipt) confirmReceipt.content = receiptFields(model.fields);
-        if (confirmHelp) confirmHelp.content = model.help;
-      }
-    } else if (["pageup", "pagedown", "home", "end"].includes(key.name)) {
-      key.preventDefault();
-      if (key.name === "home") confirmScroll?.scrollTo(0);
-      else if (key.name === "end") confirmScroll?.scrollTo(confirmScroll.scrollHeight);
-      else confirmScroll?.scrollBy(key.name === "pageup" ? -1 : 1, "viewport");
-    }
-    return;
-  }
-  if (chooserView) {
-    if (key.name === "escape") {
-      key.preventDefault();
-      key.stopPropagation();
-      closeChooser();
+      break;
+    case "cancel":
       void cancelPending();
-    } else if (key.name === "up" || key.name === "down") {
-      key.preventDefault();
-      key.stopPropagation();
-      if (key.name === "up") chooserSelect?.moveUp();
-      else chooserSelect?.moveDown();
+      break;
+    case "open-palette":
+      openPalette();
+      break;
+    case "open-selected":
+      openSelectedSkill();
+      break;
+    case "back-details":
+      narrowDetails = false;
+      renderNavigation();
+      break;
+    case "back-skills":
+      skillNavigation = { view: "groups" };
+      selectedItem = 0;
+      renderNavigation();
+      break;
+    case "back-collection": {
+      const previous = libraryCollectionId;
+      libraryCollectionId = undefined;
+      selectedItem = libraryRows(libraryHost.state?.skills ?? []).findIndex(
+        (row) => row.kind === "library-collection" && row.collectionId === previous,
+      );
+      renderNavigation();
+      break;
     }
-    return;
-  }
-  if (paletteView) {
-    if (key.name === "escape") {
-      key.preventDefault();
-      key.stopPropagation();
-      closePalette();
-    } else if (key.name === "up" || key.name === "down") {
-      key.preventDefault();
-      key.stopPropagation();
-      if (key.name === "up") paletteSelect?.moveUp();
-      else paletteSelect?.moveDown();
-    }
-    return;
-  }
-  if (isNarrow() && narrowDetails && key.name === "escape") {
-    key.preventDefault();
-    key.stopPropagation();
-    narrowDetails = false;
-    render();
-  } else if (detailsScroll !== null && ["pageup", "pagedown", "home", "end"].includes(key.name)) {
-    key.preventDefault();
-    const scroll = detailsScroll;
-    if (key.name === "home") scroll?.scrollTo(0);
-    else if (key.name === "end") scroll?.scrollTo(scroll.scrollHeight);
-    else scroll?.scrollBy(key.name === "pageup" ? -1 : 1, "viewport");
-  } else if (isNarrow() && narrowDetails && ["return", "enter"].includes(key.name)) {
-    key.preventDefault();
-    openSelectedSkill();
-  } else if (
-    key.name === "escape" &&
-    sections[variant]?.key === "skills" &&
-    skillNavigation.view === "skills"
-  ) {
-    key.preventDefault();
-    skillNavigation = { view: "groups" };
-    selectedItem = 0;
-    render();
-  } else if (
-    key.name === "escape" &&
-    sections[variant]?.key === "library" &&
-    libraryCollectionId !== undefined
-  ) {
-    const previous = libraryCollectionId;
-    libraryCollectionId = undefined;
-    selectedItem = libraryRows(libraryHost.state?.skills ?? [], libraryCollectionId).findIndex(
-      (row) => row.kind === "library-collection" && row.collectionId === previous,
-    );
-    key.preventDefault();
-    render();
-  } else if (key.ctrl && key.name === "p") {
-    key.preventDefault();
-    key.stopPropagation();
-    openPalette();
-  } else if (key.name === "q") {
-    key.preventDefault();
-    keymap.runCommand("app.quit", { event: key });
-  } else if (key.name === "p" && sections[variant]?.key === "harnesses") {
-    key.preventDefault();
-    probeSelectedHarness(key.shift);
-  } else if (sections[variant]?.key === "library" && ["e", "d", "i", "r"].includes(key.name)) {
-    key.preventDefault();
-    key.stopPropagation();
-    if (key.name === "e") startEnable();
-    else if (key.name === "d") startDisable();
-    else if (key.name === "i") startInvocation();
-    else void refreshLibrary();
-  } else if (["1", "2", "3", "4", "5", "6"].includes(key.name)) {
-    keymap.runCommand(viewCommandNames[Number(key.name) - 1]!, { event: key });
-  } else if (key.name === "]" || key.name === "right") {
-    keymap.runCommand(viewCommandNames[(variant + 1) % sections.length]!, { event: key });
-  } else if (key.name === "[" || key.name === "left") {
-    keymap.runCommand(viewCommandNames[(variant - 1 + sections.length) % sections.length]!, {
-      event: key,
-    });
+    case "scroll-details":
+      if (detailsScroll) scrollOverlay(detailsScroll, command.key);
+      break;
+    case "probe":
+      probeSelectedHarness(command.all);
+      break;
+    case "enable":
+      startEnable();
+      break;
+    case "disable":
+      startDisable();
+      break;
+    case "invocation":
+      startInvocation();
+      break;
+    case "refresh":
+      void refreshLibrary();
+      break;
+    case "switch-view":
+      keymap.runCommand(viewCommandNames[command.index]!, { event: key });
+      break;
   }
 }
 
 renderer.keyInput.on("keypress", handleGlobalKey);
 renderer.on("resize", () => {
   const scrollTop = detailsScroll?.scrollTop;
-  render();
+  interaction.resize();
   if (scrollTop !== undefined) detailsScroll?.scrollTo(scrollTop);
-  for (const modal of [chooserView, confirmView, paletteView]) {
-    if (!modal) continue;
-    const dimensions = modalWidth();
-    modal.left = dimensions.left;
-    modal.width = dimensions.width;
-  }
-  if (documentView) documentScroll?.focus();
-  else if (paletteView) {
-    // Their input retains focus when the underlying list is rerendered.
-    renderer.root.findDescendantById("command-palette-input")?.focus();
-  } else if (chooserView) chooserSelect?.focus();
-  else if (confirmView) confirmScroll?.focus();
 });
 
 if (process.env.SKIT_TUI_SNAPSHOT_DETAILS === "1") narrowDetails = true;
