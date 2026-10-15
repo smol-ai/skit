@@ -57,6 +57,15 @@ the same transaction as removal, preventing re-registration from racing that mar
 Nested writer scopes remain reentrant, so one composed action produces one history event.
 State-file migration retains its own writer lock even when initiated by a reader.
 
+Guided setup holds an `openSetupReview` over the final observation and routing. The review owns
+Source grouping, copy eligibility, selection translation, repository-persistence decisions and
+recovery preparation. The command renders choices and collects selected values and duplicate-copy
+consent; it does not construct `SetupApproval` or select mutation stages. Preparation returns
+summary facts and an apply closure, capturing the original plan ID, routing and selections.
+Presentation derives no action categories from candidates, and changing display facts cannot
+redirect confirmation. Preparation writes nothing. Existing apply stages still revalidate under
+the writer, preserve exact alias consent, and run removals only after additions succeed.
+
 Registry credential/alias and repository-decision mutations use the same root storage
 mutex through `withConfigurationWriter`, preserving exclusion with existing writers.
 This adapter does not open Library state or record Library history. Login questions run
