@@ -1,5 +1,7 @@
 import {
   bindingSkillIds,
+  currentCollectionSkills,
+  currentSkillVersion,
   LinkStat,
   deterministicTreeHashEffect,
   DeviceBinding,
@@ -26,11 +28,21 @@ import {
   type ShadowObservationError,
 } from "../projection/harness-shadows.js";
 import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
-import { resolveLibrarySubject } from "../workflows/library/subject-resolution.js";
 import {
   calculateBindingChange,
-  scopeBinding,
+  bindingPlacements,
+  expandBindingIntent,
+  uniqueBindingScopes,
+  sameBindingScope,
+  type BindingChangeIntent,
+  type BindingPlacement,
   type BindingSelection,
+} from "../workflows/library/binding-selection.js";
+import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
+import { readDescriptionLoad } from "../workflows/library/collection-load.js";
+export type {
+  BindingChangeIntent,
+  BindingPlacement,
 } from "../workflows/library/binding-selection.js";
 import type { SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 
@@ -63,6 +75,7 @@ const preparedPlans = new WeakMap<
     revision: string;
     requests: readonly BindingChangeRequest[];
     configuration: BindingChangeConfiguration;
+    repairs: readonly boolean[];
   }
 >();
 
@@ -125,49 +138,138 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   };
 });
 
-/** Keep interactive selection tied to the Library shown before asking questions. */
-export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* (
+/** The raw request path is retained for internal adoption workflows. */
+const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
+  current: LibraryState,
+  home: string,
+  requests: readonly BindingChangeRequest[],
   configuration: BindingChangeConfiguration,
 ) {
-  const store = yield* LibraryStore;
-  const current = yield* store.load;
-  const home = store.home;
-  const revision = libraryStateRevision(current);
-  // Copy only supported fields; embedders may carry unrelated functions alongside them.
   const routing = {
     home: configuration.home,
     configHome: configuration.configHome,
     overrides: structuredClone(configuration.overrides),
   };
+  const captured = structuredClone(requests);
+  const changes = yield* Effect.forEach(captured, (request) =>
+    previewChange(current, request, routing),
+  );
+  const plan: BindingChangePlan = { [planType]: true, changes: structuredClone(changes) };
+  preparedPlans.set(plan, {
+    home,
+    revision: libraryStateRevision(current),
+    requests: captured,
+    configuration: routing,
+    repairs: changes.map((change) => change.repair === true),
+  });
+  return plan;
+});
+
+/** Read facts and accept intents against the Library displayed before asking questions. */
+export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
+  const store = yield* LibraryStore;
+  const current = yield* store.load;
+  const placements = structuredClone(bindingPlacements(current));
+  const skills = current.skills.map((skill) => {
+    const collection = current.collections.find(
+      (item) => item.collection_id === skill.collection_id,
+    );
+    const source =
+      collection?.upstream?.source_identity ??
+      current.acquisitions.find((item) => item.collection_id === skill.collection_id)
+        ?.source_identity;
+    return {
+      id: skill.skill_id,
+      name: skill.name,
+      collectionId: skill.collection_id,
+      versionId: currentSkillVersion(current, skill)?.skill_version_id,
+      collectionLabel: collection?.label,
+      ...(source === undefined
+        ? {}
+        : { collectionSource: { kind: source.kind, locator: sourceIdentityLabel(source) } }),
+    };
+  });
+  const collections = current.collections.map((collection) => ({
+    id: collection.collection_id,
+    label: collection.label,
+    members: skills.filter((skill) => skill.collectionId === collection.collection_id),
+  }));
+  const atScope = (scope: BindingPlacement["scope"] | undefined) =>
+    placements.filter(
+      (placement) => scope === undefined || sameBindingScope(placement.scope, scope),
+    );
   return {
-    library: structuredClone(current),
-    originalsPath: store.originalsPath,
-    preview: Effect.fn("LibraryBindings.previewSelection")(function* (
-      requests: readonly BindingChangeRequest[],
-    ) {
-      const prepared = {
-        home,
-        revision,
-        requests: structuredClone(requests),
-        configuration: routing,
-      };
-      const changes = yield* Effect.forEach(prepared.requests, (request) =>
-        previewChange(current, request, routing),
+    collections,
+    placements,
+    placementsAt: atScope,
+    scopesFor: (collectionId: string) =>
+      uniqueBindingScopes(
+        placements.filter((item) => item.collectionId === collectionId).map((item) => item.scope),
+      ),
+    membersFor: (collectionId: string, scopes?: readonly BindingPlacement["scope"][]) =>
+      skills.filter(
+        (skill) =>
+          skill.collectionId === collectionId &&
+          (scopes === undefined ||
+            placements.some(
+              (placement) =>
+                placement.skillIds.includes(skill.id) &&
+                scopes.some((scope) => sameBindingScope(scope, placement.scope)),
+            )),
+      ),
+    readSkills: Effect.fn("LibraryBindings.readSkills")(function* () {
+      const metadata = yield* readLibrarySkillMetadata(current, store.originalsPath);
+      return skills.flatMap((skill) =>
+        skill.versionId === undefined
+          ? []
+          : [
+              {
+                ...skill,
+                versionId: skill.versionId,
+                ...metadata.get(skill.id)!,
+                bindings: placements
+                  .filter((placement) => placement.skillIds.includes(skill.id))
+                  .map((placement) => ({
+                    scope: placement.scope,
+                    invocation: placement.invocationBySkill[skill.id] ?? "declared",
+                  })),
+              },
+            ],
       );
-      const plan: BindingChangePlan = { [planType]: true, changes };
-      preparedPlans.set(plan, prepared);
-      return plan;
+    }),
+    descriptionLoad: (collectionId: string) => {
+      const collection = current.collections.find((item) => item.collection_id === collectionId);
+      return readDescriptionLoad(
+        current,
+        store.originalsPath,
+        collection === undefined ? [] : currentCollectionSkills(current, collection.collection_id),
+      );
+    },
+    listingSizeAfter: (change: Pick<SetEnabledResult, "scope" | "bindings">) =>
+      new Set(
+        [
+          ...change.bindings,
+          ...(change.scope.kind === "repository" ? current.global_bindings : []),
+        ].flatMap((binding) => bindingSkillIds(current, binding)),
+      ).size,
+    preview: Effect.fn("LibraryBindings.previewSelection")(function* (
+      intent: BindingChangeIntent,
+      configuration: BindingChangeConfiguration,
+    ) {
+      const requests = yield* expandBindingIntent(current, intent);
+      return yield* previewRequests(current, store.home, requests, configuration);
     }),
   };
 });
+export type BindingChangeSelection = Effect.Success<ReturnType<typeof openBindingChangeSelection>>;
 
-/** Observe without holding a writer or materializing any Projection. */
+/** Internal adoption/testing entry point; front ends use a held selection and user intent. */
 export const previewBindingChanges = Effect.fn("LibraryBindings.preview")(function* (
   requests: readonly BindingChangeRequest[],
   configuration: BindingChangeConfiguration,
 ) {
-  const selection = yield* openBindingChangeSelection(configuration);
-  return yield* selection.preview(requests);
+  const store = yield* LibraryStore;
+  return yield* previewRequests(yield* store.load, store.home, requests, configuration);
 });
 
 /** Authoritatively reload, commit Binding intent, then reconcile Projection reality. */
@@ -175,26 +277,19 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   state: LibraryState,
   options: BindingChangeRequest,
   configuration: BindingChangeConfiguration,
+  repair: boolean,
 ) {
-  const plan = yield* previewChange(state, options, configuration);
   const expectedRevision = libraryStateRevision(state);
   const store = yield* LibraryStore;
   const current = yield* store.load;
   if (libraryStateRevision(current) !== expectedRevision) return yield* stale();
+  const calculated = yield* calculateBindingChange(current, options);
+  const { plan, skillIds, newlyEnabledSkills } = calculated;
+  const warnings: ShadowObservationError[] = [];
+  const shadows = newlyEnabledSkills.length
+    ? yield* observeHarnessShadows(configuration, plan.scope, newlyEnabledSkills, warnings)
+    : [];
   if (options.enabled && !options.allowDuplicate) {
-    const selected = yield* resolveLibrarySubject(current, options.query);
-    const existing = scopeBinding(current, plan.scope);
-    const existingIds = new Set(existing ? bindingSkillIds(current, existing) : []);
-    const newlyEnabled = selected.skills.filter(
-      (skill) => plan.skills.includes(skill.name) && !existingIds.has(skill.skill_id),
-    );
-    const shadows = newlyEnabled.length
-      ? yield* observeHarnessShadows(
-          configuration,
-          plan.scope,
-          newlyEnabled.map((skill) => skill.name),
-        )
-      : [];
     const links = yield* LinkStat;
     const fs = yield* FileSystem.FileSystem;
     const remaining = [];
@@ -238,20 +333,21 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       .publish({ ...current, global_bindings, local_bindings }, current)
       .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(stale())));
   }
-  const selected = yield* resolveLibrarySubject(current, options.query);
   const reconciled = yield* reconcileLibraryProjections({
     roots: configuration,
     variantsPath: store.variantsPath,
     onlyBindings: plan.bindings,
-    restoreNativeDeletedSkills: options.enabled
-      ? selected.skills
-          .filter((skill) => plan.skills.includes(skill.name))
-          .map((skill) => skill.skill_id)
-      : [],
+    restoreNativeDeletedSkills: options.enabled ? skillIds : [],
     ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
   });
-  let result = plan;
+  let result = {
+    ...plan,
+    ...(repair ? { repair } : {}),
+    ...(shadows.length ? { shadows } : {}),
+    ...(warnings.length ? { warnings } : {}),
+  };
   if (!options.enabled) {
+    // Reconciliation needs empty Bindings to retire their copies; prune them only afterward.
     const settled = yield* store.load;
     const global_bindings = settled.global_bindings.filter((binding) => binding.entries.length > 0);
     const local_bindings = settled.local_bindings.filter((binding) => binding.entries.length > 0);
@@ -261,7 +357,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     )
       yield* store.publish({ ...settled, global_bindings, local_bindings }, settled);
     result = {
-      ...plan,
+      ...result,
       bindings: plan.bindings.filter((binding) => binding.entries.length > 0),
     };
   }
@@ -286,8 +382,15 @@ export const applyBindingChanges = Effect.fn("LibraryBindings.apply")(function* 
       let expected = yield* store.load;
       if (libraryStateRevision(expected) !== prepared.revision) return yield* stale();
       const outcomes: Array<{ readonly kind: "applied"; readonly value: SetEnabledResult }> = [];
-      for (const request of prepared.requests) {
-        outcomes.push(yield* applyChange(expected, request, prepared.configuration));
+      for (const [index, request] of prepared.requests.entries()) {
+        outcomes.push(
+          yield* applyChange(
+            expected,
+            request,
+            prepared.configuration,
+            prepared.repairs[index] ?? false,
+          ),
+        );
         expected = (yield* lastPublishedLibraryState) ?? expected;
       }
       return outcomes;

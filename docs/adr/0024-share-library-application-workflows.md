@@ -10,21 +10,28 @@ All front ends import core through `@smolai/skit-core`, preserving one runtime i
 for service tags and schemas. The older `front-end.ts` facade retains presentation/audit
 exports and re-exports the application surface for existing workspace consumers.
 
-`binding-changes.ts` owns enable/disable and invocation changes. Front ends prepare requests
-with `previewBindingChanges`, display the returned facts, and apply the opaque plan with
+`binding-changes.ts` owns enable/disable and invocation changes. Front ends open a selection,
+preview user intent, display the returned facts, and apply the opaque plan with
 `applyBindingChanges`. The plan privately retains the Library home, revision, requests, and
 projection routing; confirmation cannot reconstruct or redirect the operation. Plans are
 in-memory handles for the current process, not persisted or wire contracts. CLI JSON schemas
 remain separate in `set-enabled-contract.ts`, and terminal text belongs to presentation.
 
-Interactive CLI selection uses `openBindingChangeSelection` before asking questions. Its preview
-is tied to the Library shown at that point, so a change during prompting is refused at apply.
+CLI and TUI use `openBindingChangeSelection` before displaying choices. The selection exposes
+Collection members, placements and metadata rather than raw Library state. It expands intent
+into per-Scope requests, deduplicates Scopes, and filters multi-Scope disabling to the selected
+Skills actually enabled at each Scope. The TUI holds this selection with its displayed rows.
+Preview is tied to that selection, so a Library change before proposal or during prompting is
+refused at apply. The lower-level request preview remains internal to adoption and tests.
 Selection and preview hold no writer and materialize nothing. Application execution owns the
 writer, validates the original revision, publishes Binding intent, reconciles through the existing
 Projection workflow, and advances each change only onto this action's previous publication.
 The environment-free `binding-selection.ts` owns Collection-following and invocation policy;
 filesystem observations and publication stay in the application workflow. TUI session state
-retains the prepared plan and presentation facts, with no operation list or storage revision.
+retains the selection, prepared plan and presentation facts, with no operation list or storage
+revision. Apply calculates each change once against the validated state and uses that calculation's
+Skill IDs for consent and restoration. It observes shadows afresh, preserving exact alias checks;
+repair hashing stays in preview rather than running again at confirmation.
 
 Library updates require an explicit `LibraryProgress` implementation. Stages and completions
 carry subject identity, source change, and projection counts. The terminal adapter maps

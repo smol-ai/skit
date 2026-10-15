@@ -8,6 +8,11 @@ import {
   previewBindingChanges,
   type BindingChangeRequest,
 } from "../src/library-application/binding-changes.js";
+import {
+  openLibrarySession,
+  proposeLibraryCollectionChange,
+  confirmLibraryChange,
+} from "../src/library-application/session.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import {
   initializeLibraryMachine,
@@ -99,7 +104,7 @@ it.effect("applying a plan uses its captured selection and routing", () =>
 it.effect("refuses a plan when the Library changed during interactive selection", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const selection = yield* f.home.owned(openBindingChangeSelection(f.home.bindings));
+    const selection = yield* f.home.owned(openBindingChangeSelection());
     yield* f.home.owned(
       writingTo(
         f.home.home,
@@ -110,7 +115,17 @@ it.effect("refuses a plan when the Library changed during interactive selection"
         ),
       ),
     );
-    const plan = yield* f.home.owned(selection.preview([f.request]));
+    const plan = yield* f.home.owned(
+      selection.preview(
+        {
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        },
+        f.home.bindings,
+      ),
+    );
     const error = yield* f.home.owned(applyBindingChanges(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SetEnabledStale");
     assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
@@ -143,6 +158,114 @@ it.effect("refuses to apply a prepared plan to another Library", () =>
     const error = yield* other.owned(applyBindingChanges(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SetEnabledStale");
     assert.deepStrictEqual((yield* other.durable).global_bindings, []);
+    assert.strictEqual(yield* f.fs.exists(f.destination), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("derives placements and filters multi-Scope disable intent to enabled members", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const repository = join(f.root, "repository");
+    yield* f.fs.makeDirectory(repository);
+    for (const [members, where] of [
+      [["alpha"], [{ kind: "global" }]],
+      [["beta"], [{ kind: "repository", root: repository }]],
+    ] as const) {
+      const selection = yield* f.home.owned(openBindingChangeSelection());
+      const plan = yield* f.home.owned(
+        selection.preview(
+          { subject: f.request.query, members, where, enabled: true },
+          f.home.bindings,
+        ),
+      );
+      yield* f.home.owned(applyBindingChanges(plan));
+    }
+    const selection = yield* f.home.owned(openBindingChangeSelection());
+    assert.deepStrictEqual(
+      selection.placements.map((placement) => [
+        placement.scope.kind,
+        placement.skillIds.map(
+          (id) => selection.collections[0]?.members.find((member) => member.id === id)?.name,
+        ),
+      ]),
+      [
+        ["global", ["alpha"]],
+        ["repository", ["beta"]],
+      ],
+    );
+    const before = yield* f.fs.readFileString(f.home.statePath);
+    const both = yield* f.home.owned(
+      selection.preview(
+        {
+          subject: f.request.query,
+          enabled: false,
+          members: ["alpha", "beta"],
+          where: "where-enabled",
+        },
+        f.home.bindings,
+      ),
+    );
+    assert.deepStrictEqual(
+      both.changes.map((change) => [change.scope.kind, change.skills]),
+      [
+        ["global", ["alpha"]],
+        ["repository", ["beta"]],
+      ],
+    );
+    const onlyAlpha = yield* f.home.owned(
+      selection.preview(
+        {
+          subject: f.request.query,
+          enabled: false,
+          members: ["alpha"],
+          where: "where-enabled",
+        },
+        f.home.bindings,
+      ),
+    );
+    assert.strictEqual(onlyAlpha.changes.length, 1);
+    assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
+    yield* f.home.owned(applyBindingChanges(onlyAlpha));
+    const settled = yield* f.home.durable;
+    const beta = selection.collections[0]?.members.find((member) => member.name === "beta");
+    assert.ok(beta);
+    assert.deepStrictEqual(settled.global_bindings, []);
+    assert.deepStrictEqual(settled.local_bindings[0]?.entries, [
+      {
+        kind: "skill",
+        skill_id: beta.id,
+      },
+    ]);
+    assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a TUI proposal keeps the revision displayed before the proposal was made", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const displayed = yield* f.home.owned(openLibrarySession());
+    yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        LibraryStore.use((store) =>
+          Effect.flatMap(store.load, (state) =>
+            store.publish({ ...state, custodyIssues: [] }, state),
+          ),
+        ),
+      ),
+    );
+    const before = yield* f.fs.readFileString(f.home.statePath);
+    const proposed = yield* f.home.owned(
+      proposeLibraryCollectionChange(displayed, f.home.bindings, f.request.query, true, [
+        { kind: "global" },
+      ]),
+    );
+    assert.strictEqual(proposed.outcome.kind, "preview");
+    const confirmed = yield* f.home.owned(confirmLibraryChange(proposed));
+    assert.strictEqual(confirmed.outcome?.kind, "failed");
+    if (confirmed.outcome?.kind === "failed")
+      assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
+    assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

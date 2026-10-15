@@ -178,3 +178,111 @@ export const calculateBindingChange = Effect.fn("LibraryBindings.calculate")(fun
     newlyEnabledSkills,
   };
 });
+
+/** User intent, independent of the per-Scope requests needed to implement it. */
+export interface BindingChangeIntent {
+  readonly subject: string;
+  readonly enabled: boolean;
+  readonly members?: "whole" | readonly string[];
+  readonly where: readonly SkitBindingScope[] | "where-enabled";
+  readonly invocation?: InvocationOption;
+  readonly allowDuplicate?: boolean;
+}
+
+export interface BindingPlacement {
+  readonly collectionId: string;
+  readonly scope: SkitBindingScope;
+  readonly skillIds: readonly string[];
+  readonly invocationBySkill: Readonly<Record<string, InvocationOption>>;
+}
+
+const scopeIdentity = (scope: SkitBindingScope) =>
+  scope.kind === "global" ? "global" : `repository:${resolve(scope.root)}`;
+
+export const sameBindingScope = (left: SkitBindingScope, right: SkitBindingScope) =>
+  scopeIdentity(left) === scopeIdentity(right);
+
+export const uniqueBindingScopes = (scopes: readonly SkitBindingScope[]) => [
+  ...new Map(scopes.map((scope) => [scopeIdentity(scope), scope])).values(),
+];
+
+/** One Collection's enabled members and invocation intent at a Scope, including empty follows. */
+export const bindingPlacements = (state: LibraryState): BindingPlacement[] =>
+  [...state.global_bindings, ...state.local_bindings].flatMap((binding) => {
+    const ids = bindingSkillIds(state, binding);
+    const collections = new Set([
+      ...state.skills
+        .filter((skill) => ids.includes(skill.skill_id))
+        .map((skill) => skill.collection_id),
+      ...binding.entries.flatMap((entry) =>
+        entry.kind === "collection" ? [entry.collection_id] : [],
+      ),
+    ]);
+    return [...collections].map((collectionId) => {
+      const skillIds = state.skills
+        .filter((skill) => skill.collection_id === collectionId && ids.includes(skill.skill_id))
+        .map((skill) => skill.skill_id);
+      return {
+        collectionId,
+        scope: binding.scope,
+        skillIds,
+        invocationBySkill: Object.fromEntries(
+          skillIds.map((id) => [id, binding.invocation_policies?.[id] ?? "declared"]),
+        ),
+      };
+    });
+  });
+
+/** Expand once, filtering a multi-Scope disable to the members actually enabled at each Scope. */
+export const expandBindingIntent = Effect.fn("LibraryBindings.expandIntent")(function* (
+  state: LibraryState,
+  intent: BindingChangeIntent,
+) {
+  const subject = yield* resolveLibrarySubject(state, intent.subject);
+  const selectedNames =
+    intent.members !== undefined && intent.members !== "whole" ? intent.members : undefined;
+  if (selectedNames?.some((name) => !subject.skills.some((skill) => skill.name === name)))
+    return yield* new OptionCombinationInvalid({
+      detail: "Selected Skill is absent from this Collection",
+    });
+  const collectionId =
+    subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
+  const scopes = uniqueBindingScopes(
+    intent.where === "where-enabled"
+      ? bindingPlacements(state)
+          .filter(
+            (placement) =>
+              placement.collectionId === collectionId &&
+              (subject.kind === "collection" ||
+                placement.skillIds.includes(subject.skill.skill_id)),
+          )
+          .map((placement) => placement.scope)
+      : intent.where,
+  );
+  return scopes.flatMap((scope) => {
+    let names = selectedNames;
+    if (
+      !intent.enabled &&
+      intent.members !== "whole" &&
+      (scopes.length > 1 || intent.where === "where-enabled")
+    ) {
+      const binding = scopeBinding(state, scope);
+      const enabled = new Set(binding === undefined ? [] : bindingSkillIds(state, binding));
+      names = (names ?? subject.skills.map((skill) => skill.name)).filter((name) =>
+        subject.skills.some((skill) => skill.name === name && enabled.has(skill.skill_id)),
+      );
+      if (!names.length) return [];
+    }
+    return [
+      {
+        query: intent.subject,
+        scope,
+        enabled: intent.enabled,
+        all: intent.members === "whole",
+        ...(subject.kind === "collection" && names !== undefined ? { selectedSkills: names } : {}),
+        ...(intent.invocation === undefined ? {} : { invocation: intent.invocation }),
+        ...(intent.allowDuplicate === undefined ? {} : { allowDuplicate: intent.allowDuplicate }),
+      },
+    ];
+  });
+});

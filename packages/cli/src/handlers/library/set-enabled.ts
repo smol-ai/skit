@@ -1,10 +1,5 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import {
-  bindingSkillIds,
-  currentCollectionSkills,
-  type LibraryState,
-  type SkitBindingScope as Scope,
-} from "@smolai/skit-core";
+import type { SkitBindingScope as Scope } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
@@ -24,11 +19,11 @@ import { result } from "../contracts.js";
 import {
   applyBindingChanges,
   openBindingChangeSelection,
-  type BindingChangeRequest,
+  type BindingChangeIntent,
+  type BindingPlacement,
 } from "../../library-application/binding-changes.js";
 import {
   largeCollectionWarning,
-  readDescriptionLoad,
   descriptionLoadMessage,
 } from "../../workflows/library/collection-load.js";
 
@@ -133,42 +128,11 @@ export interface SetEnabledCommandInput {
   readonly configuration: Effect.Success<ReturnType<typeof libraryCommandConfiguration>>;
 }
 
-/** One Collection's Skills enabled at one Scope. */
-interface EnabledTarget {
-  readonly collectionId: string;
-  readonly scope: Scope;
-  readonly skillIds: readonly string[];
-  readonly location: string;
-}
-
-const enabledTargets = (state: LibraryState): EnabledTarget[] =>
-  [...state.global_bindings, ...state.local_bindings].flatMap((binding) => {
-    const skills = bindingSkillIds(state, binding).flatMap((skillId) => {
-      const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
-      return skill === undefined ? [] : [skill];
-    });
-    const collectionIds = new Set([
-      ...skills.map((skill) => skill.collection_id),
-      ...binding.entries.flatMap((entry) =>
-        entry.kind === "collection" ? [entry.collection_id] : [],
-      ),
-    ]);
-    const location =
-      binding.scope.kind === "global" ? "global" : `repository ${binding.scope.root}`;
-    return [...collectionIds].map((collectionId) => ({
-      collectionId,
-      scope: binding.scope,
-      skillIds: skills
-        .filter((skill) => skill.collection_id === collectionId)
-        .map((skill) => skill.skill_id),
-      location,
-    }));
-  });
-
-const sameScope = (left: Scope, right: Scope) =>
-  left.kind === "global"
-    ? right.kind === "global"
-    : right.kind === "repository" && resolve(left.root) === resolve(right.root);
+type EnabledTarget = BindingPlacement & { readonly location: string };
+const withLocation = (placement: BindingPlacement): EnabledTarget => ({
+  ...placement,
+  location: placement.scope.kind === "global" ? "global" : `repository ${placement.scope.root}`,
+});
 
 /** Native Collection binding path; interactive selection supplies names from retained membership. */
 export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* (
@@ -176,26 +140,26 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
 ) {
   if (input.subject === undefined && !input.interactive)
     return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
-  const selection = yield* openBindingChangeSelection({
-    ...input.configuration.inventory,
-  });
-  const state = selection.library;
+  const selection = yield* openBindingChangeSelection();
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
   const collectionLabel = (collectionId: string) =>
-    state.collections.find((collection) => collection.collection_id === collectionId)?.label;
+    selection.collections.find((collection) => collection.id === collectionId)?.label;
   const skillNames = (skillIds: readonly string[]) =>
     skillIds
-      .flatMap((skillId) => state.skills.find((skill) => skill.skill_id === skillId)?.name ?? [])
+      .flatMap(
+        (skillId) =>
+          selection.collections
+            .flatMap((collection) => collection.members)
+            .find((skill) => skill.id === skillId)?.name ?? [],
+      )
       .join(", ");
 
   let query = input.subject;
   // Disabling without a subject starts from where Skills are enabled.
   let targets: readonly EnabledTarget[] | undefined;
   if (query === undefined && !input.enabled) {
-    const enabled = enabledTargets(state).filter(
-      (target) => input.scope === undefined || sameScope(target.scope, input.scope),
-    );
+    const enabled = selection.placementsAt(input.scope).map(withLocation);
     if (enabled.length === 0)
       return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
     const everywhere = [...new Set(enabled.map((target) => target.collectionId))].flatMap(
@@ -232,15 +196,13 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     query = targets[0]!.collectionId;
   }
   if (query === undefined) {
-    const collections = state.collections.filter((collection) =>
-      state.skills.some((skill) => skill.collection_id === collection.collection_id),
-    );
+    const collections = selection.collections.filter((collection) => collection.members.length > 0);
     if (collections.length === 0)
       return yield* new NothingToSelect({ detail: "The local Library contains no Skills" });
     query = yield* prompter
       .autocomplete("Select a collection", [
         ...collections.map((collection): { value: string; label: string } => ({
-          value: collection.collection_id,
+          value: collection.id,
           label: collection.label,
         })),
         { value: DONE, label: DONE },
@@ -249,15 +211,13 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     if (query === DONE) return;
   }
 
-  const collection = state.collections.find((candidate) =>
-    [candidate.collection_id, candidate.label].includes(query),
+  const collection = selection.collections.find((candidate) =>
+    [candidate.id, candidate.label].includes(query),
   );
   const members = collection
-    ? state.skills.filter(
-        (skill) =>
-          skill.collection_id === collection.collection_id &&
-          (targets === undefined ||
-            targets.some((target) => target.skillIds.includes(skill.skill_id))),
+    ? selection.membersFor(
+        collection.id,
+        targets?.map((target) => target.scope),
       )
     : undefined;
   let wholeCollection = input.all;
@@ -268,11 +228,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           value: "collection",
           label: input.enabled
             ? `Enable whole collection · ${descriptionLoadMessage(
-                yield* readDescriptionLoad(
-                  state,
-                  selection.originalsPath,
-                  currentCollectionSkills(state, collection.collection_id),
-                ),
+                yield* selection.descriptionLoad(collection.id),
               )}`
             : "Disable whole collection",
           hint: input.enabled
@@ -310,7 +266,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             ? {}
             : {
                 hint: targets
-                  .filter((target) => target.skillIds.includes(skill.skill_id))
+                  .filter((target) => target.skillIds.includes(skill.id))
                   .map(
                     (target) =>
                       `${collectionLabel(target.collectionId) ?? target.collectionId} · ${target.location}`,
@@ -331,9 +287,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     input.scope === undefined &&
     targets === undefined
   ) {
-    const enabled = enabledTargets(state).filter(
-      (target) => target.collectionId === collection.collection_id,
-    );
+    const enabled = selection.placements
+      .map(withLocation)
+      .filter((target) => target.collectionId === collection.id);
     if (!enabled.length) {
       yield* renderer.note("This collection is not enabled anywhere.", "Nothing to change");
       return;
@@ -362,35 +318,21 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         scope = chosen;
       }
     }
-    targets = [{ collectionId: query, scope, skillIds: [], location: "" }];
+    targets = [{ collectionId: query, scope, skillIds: [], invocationBySkill: {}, location: "" }];
   }
 
-  const changes = targets.flatMap((target): BindingChangeRequest[] => {
-    // Several Scopes may each enable a different subset of the selected Skills.
-    const names =
-      targets.length > 1
-        ? selectedSkills?.filter((name) =>
-            state.skills.some(
-              (skill) =>
-                skill.collection_id === target.collectionId &&
-                skill.name === name &&
-                target.skillIds.includes(skill.skill_id),
-            ),
-          )
-        : selectedSkills;
-    if (targets.length > 1 && !wholeCollection && !names?.length) return [];
-    return [
-      {
-        query: targets.length > 1 ? target.collectionId : query,
-        all: wholeCollection,
-        allowDuplicate: input.allowDuplicate,
-        ...(names === undefined || wholeCollection ? {} : { selectedSkills: names }),
-        scope: target.scope,
-        enabled: input.enabled,
-        ...(input.invocation === undefined ? {} : { invocation: input.invocation }),
-      },
-    ];
-  });
+  const intent: BindingChangeIntent = {
+    subject: query,
+    enabled: input.enabled,
+    where: targets.map((target) => target.scope),
+    ...(wholeCollection
+      ? { members: "whole" as const }
+      : selectedSkills === undefined
+        ? {}
+        : { members: selectedSkills }),
+    allowDuplicate: input.allowDuplicate,
+    invocation: input.invocation,
+  };
   const outcomes = yield* renderer.withStatus(
     input.dryRun
       ? "Planning Collection Bindings"
@@ -398,7 +340,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         ? "Projecting retained Skills"
         : "Removing retained Projections",
     Effect.gen(function* () {
-      const plan = yield* selection.preview(changes);
+      const plan = yield* selection.preview(intent, input.configuration.inventory);
       return input.dryRun
         ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
         : yield* applyBindingChanges(plan);
@@ -406,14 +348,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   );
   for (const outcome of outcomes) {
     if (input.enabled) {
-      const scope = outcome.value.scope;
-      const bindings = [
-        ...outcome.value.bindings,
-        ...(scope.kind === "repository" ? state.global_bindings : []),
-      ];
-      const warning = largeCollectionWarning(
-        new Set(bindings.flatMap((binding) => bindingSkillIds(state, binding))).size,
-      );
+      const warning = largeCollectionWarning(selection.listingSizeAfter(outcome.value));
       if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
     }
     yield* renderer.result(

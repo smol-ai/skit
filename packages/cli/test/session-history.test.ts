@@ -184,7 +184,12 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     );
     const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
     const cleanup = yield* home.owned(
-      proposeLibraryDisable(repaired, home.bindings, alphaRow, alphaRow.bindings),
+      proposeLibraryDisable(
+        yield* home.owned(openLibrarySession()),
+        home.bindings,
+        alphaRow,
+        alphaRow.bindings,
+      ),
     );
     assert.strictEqual(cleanup.outcome.kind, "preview");
     const cleaned = yield* home.owned(confirmLibraryChange(cleanup));
@@ -199,7 +204,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     );
 
     const removal = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.bindings, collectionId, false, scopes),
+      proposeLibraryCollectionChange(cleaned, home.bindings, collectionId, false, scopes),
     );
     assert.strictEqual(removal.outcome.kind, "preview");
     const disabled = yield* home.owned(confirmLibraryChange(removal));

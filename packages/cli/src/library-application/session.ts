@@ -1,16 +1,9 @@
 import { ProjectionWouldDuplicate } from "../projection/harness-shadows.js";
+import type { SkillMetadata } from "./skill-metadata.js";
 import {
-  readLibrarySkillMetadata,
-  sourceIdentityLabel,
-  type SkillMetadata,
-} from "./skill-metadata.js";
-import {
-  bindingSkillIds,
-  currentSkillVersion,
   retainedTreePath,
   versionBacking,
   LibraryStore,
-  type LibraryState,
   type SourceIdentity,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
@@ -22,14 +15,16 @@ import {
 } from "../workflows/library/subject-resolution.js";
 import type { InvocationOption } from "../invocation/policy.js";
 import { invocationReadModel, type InvocationReadModel } from "../invocation/read-model.js";
-import { bindingRowLabel, destinationLabel, scopeKey } from "./read-model.js";
+import { bindingRowLabel, destinationLabel } from "./read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
 import { unspecifiedDeclaredInvocation } from "../invocation/library-source.js";
 import type { ProjectionOptions } from "../workflows/library/projection-options.js";
 import {
   applyBindingChanges,
-  previewBindingChanges,
-  type BindingChangeRequest,
+  openBindingChangeSelection,
+  SetEnabledStale,
+  type BindingChangeIntent,
+  type BindingChangeSelection,
   type BindingChangePlan,
 } from "./binding-changes.js";
 
@@ -78,75 +73,39 @@ export type LibraryActionOutcome =
   | { readonly kind: "cancelled"; readonly pending?: PendingLibraryChange }
   | { readonly kind: "failed"; readonly failure: ClassifiedFailure };
 
+const sessionSelection = Symbol("LibrarySessionSelection");
+
 export interface LibrarySessionState {
+  readonly [sessionSelection]?: BindingChangeSelection;
   readonly skills: readonly LibrarySkillRow[];
   readonly pending?: PendingLibraryChange;
   readonly outcome?: LibraryActionOutcome;
 }
 
-const bindingRows = (
-  state: LibraryState,
-  skillId: LibraryState["skills"][number]["skill_id"],
-  skillName: string,
-): LibraryBindingRow[] =>
-  [...state.global_bindings, ...state.local_bindings]
-    .filter((binding) => bindingSkillIds(state, binding).includes(skillId))
-    .map((binding) => {
-      const invocation = (binding.invocation_policies?.[skillId] ?? "declared") as InvocationOption;
+export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () {
+  const selection = yield* openBindingChangeSelection();
+  const rows = yield* selection.readSkills();
+  const skills: LibrarySkillRow[] = rows.map((row) => ({
+    source: row.source,
+    revision: row.revision,
+    source_updated_at: row.source_updated_at,
+    acquired_at: row.acquired_at,
+    name: row.name,
+    skillVersionId: row.versionId,
+    collectionId: row.collectionId,
+    heading: row.collectionLabel ?? row.name,
+    hasCollection: row.collectionLabel !== undefined,
+    ...(row.collectionSource === undefined ? {} : { collectionSource: row.collectionSource }),
+    bindings: row.bindings.map(({ scope, invocation }) => {
       const policy = invocationReadModel({
-        skill: skillName,
+        skill: row.name,
         author: unspecifiedDeclaredInvocation(),
         storedIntent: invocation,
       });
-      return {
-        scope: binding.scope,
-        invocation,
-        policy,
-        label: bindingRowLabel({ scope: binding.scope, policy }),
-      };
-    });
-
-const skillRows = (
-  state: LibraryState,
-  metadata: ReadonlyMap<string, SkillMetadata>,
-): LibrarySkillRow[] =>
-  state.skills.flatMap((skill) => {
-    const collection = state.collections.find(
-      (candidate) => candidate.collection_id === skill.collection_id,
-    );
-    const heading = collection?.label ?? skill.name;
-    const collectionSource =
-      collection?.upstream?.source_identity ??
-      state.acquisitions.find((acquisition) => acquisition.collection_id === skill.collection_id)
-        ?.source_identity;
-    const version = currentSkillVersion(state, skill);
-    if (version === undefined) return [];
-    return [
-      {
-        ...metadata.get(skill.skill_id)!,
-        name: skill.name,
-        skillVersionId: version.skill_version_id,
-        collectionId: collection?.collection_id ?? skill.skill_id,
-        heading,
-        hasCollection: collection !== undefined,
-        ...(collectionSource === undefined
-          ? {}
-          : {
-              collectionSource: {
-                kind: collectionSource.kind,
-                locator: sourceIdentityLabel(collectionSource),
-              },
-            }),
-        bindings: bindingRows(state, skill.skill_id, skill.name),
-      },
-    ];
-  });
-
-export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () {
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
-  const metadata = yield* readLibrarySkillMetadata(state, store.originalsPath);
-  return { skills: skillRows(state, metadata) } satisfies LibrarySessionState;
+      return { scope, invocation, policy, label: bindingRowLabel({ scope, policy }) };
+    }),
+  }));
+  return { skills, [sessionSelection]: selection } satisfies LibrarySessionState;
 });
 
 /** Read the exact retained version selected by the front end, never a native Projection. */
@@ -208,19 +167,22 @@ const factFromPlan = (plan: BindingChangePlan["changes"][number]): PreviewFacts 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   state: LibrarySessionState,
   configuration: ProjectionOptions,
-  operations: readonly BindingChangeRequest[],
+  intent: BindingChangeIntent,
   policies: readonly InvocationReadModel[] = [],
 ) {
+  const selection = state[sessionSelection];
   const attempted = yield* Effect.result(
-    previewBindingChanges(operations, configuration).pipe(
-      Effect.tap((plan) =>
-        Effect.forEach(plan.changes, (change) =>
-          change.shadows?.length
-            ? Effect.fail(new ProjectionWouldDuplicate({ shadows: change.shadows }))
-            : Effect.void,
-        ),
-      ),
-    ),
+    Effect.gen(function* () {
+      if (selection === undefined)
+        return yield* new SetEnabledStale({
+          message: "Open the Library before proposing a Binding change",
+        });
+      const plan = yield* selection.preview(intent, configuration);
+      for (const change of plan.changes)
+        if (change.shadows?.length)
+          return yield* new ProjectionWouldDuplicate({ shadows: change.shadows });
+      return plan;
+    }),
   );
   if (Result.isFailure(attempted))
     return {
@@ -230,7 +192,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     } satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
   const pending: PendingLibraryChange = {
     plan: attempted.success,
-    facts: attempted.success.changes.map((plan, index) => ({
+    facts: attempted.success.changes.map((plan) => ({
       ...factFromPlan(plan),
       ...(plan.repair
         ? {
@@ -239,12 +201,12 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
               : ("projection removed" as const),
           }
         : {}),
-      ...(operations[index]?.all
+      ...(intent.members === "whole"
         ? {
             wholeCollection: true,
             collectionLabel:
-              state.skills.find((row) => row.collectionId === plan.subject_id)?.heading ??
-              plan.subject_id,
+              selection?.collections.find((collection) => collection.id === plan.subject_id)
+                ?.label ?? plan.subject_id,
           }
         : {}),
     })),
@@ -267,22 +229,17 @@ export function proposeLibraryEnable(
   state: LibrarySessionState,
   configuration: ProjectionOptions,
   row: LibrarySkillRow,
-  selection: {
-    readonly scope: Scope;
-    readonly invocation?: InvocationOption;
-  },
+  selection: { readonly scope: Scope; readonly invocation?: InvocationOption },
 ) {
   return proposeLibraryChange(
     state,
     configuration,
-    [
-      {
-        query: row.skillVersionId,
-        scope: selection.scope,
-        enabled: true,
-        ...(selection.invocation === undefined ? {} : { invocation: selection.invocation }),
-      },
-    ],
+    {
+      subject: row.skillVersionId,
+      where: [selection.scope],
+      enabled: true,
+      invocation: selection.invocation,
+    },
     [libraryPolicyAfter(row, selection.invocation ?? "declared")],
   );
 }
@@ -293,23 +250,15 @@ export function proposeLibraryDisable(
   row: LibrarySkillRow,
   bindings: readonly LibraryBindingRow[],
 ) {
-  const byScope = new Map(bindings.map((binding) => [scopeKey(binding.scope), binding.scope]));
-  return proposeLibraryChange(
-    state,
-    configuration,
-    [...byScope.values()].map((scope) => ({ query: row.skillVersionId, scope, enabled: false })),
-  );
+  return proposeLibraryChange(state, configuration, {
+    subject: row.skillVersionId,
+    where: bindings.map((binding) => binding.scope),
+    enabled: false,
+  });
 }
 
 export function libraryCollectionScopes(state: LibrarySessionState, collectionId: string): Scope[] {
-  return [
-    ...new Map(
-      state.skills
-        .filter((row) => row.collectionId === collectionId)
-        .flatMap((row) => row.bindings)
-        .map((binding) => [scopeKey(binding.scope), binding.scope]),
-    ).values(),
-  ];
+  return state[sessionSelection]?.scopesFor(collectionId) ?? [];
 }
 
 /** Whole-Collection intent follows future Source membership changes. */
@@ -320,17 +269,12 @@ export function proposeLibraryCollectionChange(
   enabled: boolean,
   scopes: readonly Scope[],
 ) {
-  const uniqueScopes = new Map(scopes.map((scope) => [scopeKey(scope), scope]));
-  return proposeLibraryChange(
-    state,
-    configuration,
-    [...uniqueScopes.values()].map((scope) => ({
-      query: collectionId,
-      all: true,
-      scope,
-      enabled,
-    })),
-  );
+  return proposeLibraryChange(state, configuration, {
+    subject: collectionId,
+    members: "whole",
+    where: scopes,
+    enabled,
+  });
 }
 
 export function proposeLibraryInvocation(
@@ -343,14 +287,12 @@ export function proposeLibraryInvocation(
   return proposeLibraryChange(
     state,
     configuration,
-    [
-      {
-        query: row.skillVersionId,
-        scope: binding.scope,
-        enabled: true,
-        invocation,
-      },
-    ],
+    {
+      subject: row.skillVersionId,
+      where: [binding.scope],
+      enabled: true,
+      invocation,
+    },
     [libraryPolicyAfter(row, invocation)],
   );
 }

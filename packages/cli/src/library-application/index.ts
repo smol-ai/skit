@@ -49,9 +49,9 @@ export {
 } from "../configuration/skit-configuration.js";
 
 export {
-  previewBindingChanges,
   applyBindingChanges,
   openBindingChangeSelection,
-  type BindingChangeRequest,
+  type BindingChangeIntent,
+  type BindingPlacement,
   type BindingChangePlan,
 } from "./binding-changes.js";
