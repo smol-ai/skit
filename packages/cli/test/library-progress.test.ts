@@ -14,7 +14,7 @@ import {
   type LibraryProgressEvent,
 } from "../src/library-application/progress.js";
 import { updateSubjectsEffect } from "../src/library-application/update.js";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>
@@ -40,7 +40,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
         ),
     });
     yield* home.owned(
-      addLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/source.zip" }),
+      retainLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/source.zip" }),
     );
     const before = yield* home.durable;
     const events: LibraryProgressEvent[] = [];
@@ -51,9 +51,8 @@ it.effect("a headless update emits domain progress and records one attributed tr
     bytes = yield* archive;
     const results = yield* home
       .owned(
-        updateSubjectsEffect(before, {
+        updateSubjectsEffect({
           roots: home.inventory,
-          variantsPath: home.bindings.variantsPath,
         }).pipe(
           Effect.provide(
             libraryProgressLayer((event) =>

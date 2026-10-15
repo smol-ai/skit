@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.plan.v6",
+  "$id": "skit.enable.v7",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -56,6 +56,9 @@
       "type": "string"
     },
     "changed": {
+      "type": "boolean"
+    },
+    "repair": {
       "type": "boolean"
     },
     "shadows": {
@@ -307,6 +310,25 @@
           }
         ]
       }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
@@ -315,7 +337,8 @@
     "scope",
     "enabled",
     "changed",
-    "bindings"
+    "bindings",
+    "projections"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

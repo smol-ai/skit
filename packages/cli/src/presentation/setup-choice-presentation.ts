@@ -1,9 +1,7 @@
 import { Effect } from "effect";
-import { captureSetupAliasApproval } from "../workflows/library/setup-local-custody.js";
-import type { SetupApproval } from "../workflows/library/setup-apply.js";
-import type { SetupResult } from "../workflows/library/setup-contract.js";
+import { captureLocalAdoptionAliases } from "../workflows/library/local-adoption.js";
+import type { SetupReviewSummary } from "../workflows/library/setup-review.js";
 import {
-  isSetupProjectionTarget,
   type SetupCopyDecision,
   type SetupDuplicateAction,
   type SetupSelectedCopy,
@@ -25,12 +23,12 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
     action: SetupDuplicateAction | undefined,
   ): Effect.fn.Return<
     SetupCopyDecision,
-    Effect.Error<ReturnType<typeof captureSetupAliasApproval>>,
-    Effect.Services<ReturnType<typeof captureSetupAliasApproval>>
+    Effect.Error<ReturnType<typeof captureLocalAdoptionAliases>>,
+    Effect.Services<ReturnType<typeof captureLocalAdoptionAliases>>
   > {
     if (action === undefined) return copy;
     if (action !== "retire-aliases") return { ...copy, duplicateAction: action };
-    const approvedAliases = yield* captureSetupAliasApproval(
+    const approvedAliases = yield* captureLocalAdoptionAliases(
       copy.sourcePath,
       copy.conflict.kind === "none" ? [] : copy.conflict.shadows,
     );
@@ -117,103 +115,65 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
 
 /** The changes guided setup asks the user to approve, one line per effect. */
 export function setupPlanLines(input: {
-  readonly approval: SetupApproval;
-  readonly observed: SetupResult;
-  readonly decisions: readonly SetupCopyDecision[];
-  readonly repositoryDecisions: readonly { path: string; status: "watched" | "ignored" }[];
+  readonly summary: SetupReviewSummary;
   readonly displayRoots: string;
   readonly displayPath: (path: string) => string;
 }) {
-  const { approval, observed, decisions, displayPath } = input;
-  const imports = observed.onboarding.candidates.filter(
-    (candidate) => candidate.action === "import-observed-collection",
-  );
-  const retainedBySource = [
-    ...new Set(approval.imports.map((selection) => selection.groupKey)),
-  ].map((groupKey) => ({
-    source: imports.find((candidate) => candidate.groupKey === groupKey)!,
-    names: approval.imports
-      .filter((selection) => selection.groupKey === groupKey)
-      .map((selection) => selection.name)
-      .sort(),
-  }));
-  const repositorySelections = approval.custody.filter((selection) =>
-    observed.instances.some(
-      (instance) =>
-        instance.path === selection.sourcePath &&
-        (instance.git.repository !== undefined || !isSetupProjectionTarget(instance)),
-    ),
-  );
-  const custodySelections = approval.custody.filter(
-    (selection) =>
-      !repositorySelections.includes(selection) && selection.duplicateAction !== "retain-only",
-  );
-  const reconnectSelections = approval.bindings.filter(
-    (selection) => selection.duplicateAction !== "retain-only",
-  );
+  const { summary, displayPath } = input;
   return [
-    ...(approval.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),
-    ...input.repositoryDecisions.map(
+    ...(summary.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),
+    ...summary.repositoryDecisions.map(
       (decision) =>
         `${decision.status === "watched" ? "Watch" : "Ignore"} repository: ${displayPath(decision.path)}`,
     ),
-    ...(approval.imports.length && !observed.machineConfig.machineId
-      ? ["Create this machine's stable Library identity"]
-      : []),
-    ...(retainedBySource.length
+    ...(summary.createsMachineIdentity ? ["Create this machine's stable Library identity"] : []),
+    ...(summary.sources.length
       ? [
-          `Import installed skills.sh Collections into the SKIT Library: ${retainedBySource.length}`,
-          ...retainedBySource.flatMap(({ source, names }) => [
-            `  ${source.source} · observed lock ${source.lockContentHash.slice(0, 14)} · ${names.length} skill${names.length === 1 ? "" : "s"}`,
+          `Import installed skills.sh Collections into the SKIT Library: ${summary.sources.length}`,
+          ...summary.sources.flatMap(({ source, lockContentHash, names }) => [
+            `  ${source} · observed lock ${lockContentHash.slice(0, 14)} · ${names.length} skill${names.length === 1 ? "" : "s"}`,
             ...(names.length <= 5 ? [`    ${names.join(", ")}`] : []),
           ]),
         ]
       : []),
-    ...(reconnectSelections.length
+    ...(summary.reconnects.length
       ? [
-          `Reconnect existing Library matches: ${reconnectSelections.length}`,
-          ...reconnectSelections
+          `Reconnect existing Library matches: ${summary.reconnects.length}`,
+          ...summary.reconnects
             .slice(0, 5)
             .map(({ name, sourcePath }) => `  ${name} · ${displayPath(sourcePath)}`),
-          ...(reconnectSelections.length > 5
-            ? [`  … and ${reconnectSelections.length - 5} more`]
+          ...(summary.reconnects.length > 5
+            ? [`  … and ${summary.reconnects.length - 5} more`]
             : []),
         ]
       : []),
-    ...(approval.custody.length
+    ...(summary.additions.length
       ? [
-          `Add to Library: ${approval.custody.length}`,
-          ...approval.custody
+          `Add to Library: ${summary.additions.length}`,
+          ...summary.additions
             .slice(0, 5)
             .map((selection) => `  ${selection.name} · ${displayPath(selection.sourcePath)}`),
-          ...(approval.custody.length > 5 ? [`  … and ${approval.custody.length - 5} more`] : []),
+          ...(summary.additions.length > 5 ? [`  … and ${summary.additions.length - 5} more`] : []),
         ]
       : []),
-    ...setupDuplicatePlanLines(decisions),
-    ...(custodySelections.length ? [`Take custody: ${custodySelections.length}`] : []),
-    ...approval.custody.flatMap((selection) => {
-      const candidate = observed.onboarding.candidates.find((item) =>
-        item.paths.includes(selection.sourcePath),
-      );
-      return candidate?.action === "blocked" && candidate.reason === "divergent-copies"
-        ? [
-            `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
-            "  Other copies stay in place unless explicitly marked Remove.",
-          ]
-        : [];
-    }),
-    ...(approval.removals.entries.length
+    ...setupDuplicatePlanLines(summary.duplicates),
+    ...(summary.custodyCount ? [`Take custody: ${summary.custodyCount}`] : []),
+    ...summary.authoritativeCopies.flatMap((selection) => [
+      `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
+      "  Other copies stay in place unless explicitly marked Remove.",
+    ]),
+    ...(summary.removals.entries.length
       ? [
-          `Remove installed copies: ${approval.removals.entries.length}`,
-          ...approval.removals.entries.map(
+          `Remove installed copies: ${summary.removals.entries.length}`,
+          ...summary.removals.entries.map(
             (entry) =>
               `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
           ),
-          `Recovery folder: ${approval.removals.recoveryDirectory}`,
+          `Recovery folder: ${summary.removals.recoveryDirectory}`,
           "Library entries and source files outside these locations stay in place.",
         ]
       : []),
-    ...(repositorySelections.length
+    ...(summary.repositoryCopiesRemain
       ? [
           "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
         ]
@@ -221,21 +181,14 @@ export function setupPlanLines(input: {
   ];
 }
 
-function setupDuplicatePlanLines(decisions: readonly SetupCopyDecision[]) {
-  return (["retain-only", "retire-aliases", "keep-both"] as const).flatMap((action) => {
-    const selected = decisions.filter((decision) => decision.duplicateAction === action);
-    if (!selected.length) return [];
-    const names = selected.length <= 5 ? ` · ${selected.map((copy) => copy.name).join(", ")}` : "";
+function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
+  return duplicates.map(({ action, names, aliasCount }) => {
+    const examples = names.length <= 5 ? ` · ${names.join(", ")}` : "";
     if (action === "retain-only")
-      return [`Retain only: ${skillCount(selected.length)}${names} · no new Binding or Projection`];
+      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or Projection`;
     if (action === "keep-both")
-      return [`Allow duplicate agent copies: ${skillCount(selected.length)}${names}`];
-    const aliases = new Set(
-      selected.flatMap((decision) => decision.approvedAliases?.map((alias) => alias.path) ?? []),
-    );
-    return [
-      `Retire redundant symlinks: ${skillCount(selected.length)} · ${aliases.size} symlink${aliases.size === 1 ? "" : "s"}${names} · sources stay; recovery receipts saved`,
-    ];
+      return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
+    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; recovery receipts saved`;
   });
 }
 

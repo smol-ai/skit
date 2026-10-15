@@ -1,7 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Fiber, FileSystem, Layer, Result, Schedule } from "effect";
-import { SourceProcess } from "@smolai/skit-core";
+import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effect";
+import { SourceProcess, LibraryStore, libraryDoctorReport } from "@smolai/skit-core";
+import { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
@@ -15,8 +16,94 @@ import {
   type HarnessDoctorCheck,
   readClaudeCommands,
   nativeDiscovery,
+  inspectNativeDiscovery,
+  DoctorReport,
 } from "../src/workflows/library/doctor-harnesses.js";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
+
+import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
+import { captureDisk } from "./helpers/disk-snapshot.js";
+
+it.effect.each([false, true])(
+  "assembles native diagnostics without probes for custom roots (unreadable alias: %s)",
+  (unreadable) =>
+    Effect.gen(function* () {
+      const f = yield* NativeLibraryFixture;
+      const fs = yield* FileSystem.FileSystem;
+      const cwd = join(f.root, "project");
+      const globalCopy = join(f.root, "claude", "global-review");
+      const projectCopy = join(cwd, ".claude", "skills", "project-review");
+      for (const path of [globalCopy, projectCopy]) {
+        yield* fs.makeDirectory(path, { recursive: true });
+        yield* fs.writeFileString(
+          join(path, "SKILL.md"),
+          "---\nname: review\ndescription: Review\n---\nReview bytes.\n",
+        );
+      }
+      const loop = join(f.root, "claude", "loop");
+      if (unreadable) yield* fs.symlink(loop, loop);
+      const store = yield* LibraryStore;
+      const inventory = yield* store.load;
+      const before = yield* captureDisk([f.root]);
+      const report = yield* inspectNativeDiscovery(inventory, {
+        cwd,
+        home: f.root,
+        configHome: join(f.root, "config"),
+        overrides: {
+          codex: [join(f.root, "codex")],
+          "claude-code": [join(f.root, "claude")],
+          opencode: [join(f.root, "opencode")],
+          devin: [join(f.root, "devin")],
+        },
+      }).pipe(
+        Effect.provide(skitConfigurationLayer(f.home)),
+        Effect.provide(
+          Layer.mock(ChildProcessSpawner.ChildProcessSpawner, {
+            spawn: () => Effect.die("Custom-root diagnostics must not spawn a native probe"),
+          }),
+        ),
+        Effect.provideService(SourceProcess, {
+          run: () => Effect.die("Unexpected native process"),
+          output: () => Effect.die("Unexpected native process"),
+        }),
+      );
+      yield* Schema.decodeUnknownEffect(DoctorReport)({
+        ...libraryDoctorReport(inventory),
+        ...report,
+      });
+      expect(report.codex.status).toBe("skipped");
+      expect(report.listing_budgets[0]).toMatchObject({
+        _tag: "Unavailable",
+        harness: "codex",
+        cwd,
+      });
+      expect(report.listing_budgets[0]).toHaveProperty(
+        "detail",
+        "detail" in report.codex ? report.codex.detail : undefined,
+      );
+      expect(report.listing_budgets[1]).toMatchObject({ harness: "claude-code", cwd });
+      expect(report.harnesses.map((check) => [check.harness, check.status, check.cwd])).toEqual([
+        ["claude-code", "skipped", cwd],
+        ["opencode", "skipped", cwd],
+        ["devin", "skipped", cwd],
+      ]);
+      const claude = report.harnesses.find((check) => check.harness === "claude-code");
+      expect(
+        claude?.locations
+          ?.flatMap((location) => location.aliases.map((alias) => alias.path))
+          .sort(),
+      ).toEqual([globalCopy, projectCopy].sort());
+      for (const check of report.harnesses) {
+        expect(check.locations?.every((location) => location.harness === check.harness)).toBe(true);
+        expect(
+          check.warnings.some((warning) =>
+            warning.includes(`Could not inspect skill aliases at ${loop}:`),
+          ),
+        ).toBe(unreadable);
+      }
+      expect(yield* captureDisk([f.root])).toEqual(before);
+    }).pipe(Effect.provide(nativeLibraryLayer)),
+);
 
 const processLayer = (stdout: unknown, exitCode = 0, stderr = "") =>
   Layer.succeed(

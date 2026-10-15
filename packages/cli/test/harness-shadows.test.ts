@@ -1,12 +1,12 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { LinkStat } from "@smolai/skit-core";
+import { LinkStat, deterministicTreeHashEffect } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
+import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
 import {
-  applySetupLocalCustody,
-  captureSetupAliasApproval,
-  planSetupAliasRetirement,
-  retireSetupAliases,
-} from "../src/workflows/library/setup-local-custody.js";
+  captureLocalAdoptionAliases,
+  approveLocalAdoption,
+  prepareLocalAdoption,
+} from "../src/workflows/library/local-adoption.js";
 import { applySetupExistingBindings } from "../src/workflows/library/setup-existing-binding.js";
 import { copyConflict } from "../src/workflows/library/setup-decisions.js";
 import type { ShadowObservationError } from "../src/projection/harness-shadows.js";
@@ -21,8 +21,8 @@ import {
   observeHarnessSkills,
   readableHarnessRoots,
 } from "../src/projection/harness-shadows.js";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { Renderer } from "../src/presentation/renderer.js";
@@ -65,7 +65,7 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          const retained = yield* addLibrarySourceEffect(f.source);
+          const retained = yield* retainLibrarySourceEffect(f.source);
           const store = yield* LibraryStore;
           const before = yield* store.load;
           if (retained.collection_id === undefined)
@@ -79,9 +79,9 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
               dryRun: false,
             },
             roots: f.home.inventory,
-            variantsPath: f.home.bindings.variantsPath,
+            variantsPath: f.home.variantsPath,
           };
-          const preview = yield* applyLibraryBindings(before, {
+          const preview = yield* setLibraryBindings({
             ...options,
             invocation: { ...options.invocation, dryRun: true },
           });
@@ -92,15 +92,15 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
               aliases: [expect.objectContaining({ path: f.alias, via: "symlink" })],
             }),
           ]);
-          const result = yield* Effect.result(applyLibraryBindings(before, options));
+          const result = yield* Effect.result(setLibraryBindings(options));
           expect(Result.isFailure(result) && result.failure._tag).toBe("ProjectionWouldDuplicate");
           expect((yield* store.load).global_bindings).toEqual(before.global_bindings);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
-          yield* applyLibraryBindings(before, { ...options, allowDuplicate: true });
+          yield* setLibraryBindings({ ...options, allowDuplicate: true });
           expect(yield* f.fs.readFileString(join(f.destination, "SKILL.md"))).toBe(
             yield* f.fs.readFileString(join(f.source, "SKILL.md")),
           );
-          const policyChange = yield* applyLibraryBindings(yield* store.load, {
+          const policyChange = yield* setLibraryBindings({
             ...options,
             invocation: { ...options.invocation, invocation: "explicit" as const },
           });
@@ -125,7 +125,7 @@ it.effect.each(["retain-only", "retire-aliases", "keep-both"] as const)(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -222,14 +222,9 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
           const options = { ...f.options, repositoryRoots: [], persistRoots: false };
           const observed = yield* runSetup(options);
           const result = yield* Effect.result(
-            applySetupLocalCustody(
-              {
-                setup: options,
-                adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-              },
-              observed,
-              [{ name: "review", sourcePath: f.source }],
-            ),
+            applySetupLocalCustody({ bindings: f.home.bindings }, observed, [
+              { name: "review", sourcePath: f.source },
+            ]),
           );
           expect(
             Result.isFailure(result) &&
@@ -271,14 +266,9 @@ it.effect("a failed replacement keeps the original alias available", () =>
                 : f.fs.rename(from, to),
           });
           const result = yield* Effect.result(
-            applySetupLocalCustody(
-              {
-                setup: options,
-                adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-              },
-              observed,
-              [{ name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" }],
-            ).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
+            applySetupLocalCustody({ bindings: f.home.bindings }, observed, [
+              { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+            ]).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
           );
           expect(Result.isFailure(result)).toBe(true);
           expect((yield* (yield* LibraryStore).load).skills).toHaveLength(1);
@@ -356,10 +346,9 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          yield* addLibrarySourceEffect(f.source);
-          const state = yield* (yield* LibraryStore).load;
+          yield* retainLibrarySourceEffect(f.source);
           const result = yield* Effect.result(
-            applyLibraryBindings(state, {
+            setLibraryBindings({
               query: "review",
               all: false,
               invocation: {
@@ -368,7 +357,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
                 dryRun: false,
               },
               roots: f.home.inventory,
-              variantsPath: f.home.bindings.variantsPath,
+              variantsPath: f.home.variantsPath,
               allowedShadowAliases: [
                 {
                   path: f.alias,
@@ -402,9 +391,9 @@ it.effect(
         writingTo(
           f.home.home,
           Effect.gen(function* () {
-            yield* addLibrarySourceEffect(f.source);
+            yield* retainLibrarySourceEffect(f.source);
             const store = yield* LibraryStore;
-            yield* applyLibraryBindings(yield* store.load, {
+            yield* setLibraryBindings({
               query: "review",
               all: false,
               allowDuplicate: true,
@@ -414,7 +403,7 @@ it.effect(
                 dryRun: false,
               },
               roots: f.home.inventory,
-              variantsPath: f.home.bindings.variantsPath,
+              variantsPath: f.home.variantsPath,
             });
             const state = yield* store.load;
             expect(state.projections.some((projection) => projection.target === "claude")).toBe(
@@ -431,22 +420,33 @@ it.effect(
               },
               state,
             );
-            const shadows = yield* observeHarnessShadows(f.home.inventory, { kind: "global" }, [
-              "review",
-            ]);
-            const retirement = yield* planSetupAliasRetirement(
-              f.home.home,
-              "review",
-              f.source,
-              shadows,
-            );
-            const outcome = yield* retireSetupAliases(
+            const shadows = yield* observeHarnessShadows(
               { ...f.home.inventory, home: aliasHome },
-              "review",
-              "review",
-              retirement,
+              { kind: "global" },
+              ["review"],
             );
-            expect(outcome.kind).toBe("retired");
+            const approvedAliases = yield* captureLocalAdoptionAliases(f.source, shadows);
+            const selection = yield* approveLocalAdoption(
+              {
+                name: "review",
+                sourcePath: f.source,
+                duplicateAction: "retire-aliases",
+                approvedAliases,
+              },
+              { kind: "retirable", shadows, aliases: approvedAliases.map((alias) => alias.path) },
+              () => new Error("Expected retirable aliases"),
+            );
+            const adoption = yield* prepareLocalAdoption(
+              { bindings: { ...f.home.inventory, home: aliasHome } },
+              selection,
+              {
+                kind: "existing",
+                subjectId: "review",
+                observedHash: yield* deterministicTreeHashEffect(f.source),
+              },
+            );
+            const outcome = yield* adoption.apply();
+            expect(outcome.recoveryDirectories).toHaveLength(1);
             expect(yield* f.fs.exists(f.alias)).toBe(false);
             expect(yield* f.fs.exists(f.destination)).toBe(true);
           }),
@@ -480,17 +480,10 @@ it.effect(
           Effect.gen(function* () {
             const options = { ...f.options, repositoryRoots: [], persistRoots: false };
             const observed = yield* runSetup(options);
-            const applied = yield* applySetupLocalCustody(
-              {
-                setup: options,
-                adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-              },
-              observed,
-              [
-                { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
-                { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
-              ],
-            );
+            const applied = yield* applySetupLocalCustody({ bindings: f.home.bindings }, observed, [
+              { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+              { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
+            ]);
             expect(applied.warnings).toEqual([
               expect.objectContaining({
                 name: "review",
@@ -534,7 +527,7 @@ for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -584,7 +577,7 @@ it.effect.each(["retain-only", "keep-both"] as const)(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -618,7 +611,7 @@ it.effect(
         );
       }
       yield* initializeLibraryMachine(f.home.home);
-      yield* f.home.owned(writingTo(f.home.home, addLibrarySourceEffect(f.source)));
+      yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
       const interaction = yield* makeScriptedInteraction([
         ["review", "later", "ordinary-one", "ordinary-two"],
         "retire-aliases",
@@ -632,7 +625,7 @@ it.effect(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -672,14 +665,17 @@ for (const operation of ["add", "bind"] as const) {
           writingTo(
             f.home.home,
             Effect.gen(function* () {
-              if (operation === "bind") yield* addLibrarySourceEffect(f.source);
+              if (operation === "bind") yield* retainLibrarySourceEffect(f.source);
               const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
               const before = yield* (yield* LibraryStore).load;
               const observed = yield* runSetup(setup);
               const conflict = copyConflict(observed, { name: "review", sourcePath: f.source });
               if (conflict.kind !== "retirable")
                 return yield* Effect.die("Expected retirable aliases");
-              const approvedAliases = yield* captureSetupAliasApproval(f.source, conflict.shadows);
+              const approvedAliases = yield* captureLocalAdoptionAliases(
+                f.source,
+                conflict.shadows,
+              );
               if (change === "added") {
                 const root = join(f.root, ".codex", "skills");
                 yield* f.fs.makeDirectory(root, { recursive: true });
@@ -705,15 +701,10 @@ for (const operation of ["add", "bind"] as const) {
               };
               const result =
                 operation === "add"
-                  ? yield* applySetupLocalCustody(
-                      {
-                        setup,
-                        adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
-                      },
-                      fresh,
-                      [selection],
-                    ).pipe(Effect.asVoid, Effect.result)
-                  : yield* applySetupExistingBindings({ setup, bindings: f.home.bindings }, fresh, [
+                  ? yield* applySetupLocalCustody({ bindings: f.home.bindings }, fresh, [
+                      selection,
+                    ]).pipe(Effect.asVoid, Effect.result)
+                  : yield* applySetupExistingBindings({ bindings: f.home.bindings }, fresh, [
                       selection,
                     ]).pipe(Effect.asVoid, Effect.result);
               expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
@@ -765,7 +756,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
     );
     yield* f.fs.symlink(later, laterAlias);
     yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(writingTo(f.home.home, addLibrarySourceEffect(f.source)));
+    yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
     const interaction = yield* makeScriptedInteraction([
       ["review", "later"],
       "retire-aliases",
@@ -780,7 +771,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(
             Effect.provideService(Renderer, {
               ...renderer,
@@ -809,4 +800,56 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
     expect(yield* f.fs.readLink(addedAlias)).toBe(later);
     expect(yield* f.fs.exists(join(f.root, ".agents", "skills", "later"))).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect.each(["source", "alias"] as const)(
+  "prepared local adoption rejects changed %s before retaining or retiring anything",
+  (changed) =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* initializeLibraryMachine(f.home.home);
+      yield* f.home.owned(
+        Effect.gen(function* () {
+          const observed = yield* runSetup({
+            ...f.options,
+            repositoryRoots: [],
+            persistRoots: false,
+          });
+          const input = {
+            name: "review",
+            sourcePath: f.source,
+            duplicateAction: "retire-aliases" as const,
+          };
+          const selection = yield* approveLocalAdoption(
+            input,
+            copyConflict(observed, input),
+            () => new Error("Expected retirable aliases"),
+          );
+          const adoption = yield* prepareLocalAdoption({ bindings: f.home.bindings }, selection, {
+            kind: "retain",
+            observedHash: yield* deterministicTreeHashEffect(f.source),
+            custody: { harnesses: ["codex"], machineId: observed.machineConfig.machineId },
+          });
+          expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
+          expect(yield* f.fs.exists(f.destination)).toBe(false);
+          if (changed === "source") {
+            yield* f.fs.writeFileString(
+              join(f.source, "SKILL.md"),
+              "---\nname: review\ndescription: Changed\n---\nChanged after preparation.\n",
+            );
+          } else {
+            // Keep the old inode alive, then replace the alias with the same target and a new identity.
+            yield* f.fs.rename(f.alias, join(f.root, "displaced-alias"));
+            yield* f.fs.symlink(f.source, f.alias);
+          }
+          const result = yield* adoption.apply().pipe(Effect.result);
+          expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
+          expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
+          expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);
+          expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+          expect(yield* f.fs.exists(f.destination)).toBe(false);
+          expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
+        }),
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

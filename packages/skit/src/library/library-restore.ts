@@ -1,10 +1,19 @@
+import { resolveSkitSourceEffect } from "../acquisition/sources.js";
+import { deterministicTreeHashEffect } from "../artifact/skit.js";
+import { prepareObservedCollectionEffect } from "./observed-import.js";
 import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
-import { materializeVerifiedSnapshotEffect } from "./snapshot-archive.js";
+import {
+  captureSnapshotArchiveEffect,
+  materializeVerifiedSnapshotEffect,
+} from "./snapshot-archive.js";
 import { verifySnapshotArchiveEffect } from "./snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "./library-state.js";
 import {
+  acquisitionIsSourceRestorable,
+  type Acquisition,
+  type SkitSource,
   bindingSkillIds,
   currentLibraryManifest,
   librarySnapshotDigests,
@@ -26,37 +35,176 @@ export class RestoreInvalid
   }
 }
 
-/** Complete a restore set without treating retrievable source bytes as private snapshots. */
-export const completeRestoreArchivesEffect = <E, R>(
+/** Access to historical sources and the destination for verified retained bytes. */
+export interface RestoreOptions {
+  readonly originalsPath: string;
+  readonly registryBaseUrl?: string;
+  readonly registryToken?: string;
+}
+
+/** Preserve the existing diagnostic tag as source restoration moves behind the core boundary. */
+export class SourceRestoreInvalid
+  extends Data.TaggedError("Library.SyncSourceRestoreInvalid")<{
+    digest: string;
+    detail: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "Restore access to the source, or run `skit update` on the Collection, then run `skit sync` again.";
+  get message(): string {
+    return this.detail;
+  }
+}
+
+/**
+ * The Source to reacquire an Acquisition's exact bytes from: its recorded identity at its
+ * revision. Git restores pin the commit separately; a Registry restore names the Release.
+ */
+const restorableSource = (acquisition: Acquisition): SkitSource | undefined => {
+  const identity = acquisition.source_identity;
+  const subpath =
+    (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
+      ? { subpath: identity.collection_root }
+      : {};
+  switch (identity.kind) {
+    case "github":
+      return {
+        type: "github",
+        owner: identity.owner,
+        repository: identity.repository,
+        ...subpath,
+      };
+    case "git":
+      return { type: "git", remote: identity.remote.value, ...subpath };
+    case "registry":
+      return acquisition.revision === undefined
+        ? undefined
+        : {
+            type: "registry",
+            namespace: identity.namespace,
+            slug: identity.slug,
+            version: acquisition.revision,
+            ...(identity.authority === "default" ? {} : { authority: identity.authority }),
+          };
+    default:
+      return undefined;
+  }
+};
+
+const reacquireSourceArchiveEffect = Effect.fn("Library.restore.reacquireSource")(function* (
+  manifest: LibraryManifest,
+  digest: string,
+  options: RestoreOptions,
+) {
+  const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
+  const acquisition = manifest.acquisitions.find(
+    (candidate) =>
+      candidate.retained_copy_id === copy?.retained_copy_id &&
+      acquisitionIsSourceRestorable(candidate),
+  );
+  if (copy === undefined || acquisition === undefined)
+    return yield* new SourceRestoreInvalid({
+      digest,
+      detail: "manifest has no exact source-restoration acquisition",
+    });
+  const archive = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const gitSource =
+        acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git";
+      const commit = gitSource ? acquisition.revision : undefined;
+      if (gitSource && commit === undefined)
+        return yield* new SourceRestoreInvalid({
+          digest,
+          detail: "pinned Git acquisition has no commit",
+        });
+      const source = restorableSource(acquisition);
+      if (source === undefined)
+        return yield* new SourceRestoreInvalid({
+          digest,
+          detail: "acquisition has no restorable source identity",
+        });
+      const profiles = new Set(copy.members.map((member) => member.materialization_profile));
+      if (profiles.size !== 1)
+        return yield* new SourceRestoreInvalid({
+          digest,
+          detail: "retained copy has no single materialization profile",
+        });
+      const resolved = yield* resolveSkitSourceEffect(source, {
+        registryBaseUrl: options.registryBaseUrl,
+        ...(options.registryToken === undefined ? {} : { registryToken: options.registryToken }),
+        ...(commit === undefined
+          ? {}
+          : { git: { commit, tracking_ref: null }, requireGitRevision: true }),
+      });
+      // Declared imports retain the whole resolved SKIT root, including shared and non-Skill files.
+      if (profiles.has("declared-skit-skill/v1")) {
+        if (resolved.descriptorKind !== "declared")
+          return yield* new SourceRestoreInvalid({
+            digest,
+            detail: "declared retained copy source has no declared Descriptor",
+          });
+        return yield* captureSnapshotArchiveEffect(resolved.root);
+      }
+      const prepared = yield* prepareObservedCollectionEffect(
+        yield* Effect.forEach(copy.members, (member) =>
+          Effect.gen(function* () {
+            const sourcePath =
+              member.source_path === "."
+                ? resolved.originalRoot
+                : join(resolved.originalRoot, member.source_path);
+            return {
+              name: member.source_path,
+              sourcePath,
+              relativePath: member.source_path,
+              observedHash: yield* deterministicTreeHashEffect(sourcePath),
+            };
+          }),
+        ),
+      );
+      return yield* captureSnapshotArchiveEffect(prepared.staged);
+    }),
+  );
+  if (archive.digest !== digest)
+    return yield* new SourceRestoreInvalid({
+      digest,
+      detail: `source returned ${archive.digest}; expected ${digest}`,
+    });
+  return archive;
+});
+
+/** Complete all archives before retaining any bytes. Private snapshots are never reacquired. */
+const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives")(function* (
   manifest: LibraryManifest,
   available: readonly SnapshotArchive[],
-  reacquireSource: (digest: string) => Effect.Effect<SnapshotArchive, E, R>,
-): Effect.Effect<SnapshotArchive[], E | RestoreInvalid, R> =>
-  Effect.gen(function* () {
-    const archives = new Map(available.map((archive) => [archive.digest, archive]));
-    const snapshotDigests = new Set(manifest.snapshot_digests);
-    for (const copy of manifest.retained_copies) {
-      if (archives.has(copy.digest)) continue;
-      if (snapshotDigests.has(copy.digest))
-        return yield* new RestoreInvalid({
-          detail: `snapshot-backed retained copy ${copy.digest} not downloaded`,
-        });
-      const archive = yield* reacquireSource(copy.digest);
-      if (archive.digest !== copy.digest)
-        return yield* new RestoreInvalid({
-          detail: `source-backed retained copy ${copy.digest} returned ${archive.digest}`,
-        });
-      archives.set(archive.digest, archive);
-    }
-    return [...archives.values()];
-  }).pipe(Effect.withSpan("Library.completeRestoreArchives"));
+  options: RestoreOptions,
+) {
+  const archives = new Map(available.map((archive) => [archive.digest, archive]));
+  const snapshotDigests = new Set(manifest.snapshot_digests);
+  for (const copy of manifest.retained_copies) {
+    if (archives.has(copy.digest)) continue;
+    if (snapshotDigests.has(copy.digest))
+      return yield* new RestoreInvalid({
+        detail: `snapshot-backed retained copy ${copy.digest} not downloaded`,
+      });
+    const archive = yield* reacquireSourceArchiveEffect(manifest, copy.digest, options);
+    archives.set(archive.digest, archive);
+  }
+  return [...archives.values()];
+});
 
-/** Prepare another device without rewriting portable Acquisition provenance. */
+/**
+ * Prepare the exact content a manifest requires, without publishing Library state or rewriting
+ * Acquisition provenance. Available snapshots and exact source reconstruction share verification.
+ */
 export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function* (
   manifest: LibraryManifest,
-  archives: readonly SnapshotArchive[],
-  originalsPath: string,
+  available: readonly SnapshotArchive[],
+  options: RestoreOptions,
 ) {
+  const archives = yield* completeRestoreArchivesEffect(manifest, available, options);
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
   for (const tree of manifest.retained_copies) {
     const archive = received.get(tree.digest);
@@ -66,7 +214,7 @@ export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function
       });
     const verified = yield* verifySnapshotArchiveEffect(archive);
     const temporary = yield* materializeVerifiedSnapshotEffect(verified);
-    const path = yield* retainLocalTreeEffect(temporary, originalsPath, tree.digest, true);
+    const path = yield* retainLocalTreeEffect(temporary, options.originalsPath, tree.digest, true);
     for (const member of tree.members) {
       const directory = member.source_path === "." ? path : join(path, member.source_path);
       if ((yield* originalTreeHashEffect(directory)) !== member.source_digest)

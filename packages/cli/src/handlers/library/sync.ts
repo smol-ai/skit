@@ -22,7 +22,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly adopt: boolean;
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
-  readonly projection: Pick<LibraryInstallationConfiguration, "variantsPath" | "rootFor">;
+  readonly projection: Pick<LibraryInstallationConfiguration, "rootFor">;
 }) {
   const auth = yield* Effect.fromResult(options.authState);
   if (auth.origin === undefined) return yield* new NoStoredCredentials();

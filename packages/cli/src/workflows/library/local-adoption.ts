@@ -1,4 +1,29 @@
 import {
+  activeProjectionTargetsEffect,
+  bindingRoot,
+  type InventoryRootOptions,
+} from "../../projection/roots.js";
+import {
+  observeHarnessShadows,
+  readableHarnessRoots,
+  type HarnessShadow,
+} from "../../projection/harness-shadows.js";
+import {
+  applyBindingChanges,
+  previewBindingChanges,
+  type BindingChangeRequest,
+} from "../../library-application/binding-changes.js";
+import { PlanIsStale } from "../../library/failures.js";
+import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
+import { resolveLibrarySubject } from "./subject-resolution.js";
+import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
+import {
+  retirableShadowAliases,
+  SetupApprovedAlias,
+  type SetupCopySelection,
+  type SetupCopyConflict,
+} from "./setup-decisions.js";
+import {
   canonicalJson,
   deterministicTreeHashEffect,
   Digest as DigestSchema,
@@ -6,24 +31,34 @@ import {
   inspectNormalizedTreeEffect,
   inspectOwnershipMarkerEffect,
   LibraryStore,
+  LinkStat,
+  hasHarnessProfile,
+  withLibraryWriter,
+  type Digest,
+  type MachineId,
+  type HarnessName as HarnessNameType,
+  FailureTypeId,
+  type SkitFailure,
   SkitBindingScope,
   walkTreeEffect,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import { inspectLibrarySourceEffect } from "./add.js";
+import {
+  retainLibrarySourceEffect,
+  inspectLibrarySourceEffect,
+} from "../../library-application/source-acquisition.js";
 import type { ProjectionOptions } from "./projection-options.js";
-import type { RetentionOptions } from "./retention-options.js";
 
-export const LocalAdoptionTarget = Schema.Struct({
+const LocalAdoptionTarget = Schema.Struct({
   path: Schema.String,
   harness: HarnessName,
   scope: SkitBindingScope,
 });
-export interface LocalAdoptionTarget extends Schema.Schema.Type<typeof LocalAdoptionTarget> {}
+interface LocalAdoptionTarget extends Schema.Schema.Type<typeof LocalAdoptionTarget> {}
 
-export const LocalAdoptionBlockerReason = Schema.Literals([
+const LocalAdoptionBlockerReason = Schema.Literals([
   "empty-selection",
   "multiple-skills",
   "not-projection-target",
@@ -33,9 +68,9 @@ export const LocalAdoptionBlockerReason = Schema.Literals([
   "would-discard-control-entry",
   "would-normalize-path",
 ]);
-export type LocalAdoptionBlockerReason = typeof LocalAdoptionBlockerReason.Type;
+type LocalAdoptionBlockerReason = typeof LocalAdoptionBlockerReason.Type;
 
-export const LocalAdoptionPlannedTarget = Schema.Union([
+const LocalAdoptionPlannedTarget = Schema.Union([
   Schema.Struct({
     ...LocalAdoptionTarget.fields,
     status: Schema.Literal("adoptable"),
@@ -52,9 +87,9 @@ export const LocalAdoptionPlannedTarget = Schema.Union([
     observedHash: Schema.optionalKey(DigestSchema),
   }),
 ]);
-export type LocalAdoptionPlannedTarget = typeof LocalAdoptionPlannedTarget.Type;
+type LocalAdoptionPlannedTarget = typeof LocalAdoptionPlannedTarget.Type;
 
-export const LocalAdoptionPlan = Schema.Struct({
+const LocalAdoptionPlan = Schema.Struct({
   revision: Schema.String,
   sourcePath: Schema.optionalKey(Schema.String),
   snapshotDigest: Schema.optionalKey(DigestSchema),
@@ -70,10 +105,9 @@ export const LocalAdoptionPlan = Schema.Struct({
   ),
   applicable: Schema.Boolean,
 });
-export interface LocalAdoptionPlan extends Schema.Schema.Type<typeof LocalAdoptionPlan> {}
+interface LocalAdoptionPlan extends Schema.Schema.Type<typeof LocalAdoptionPlan> {}
 
 export interface LocalAdoptionOptions {
-  readonly acquisition: RetentionOptions;
   readonly bindings: ProjectionOptions;
 }
 
@@ -102,8 +136,7 @@ const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(fu
 });
 
 /** Plan exact-content Custody transfer without retaining, projecting, or publishing state. */
-export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
-  options: LocalAdoptionOptions,
+const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
   selected: readonly LocalAdoptionTarget[],
   nominatedSourcePath?: string,
 ) {
@@ -216,7 +249,7 @@ export const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function
   return plan;
 });
 
-export const localAdoptionPlanIdentity = (plan: LocalAdoptionPlan) =>
+const localAdoptionPlanIdentity = (plan: LocalAdoptionPlan) =>
   createHash("sha256")
     .update(
       canonicalJson({
@@ -230,3 +263,310 @@ export const localAdoptionPlanIdentity = (plan: LocalAdoptionPlan) =>
       }),
     )
     .digest("hex");
+
+export class LocalAdoptionInvalid
+  extends Schema.TaggedError<LocalAdoptionInvalid>()("LocalAdoptionInvalid", {
+    name: Schema.String,
+    reason: Schema.Literals(["source-not-candidate", "machine-identity-required"]),
+  })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Run `skit setup` again and review the current plan.";
+  get message() {
+    return `Cannot take custody of ${this.name}: ${this.reason}`;
+  }
+}
+
+/** Setup selects eligibility; adoption owns retaining or reusing content and taking custody. */
+export type LocalAdoptionRequest =
+  | { readonly kind: "existing"; readonly subjectId: string; readonly observedHash: Digest }
+  | {
+      readonly kind: "retain";
+      readonly observedHash: Digest | undefined;
+      readonly custody?: {
+        readonly harnesses: readonly HarnessNameType[];
+        readonly machineId: MachineId | undefined;
+      };
+    };
+
+/** Validate every duplicate decision before applying any of the selected copies. */
+export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function* <E>(
+  selection: SetupCopySelection,
+  conflict: SetupCopyConflict,
+  invalid: (reason: "duplicate-action-required" | "aliases-not-retirable") => E,
+) {
+  if (conflict.kind !== "none" && !selection.duplicateAction)
+    return yield* Effect.fail(invalid("duplicate-action-required"));
+  if (selection.duplicateAction !== "retire-aliases")
+    return { ...selection, duplicateAction: selection.duplicateAction };
+  if (conflict.kind !== "retirable")
+    return yield* Effect.fail(
+      selection.approvedAliases ? new PlanIsStale() : invalid("aliases-not-retirable"),
+    );
+  return {
+    ...selection,
+    duplicateAction: selection.duplicateAction,
+    approvedAliases: yield* captureLocalAdoptionAliases(
+      selection.sourcePath,
+      conflict.shadows,
+      selection.approvedAliases,
+    ),
+  };
+});
+
+/** Prepare without changing custody. Apply revalidates content under the same Library writer. */
+export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function* (
+  options: LocalAdoptionOptions,
+  approved: Effect.Success<ReturnType<typeof approveLocalAdoption>>,
+  requestInput: LocalAdoptionRequest,
+) {
+  const home = (yield* LibraryStore).home;
+  const selection = structuredClone(approved);
+  const request = structuredClone(requestInput);
+  const bindings = {
+    home: options.bindings.home,
+    configHome: options.bindings.configHome,
+    overrides: structuredClone(options.bindings.overrides),
+  };
+  const binding =
+    selection.duplicateAction !== "retain-only" &&
+    (request.kind === "existing" || request.custody !== undefined);
+  return {
+    apply: Effect.fn("LocalAdoption.apply")(function* () {
+      if ((yield* LibraryStore).home !== home) return yield* new PlanIsStale();
+      const empty = {
+        result: undefined,
+        recoveryDirectories: [] as string[],
+        warnings: [] as { name: string; message: string }[],
+      };
+      if (request.kind === "existing" && !binding) return empty;
+      const observedHash = request.observedHash;
+      if (
+        observedHash === undefined ||
+        (request.kind === "retain" &&
+          (yield* deterministicTreeHashEffect(selection.sourcePath)) !== observedHash)
+      )
+        return yield* new PlanIsStale();
+      const retirement = binding ? yield* prepareAliasRetirement(bindings, selection) : undefined;
+      if (request.kind === "retain" && !binding) {
+        const retained = yield* retainLibrarySourceEffect(selection.sourcePath);
+        if (retained.collection_id === undefined)
+          return yield* new LocalAdoptionInvalid({
+            name: selection.name,
+            reason: "source-not-candidate",
+          });
+        return empty;
+      }
+      const adoption = { path: selection.sourcePath, observedHash };
+      let subjectId: string;
+      if (request.kind === "existing") subjectId = request.subjectId;
+      else {
+        const targets = (request.custody?.harnesses ?? []).map((harness) => ({
+          path: selection.sourcePath,
+          harness,
+          scope: { kind: "global" as const },
+        }));
+        const plan = yield* planLocalAdoption(targets, selection.sourcePath);
+        if (
+          plan.targets.some((target) => target.status === "adoptable") &&
+          !request.custody?.machineId
+        )
+          return yield* new LocalAdoptionInvalid({
+            name: selection.name,
+            reason: "machine-identity-required",
+          });
+        if (!plan.applicable || !plan.sourcePath || !plan.skill)
+          return yield* new LocalAdoptionInvalid({
+            name: selection.name,
+            reason: "source-not-candidate",
+          });
+        const refreshed = yield* planLocalAdoption(plan.targets, plan.sourcePath);
+        if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(plan))
+          return yield* new PlanIsStale();
+        const retained = yield* retainLibrarySourceEffect(plan.sourcePath);
+        if (retained.collection_id === undefined)
+          return yield* new LocalAdoptionInvalid({
+            name: selection.name,
+            reason: "source-not-candidate",
+          });
+        subjectId = retained.collection_id;
+        adoption.path = plan.sourcePath;
+        adoption.observedHash = plan.skill.validationDigest;
+      }
+      return yield* bindCopy(bindings, selection, subjectId, adoption, retirement);
+    }, withLibraryWriter),
+  };
+});
+
+/** Only retirement rows need a fresh shadow scan; prepare before adoption or binding. */
+const prepareAliasRetirement = Effect.fn("LocalAdoption.prepareAliasRetirement")(function* (
+  roots: InventoryRootOptions,
+  selection: Effect.Success<ReturnType<typeof approveLocalAdoption>>,
+) {
+  if (selection.duplicateAction !== "retire-aliases") return undefined;
+  const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
+  const shadows = yield* observeHarnessShadows(roots, { kind: "global" }, [selection.name]);
+  return yield* planAliasRetirement(
+    (yield* LibraryStore).home,
+    selection.name,
+    selection.sourcePath,
+    shadows,
+    approvedAliases,
+  );
+});
+
+/** Consume a retirement prepared before adoption; bind before retiring any approved link. */
+const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
+  roots: InventoryRootOptions,
+  selection: SetupCopySelection,
+  subjectId: string,
+  adoption: NonNullable<BindingChangeRequest["adoption"]>,
+  retirement?: Effect.Success<ReturnType<typeof planAliasRetirement>>,
+) {
+  const plan = yield* previewBindingChanges(
+    [
+      {
+        query: subjectId,
+        all: false,
+        allowDuplicate: selection.duplicateAction === "keep-both",
+        ...(retirement
+          ? {
+              allowedShadowAliases: retirement.aliases.map((entry) => ({
+                ...entry,
+                canonicalPath: selection.sourcePath,
+              })),
+            }
+          : {}),
+        selectedSkills: [selection.name],
+        scope: { kind: "global" },
+        enabled: true,
+        adoption,
+      },
+    ],
+    roots,
+  );
+  const [result] = yield* applyBindingChanges(plan);
+  const outcome = retirement
+    ? yield* retireAliases(roots, subjectId, selection.name, retirement)
+    : undefined;
+  return {
+    result,
+    recoveryDirectories:
+      retirement && outcome?.kind === "retired" ? [retirement.moves.recoveryDirectory] : [],
+    warnings:
+      outcome?.kind === "preserved" ? [{ name: selection.name, message: outcome.message }] : [],
+  };
+});
+
+/** Bind observed aliases to filesystem identities before approval, and verify that consent later. */
+export const captureLocalAdoptionAliases = Effect.fn("LocalAdoption.captureAliasApproval")(
+  function* (
+    sourcePath: string,
+    shadows: readonly HarnessShadow[],
+    approved?: readonly SetupApprovedAlias[],
+  ) {
+    const paths = retirableShadowAliases(sourcePath, shadows);
+    if (!paths.length) return yield* new PlanIsStale();
+    const links = yield* LinkStat;
+    const fs = yield* FileSystem.FileSystem;
+    const aliases = yield* Effect.forEach(paths, (path) =>
+      Effect.gen(function* () {
+        yield* leavePnpmSkillEffect(path);
+        const info = yield* links.identity.lstat(path);
+        if (info.type !== "SymbolicLink") return yield* new PlanIsStale();
+        const canonicalPath = yield* fs.realPath(path);
+        const linkTarget = yield* fs.readLink(path);
+        if (
+          canonicalPath !== sourcePath ||
+          shadows.some((shadow) =>
+            shadow.aliases.some((alias) => alias.path === path && alias.linkTarget !== linkTarget),
+          )
+        )
+          return yield* new PlanIsStale();
+        return { path, canonicalPath, linkTarget, dev: info.dev, ino: info.ino };
+      }).pipe(
+        Effect.catchTag("PlatformError", (error) =>
+          Effect.fail(error.reason._tag === "NotFound" ? new PlanIsStale() : error),
+        ),
+      ),
+    );
+    if (
+      approved &&
+      !Schema.toEquivalence(Schema.Array(SetupApprovedAlias))(
+        [...approved].sort((left, right) => left.path.localeCompare(right.path)),
+        [...aliases].sort((left, right) => left.path.localeCompare(right.path)),
+      )
+    )
+      return yield* new PlanIsStale();
+    return aliases;
+  },
+);
+
+const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(function* (
+  libraryHome: string,
+  name: string,
+  sourcePath: string,
+  shadows: readonly HarnessShadow[],
+  approvedAliases?: readonly SetupApprovedAlias[],
+) {
+  const aliases = yield* captureLocalAdoptionAliases(sourcePath, shadows, approvedAliases);
+  const moves = yield* prepareRecoveryMoves(
+    libraryHome,
+    aliases.map((alias) => ({
+      name,
+      path: alias.path,
+      approvedLink: alias,
+    })),
+  );
+  const harnesses = [...new Set(shadows.map((shadow) => shadow.harness).filter(hasHarnessProfile))];
+  return { moves, aliases, harnesses };
+});
+
+/** Preserve each alias until its harness has an installed replacement; unrelated targets do not gate retirement. */
+const retireAliases = Effect.fn("LocalAdoption.retireAliasesAfterProjection")(function* (
+  roots: InventoryRootOptions,
+  subjectId: string,
+  name: string,
+  retirement: Effect.Success<ReturnType<typeof planAliasRetirement>>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const state = yield* (yield* LibraryStore).load;
+  const subject = yield* resolveLibrarySubject(state, subjectId);
+  const skill = subject.skills.find((item) => item.name === name);
+  const canonical = (path: string) =>
+    fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
+  const readableRoots = yield* Effect.forEach(
+    readableHarnessRoots(roots, { kind: "global" }).filter((root) =>
+      retirement.harnesses.includes(root.harness),
+    ),
+    (root) => canonical(root.root),
+  );
+  let required = 0;
+  for (const target of yield* activeProjectionTargetsEffect(roots)) {
+    const root = bindingRoot(target, { kind: "global" }, roots);
+    if (!readableRoots.includes(yield* canonical(root))) continue;
+    required++;
+    const path = join(root, name);
+    const expectedPath = yield* canonical(path);
+    const candidates = state.projections.filter(
+      (projection) => projection.skill_id === skill?.skill_id && projection.status === "installed",
+    );
+    const installedPaths = yield* Effect.forEach(candidates, (projection) =>
+      canonical(projection.path),
+    );
+    if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
+      return {
+        kind: "preserved" as const,
+        message: `Bound ${name}; existing aliases were preserved because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
+      };
+  }
+  if (!required)
+    return {
+      kind: "preserved" as const,
+      message: `Bound ${name}; existing aliases were preserved because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
+    };
+  yield* retirement.moves.apply();
+  return { kind: "retired" as const };
+});

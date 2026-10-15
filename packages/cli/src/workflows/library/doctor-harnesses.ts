@@ -1,17 +1,24 @@
-import { HarnessShadow } from "../../projection/harness-shadows.js";
-import { Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
+import {
+  HarnessShadow,
+  observeHarnessSkills,
+  readableHarnessRoots,
+  type ShadowObservationError,
+} from "../../projection/harness-shadows.js";
+import type { InventoryRootOptions } from "../../projection/roots.js";
+import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
   HarnessName,
   type LibraryState,
   LibraryDoctorReport,
+  readClaudeListingSnapshot,
   ListingBudget,
   SourceProcess,
   type SourceProcessResult,
 } from "@smolai/skit-core";
 import { probeHarnessEffect } from "../../harness/probe.js";
-import { CodexDoctorCheck } from "./doctor-codex.js";
+import { CodexDoctorCheck, doctorCodexCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
@@ -452,3 +459,57 @@ export function classifyOpenCodeWarnings(
       .map(({ line }) => line),
   };
 }
+
+/** Diagnose native discovery against one already-refreshed Library observation. Does not acquire the writer. */
+export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")(function* (
+  inventory: LibraryState,
+  options: InventoryRootOptions & { readonly cwd: string },
+) {
+  const { cwd } = options;
+  const { codex, claude, harnesses } = yield* Effect.all(
+    {
+      codex: doctorCodexCheck(inventory, cwd, options.overrides.codex?.[0], options),
+      claude: readClaudeListingSnapshot(inventory, { ...options, cwd }),
+      harnesses: Effect.forEach(
+        Record.keys(nativeDiscovery),
+        (harness) => doctorHarnessCheck(harness, cwd, options.overrides[harness]),
+        { concurrency: 3 },
+      ),
+    },
+    { concurrency: 3 },
+  );
+  const aliasErrors: ShadowObservationError[] = [];
+  const locations = yield* observeHarnessSkills(
+    [
+      ...readableHarnessRoots(options, { kind: "global" }),
+      ...readableHarnessRoots(options, { kind: "repository", root: cwd }),
+    ],
+    { errors: aliasErrors },
+  );
+  const { listingBudget, ...nativeCodex } = codex;
+  return {
+    codex: nativeCodex,
+    listing_budgets: [
+      listingBudget ?? {
+        _tag: "Unavailable" as const,
+        harness: "codex" as const,
+        cwd,
+        detail: "detail" in codex ? codex.detail : "Native discovery unavailable",
+      },
+      claude.budget,
+    ],
+    harnesses: harnesses.map((check) => {
+      const located = {
+        ...check,
+        locations: locations.filter((location) => location.harness === check.harness),
+        warnings: [
+          ...check.warnings,
+          ...aliasErrors.map(
+            (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
+          ),
+        ],
+      };
+      return nativeDiscovery[check.harness].classifyWarnings?.(located, inventory) ?? located;
+    }),
+  };
+});

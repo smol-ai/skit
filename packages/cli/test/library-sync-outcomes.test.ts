@@ -5,6 +5,7 @@ import type { SkillId } from "@smolai/skit-core";
 import { join } from "node:path";
 import {
   LibraryState,
+  libraryStoreLayer,
   InvalidLibraryState,
   captureSnapshotArchiveEffect,
   deterministicTreeHashEffect,
@@ -16,6 +17,7 @@ import {
   LibraryApiRejected,
   LibraryManifestTooNew,
 } from "../src/workflows/library/library-sync-api.js";
+import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-projections.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import {
   assertDiskUnchanged,
@@ -780,4 +782,61 @@ it.effect(
       assert.strictEqual(events.at(-1), "Enabling synced Skills");
       assert.strictEqual((yield* b.state).collections.length, 2);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a failed snapshot download retains nothing and leaves the remote unchanged", () =>
+  Effect.gen(function* () {
+    const { a, b, fs, inject, server } = yield* devices;
+    yield* a.retain("first");
+    yield* a.retain("second");
+    yield* a.sync();
+    const before = server.stored;
+    inject({ _tag: "FailDownload", digest: server.remote!.manifest.snapshot_digests[1]! });
+    const progress: string[] = [];
+    const failure = yield* Effect.flip(
+      b.sync({
+        onProgress: (message) =>
+          Effect.sync(() => {
+            progress.push(message);
+          }),
+      }),
+    );
+    assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
+    assert.notInclude(progress, "Restoring retained Skill copies");
+    assert.isFalse(yield* fs.exists(join(b.home, "originals")));
+    assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
+    assert.strictEqual(b.publishes, 0);
+    assert.deepStrictEqual(server.stored, before);
+    assert.strictEqual((yield* b.sync()).status, "pulled");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a prepared device transition cannot publish into another Library home", () =>
+  Effect.gen(function* () {
+    const { a, b } = yield* devices;
+    yield* a.retain("first");
+    const state = yield* a.state;
+    const manifest = yield* libraryManifestFromLocalStateEffect(state);
+    const transition = yield* prepareSyncDeviceTransition({
+      current: state,
+      aligned: state,
+      manifest,
+      rootFor: undefined,
+    }).pipe(Effect.provide(libraryStoreLayer({ home: a.home })));
+    assert.strictEqual(transition._tag, "Ready");
+    if (transition._tag !== "Ready") return;
+    const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });
+    const failure = yield* Effect.flip(
+      transition
+        .publishRestored(state, {
+          origin: "https://registry.test",
+          library_id: "library_test",
+          revision_id: "revision_test",
+          base_manifest: manifest,
+        })
+        .pipe(Effect.provide(libraryStoreLayer({ home: b.home }))),
+    );
+    assert.strictEqual(failure._tag, "LibraryChanged");
+    yield* assertDiskUnchanged(before);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

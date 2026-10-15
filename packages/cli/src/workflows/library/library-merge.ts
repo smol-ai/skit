@@ -1,3 +1,4 @@
+import { alignLibrary, aliasManifest, aliasDevice } from "./library-alignment.js";
 import {
   acquisitionIsSourceRestorable,
   sourceAcquisitions,
@@ -7,6 +8,8 @@ import {
   planThreeWayRecords,
   librarySnapshotDigests,
   LibraryManifest,
+  LibraryState,
+  emptyLibraryState,
   bindingSkillIds,
   mergeGlobalBindings,
   currentSkillVersion,
@@ -19,7 +22,7 @@ import {
   type RetainedCopy,
   type Acquisition,
 } from "@smolai/skit-core";
-import { Result, Schema } from "effect";
+import { Data, Effect, Result, Schema } from "effect";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
@@ -470,3 +473,79 @@ export function describeLibraryMergeConflicts(
     });
   });
 }
+
+type MergePreparation = Data.TaggedEnum<{
+  Ready: {
+    readonly manifest: LibraryManifest;
+    readonly alignedLocal: LibraryManifest;
+    readonly device: LibraryState;
+  };
+  InvalidResolution: {};
+  Conflicted: { readonly conflicts: readonly SyncConflictDetail[] };
+}>;
+const MergePreparation = Data.taggedEnum<MergePreparation>();
+
+/**
+ * Align portable identities and device references together, then validate and apply merge choices.
+ * This prepares data only; ancestry gates, filesystem checks and commit order belong to sync.
+ */
+export const prepareLibraryMerge = Effect.fn("Library.prepareMerge")(function* (input: {
+  readonly base: LibraryManifest;
+  readonly local: LibraryManifest;
+  readonly remote: LibraryManifest;
+  readonly device?: LibraryState;
+  readonly takeRemote?: readonly string[];
+}) {
+  const aliases = alignLibrary(input.local, input.remote, input.base);
+  const alignedLocal = aliasManifest(input.local, aliases);
+  const alignedBase = aliasManifest(input.base, aliases);
+  // Rebuild through the schema so a prepared device carries only fields this CLI declares.
+  const device =
+    input.device === undefined
+      ? emptyLibraryState()
+      : yield* LibraryState.makeEffect(aliasDevice(input.device, aliases));
+  const independentSkills = aliases.skills.map((alias) => alias.to);
+  const independentCollections = aliases.collections.map((alias) => alias.to);
+  const preliminary = mergeLibraryManifests(
+    alignedBase,
+    alignedLocal,
+    input.remote,
+    new Set(),
+    independentSkills,
+    independentCollections,
+  );
+  // A requested key must name an actual remotely resolvable conflict, even on push/pull/clean.
+  const requested = new Set(input.takeRemote ?? []);
+  const available = describeLibraryMergeConflicts(
+    preliminary.conflicts,
+    preliminary.manifest,
+    preliminary.unresolvable,
+  );
+  if (
+    [...requested].some(
+      (key) =>
+        !available.some((detail) => detail.key === key && detail.resolution === "take-remote"),
+    )
+  )
+    return MergePreparation.InvalidResolution();
+  const merged =
+    requested.size === 0
+      ? preliminary
+      : mergeLibraryManifests(
+          alignedBase,
+          alignedLocal,
+          input.remote,
+          requested,
+          independentSkills,
+          independentCollections,
+        );
+  if (merged.conflicts.length)
+    return MergePreparation.Conflicted({
+      conflicts: describeLibraryMergeConflicts(
+        merged.conflicts,
+        merged.manifest,
+        merged.unresolvable,
+      ),
+    });
+  return MergePreparation.Ready({ manifest: merged.manifest, alignedLocal, device });
+});

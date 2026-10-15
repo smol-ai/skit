@@ -7,7 +7,8 @@ import type {
   SetupOnboardingCandidate,
   SetupSkillInstance,
 } from "../workflows/library/setup-contract.js";
-import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "../workflows/library/setup.js";
+import { setupReviewCopies, type SetupReviewCopy } from "../workflows/library/setup-decisions.js";
+import { isSetupCandidateFromCodex } from "../workflows/library/setup.js";
 
 const agentNames: Record<HarnessName, string> = {
   "claude-code": "Claude",
@@ -69,32 +70,12 @@ const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardi
 };
 
 /** Show discovered copies that still need attention, including blocked content. */
-export const setupDiscoveredSkillChoices = (
-  instances: readonly SetupSkillInstance[],
-  candidates: readonly SetupOnboardingCandidate[],
-  home = homedir(),
+export const setupReviewSkillChoices = (
+  copies: readonly (SetupReviewCopy & { readonly removeValue?: string })[],
+  home: string,
 ) => {
-  const rows = instances
-    .filter(
-      (instance) => instance.owner.kind !== "skit" || instance.owner.membership.kind !== "retained",
-    )
-    .filter(
-      (instance) =>
-        !candidates.some(
-          (candidate) =>
-            candidate.action === "import-observed-collection" &&
-            candidate.paths.includes(instance.path),
-        ),
-    )
-    .map((instance) => {
-      const candidate = candidates.find((item) => item.paths.includes(instance.path));
-      const groupKey = setupInstanceGroupKey(instance);
-      const siblings = instances.filter(
-        (item) => setupInstanceGroupKey(item) === groupKey && item.path !== instance.path,
-      );
-      const sameNameElsewhere = instances.some(
-        (item) => item.name === instance.name && item.path !== instance.path,
-      );
+  const rows = copies
+    .map(({ instance, candidate, value, selectable, groupKey, siblings, removeValue }) => {
       const identical = siblings.filter(
         (item) =>
           instance.contentIdentity.observedHash !== undefined &&
@@ -102,12 +83,7 @@ export const setupDiscoveredSkillChoices = (
       );
       const differing = siblings.filter((item) => !identical.includes(item));
       const status = candidateStatus(instance, candidate);
-      const disabled =
-        !candidate ||
-        instance.owner.kind === "skit" ||
-        instance.owner.kind === "authored" ||
-        instance.owner.kind === "pnpm" ||
-        (candidate.action === "blocked" && candidate.reason !== "divergent-copies");
+      const disabled = !selectable;
       const copyContext = differing.length
         ? "Content differs · Space selects this copy; other copies stay in place"
         : identical.length
@@ -137,7 +113,8 @@ export const setupDiscoveredSkillChoices = (
         );
       const details = [compactHomePath(instance.path, home), metadata, ...links].join("\n");
       const choice: Choice<string> = {
-        value: sameNameElsewhere ? `${instance.name}\0${instance.path}` : instance.name,
+        value,
+        ...(removeValue === undefined ? {} : { removeValue }),
         label: instance.name,
         hint:
           [
@@ -160,7 +137,7 @@ export const setupDiscoveredSkillChoices = (
         ...(siblings.length ? { exclusiveGroup: groupKey } : {}),
         ...(differing.length ? { selectExplicitly: true } : {}),
       };
-      return { instance, candidate, choice, details };
+      return { instance, candidate, choice, details, groupKey };
     })
     .sort(
       (left, right) =>
@@ -170,10 +147,16 @@ export const setupDiscoveredSkillChoices = (
         left.instance.path.localeCompare(right.instance.path),
     );
   const selectedGroups = new Set<string>();
-  for (const { instance, choice } of rows) {
-    const key = setupInstanceGroupKey(instance);
+  for (const { groupKey: key, choice } of rows) {
     if (choice.selected && selectedGroups.has(key)) choice.selected = false;
     if (choice.selected) selectedGroups.add(key);
   }
   return rows;
 };
+
+/** Standalone rendering adapter for an observed setup report. */
+export const setupDiscoveredSkillChoices = (
+  instances: readonly SetupSkillInstance[],
+  candidates: readonly SetupOnboardingCandidate[],
+  home = homedir(),
+) => setupReviewSkillChoices(setupReviewCopies(instances, candidates), home);

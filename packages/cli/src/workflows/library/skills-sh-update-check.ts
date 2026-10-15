@@ -1,15 +1,10 @@
-import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
-import { Data, Clock, Effect, FileSystem, Result } from "effect";
-import {
-  LibraryStore,
-  retainedTreePath,
-  SourceProcess,
-  type LibraryState,
-} from "@smolai/skit-core";
+import { Clock, Effect } from "effect";
+import { LibraryStore, retainedTreePath, type LibraryState } from "@smolai/skit-core";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import type { LibrarySubject } from "./subject-resolution.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
+export { GitInspectionFailed } from "./skills-sh-git-evidence.js";
 
 export type SkillsShUpdateStatus =
   | "current"
@@ -32,98 +27,6 @@ export interface SkillsShUpdateMember {
   readonly upstream_tree?: string;
   readonly reason?: string;
 }
-
-export class GitInspectionFailed
-  extends Data.TaggedError("SkillsSh.GitInspectionFailed")<{
-    operation: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that git is installed and the repository is readable, then retry.";
-  get message(): string {
-    return `git ${this.operation} failed`;
-  }
-}
-
-const gitBytes = Effect.fn("SkillsSh.gitBytes")(function* (
-  gitDirectory: string | undefined,
-  args: readonly string[],
-) {
-  const process = yield* SourceProcess;
-  const gitArgs = [...(gitDirectory ? [`--git-dir=${gitDirectory}`] : []), ...args];
-  const result = yield* process
-    .output("git", gitArgs)
-    .pipe(Effect.mapError(() => new GitInspectionFailed({ operation: args[0] ?? "git" })));
-  if (result.exitCode !== 0) return yield* new GitInspectionFailed({ operation: args[0] ?? "git" });
-  return result.stdout;
-});
-
-const gitText = Effect.fn("SkillsSh.gitText")(function* (
-  gitDirectory: string | undefined,
-  args: readonly string[],
-) {
-  return new TextDecoder().decode(yield* gitBytes(gitDirectory, args));
-});
-
-const gitTree = Effect.fn("SkillsSh.gitTree")(function* (
-  gitDirectory: string,
-  commit: string,
-  folder: string,
-) {
-  const result = yield* Effect.result(gitText(gitDirectory, ["rev-parse", `${commit}:${folder}`]));
-  return Result.isSuccess(result) ? result.success.trim() || undefined : undefined;
-});
-
-const skillsShHashForTree = Effect.fn("SkillsSh.hashGitTree")(function* (
-  gitDirectory: string,
-  tree: string,
-) {
-  const records = (yield* gitText(gitDirectory, ["ls-tree", "-r", "-z", tree]))
-    .split("\0")
-    .filter(Boolean)
-    .map((record) => {
-      const tab = record.indexOf("\t");
-      const fields = record.slice(0, tab).split(" ");
-      return { object: fields[2] ?? "", path: record.slice(tab + 1) };
-    })
-    .sort((left, right) => left.path.localeCompare(right.path));
-  const hash = createHash("sha256");
-  for (const record of records) {
-    hash.update(record.path);
-    hash.update(yield* gitBytes(gitDirectory, ["cat-file", "blob", record.object]));
-  }
-  return hash.digest("hex");
-});
-
-const hashAt = Effect.fn("SkillsSh.hashAt")(function* (
-  gitDirectory: string,
-  commit: string,
-  folder: string,
-  kind: "computedHash" | "skillFolderHash",
-) {
-  const tree = yield* gitTree(gitDirectory, commit, folder);
-  if (!tree) return undefined;
-  return {
-    tree,
-    hash: kind === "skillFolderHash" ? tree : yield* skillsShHashForTree(gitDirectory, tree),
-  };
-});
-
-const ensureMirror = Effect.fn("SkillsSh.ensureMirror")(function* (
-  cacheRoot: string,
-  source: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(cacheRoot, { recursive: true });
-  const key = createHash("sha256").update(source).digest("hex");
-  const directory = join(cacheRoot, `${key}.git`);
-  if (yield* fs.exists(directory))
-    yield* gitBytes(directory, ["fetch", "--all", "--prune", "--quiet"]);
-  else yield* gitBytes(undefined, ["clone", "--mirror", "--quiet", source, directory]);
-  return directory;
-});
 
 const sourceUrl = (
   subject: LibrarySubject,
@@ -174,32 +77,19 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
             : "source is not a Git repository",
       })),
     };
-  const mirror = yield* Effect.result(
-    ensureMirror(join(store.home, "cache", "skills-sh-sources"), source),
-  );
-  if (Result.isFailure(mirror))
-    return {
-      checked_at: checkedAt,
-      members: observations.map((observation): SkillsShUpdateMember => ({
-        skill_name: observation.skill_name,
-        ...(observation.skill_path ? { skill_path: observation.skill_path } : {}),
-        status: "unverifiable",
-        reason: "could not reach Git source",
-      })),
-    };
   const ref = observations.find((observation) => observation.ref)?.ref ?? "HEAD";
-  const tipResult = yield* Effect.result(gitText(mirror.success, ["rev-parse", `${ref}^{commit}`]));
-  if (Result.isFailure(tipResult))
+  const evidence = yield* inspectSkillsShGitEvidence(store.home, source, ref);
+  if (evidence._tag === "Unavailable")
     return {
       checked_at: checkedAt,
       members: observations.map((observation): SkillsShUpdateMember => ({
         skill_name: observation.skill_name,
         ...(observation.skill_path ? { skill_path: observation.skill_path } : {}),
         status: "unverifiable",
-        reason: `could not resolve ref ${ref}`,
+        reason: evidence.reason,
       })),
     };
-  const tip = tipResult.success.trim();
+  const tip = evidence.commit;
   const root = retainedTreePath(store.originalsPath, retainedCopy.digest);
   const members: SkillsShUpdateMember[] = [];
   for (const observation of observations) {
@@ -220,20 +110,10 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
       continue;
     }
     const folder = dirname(observation.skill_path).replaceAll("\\", "/");
-    const tipState = yield* hashAt(mirror.success, tip, folder, kind);
+    const member = yield* evidence.member(folder, kind, claimed);
+    const tipState = member.tip;
     if (!tipState) {
-      const commits = (yield* gitText(mirror.success, ["log", "--format=%H", tip, "--", folder]))
-        .trim()
-        .split("\n")
-        .filter(Boolean);
-      let baseline: { commit: string; tree: string } | undefined;
-      for (const commit of commits) {
-        const candidate = yield* hashAt(mirror.success, commit, folder, kind);
-        if (candidate?.hash === claimed) {
-          baseline = { commit, tree: candidate.tree };
-          break;
-        }
-      }
+      const baseline = yield* member.baseline;
       members.push({
         ...base,
         ...(baseline
@@ -252,20 +132,7 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
       continue;
     }
     if (kind === "skillFolderHash") {
-      let baseline = tipState.hash === claimed ? { commit: tip, tree: tipState.tree } : undefined;
-      if (!baseline) {
-        const commits = (yield* gitText(mirror.success, ["log", "--format=%H", tip, "--", folder]))
-          .trim()
-          .split("\n")
-          .filter(Boolean);
-        for (const commit of commits) {
-          const candidate = yield* hashAt(mirror.success, commit, folder, kind);
-          if (candidate?.hash === claimed) {
-            baseline = { commit, tree: candidate.tree };
-            break;
-          }
-        }
-      }
+      const baseline = yield* member.baseline;
       members.push({
         ...base,
         upstream_tree: tipState.tree,
@@ -312,21 +179,7 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
       });
       continue;
     }
-    const commits = (yield* gitText(mirror.success, ["log", "--format=%H", tip, "--", folder]))
-      .trim()
-      .split("\n")
-      .filter(Boolean);
-    let baseline: { commit: string; tree: string } | undefined;
-    const seenTrees = new Set<string>();
-    for (const commit of commits) {
-      const candidate = yield* hashAt(mirror.success, commit, folder, kind);
-      if (!candidate || seenTrees.has(candidate.tree)) continue;
-      seenTrees.add(candidate.tree);
-      if (candidate.hash === claimed) {
-        baseline = { commit, tree: candidate.tree };
-        break;
-      }
-    }
+    const baseline = yield* member.baseline;
     members.push({
       ...base,
       upstream_tree: tipState.tree,

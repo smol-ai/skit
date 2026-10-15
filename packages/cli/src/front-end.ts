@@ -11,6 +11,7 @@ export { errorMessage } from "./failure-classification.js";
 export { auditLocalCapabilitiesV1Alpha4Effect } from "./audit/local.js";
 export type {
   AuditEntryV1Alpha4,
+  AuditReportV1Alpha4,
   AuditMcpServerV1Alpha4,
   AuditSkillV1Alpha4,
 } from "./audit/schema.js";

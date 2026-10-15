@@ -21,7 +21,9 @@ export function renderSetEnabled(
         ? data.skills.join(", ")
         : "no skills";
   const destination = data.scope.kind === "global" ? "" : ` in ${data.scope.root}`;
-  const change = data.changed ? "" : data.enabled ? " · Already enabled" : " · Already disabled";
+  const change = data.changed
+    ? ""
+    : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
   const shadows = data.shadows ?? [];
   const warning = shadows.length
     ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`

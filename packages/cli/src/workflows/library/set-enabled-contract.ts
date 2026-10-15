@@ -5,7 +5,6 @@ import {
   RepositoryBinding,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-
 import { HarnessShadow, ShadowObservationError } from "../../projection/harness-shadows.js";
 
 // The published output contract constrains every map value. Use string keys for this
@@ -26,6 +25,8 @@ export const SetEnabledPlan = Schema.Struct({
   enabled: Schema.Boolean,
   invocation: Schema.optionalKey(Schema.String),
   changed: Schema.Boolean,
+  /** An unchanged Binding whose copies are missing, edited, or left behind and will be repaired. */
+  repair: Schema.optionalKey(Schema.Boolean),
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
   warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),

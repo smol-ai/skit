@@ -15,7 +15,7 @@ const decode = (document: unknown) =>
 it.effect("normalizes every persisted machine document version to one current shape", () =>
   Effect.gen(function* () {
     assert.deepStrictEqual(yield* decode({ schemaVersion: 1, repositoryRoots: ["/v1"] }), {
-      schemaVersion: 4,
+      schemaVersion: 5,
       discoveryRoots: ["/v1"],
       repositories: [],
       repositoryDecisionsInitialized: false,
@@ -29,7 +29,7 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v2"],
       }),
       {
-        schemaVersion: 4,
+        schemaVersion: 5,
         machineId: migratedMachineId(legacyMachineId, legacyMachineId),
         legacyMachineId,
         displayName: "legacy",
@@ -48,7 +48,7 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v3"],
       }),
       {
-        schemaVersion: 4,
+        schemaVersion: 5,
         machineId,
         displayName: "prior",
         discoveryRoots: ["/v3"],
@@ -66,7 +66,24 @@ it.effect("normalizes every persisted machine document version to one current sh
     } as const;
     assert.deepStrictEqual(yield* decode(current), {
       ...current,
+      schemaVersion: 5,
       repositoryDecisionsInitialized: true,
     });
   }),
 );
+
+for (const initialized of [false, true]) {
+  it.effect(`v5 preserves explicit repository decision initialization: ${initialized}`, () =>
+    Effect.gen(function* () {
+      const document = {
+        schemaVersion: 5,
+        machineId: makeMachineId(),
+        displayName: "Current machine",
+        discoveryRoots: ["/projects"],
+        repositories: [],
+        repositoryDecisionsInitialized: initialized,
+      } as const;
+      assert.deepStrictEqual(yield* decode(document), document);
+    }),
+  );
+}

@@ -39,6 +39,8 @@ export class LibraryStore extends Context.Service<
     ) => Effect.Effect<void, LibraryStateWriteError>;
     readonly home: string;
     readonly originalsPath: string;
+    readonly statePath: string;
+    readonly variantsPath: string;
   }
 >()("skit/library/LibraryStore") {}
 
@@ -83,7 +85,15 @@ export function libraryStoreLayer(options: { home: string }) {
             Effect.provideService(FileSystem.FileSystem, fs),
           );
       });
-      return { load, inspect, publish, home, originalsPath: join(home, "originals") };
+      return {
+        load,
+        inspect,
+        publish,
+        home,
+        statePath: path,
+        originalsPath: join(home, "originals"),
+        variantsPath: join(home, "variants"),
+      };
     }),
   );
 }

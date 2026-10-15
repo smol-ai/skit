@@ -194,7 +194,6 @@ export const devices = Effect.gen(function* () {
           apply: true,
           ...options,
           projection: {
-            variantsPath: join(home, "variants"),
             rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
           },
         }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),

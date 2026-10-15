@@ -10,6 +10,37 @@ All front ends import core through `@smolai/skit-core`, preserving one runtime i
 for service tags and schemas. The older `front-end.ts` facade retains presentation/audit
 exports and re-exports the application surface for existing workspace consumers.
 
+`binding-changes.ts` owns enable/disable and invocation changes. Front ends open a selection,
+preview user intent, display the returned facts, and apply the opaque plan with
+`applyBindingChanges`. The plan privately retains the Library home, revision, requests, and
+projection routing; confirmation cannot reconstruct or redirect the operation. Plans are
+in-memory handles for the current process, not persisted or wire contracts. CLI JSON schemas
+remain separate in `set-enabled-contract.ts`, and terminal text belongs to presentation.
+
+CLI and TUI use `openBindingChangeSelection` before displaying choices. The selection exposes
+Collection members, placements and metadata rather than raw Library state. It expands intent
+into per-Scope requests, deduplicates Scopes, and filters multi-Scope disabling to the selected
+Skills actually enabled at each Scope. The TUI holds this selection with its displayed rows.
+Preview is tied to that selection, so a Library change before proposal or during prompting is
+refused at apply. The lower-level request preview remains internal to adoption and tests.
+Selection and preview hold no writer and materialize nothing. Application execution owns the
+writer, validates the original revision, publishes Binding intent, reconciles through the existing
+Projection workflow, and advances each change only onto this action's previous publication.
+The environment-free `binding-selection.ts` owns Collection-following and invocation policy;
+filesystem observations and publication stay in the application workflow. TUI session state
+retains the selection, prepared plan and presentation facts, with no operation list or storage
+revision. Apply calculates each change once against the validated state and uses that calculation's
+Skill IDs for consent and restoration. It observes shadows afresh, preserving exact alias checks;
+repair hashing stays in preview rather than running again at confirmation.
+
+`library-view.ts` owns Library query facts: subjects, members, selected versions and version history,
+placements, Binding labels and provenance. `list` maps those facts to its existing JSON fields;
+Binding selection exposes a `view` built from the exact state it captured for intent planning, and
+TUI rows consume that view. Opening a view loads once, and subsequent queries retain that selection
+even when another action publishes newer state. Caller-visible facts cannot mutate its private
+snapshot. Reading does not publish state or reconcile copies. Provenance remains tied to the
+selected retained bytes through the existing metadata reader, rather than the latest acquisition.
+
 Library updates require an explicit `LibraryProgress` implementation. Stages and completions
 carry subject identity, source change, and projection counts. The terminal adapter maps
 these facts to the existing scoped spinner and completion lines. Other consumers can
@@ -34,6 +65,29 @@ the same transaction as removal, preventing re-registration from racing that mar
 Nested writer scopes remain reentrant, so one composed action produces one history event.
 State-file migration retains its own writer lock even when initiated by a reader.
 
+Guided setup holds an `openSetupReview` over the final observation and routing. The review owns
+Source grouping, copy eligibility, selection translation, repository-persistence decisions and
+recovery preparation. The command renders choices and collects selected values and duplicate-copy
+consent; it does not construct `SetupApproval` or select mutation stages. Preparation returns
+summary facts and an apply closure, capturing the original plan ID, routing and selections.
+Presentation derives no action categories from candidates, and changing display facts cannot
+redirect confirmation. Preparation writes nothing. Existing apply stages still revalidate under
+the writer, preserve exact alias consent, and run removals only after additions succeed.
+
+Setup discovery owns candidate directory enumeration, repository configuration, nearest-repository
+routing and Git inspection in `scanSetupLocations` and its private repository scanner. It merges
+filesystem and Git evidence into one hit per installed path, retaining filesystem hits with
+unavailable Git status when Git fails. The collector receives hits, configuration diagnostics and
+one discovery-completeness result; it does not interpret exclusions or combine provisional hits.
+
+Native diagnostics are assembled by `inspectNativeDiscovery` in `doctor-harnesses.ts`. The command
+refreshes Library inventory under its writer, then supplies that observation, explicit working
+directory and roots to native inspection after releasing the writer. The diagnostics boundary
+owns Harness enumeration, bounded concurrency, listing-budget fallbacks, filesystem locations,
+alias warnings and expected-collision classification. It does not refresh or publish Library state.
+Custom-root probe skipping and individual native adapters retain their existing behavior; the
+command only renders progress and combines the returned native facts with the Library report.
+
 Registry credential/alias and repository-decision mutations use the same root storage
 mutex through `withConfigurationWriter`, preserving exclusion with existing writers.
 This adapter does not open Library state or record Library history. Login questions run
@@ -43,19 +97,123 @@ CLI handlers and the TUI resolve a required `SkitConfiguration` service at their
 boundary. Explicit state-directory flags take precedence over Effect `Config`'s
 `SKIT_HOME`, with the account's `.skit` directory as the default. Account home,
 SKIT state home, and XDG configuration/state roots remain separate values. Derived
-file paths, storage services, and writer locks share this snapshot. The optional XDG
+CLI-owned file paths, storage services, and writer locks share this snapshot. The optional XDG
 state override is preserved separately from the default state directory: when absent
 or empty, skills.sh lock discovery uses `~/.agents/.skill-lock.json`. Empty XDG
 configuration/state values are treated as unset. Account home is an OS boundary
 input, not a ConfigProvider key; embedders can pass it to `resolveSkitConfiguration`. Standalone
 applications construct it with `skitConfigurationLayer`; command handlers provide that layer
-from their parsed flags. The configuration includes resolved directory settings and centrally derived storage paths.
+from their parsed flags. The configuration includes resolved directory settings and CLI-owned auth and registry paths.
+Library layout belongs to core: projection and audit consumers take storage paths from their bound
+`LibraryStore`; command options do not carry copies of the state, originals, or variants paths.
 Domain layers consume a required `SkitConfiguration` service and do
 not provide it again. Standalone adapters and tests also supply this boundary explicitly.
 Configuration writers derive concrete root overrides from the supplied snapshot and
 provide those paths to the protected program; they never re-read configuration.
 `ConfigProvider` injection therefore controls both the lock and the actual file writes,
 including commands without explicit home flags, without changing process globals.
+
+Core's `MachineSettings` module owns `machine.json` reads, identity creation, discovery updates,
+and repository decisions. Reads normalize supported document versions in memory without writing.
+Mutations load the latest settings under the root writer and replacement mutex, preserving identity
+and fields outside the requested change. V5 persists repository-decision initialization explicitly:
+creating identity preserves discovery mode, while saving discovery choices or a repository decision
+initializes it. V1–V4 reads remain read-only; older binaries reject V5 rather than silently treating
+identity creation as completion of discovery. MachineSettings defaults new names to the hostname,
+preserves saved names for unnamed operations, and honors an explicit setup name as a replacement.
+They open no Library state and record no Library history.
+Import no longer handles machine-document encoding, and repository commands do not depend on setup.
+Setup retains the policy that an empty root selection narrows the scan without clearing saved roots.
+Failures to read shared machine settings stop an update batch rather than being treated as failures
+of an individual Source.
+
+Core's `prepareRestoreEffect` owns completion of a manifest's retained content: it combines
+available archives with reconstruction from exact source acquisitions, handles materialization
+profiles, verifies digests and member bytes, and retains the verified content. It returns prepared
+state without publishing it or rewriting acquisition provenance. Archive completion and source
+translation are private; callers provide a destination and source access rather than a callback
+implementing reconstruction. Sync still owns remote snapshot downloads, conflict decisions, and
+the remote-write, projection-retirement, local-publication, reconciliation order.
+
+Local adoption owns physical custody transfer for setup's newly retained and existing Library
+matches. Setup validates candidate eligibility and approves duplicate decisions for every selected
+copy before applying any. A prepared adoption captures the selection, observed content and routing;
+its apply operation owns the Library writer, fresh alias checks, lossless retention or reuse,
+Binding changes, replacement-readability checks and recovery moves. Alias retirement plans and
+adoption-plan comparisons are private. Setup workflows return warnings and recovery locations
+without importing each other's mutation helpers. Presentation captures alias consent through the
+adoption boundary, independently of later setup stages.
+
+The update application owns loading and selecting the current batch; callers pass a query and,
+for application, projection roots. A single-Collection refresh owns prior acquisition/source
+resolution, retention, projection reconciliation, Skill change reporting, and failure recovery
+after its scopes close. Preview and apply share resolution of the prior retained copy. Recoverable
+Collection failures return an outcome with durable retention evidence; shared-storage failures,
+interruption and defects still fail the batch. The batch keeps one baseline and writer across its
+ordered Collection refreshes, and aggregates results and exit status without handling filesystem
+paths, phase flags or cleanup recovery.
+
+`prepareLibraryMerge` is the merge decision boundary used by sync. It aligns local and accepted-base
+identities with remote records, carries that alignment into device references, derives independently
+imported records, and validates requested remote conflict choices before returning a ready merge,
+invalid resolution, or described conflicts. Raw alias maps, preliminary merge results and the second
+merge needed for conflict resolution stay inside the merge implementation. Sync retains ancestry
+and adoption gates, filesystem collision checks and publication order.
+
+The skills.sh lock module owns decoding supported lock versions, matching installed copies,
+resolving selected source claims, revalidating lock snapshots and translating provenance.
+Discovery supplies lock locations and installed copies; setup validates selections and groups
+candidates, then requests import evidence before handing installed bytes to core retention.
+Changed or missing locks fail before retention. Lock claims remain observations, including unknown
+entry fields; preparing evidence does not fetch upstream content or verify a revision.
+
+Git inspection for skills.sh update checks owns mirror storage, clone/fetch, ref resolution,
+tree hashing and one baseline search. It returns evidence pinned to the resolved commit, with
+baseline lookup deferred until needed. Update checking selects observations, compares retained
+bytes and decides status without handling Git commands or mirror paths. A matching Git tree claim
+remains lock-only evidence; filesystem-byte verification remains a separate decision.
+
+Recoverable moves own filesystem identity capture, approved-link validation, recovery paths,
+preflight checks, per-entry revalidation, rename and recovery receipts. Preparation exposes only
+name/path/type summaries, the recovery directory and an apply operation; mutation records stay
+private. Setup owns removal eligibility. Local adoption owns alias consent and replacement
+readability, then applies prepared moves without depending on setup removal. Both callers share
+the same protection for modified bytes, new custody markers and pnpm-owned paths.
+
+Source acquisition exposes inspection and retention to add, check, refresh and adoption. Both
+operations use one private preparation boundary for Registry access, source parsing, pnpm guards,
+resolution and staging lifetime. Resolved paths remain inside that scope; only inspection facts or
+durable retention receipts leave it. Retention holds writer authority through cleanup, while
+inspection does not publish Library state. Command handlers consume facts without owning source
+preparation or importing another command's workflow.
+
+Sync snapshot handling owns local archive capture and digest verification, archive deduplication,
+transfer selection, download concurrency and transfer progress. A verified inventory prepares a
+transfer that exposes its snapshot count, restoration and upload operations, keeping archives and
+digest indexes private. Restoration waits for all downloads before delegating byte retention and
+source reconstruction to core. Sync retains the local-state recheck between restoration and upload,
+and the remote-head, projection-retirement, local-state and reconciliation commit sequence.
+
+Author workspace registration owns identity creation/recovery, physical-directory conflicts,
+registration metadata and Library retention. It checks conflicts before optional scaffolding,
+retains bytes before marking registration complete, and preserves explicit re-registration of
+removed workspaces. Removal delegates the identity-checked metadata transition after removing
+the Collection. Metadata codecs and raw writes stay private; callers supply lifecycle choices,
+while LibraryStore supplies storage without projection or home configuration plumbing.
+
+Projection retention exposes a prepared operation from a Skill query and projection selector.
+The operation loads its Library, captures a preview, and applies only against the same home,
+Library revision and observed copies under the writer. Observation helpers stay private; callers
+render the preview or apply the captured operation without passing state or projection roots.
+Display facts are copied separately from the captured plan, and revision checks use the shared
+Library state revision function. Retention and reconciliation preserve divergent copies.
+
+The prepared sync device transition owns projection planning, retirement, restored-state blending
+and local publication. It returns conflicts or a publish operation; projection mutation arrays and
+the state retirement published remain private. The operation stays bound to its Library home and
+publishes content with ancestry onto its captured baseline or retirement's resulting state.
+Sync keeps the remote commit before this transition and reconciliation afterward; the clean path
+continues to anchor ancestry directly without retiring or transferring anything.
 
 ## Command environments
 
@@ -69,6 +227,33 @@ remain visible to the command tree and ultimately fail the executable's typechec
 
 The full command environment remains available to contract generators and tests that
 exercise multiple command families. It is not the default environment for each command.
+
+Registry account rules live in `RegistryAccounts`, over one decoded credential snapshot and an
+injected environment credential. The account book owns selection policies, credential precedence,
+alias allocation/default promotion, account edits and status facts. Ambient selection honors the
+environment and default; logout selects stored accounts independently; login requires an explicit
+origin, alias or configured default. Auth workflows retain filesystem persistence, transport,
+writer scopes and login resource cleanup. Selection and credential lookup, including login reuse,
+share one file read. Explicit-origin environment credentials still bypass an unusable credential
+file. Account edits strip legacy `activeOrigin`; removing a default alias never recreates it.
+
+The TUI presentation model derives audit inventory, Library collection/member rows, list labels,
+detail receipt fields, action guidance, probe display facts and confirmation copy from explicit
+inputs. It returns plain data without importing a terminal renderer or running effects. The TUI
+entry point supplies the current session/navigation and applies layout, colors and key bindings;
+it retains async content reads and probe execution. Receipt formatting uses one renderer adapter.
+Presentation tests assert derived facts, while key replay continues to verify writes and cancellation
+against real Library storage.
+
+The TUI interaction controller owns one active mode (`browse`, `chooser`, `confirm`, `document`
+or `palette`), overlay replacement/disposal, focus restoration and mode-specific key routing.
+Overlays expose only mount/dispose/focus/resize plus selection, scrolling or confirmation updates;
+renderer handles stay in the rendering adapter. The controller emits commands for Library work and
+navigation rather than performing effects. Confirmation member visibility belongs to its mode and
+resets on replacement. Async document reads capture the browsing revision, so a modal transition,
+selection change invalidates their permission to open a document; resize and background renders
+leave that permission intact. The read also checks that the selected Skill path is unchanged. Library
+writes and revision checks remain in the application workflows.
 
 ## Validation
 

@@ -8,12 +8,14 @@ import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { applySetupObservedCollections } from "../src/workflows/library/setup-observed-collections.js";
+import { checkSkillsShSubjectEffect } from "../src/workflows/library/skills-sh-update-check.js";
+import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
 
-it.effect("checks a skills.sh Collection member against its recorded Git source", () =>
+it.effect("checks skills.sh status against real Git history without publishing Library state", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -74,11 +76,9 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
     yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections(
-          { setup, retention: { originalsPath: home.originals } },
-          preview,
-          [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
-        ),
+        applySetupObservedCollections({ setup }, preview, [
+          { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
+        ]),
       ),
     );
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
@@ -138,14 +138,17 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
         ),
       );
     });
+    const store = {
+      load: Effect.succeed(localState),
+      inspect: Effect.succeed({ present: true as const, state: localState }),
+      publish: (next: LibraryState) => Ref.set(published, next),
+      home: home.home,
+      originalsPath: home.originals,
+      statePath: home.statePath,
+      variantsPath: home.variantsPath,
+    };
     const checked = yield* checkSubjectsEffect(localState, member.skill_id).pipe(
-      Effect.provideService(LibraryStore, {
-        load: Effect.succeed(localState),
-        inspect: Effect.succeed({ present: true as const, state: localState }),
-        publish: (next) => Ref.set(published, next),
-        home: home.home,
-        originalsPath: home.originals,
-      }),
+      Effect.provideService(LibraryStore, store),
       Effect.provideService(HttpClient.HttpClient, discoveryClient),
     );
     expect(checked[0]?.skills_sh?.members).toEqual([
@@ -159,6 +162,73 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
     expect(checked[0]?.skills_sh?.members[0]?.baseline_commit).not.toBe(
       checked[0]?.skills_sh?.members[0]?.upstream_commit,
     );
+    const subject = librarySubjects(localState)[0]!;
+    const acquisition = localState.acquisitions[0]!;
+    const retainedCopy = localState.retained_copies[0]!;
+    type Observation = LibraryState["acquisitions"][number]["observations"][number];
+    const checkObservation = (change: Partial<Observation> = {}) =>
+      checkSkillsShSubjectEffect(
+        subject,
+        {
+          ...acquisition,
+          observations: acquisition.observations.map((observation) => ({
+            ...observation,
+            ...change,
+          })),
+        },
+        retainedCopy,
+      ).pipe(Effect.provideService(LibraryStore, store));
+    const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
+    const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;
+    expect((yield* checkObservation({ ref: originalCommit }))?.members[0]).toMatchObject({
+      status: "current",
+      baseline_commit: originalCommit,
+      baseline_verification: "lock+retained-bytes",
+    });
+    const treeOnly = (yield* checkObservation({
+      computed_hash: undefined,
+      skill_folder_hash: originalTree,
+    }))?.members[0];
+    expect(treeOnly).toMatchObject({
+      status: "unverifiable",
+      hash_kind: "skillFolderHash",
+      baseline_commit: originalCommit,
+      baseline_verification: "lock-only",
+      reason: "Git tree hash cannot verify retained filesystem bytes",
+    });
+    expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+      status: "differs-from-lock-and-upstream",
+    });
+    // The next check must fetch the existing mirror, rather than inspecting its old tip.
+    yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), original);
+    expect(yield* runGit(upstream, ["commit", "-qam", "restored"])).toBe(0);
+    expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+      status: "lock-stale",
+    });
+    expect((yield* checkObservation())?.members[0]).toMatchObject({
+      status: "current",
+      baseline_verification: "lock+retained-bytes",
+    });
+    expect(yield* runGit(upstream, ["rm", "-q", "skills/review/SKILL.md"])).toBe(0);
+    expect(yield* runGit(upstream, ["commit", "-qm", "removed"])).toBe(0);
+    expect((yield* checkObservation())?.members[0]).toMatchObject({
+      status: "removed-upstream",
+      baseline_verification: "lock+retained-bytes",
+    });
+    expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+      status: "unverifiable",
+      reason: "lock hash not found in searched ref history",
+    });
+    expect((yield* checkObservation({ ref: "missing-ref" }))?.members[0]).toMatchObject({
+      status: "unverifiable",
+      reason: "could not resolve ref missing-ref",
+    });
+    expect(
+      (yield* checkObservation({ source_url: join(root, "missing-source") }))?.members[0],
+    ).toMatchObject({
+      status: "unverifiable",
+      reason: "could not reach Git source",
+    });
     // Checking only reports: the Library it read is left exactly as it was.
     expect(yield* Ref.get(published)).toBeUndefined();
   }).pipe(Effect.provide(skitLayer)),

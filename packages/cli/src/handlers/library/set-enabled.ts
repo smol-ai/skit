@@ -1,13 +1,5 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import {
-  bindingSkillIds,
-  currentCollectionSkills,
-  withLibraryWriter,
-  lastPublishedLibraryState,
-  libraryStateRevision,
-  LibraryStore,
-  type SkitBindingScope as Scope,
-} from "@smolai/skit-core";
+import type { SkitBindingScope as Scope } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
@@ -19,15 +11,19 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
 import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
-import { destinationLabel, scopeChoices } from "../../library-application/read-model.js";
+import { scopeChoices } from "../../library-application/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
 import { result } from "../contracts.js";
-import { applyLibraryBindings, SetEnabledStale } from "../../workflows/library/set-enabled.js";
+import {
+  applyBindingChanges,
+  openBindingChangeSelection,
+  type BindingChangeIntent,
+  type BindingPlacement,
+} from "../../library-application/binding-changes.js";
 import {
   largeCollectionWarning,
-  readDescriptionLoad,
   descriptionLoadMessage,
 } from "../../workflows/library/collection-load.js";
 
@@ -84,8 +80,6 @@ const setEnabledCliCommand = (enabled: boolean) => {
             | undefined;
           const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
 
-          const store = yield* LibraryStore;
-          yield* store.load;
           yield* presentSetEnabled({
             action,
             enabled,
@@ -134,159 +128,115 @@ export interface SetEnabledCommandInput {
   readonly configuration: Effect.Success<ReturnType<typeof libraryCommandConfiguration>>;
 }
 
+type EnabledTarget = BindingPlacement & { readonly location: string };
+const withLocation = (placement: BindingPlacement): EnabledTarget => ({
+  ...placement,
+  location: placement.scope.kind === "global" ? "global" : `repository ${placement.scope.root}`,
+});
+
 /** Native Collection binding path; interactive selection supplies names from retained membership. */
 export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* (
   input: SetEnabledCommandInput,
 ) {
   if (input.subject === undefined && !input.interactive)
     return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
-  const expectedRevision = libraryStateRevision(state);
+  const selection = yield* openBindingChangeSelection();
+  const view = selection.view;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
-  let query = input.subject;
-  type EnabledBindingTarget = {
-    readonly collectionId: string;
-    readonly scope: Scope;
-    readonly skillIds: readonly string[];
-    readonly location: string;
-  };
-  let selectedBindings: readonly EnabledBindingTarget[] | undefined;
-  if (query === undefined && !input.enabled) {
-    const bindings = [...state.global_bindings, ...state.local_bindings]
-      .filter(
-        (binding) =>
-          input.scope === undefined ||
-          (binding.scope.kind === input.scope.kind &&
-            (binding.scope.kind === "global" ||
-              (input.scope.kind === "repository" &&
-                resolve(binding.scope.root) === resolve(input.scope.root)))),
+  const collectionLabel = (collectionId: string) =>
+    view.collections.find((collection) => collection.id === collectionId)?.label;
+  const skillNames = (skillIds: readonly string[]) =>
+    skillIds
+      .flatMap(
+        (skillId) =>
+          view.collections
+            .flatMap((collection) => collection.members)
+            .find((skill) => skill.id === skillId)?.name ?? [],
       )
-      .flatMap((binding, index) => {
-        const skillIds = bindingSkillIds(state, binding);
-        const skills = skillIds.flatMap((skillId) => {
-          const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
-          return skill === undefined ? [] : [skill];
-        });
-        const collectionIds = [
-          ...new Set([
-            ...skills.map((skill) => skill.collection_id),
-            ...binding.entries.flatMap((entry) =>
-              entry.kind === "collection" ? [entry.collection_id] : [],
-            ),
-          ]),
-        ];
-        const location =
-          binding.scope.kind === "global" ? "global" : `repository ${binding.scope.root}`;
-        return collectionIds.map((collectionId) => {
-          const collection = state.collections.find(
-            (candidate) => candidate.collection_id === collectionId,
-          );
-          const members = skills.filter((skill) => skill.collection_id === collectionId);
-          return {
-            value: `${index}:${collectionId}`,
-            label: `${collection?.label ?? members.map((skill) => skill.name).join(", ")} — ${location}`,
-            hint: members.map((skill) => skill.name).join(", "),
-            target: {
-              collectionId,
-              scope: binding.scope,
-              skillIds: members.map((skill) => skill.skill_id),
-              location,
-            },
-          };
-        });
-      });
-    if (bindings.length === 0)
+      .join(", ");
+
+  let query = input.subject;
+  // Disabling without a subject starts from where Skills are enabled.
+  let targets: readonly EnabledTarget[] | undefined;
+  if (query === undefined && !input.enabled) {
+    const enabled = view.placementsAt(input.scope).map(withLocation);
+    if (enabled.length === 0)
       return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
-    const collections = [
-      ...new Set(bindings.map((binding) => binding.target.collectionId)),
-    ].flatMap((collectionId) => {
-      const targets = bindings.filter((binding) => binding.target.collectionId === collectionId);
-      if (targets.length < 2) return [];
-      const collection = state.collections.find(
-        (candidate) => candidate.collection_id === collectionId,
-      );
-      return [
-        {
-          value: `all:${collectionId}`,
-          label: `${collection?.label ?? collectionId} — everywhere enabled`,
-          hint: targets.map((binding) => binding.target.location).join(", "),
-          targets: targets.map((binding) => binding.target),
-        },
-      ];
-    });
+    const everywhere = [...new Set(enabled.map((target) => target.collectionId))].flatMap(
+      (collectionId) => {
+        const all = enabled.filter((target) => target.collectionId === collectionId);
+        if (all.length < 2) return [];
+        return [
+          {
+            value: `all:${collectionId}`,
+            label: `${collectionLabel(collectionId) ?? collectionId} — everywhere enabled`,
+            hint: all.map((target) => target.location).join(", "),
+            targets: all,
+          },
+        ];
+      },
+    );
     const choices = [
-      ...collections,
-      ...bindings.map(({ value, label, hint, target }) => ({
-        value,
-        label,
-        hint,
+      ...everywhere,
+      ...enabled.map((target, index) => ({
+        value: `${index}:${target.collectionId}`,
+        label: `${collectionLabel(target.collectionId) ?? skillNames(target.skillIds)} — ${target.location}`,
+        hint: skillNames(target.skillIds),
         targets: [target],
       })),
     ];
-    const selectedValue = yield* prompter
+    const chosen = yield* prompter
       .autocomplete(
         "Select where to disable Skills",
         choices.map(({ value, label, hint }) => ({ value, label, hint })),
       )
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
-    if (selectedValue === DONE) return;
-    selectedBindings = choices.find((choice) => choice.value === selectedValue)?.targets;
-    if (selectedBindings === undefined || selectedBindings.length === 0) return;
-    query = selectedBindings[0]!.collectionId;
+    targets = choices.find((choice) => choice.value === chosen)?.targets;
+    if (targets === undefined) return;
+    query = targets[0]!.collectionId;
   }
   if (query === undefined) {
-    const collections = state.collections.filter((collection) =>
-      state.skills.some((skill) => skill.collection_id === collection.collection_id),
-    );
+    const collections = view.collections.filter((collection) => collection.members.length > 0);
     if (collections.length === 0)
       return yield* new NothingToSelect({ detail: "The local Library contains no Skills" });
     query = yield* prompter
-      .autocomplete(
-        "Select a collection",
-        collections
-          .map((collection): { value: string; label: string } => ({
-            value: collection.collection_id,
-            label: collection.label,
-          }))
-          .concat({ value: DONE, label: DONE }),
-      )
+      .autocomplete("Select a collection", [
+        ...collections.map((collection): { value: string; label: string } => ({
+          value: collection.id,
+          label: collection.label,
+        })),
+        { value: DONE, label: DONE },
+      ])
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
     if (query === DONE) return;
   }
-  const collection = state.collections.find((candidate) =>
-    [candidate.collection_id, candidate.label].includes(query),
+
+  const collection = view.collections.find((candidate) =>
+    [candidate.id, candidate.label].includes(query),
   );
-  const selected = collection
-    ? state.skills.filter(
-        (skill) =>
-          skill.collection_id === collection.collection_id &&
-          (selectedBindings === undefined ||
-            selectedBindings.some((binding) => binding.skillIds.includes(skill.skill_id))),
+  const members = collection
+    ? view.membersFor(
+        collection.id,
+        targets?.map((target) => target.scope),
       )
     : undefined;
   let wholeCollection = input.all;
   if (input.interactive && collection !== undefined && !wholeCollection) {
-    const collectionLabel = input.enabled
-      ? `Enable whole collection · ${descriptionLoadMessage(
-          yield* readDescriptionLoad(
-            state,
-            store.originalsPath,
-            currentCollectionSkills(state, collection.collection_id),
-          ),
-        )}`
-      : "Disable whole collection";
-    const selection = yield* prompter
+    const selectedMode = yield* prompter
       .select("What would you like to " + input.action + "?", [
         {
           value: "collection",
-          label: collectionLabel,
+          label: input.enabled
+            ? `Enable whole collection · ${descriptionLoadMessage(
+                yield* view.descriptionLoad(collection.id),
+              )}`
+            : "Disable whole collection",
           hint: input.enabled
             ? "Include new skills and remove deleted ones when you update"
             : "Disable every skill in this collection",
         },
-        ...(selected?.length
+        ...(members?.length
           ? [
               {
                 value: "skills",
@@ -297,183 +247,121 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           : []),
       ])
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
-    if (selection === DONE) return;
-    wholeCollection = selection === "collection";
+    if (selectedMode === DONE) return;
+    wholeCollection = selectedMode === "collection";
   }
   let selectedSkills: string[] | undefined;
   if (
     input.interactive &&
     !wholeCollection &&
-    selected &&
-    (selected.length > 1 || selectedBindings !== undefined)
+    members &&
+    (members.length > 1 || targets !== undefined)
   ) {
     selectedSkills = yield* prompter
       .multiselect(
         `Select Skills to ${input.action}`,
-        selected.map((skill) => ({
+        members.map((skill) => ({
           value: skill.name,
           label: skill.name,
-          ...(selectedBindings === undefined
+          ...(targets === undefined
             ? {}
             : {
-                hint: selectedBindings
-                  .filter((binding) => binding.skillIds.includes(skill.skill_id))
+                hint: targets
+                  .filter((target) => target.skillIds.includes(skill.id))
                   .map(
-                    (binding) =>
-                      `${collection?.label ?? binding.collectionId} · ${binding.location}`,
+                    (target) =>
+                      `${collectionLabel(target.collectionId) ?? target.collectionId} · ${target.location}`,
                   )
                   .join(", "),
               }),
         })),
       )
-      .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
+      .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([] as string[])));
     if (selectedSkills.length === 0) return;
   }
+  // Disabling a whole Collection without a Scope asks which of its enabled Scopes.
   if (
     input.interactive &&
     !input.enabled &&
     wholeCollection &&
     collection !== undefined &&
     input.scope === undefined &&
-    selectedBindings === undefined
+    targets === undefined
   ) {
-    const targets = [...state.global_bindings, ...state.local_bindings]
-      .filter(
-        (binding) =>
-          binding.entries.some(
-            (entry) =>
-              entry.kind === "collection" && entry.collection_id === collection.collection_id,
-          ) ||
-          bindingSkillIds(state, binding).some((id) =>
-            state.skills.some(
-              (skill) => skill.skill_id === id && skill.collection_id === collection.collection_id,
-            ),
-          ),
-      )
-      .map((binding) => ({
-        collectionId: collection.collection_id,
-        scope: binding.scope,
-        skillIds: bindingSkillIds(state, binding),
-        location: destinationLabel(binding.scope),
-      }));
-    if (!targets.length) {
+    const enabled = view.placements
+      .map(withLocation)
+      .filter((target) => target.collectionId === collection.id);
+    if (!enabled.length) {
       yield* renderer.note("This collection is not enabled anywhere.", "Nothing to change");
       return;
     }
     const chosen =
-      targets.length === 1
+      enabled.length === 1
         ? "0"
         : yield* prompter
             .autocomplete("Select where to disable Skills", [
               { value: "all", label: "All shown" },
-              ...targets.map((target, index) => ({ value: String(index), label: target.location })),
+              ...enabled.map((target, index) => ({ value: String(index), label: target.location })),
             ])
             .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
     if (chosen === DONE) return;
-    selectedBindings = chosen === "all" ? targets : [targets[Number(chosen)]!];
+    targets = chosen === "all" ? enabled : [enabled[Number(chosen)]!];
   }
-  if (selectedBindings !== undefined && selectedBindings.length > 1) {
-    const outcomes = yield* renderer.withStatus(
-      input.dryRun ? "Planning Collection Bindings" : "Removing retained Projections",
-      Effect.gen(function* () {
-        let expected = yield* store.load;
-        if (!input.dryRun && libraryStateRevision(expected) !== expectedRevision)
-          return yield* new SetEnabledStale({
-            message: "Library changed after this Binding change was previewed",
-          });
-        // Each Binding change applies only onto the state the previous one left.
-        return yield* Effect.forEach(selectedBindings, (binding) => {
-          const names = selectedSkills?.filter((name) => {
-            const skill = state.skills.find(
-              (candidate) =>
-                candidate.collection_id === binding.collectionId && candidate.name === name,
-            );
-            return skill !== undefined && binding.skillIds.includes(skill.skill_id);
-          });
-          if (!wholeCollection && (names === undefined || names.length === 0))
-            return Effect.succeed(undefined);
-          return applyLibraryBindings(expected, {
-            query: binding.collectionId,
-            all: wholeCollection,
-            ...(wholeCollection ? {} : { selectedSkills: names }),
-            invocation: {
-              scope: binding.scope,
-              enabled: false,
-              dryRun: input.dryRun,
-            },
-            roots: input.configuration.inventory,
-            variantsPath: input.configuration.pull.bindings.variantsPath,
-          }).pipe(
-            Effect.tap(() =>
-              Effect.map(lastPublishedLibraryState, (published) => {
-                if (published !== undefined) expected = published;
-              }),
-            ),
-          );
-        });
-      }).pipe((effect) => (input.dryRun ? effect : withLibraryWriter(effect))),
-    );
-    for (const outcome of outcomes) {
-      if (outcome === undefined) continue;
-      yield* renderer.result(
-        outcome.kind === "plan"
-          ? result("disablePlan", outcome.value)
-          : result("disable", outcome.value),
-      );
+  if (targets === undefined) {
+    let scope: Scope = input.scope ?? { kind: "global" };
+    if (input.interactive && input.scope === undefined) {
+      const choices = scopeChoices(input.cwd);
+      if (choices.length > 1) {
+        const chosen = yield* promptForScope(input.cwd, choices).pipe(
+          Effect.catchTag("PromptCancelled", () => Effect.succeed(undefined)),
+        );
+        if (chosen === undefined) return;
+        scope = chosen;
+      }
     }
-    return;
+    targets = [{ collectionId: query, scope, skillIds: [], invocationBySkill: {}, location: "" }];
   }
-  const selectedBinding = selectedBindings?.[0];
-  let scope = selectedBinding?.scope ?? input.scope ?? ({ kind: "global" } as const);
-  if (input.interactive && input.scope === undefined && selectedBinding === undefined) {
-    const choices = scopeChoices(input.cwd);
-    if (choices.length > 1) {
-      const chosen = yield* promptForScope(input.cwd, choices).pipe(
-        Effect.catchTag("PromptCancelled", () => Effect.succeed(undefined)),
-      );
-      if (chosen === undefined) return;
-      scope = chosen;
-    }
-  }
-  const outcome = yield* renderer.withStatus(
+
+  const intent: BindingChangeIntent = {
+    subject: query,
+    enabled: input.enabled,
+    where: targets.map((target) => target.scope),
+    ...(wholeCollection
+      ? { members: "whole" as const }
+      : selectedSkills === undefined
+        ? {}
+        : { members: selectedSkills }),
+    allowDuplicate: input.allowDuplicate,
+    invocation: input.invocation,
+  };
+  const outcomes = yield* renderer.withStatus(
     input.dryRun
       ? "Planning Collection Bindings"
       : input.enabled
         ? "Projecting retained Skills"
         : "Removing retained Projections",
-    applyLibraryBindings(state, {
-      query,
-      all: wholeCollection,
-      allowDuplicate: input.allowDuplicate,
-      ...(selectedSkills === undefined ? {} : { selectedSkills }),
-      invocation: {
-        scope,
-        enabled: input.enabled,
-        ...(input.invocation === undefined ? {} : { invocation: input.invocation }),
-        dryRun: input.dryRun,
-      },
-      roots: input.configuration.inventory,
-      variantsPath: input.configuration.pull.bindings.variantsPath,
+    Effect.gen(function* () {
+      const plan = yield* selection.preview(intent, input.configuration.inventory);
+      return input.dryRun
+        ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
+        : yield* applyBindingChanges(plan);
     }),
   );
-  if (input.enabled) {
-    const bindings = [
-      ...outcome.value.bindings,
-      ...(scope.kind === "repository" ? state.global_bindings : []),
-    ];
-    const ids = new Set(bindings.flatMap((binding) => bindingSkillIds(state, binding)));
-    const warning = largeCollectionWarning(ids.size);
-    if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
-  }
-  if (outcome.kind === "plan") {
+  for (const outcome of outcomes) {
+    if (input.enabled) {
+      const warning = largeCollectionWarning(view.listingSizeAfter(outcome.value));
+      if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
+    }
     yield* renderer.result(
-      input.enabled ? result("enablePlan", outcome.value) : result("disablePlan", outcome.value),
+      outcome.kind === "plan"
+        ? input.enabled
+          ? result("enablePlan", outcome.value)
+          : result("disablePlan", outcome.value)
+        : input.enabled
+          ? result("enable", outcome.value)
+          : result("disable", outcome.value),
     );
-    return;
   }
-  yield* renderer.result(
-    input.enabled ? result("enable", outcome.value) : result("disable", outcome.value),
-  );
 });
 
 export const enableCliCommand = setEnabledCliCommand(true);

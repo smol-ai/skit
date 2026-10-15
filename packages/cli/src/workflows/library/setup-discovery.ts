@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
-import { hostname } from "node:os";
-import { basename, dirname, join, posix, relative, resolve, sep } from "node:path";
+import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Context, Effect, FileSystem, Result, Schema } from "effect";
 import {
   LinkStat,
@@ -16,31 +14,20 @@ import {
   SourceIdentity,
   SourceProcess,
   HarnessName,
-  type CurrentMachineDocument,
+  MachineSettings,
   type HarnessName as Harness,
   type LibraryState,
 } from "@smolai/skit-core";
-import { withConfigurationWriter } from "../../configuration-writer.js";
-import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
+import { readSkillsLock } from "./skills-sh-lock-source.js";
 import { readableHarnessRoots } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
-import {
-  readSetupMachineConfig,
-  writeSetupMachineConfig,
-  setupDiscoveryRoots,
-  setupRepositoryDecisions,
-  readRepositoryConfig,
-  repositoryPathExcluded,
-} from "./setup-config.js";
+import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
 import type {
   SetupBrokenLink,
   SetupAuthoredCollection,
   SetupGitPreservation,
-  SetupLockMatch,
   SetupRepositoryConfig,
-  SetupSkillsLock,
-  SetupSkillsLockEntry,
   SetupSuppressed,
 } from "./setup-contract.js";
 const SUPPRESSED_NAMES = new Map<string, SetupSuppressed["reason"]>([
@@ -75,29 +62,6 @@ const PROJECT_COLLECTION_ROOTS = [
   "skills/.experimental",
   "skills/.system",
 ] as const;
-
-const SkillsLockEntry = Schema.StructWithRest(
-  Schema.Struct({
-    source: Schema.String,
-    sourceType: Schema.String,
-    sourceUrl: Schema.optionalKey(Schema.String),
-    sourceBaseUrl: Schema.optionalKey(Schema.String),
-    ref: Schema.optionalKey(Schema.String),
-    updatedAt: Schema.optionalKey(Schema.String),
-    skillPath: Schema.optionalKey(Schema.String),
-    computedHash: Schema.optionalKey(Schema.String),
-    skillFolderHash: Schema.optionalKey(Schema.String),
-    wellKnownDigest: Schema.optionalKey(Schema.String),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-
-const SkillsLockDocument = Schema.fromJsonString(
-  Schema.Struct({
-    version: Schema.Number,
-    skills: Schema.Record(Schema.String, SkillsLockEntry),
-  }),
-);
 
 const AuthorRemoteDocument = Schema.fromJsonString(
   Schema.Struct({
@@ -332,11 +296,16 @@ const preservationStatus = (
   return { status, repository };
 };
 
-const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")(function* (
+const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
   repository: string,
-  localCandidates: readonly string[],
-  config: SetupRepositoryConfig | undefined,
+  candidates: readonly SkillHit[],
+  config: SetupRepositoryConfig,
 ) {
+  const localCandidates = candidates.filter(
+    (hit) =>
+      hit.repository === repository &&
+      !repositoryPathExcluded(config, relative(repository, hit.path)),
+  );
   const pathspecs = [
     ":(glob)**/SKILL.md",
     ...[...SUPPRESSED_NAMES.keys()].map((name) => `:(exclude,glob)**/${name}/**`),
@@ -350,10 +319,10 @@ const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")
     "--",
     ...pathspecs,
   ]);
-  if (Result.isFailure(trackedResult)) return { hits: [] as SkillHit[], complete: false };
+  if (Result.isFailure(trackedResult)) return { hits: localCandidates, complete: false };
   const tracked = new Set(gitPaths(trackedResult.success));
-  const localDocuments = localCandidates.map((path) =>
-    posix.join(relative(repository, path).split(sep).join(posix.sep), "SKILL.md"),
+  const localDocuments = localCandidates.map((hit) =>
+    posix.join(relative(repository, hit.path).split(sep).join(posix.sep), "SKILL.md"),
   );
   const documents = [...new Set([...tracked, ...localDocuments])]
     .filter((document) => !suppressedGitDocument(document))
@@ -389,92 +358,13 @@ const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")
         : { status: "unavailable", repository },
     });
   }
-  return { hits, complete: Result.isSuccess(statusResult) };
-});
-
-const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
-  scope: SetupSkillsLock["scope"],
-  path: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
-  if (text === undefined) return undefined;
-  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text);
-  if (Result.isFailure(decoded)) return { scope, path, status: "malformed" as const, entries: [] };
-  const expected = scope === "project" ? 1 : 3;
-  if (decoded.success.version !== expected)
-    return {
-      scope,
-      path,
-      status: "unsupported" as const,
-      version: decoded.success.version,
-      entries: [] as SetupSkillsLockEntry[],
-    };
-  const entries: SetupSkillsLockEntry[] = [];
-  for (const [name, entry] of Object.entries(decoded.success.skills).sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    const originalEntry = Schema.decodeUnknownResult(Schema.JsonObject)(entry);
-    if (Result.isFailure(originalEntry))
-      return { scope, path, status: "malformed" as const, entries: [] };
-    entries.push({
-      name,
-      source: entry.source,
-      sourceType: entry.sourceType,
-      ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}),
-      ...(entry.sourceBaseUrl ? { sourceBaseUrl: entry.sourceBaseUrl } : {}),
-      ...(entry.ref ? { ref: entry.ref } : {}),
-      ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}),
-      ...(entry.skillPath ? { skillPath: entry.skillPath } : {}),
-      ...(entry.computedHash ? { computedHash: entry.computedHash } : {}),
-      ...(entry.skillFolderHash ? { skillFolderHash: entry.skillFolderHash } : {}),
-      ...(entry.wellKnownDigest ? { wellKnownDigest: entry.wellKnownDigest } : {}),
-      originalEntry: originalEntry.success,
-    });
-  }
+  // Keep filesystem evidence if Git cannot describe a copy; otherwise its status replaces
+  // the provisional unavailable status. Each installed path has one observation.
+  const byPath = new Map([...localCandidates, ...hits].map((hit) => [hit.path, hit]));
   return {
-    scope,
-    path,
-    status: "valid" as const,
-    version: decoded.success.version,
-    contentHash: `sha256:${createHash("sha256").update(text).digest("hex")}`,
-    entries,
+    hits: [...byPath.values()],
+    complete: Result.isSuccess(statusResult) && ["missing", "valid"].includes(config.status),
   };
-});
-
-export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
-  hit: SkillHit,
-  locks: readonly SetupSkillsLock[],
-  includeGlobal: boolean,
-) {
-  const matches: SetupLockMatch[] = [];
-  const names = new Set([hit.name.toLowerCase(), basename(hit.path).toLowerCase()]);
-  for (const lock of locks) {
-    if (lock.status !== "valid" || lock.version === undefined || lock.contentHash === undefined)
-      continue;
-    if (lock.scope === "global" && !includeGlobal) continue;
-    if (lock.scope === "project" && hit.repository && dirname(lock.path) !== hit.repository)
-      continue;
-    if (lock.scope === "project" && !hit.repository) continue;
-    const entry = lock.entries.find((candidate) => names.has(candidate.name.toLowerCase()));
-    if (!entry) continue;
-    let content: SetupLockMatch["content"] = "unverifiable";
-    const recordedHash = entry.computedHash ?? entry.skillFolderHash;
-    if (lock.scope === "project" && recordedHash) {
-      const observedHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
-      if (observedHash !== undefined)
-        content = observedHash === recordedHash ? "agrees" : "mismatch";
-    }
-    matches.push({
-      scope: lock.scope,
-      lockPath: lock.path,
-      lockVersion: lock.version,
-      lockContentHash: lock.contentHash,
-      content,
-      entry,
-    });
-  }
-  return matches;
 });
 
 export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
@@ -513,6 +403,46 @@ export const collectHarnessRoots = (
   }
   return roots;
 };
+
+/** Discover selected locations, routing every copy to its nearest selected repository. */
+const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
+  walk: WalkResult,
+  harnessRoots: ReturnType<typeof collectHarnessRoots>,
+) {
+  const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
+  const roots = [
+    ...harnessRoots.map(({ root }) => root),
+    ...repositoryConfigs.flatMap((config) =>
+      [...PROJECT_COLLECTION_ROOTS, ...config.collections.map((entry) => entry.path)].map((path) =>
+        join(config.repository, ...path.split("/")),
+      ),
+    ),
+  ];
+  const directories = new Set([
+    ...walk.directories.filter(
+      (directory) => nearestRepository(directory, walk.repositories) === undefined,
+    ),
+    ...walk.repositories,
+  ]);
+  for (const root of new Set(roots))
+    for (const entry of yield* entriesOf(root))
+      if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
+        directories.add(join(root, entry.name));
+  const candidates = yield* collectSkillHits([...directories], walk.repositories);
+  const scans = yield* Effect.forEach(
+    repositoryConfigs,
+    (config) => scanSetupRepository(config.repository, candidates, config),
+    { concurrency: 8 },
+  );
+  return {
+    repositoryConfigs,
+    hits: [
+      ...candidates.filter((hit) => hit.repository === undefined),
+      ...scans.flatMap((scan) => scan.hits),
+    ],
+    complete: scans.every((scan) => scan.complete),
+  };
+});
 
 export const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
   roots: readonly { harness: Harness; root: string }[],
@@ -596,14 +526,12 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
 });
 
 /** The repository roots and decisions a setup run observes: its options over the saved config. */
-const setupMachineScope = (options: SetupOptions, prior: CurrentMachineDocument) => {
+const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Settings) => {
   const discoveryRoots = [
-    ...new Set(
-      (options.repositoryRoots ?? setupDiscoveryRoots(prior)).map((path) => resolve(path)),
-    ),
+    ...new Set((options.repositoryRoots ?? prior.discoveryRoots).map((path) => resolve(path))),
   ].sort();
   const existingDecisions = new Map(
-    setupRepositoryDecisions(prior).map((decision) => [resolve(decision.path), decision.status]),
+    prior.repositories.map((decision) => [resolve(decision.path), decision.status]),
   );
   for (const decision of options.repositoryDecisions ?? [])
     existingDecisions.set(resolve(decision.path), decision.status);
@@ -611,28 +539,23 @@ const setupMachineScope = (options: SetupOptions, prior: CurrentMachineDocument)
 };
 
 /** Save the roots and repository decisions setup observes, creating this machine's identity. */
-export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(
-  function* (options: SetupOptions) {
-    const prior = yield* readSetupMachineConfig(options.libraryHome);
-    const { discoveryRoots, existingDecisions } = setupMachineScope(options, prior);
-    return yield* writeSetupMachineConfig(
-      options.libraryHome,
-      // Setup never clears saved discovery roots; an empty list only narrows this scan.
-      discoveryRoots.length ? discoveryRoots : setupDiscoveryRoots(prior),
-      [...existingDecisions]
-        .map(([path, status]) => ({ path, status }))
-        .sort((left, right) => left.path.localeCompare(right.path)),
-      prior,
-      options.machineDisplayName ?? hostname(),
-    );
-  },
-  (effect, options) => withConfigurationWriter(options.libraryHome, effect),
-);
+export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* (
+  options: SetupOptions,
+) {
+  return yield* MachineSettings.updateDiscovery(options.libraryHome, {
+    // An empty selection narrows this scan; it never clears saved discovery roots.
+    ...(options.repositoryRoots?.length ? { discoveryRoots: options.repositoryRoots } : {}),
+    repositories: options.repositoryDecisions,
+    ...(options.machineDisplayName === undefined
+      ? {}
+      : { displayName: options.machineDisplayName }),
+  });
+});
 
 export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (
   options: SetupOptions,
 ) {
-  const prior = yield* readSetupMachineConfig(options.libraryHome);
+  const prior = yield* MachineSettings.read(options.libraryHome);
   const { discoveryRoots, existingDecisions } = setupMachineScope(options, prior);
   const discovering =
     !options.scanDecidedRepositories ||
@@ -643,62 +566,15 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
         [...existingDecisions].filter(([, status]) => status === "watched").map(([path]) => path),
       );
   const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
-  const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
-  const repositoryConfigByPath = new Map(
-    repositoryConfigs.map((config) => [config.repository, config] as const),
-  );
   const harnessRoots = collectHarnessRoots(options.inventory, walk.repositories);
-  const library = yield* (yield* LibraryStore).load;
+  const store = yield* LibraryStore;
+  const library = yield* store.load;
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);
   const observedLibrary = yield* observeInventory(
     library,
     harnessRoots.map(({ harness, root }) => ({ harness, root })),
   );
-  const harnessSkillDirectories: string[] = [];
-  for (const { root } of harnessRoots)
-    for (const entry of yield* entriesOf(root))
-      if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
-        harnessSkillDirectories.push(join(root, entry.name));
-  for (const repository of walk.repositories) harnessSkillDirectories.push(repository);
-  for (const repository of walk.repositories)
-    for (const collectionRoot of [
-      ...PROJECT_COLLECTION_ROOTS,
-      ...(repositoryConfigByPath.get(repository)?.collections.map((entry) => entry.path) ?? []),
-    ]) {
-      const root = join(repository, ...collectionRoot.split("/"));
-      for (const entry of yield* entriesOf(root))
-        if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
-          harnessSkillDirectories.push(join(root, entry.name));
-    }
-  const filesystemDirectories = walk.directories.filter(
-    (directory) => nearestRepository(directory, walk.repositories) === undefined,
-  );
-  const filesystemHits = yield* collectSkillHits(
-    [...new Set([...filesystemDirectories, ...harnessSkillDirectories])],
-    walk.repositories,
-  ).pipe(
-    Effect.map((hits) =>
-      hits.filter(
-        (hit) =>
-          !hit.repository ||
-          !repositoryPathExcluded(
-            repositoryConfigByPath.get(hit.repository),
-            relative(hit.repository, hit.path),
-          ),
-      ),
-    ),
-  );
-  const repositoryScans = yield* Effect.forEach(
-    walk.repositories,
-    (repository) =>
-      collectRepositorySkillHits(
-        repository,
-        filesystemHits.filter((hit) => hit.repository === repository).map((hit) => hit.path),
-        repositoryConfigByPath.get(repository),
-      ),
-    { concurrency: 8 },
-  );
-  const hits = [...filesystemHits, ...repositoryScans.flatMap((scan) => scan.hits)];
+  const { repositoryConfigs, hits, complete } = yield* scanSetupLocations(walk, harnessRoots);
   const globalLockPath = options.skillsStateHome
     ? join(resolve(options.skillsStateHome), "skills", ".skill-lock.json")
     : join(resolve(options.inventory.home), ".agents", ".skill-lock.json");
@@ -720,7 +596,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     library,
     authoredCollections,
     observedLibrary,
-    repositoryScans,
+    discoveryComplete: complete,
     hits,
     locks,
   };

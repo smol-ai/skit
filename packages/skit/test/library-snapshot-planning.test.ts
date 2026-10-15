@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import {
   makeAcquisitionId,
   makeCollectionId,
@@ -11,13 +11,11 @@ import {
 import {
   acquisitionIsSourceRestorable,
   librarySnapshotDigests,
-  SnapshotArchive,
   type Acquisition,
   type LibraryManifest,
   type RetainedCopy,
 } from "../src/library/library-contracts.js";
 import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
-import { completeRestoreArchivesEffect } from "../src/library/library-restore.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const retainedCopyId = makeRetainedCopyId();
@@ -125,11 +123,6 @@ const mixedManifest: LibraryManifest = {
   snapshot_digests: [digest],
   bindings: [],
 };
-const snapshotArchive = SnapshotArchive.make({
-  profile: "verbatim/v1",
-  digest,
-  entries: [],
-});
 
 it("decodes a v4 manifest into the current model without selections", () => {
   const skillId = makeSkillId();
@@ -219,60 +212,3 @@ it("rejects a Skill Version that no Acquisition of its Collection backs", () => 
     }),
   );
 });
-
-it.effect("combines downloaded snapshots with exact source reacquisition", () =>
-  Effect.gen(function* () {
-    const requested: string[] = [];
-    const archives = yield* completeRestoreArchivesEffect(
-      mixedManifest,
-      [snapshotArchive],
-      (requestedDigest) => {
-        requested.push(requestedDigest);
-        return Effect.succeed(
-          SnapshotArchive.make({
-            profile: "verbatim/v1",
-            digest: sourceDigest,
-            entries: [],
-          }),
-        );
-      },
-    );
-    assert.deepStrictEqual(requested, [sourceDigest]);
-    assert.deepStrictEqual(
-      archives.map((archive) => archive.digest).sort(),
-      [digest, sourceDigest].sort(),
-    );
-  }),
-);
-
-it.effect("rejects changed source bytes before restore preparation", () =>
-  Effect.gen(function* () {
-    const failure = yield* completeRestoreArchivesEffect(mixedManifest, [snapshotArchive], () =>
-      Effect.succeed(snapshotArchive),
-    ).pipe(Effect.flip);
-    assert.strictEqual(failure._tag, "Library.RestoreInvalid");
-    assert.match(failure.detail, /source-backed retained copy.*returned/);
-  }),
-);
-
-it.effect("fails when the pinned source is unavailable", () =>
-  Effect.gen(function* () {
-    const failure = yield* completeRestoreArchivesEffect(mixedManifest, [snapshotArchive], () =>
-      Effect.fail("source unavailable" as const),
-    ).pipe(Effect.flip);
-    assert.strictEqual(failure, "source unavailable");
-  }),
-);
-
-it.effect("does not substitute source reacquisition for a missing private snapshot", () =>
-  Effect.gen(function* () {
-    let requested = false;
-    const failure = yield* completeRestoreArchivesEffect(mixedManifest, [], () => {
-      requested = true;
-      return Effect.succeed(snapshotArchive);
-    }).pipe(Effect.flip);
-    assert.strictEqual(failure._tag, "Library.RestoreInvalid");
-    assert.match(failure.detail, /snapshot-backed retained copy.*not downloaded/);
-    assert.strictEqual(requested, false);
-  }),
-);

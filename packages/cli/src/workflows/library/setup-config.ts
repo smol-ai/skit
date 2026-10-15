@@ -1,20 +1,6 @@
-import { withConfigurationWriter } from "../../configuration-writer.js";
-import { hostname } from "node:os";
-import { join, matchesGlob, posix, resolve, sep } from "node:path";
-import { Data, Effect, FileSystem, Result, Schema } from "effect";
-import {
-  currentMachineDocument,
-  emptyMachineDocument,
-  MachineDocumentJson,
-  MachineDocumentV4,
-  makeMachineId,
-  writeJsonAtomicEffect,
-  type CurrentMachineDocument,
-} from "@smolai/skit-core";
-import { isErrno } from "../../platform/errno.js";
+import { join, matchesGlob, posix, sep } from "node:path";
+import { Effect, FileSystem, Result, Schema } from "effect";
 import type { SetupRepositoryConfig } from "./setup-contract.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-const MACHINE_CONFIG_FILE = "machine.json";
 
 const RepositoryRelativeGlob = Schema.String.check(
   Schema.isPattern(/^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))(?!!).+$/u),
@@ -31,95 +17,6 @@ const RepositoryConfigDocument = Schema.fromJsonString(
       collections: Schema.Array(Schema.Struct({ path: RepositoryRelativeDirectory })),
     }),
   }),
-);
-
-export class SetupConfigUnusable
-  extends Data.TaggedError("SetupConfigUnusable")<{ path: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get remediation(): string {
-    return `Correct or move aside ${this.path}, then run \`skit setup\` again.`;
-  }
-  get message() {
-    return `SKIT machine configuration is invalid: ${this.path}`;
-  }
-}
-
-const machineConfigPath = (home: string) => join(resolve(home), MACHINE_CONFIG_FILE);
-
-export const setupDiscoveryRoots = (config: CurrentMachineDocument): readonly string[] =>
-  config.discoveryRoots;
-
-export const setupRepositoryDecisions = (
-  config: CurrentMachineDocument,
-): readonly { path: string; status: "watched" | "ignored" }[] => config.repositories;
-
-export const readSetupMachineConfig = Effect.fn("Setup.readMachineConfig")(function* (
-  libraryHome: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = machineConfigPath(libraryHome);
-  const text = yield* fs
-    .readFileString(path)
-    .pipe(
-      Effect.catchTag("PlatformError", (error) =>
-        isErrno(error, "ENOENT")
-          ? Effect.succeed(undefined)
-          : Effect.fail(new SetupConfigUnusable({ path })),
-      ),
-    );
-  if (text === undefined) return { path, ...emptyMachineDocument() };
-  return yield* Schema.decodeUnknownEffect(MachineDocumentJson)(text).pipe(
-    Effect.mapError(() => new SetupConfigUnusable({ path })),
-    Effect.map((config) => ({ path, ...config })),
-  );
-});
-
-export const writeSetupMachineConfig = Effect.fn("Setup.writeMachineConfig")(function* (
-  libraryHome: string,
-  discoveryRoots: readonly string[],
-  repositories: readonly { path: string; status: "watched" | "ignored" }[],
-  prior: CurrentMachineDocument,
-  displayName: string,
-) {
-  const path = machineConfigPath(libraryHome);
-  const config = yield* MachineDocumentV4.makeEffect(
-    currentMachineDocument({
-      machineId: prior.machineId ?? makeMachineId(),
-      displayName: prior.displayName ?? displayName,
-      discoveryRoots: [...discoveryRoots],
-      repositories: [...repositories],
-    }),
-  );
-  yield* writeJsonAtomicEffect(path, config);
-  return { path, ...config };
-});
-
-export const updateSetupRepositoryDecision = Effect.fn("Setup.updateRepositoryDecision")(
-  function* (libraryHome: string, repository: string, status: "watched" | "ignored" | undefined) {
-    const prior = yield* readSetupMachineConfig(libraryHome);
-    const path = resolve(repository);
-    const decisions = new Map(
-      setupRepositoryDecisions(prior).map((decision) => [resolve(decision.path), decision.status]),
-    );
-    if (status === undefined) decisions.delete(path);
-    else decisions.set(path, status);
-    return yield* writeSetupMachineConfig(
-      libraryHome,
-      setupDiscoveryRoots(prior),
-      [...decisions]
-        .map(([decisionPath, decisionStatus]) => ({
-          path: decisionPath,
-          status: decisionStatus,
-        }))
-        .sort((left, right) => left.path.localeCompare(right.path)),
-      prior,
-      hostname(),
-    );
-  },
-  (effect, home) => withConfigurationWriter(home, effect),
 );
 
 export const readRepositoryConfig = Effect.fn("Setup.readRepositoryConfig")(function* (

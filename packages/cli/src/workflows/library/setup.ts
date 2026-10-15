@@ -8,13 +8,6 @@ import { collectBrokenLinks, SetupDiscovery } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-export {
-  SetupConfigUnusable,
-  readSetupMachineConfig,
-  updateSetupRepositoryDecision,
-  setupDiscoveryRoots,
-  setupRepositoryDecisions,
-} from "./setup-config.js";
 export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
@@ -64,7 +57,7 @@ const observeSetup = Effect.fn("Library.setup")(
       harnessRoots,
       library,
       authoredCollections,
-      repositoryScans,
+      discoveryComplete,
       locks,
     } = evidence;
     const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
@@ -124,10 +117,7 @@ const observeSetup = Effect.fn("Library.setup")(
       },
       probes,
       scan: {
-        complete:
-          walk.complete &&
-          repositoryScans.every((scan) => scan.complete) &&
-          repositoryConfigs.every((config) => ["missing", "valid"].includes(config.status)),
+        complete: walk.complete && discoveryComplete,
         directoriesExamined: walk.directoriesExamined,
         repositorySearchDepth: 1,
         ...(missingRepositories.length ? { missingRepositories } : {}),

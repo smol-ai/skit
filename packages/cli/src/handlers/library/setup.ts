@@ -20,23 +20,15 @@ import {
   setupStepPlan,
   type SetupStepPlan,
 } from "../../presentation/setup-steps.js";
-import {
-  readSetupMachineConfig,
-  setupRepositoryDecisions,
-  runSetup,
-  type SetupOptions,
-} from "../../workflows/library/setup.js";
-import { applySetupPlan, type SetupApproval } from "../../workflows/library/setup-apply.js";
-import type { SetupLocalCustodyOptions } from "../../workflows/library/setup-local-custody.js";
-import type { SetupResult } from "../../workflows/library/setup-contract.js";
+import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
+import { openSetupReview, type SetupReview } from "../../workflows/library/setup-review.js";
+import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
 import { result } from "../contracts.js";
 import { LibraryStore } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
-import { setupDiscoveredSkillChoices } from "../../presentation/setup-skills.js";
-import { planSetupRemovals, setupRemovablePaths } from "../../workflows/library/setup-removal.js";
+import { setupReviewSkillChoices } from "../../presentation/setup-skills.js";
 
-import { setupSelectedCopies } from "../../workflows/library/setup-decisions.js";
 import {
   chooseSetupCopyDecisions,
   setupPlanLines,
@@ -62,14 +54,13 @@ export const shouldSetupInteractively = (input: {
 
 export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody?: SetupLocalCustodyOptions["adoption"];
+  readonly localCustody?: LocalAdoptionOptions;
   readonly interactive: boolean;
   readonly dryRun: boolean;
   readonly workDirFlag?: string;
 }) {
-  const configured = yield* readSetupMachineConfig(input.options.libraryHome);
   const roots = input.workDirFlag ? [resolve(input.workDirFlag)] : [];
-  let persistRoots = Boolean(input.workDirFlag) && !input.dryRun;
+  const persistRoots = Boolean(input.workDirFlag) && !input.dryRun;
   let setupOptions: SetupOptions = {
     ...input.options,
     repositoryRoots: roots,
@@ -118,41 +109,21 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       repositoryDecisions,
       scanDecidedRepositories: true,
     };
-    const configuredDecisions = new Map(
-      setupRepositoryDecisions(configured).map((decision) => [decision.path, decision.status]),
-    );
-    const decisionsChanged = repositoryDecisions.some(
-      (decision) => configuredDecisions.get(decision.path) !== decision.status,
-    );
-    persistRoots = !input.dryRun && (persistRoots || decisionsChanged);
     observed = yield* observe({ ...setupOptions, persistRoots: false });
   }
-  const imports = yield* chooseKnownSources(steps, observed);
-  const { bind, add, remove, removablePaths } = yield* chooseDiscoveredSkills(
-    steps,
-    setupOptions,
+  const review = yield* openSetupReview(
+    { ...setupOptions, persistRoots },
     observed,
+    input.localCustody,
   );
+  const sources = yield* chooseKnownSources(steps, review);
+  const copies = yield* chooseDiscoveredSkills(steps, review, input.options.inventory.home);
   const decisions = yield* chooseSetupCopyDecisions(
-    setupSelectedCopies(observed, add, bind),
+    yield* review.selectedCopies(copies),
     displayPath,
   );
-  const approval: SetupApproval = {
-    setup: setupOptions,
-    planId: observed.onboarding.planId,
-    persistRoots,
-    imports,
-    bindings: decisions.filter((copy) => copy.operation === "bind"),
-    custody: decisions.filter((copy) => copy.operation === "add"),
-    removals: yield* planSetupRemovals(setupOptions, observed, remove, removablePaths),
-  };
-  if (
-    !persistRoots &&
-    !imports.length &&
-    !approval.bindings.length &&
-    !approval.custody.length &&
-    !approval.removals.entries.length
-  ) {
+  const plan = yield* review.prepare({ sources, copies, decisions });
+  if (!plan.hasChanges) {
     yield* renderer.step(
       steps.step("confirm"),
       "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
@@ -163,10 +134,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   yield* renderer.step(
     steps.step("confirm"),
     setupPlanLines({
-      approval,
-      observed,
-      decisions,
-      repositoryDecisions,
+      summary: plan.summary,
       displayRoots,
       displayPath,
     }).join("\n"),
@@ -176,14 +144,11 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     yield* renderer.note("No changes were applied.", "Setup cancelled");
     return observed;
   }
-  const applied = yield* applySetupPlan(
-    { adoption: input.localCustody, withStatus: renderer.withStatus },
-    approval,
-  );
+  const applied = yield* plan.apply(renderer.withStatus);
   yield* renderSetupAliasRecovery(applied);
-  if (approval.removals.entries.length)
+  if (plan.summary.removals.entries.length)
     yield* renderer.note(
-      `Removed installed locations are saved at ${approval.removals.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
+      `Removed installed locations are saved at ${plan.summary.removals.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
       "Removed copies saved",
     );
   yield* renderer.note("Selected setup changes were applied.", "Setup complete");
@@ -224,87 +189,47 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
 
 const chooseKnownSources = Effect.fn("CLI.setup.chooseKnownSources")(function* (
   steps: SetupStepPlan,
-  observed: SetupResult,
+  review: SetupReview,
 ) {
-  const bySource = new Map<
-    string,
-    {
-      label: string;
-      candidates: Array<
-        Extract<
-          SetupResult["onboarding"]["candidates"][number],
-          { action: "import-observed-collection" }
-        >
-      >;
-    }
-  >();
-  for (const candidate of observed.onboarding.candidates)
-    if (candidate.action === "import-observed-collection") {
-      const prior = bySource.get(candidate.groupKey);
-      bySource.set(candidate.groupKey, {
-        label: candidate.source,
-        candidates: [...(prior?.candidates ?? []), candidate],
-      });
-    }
+  const sources = review.sources;
   const renderer = yield* Renderer;
-  if (!bySource.size) {
+  if (!sources.length) {
     yield* renderer.step(steps.step("collections"), "No skills.sh collections to add.");
     return [];
   }
   yield* renderer.step(
     steps.step("collections"),
-    `Found ${bySource.size} installed skills.sh collection${bySource.size === 1 ? "" : "s"} not yet in the SKIT Library.`,
+    `Found ${sources.length} installed skills.sh collection${sources.length === 1 ? "" : "s"} not yet in the SKIT Library.`,
   );
   const prompter = yield* Prompter;
   const selectedSources = yield* prompter
     .multiselect(
       setupPrompts.collections,
-      [...bySource]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([locator, group]) => ({
-          value: locator,
-          label: group.label,
-          hint: `${group.candidates.length} installed ${group.candidates.length === 1 ? "skill" : "skills"}`,
-          selected: true,
-        })),
+      sources.map((source) => ({
+        value: source.key,
+        label: source.label,
+        hint: `${source.skillCount} installed ${source.skillCount === 1 ? "skill" : "skills"}`,
+        selected: true,
+      })),
     )
     .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])));
-  return selectedSources
-    .flatMap((source) => bySource.get(source)?.candidates ?? [])
-    .map((candidate) => ({
-      name: candidate.name,
-      paths: candidate.paths,
-      groupKey: candidate.groupKey,
-    }))
-    .sort(
-      (left, right) =>
-        left.name.localeCompare(right.name) ||
-        left.paths.join("\0").localeCompare(right.paths.join("\0")),
-    );
+  return selectedSources;
 });
 
 const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(function* (
   steps: SetupStepPlan,
-  options: SetupOptions,
-  observed: SetupResult,
+  review: SetupReview,
+  home: string,
 ) {
-  const removablePaths = yield* setupRemovablePaths(options, observed);
   const prompter = yield* Prompter;
   const fs = yield* FileSystem.FileSystem;
-  const rows = setupDiscoveredSkillChoices(
-    observed.instances,
-    observed.onboarding.candidates,
-    options.inventory.home,
-  );
+  const rows = setupReviewSkillChoices(review.copies, home);
   const choices = yield* Effect.forEach(rows, (row) =>
     Effect.gen(function* () {
       const modified = yield* skillModificationTime(row.instance.path);
       const path = join(row.instance.path, "SKILL.md");
       return {
         ...row.choice,
-        ...((removablePaths.get(row.instance.path)?.length ?? 0) > 0
-          ? { removeValue: `remove\0${row.choice.value}` }
-          : {}),
         searchText: `${row.details} · SKILL.md modified ${modified?.slice(0, 10) ?? "unavailable"}`,
         preview: () =>
           fs.readFileString(path).pipe(
@@ -333,25 +258,7 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
         .multiselect(setupPrompts.skills, choices)
         .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed([])))
     : [];
-  const selectedRows = rows.filter((row) => selectedValues.includes(row.choice.value));
-  const add = selectedRows.flatMap(({ instance, candidate, choice }) =>
-    !choice.disabled &&
-    candidate &&
-    candidate.action !== "import-observed-collection" &&
-    candidate.action !== "bind-existing-entry"
-      ? [{ name: instance.name, sourcePath: instance.path }]
-      : [],
-  );
-
-  const bind = selectedRows.flatMap(({ instance, candidate }) =>
-    candidate?.action === "bind-existing-entry"
-      ? [{ name: candidate.name, sourcePath: instance.path }]
-      : [],
-  );
-  const remove = rows
-    .filter((row) => selectedValues.includes(`remove\0${row.choice.value}`))
-    .map(({ instance }) => ({ name: instance.name, paths: [instance.path] }));
-  return { add, bind, remove, removablePaths };
+  return selectedValues;
 });
 
 export const setupCliCommand = Command.make(
@@ -384,7 +291,6 @@ export const setupCliCommand = Command.make(
               skillsStateHome: paths.xdgStateHome,
             },
             localCustody: {
-              acquisition: configuration.acquisition,
               bindings: configuration.pull.bindings,
             },
           });

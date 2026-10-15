@@ -55,9 +55,7 @@ test("cancelling a previewed change writes nothing and leaves nothing to confirm
   expect(cancelled?.kind).toBe("cancelled");
   expect(host.state?.pending).toBeUndefined();
   // A stray Enter after Esc reaches confirm with no pending change.
-  const confirmed = await host.transition((state) =>
-    confirmLibraryChange(state, library.configuration),
-  );
+  const confirmed = await host.transition((state) => confirmLibraryChange(state));
   expect(confirmed?.kind).toBe("cancelled");
   expect(await outside(library.tree)).toEqual(before);
 });
@@ -70,8 +68,7 @@ test("a confirmation applies only at the previewed revision, and the session rec
         { kind: "global" },
       ]),
     );
-  const confirm = () =>
-    host.transition((state) => confirmLibraryChange(state, library.configuration));
+  const confirm = () => host.transition((state) => confirmLibraryChange(state));
   const session = await host.open();
   const alpha = session.skills.find((row) => row.heading === "alpha-pack")!.collectionId;
 

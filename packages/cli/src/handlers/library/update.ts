@@ -1,7 +1,6 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { terminalLibraryProgressLayer } from "../../presentation/library-progress.js";
 import { Effect, Option } from "effect";
-import { LibraryStore } from "@smolai/skit-core";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
@@ -16,8 +15,7 @@ import {
   updateExitCode,
 } from "../../library-application/update.js";
 import {
-  applyProjectionRetention,
-  planProjectionRetention,
+  prepareProjectionRetention,
   ProjectionRetentionMissing,
 } from "../../workflows/library/projection-retention.js";
 
@@ -38,41 +36,35 @@ export const updateCliCommand = Command.make(
     handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const configuration = yield* libraryCommandConfiguration(input);
         const query = Option.getOrUndefined(input.subject);
         const projectionSelector = Option.getOrUndefined(input.fromProjection);
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
-        const options = {
-          roots: configuration.inventory,
-          variantsPath: configuration.pull.bindings.variantsPath,
-        };
         if (projectionSelector !== undefined) {
           if (query === undefined)
             return yield* new ProjectionRetentionMissing({
               message: "A Skill is required with --from-projection",
             });
-          if (input.dryRun) {
-            const value = yield* renderer.withStatus(
-              "Inspecting changed Projection bytes",
-              planProjectionRetention(state, options, query, projectionSelector),
-            );
-            return yield* renderer.result(result("projectionRetentionPlan", value));
-          }
           const value = yield* renderer.withStatus(
-            "Retaining changed Projection bytes",
-            applyProjectionRetention(state, options, query, projectionSelector),
+            input.dryRun
+              ? "Inspecting changed Projection bytes"
+              : "Retaining changed Projection bytes",
+            Effect.gen(function* () {
+              const prepared = yield* prepareProjectionRetention(query, projectionSelector);
+              return input.dryRun
+                ? result("projectionRetentionPlan", prepared.preview)
+                : result("projectionRetention", yield* prepared.apply());
+            }),
           );
-          return yield* renderer.result(result("projectionRetention", value));
+          return yield* renderer.result(value);
         }
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
-            planUpdatesEffect(state, options, query),
+            planUpdatesEffect(query),
           );
           return yield* renderer.result(result("updatePlan", value));
         }
-        const value = yield* updateSubjectsEffect(state, options, query).pipe(
+        const configuration = yield* libraryCommandConfiguration(input);
+        const value = yield* updateSubjectsEffect({ roots: configuration.inventory }, query).pipe(
           Effect.provide(terminalLibraryProgressLayer),
         );
         yield* renderer.result(result("update", value, updateExitCode(value)));

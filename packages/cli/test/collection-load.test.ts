@@ -9,7 +9,7 @@ import {
   type ObservedSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -132,7 +132,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A😀é"\n---\n',
       );
-      const first = yield* addLibrarySourceEffect(source).pipe(
+      const first = yield* retainLibrarySourceEffect(source).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
       const firstState = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -143,7 +143,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A much longer new description"\n---\n',
       );
-      yield* addLibrarySourceEffect(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+      yield* retainLibrarySourceEffect(source).pipe(Effect.provide(libraryStoreLayer({ home })));
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );

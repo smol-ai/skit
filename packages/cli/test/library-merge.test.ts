@@ -12,14 +12,13 @@ import {
   makeProjectionId,
   restoreCustodyConflicts,
 } from "@smolai/skit-core";
-import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
+import {
+  mergeLibraryManifests,
+  prepareLibraryMerge,
+} from "../src/workflows/library/library-merge.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 
-import {
-  alignLibrary,
-  aliasDevice,
-  aliasManifest,
-} from "../src/workflows/library/library-alignment.js";
+import { alignLibrary, aliasManifest } from "../src/workflows/library/library-alignment.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const digestB = `sha256:${"b".repeat(64)}`;
@@ -432,16 +431,6 @@ it.effect(
         ],
       });
       const original = structuredClone(local);
-      const aliases = alignLibrary(local, remote, base);
-      const merged = mergeLibraryManifests(
-        aliasManifest(base, aliases),
-        aliasManifest(local, aliases),
-        remote,
-      );
-      assert.deepEqual(merged.conflicts, []);
-      yield* decode(merged.manifest);
-      assert.strictEqual(merged.manifest.acquisitions.length, local.acquisitions.length);
-      assert.deepEqual(local, original);
       const state = yield* Schema.decodeUnknownEffect(LibraryState)({
         schemaVersion: 8,
         ...local,
@@ -476,8 +465,12 @@ it.effect(
           acceptedAt: "2026-01-01T00:00:00.000Z",
         })),
       });
-      const device = aliasDevice(state, aliases);
-      yield* LibraryState.makeEffect(device);
+      const merged = yield* prepareLibraryMerge({ base, local, remote, device: state });
+      if (merged._tag !== "Ready") return assert.fail(`Expected ready merge, got ${merged._tag}`);
+      yield* decode(merged.manifest);
+      assert.strictEqual(merged.manifest.acquisitions.length, local.acquisitions.length);
+      assert.deepEqual(local, original);
+      const device = merged.device;
       assert.deepEqual(
         restoreCustodyConflicts(device, { ...merged.manifest, bindings: state.global_bindings }),
         [],
@@ -737,5 +730,46 @@ it.effect("keeps one device's disable when the other device changed nothing", ()
     assert.deepEqual(merged.manifest.bindings, [
       { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: beta }] },
     ]);
+  }),
+);
+
+it.effect(
+  "merge preparation describes conflicts and applies a valid remote Collection choice",
+  () =>
+    Effect.gen(function* () {
+      const base = yield* decode(manifest());
+      const local = { ...base, collections: [{ ...base.collections[0]!, label: "local label" }] };
+      const remote = { ...base, collections: [{ ...base.collections[0]!, label: "remote label" }] };
+      const key = `collection:${collectionId}`;
+      const conflict = yield* prepareLibraryMerge({ base, local, remote });
+      assert.strictEqual(conflict._tag, "Conflicted");
+      if (conflict._tag === "Conflicted") {
+        assert.deepStrictEqual(
+          conflict.conflicts.map((detail) => detail.key),
+          [key],
+        );
+        assert.strictEqual(conflict.conflicts[0]?.resolution, "take-remote");
+      }
+      const prepared = yield* prepareLibraryMerge({ base, local, remote, takeRemote: [key] });
+      if (prepared._tag !== "Ready")
+        return assert.fail(`Expected ready merge, got ${prepared._tag}`);
+      assert.strictEqual(prepared.manifest.collections[0]?.label, "remote label");
+      assert.strictEqual(prepared.alignedLocal.collections[0]?.label, "local label");
+      assert.strictEqual(local.collections[0]?.label, "local label");
+      assert.strictEqual(base.collections[0]?.label, "fixture/skills");
+      yield* decode(prepared.manifest);
+    }),
+);
+
+it.effect("merge preparation rejects a requested key when there is no resolvable conflict", () =>
+  Effect.gen(function* () {
+    const base = yield* decode(manifest());
+    const prepared = yield* prepareLibraryMerge({
+      base,
+      local: base,
+      remote: base,
+      takeRemote: [`collection:${collectionId}`],
+    });
+    assert.strictEqual(prepared._tag, "InvalidResolution");
   }),
 );

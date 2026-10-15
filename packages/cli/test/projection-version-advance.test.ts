@@ -10,7 +10,7 @@ import {
   projectBindingEffect,
   refreshLibraryInventory,
 } from "@smolai/skit-core";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { reconcileLibraryProjections } from "../src/workflows/library/projection-reconciliation.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
@@ -171,7 +171,7 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
     assert.ok(skillId);
     const changed = yield* writingTo(
       home,
-      applyLibraryBindings(before, {
+      setLibraryBindings({
         query: skillId,
         all: false,
         roots: { home, configHome: join(home, "config"), overrides: { codex: [newRoot] } },
@@ -276,7 +276,7 @@ for (const followedCollection of [false, true])
         const enable = (dryRun: boolean) =>
           writingTo(
             home,
-            applyLibraryBindings(before, {
+            setLibraryBindings({
               query: skillId,
               all: false,
               roots: {

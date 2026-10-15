@@ -1,41 +1,22 @@
-import { emptyLibraryState, withLibraryWriter } from "@smolai/skit-core";
+import { withLibraryWriter } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
 import {
   canonicalJson,
-  blendRestoredStateEffect,
-  captureSnapshotArchiveEffect,
-  completeRestoreArchivesEffect,
   currentLibraryManifest,
-  deterministicTreeHashEffect,
-  LibraryState,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
-  prepareRestoreEffect,
-  prepareObservedCollectionEffect,
-  acquisitionIsSourceRestorable,
-  resolveSkitSourceEffect,
-  retainedTreePath,
-  type Acquisition,
   type LibraryManifest,
   type ProjectionTarget,
-  type SkitSource,
-  type SnapshotArchive,
 } from "@smolai/skit-core";
-import { join } from "node:path";
+import { inspectSyncSnapshots } from "./library-sync-snapshots.js";
 import { librarySyncApiEffect } from "./library-sync-api.js";
-import {
-  mergeLibraryManifests,
-  normalizeLibraryManifest,
-  describeLibraryMergeConflicts,
-} from "./library-merge.js";
+import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
-import { alignLibrary, aliasDevice, aliasManifest } from "./library-alignment.js";
 import {
-  planSyncProjectionsEffect,
+  prepareSyncDeviceTransition,
   resolveSyncProjectionCollisionsEffect,
-  retireSyncProjectionsEffect,
 } from "./library-sync-projections.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -72,138 +53,6 @@ export class SyncLocalChanged
     return "The local Library changed while sync was running";
   }
 }
-export class SyncSourceRestoreInvalid
-  extends Data.TaggedError("Library.SyncSourceRestoreInvalid")<{
-    digest: string;
-    detail: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Restore access to the source, or run `skit update` on the Collection, then run `skit sync` again.";
-  get message(): string {
-    return this.detail;
-  }
-}
-
-/**
- * The Source to reacquire an Acquisition's exact bytes from: its recorded identity at its
- * revision. Git restores pin the commit separately; a Registry restore names the Release.
- */
-export const restorableSource = (acquisition: Acquisition): SkitSource | undefined => {
-  const identity = acquisition.source_identity;
-  const subpath =
-    (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
-      ? { subpath: identity.collection_root }
-      : {};
-  switch (identity.kind) {
-    case "github":
-      return {
-        type: "github",
-        owner: identity.owner,
-        repository: identity.repository,
-        ...subpath,
-      };
-    case "git":
-      return { type: "git", remote: identity.remote.value, ...subpath };
-    case "registry":
-      return acquisition.revision === undefined
-        ? undefined
-        : {
-            type: "registry",
-            namespace: identity.namespace,
-            slug: identity.slug,
-            version: acquisition.revision,
-            ...(identity.authority === "default" ? {} : { authority: identity.authority }),
-          };
-    default:
-      return undefined;
-  }
-};
-
-const reacquireSourceArchiveEffect = Effect.fn("Library.sync.reacquireSource")(function* (
-  manifest: LibraryManifest,
-  digest: string,
-  options: { origin: string; token?: string },
-) {
-  const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
-  const acquisition = manifest.acquisitions.find(
-    (candidate) =>
-      candidate.retained_copy_id === copy?.retained_copy_id &&
-      acquisitionIsSourceRestorable(candidate),
-  );
-  if (copy === undefined || acquisition === undefined)
-    return yield* new SyncSourceRestoreInvalid({
-      digest,
-      detail: "manifest has no exact source-restoration acquisition",
-    });
-  const archive = yield* Effect.scoped(
-    Effect.gen(function* () {
-      const gitSource =
-        acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git";
-      const commit = gitSource ? acquisition.revision : undefined;
-      if (gitSource && commit === undefined)
-        return yield* new SyncSourceRestoreInvalid({
-          digest,
-          detail: "pinned Git acquisition has no commit",
-        });
-      const source = restorableSource(acquisition);
-      if (source === undefined)
-        return yield* new SyncSourceRestoreInvalid({
-          digest,
-          detail: "acquisition has no restorable source identity",
-        });
-      const profiles = new Set(copy.members.map((member) => member.materialization_profile));
-      if (profiles.size !== 1)
-        return yield* new SyncSourceRestoreInvalid({
-          digest,
-          detail: "retained copy has no single materialization profile",
-        });
-      const resolved = yield* resolveSkitSourceEffect(source, {
-        registryBaseUrl: options.origin,
-        ...(options.token === undefined ? {} : { registryToken: options.token }),
-        ...(commit === undefined
-          ? {}
-          : { git: { commit, tracking_ref: null }, requireGitRevision: true }),
-      });
-      // Declared imports retain the whole resolved SKIT root, including shared and non-Skill files.
-      if (profiles.has("declared-skit-skill/v1")) {
-        if (resolved.descriptorKind !== "declared")
-          return yield* new SyncSourceRestoreInvalid({
-            digest,
-            detail: "declared retained copy source has no declared Descriptor",
-          });
-        return yield* captureSnapshotArchiveEffect(resolved.root);
-      }
-      const prepared = yield* prepareObservedCollectionEffect(
-        yield* Effect.forEach(copy.members, (member) =>
-          Effect.gen(function* () {
-            const sourcePath =
-              member.source_path === "."
-                ? resolved.originalRoot
-                : join(resolved.originalRoot, member.source_path);
-            return {
-              name: member.source_path,
-              sourcePath,
-              relativePath: member.source_path,
-              observedHash: yield* deterministicTreeHashEffect(sourcePath),
-            };
-          }),
-        ),
-      );
-      return yield* captureSnapshotArchiveEffect(prepared.staged);
-    }),
-  );
-  if (archive.digest !== digest)
-    return yield* new SyncSourceRestoreInvalid({
-      digest,
-      detail: `source returned ${archive.digest}; expected ${digest}`,
-    });
-  return archive;
-});
-
 /**
  * Sync is one three-way merge of this device's Library (L) with the remote head (R) from their
  * accepted base (B). A push merges L with an absent R, a pull an absent L with R, and a clean sync
@@ -219,7 +68,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     takeRemote?: readonly string[];
     keepEnabled?: readonly string[];
     projection?: {
-      variantsPath: string;
       rootFor: (target: ProjectionTarget) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
@@ -230,30 +78,21 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const store = yield* LibraryStore;
     const projectionOptions = {
       home: store.home,
-      variantsPath: options.projection?.variantsPath ?? store.originalsPath,
+      variantsPath: store.variantsPath,
       ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
     };
     const api = yield* librarySyncApiEffect({ origin: options.origin, token: options.token });
     const local = yield* store.inspect;
-    let manifest = emptyManifest;
-    const localArchives: SnapshotArchive[] = [];
-    if (local.present) {
-      manifest = yield* libraryManifestFromLocalStateEffect(local.state);
-      let verified = 0;
-      for (const tree of local.state.retained_copies) {
-        yield* progress(
-          `Verifying retained copies · ${verified}/${local.state.retained_copies.length}`,
-        );
-        const archive = yield* captureSnapshotArchiveEffect(
-          retainedTreePath(store.originalsPath, tree.digest),
-        );
-        if (archive.digest !== tree.digest)
-          return { status: "local_bytes_changed" as const, digest: tree.digest };
-        if (!localArchives.some((candidate) => candidate.digest === archive.digest))
-          localArchives.push(archive);
-        verified++;
-      }
-    }
+    const manifest = local.present
+      ? yield* libraryManifestFromLocalStateEffect(local.state)
+      : emptyManifest;
+    const inventory = yield* inspectSyncSnapshots(
+      local.present ? local.state.retained_copies : [],
+      store.originalsPath,
+      progress,
+    );
+    if (inventory._tag === "Changed")
+      return { status: "local_bytes_changed" as const, digest: inventory.digest };
     yield* progress("Reading remote Library");
     const remote = yield* api.read();
     yield* progress("Planning Library sync");
@@ -296,63 +135,19 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       base_manifest: normalizeLibraryManifest(reconciled),
     });
 
-    // One alias map renames every side that holds independently created records. The device is
-    // rebuilt through the Library schema, so sync carries only the fields this CLI declares.
-    const aliases = alignLibrary(manifest, remoteManifest, base);
-    const aligned = aliasManifest(manifest, aliases);
-    const alignedBase = aliasManifest(base, aliases);
-    const device = local.present
-      ? yield* LibraryState.makeEffect(aliasDevice(local.state, aliases))
-      : emptyLibraryState();
-    // Every local publish replaces exactly the state this sync planned from.
-    const planned = local.present ? local.state : device;
-    const imports = {
-      skills: aliases.skills.map((alias) => alias.to),
-      collections: aliases.collections.map((alias) => alias.to),
-    };
-    const preliminary = mergeLibraryManifests(
-      alignedBase,
-      aligned,
-      remoteManifest,
-      new Set(),
-      imports.skills,
-      imports.collections,
-    );
-    // A `--take-remote` key must name a conflict this merge can take remotely, on every path and
-    // before any device check; a push, pull or clean sync has none.
-    const requested = new Set(options.takeRemote ?? []);
-    const availableResolutions = describeLibraryMergeConflicts(
-      preliminary.conflicts,
-      preliminary.manifest,
-      preliminary.unresolvable,
-    );
-    if (
-      [...requested].some(
-        (key) =>
-          !availableResolutions.some(
-            (detail) => detail.key === key && detail.resolution === "take-remote",
-          ),
-      )
-    )
+    const merge = yield* prepareLibraryMerge({
+      base,
+      local: manifest,
+      remote: remoteManifest,
+      ...(local.present ? { device: local.state } : {}),
+      ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+    });
+    if (merge._tag === "InvalidResolution")
       return { status: "resolution_invalid" as const, ...revision };
-    const merged =
-      requested.size === 0
-        ? preliminary
-        : mergeLibraryManifests(
-            alignedBase,
-            aligned,
-            remoteManifest,
-            requested,
-            imports.skills,
-            imports.collections,
-          );
-    if (merged.conflicts.length)
-      return conflicted(
-        describeLibraryMergeConflicts(merged.conflicts, merged.manifest, merged.unresolvable),
-        remote?.revision_id,
-      );
+    if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
+    const { device } = merge;
     const collision = yield* resolveSyncProjectionCollisionsEffect(
-      merged.manifest,
+      merge.manifest,
       options.projection?.rootFor,
       options.keepEnabled,
       device,
@@ -360,12 +155,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
     if (collision.conflicts.length) return conflicted(collision.conflicts, remote?.revision_id);
     const desired = collision.manifest;
-    // An empty device holds no Projections or repository Bindings to plan. Planning it anyway
-    // would only report remote Bindings without a selected Version, which a pull accepts.
-    const devicePlan = local.present
-      ? yield* planSyncProjectionsEffect(planned, device, desired, options.projection?.rootFor)
-      : undefined;
-    if (devicePlan?.conflicts.length) return conflicted(devicePlan.conflicts, remote?.revision_id);
+    const transition = yield* prepareSyncDeviceTransition({
+      current: local.present ? local.state : undefined,
+      aligned: device,
+      manifest: desired,
+      rootFor: options.projection?.rootFor,
+    });
+    if (transition._tag === "Conflicted")
+      return conflicted(transition.conflicts, remote?.revision_id);
 
     if (clean) {
       // Nothing to transfer, write or retire. Publish only to anchor ancestry this state lacks,
@@ -374,7 +171,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         const sync_ancestry = ancestryAt(remote, remoteManifest);
         if (canonicalJson(local.state.sync_ancestry ?? null) !== canonicalJson(sync_ancestry))
           yield* store
-            .publish({ ...device, sync_ancestry }, planned)
+            .publish({ ...device, sync_ancestry }, local.state)
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
         yield* progress("Checking enabled Skills");
       }
@@ -396,20 +193,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     }
 
     // Equivalent handle alignment alone is not a Collection content or evidence change.
-    const plan = planLibrarySync(aligned, remoteManifest, desired);
-    const required = [...new Set(desired.retained_copies.map((tree) => tree.digest))];
-    const snapshotSet = new Set(desired.snapshot_digests);
-    const localArchiveByDigest = new Map(localArchives.map((archive) => [archive.digest, archive]));
-    const downloads = required.filter(
-      (digest) => !localArchiveByDigest.has(digest) && snapshotSet.has(digest),
-    );
-    const uploads = [...localArchiveByDigest.values()].filter(
-      (archive) =>
-        required.includes(archive.digest) &&
-        snapshotSet.has(archive.digest) &&
-        !remoteManifest.snapshot_digests.includes(archive.digest),
-    );
-    const snapshots = remote === null ? uploads.length : downloads.length;
+    const plan = planLibrarySync(merge.alignedLocal, remoteManifest, desired);
+    const transfer = inventory.prepareTransfer(desired, remote, api, options);
+    const snapshots = transfer.snapshotCount;
     if (!options.apply)
       return remote === null
         ? { status: "push_ready" as const, snapshots, plan }
@@ -437,33 +223,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     // revision, onto exactly the state this sync planned from, (6) reconcile Projections. Remote
     // commits before local, so an interruption leaves R ahead of B and the next sync re-derives
     // the same result from the old base; local state never names a revision R does not hold.
-    let completed = 0;
-    if (downloads.length) yield* progress(`Downloading Skill copies · 0/${downloads.length}`);
-    const downloaded =
-      remote === null
-        ? []
-        : yield* Effect.forEach(
-            downloads,
-            (digest) =>
-              api
-                .download(remote.library_id, digest)
-                .pipe(
-                  Effect.tap(() =>
-                    progress(`Downloading Skill copies · ${++completed}/${downloads.length}`),
-                  ),
-                ),
-            // Nothing is written until every archive arrives, so a failed download aborts cleanly.
-            { concurrency: 4 },
-          );
-    yield* progress("Restoring retained Skill copies");
-    const archives = yield* completeRestoreArchivesEffect(
-      desired,
-      [...localArchiveByDigest.values(), ...downloaded],
-      (digest) => reacquireSourceArchiveEffect(desired, digest, options),
-    );
-    const restored = yield* Effect.scoped(
-      prepareRestoreEffect(desired, archives, store.originalsPath),
-    );
+    const restored = yield* transfer.restore();
     // A merge or pull rechecks L before the remote write; a push relies on the publish check.
     if (remote !== null) {
       const fresh = yield* store.inspect;
@@ -473,11 +233,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       )
         return yield* new SyncLocalChanged();
     }
-    for (const [index, archive] of uploads.entries()) {
-      yield* progress(`Uploading Skill copies · ${index}/${uploads.length}`);
-      yield* api.upload(archive);
-      yield* progress(`Uploading Skill copies · ${index + 1}/${uploads.length}`);
-    }
+    yield* transfer.upload();
     yield* progress("Saving Library sync");
     const saved =
       remote !== null && same(desired, remoteManifest)
@@ -485,21 +241,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         : yield* api.write(remote?.revision_id ?? null, desired);
     // Local state is published only onto exactly what this plan describes. If it moved, the
     // device keeps its old ancestry and the next sync merges both changes.
-    const retired = yield* Effect.gen(function* () {
-      const retirement =
-        devicePlan === undefined
-          ? { retired: 0, state: planned }
-          : yield* retireSyncProjectionsEffect(devicePlan, projectionOptions.variantsPath, planned);
-      const blended = yield* blendRestoredStateEffect(
-        { ...device, projections: [...(devicePlan?.projections ?? [])] },
-        restored.state,
-      );
-      yield* store.publish(
-        { ...blended, sync_ancestry: ancestryAt(saved, desired) },
-        retirement.state,
-      );
-      return retirement.retired;
-    }).pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
+    const retired = yield* transition
+      .publishRestored(restored.state, ancestryAt(saved, desired))
+      .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
     yield* progress("Enabling synced Skills");
     const projections = projectionCounts(
       yield* reconcileLibraryProjections({

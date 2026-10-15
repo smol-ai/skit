@@ -1,5 +1,5 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { SetEnabledStale } from "../src/workflows/library/set-enabled.js";
+import { SetEnabledStale } from "../src/library-application/binding-changes.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
@@ -104,7 +104,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    const stale = yield* home.owned(confirmLibraryChange(proposed, home.bindings));
+    const stale = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(stale.outcome?.kind, "failed");
     if (stale.outcome?.kind === "failed")
       assert.strictEqual(stale.outcome.failure.code, "CONFLICT");

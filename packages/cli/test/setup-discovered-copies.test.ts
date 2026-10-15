@@ -108,7 +108,7 @@ for (const scenario of [
             interactive: true,
             dryRun: false,
             ...(repositories.length ? { workDirFlag: join(root, "work") } : {}),
-            localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+            localCustody: { bindings: home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );

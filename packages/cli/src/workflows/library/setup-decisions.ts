@@ -1,6 +1,12 @@
 import { Schema } from "effect";
 import type { HarnessShadow } from "../../projection/harness-shadows.js";
-import type { SetupResult, SetupSkillInstance } from "./setup-contract.js";
+import type {
+  SetupResult,
+  SetupSkillInstance,
+  SetupOnboardingCandidate,
+} from "./setup-contract.js";
+
+import { setupInstanceGroupKey } from "./setup-onboarding.js";
 
 export const SetupDuplicateAction = Schema.Literals(["retain-only", "retire-aliases", "keep-both"]);
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
@@ -100,3 +106,43 @@ export function setupSelectedCopies(
     ...bind.map((selection) => ({ ...selection, operation: "bind" as const })),
   ].map((copy) => ({ ...copy, conflict: copyConflict(observed, copy) }));
 }
+
+/** Choices the review can interpret; presentation supplies labels and ordering. */
+export const setupReviewCopies = (
+  instances: readonly SetupSkillInstance[],
+  candidates: readonly SetupOnboardingCandidate[],
+) =>
+  instances
+    .filter(
+      (instance) => instance.owner.kind !== "skit" || instance.owner.membership.kind !== "retained",
+    )
+    .filter(
+      (instance) =>
+        !candidates.some(
+          (candidate) =>
+            candidate.action === "import-observed-collection" &&
+            candidate.paths.includes(instance.path),
+        ),
+    )
+    .map((instance) => {
+      const candidate = candidates.find((item) => item.paths.includes(instance.path));
+      const groupKey = setupInstanceGroupKey(instance);
+      return {
+        instance,
+        candidate,
+        groupKey,
+        siblings: instances.filter(
+          (item) => setupInstanceGroupKey(item) === groupKey && item.path !== instance.path,
+        ),
+        value: instances.some((item) => item.name === instance.name && item.path !== instance.path)
+          ? `${instance.name}\0${instance.path}`
+          : instance.name,
+        selectable:
+          candidate !== undefined &&
+          instance.owner.kind !== "skit" &&
+          instance.owner.kind !== "authored" &&
+          instance.owner.kind !== "pnpm" &&
+          !(candidate.action === "blocked" && candidate.reason !== "divergent-copies"),
+      };
+    });
+export type SetupReviewCopy = ReturnType<typeof setupReviewCopies>[number];

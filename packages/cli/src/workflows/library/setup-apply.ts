@@ -14,7 +14,7 @@ import type { SetupCopySelection } from "./setup-decisions.js";
 import { applySetupExistingBindings } from "./setup-existing-binding.js";
 import { applySetupLocalCustody } from "./setup-local-custody.js";
 import { applySetupObservedCollections } from "./setup-observed-collections.js";
-import { applySetupRemovals, type planSetupRemovals } from "./setup-removal.js";
+import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
 export interface SetupApproval {
@@ -25,7 +25,7 @@ export interface SetupApproval {
   readonly imports: readonly SetupKnownSourceSelection[];
   readonly bindings: readonly SetupCopySelection[];
   readonly custody: readonly SetupCopySelection[];
-  readonly removals: Effect.Success<ReturnType<typeof planSetupRemovals>>;
+  readonly removals: PreparedRecoveryMoves;
 }
 
 export interface SetupApplyOptions {
@@ -82,11 +82,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const collections = new Set(approval.imports.map((selection) => selection.groupKey)).size;
         yield* options.withStatus(
           `Importing ${collections} installed Collection${collections === 1 ? "" : "s"} (${approval.imports.length} Skill${approval.imports.length === 1 ? "" : "s"})`,
-          applySetupObservedCollections(
-            { setup: approval.setup, retention: options.adoption.acquisition },
-            current,
-            approval.imports,
-          ),
+          applySetupObservedCollections({ setup: approval.setup }, current, approval.imports),
         );
       }
       if (approval.bindings.length) {
@@ -97,11 +93,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           reconnects
             ? `Reconnecting ${reconnects} existing Library match${reconnects === 1 ? "" : "es"}`
             : "Keeping existing Library matches without enabling",
-          applySetupExistingBindings(
-            { setup: approval.setup, bindings: options.adoption.bindings },
-            current,
-            approval.bindings,
-          ),
+          applySetupExistingBindings(options.adoption, current, approval.bindings),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
@@ -113,11 +105,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             : "";
         const applied = yield* options.withStatus(
           `Taking custody of ${approval.custody.length} local Skill${approval.custody.length === 1 ? "" : "s"}${names}`,
-          applySetupLocalCustody(
-            { setup: approval.setup, adoption: options.adoption },
-            current,
-            approval.custody,
-          ),
+          applySetupLocalCustody(options.adoption, current, approval.custody),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
@@ -140,7 +128,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         return yield* new LibraryChanged({ path: join(store.home, "state.json") });
       yield* options.withStatus(
         `Removing ${approval.removals.entries.length} installed cop${approval.removals.entries.length === 1 ? "y" : "ies"}`,
-        applySetupRemovals(approval.removals),
+        approval.removals.apply(),
       );
     }
     return { observed: current, warnings, recoveryDirectories };

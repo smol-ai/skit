@@ -78,3 +78,9 @@ export * from "./library/audit/audit-log.js";
 export { writeJsonAtomicEffect, writeJsonExclusiveEffect } from "./platform/atomic-write.js";
 export * from "./usage/contracts.js";
 export { SkillUsage, skillUsageLayer } from "./usage/scanner.js";
+
+export * as MachineSettings from "./library/machine-settings.js";
+export {
+  Unusable as MachineSettingsUnusable,
+  type Settings as MachineSettingsSnapshot,
+} from "./library/machine-settings.js";

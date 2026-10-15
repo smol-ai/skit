@@ -1,14 +1,12 @@
 import {
-  prepareSetupAliasRetirement,
-  approveSetupCopy,
-  bindSetupCopy,
-} from "./setup-local-custody.js";
+  approveLocalAdoption,
+  prepareLocalAdoption,
+  type LocalAdoptionOptions,
+} from "./local-adoption.js";
 import { Data, Effect } from "effect";
-import type { ProjectionOptions } from "./projection-options.js";
-import type { SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
 
-import type { SetupCopySelection } from "./setup-decisions.js";
+import { copyConflict, type SetupCopySelection } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export class SetupExistingBindingInvalid
@@ -33,21 +31,16 @@ export class SetupExistingBindingInvalid
   }
 }
 
-export interface SetupExistingBindingOptions {
-  readonly setup: SetupOptions;
-  readonly bindings: ProjectionOptions;
-}
-
 /** Take custody using an exact existing Library Artifact, from the approved setup observation. */
 export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings")(function* (
-  options: SetupExistingBindingOptions,
+  options: LocalAdoptionOptions,
   current: SetupResult,
   selectedCopies: readonly SetupCopySelection[],
 ) {
   const selections = yield* Effect.forEach(selectedCopies, (selection) =>
-    approveSetupCopy(
-      current,
+    approveLocalAdoption(
       selection,
+      copyConflict(current, selection),
       (reason) => new SetupExistingBindingInvalid({ name: selection.name, reason }),
     ),
   );
@@ -56,7 +49,7 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
   const recoveryDirectories: string[] = [];
   const warnings: { name: string; message: string }[] = [];
   for (const selection of selections) {
-    const { name, sourcePath: selectedPath, duplicateAction } = selection;
+    const { name, sourcePath: selectedPath } = selection;
     if (selected.has(name))
       return yield* new SetupExistingBindingInvalid({ name, reason: "duplicate-selection" });
     selected.add(name);
@@ -78,16 +71,13 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
     if (instance.scope !== "global" || !instance.harnesses.length)
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
-    if (duplicateAction === "retain-only") continue;
-    const retirement = yield* prepareSetupAliasRetirement(options.setup, selection);
-    const bound = yield* bindSetupCopy(
-      options,
-      selection,
-      candidate.subjectId,
-      { path: selectedPath, observedHash },
-      retirement,
-    );
-    results.push(bound.result);
+    const adoption = yield* prepareLocalAdoption(options, selection, {
+      kind: "existing",
+      subjectId: candidate.subjectId,
+      observedHash,
+    });
+    const bound = yield* adoption.apply();
+    if (bound.result !== undefined) results.push(bound.result);
     recoveryDirectories.push(...bound.recoveryDirectories);
     warnings.push(...bound.warnings);
   }
