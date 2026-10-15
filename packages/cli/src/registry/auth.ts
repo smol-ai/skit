@@ -9,11 +9,7 @@ import { dirname } from "node:path";
 import { isErrno } from "../platform/errno.js";
 import {
   CredentialsUnusable,
-  DefaultRegistryNotConfigured,
-  InsecureOrigin,
   NoStoredCredentials,
-  RegistryAliasConflict,
-  RegistryAliasInvalid,
   RegistryAliasNotFound,
   RegistryOriginInvalid,
   RegistrySelectionAmbiguous,
@@ -27,7 +23,6 @@ import {
 } from "./failures.js";
 import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
 import { Renderer } from "../presentation/renderer.js";
-import type { RegistryRemote } from "./contracts.js";
 import { serverDiscoverySchema } from "@smolai/skit-core";
 import {
   ApiErrorBody,
@@ -48,43 +43,25 @@ const ok = (response: HttpClientResponse) => response.status >= 200 && response.
 export const AUTH_SCOPES = ["library:sync", "authoring:write", "publication:write"] as const;
 export type AuthScope = (typeof AUTH_SCOPES)[number];
 
-/**
- * `scopes` decodes as plain strings, not the AUTH_SCOPES union: those literals say what this CLI
- * may request at login, not what a Registry may have granted. A scope this build does not know
- * about must not render the whole credential file unusable.
- */
-const StoredCredential = Schema.Struct({
-  token: Schema.String,
-  tokenId: Schema.String,
-  tokenPrefix: Schema.String,
-  scopes: Schema.Array(Schema.String),
-  expiresAt: Schema.optionalKey(Schema.String),
-});
-
-const AuthConfig = Schema.fromJsonString(
-  Schema.Struct({
-    schemaVersion: Schema.Literal(1),
-    activeOrigin: Schema.optionalKey(Schema.String),
-    defaultRegistry: Schema.optionalKey(Schema.String),
-    registryAliases: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-    servers: Schema.Record(Schema.String, StoredCredential),
-  }),
-);
-
-type StoredCredential = typeof StoredCredential.Type;
-type AuthConfig = typeof AuthConfig.Type;
-
+export { parseOrigin } from "./accounts.js";
+export type { ResolvedAuth } from "./accounts.js";
+import {
+  AuthConfig,
+  RegistryAccounts,
+  environmentCredential,
+  validateAuthenticationOrigin,
+  parseOrigin,
+  type StoredCredential,
+  type ResolvedAuth,
+} from "./accounts.js";
 const decodeAuthConfig = Schema.decodeUnknownEffect(AuthConfig);
-
-export type ResolvedAuth = {
-  origin?: string;
-  token?: string;
-  tokenId?: string;
-  tokenPrefix?: string;
-  scopes?: readonly string[];
-  expiresAt?: string;
-  source: "environment" | "stored" | "none";
-};
+const accountEnvironment = () => ({
+  origin: process.env.SKIT_SERVER_URL,
+  token: process.env.SKIT_TOKEN,
+});
+const readAccounts = Effect.fn("Auth.readAccounts")(function* (home?: string) {
+  return new RegistryAccounts(yield* readConfigEffect(home), accountEnvironment());
+});
 
 export type RegistryConfigurationError =
   | Config.ConfigError
@@ -92,18 +69,6 @@ export type RegistryConfigurationError =
   | RegistryOriginInvalid
   | RegistryAliasNotFound
   | RegistrySelectionAmbiguous;
-
-type AuthStatusCredential = {
-  origin: string;
-  aliases: string[];
-  tokenPrefix: string;
-  scopes: readonly string[];
-  expiresAt?: string;
-  expiry: "known" | "unknown";
-  expired: boolean;
-  isDefault: boolean;
-  source: "stored" | "environment";
-};
 
 export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
   return (yield* configurationForHome(home)).authPath;
@@ -135,65 +100,15 @@ export function readConfigEffect(home?: string) {
 const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
   config: AuthConfig,
   home?: string,
-  options: { readonly promoteSoleRegistry?: boolean } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* authPath(home);
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${process.pid}`;
-  const { activeOrigin: _legacyActiveOrigin, ...withoutActiveOrigin } = config;
-  const origins = Object.keys(config.servers);
-  let normalized = withoutActiveOrigin;
-  if (
-    options.promoteSoleRegistry !== false &&
-    !normalized.defaultRegistry &&
-    origins.length === 1
-  ) {
-    const origin = origins[0];
-    const aliases = normalized.registryAliases ?? {};
-    const existing = Object.entries(aliases).find(([, value]) => value === origin)?.[0];
-    let name = existing ?? "default";
-    for (let suffix = 2; aliases[name] && aliases[name] !== origin; suffix += 1)
-      name = `default-${suffix}`;
-    normalized = {
-      ...normalized,
-      registryAliases: existing ? aliases : { ...aliases, [name]: origin },
-      defaultRegistry: name,
-    };
-  }
-  yield* fs.writeFileString(temporary, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+  yield* fs.writeFileString(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
   // The write mode is subject to umask; credentials get the permission set explicitly.
   yield* fs.chmod(temporary, 0o600);
   yield* fs.rename(temporary, path);
-});
-
-const resolveSelectedOriginEffect = Effect.fnUntraced(function* (options: {
-  readonly home?: string;
-  readonly registry?: string;
-  readonly durableOrigin?: string;
-  readonly command?: string;
-}) {
-  if (options.durableOrigin) return yield* parseOrigin(options.durableOrigin);
-  const config = yield* readConfigEffect(options.home);
-  if (options.registry) {
-    if (options.registry.includes("://")) return yield* parseOrigin(options.registry);
-    const aliased = config.registryAliases?.[options.registry];
-    if (!aliased) return yield* new RegistryAliasNotFound({ name: options.registry });
-    return aliased;
-  }
-  if (process.env.SKIT_SERVER_URL) return yield* parseOrigin(process.env.SKIT_SERVER_URL);
-  if (config.defaultRegistry) {
-    const defaultOrigin = config.registryAliases?.[config.defaultRegistry];
-    if (defaultOrigin) return defaultOrigin;
-  }
-  const origins = Object.keys(config.servers).sort();
-  if (origins.length === 1) return origins[0];
-  if (origins.length > 1)
-    return yield* new RegistrySelectionAmbiguous({
-      origins,
-      command: `${options.command ?? "skit <command>"} --registry <alias-or-origin>`,
-    });
-  return undefined;
 });
 
 export const resolveAuthEffect = Effect.fnUntraced(function* (
@@ -206,84 +121,39 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
   RegistryConfigurationError,
   FileSystem.FileSystem | SkitConfiguration
 > {
-  const config = yield* readConfigEffect(home);
-  const origin = yield* resolveSelectedOriginEffect({ home, registry, durableOrigin, command });
-  const stored = origin ? config.servers[origin] : undefined;
-  const environmentOrigin = process.env.SKIT_SERVER_URL
-    ? yield* parseOrigin(process.env.SKIT_SERVER_URL)
-    : undefined;
-  const environmentToken = process.env.SKIT_TOKEN;
-  const useEnvironment = Boolean(environmentToken && environmentOrigin === origin);
-  return {
-    origin,
-    token: useEnvironment ? environmentToken : stored?.token,
-    tokenId: useEnvironment ? undefined : stored?.tokenId,
-    tokenPrefix: useEnvironment ? environmentToken?.slice(0, 18) : stored?.tokenPrefix,
-    scopes: useEnvironment ? undefined : stored?.scopes,
-    expiresAt: useEnvironment ? undefined : stored?.expiresAt,
-    source: useEnvironment ? "environment" : stored ? "stored" : "none",
-  };
+  const accounts = yield* readAccounts(home);
+  return yield* accounts.credential(
+    yield* accounts.select(registry, "ambient", { durableOrigin, command }),
+  );
 });
-
-const validateRegistryAlias = (name: string) =>
-  /^[a-z][a-z0-9-]*$/.test(name)
-    ? Effect.succeed(name)
-    : Effect.fail(new RegistryAliasInvalid({ name }));
 
 export const listRegistryRemotesEffect = Effect.fn("Registry.listRemotes")(function* (
   home?: string,
 ) {
-  const config = yield* readConfigEffect(home);
-  return Object.entries(config.registryAliases ?? {}).map(([name, origin]) => ({
-    name,
-    origin,
-    isDefault: config.defaultRegistry === name,
-  }));
+  return (yield* readAccounts(home)).remotes();
 });
 
 export const addRegistryRemoteEffect = Effect.fn("Registry.addRemote")(
   function* (name: string, originInput: string, home?: string) {
-    yield* validateRegistryAlias(name);
-    const origin = yield* parseOrigin(originInput);
-    const config = yield* readConfigEffect(home);
-    if (config.registryAliases?.[name]) return yield* new RegistryAliasConflict({ name });
-    const next: AuthConfig = {
-      ...config,
-      registryAliases: { ...config.registryAliases, [name]: origin },
-    };
-    yield* writeConfigEffect(next, home);
-    return { name, origin, isDefault: false } satisfies RegistryRemote;
+    const result = yield* (yield* readAccounts(home)).addAlias(name, originInput);
+    yield* writeConfigEffect(result.config, home);
+    return result.remote;
   },
   (effect, _name, _origin, home) => withConfigurationWriter(home, effect),
 );
-
 export const defaultRegistryRemoteEffect = Effect.fn("Registry.defaultRemote")(
   function* (name: string, home?: string) {
-    yield* validateRegistryAlias(name);
-    const config = yield* readConfigEffect(home);
-    const origin = config.registryAliases?.[name];
-    if (!origin) return yield* new RegistryAliasNotFound({ name });
-    yield* writeConfigEffect({ ...config, defaultRegistry: name }, home);
-    return { name, origin, isDefault: true } satisfies RegistryRemote;
+    const result = yield* (yield* readAccounts(home)).setDefault(name);
+    yield* writeConfigEffect(result.config, home);
+    return result.remote;
   },
   (effect, _name, home) => withConfigurationWriter(home, effect),
 );
-
 export const removeRegistryRemoteEffect = Effect.fn("Registry.removeRemote")(
   function* (name: string, home?: string) {
-    yield* validateRegistryAlias(name);
-    const config = yield* readConfigEffect(home);
-    if (!config.registryAliases?.[name]) return yield* new RegistryAliasNotFound({ name });
-    const { [name]: removed, ...registryAliases } = config.registryAliases;
-    const { defaultRegistry: _defaultRegistry, ...configWithoutDefault } = config;
-    yield* writeConfigEffect(
-      config.defaultRegistry === name
-        ? { ...configWithoutDefault, registryAliases }
-        : { ...config, registryAliases },
-      home,
-      { promoteSoleRegistry: false },
-    );
-    return { name, origin: removed, isDefault: false } satisfies RegistryRemote;
+    const result = yield* (yield* readAccounts(home)).removeAlias(name);
+    yield* writeConfigEffect(result.config, home);
+    return result.remote;
   },
   (effect, _name, home) => withConfigurationWriter(home, effect),
 );
@@ -295,39 +165,16 @@ export const resolveRegistryLocatorEffect = Effect.fn("Registry.resolveLocator")
 ) {
   const match = input.match(/^skit:\/\/([^/]+)\/(.+)$/);
   if (match && options.registry) return yield* new RegistrySelectionConflict({ locator: input });
-  const config = yield* readConfigEffect(options.home);
+  const accounts = yield* readAccounts(options.home);
   if (match) {
     const origin = `https://${match[1]}`;
-    return { input, origin, token: config.servers[origin]?.token };
+    return { input, origin, token: accounts.stored(origin)?.token };
   }
   if (!options.registry) return { input };
   if (!input.startsWith("skit:"))
     return yield* new RegistrySelectionRequiresRegistrySource({ source: input });
-  const origin = options.registry.includes("://")
-    ? yield* parseOrigin(options.registry)
-    : config.registryAliases?.[options.registry];
-  if (!origin) return yield* new RegistryAliasNotFound({ name: options.registry });
-  const credential = config.servers[origin];
-  return { input, origin, token: credential?.token };
-});
-
-// URL syntax errors retain their generic command classification; programming defects do not.
-export const parseOrigin = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
-    Effect.map((url) => url.origin),
-    Effect.mapError(() => new RegistryOriginInvalid({ origin: input })),
-  );
-
-const validateAuthenticationOrigin = Effect.fnUntraced(function* (input: string) {
-  const origin = yield* parseOrigin(input).pipe(
-    Effect.mapError(() => new InsecureOrigin({ purpose: "authentication" })),
-  );
-  if (
-    !origin.startsWith("https://") &&
-    !/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin)
-  )
-    return yield* new InsecureOrigin({ purpose: "authentication" });
-  return origin;
+  const origin = yield* accounts.select(options.registry, "explicit");
+  return { input, origin, token: origin ? accounts.stored(origin)?.token : undefined };
 });
 
 /** Resolve a device-local login selector before asking the user for credentials. */
@@ -335,17 +182,7 @@ export const resolveLoginTargetEffect = Effect.fn("Auth.resolveLoginTarget")(fun
   selectedRegistry?: string,
   home?: string,
 ) {
-  const config = yield* readConfigEffect(home);
-  if (selectedRegistry?.includes("://"))
-    return yield* validateAuthenticationOrigin(selectedRegistry);
-  const name = selectedRegistry ?? config.defaultRegistry;
-  if (!name) return yield* new DefaultRegistryNotConfigured();
-  const origin = config.registryAliases?.[name];
-  if (!origin) {
-    if (selectedRegistry) return yield* new RegistryAliasNotFound({ name });
-    return yield* new DefaultRegistryNotConfigured();
-  }
-  return yield* validateAuthenticationOrigin(origin);
+  return yield* (yield* readAccounts(home)).loginTarget(selectedRegistry);
 });
 
 export function resolveAuthForOriginEffect(
@@ -358,28 +195,9 @@ export function resolveAuthForOriginEffect(
 > {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);
-    const environmentOrigin = process.env.SKIT_SERVER_URL
-      ? yield* parseOrigin(process.env.SKIT_SERVER_URL)
-      : undefined;
-    const environmentToken = process.env.SKIT_TOKEN;
-    if (environmentToken && environmentOrigin === origin)
-      return {
-        origin,
-        token: environmentToken,
-        tokenPrefix: environmentToken.slice(0, 18),
-        source: "environment",
-      };
-    const config = yield* readConfigEffect(home);
-    const stored = config.servers[origin];
-    return {
-      origin,
-      token: stored?.token,
-      tokenId: stored?.tokenId,
-      tokenPrefix: stored?.tokenPrefix,
-      scopes: stored?.scopes,
-      expiresAt: stored?.expiresAt,
-      source: stored ? "stored" : "none",
-    };
+    const environment = yield* environmentCredential(accountEnvironment(), origin);
+    if (environment) return environment;
+    return yield* (yield* readAccounts(home)).credential(origin);
   });
 }
 
@@ -390,15 +208,17 @@ export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
   alias?: string;
   home?: string;
 }) {
-  const auth = yield* resolveAuthForOriginEffect(input.origin, input.home);
+  const origin = yield* parseOrigin(input.origin);
+  if (yield* environmentCredential(accountEnvironment(), origin)) return undefined;
+  const accounts = yield* readAccounts(input.home);
+  const auth = yield* accounts.credential(origin);
   if (!auth.token || !auth.scopes || !input.scopes.every((scope) => auth.scopes?.includes(scope)))
     return undefined;
   if (auth.expiresAt) {
     const expiry = Date.parse(auth.expiresAt);
     if (!Number.isFinite(expiry) || expiry <= (yield* Clock.currentTimeMillis)) return undefined;
   }
-  const config = yield* readConfigEffect(input.home);
-  if (input.alias && config.registryAliases?.[input.alias] !== input.origin) return undefined;
+  if (input.alias && !accounts.hasAlias(input.alias, input.origin)) return undefined;
   const http = yield* (yield* RegistryHttp).client;
   const response = yield* http
     .execute(
@@ -423,16 +243,14 @@ export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
     )
       return yield* new SignInFailed({ message: `Credential check failed (${response.status})` });
   }
-  const alias =
-    input.alias ??
-    Object.entries(config.registryAliases ?? {}).find(([, origin]) => origin === input.origin)?.[0];
+  const alias = input.alias ?? accounts.aliasesOf(input.origin)[0];
   return {
     origin: input.origin,
     tokenPrefix: auth.tokenPrefix ?? "",
     scopes: auth.scopes,
     ...(auth.expiresAt ? { expiresAt: auth.expiresAt } : {}),
     ...(alias ? { alias } : {}),
-    ...(config.defaultRegistry ? { defaultRegistry: config.defaultRegistry } : {}),
+    ...(accounts.defaultRegistry ? { defaultRegistry: accounts.defaultRegistry } : {}),
     alreadyAuthenticated: true,
     credentialPath: yield* authPath(input.home),
   };
@@ -442,55 +260,8 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
   home?: string,
   selectedRegistry?: string,
 ) {
-  const config = yield* readConfigEffect(home);
-  const selectedOrigin = selectedRegistry
-    ? selectedRegistry.includes("://")
-      ? yield* parseOrigin(selectedRegistry)
-      : config.registryAliases?.[selectedRegistry]
-    : undefined;
-  if (selectedRegistry && !selectedOrigin)
-    return yield* new RegistryAliasNotFound({ name: selectedRegistry });
-  const defaultOrigin = config.defaultRegistry
-    ? config.registryAliases?.[config.defaultRegistry]
-    : undefined;
-  const now = yield* Clock.currentTimeMillis;
-  const credentials: AuthStatusCredential[] = Object.entries(config.servers)
-    .filter(([origin]) => !selectedOrigin || origin === selectedOrigin)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([origin, credential]) => ({
-      origin,
-      aliases: Object.entries(config.registryAliases ?? {})
-        .filter(([, value]) => value === origin)
-        .map(([name]) => name)
-        .sort(),
-      tokenPrefix: credential.tokenPrefix,
-      scopes: credential.scopes,
-      ...(credential.expiresAt ? { expiresAt: credential.expiresAt } : {}),
-      expiry: credential.expiresAt ? ("known" as const) : ("unknown" as const),
-      expired: credential.expiresAt ? Date.parse(credential.expiresAt) <= now : false,
-      isDefault: defaultOrigin === origin,
-      source: "stored" as const,
-    }));
-  const environmentOrigin = process.env.SKIT_SERVER_URL
-    ? yield* parseOrigin(process.env.SKIT_SERVER_URL)
-    : undefined;
-  const environmentToken = process.env.SKIT_TOKEN;
-  if (
-    environmentOrigin &&
-    environmentToken &&
-    (!selectedOrigin || selectedOrigin === environmentOrigin)
-  )
-    credentials.push({
-      origin: environmentOrigin,
-      aliases: [],
-      tokenPrefix: environmentToken.slice(0, 18),
-      scopes: [],
-      expiry: "unknown",
-      expired: false,
-      isDefault: defaultOrigin === environmentOrigin,
-      source: "environment",
-    });
-  return { credentials };
+  const accounts = yield* readAccounts(home);
+  return yield* accounts.status(selectedRegistry, yield* Clock.currentTimeMillis);
 });
 
 /**
@@ -513,14 +284,9 @@ export const loginEffect = Effect.fn("Auth.login")(
     home?: string;
   }) {
     const origin = yield* validateAuthenticationOrigin(input.origin);
-    const config = yield* readConfigEffect(input.home);
-    if (input.alias) {
-      yield* validateRegistryAlias(input.alias);
-      const existingAlias = config.registryAliases?.[input.alias];
-      if (existingAlias && existingAlias !== origin)
-        return yield* new RegistryAliasConflict({ name: input.alias });
-    }
-    const existing = config.servers[origin];
+    const accounts = yield* readAccounts(input.home);
+    yield* accounts.checkLoginAlias(origin, input.alias);
+    const existing = accounts.stored(origin);
     const http = yield* (yield* RegistryHttp).client;
     const send = (
       url: URL,
@@ -686,28 +452,8 @@ export const loginEffect = Effect.fn("Auth.login")(
     if (Result.isFailure(creation)) return yield* Effect.fail(creation.failure);
     if (!created) return yield* new SignInFailed({ message: "Credential creation failed" });
 
-    // The decoded config is the file's shape, not a scratch object: build the next one.
-    const firstRegistry = Object.keys(config.servers).length === 0 && !config.defaultRegistry;
-    const existingOriginAlias = Object.entries(config.registryAliases ?? {}).find(
-      ([, value]) => value === origin,
-    )?.[0];
-    let initialAlias = input.alias ?? existingOriginAlias ?? "default";
-    for (
-      let suffix = 2;
-      config.registryAliases?.[initialAlias] && config.registryAliases[initialAlias] !== origin;
-      suffix += 1
-    )
-      initialAlias = `default-${suffix}`;
-    const configuredAlias = input.alias ?? (firstRegistry ? initialAlias : undefined);
-    const signedIn: AuthConfig = {
-      ...config,
-      ...(configuredAlias
-        ? { registryAliases: { ...config.registryAliases, [configuredAlias]: origin } }
-        : {}),
-      ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
-      servers: { ...config.servers, [origin]: created },
-    };
-    const stored = yield* Effect.result(writeConfigEffect(signedIn, input.home));
+    const signedIn = accounts.signedIn(origin, created, input.alias);
+    const stored = yield* Effect.result(writeConfigEffect(signedIn.config, input.home));
     if (Result.isFailure(stored)) {
       const cleanup = yield* revoke(created);
       unsaved = undefined;
@@ -732,8 +478,8 @@ export const loginEffect = Effect.fn("Auth.login")(
       scopes: created.scopes,
       ...(created.expiresAt ? { expiresAt: created.expiresAt } : {}),
       ...(warning ? { warning } : {}),
-      ...(configuredAlias ? { alias: configuredAlias } : {}),
-      ...(firstRegistry ? { defaultRegistry: initialAlias } : {}),
+      ...(signedIn.alias ? { alias: signedIn.alias } : {}),
+      ...(signedIn.defaultRegistry ? { defaultRegistry: signedIn.defaultRegistry } : {}),
       alreadyAuthenticated: false,
       credentialPath: yield* authPath(input.home),
     };
@@ -749,23 +495,9 @@ export const loginEffect = Effect.fn("Auth.login")(
  */
 export const logoutEffect = Effect.fn("Auth.logout")(
   function* (home?: string, selectedOrigin?: string) {
-    const config = yield* readConfigEffect(home);
-    const origins = Object.keys(config.servers).sort();
-    const origin = selectedOrigin
-      ? selectedOrigin.includes("://")
-        ? yield* parseOrigin(selectedOrigin)
-        : config.registryAliases?.[selectedOrigin]
-      : origins.length === 1
-        ? origins[0]
-        : origins.length > 1
-          ? yield* new RegistrySelectionAmbiguous({
-              origins,
-              command: "skit auth logout <origin-or-alias>",
-            })
-          : undefined;
-    if (selectedOrigin && !origin)
-      return yield* new RegistryAliasNotFound({ name: selectedOrigin });
-    const credential = origin ? config.servers[origin] : undefined;
+    const accounts = yield* readAccounts(home);
+    const origin = yield* accounts.select(selectedOrigin, "logout");
+    const credential = origin ? accounts.stored(origin) : undefined;
     if (!origin || !credential) return yield* new NoStoredCredentials();
     const http = yield* (yield* RegistryHttp).client;
     const client = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
@@ -795,8 +527,7 @@ export const logoutEffect = Effect.fn("Auth.logout")(
         message: `Logout failed (${response.status}): ${detail}`,
       });
     }
-    const { [origin]: _revoked, ...servers } = config.servers;
-    yield* writeConfigEffect({ ...config, servers }, home);
+    yield* writeConfigEffect(accounts.signedOut(origin), home);
     return { origin, revoked: ok };
   },
   (effect, home, _selectedOrigin) => withConfigurationWriter(home, effect),

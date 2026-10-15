@@ -228,6 +228,15 @@ remain visible to the command tree and ultimately fail the executable's typechec
 The full command environment remains available to contract generators and tests that
 exercise multiple command families. It is not the default environment for each command.
 
+Registry account rules live in `RegistryAccounts`, over one decoded credential snapshot and an
+injected environment credential. The account book owns selection policies, credential precedence,
+alias allocation/default promotion, account edits and status facts. Ambient selection honors the
+environment and default; logout selects stored accounts independently; login requires an explicit
+origin, alias or configured default. Auth workflows retain filesystem persistence, transport,
+writer scopes and login resource cleanup. Selection and credential lookup, including login reuse,
+share one file read. Explicit-origin environment credentials still bypass an unusable credential
+file. Account edits strip legacy `activeOrigin`; removing a default alias never recreates it.
+
 ## Validation
 
 Boundary tests run a real parsed listing while another fiber holds the writer and exercise
