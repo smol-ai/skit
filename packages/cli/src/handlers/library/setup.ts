@@ -20,17 +20,12 @@ import {
   setupStepPlan,
   type SetupStepPlan,
 } from "../../presentation/setup-steps.js";
-import {
-  readSetupMachineConfig,
-  setupRepositoryDecisions,
-  runSetup,
-  type SetupOptions,
-} from "../../workflows/library/setup.js";
+import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
 import { applySetupPlan, type SetupApproval } from "../../workflows/library/setup-apply.js";
 import type { SetupLocalCustodyOptions } from "../../workflows/library/setup-local-custody.js";
 import type { SetupResult } from "../../workflows/library/setup-contract.js";
 import { result } from "../contracts.js";
-import { LibraryStore } from "@smolai/skit-core";
+import { LibraryStore, MachineSettings } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupDiscoveredSkillChoices } from "../../presentation/setup-skills.js";
@@ -67,7 +62,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly dryRun: boolean;
   readonly workDirFlag?: string;
 }) {
-  const configured = yield* readSetupMachineConfig(input.options.libraryHome);
+  const configured = yield* MachineSettings.read(input.options.libraryHome);
   const roots = input.workDirFlag ? [resolve(input.workDirFlag)] : [];
   let persistRoots = Boolean(input.workDirFlag) && !input.dryRun;
   let setupOptions: SetupOptions = {
@@ -119,7 +114,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       scanDecidedRepositories: true,
     };
     const configuredDecisions = new Map(
-      setupRepositoryDecisions(configured).map((decision) => [decision.path, decision.status]),
+      configured.repositories.map((decision) => [decision.path, decision.status]),
     );
     const decisionsChanged = repositoryDecisions.some(
       (decision) => configuredDecisions.get(decision.path) !== decision.status,

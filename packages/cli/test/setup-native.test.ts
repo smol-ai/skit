@@ -14,6 +14,7 @@ import {
   makeAcquisitionId,
   makeCollectionId,
   makeMachineId,
+  MachineSettings,
   makeProjectionId,
   makeRetainedCopyId,
   makeSkillId,
@@ -23,10 +24,8 @@ import {
   classifySetupOnboarding,
   classifyObservedOwner,
   computeSkillsLockCompatibleHash,
-  readSetupMachineConfig,
   revalidateSetupPlan,
   runSetup,
-  updateSetupRepositoryDecision,
   type SetupOptions,
 } from "../src/workflows/library/setup.js";
 import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
@@ -177,9 +176,8 @@ it.effect("persists repository roots only when requested and reuses the machine 
       repositoryDecisions: [],
       persisted: true,
     });
-    const persisted = yield* readSetupMachineConfig(f.libraryHome);
+    const persisted = yield* MachineSettings.read(f.libraryHome);
     expect(persisted).toMatchObject({
-      schemaVersion: 4,
       machineId: first.machineConfig.machineId,
       displayName: "Test machine",
       discoveryRoots: [f.work],
@@ -284,17 +282,31 @@ it.effect("scans only repositories watched by machine configuration", () =>
 it.effect("watches, ignores, and forgets a repository decision", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    yield* updateSetupRepositoryDecision(f.libraryHome, f.repository, "watched");
-    expect(yield* readSetupMachineConfig(f.libraryHome)).toMatchObject({
-      schemaVersion: 4,
+    yield* MachineSettings.setRepositoryDecision(
+      f.libraryHome,
+      f.repository,
+      "watched",
+      "Test machine",
+    );
+    expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
       repositories: [{ path: f.repository, status: "watched" }],
     });
-    yield* updateSetupRepositoryDecision(f.libraryHome, f.repository, "ignored");
-    expect(yield* readSetupMachineConfig(f.libraryHome)).toMatchObject({
+    yield* MachineSettings.setRepositoryDecision(
+      f.libraryHome,
+      f.repository,
+      "ignored",
+      "Test machine",
+    );
+    expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
       repositories: [{ path: f.repository, status: "ignored" }],
     });
-    yield* updateSetupRepositoryDecision(f.libraryHome, f.repository, undefined);
-    expect(yield* readSetupMachineConfig(f.libraryHome)).toMatchObject({ repositories: [] });
+    yield* MachineSettings.setRepositoryDecision(
+      f.libraryHome,
+      f.repository,
+      undefined,
+      "Test machine",
+    );
+    expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({ repositories: [] });
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 

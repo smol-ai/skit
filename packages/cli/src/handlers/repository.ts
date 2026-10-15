@@ -7,11 +7,8 @@ import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import { Renderer } from "../presentation/renderer.js";
-import {
-  readSetupMachineConfig,
-  setupRepositoryDecisions,
-  updateSetupRepositoryDecision,
-} from "../workflows/library/setup.js";
+import { MachineSettings } from "@smolai/skit-core";
+import { hostname } from "node:os";
 import { result } from "./contracts.js";
 
 const path = Argument.String("path");
@@ -27,10 +24,11 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const repository = resolve(input.path);
-          const config = yield* updateSetupRepositoryDecision(
+          const config = yield* MachineSettings.setRepositoryDecision(
             selectedHome,
             repository,
             name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
+            hostname(),
           );
           yield* renderer.result(
             result("repositoryPolicy", {
@@ -66,12 +64,12 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
     return yield* handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const config = yield* readSetupMachineConfig(selectedHome);
+        const config = yield* MachineSettings.read(selectedHome);
         yield* renderer.result(
           result("repositoryPolicy", {
             action: "list",
             path: "",
-            repositories: [...setupRepositoryDecisions(config)],
+            repositories: [...config.repositories],
           }),
         );
       }),

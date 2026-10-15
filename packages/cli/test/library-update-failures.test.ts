@@ -11,6 +11,7 @@ import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
+import { silentLibraryProgressLayer } from "../src/library-application/progress.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { result } from "../src/handlers/contracts.js";
@@ -75,6 +76,23 @@ const fixture = Effect.gen(function* () {
   };
   return { fs, root, home, urls, bodies, requests, before, run, options, archive };
 });
+
+it.effect("stops the batch when shared machine settings cannot be read", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+    yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
+    const before = yield* f.fs.readFileString(join(f.home, "state.json"));
+    const error = yield* f
+      .run(
+        updateSubjectsEffect(f.before, f.options).pipe(Effect.provide(silentLibraryProgressLayer)),
+      )
+      .pipe(Effect.flip);
+    assert.strictEqual(error._tag, "MachineSettingsUnusable");
+    assert.deepStrictEqual(f.requests, [f.urls[0]]);
+    assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
 
 it.effect(
   "continues after invalid imports and cleanup failures, preserving successful updates",

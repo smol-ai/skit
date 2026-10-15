@@ -347,7 +347,8 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
                 Predicate.isTagged(error, "InvalidLibraryState") ||
                 Predicate.isTagged(error, "LibraryBusy") ||
                 Predicate.isTagged(error, "LibraryChanged") ||
-                Predicate.isTagged(error, "ContentAddressCollision")
+                Predicate.isTagged(error, "ContentAddressCollision") ||
+                Predicate.isTagged(error, "MachineSettingsUnusable")
               )
                 return false;
               if (isPlatformError(error)) {

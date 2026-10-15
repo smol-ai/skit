@@ -3,21 +3,15 @@ import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../artifact/skit.js";
 import { InvalidLibraryState } from "../failures.js";
 import { copyLocalTreeEffect } from "../platform/copy-tree.js";
-import { writeRawAtomicEffect } from "../platform/atomic-write.js";
 import {
   makeAcquisitionId,
   makeCollectionId,
-  makeMachineId,
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
   MachineId,
 } from "./entity-ids.js";
-import {
-  currentMachineDocument,
-  MachineDocumentJson,
-  MachineDocumentV4,
-} from "./machine-document.js";
+import * as MachineSettings from "./machine-settings.js";
 import { acquisitionObservations } from "./acquisition-evidence.js";
 import {
   Acquisition,
@@ -44,50 +38,6 @@ import {
 import type { SkillsShProvenanceObservation } from "./store/state-schema.js";
 import type { Digest } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-const readOrCreateMachineId = Effect.fn("Library.readOrCreateMachineId")(function* (
-  libraryHome: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = join(libraryHome, "machine.json");
-  const text = yield* fs
-    .readFileString(path)
-    .pipe(
-      Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
-      ),
-    );
-  if (text !== undefined) {
-    const document = yield* Schema.decodeUnknownEffect(MachineDocumentJson)(text);
-    if (document.machineId !== undefined) return document.machineId;
-    const machineId = makeMachineId();
-    const upgraded = yield* Schema.encodeEffect(
-      Schema.fromJsonString(MachineDocumentV4, { space: 2 }),
-    )(
-      currentMachineDocument({
-        machineId,
-        displayName: document.displayName ?? "SKIT machine",
-        discoveryRoots: document.discoveryRoots,
-        repositories: document.repositories,
-      }),
-    );
-    yield* writeRawAtomicEffect(path, `${upgraded}\n`);
-    return machineId;
-  }
-  const machineId = makeMachineId();
-  const created = yield* Schema.encodeEffect(
-    Schema.fromJsonString(MachineDocumentV4, { space: 2 }),
-  )(
-    currentMachineDocument({
-      machineId,
-      displayName: "SKIT machine",
-      discoveryRoots: [],
-      repositories: [],
-    }),
-  );
-  yield* writeRawAtomicEffect(path, `${created}\n`);
-  return machineId;
-});
 
 export class ObservedImportInvalid
   extends Data.TaggedError("Library.ObservedImportInvalid")<{
@@ -218,7 +168,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   request: PersistPreparedRequest,
 ) {
   const store = yield* LibraryStore;
-  const machineId = request.machineId ?? (yield* readOrCreateMachineId(store.home));
+  const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(store.home));
   const base = yield* store.load;
   const state = structuredClone(base);
   const source =
@@ -444,7 +394,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
     );
     yield* retainLocalTreeEffect(prepared.staged, store.originalsPath, prepared.digest, true);
     const fact = prepared.facts[0]!;
-    const machineId = yield* readOrCreateMachineId(store.home);
+    const machineId = yield* MachineSettings.ensureIdentity(store.home);
     const retainedCopy = state.retained_copies.find(
       (candidate) => candidate.digest === prepared.digest,
     );

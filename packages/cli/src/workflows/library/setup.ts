@@ -8,13 +8,6 @@ import { collectBrokenLinks, SetupDiscovery } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-export {
-  SetupConfigUnusable,
-  readSetupMachineConfig,
-  updateSetupRepositoryDecision,
-  setupDiscoveryRoots,
-  setupRepositoryDecisions,
-} from "./setup-config.js";
 export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";

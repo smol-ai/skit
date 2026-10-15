@@ -1,0 +1,159 @@
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem } from "effect";
+import { join } from "node:path";
+import * as MachineSettings from "../src/library/machine-settings.js";
+import { LegacyMachineId, makeMachineId, migratedMachineId } from "../src/library/entity-ids.js";
+import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import { skitLayer } from "../src/platform/layer.js";
+
+it.effect("reading missing settings creates no files or directories", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-read-" });
+    const home = join(root, "missing");
+    const settings = yield* MachineSettings.read(home);
+    assert.strictEqual(settings.machineId, undefined);
+    assert.deepStrictEqual(settings.discoveryRoots, []);
+    assert.deepStrictEqual(settings.repositories, []);
+    assert.strictEqual(settings.repositoryDecisionsInitialized, false);
+    assert.strictEqual(yield* fs.exists(home), false);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const version of [1, 2, 3] as const) {
+  it.effect(`reads v${version} without writing, preserving its identity and discovery roots`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-legacy-" });
+      const legacyId = LegacyMachineId.make("018f47de-6c9a-7b21-8000-000000000001");
+      const machineId = makeMachineId();
+      const document =
+        version === 1
+          ? { schemaVersion: 1, repositoryRoots: ["/saved"] }
+          : {
+              schemaVersion: version,
+              machineId: version === 2 ? legacyId : machineId,
+              displayName: "Existing name",
+              repositoryRoots: ["/saved"],
+            };
+      const path = join(home, "machine.json");
+      const bytes = JSON.stringify(document);
+      yield* fs.writeFileString(path, bytes);
+      const settings = yield* MachineSettings.read(home);
+      assert.deepStrictEqual(settings.discoveryRoots, ["/saved"]);
+      assert.strictEqual(settings.repositoryDecisionsInitialized, false);
+      assert.strictEqual(yield* fs.readFileString(path), bytes);
+      const identity = yield* MachineSettings.ensureIdentity(home);
+      if (version !== 1) {
+        assert.strictEqual(
+          identity,
+          version === 2 ? migratedMachineId(legacyId, legacyId) : machineId,
+        );
+        assert.strictEqual(yield* fs.readFileString(path), bytes);
+      }
+      yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched", "Replacement name");
+      const updated = yield* MachineSettings.read(home);
+      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 4);
+      assert.strictEqual(updated.machineId, identity);
+      assert.strictEqual(updated.displayName, version === 1 ? "SKIT machine" : "Existing name");
+      assert.deepStrictEqual(updated.discoveryRoots, ["/saved"]);
+      assert.deepStrictEqual(updated.repositories, [{ path: "/repo", status: "watched" }]);
+      assert.strictEqual(updated.repositoryDecisionsInitialized, true);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
+
+it.effect(
+  "serializes settings changes sharing a writer, without opening Library state or history",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-concurrent-" });
+      // Configuration remains usable even if Library metadata is corrupt.
+      const corruptState = "not a Library document\n";
+      yield* fs.writeFileString(join(home, "state.json"), corruptState);
+      const [identity, discovery, repository] = yield* withLibraryWriterLock(
+        home,
+        Effect.all(
+          [
+            MachineSettings.ensureIdentity(home),
+            MachineSettings.updateDiscovery(home, {
+              discoveryRoots: ["/second", "/first", "/second"],
+              repositories: [{ path: "/one", status: "watched" }],
+              displayName: "Discovery name",
+            }),
+            MachineSettings.setRepositoryDecision(home, "/two", "ignored", "Repository name"),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
+      const final = yield* MachineSettings.read(home);
+      assert.strictEqual(discovery.machineId, identity);
+      assert.strictEqual(repository.machineId, identity);
+      assert.strictEqual(final.machineId, identity);
+      assert.deepStrictEqual(final.discoveryRoots, ["/first", "/second"]);
+      assert.deepStrictEqual(final.repositories, [
+        { path: "/one", status: "watched" },
+        { path: "/two", status: "ignored" },
+      ]);
+      yield* MachineSettings.updateDiscovery(home, { displayName: "Another name" });
+      assert.deepStrictEqual(
+        (yield* MachineSettings.read(home)).discoveryRoots,
+        final.discoveryRoots,
+      );
+      assert.deepStrictEqual((yield* MachineSettings.read(home)).repositories, final.repositories);
+      yield* MachineSettings.setRepositoryDecision(home, "/one", undefined, "Another name");
+      assert.deepStrictEqual((yield* MachineSettings.read(home)).repositories, [
+        { path: "/two", status: "ignored" },
+      ]);
+      assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), corruptState);
+      assert.strictEqual(yield* fs.exists(join(home, "audit.jsonl")), false);
+      assert.strictEqual(yield* fs.exists(join(home, ".lock")), false);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("refuses an occupied root lock before replacing settings", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-locked-" });
+    yield* MachineSettings.ensureIdentity(home);
+    const path = join(home, "machine.json");
+    const before = yield* fs.readFileString(path);
+    yield* fs.writeFileString(join(home, ".lock"), "4242@elsewhere token\n");
+    const error = yield* MachineSettings.setRepositoryDecision(
+      home,
+      "/repo",
+      "ignored",
+      "New name",
+    ).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "LibraryBusy");
+    assert.strictEqual(yield* fs.readFileString(path), before);
+    assert.strictEqual(yield* fs.readFileString(join(home, ".lock")), "4242@elsewhere token\n");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const content of ["invalid JSON", JSON.stringify({ schemaVersion: 99 })]) {
+  it.effect(`refuses to replace invalid or unsupported settings: ${content}`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-invalid-" });
+      const path = join(home, "machine.json");
+      yield* fs.writeFileString(path, content);
+      const error = yield* MachineSettings.ensureIdentity(home).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "MachineSettingsUnusable");
+      assert.strictEqual(yield* fs.readFileString(path), content);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
+
+it.effect("does not interpret an unreadable document as missing settings", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-unreadable-" });
+    const path = join(home, "machine.json");
+    yield* fs.makeDirectory(path);
+    const error = yield* MachineSettings.ensureIdentity(home).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "MachineSettingsUnusable");
+    assert.strictEqual((yield* fs.stat(path)).type, "Directory");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

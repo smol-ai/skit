@@ -16,22 +16,14 @@ import {
   SourceIdentity,
   SourceProcess,
   HarnessName,
-  type CurrentMachineDocument,
+  MachineSettings,
   type HarnessName as Harness,
   type LibraryState,
 } from "@smolai/skit-core";
-import { withConfigurationWriter } from "../../configuration-writer.js";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import { readableHarnessRoots } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
-import {
-  readSetupMachineConfig,
-  writeSetupMachineConfig,
-  setupDiscoveryRoots,
-  setupRepositoryDecisions,
-  readRepositoryConfig,
-  repositoryPathExcluded,
-} from "./setup-config.js";
+import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
 import type {
   SetupBrokenLink,
@@ -596,14 +588,12 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
 });
 
 /** The repository roots and decisions a setup run observes: its options over the saved config. */
-const setupMachineScope = (options: SetupOptions, prior: CurrentMachineDocument) => {
+const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Settings) => {
   const discoveryRoots = [
-    ...new Set(
-      (options.repositoryRoots ?? setupDiscoveryRoots(prior)).map((path) => resolve(path)),
-    ),
+    ...new Set((options.repositoryRoots ?? prior.discoveryRoots).map((path) => resolve(path))),
   ].sort();
   const existingDecisions = new Map(
-    setupRepositoryDecisions(prior).map((decision) => [resolve(decision.path), decision.status]),
+    prior.repositories.map((decision) => [resolve(decision.path), decision.status]),
   );
   for (const decision of options.repositoryDecisions ?? [])
     existingDecisions.set(resolve(decision.path), decision.status);
@@ -611,28 +601,21 @@ const setupMachineScope = (options: SetupOptions, prior: CurrentMachineDocument)
 };
 
 /** Save the roots and repository decisions setup observes, creating this machine's identity. */
-export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(
-  function* (options: SetupOptions) {
-    const prior = yield* readSetupMachineConfig(options.libraryHome);
-    const { discoveryRoots, existingDecisions } = setupMachineScope(options, prior);
-    return yield* writeSetupMachineConfig(
-      options.libraryHome,
-      // Setup never clears saved discovery roots; an empty list only narrows this scan.
-      discoveryRoots.length ? discoveryRoots : setupDiscoveryRoots(prior),
-      [...existingDecisions]
-        .map(([path, status]) => ({ path, status }))
-        .sort((left, right) => left.path.localeCompare(right.path)),
-      prior,
-      options.machineDisplayName ?? hostname(),
-    );
-  },
-  (effect, options) => withConfigurationWriter(options.libraryHome, effect),
-);
+export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* (
+  options: SetupOptions,
+) {
+  return yield* MachineSettings.updateDiscovery(options.libraryHome, {
+    // An empty selection narrows this scan; it never clears saved discovery roots.
+    ...(options.repositoryRoots?.length ? { discoveryRoots: options.repositoryRoots } : {}),
+    repositories: options.repositoryDecisions,
+    displayName: options.machineDisplayName ?? hostname(),
+  });
+});
 
 export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (
   options: SetupOptions,
 ) {
-  const prior = yield* readSetupMachineConfig(options.libraryHome);
+  const prior = yield* MachineSettings.read(options.libraryHome);
   const { discoveryRoots, existingDecisions } = setupMachineScope(options, prior);
   const discovering =
     !options.scanDecidedRepositories ||

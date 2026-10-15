@@ -73,6 +73,15 @@ provide those paths to the protected program; they never re-read configuration.
 `ConfigProvider` injection therefore controls both the lock and the actual file writes,
 including commands without explicit home flags, without changing process globals.
 
+Core's `MachineSettings` module owns `machine.json` reads, identity creation, discovery updates,
+and repository decisions. Reads normalize supported document versions in memory without writing.
+Mutations load the latest settings under the root writer and replacement mutex, preserving identity
+and fields outside the requested change. They open no Library state and record no Library history.
+Import no longer handles machine-document encoding, and repository commands do not depend on setup.
+Setup retains the policy that an empty root selection narrows the scan without clearing saved roots.
+Failures to read shared machine settings stop an update batch rather than being treated as failures
+of an individual Source.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.
