@@ -66,6 +66,12 @@ Presentation derives no action categories from candidates, and changing display 
 redirect confirmation. Preparation writes nothing. Existing apply stages still revalidate under
 the writer, preserve exact alias consent, and run removals only after additions succeed.
 
+Setup discovery owns candidate directory enumeration, repository configuration, nearest-repository
+routing and Git inspection in `scanSetupLocations` and its private repository scanner. It merges
+filesystem and Git evidence into one hit per installed path, retaining filesystem hits with
+unavailable Git status when Git fails. The collector receives hits, configuration diagnostics and
+one discovery-completeness result; it does not interpret exclusions or combine provisional hits.
+
 Registry credential/alias and repository-decision mutations use the same root storage
 mutex through `withConfigurationWriter`, preserving exclusion with existing writers.
 This adapter does not open Library state or record Library history. Login questions run

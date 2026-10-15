@@ -296,11 +296,16 @@ const preservationStatus = (
   return { status, repository };
 };
 
-const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")(function* (
+const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
   repository: string,
-  localCandidates: readonly string[],
-  config: SetupRepositoryConfig | undefined,
+  candidates: readonly SkillHit[],
+  config: SetupRepositoryConfig,
 ) {
+  const localCandidates = candidates.filter(
+    (hit) =>
+      hit.repository === repository &&
+      !repositoryPathExcluded(config, relative(repository, hit.path)),
+  );
   const pathspecs = [
     ":(glob)**/SKILL.md",
     ...[...SUPPRESSED_NAMES.keys()].map((name) => `:(exclude,glob)**/${name}/**`),
@@ -314,10 +319,10 @@ const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")
     "--",
     ...pathspecs,
   ]);
-  if (Result.isFailure(trackedResult)) return { hits: [] as SkillHit[], complete: false };
+  if (Result.isFailure(trackedResult)) return { hits: localCandidates, complete: false };
   const tracked = new Set(gitPaths(trackedResult.success));
-  const localDocuments = localCandidates.map((path) =>
-    posix.join(relative(repository, path).split(sep).join(posix.sep), "SKILL.md"),
+  const localDocuments = localCandidates.map((hit) =>
+    posix.join(relative(repository, hit.path).split(sep).join(posix.sep), "SKILL.md"),
   );
   const documents = [...new Set([...tracked, ...localDocuments])]
     .filter((document) => !suppressedGitDocument(document))
@@ -353,7 +358,13 @@ const collectRepositorySkillHits = Effect.fn("Setup.collectRepositorySkillHits")
         : { status: "unavailable", repository },
     });
   }
-  return { hits, complete: Result.isSuccess(statusResult) };
+  // Keep filesystem evidence if Git cannot describe a copy; otherwise its status replaces
+  // the provisional unavailable status. Each installed path has one observation.
+  const byPath = new Map([...localCandidates, ...hits].map((hit) => [hit.path, hit]));
+  return {
+    hits: [...byPath.values()],
+    complete: Result.isSuccess(statusResult) && ["missing", "valid"].includes(config.status),
+  };
 });
 
 export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
@@ -392,6 +403,46 @@ export const collectHarnessRoots = (
   }
   return roots;
 };
+
+/** Discover selected locations, routing every copy to its nearest selected repository. */
+const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
+  walk: WalkResult,
+  harnessRoots: ReturnType<typeof collectHarnessRoots>,
+) {
+  const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
+  const roots = [
+    ...harnessRoots.map(({ root }) => root),
+    ...repositoryConfigs.flatMap((config) =>
+      [...PROJECT_COLLECTION_ROOTS, ...config.collections.map((entry) => entry.path)].map((path) =>
+        join(config.repository, ...path.split("/")),
+      ),
+    ),
+  ];
+  const directories = new Set([
+    ...walk.directories.filter(
+      (directory) => nearestRepository(directory, walk.repositories) === undefined,
+    ),
+    ...walk.repositories,
+  ]);
+  for (const root of new Set(roots))
+    for (const entry of yield* entriesOf(root))
+      if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
+        directories.add(join(root, entry.name));
+  const candidates = yield* collectSkillHits([...directories], walk.repositories);
+  const scans = yield* Effect.forEach(
+    repositoryConfigs,
+    (config) => scanSetupRepository(config.repository, candidates, config),
+    { concurrency: 8 },
+  );
+  return {
+    repositoryConfigs,
+    hits: [
+      ...candidates.filter((hit) => hit.repository === undefined),
+      ...scans.flatMap((scan) => scan.hits),
+    ],
+    complete: scans.every((scan) => scan.complete),
+  };
+});
 
 export const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
   roots: readonly { harness: Harness; root: string }[],
@@ -515,62 +566,15 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
         [...existingDecisions].filter(([, status]) => status === "watched").map(([path]) => path),
       );
   const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
-  const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
-  const repositoryConfigByPath = new Map(
-    repositoryConfigs.map((config) => [config.repository, config] as const),
-  );
   const harnessRoots = collectHarnessRoots(options.inventory, walk.repositories);
-  const library = yield* (yield* LibraryStore).load;
+  const store = yield* LibraryStore;
+  const library = yield* store.load;
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);
   const observedLibrary = yield* observeInventory(
     library,
     harnessRoots.map(({ harness, root }) => ({ harness, root })),
   );
-  const harnessSkillDirectories: string[] = [];
-  for (const { root } of harnessRoots)
-    for (const entry of yield* entriesOf(root))
-      if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
-        harnessSkillDirectories.push(join(root, entry.name));
-  for (const repository of walk.repositories) harnessSkillDirectories.push(repository);
-  for (const repository of walk.repositories)
-    for (const collectionRoot of [
-      ...PROJECT_COLLECTION_ROOTS,
-      ...(repositoryConfigByPath.get(repository)?.collections.map((entry) => entry.path) ?? []),
-    ]) {
-      const root = join(repository, ...collectionRoot.split("/"));
-      for (const entry of yield* entriesOf(root))
-        if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
-          harnessSkillDirectories.push(join(root, entry.name));
-    }
-  const filesystemDirectories = walk.directories.filter(
-    (directory) => nearestRepository(directory, walk.repositories) === undefined,
-  );
-  const filesystemHits = yield* collectSkillHits(
-    [...new Set([...filesystemDirectories, ...harnessSkillDirectories])],
-    walk.repositories,
-  ).pipe(
-    Effect.map((hits) =>
-      hits.filter(
-        (hit) =>
-          !hit.repository ||
-          !repositoryPathExcluded(
-            repositoryConfigByPath.get(hit.repository),
-            relative(hit.repository, hit.path),
-          ),
-      ),
-    ),
-  );
-  const repositoryScans = yield* Effect.forEach(
-    walk.repositories,
-    (repository) =>
-      collectRepositorySkillHits(
-        repository,
-        filesystemHits.filter((hit) => hit.repository === repository).map((hit) => hit.path),
-        repositoryConfigByPath.get(repository),
-      ),
-    { concurrency: 8 },
-  );
-  const hits = [...filesystemHits, ...repositoryScans.flatMap((scan) => scan.hits)];
+  const { repositoryConfigs, hits, complete } = yield* scanSetupLocations(walk, harnessRoots);
   const globalLockPath = options.skillsStateHome
     ? join(resolve(options.skillsStateHome), "skills", ".skill-lock.json")
     : join(resolve(options.inventory.home), ".agents", ".skill-lock.json");
@@ -592,7 +596,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     library,
     authoredCollections,
     observedLibrary,
-    repositoryScans,
+    discoveryComplete: complete,
     hits,
     locks,
   };

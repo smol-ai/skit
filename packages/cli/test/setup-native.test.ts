@@ -15,6 +15,7 @@ import {
   makeCollectionId,
   makeMachineId,
   MachineSettings,
+  SourceProcess,
   makeProjectionId,
   makeRetainedCopyId,
   makeSkillId,
@@ -29,7 +30,7 @@ import {
   type SetupOptions,
 } from "../src/workflows/library/setup.js";
 import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
-import { custodyAt } from "../src/workflows/library/setup-discovery.js";
+import { custodyAt, collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
 
 const skillDocument = (name: string) =>
   `---\nname: ${name}\ndescription: ${name} skill\n---\n\n# ${name}\n`;
@@ -475,6 +476,83 @@ it.effect("applies repository discovery exclusions and declared collection roots
         exclude: ["test/fixtures/**"],
         collections: [{ path: "custom/skills" }],
       },
+    ]);
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+for (const failure of ["ls-files", "status"] as const) {
+  it.effect(`keeps discovered repository copies visible when git ${failure} fails`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      for (const [directory, name] of [
+        [".agents/skills/local", "local"],
+        ["deep/tracked", "tracked"],
+      ]) {
+        const path = join(f.repository, directory);
+        yield* f.fs.makeDirectory(path, { recursive: true });
+        yield* f.fs.writeFileString(join(path, "SKILL.md"), skillDocument(name));
+      }
+      yield* git(f.repository, "add", ".");
+      yield* git(f.repository, "commit", "-qm", "repository copies");
+      const evidence = yield* collectSetupEvidence(f.options).pipe(
+        Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
+      );
+      expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
+      const process = yield* SourceProcess;
+      const observed = yield* runSetup(f.options).pipe(
+        Effect.provideService(SourceProcess, {
+          ...process,
+          output: (command, args, options) =>
+            command === "git" && args.includes(failure)
+              ? Effect.succeed({ exitCode: 1, stdout: new Uint8Array(), stderr: "fixture failure" })
+              : process.output(command, args, options),
+        }),
+        Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
+      );
+      expect(observed.scan.complete).toBe(false);
+      expect(observed.instances.map((item) => item.name).sort()).toEqual(
+        failure === "ls-files" ? ["local"] : ["local", "tracked"],
+      );
+      expect(
+        observed.instances.every(
+          (item) => item.git.status === "unavailable" && item.git.repository === f.repository,
+        ),
+      ).toBe(true);
+      expect(yield* f.fs.exists(join(f.libraryHome, "state.json"))).toBe(false);
+      expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
+    }).pipe(Effect.provide(testPlatformLayer)),
+  );
+}
+
+it.effect("routes configured copies to the nearest selected repository and its exclusions", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const nested = join(f.repository, "nested", "project");
+    yield* f.fs.makeDirectory(nested, { recursive: true });
+    yield* git(nested, "init", "-q");
+    for (const name of ["review", "blocked"]) {
+      const path = join(nested, "custom", name);
+      yield* f.fs.makeDirectory(path, { recursive: true });
+      yield* f.fs.writeFileString(join(path, "SKILL.md"), skillDocument(name));
+    }
+    yield* f.fs.writeFileString(
+      join(f.repository, "skit.config.json"),
+      JSON.stringify({
+        schema: "skit.config.v1",
+        discovery: { exclude: ["nested/**"], collections: [{ path: "nested/project/custom" }] },
+      }),
+    );
+    yield* f.fs.writeFileString(
+      join(nested, "skit.config.json"),
+      JSON.stringify({
+        schema: "skit.config.v1",
+        discovery: { exclude: ["custom/blocked"], collections: [] },
+      }),
+    );
+    const observed = yield* observeSetup({ ...f.options, repositoryRoots: [f.repository, nested] });
+    expect(observed.scan.complete).toBe(true);
+    expect(observed.instances.map((item) => [item.name, item.git])).toEqual([
+      ["review", { status: "untracked", repository: nested }],
     ]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

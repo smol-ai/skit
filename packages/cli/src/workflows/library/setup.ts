@@ -57,7 +57,7 @@ const observeSetup = Effect.fn("Library.setup")(
       harnessRoots,
       library,
       authoredCollections,
-      repositoryScans,
+      discoveryComplete,
       locks,
     } = evidence;
     const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
@@ -117,10 +117,7 @@ const observeSetup = Effect.fn("Library.setup")(
       },
       probes,
       scan: {
-        complete:
-          walk.complete &&
-          repositoryScans.every((scan) => scan.complete) &&
-          repositoryConfigs.every((config) => ["missing", "valid"].includes(config.status)),
+        complete: walk.complete && discoveryComplete,
         directoriesExamined: walk.directoriesExamined,
         repositorySearchDepth: 1,
         ...(missingRepositories.length ? { missingRepositories } : {}),
