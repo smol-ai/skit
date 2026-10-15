@@ -3,6 +3,7 @@ import {
   deterministicTreeHashEffect,
   inspectOwnershipMarkerEffect,
   LibraryStore,
+  libraryStateRevision,
   bindingSkillIds,
   currentSkillVersion,
   prepareObservedCollectionEffect,
@@ -20,9 +21,7 @@ import {
   type ProjectionId,
 } from "@smolai/skit-core";
 import { Data, Clock, Effect } from "effect";
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import type { InventoryRootOptions } from "../../projection/roots.js";
 import type {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
@@ -57,13 +56,6 @@ export class ProjectionRetentionStale
   readonly code = "CONFLICT" as const;
   readonly remediation = "Preview the Projection retention again.";
 }
-
-interface ProjectionRetentionOptions {
-  readonly roots: InventoryRootOptions;
-}
-
-const revision = (state: LibraryState) =>
-  createHash("sha256").update(canonicalJson(state)).digest("hex");
 
 const matchingSkill = Effect.fn("Library.ProjectionRetention.matchSkill")(function* (
   state: LibraryState,
@@ -105,9 +97,8 @@ const matchingProjection = Effect.fn("Library.ProjectionRetention.matchProjectio
   return matches[0]!;
 });
 
-export const planProjectionRetention = Effect.fn("Library.planProjectionRetention")(function* (
+const observeProjectionRetention = Effect.fn("Library.planProjectionRetention")(function* (
   state: LibraryState,
-  options: ProjectionRetentionOptions,
   query: string,
   selector: string,
 ) {
@@ -153,7 +144,7 @@ export const planProjectionRetention = Effect.fn("Library.planProjectionRetentio
     });
   }
   return {
-    revision: revision(state),
+    revision: libraryStateRevision(state),
     skill_id: skill.skill_id,
     skill_name: skill.name,
     previous_skill_version_id: previousVersion.skill_version_id,
@@ -177,22 +168,38 @@ const bindingForProjection = (
       (binding.scope.kind === "global" || resolve(binding.scope.root) === resolve(projection.root)),
   );
 
-export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetention")(function* (
-  initial: LibraryState,
-  options: ProjectionRetentionOptions,
+/** Capture the Library and observations once; callers only render or apply this operation. */
+export const prepareProjectionRetention = Effect.fn("Library.prepareProjectionRetention")(
+  function* (query: string, selector: string) {
+    const store = yield* LibraryStore;
+    const initial = yield* store.load;
+    const preview = yield* observeProjectionRetention(initial, query, selector);
+    return {
+      preview: structuredClone(preview),
+      apply: () => applyPreparedProjectionRetention(store.home, preview, query, selector),
+    };
+  },
+);
+
+const applyPreparedProjectionRetention = Effect.fn("Library.applyProjectionRetention")(function* (
+  home: string,
+  preview: ProjectionRetentionPlan,
   query: string,
   selector: string,
 ) {
-  const preview = yield* planProjectionRetention(initial, options, query, selector);
+  const store = yield* LibraryStore;
+  if (store.home !== home)
+    return yield* new ProjectionRetentionStale({
+      message: "Projection retention belongs to a different Library",
+    });
   return yield* withLibraryWriter(
     Effect.gen(function* () {
-      const store = yield* LibraryStore;
       const current = yield* store.load;
-      if (revision(current) !== preview.revision)
+      if (libraryStateRevision(current) !== preview.revision)
         return yield* new ProjectionRetentionStale({
           message: "Library state changed after Projection retention was previewed",
         });
-      const revalidated = yield* planProjectionRetention(current, options, query, selector);
+      const revalidated = yield* observeProjectionRetention(current, query, selector);
       if (canonicalJson(revalidated) !== canonicalJson(preview))
         return yield* new ProjectionRetentionStale({
           message: "Projection bytes changed after Projection retention was previewed",

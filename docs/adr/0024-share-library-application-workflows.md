@@ -163,6 +163,13 @@ removed workspaces. Removal delegates the identity-checked metadata transition a
 the Collection. Metadata codecs and raw writes stay private; callers supply lifecycle choices,
 while LibraryStore supplies storage without projection or home configuration plumbing.
 
+Projection retention exposes a prepared operation from a Skill query and projection selector.
+The operation loads its Library, captures a preview, and applies only against the same home,
+Library revision and observed copies under the writer. Observation helpers stay private; callers
+render the preview or apply the captured operation without passing state or projection roots.
+Display facts are copied separately from the captured plan, and revision checks use the shared
+Library state revision function. Retention and reconciliation preserve divergent copies.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.
