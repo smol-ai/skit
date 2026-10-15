@@ -129,7 +129,8 @@ const safeRelative = (path: string) =>
   !path.includes("\0") &&
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
 
-interface PreparedFact {
+/** Member facts from verified retained bytes; `sourcePath` is relative to the retained copy. */
+export interface RetainedSkillFact {
   readonly name: string;
   readonly sourcePath: string;
   readonly sourceDigest: Digest;
@@ -171,7 +172,7 @@ export const prepareObservedCollectionEffect = Effect.fn("Library.prepareObserve
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-observed-v4-" });
     const staged = join(workspace, "verbatim");
     if (skills[0]?.relativePath !== ".") yield* fs.makeDirectory(staged);
-    const facts: PreparedFact[] = [];
+    const facts: RetainedSkillFact[] = [];
     for (const skill of skills) {
       const path = join(staged, skill.relativePath);
       yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
@@ -208,7 +209,7 @@ const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
 interface PersistPreparedRequest extends ObservedImport {
   readonly retainedDigest: Digest;
-  readonly facts: readonly PreparedFact[];
+  readonly facts: readonly RetainedSkillFact[];
   readonly sourceIdentity?: SourceIdentity;
   readonly label?: string;
 }
@@ -265,6 +266,13 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     (candidate) => candidate.digest === request.retainedDigest,
   );
   const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
+  // Return the identity and facts of this retained copy, including on an unchanged import.
+  // These contain no scoped paths, so callers can consume them after preparation closes.
+  const receipt = {
+    retainedCopyId,
+    snapshotDigest: request.retainedDigest,
+    members: request.facts,
+  };
   const acquisition: Acquisition = {
     acquisition_id: makeAcquisitionId(),
     collection_id: collectionId,
@@ -291,7 +299,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     }) &&
     unchangedSkills.every((skill) => skill !== undefined)
   )
-    return { collection, skills: unchangedSkills };
+    return { collection, skills: unchangedSkills, ...receipt };
   const previousCopy = state.retained_copies.find(
     (copy) => copy.retained_copy_id === previous?.retained_copy_id,
   );
@@ -358,10 +366,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     skills: persistedSkills.map((skill) =>
       successor.skills.find((candidate) => candidate.skill_id === skill.skill_id)!,
     ),
+    ...receipt,
   };
 });
 
-/** Retain observed bytes while the caller holds Library write authority. */
+/** Retain observed bytes and return their receipt while the caller holds Library write authority. */
 export const retainObservedCollectionEffect = Effect.fn("Library.retainObservedCollection")(
   function* (request: ObservedImport) {
     const store = yield* LibraryStore;
@@ -530,7 +539,7 @@ export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
     true,
   );
   const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
-  const facts: PreparedFact[] = [];
+  const facts: RetainedSkillFact[] = [];
   for (const member of validated.descriptor.skills) {
     const identity = validationByName.get(member.name);
     if (identity === undefined)

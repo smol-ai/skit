@@ -125,6 +125,45 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("reports the retained package when its source disappears after publication", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-add-receipt-" });
+    const source = join(root, "source");
+    const home = join(root, "home");
+    const memberPath = "skills/review";
+    const bytes = "---\nname: review\ndescription: Review carefully\n---\nReview.\n";
+    yield* fs.makeDirectory(join(source, memberPath), { recursive: true });
+    yield* fs.writeFileString(join(source, memberPath, "SKILL.md"), bytes);
+    yield* fs.writeFileString(
+      join(source, "skit.json"),
+      JSON.stringify({ slug: "tools", skills: [{ name: "review", path: memberPath }] }),
+    );
+    yield* initializeLibraryMachine(home);
+    const store = yield* Effect.service(LibraryStore).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+    );
+    const added = yield* addLibrarySourceEffect(source).pipe(
+      Effect.provideService(LibraryStore, {
+        ...store,
+        publish: (next, base) =>
+          store.publish(next, base).pipe(Effect.andThen(fs.remove(source, { recursive: true }))),
+      }),
+    );
+    assert.strictEqual(yield* fs.exists(source), false);
+    assert.deepStrictEqual(added.skills, [{ name: "review", verbatim_path: memberPath }]);
+    const state = yield* store.load;
+    assert.strictEqual(state.retained_copies[0]?.retained_copy_id, added.retained_version_id);
+    assert.strictEqual(state.retained_copies[0]?.digest, added.snapshot_digest);
+    assert.strictEqual(
+      yield* fs.readFileString(
+        join(retainedTreePath(store.originalsPath, added.snapshot_digest), memberPath, "SKILL.md"),
+      ),
+      bytes,
+    );
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("retains the exact bytes of a direct SKILL.md URL", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
