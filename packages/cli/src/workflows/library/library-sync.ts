@@ -1,11 +1,10 @@
-import { emptyLibraryState, withLibraryWriter } from "@smolai/skit-core";
+import { withLibraryWriter } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
 import {
   canonicalJson,
   blendRestoredStateEffect,
   captureSnapshotArchiveEffect,
   currentLibraryManifest,
-  LibraryState,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
   prepareRestoreEffect,
@@ -15,15 +14,10 @@ import {
   type SnapshotArchive,
 } from "@smolai/skit-core";
 import { librarySyncApiEffect } from "./library-sync-api.js";
-import {
-  mergeLibraryManifests,
-  normalizeLibraryManifest,
-  describeLibraryMergeConflicts,
-} from "./library-merge.js";
+import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
-import { alignLibrary, aliasDevice, aliasManifest } from "./library-alignment.js";
 import {
   planSyncProjectionsEffect,
   resolveSyncProjectionCollisionsEffect,
@@ -155,63 +149,21 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       base_manifest: normalizeLibraryManifest(reconciled),
     });
 
-    // One alias map renames every side that holds independently created records. The device is
-    // rebuilt through the Library schema, so sync carries only the fields this CLI declares.
-    const aliases = alignLibrary(manifest, remoteManifest, base);
-    const aligned = aliasManifest(manifest, aliases);
-    const alignedBase = aliasManifest(base, aliases);
-    const device = local.present
-      ? yield* LibraryState.makeEffect(aliasDevice(local.state, aliases))
-      : emptyLibraryState();
+    const merge = yield* prepareLibraryMerge({
+      base,
+      local: manifest,
+      remote: remoteManifest,
+      ...(local.present ? { device: local.state } : {}),
+      ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+    });
+    if (merge._tag === "InvalidResolution")
+      return { status: "resolution_invalid" as const, ...revision };
+    if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
+    const { device } = merge;
     // Every local publish replaces exactly the state this sync planned from.
     const planned = local.present ? local.state : device;
-    const imports = {
-      skills: aliases.skills.map((alias) => alias.to),
-      collections: aliases.collections.map((alias) => alias.to),
-    };
-    const preliminary = mergeLibraryManifests(
-      alignedBase,
-      aligned,
-      remoteManifest,
-      new Set(),
-      imports.skills,
-      imports.collections,
-    );
-    // A `--take-remote` key must name a conflict this merge can take remotely, on every path and
-    // before any device check; a push, pull or clean sync has none.
-    const requested = new Set(options.takeRemote ?? []);
-    const availableResolutions = describeLibraryMergeConflicts(
-      preliminary.conflicts,
-      preliminary.manifest,
-      preliminary.unresolvable,
-    );
-    if (
-      [...requested].some(
-        (key) =>
-          !availableResolutions.some(
-            (detail) => detail.key === key && detail.resolution === "take-remote",
-          ),
-      )
-    )
-      return { status: "resolution_invalid" as const, ...revision };
-    const merged =
-      requested.size === 0
-        ? preliminary
-        : mergeLibraryManifests(
-            alignedBase,
-            aligned,
-            remoteManifest,
-            requested,
-            imports.skills,
-            imports.collections,
-          );
-    if (merged.conflicts.length)
-      return conflicted(
-        describeLibraryMergeConflicts(merged.conflicts, merged.manifest, merged.unresolvable),
-        remote?.revision_id,
-      );
     const collision = yield* resolveSyncProjectionCollisionsEffect(
-      merged.manifest,
+      merge.manifest,
       options.projection?.rootFor,
       options.keepEnabled,
       device,
@@ -255,7 +207,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     }
 
     // Equivalent handle alignment alone is not a Collection content or evidence change.
-    const plan = planLibrarySync(aligned, remoteManifest, desired);
+    const plan = planLibrarySync(merge.alignedLocal, remoteManifest, desired);
     const required = [...new Set(desired.retained_copies.map((tree) => tree.digest))];
     const snapshotSet = new Set(desired.snapshot_digests);
     const localArchiveByDigest = new Map(localArchives.map((archive) => [archive.digest, archive]));

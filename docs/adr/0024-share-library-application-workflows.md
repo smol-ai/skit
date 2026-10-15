@@ -115,6 +115,13 @@ interruption and defects still fail the batch. The batch keeps one baseline and 
 ordered Collection refreshes, and aggregates results and exit status without handling filesystem
 paths, phase flags or cleanup recovery.
 
+`prepareLibraryMerge` is the merge decision boundary used by sync. It aligns local and accepted-base
+identities with remote records, carries that alignment into device references, derives independently
+imported records, and validates requested remote conflict choices before returning a ready merge,
+invalid resolution, or described conflicts. Raw alias maps, preliminary merge results and the second
+merge needed for conflict resolution stay inside the merge implementation. Sync retains ancestry
+and adoption gates, filesystem collision checks, transfer planning and publication order.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.
