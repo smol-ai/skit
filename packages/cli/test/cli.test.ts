@@ -353,7 +353,7 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v6",
+        schema: "skit.enable.v7",
         data: expect.objectContaining({ enabled: true }),
       }),
     );
@@ -559,7 +559,7 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v6");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v7");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),

@@ -6,7 +6,6 @@ import {
 } from "./skill-metadata.js";
 import {
   bindingSkillIds,
-  deterministicTreeHashEffect,
   currentSkillVersion,
   retainedTreePath,
   versionBacking,
@@ -18,7 +17,6 @@ import {
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
-import { activeProjectionTargetsEffect, bindingRoot } from "../projection/roots.js";
 import {
   LibrarySubjectNotFound,
   resolveLibrarySubject,
@@ -234,59 +232,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
             });
             if (plan.shadows?.length)
               return yield* new ProjectionWouldDuplicate({ shadows: plan.shadows });
-            let needsReconciliation = false;
-            if (plan.enabled && !plan.changed) {
-              const fs = yield* FileSystem.FileSystem;
-              const targets = yield* activeProjectionTargetsEffect(configuration);
-              const subject = yield* resolveLibrarySubject(current, query);
-              for (const target of targets) {
-                const root = bindingRoot(target, invocation.scope, configuration);
-                if (root === undefined) continue;
-                for (const skill of subject.skills.filter((skill) =>
-                  plan.skills.includes(skill.name),
-                )) {
-                  const projection = current.projections.find(
-                    (candidate) =>
-                      candidate.root === root &&
-                      candidate.skill_id === skill.skill_id &&
-                      candidate.target === target,
-                  );
-                  if (
-                    !projection ||
-                    projection.status !== "installed" ||
-                    !(yield* fs.exists(projection.path))
-                  ) {
-                    needsReconciliation = true;
-                    continue;
-                  }
-                  if (
-                    (yield* deterministicTreeHashEffect(projection.path)) !==
-                    projection.expected_digest
-                  )
-                    needsReconciliation = true;
-                }
-              }
-            }
-            if (!plan.enabled && !plan.changed) {
-              const fs = yield* FileSystem.FileSystem;
-              const targets = yield* activeProjectionTargetsEffect(configuration);
-              for (const binding of plan.bindings) {
-                const boundIds = new Set(bindingSkillIds(current, binding));
-                for (const target of targets) {
-                  const root = bindingRoot(target, binding.scope, configuration);
-                  if (root === undefined) continue;
-                  for (const projection of current.projections.filter(
-                    (projection) =>
-                      projection.root === root &&
-                      projection.target === target &&
-                      !boundIds.has(projection.skill_id),
-                  )) {
-                    if (yield* fs.exists(projection.path)) needsReconciliation = true;
-                  }
-                }
-              }
-            }
-            return { ...plan, needsReconciliation };
+            return plan;
           }),
         ),
       };
@@ -302,7 +248,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     operations,
     facts: attempted.success.plans.map((plan, index) => ({
       ...factFromPlan(plan),
-      ...(plan.needsReconciliation
+      ...(plan.repair
         ? {
             writes: plan.enabled
               ? ("copies checked for repair" as const)
@@ -314,7 +260,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
     policies,
     libraryRevision: attempted.success.libraryRevision,
   };
-  if (attempted.success.plans.every((plan) => !plan.changed && !plan.needsReconciliation))
+  if (attempted.success.plans.every((plan) => !plan.changed && !plan.repair))
     return {
       ...state,
       pending: undefined,

@@ -193,6 +193,15 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     ]);
     const repeated = yield* writingTo(home, apply(true));
     assert.strictEqual(repeated.value.changed, false);
+    assert.strictEqual(repeated.value.repair, undefined);
+    yield* fs.remove(join(roots.codexRoot, "review"), { recursive: true });
+    const repaired = yield* writingTo(home, apply(true));
+    assert.strictEqual(repaired.value.changed, false);
+    assert.strictEqual(repaired.value.repair, true);
+    assert.strictEqual(
+      yield* fs.readFileString(join(roots.codexRoot, "review", "SKILL.md")),
+      "review raw bytes\n",
+    );
     const disabled = yield* writingTo(home, apply(false));
     assert.strictEqual(disabled.value.changed, true);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);

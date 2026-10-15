@@ -530,8 +530,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.disable.v6",
-        "skit.disable.plan.v6"
+        "skit.disable.v7",
+        "skit.disable.plan.v7"
       ],
       "exitCodes": [
         0,
@@ -639,8 +639,8 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.enable.v6",
-        "skit.enable.plan.v6"
+        "skit.enable.v7",
+        "skit.enable.plan.v7"
       ],
       "exitCodes": [
         0,

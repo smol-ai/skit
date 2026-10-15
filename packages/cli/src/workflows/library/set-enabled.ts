@@ -2,6 +2,7 @@ import {
   BindingEntry,
   bindingSkillIds,
   LinkStat,
+  deterministicTreeHashEffect,
   currentCollectionSkills,
   DeviceBinding,
   InvocationPolicy,
@@ -20,7 +21,11 @@ import { Data, Effect, FileSystem, Schema } from "effect";
 import { resolve } from "node:path";
 import { OptionCombinationInvalid } from "../failures.js";
 import type { InvocationOption } from "../../invocation/policy.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import {
+  activeProjectionTargetsEffect,
+  bindingRoot,
+  type InventoryRootOptions,
+} from "../../projection/roots.js";
 import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import {
   HarnessShadow,
@@ -49,6 +54,8 @@ export const SetEnabledPlan = Schema.Struct({
   enabled: Schema.Boolean,
   invocation: Schema.optionalKey(Schema.String),
   changed: Schema.Boolean,
+  /** An unchanged Binding whose copies are missing, edited, or left behind and will be repaired. */
+  repair: Schema.optionalKey(Schema.Boolean),
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
   warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
@@ -251,6 +258,31 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
   const shadows = newlyEnabledSkills.length
     ? yield* observeHarnessShadows(options.roots, scope, newlyEnabledSkills, warnings)
     : [];
+  // An unchanged Binding still repairs its copies when they are missing, edited, or left behind.
+  let repair = false;
+  if (!changed) {
+    const fs = yield* FileSystem.FileSystem;
+    const bound = bindings.map((binding) => new Set(bindingSkillIds(state, binding)));
+    for (const target of yield* activeProjectionTargetsEffect(options.roots)) {
+      const root = bindingRoot(target, scope, options.roots);
+      const projections = state.projections.filter(
+        (projection) => projection.root === root && projection.target === target,
+      );
+      if (options.invocation.enabled)
+        for (const skillId of skillIds) {
+          const projection = projections.find((candidate) => candidate.skill_id === skillId);
+          repair ||=
+            projection === undefined ||
+            projection.status !== "installed" ||
+            !(yield* fs.exists(projection.path)) ||
+            (yield* deterministicTreeHashEffect(projection.path)) !== projection.expected_digest;
+        }
+      else if (bindings.length)
+        for (const projection of projections)
+          if (!bound.some((ids) => ids.has(projection.skill_id)))
+            repair ||= yield* fs.exists(projection.path);
+    }
+  }
   return {
     ...(shadows.length ? { shadows } : {}),
     ...(warnings.length ? { warnings } : {}),
@@ -262,6 +294,7 @@ export const previewLibraryBindings = Effect.fn("LibraryBindings.preview")(funct
       ? {}
       : { invocation: options.invocation.invocation }),
     changed,
+    ...(repair ? { repair } : {}),
     bindings,
   };
 });
@@ -415,7 +448,9 @@ export function renderSetEnabled(
         ? data.skills.join(", ")
         : "no skills";
   const destination = data.scope.kind === "global" ? "" : ` in ${data.scope.root}`;
-  const change = data.changed ? "" : data.enabled ? " · Already enabled" : " · Already disabled";
+  const change = data.changed
+    ? ""
+    : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
   const shadows = data.shadows ?? [];
   const warning = shadows.length
     ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
