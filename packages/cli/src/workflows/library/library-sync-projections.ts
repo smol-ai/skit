@@ -7,6 +7,9 @@ import {
   ProjectionId,
   SkillId,
   LibraryStore,
+  LibraryChanged,
+  blendRestoredStateEffect,
+  withLibraryWriter,
   bindingSkillIds,
   currentSkillVersion,
   mergeGlobalBindings,
@@ -140,10 +143,10 @@ const SyncProjectionPlan = Schema.Struct({
   remove: Schema.Array(ProjectionId),
   conflicts: Schema.Array(SyncConflictDetail),
 });
-export type SyncProjectionPlan = typeof SyncProjectionPlan.Type;
+type SyncProjectionPlan = typeof SyncProjectionPlan.Type;
 
 /** Preview every affected copy, including repository custody, before any remote write. */
-export const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(function* (
+const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(function* (
   current: LibraryState,
   aligned: LibraryState,
   manifest: LibraryManifest,
@@ -287,9 +290,8 @@ export const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections
  * Keep old references durable until portable state and ancestry can be published together.
  * Publishes only onto `current`, the state sync planned from, and returns the state it published.
  */
-export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProjections")(function* (
+const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProjections")(function* (
   plan: SyncProjectionPlan,
-  variantsPath: string,
   current: LibraryState,
 ) {
   const store = yield* LibraryStore;
@@ -298,7 +300,7 @@ export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProject
     current,
     {
       rootFor: () => undefined,
-      variantsPath,
+      variantsPath: store.variantsPath,
       originalsPath: store.originalsPath,
       publish: store.publish,
     },
@@ -327,3 +329,51 @@ export const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProject
   );
   return { retired: result.value, state: result.state };
 });
+
+/** Prepare this device's local transition before remote publication; keep mutation records private. */
+export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDeviceTransition")(
+  function* (options: {
+    readonly current: LibraryState | undefined;
+    readonly aligned: LibraryState;
+    readonly manifest: LibraryManifest;
+    readonly rootFor: ((target: ProjectionTarget) => string | undefined) | undefined;
+  }) {
+    const store = yield* LibraryStore;
+    const home = store.home;
+    const { current, aligned } = options;
+    // An absent Library has no local copies to protect. A pull may accept remote Bindings
+    // without a selected Version, which planning an empty device would otherwise reject.
+    const plan =
+      current === undefined
+        ? undefined
+        : yield* planSyncProjectionsEffect(current, aligned, options.manifest, options.rootFor);
+    if (plan?.conflicts.length) return { _tag: "Conflicted" as const, conflicts: plan.conflicts };
+    const baseline = current ?? aligned;
+    return {
+      _tag: "Ready" as const,
+      publishRestored: Effect.fn("Library.sync.publishDeviceTransition")(function* (
+        restored: LibraryState,
+        ancestry: NonNullable<LibraryState["sync_ancestry"]>,
+      ) {
+        const store = yield* LibraryStore;
+        if (store.home !== home) return yield* new LibraryChanged({ path: store.statePath });
+        return yield* withLibraryWriter(
+          Effect.gen(function* () {
+            const retirement =
+              plan === undefined
+                ? { retired: 0, state: baseline }
+                : yield* retireSyncProjectionsEffect(plan, baseline);
+            const blended = yield* blendRestoredStateEffect(
+              { ...aligned, projections: [...(plan?.projections ?? [])] },
+              restored,
+            );
+            // Publish content and its accepted base together, replacing exactly the state retirement
+            // published (or the original baseline when no retirement was required).
+            yield* store.publish({ ...blended, sync_ancestry: ancestry }, retirement.state);
+            return retirement.retired;
+          }),
+        );
+      }),
+    };
+  },
+);

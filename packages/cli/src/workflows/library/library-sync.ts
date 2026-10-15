@@ -2,7 +2,6 @@ import { withLibraryWriter } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
 import {
   canonicalJson,
-  blendRestoredStateEffect,
   currentLibraryManifest,
   LibraryStore,
   libraryManifestFromLocalStateEffect,
@@ -16,9 +15,8 @@ import { reconcileLibraryProjections } from "./projection-reconciliation.js";
 import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
 import {
-  planSyncProjectionsEffect,
+  prepareSyncDeviceTransition,
   resolveSyncProjectionCollisionsEffect,
-  retireSyncProjectionsEffect,
 } from "./library-sync-projections.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -148,8 +146,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       return { status: "resolution_invalid" as const, ...revision };
     if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
     const { device } = merge;
-    // Every local publish replaces exactly the state this sync planned from.
-    const planned = local.present ? local.state : device;
     const collision = yield* resolveSyncProjectionCollisionsEffect(
       merge.manifest,
       options.projection?.rootFor,
@@ -159,12 +155,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
     if (collision.conflicts.length) return conflicted(collision.conflicts, remote?.revision_id);
     const desired = collision.manifest;
-    // An empty device holds no Projections or repository Bindings to plan. Planning it anyway
-    // would only report remote Bindings without a selected Version, which a pull accepts.
-    const devicePlan = local.present
-      ? yield* planSyncProjectionsEffect(planned, device, desired, options.projection?.rootFor)
-      : undefined;
-    if (devicePlan?.conflicts.length) return conflicted(devicePlan.conflicts, remote?.revision_id);
+    const transition = yield* prepareSyncDeviceTransition({
+      current: local.present ? local.state : undefined,
+      aligned: device,
+      manifest: desired,
+      rootFor: options.projection?.rootFor,
+    });
+    if (transition._tag === "Conflicted")
+      return conflicted(transition.conflicts, remote?.revision_id);
 
     if (clean) {
       // Nothing to transfer, write or retire. Publish only to anchor ancestry this state lacks,
@@ -173,7 +171,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         const sync_ancestry = ancestryAt(remote, remoteManifest);
         if (canonicalJson(local.state.sync_ancestry ?? null) !== canonicalJson(sync_ancestry))
           yield* store
-            .publish({ ...device, sync_ancestry }, planned)
+            .publish({ ...device, sync_ancestry }, local.state)
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
         yield* progress("Checking enabled Skills");
       }
@@ -243,21 +241,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         : yield* api.write(remote?.revision_id ?? null, desired);
     // Local state is published only onto exactly what this plan describes. If it moved, the
     // device keeps its old ancestry and the next sync merges both changes.
-    const retired = yield* Effect.gen(function* () {
-      const retirement =
-        devicePlan === undefined
-          ? { retired: 0, state: planned }
-          : yield* retireSyncProjectionsEffect(devicePlan, projectionOptions.variantsPath, planned);
-      const blended = yield* blendRestoredStateEffect(
-        { ...device, projections: [...(devicePlan?.projections ?? [])] },
-        restored.state,
-      );
-      yield* store.publish(
-        { ...blended, sync_ancestry: ancestryAt(saved, desired) },
-        retirement.state,
-      );
-      return retirement.retired;
-    }).pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
+    const retired = yield* transition
+      .publishRestored(restored.state, ancestryAt(saved, desired))
+      .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
     yield* progress("Enabling synced Skills");
     const projections = projectionCounts(
       yield* reconcileLibraryProjections({

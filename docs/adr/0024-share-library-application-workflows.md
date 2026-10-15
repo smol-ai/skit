@@ -170,6 +170,13 @@ render the preview or apply the captured operation without passing state or proj
 Display facts are copied separately from the captured plan, and revision checks use the shared
 Library state revision function. Retention and reconciliation preserve divergent copies.
 
+The prepared sync device transition owns projection planning, retirement, restored-state blending
+and local publication. It returns conflicts or a publish operation; projection mutation arrays and
+the state retirement published remain private. The operation stays bound to its Library home and
+publishes content with ancestry onto its captured baseline or retirement's resulting state.
+Sync keeps the remote commit before this transition and reconciliation afterward; the clean path
+continues to anchor ancestry directly without retiring or transferring anything.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.
