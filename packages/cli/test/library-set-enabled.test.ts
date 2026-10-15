@@ -117,13 +117,16 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       ],
     };
     assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
+    const previewStore = yield* LibraryStore.pipe(Effect.provide(layer));
     assert.strictEqual(
       (yield* planRemoveEffect(ambiguous, "review").pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* planUpdatesEffect(ambiguous, base, "review").pipe(Effect.provide(layer), Effect.flip))
-        ._tag,
+      (yield* planUpdatesEffect("review").pipe(
+        Effect.provideService(LibraryStore, { ...previewStore, load: Effect.succeed(ambiguous) }),
+        Effect.flip,
+      ))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(

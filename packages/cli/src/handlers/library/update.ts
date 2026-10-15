@@ -41,12 +41,12 @@ export const updateCliCommand = Command.make(
         const configuration = yield* libraryCommandConfiguration(input);
         const query = Option.getOrUndefined(input.subject);
         const projectionSelector = Option.getOrUndefined(input.fromProjection);
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
         const options = {
           roots: configuration.inventory,
         };
         if (projectionSelector !== undefined) {
+          const store = yield* LibraryStore;
+          const state = yield* store.load;
           if (query === undefined)
             return yield* new ProjectionRetentionMissing({
               message: "A Skill is required with --from-projection",
@@ -67,11 +67,11 @@ export const updateCliCommand = Command.make(
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
-            planUpdatesEffect(state, options, query),
+            planUpdatesEffect(query),
           );
           return yield* renderer.result(result("updatePlan", value));
         }
-        const value = yield* updateSubjectsEffect(state, options, query).pipe(
+        const value = yield* updateSubjectsEffect(options, query).pipe(
           Effect.provide(terminalLibraryProgressLayer),
         );
         yield* renderer.result(result("update", value, updateExitCode(value)));

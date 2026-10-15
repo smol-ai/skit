@@ -106,6 +106,15 @@ adoption-plan comparisons are private. Setup workflows return warnings and recov
 without importing each other's mutation helpers. Presentation captures alias consent through the
 adoption boundary, independently of later setup stages.
 
+The update application owns loading and selecting the current batch; callers pass a query and,
+for application, projection roots. A single-Collection refresh owns prior acquisition/source
+resolution, retention, projection reconciliation, Skill change reporting, and failure recovery
+after its scopes close. Preview and apply share resolution of the prior retained copy. Recoverable
+Collection failures return an outcome with durable retention evidence; shared-storage failures,
+interruption and defects still fail the batch. The batch keeps one baseline and writer across its
+ordered Collection refreshes, and aggregates results and exit status without handling filesystem
+paths, phase flags or cleanup recovery.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.

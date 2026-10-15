@@ -76,13 +76,10 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(refreshed.collections.length, 1);
     assert.strictEqual(refreshed.acquisitions.length, 2);
     assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
-    const failure = yield* planUpdatesEffect(
-      refreshed,
-      {
-        roots: { home: root, configHome: join(root, "config"), overrides: {} },
-      },
-      added.collection_id,
-    ).pipe(Effect.provide(libraryStoreLayer({ home })), Effect.flip);
+    const failure = yield* planUpdatesEffect(added.collection_id).pipe(
+      Effect.provide(libraryStoreLayer({ home })),
+      Effect.flip,
+    );
     if (failure._tag !== "Library.UpdateNotRefreshable")
       return assert.fail(`Expected UpdateNotRefreshable, received ${failure._tag}`);
     assert.strictEqual(failure.subject_id, added.collection_id);
@@ -280,14 +277,9 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       "current",
     );
     artifact = updated;
-    assert.strictEqual(
-      (yield* run(planUpdatesEffect(enabled, options, skill.skill_id)))[0]?.changed,
-      true,
-    );
+    assert.strictEqual((yield* run(planUpdatesEffect(skill.skill_id)))[0]?.changed, true);
     const result = yield* run(
-      updateSubjectsEffect(enabled, options, skill.skill_id).pipe(
-        Effect.provide(rendererTestLayer()),
-      ),
+      updateSubjectsEffect(options, skill.skill_id).pipe(Effect.provide(rendererTestLayer())),
     );
     assert.isTrue(result[0] !== undefined && !("status" in result[0]) && result[0].changed);
     const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
