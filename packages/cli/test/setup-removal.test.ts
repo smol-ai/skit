@@ -11,11 +11,7 @@ import {
 } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts, setupStepTitles } from "../src/presentation/setup-steps.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
-import {
-  applySetupRemovals,
-  planSetupRemovals,
-  setupRemovablePaths,
-} from "../src/workflows/library/setup-removal.js";
+import { planSetupRemovals, setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.gen(function* () {
@@ -210,7 +206,7 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
           ).toBe("SetupPlanStale");
           yield* f.fs.rename(f.copy, `${f.copy}-original`);
           yield* f.fs.makeDirectory(f.copy);
-          expect((yield* Effect.flip(applySetupRemovals(plan)))._tag).toBe("PlanIsStale");
+          expect((yield* Effect.flip(plan.apply()))._tag).toBe("PlanIsStale");
           expect(yield* f.fs.readLink(f.link)).toBe(f.source);
           expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
         }),

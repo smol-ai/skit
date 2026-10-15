@@ -135,6 +135,13 @@ baseline lookup deferred until needed. Update checking selects observations, com
 bytes and decides status without handling Git commands or mirror paths. A matching Git tree claim
 remains lock-only evidence; filesystem-byte verification remains a separate decision.
 
+Recoverable moves own filesystem identity capture, approved-link validation, recovery paths,
+preflight checks, per-entry revalidation, rename and recovery receipts. Preparation exposes only
+name/path/type summaries, the recovery directory and an apply operation; mutation records stay
+private. Setup owns removal eligibility. Local adoption owns alias consent and replacement
+readability, then applies prepared moves without depending on setup removal. Both callers share
+the same protection for modified bytes, new custody markers and pnpm-owned paths.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.

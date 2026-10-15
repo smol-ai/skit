@@ -14,7 +14,7 @@ import {
   type BindingChangeRequest,
 } from "../../library-application/binding-changes.js";
 import { PlanIsStale } from "../../library/failures.js";
-import { applySetupRemovals, type SetupRemoval } from "./setup-removal.js";
+import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
 import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
 import {
@@ -43,8 +43,8 @@ import {
   walkTreeEffect,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
-import { randomUUID, createHash } from "node:crypto";
-import { basename, dirname, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
 import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "./add.js";
 import type { ProjectionOptions } from "./projection-options.js";
 
@@ -430,7 +430,7 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
         allowDuplicate: selection.duplicateAction === "keep-both",
         ...(retirement
           ? {
-              allowedShadowAliases: retirement.entries.map((entry) => ({
+              allowedShadowAliases: retirement.aliases.map((entry) => ({
                 ...entry,
                 canonicalPath: selection.sourcePath,
               })),
@@ -451,7 +451,7 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
   return {
     result,
     recoveryDirectories:
-      retirement && outcome?.kind === "retired" ? [retirement.recoveryDirectory] : [],
+      retirement && outcome?.kind === "retired" ? [retirement.moves.recoveryDirectory] : [],
     warnings:
       outcome?.kind === "preserved" ? [{ name: selection.name, message: outcome.message }] : [],
   };
@@ -509,18 +509,16 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
   approvedAliases?: readonly SetupApprovedAlias[],
 ) {
   const aliases = yield* captureLocalAdoptionAliases(sourcePath, shadows, approvedAliases);
-  const recoveryDirectory = join(libraryHome, "removed", randomUUID());
-  const entries: SetupRemoval[] = aliases.map((alias, index) => ({
-    name,
-    path: alias.path,
-    recoveryPath: join(recoveryDirectory, `${index + 1}-${basename(alias.path)}`),
-    type: "SymbolicLink",
-    dev: alias.dev,
-    ino: alias.ino,
-    linkTarget: alias.linkTarget,
-  }));
+  const moves = yield* prepareRecoveryMoves(
+    libraryHome,
+    aliases.map((alias) => ({
+      name,
+      path: alias.path,
+      approvedLink: alias,
+    })),
+  );
   const harnesses = [...new Set(shadows.map((shadow) => shadow.harness).filter(hasHarnessProfile))];
-  return { recoveryDirectory, entries, harnesses };
+  return { moves, aliases, harnesses };
 });
 
 /** Preserve each alias until its harness has an installed replacement; unrelated targets do not gate retirement. */
@@ -528,11 +526,7 @@ const retireAliases = Effect.fn("LocalAdoption.retireAliasesAfterProjection")(fu
   roots: InventoryRootOptions,
   subjectId: string,
   name: string,
-  retirement: {
-    recoveryDirectory: string;
-    entries: SetupRemoval[];
-    harnesses: readonly HarnessName[];
-  },
+  retirement: Effect.Success<ReturnType<typeof planAliasRetirement>>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const state = yield* (yield* LibraryStore).load;
@@ -570,6 +564,6 @@ const retireAliases = Effect.fn("LocalAdoption.retireAliasesAfterProjection")(fu
       kind: "preserved" as const,
       message: `Bound ${name}; existing aliases were preserved because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
     };
-  yield* applySetupRemovals(retirement);
+  yield* retirement.moves.apply();
   return { kind: "retired" as const };
 });
