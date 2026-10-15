@@ -18,6 +18,7 @@ import { inventoryCommand } from "../src/handlers/library/inventory.js";
 import { renderMachineSkills } from "../src/presentation/inventory.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
 import { presentListCommand } from "../src/handlers/library/list.js";
+import { openLibraryView } from "../src/library-application/library-view.js";
 import { openLibrarySession } from "../src/library-application/session.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
@@ -98,6 +99,7 @@ it.effect(
           LibraryStore.use((store) => store.publish(selected, state)),
         ),
       );
+      const view = yield* home.owned(openLibraryView());
       const interaction = yield* makeScriptedInteraction([]);
       yield* home.owned(presentListCommand().pipe(Effect.provide(interaction.layer)));
       const listing = yield* Schema.decodeUnknownEffect(ListResult)(
@@ -151,6 +153,24 @@ it.effect(
       );
       expect(conflicting.get(state.skills[0]!.skill_id)?.source_updated_at).toBeNull();
       expect(yield* home.durable).toEqual(selected);
+      const subjects = yield* view.readSubjects();
+      const rows = yield* view.readSkills();
+      expect(subjects[0]?.skills[0]?.versions).toHaveLength(2);
+      expect(subjects[0]?.skills[0]?.versionId).toBe(rows[0]?.versionId);
+      expect(rows[0]?.revision).toBe("1".repeat(40));
+      // A held view keeps the displayed selection even when another action selects newer bytes.
+      yield* home.owned(
+        writingTo(
+          home.home,
+          LibraryStore.use((store) => store.publish(state, selected)),
+        ),
+      );
+      view.collections.length = 0;
+      expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
+      expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
+      const fresh = yield* home.owned(openLibraryView());
+      expect((yield* fresh.readSkills())[0]?.revision).toBe("2".repeat(40));
+      expect(yield* home.durable).toEqual(state);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

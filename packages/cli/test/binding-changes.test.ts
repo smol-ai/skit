@@ -182,10 +182,10 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
     }
     const selection = yield* f.home.owned(openBindingChangeSelection());
     assert.deepStrictEqual(
-      selection.placements.map((placement) => [
+      selection.view.placements.map((placement) => [
         placement.scope.kind,
         placement.skillIds.map(
-          (id) => selection.collections[0]?.members.find((member) => member.id === id)?.name,
+          (id) => selection.view.collections[0]?.members.find((member) => member.id === id)?.name,
         ),
       ]),
       [
@@ -227,7 +227,7 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
     yield* f.home.owned(applyBindingChanges(onlyAlpha));
     const settled = yield* f.home.durable;
-    const beta = selection.collections[0]?.members.find((member) => member.name === "beta");
+    const beta = selection.view.collections[0]?.members.find((member) => member.name === "beta");
     assert.ok(beta);
     assert.deepStrictEqual(settled.global_bindings, []);
     assert.deepStrictEqual(settled.local_bindings[0]?.entries, [

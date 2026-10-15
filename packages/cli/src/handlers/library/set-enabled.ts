@@ -141,15 +141,16 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   if (input.subject === undefined && !input.interactive)
     return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
   const selection = yield* openBindingChangeSelection();
+  const view = selection.view;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
   const collectionLabel = (collectionId: string) =>
-    selection.collections.find((collection) => collection.id === collectionId)?.label;
+    view.collections.find((collection) => collection.id === collectionId)?.label;
   const skillNames = (skillIds: readonly string[]) =>
     skillIds
       .flatMap(
         (skillId) =>
-          selection.collections
+          view.collections
             .flatMap((collection) => collection.members)
             .find((skill) => skill.id === skillId)?.name ?? [],
       )
@@ -159,7 +160,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   // Disabling without a subject starts from where Skills are enabled.
   let targets: readonly EnabledTarget[] | undefined;
   if (query === undefined && !input.enabled) {
-    const enabled = selection.placementsAt(input.scope).map(withLocation);
+    const enabled = view.placementsAt(input.scope).map(withLocation);
     if (enabled.length === 0)
       return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
     const everywhere = [...new Set(enabled.map((target) => target.collectionId))].flatMap(
@@ -196,7 +197,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     query = targets[0]!.collectionId;
   }
   if (query === undefined) {
-    const collections = selection.collections.filter((collection) => collection.members.length > 0);
+    const collections = view.collections.filter((collection) => collection.members.length > 0);
     if (collections.length === 0)
       return yield* new NothingToSelect({ detail: "The local Library contains no Skills" });
     query = yield* prompter
@@ -211,11 +212,11 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     if (query === DONE) return;
   }
 
-  const collection = selection.collections.find((candidate) =>
+  const collection = view.collections.find((candidate) =>
     [candidate.id, candidate.label].includes(query),
   );
   const members = collection
-    ? selection.membersFor(
+    ? view.membersFor(
         collection.id,
         targets?.map((target) => target.scope),
       )
@@ -228,7 +229,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           value: "collection",
           label: input.enabled
             ? `Enable whole collection · ${descriptionLoadMessage(
-                yield* selection.descriptionLoad(collection.id),
+                yield* view.descriptionLoad(collection.id),
               )}`
             : "Disable whole collection",
           hint: input.enabled
@@ -287,7 +288,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     input.scope === undefined &&
     targets === undefined
   ) {
-    const enabled = selection.placements
+    const enabled = view.placements
       .map(withLocation)
       .filter((target) => target.collectionId === collection.id);
     if (!enabled.length) {
@@ -348,7 +349,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   );
   for (const outcome of outcomes) {
     if (input.enabled) {
-      const warning = largeCollectionWarning(selection.listingSizeAfter(outcome.value));
+      const warning = largeCollectionWarning(view.listingSizeAfter(outcome.value));
       if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
     }
     yield* renderer.result(

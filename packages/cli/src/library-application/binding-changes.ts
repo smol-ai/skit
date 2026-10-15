@@ -1,7 +1,5 @@
 import {
   bindingSkillIds,
-  currentCollectionSkills,
-  currentSkillVersion,
   LinkStat,
   deterministicTreeHashEffect,
   DeviceBinding,
@@ -30,16 +28,11 @@ import {
 import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
 import {
   calculateBindingChange,
-  bindingPlacements,
   expandBindingIntent,
-  uniqueBindingScopes,
-  sameBindingScope,
   type BindingChangeIntent,
-  type BindingPlacement,
   type BindingSelection,
 } from "../workflows/library/binding-selection.js";
-import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
-import { readDescriptionLoad } from "../workflows/library/collection-load.js";
+import { libraryView } from "./library-view.js";
 export type {
   BindingChangeIntent,
   BindingPlacement,
@@ -169,89 +162,8 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
 export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
   const store = yield* LibraryStore;
   const current = yield* store.load;
-  const placements = structuredClone(bindingPlacements(current));
-  const skills = current.skills.map((skill) => {
-    const collection = current.collections.find(
-      (item) => item.collection_id === skill.collection_id,
-    );
-    const source =
-      collection?.upstream?.source_identity ??
-      current.acquisitions.find((item) => item.collection_id === skill.collection_id)
-        ?.source_identity;
-    return {
-      id: skill.skill_id,
-      name: skill.name,
-      collectionId: skill.collection_id,
-      versionId: currentSkillVersion(current, skill)?.skill_version_id,
-      collectionLabel: collection?.label,
-      ...(source === undefined
-        ? {}
-        : { collectionSource: { kind: source.kind, locator: sourceIdentityLabel(source) } }),
-    };
-  });
-  const collections = current.collections.map((collection) => ({
-    id: collection.collection_id,
-    label: collection.label,
-    members: skills.filter((skill) => skill.collectionId === collection.collection_id),
-  }));
-  const atScope = (scope: BindingPlacement["scope"] | undefined) =>
-    placements.filter(
-      (placement) => scope === undefined || sameBindingScope(placement.scope, scope),
-    );
   return {
-    collections,
-    placements,
-    placementsAt: atScope,
-    scopesFor: (collectionId: string) =>
-      uniqueBindingScopes(
-        placements.filter((item) => item.collectionId === collectionId).map((item) => item.scope),
-      ),
-    membersFor: (collectionId: string, scopes?: readonly BindingPlacement["scope"][]) =>
-      skills.filter(
-        (skill) =>
-          skill.collectionId === collectionId &&
-          (scopes === undefined ||
-            placements.some(
-              (placement) =>
-                placement.skillIds.includes(skill.id) &&
-                scopes.some((scope) => sameBindingScope(scope, placement.scope)),
-            )),
-      ),
-    readSkills: Effect.fn("LibraryBindings.readSkills")(function* () {
-      const metadata = yield* readLibrarySkillMetadata(current, store.originalsPath);
-      return skills.flatMap((skill) =>
-        skill.versionId === undefined
-          ? []
-          : [
-              {
-                ...skill,
-                versionId: skill.versionId,
-                ...metadata.get(skill.id)!,
-                bindings: placements
-                  .filter((placement) => placement.skillIds.includes(skill.id))
-                  .map((placement) => ({
-                    scope: placement.scope,
-                    invocation: placement.invocationBySkill[skill.id] ?? "declared",
-                  })),
-              },
-            ],
-      );
-    }),
-    descriptionLoad: (collectionId: string) => {
-      const collection = current.collections.find((item) => item.collection_id === collectionId);
-      return readDescriptionLoad(
-        current,
-        store.originalsPath,
-        collection === undefined ? [] : currentCollectionSkills(current, collection.collection_id),
-      );
-    },
-    listingSizeAfter: (change: Pick<SetEnabledResult, "scope" | "bindings">) =>
-      new Set(
-        [
-          ...change.bindings,
-          ...(change.scope.kind === "repository" ? current.global_bindings : []),
-        ].flatMap((binding) => bindingSkillIds(current, binding)),
-      ).size,
+    view: libraryView(current, store.originalsPath),
     preview: Effect.fn("LibraryBindings.previewSelection")(function* (
       intent: BindingChangeIntent,
       configuration: BindingChangeConfiguration,

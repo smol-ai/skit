@@ -84,7 +84,7 @@ export interface LibrarySessionState {
 
 export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () {
   const selection = yield* openBindingChangeSelection();
-  const rows = yield* selection.readSkills();
+  const rows = yield* selection.view.readSkills();
   const skills: LibrarySkillRow[] = rows.map((row) => ({
     source: row.source,
     revision: row.revision,
@@ -205,7 +205,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
         ? {
             wholeCollection: true,
             collectionLabel:
-              selection?.collections.find((collection) => collection.id === plan.subject_id)
+              selection?.view.collections.find((collection) => collection.id === plan.subject_id)
                 ?.label ?? plan.subject_id,
           }
         : {}),
@@ -258,7 +258,7 @@ export function proposeLibraryDisable(
 }
 
 export function libraryCollectionScopes(state: LibrarySessionState, collectionId: string): Scope[] {
-  return state[sessionSelection]?.scopesFor(collectionId) ?? [];
+  return state[sessionSelection]?.view.scopesFor(collectionId) ?? [];
 }
 
 /** Whole-Collection intent follows future Source membership changes. */

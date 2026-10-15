@@ -33,6 +33,14 @@ revision. Apply calculates each change once against the validated state and uses
 Skill IDs for consent and restoration. It observes shadows afresh, preserving exact alias checks;
 repair hashing stays in preview rather than running again at confirmation.
 
+`library-view.ts` owns Library query facts: subjects, members, selected versions and version history,
+placements, Binding labels and provenance. `list` maps those facts to its existing JSON fields;
+Binding selection exposes a `view` built from the exact state it captured for intent planning, and
+TUI rows consume that view. Opening a view loads once, and subsequent queries retain that selection
+even when another action publishes newer state. Caller-visible facts cannot mutate its private
+snapshot. Reading does not publish state or reconcile copies. Provenance remains tied to the
+selected retained bytes through the existing metadata reader, rather than the latest acquisition.
+
 Library updates require an explicit `LibraryProgress` implementation. Stages and completions
 carry subject identity, source change, and projection counts. The terminal adapter maps
 these facts to the existing scoped spinner and completion lines. Other consumers can

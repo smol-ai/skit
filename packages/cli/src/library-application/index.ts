@@ -2,6 +2,7 @@
  * package boundary so all front ends use one identity for services and schemas. */
 export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 export { libraryApplicationLayer } from "./layers.js";
+export { openLibraryView } from "./library-view.js";
 export {
   openLibrarySession,
   readLibrarySkillContent,
