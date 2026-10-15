@@ -3,7 +3,7 @@ import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
 it.effect("checks retained custody without treating an observed local copy as an upstream", () =>
@@ -15,7 +15,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const retained = yield* addLibrarySourceEffect(source).pipe(
+    const retained = yield* retainLibrarySourceEffect(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(

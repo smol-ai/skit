@@ -45,7 +45,10 @@ import {
 import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "./add.js";
+import {
+  retainLibrarySourceEffect,
+  inspectLibrarySourceEffect,
+} from "../../library-application/source-acquisition.js";
 import type { ProjectionOptions } from "./projection-options.js";
 
 const LocalAdoptionTarget = Schema.Struct({
@@ -348,7 +351,7 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
         return yield* new PlanIsStale();
       const retirement = binding ? yield* prepareAliasRetirement(bindings, selection) : undefined;
       if (request.kind === "retain" && !binding) {
-        const retained = yield* addLibrarySourceEffect(selection.sourcePath);
+        const retained = yield* retainLibrarySourceEffect(selection.sourcePath);
         if (retained.collection_id === undefined)
           return yield* new LocalAdoptionInvalid({
             name: selection.name,
@@ -382,7 +385,7 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
         const refreshed = yield* planLocalAdoption(plan.targets, plan.sourcePath);
         if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(plan))
           return yield* new PlanIsStale();
-        const retained = yield* addLibrarySourceEffect(plan.sourcePath);
+        const retained = yield* retainLibrarySourceEffect(plan.sourcePath);
         if (retained.collection_id === undefined)
           return yield* new LocalAdoptionInvalid({
             name: selection.name,

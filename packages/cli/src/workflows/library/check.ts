@@ -6,7 +6,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { inspectLibrarySourceEffect } from "./add.js";
+import { inspectLibrarySourceEffect } from "../../library-application/source-acquisition.js";
 import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
 import {
   latestSubjectAcquisition,

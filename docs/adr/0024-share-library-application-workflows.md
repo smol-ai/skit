@@ -142,6 +142,13 @@ private. Setup owns removal eligibility. Local adoption owns alias consent and r
 readability, then applies prepared moves without depending on setup removal. Both callers share
 the same protection for modified bytes, new custody markers and pnpm-owned paths.
 
+Source acquisition exposes inspection and retention to add, check, refresh and adoption. Both
+operations use one private preparation boundary for Registry access, source parsing, pnpm guards,
+resolution and staging lifetime. Resolved paths remain inside that scope; only inspection facts or
+durable retention receipts leave it. Retention holds writer authority through cleanup, while
+inspection does not publish Library state. Command handlers consume facts without owning source
+preparation or importing another command's workflow.
+
 ## Command environments
 
 `handlePlatformCommand` supplies platform capabilities for file/configuration operations.

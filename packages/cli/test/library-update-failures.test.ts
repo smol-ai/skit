@@ -9,7 +9,7 @@ import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/sk
 import { retainedTreePath } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
 import { silentLibraryProgressLayer } from "../src/library-application/progress.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
@@ -65,7 +65,7 @@ const fixture = Effect.gen(function* () {
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
-  for (const url of urls) yield* run(addLibrarySourceEffect({ type: "archive", url }));
+  for (const url of urls) yield* run(retainLibrarySourceEffect({ type: "archive", url }));
   const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
   bodies.set(urls[0]!, yield* archive("broken", true, "after"));
   bodies.set(urls[1]!, yield* archive("healthy", false, "after"));

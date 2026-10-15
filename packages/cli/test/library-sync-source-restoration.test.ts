@@ -13,7 +13,7 @@ import {
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { syncLibraryEffect } from "../src/workflows/library/library-sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";
@@ -75,7 +75,7 @@ const fixture = Effect.gen(function* () {
     );
   const seed = (source: SkitSource) =>
     Effect.gen(function* () {
-      yield* writingTo(home, addLibrarySourceEffect(source)).pipe(Effect.provide(http));
+      yield* writingTo(home, retainLibrarySourceEffect(source)).pipe(Effect.provide(http));
       const state = yield* load(home);
       const manifest = yield* libraryManifestFromLocalStateEffect(state);
       assert.deepStrictEqual(manifest.snapshot_digests, []);

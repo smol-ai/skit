@@ -4,9 +4,9 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { LibraryStore, libraryStoreLayer, retainedTreePath } from "@smolai/skit-core";
 import {
-  addLibrarySourceEffect,
+  retainLibrarySourceEffect,
   previewLibrarySourceEffect,
-} from "../../src/workflows/library/add.js";
+} from "../../src/library-application/source-acquisition.js";
 import { writingTo } from "./library-home.js";
 
 export const gitBlobHash = (bytes: Uint8Array) =>
@@ -23,7 +23,7 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
     preview.skills.map((skill) => skill.verbatim_path).toSorted(),
     [...expectedPaths].toSorted(),
   );
-  const added = yield* writingTo(home, addLibrarySourceEffect(source));
+  const added = yield* writingTo(home, retainLibrarySourceEffect(source));
   assert.deepStrictEqual(added.skills, preview.skills);
   const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
     Effect.provide(libraryStoreLayer({ home })),

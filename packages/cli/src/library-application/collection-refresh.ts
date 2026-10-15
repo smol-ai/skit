@@ -6,7 +6,7 @@ import {
 } from "@smolai/skit-core";
 import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
 import type { InventoryRootOptions } from "../projection/roots.js";
-import { addLibrarySourceEffect, inspectLibrarySourceEffect } from "../workflows/library/add.js";
+import { retainLibrarySourceEffect, inspectLibrarySourceEffect } from "./source-acquisition.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
 import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
 import { LibraryProgress } from "./progress.js";
@@ -211,7 +211,7 @@ export const refreshCollection = Effect.fn("Library.refreshCollection")(function
       const subject = { id: before.subjectId, label: before.label };
       const retained = yield* progress.around(
         { kind: "source", subject },
-        addLibrarySourceEffect(
+        retainLibrarySourceEffect(
           input,
           undefined,
           priorTree.members.map((member) => member.source_path),

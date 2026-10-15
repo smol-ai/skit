@@ -5,7 +5,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
@@ -53,7 +53,7 @@ it.effect(
           Effect.provide(rendererTestLayer()),
         );
       const added = yield* run(
-        addLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/plugins.tar" }),
+        retainLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/plugins.tar" }),
       );
       const collectionId = added.collection_id!;
       const roots = {

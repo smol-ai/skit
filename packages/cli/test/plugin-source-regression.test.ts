@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LibraryStore, libraryStoreLayer, retainedTreePath, skitLayer } from "@smolai/skit-core";
 import {
-  addLibrarySourceEffect,
+  retainLibrarySourceEffect,
   previewLibrarySourceEffect,
-} from "../src/workflows/library/add.js";
+} from "../src/library-application/source-acquisition.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
 import { writingTo } from "./helpers/library-home.js";
 import manifest from "./fixtures/source-regressions/humanlayer.json" with { type: "json" };
@@ -31,7 +31,7 @@ it.effect(
       }));
       assert.deepStrictEqual((yield* previewLibrarySourceEffect(source)).skills, expected);
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-humanlayer-import-" });
-      const result = yield* writingTo(home, addLibrarySourceEffect(source));
+      const result = yield* writingTo(home, retainLibrarySourceEffect(source));
       assert.deepStrictEqual(result.skills, expected);
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),

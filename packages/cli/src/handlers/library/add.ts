@@ -14,7 +14,10 @@ import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
-import { addLibrarySourceEffect, previewLibrarySourceEffect } from "../../workflows/library/add.js";
+import {
+  retainLibrarySourceEffect,
+  previewLibrarySourceEffect,
+} from "../../library-application/source-acquisition.js";
 import { rejectDedicatedInstallerSourceEffect } from "../../workflows/library/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
@@ -73,7 +76,7 @@ export const addCliCommand = Command.make(
         }
         const retained = yield* renderer.withStatus(
           "Retaining source",
-          withSelectedRegistry(addLibrarySourceEffect(selectedSource, requestedVersion)),
+          withSelectedRegistry(retainLibrarySourceEffect(selectedSource, requestedVersion)),
         );
         yield* renderer.result(
           result("add", {

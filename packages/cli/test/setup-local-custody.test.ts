@@ -9,7 +9,7 @@ import {
   retainedTreePath,
   skitLayer,
 } from "@smolai/skit-core";
-import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
+import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupStepTitles } from "../src/presentation/setup-steps.js";
@@ -293,7 +293,7 @@ it.effect("reconnects only the selected exact Library copy", () =>
       writingTo(
         home.home,
         Effect.gen(function* () {
-          yield* addLibrarySourceEffect(source);
+          yield* retainLibrarySourceEffect(source);
           yield* setupCommand({
             options: {
               libraryHome: home.home,
