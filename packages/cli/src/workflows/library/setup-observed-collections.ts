@@ -7,7 +7,6 @@ import {
   type MachineId,
   type SkillsShProvenanceObservation,
 } from "@smolai/skit-core";
-import type { RetentionOptions } from "./retention-options.js";
 import { setupLockGroupKey, type SetupOptions } from "./setup.js";
 import {
   SetupKnownSourceSelection,
@@ -43,7 +42,6 @@ export class SetupObservedCollectionInvalid
 
 export interface SetupObservedCollectionOptions {
   readonly setup: SetupOptions;
-  readonly retention: Pick<RetentionOptions, "originalsPath">;
 }
 
 const retainedSkillPath = (lockPath: string | undefined, name: string) => {

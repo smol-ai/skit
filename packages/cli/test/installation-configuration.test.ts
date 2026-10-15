@@ -9,22 +9,17 @@ const roots = {
 
 describe("Library installation configuration", () => {
   test("always projects into .agents and into .claude only when Claude Code is present", () => {
-    const withClaude = libraryInstallationConfiguration("/library", roots, ["claude-code"]);
+    const withClaude = libraryInstallationConfiguration(roots, ["claude-code"]);
     expect(withClaude.rootFor("agents")).toBe("/home/tester/.agents/skills");
     expect(withClaude.rootFor("claude")).toBe("/home/tester/.claude/skills");
 
-    const withoutClaude = libraryInstallationConfiguration("/library", roots, [
-      "codex",
-      "opencode",
-      "devin",
-    ]);
+    const withoutClaude = libraryInstallationConfiguration(roots, ["codex", "opencode", "devin"]);
     expect(withoutClaude.rootFor("agents")).toBe("/home/tester/.agents/skills");
     expect(withoutClaude.rootFor("claude")).toBeUndefined();
   });
 
   test("honors direct root overrides", () => {
     const installation = libraryInstallationConfiguration(
-      "/library",
       { ...roots, overrides: { codex: ["/custom/agents"], "claude-code": ["/custom/claude"] } },
       ["claude-code"],
     );

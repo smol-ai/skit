@@ -60,7 +60,6 @@ export class ProjectionRetentionStale
 
 interface ProjectionRetentionOptions {
   readonly roots: InventoryRootOptions;
-  readonly variantsPath: string;
 }
 
 const revision = (state: LibraryState) =>
@@ -260,7 +259,7 @@ export const applyProjectionRetention = Effect.fn("Library.applyProjectionRetent
           target: projection.target,
           scope: binding.scope,
           root: projection.root,
-          variantsPath: options.variantsPath,
+          variantsPath: store.variantsPath,
           acceptedObservations: accepted,
         });
       }

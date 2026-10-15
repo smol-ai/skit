@@ -59,13 +59,15 @@ CLI handlers and the TUI resolve a required `SkitConfiguration` service at their
 boundary. Explicit state-directory flags take precedence over Effect `Config`'s
 `SKIT_HOME`, with the account's `.skit` directory as the default. Account home,
 SKIT state home, and XDG configuration/state roots remain separate values. Derived
-file paths, storage services, and writer locks share this snapshot. The optional XDG
+CLI-owned file paths, storage services, and writer locks share this snapshot. The optional XDG
 state override is preserved separately from the default state directory: when absent
 or empty, skills.sh lock discovery uses `~/.agents/.skill-lock.json`. Empty XDG
 configuration/state values are treated as unset. Account home is an OS boundary
 input, not a ConfigProvider key; embedders can pass it to `resolveSkitConfiguration`. Standalone
 applications construct it with `skitConfigurationLayer`; command handlers provide that layer
-from their parsed flags. The configuration includes resolved directory settings and centrally derived storage paths.
+from their parsed flags. The configuration includes resolved directory settings and CLI-owned auth and registry paths.
+Library layout belongs to core: projection and audit consumers take storage paths from their bound
+`LibraryStore`; command options do not carry copies of the state, originals, or variants paths.
 Domain layers consume a required `SkitConfiguration` service and do
 not provide it again. Standalone adapters and tests also supply this boundary explicitly.
 Configuration writers derive concrete root overrides from the supplied snapshot and
@@ -76,7 +78,12 @@ including commands without explicit home flags, without changing process globals
 Core's `MachineSettings` module owns `machine.json` reads, identity creation, discovery updates,
 and repository decisions. Reads normalize supported document versions in memory without writing.
 Mutations load the latest settings under the root writer and replacement mutex, preserving identity
-and fields outside the requested change. They open no Library state and record no Library history.
+and fields outside the requested change. V5 persists repository-decision initialization explicitly:
+creating identity preserves discovery mode, while saving discovery choices or a repository decision
+initializes it. V1–V4 reads remain read-only; older binaries reject V5 rather than silently treating
+identity creation as completion of discovery. MachineSettings defaults new names to the hostname,
+preserves saved names for unnamed operations, and honors an explicit setup name as a replacement.
+They open no Library state and record no Library history.
 Import no longer handles machine-document encoding, and repository commands do not depend on setup.
 Setup retains the policy that an empty root selection narrows the scan without clearing saved roots.
 Failures to read shared machine settings stop an update batch rather than being treated as failures

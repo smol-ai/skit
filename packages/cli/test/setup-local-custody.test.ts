@@ -64,7 +64,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
           interactive: true,
           dryRun: false,
           workDirFlag: root,
-          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          localCustody: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -148,7 +148,7 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
           },
           interactive: true,
           dryRun: false,
-          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          localCustody: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -229,7 +229,7 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
           },
           interactive: true,
           dryRun: false,
-          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          localCustody: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -303,7 +303,7 @@ it.effect("reconnects only the selected exact Library copy", () =>
             },
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+            localCustody: { bindings: home.bindings },
           }).pipe(Effect.provide(interaction.layer));
         }),
       ),

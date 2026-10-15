@@ -379,7 +379,6 @@ export const setupCliCommand = Command.make(
               skillsStateHome: paths.xdgStateHome,
             },
             localCustody: {
-              acquisition: configuration.acquisition,
               bindings: configuration.pull.bindings,
             },
           });

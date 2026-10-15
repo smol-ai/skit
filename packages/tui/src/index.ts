@@ -149,8 +149,6 @@ const claudeRoot = flag("--claude-root");
 const libraryConfiguration = {
   home: paths.userHome,
   configHome: paths.configHome,
-  statePath: paths.libraryStatePath,
-  variantsPath: paths.variantsPath,
   overrides: {
     ...(codexRoot === undefined ? {} : { codex: [codexRoot] }),
     ...(claudeRoot === undefined ? {} : { "claude-code": [claudeRoot] }),

@@ -40,21 +40,20 @@ type LedgerInspection =
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   library: ResolvedSkitConfiguration,
 ): Effect.gen.Return<LedgerInspection, never, FileSystem.FileSystem> {
-  return yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-    Effect.provide(libraryStoreLayer({ home: library.skitHome })),
-    Effect.map((inspected): LedgerInspection =>
-      inspected.present
-        ? {
-            kind: "readable",
-            retained: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
-          }
-        : { kind: "absent" },
-    ),
-    Effect.orElseSucceed((): LedgerInspection => ({
-      kind: "unreadable",
-      path: library.libraryStatePath,
-    })),
-  );
+  return yield* Effect.gen(function* () {
+    const store = yield* LibraryStore;
+    return yield* store.inspect.pipe(
+      Effect.map((inspected): LedgerInspection =>
+        inspected.present
+          ? {
+              kind: "readable",
+              retained: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
+            }
+          : { kind: "absent" },
+      ),
+      Effect.orElseSucceed((): LedgerInspection => ({ kind: "unreadable", path: store.statePath })),
+    );
+  }).pipe(Effect.provide(libraryStoreLayer({ home: library.skitHome })));
 });
 
 const auditProjectionCustody = Effect.fn("Audit.custody")(function* (

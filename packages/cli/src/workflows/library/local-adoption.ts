@@ -14,7 +14,6 @@ import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { inspectLibrarySourceEffect } from "./add.js";
 import type { ProjectionOptions } from "./projection-options.js";
-import type { RetentionOptions } from "./retention-options.js";
 
 export const LocalAdoptionTarget = Schema.Struct({
   path: Schema.String,
@@ -73,7 +72,6 @@ export const LocalAdoptionPlan = Schema.Struct({
 export interface LocalAdoptionPlan extends Schema.Schema.Type<typeof LocalAdoptionPlan> {}
 
 export interface LocalAdoptionOptions {
-  readonly acquisition: RetentionOptions;
   readonly bindings: ProjectionOptions;
 }
 

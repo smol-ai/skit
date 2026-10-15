@@ -74,11 +74,9 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
     yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections(
-          { setup, retention: { originalsPath: home.originals } },
-          preview,
-          [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
-        ),
+        applySetupObservedCollections({ setup }, preview, [
+          { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
+        ]),
       ),
     );
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
@@ -145,6 +143,8 @@ it.effect("checks a skills.sh Collection member against its recorded Git source"
         publish: (next) => Ref.set(published, next),
         home: home.home,
         originalsPath: home.originals,
+        statePath: home.statePath,
+        variantsPath: home.variantsPath,
       }),
       Effect.provideService(HttpClient.HttpClient, discoveryClient),
     );

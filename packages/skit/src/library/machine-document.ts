@@ -43,9 +43,17 @@ export const MachineDocumentV4 = Schema.Struct({
 });
 export interface MachineDocumentV4 extends Schema.Schema.Type<typeof MachineDocumentV4> {}
 
+/** V5 preserves discovery initialization independently of creating a machine identity. */
+export const MachineDocumentV5 = Schema.Struct({
+  ...MachineDocumentV4.fields,
+  schemaVersion: Schema.Literal(5),
+  repositoryDecisionsInitialized: Schema.Boolean,
+});
+export interface MachineDocumentV5 extends Schema.Schema.Type<typeof MachineDocumentV5> {}
+
 /** One current read shape. V1 has no identity or display name to recover. */
 export const CurrentMachineDocument = Schema.Struct({
-  schemaVersion: Schema.Literal(4),
+  schemaVersion: Schema.Literal(5),
   machineId: Schema.optionalKey(MachineId),
   legacyMachineId: Schema.optionalKey(LegacyMachineId),
   displayName: Schema.optionalKey(Schema.NonEmptyString),
@@ -67,7 +75,7 @@ const fromV1 = MachineDocumentV1.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
     decodeOnly((document) => ({
-      schemaVersion: 4 as const,
+      schemaVersion: 5 as const,
       discoveryRoots: document.repositoryRoots ?? [],
       repositories: [],
       repositoryDecisionsInitialized: false,
@@ -79,7 +87,7 @@ const fromV2 = MachineDocumentV2.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
     decodeOnly((document) => ({
-      schemaVersion: 4 as const,
+      schemaVersion: 5 as const,
       machineId: migratedMachineId(document.machineId, document.machineId),
       legacyMachineId: document.machineId,
       ...(document.displayName === undefined ? {} : { displayName: document.displayName }),
@@ -94,7 +102,7 @@ const fromV3 = MachineDocumentV3.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
     decodeOnly((document) => ({
-      schemaVersion: 4 as const,
+      schemaVersion: 5 as const,
       machineId: document.machineId,
       ...(document.displayName === undefined ? {} : { displayName: document.displayName }),
       discoveryRoots: document.repositoryRoots ?? [],
@@ -109,26 +117,26 @@ const fromV4 = MachineDocumentV4.pipe(
     CurrentMachineDocument,
     decodeOnly((document) => ({
       ...document,
-      schemaVersion: 4 as const,
+      schemaVersion: 5 as const,
       repositoryDecisionsInitialized: true,
     })),
   ),
 );
 
-export const MachineDocument = Schema.Union([fromV4, fromV3, fromV2, fromV1]);
+export const MachineDocument = Schema.Union([MachineDocumentV5, fromV4, fromV3, fromV2, fromV1]);
 export const MachineDocumentJson = Schema.fromJsonString(MachineDocument);
 
 /** What a machine reads as before it has written `machine.json`. */
 export const emptyMachineDocument = (): CurrentMachineDocument => ({
-  schemaVersion: 4,
+  schemaVersion: 5,
   discoveryRoots: [],
   repositories: [],
   repositoryDecisionsInitialized: false,
 });
 
 export const currentMachineDocument = (
-  fields: Omit<MachineDocumentV4, "schemaVersion">,
-): MachineDocumentV4 => ({ ...fields, schemaVersion: 4 });
+  fields: Omit<MachineDocumentV5, "schemaVersion">,
+): MachineDocumentV5 => ({ ...fields, schemaVersion: 5 });
 
 export const machineDocumentIdentity = (
   document: CurrentMachineDocument,

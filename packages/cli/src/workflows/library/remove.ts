@@ -2,7 +2,7 @@ import {
   readAuthorWorkspaceEffect,
   writeAuthorWorkspaceEffect,
 } from "../../library/author-workspace.js";
-import { withLibraryWriter } from "@smolai/skit-core";
+import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import {
   bindingSkillIds,
   removeCollectionEffect,
@@ -15,7 +15,6 @@ import { resolveLibrarySubject } from "./subject-resolution.js";
 export interface RemoveOptions {
   readonly query: string;
   readonly dryRun: boolean;
-  readonly variantsPath: string;
 }
 
 export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
@@ -72,7 +71,7 @@ export const executeRemoveEffect = Effect.fn("Library.executeRemove")(
           ? plan.subject_id
           : (state.skills.find((skill) => skill.skill_id === plan.subject_id)?.collection_id ??
             plan.subject_id),
-      variantsPath: options.variantsPath,
+      variantsPath: (yield* LibraryStore).variantsPath,
     });
     const removedCollection =
       plan.subject_kind === "collection"

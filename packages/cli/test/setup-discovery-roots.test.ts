@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer, MachineSettings } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -68,7 +69,7 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
           options,
           interactive: true,
           dryRun: false,
-          localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+          localCustody: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -76,5 +77,39 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
     const persisted = JSON.parse(yield* fs.readFileString(machinePath));
     expect(persisted.machineId).toBeDefined();
     expect(persisted.discoveryRoots).toEqual([savedRoot]);
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("creating identity preserves V1 repository discovery until decisions are saved", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* scratch("skit-identity-discovery-");
+    const projects = join(root, "projects");
+    const repository = join(projects, "example");
+    yield* fs.makeDirectory(join(repository, ".git"), { recursive: true });
+    const home = yield* libraryHome({ home: join(root, "library"), inventoryHome: root });
+    yield* fs.writeFileString(
+      join(home.home, "machine.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        repositoryRoots: [projects],
+      }),
+    );
+    const options = {
+      libraryHome: home.home,
+      inventory: home.inventory,
+      persistRoots: false,
+      scanDecidedRepositories: true,
+    };
+    const before = yield* home.owned(collectSetupEvidence(options));
+    expect(before.walk.repositories).toEqual([repository]);
+    yield* MachineSettings.ensureIdentity(home.home);
+    const after = yield* home.owned(collectSetupEvidence(options));
+    expect(after.discovering).toBe(true);
+    expect(after.walk.repositories).toEqual(before.walk.repositories);
+    yield* MachineSettings.setRepositoryDecision(home.home, repository, "ignored");
+    const decided = yield* home.owned(collectSetupEvidence(options));
+    expect(decided.discovering).toBe(false);
+    expect(decided.walk.repositories).toEqual([]);
   }).pipe(Effect.provide(skitLayer)),
 );

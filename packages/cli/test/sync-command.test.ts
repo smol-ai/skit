@@ -24,6 +24,8 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         publish: () => Effect.die("unreachable"),
         home: "/unreachable",
         originalsPath: "/unreachable/originals",
+        statePath: "/unreachable/state.json",
+        variantsPath: "/unreachable/variants",
       }),
     ),
     Effect.provideService(
@@ -60,7 +62,7 @@ it.effect("Library sync preserves credential configuration failures", () =>
       authState: Result.fail(failure),
       apply: false,
       adopt: false,
-      projection: { variantsPath: "/unused/variants", rootFor: () => undefined },
+      projection: { rootFor: () => undefined },
     }),
   ).pipe(
     Effect.flip,

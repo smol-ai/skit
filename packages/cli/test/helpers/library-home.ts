@@ -24,14 +24,12 @@ import {
   validateSkitDirectoryEffect,
   type HarnessName,
   type HarnessRootOverrides,
-  projectionTargetProfiles,
   type LibraryState,
   makeMachineId,
   retainObservedCollectionEffect,
   withLibraryWriter,
 } from "@smolai/skit-core";
 import type { ProjectionOptions } from "../../src/workflows/library/projection-options.js";
-import type { RetentionOptions } from "../../src/workflows/library/retention-options.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
@@ -95,19 +93,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     configHome: join(input.inventoryHome ?? home, "config"),
     overrides: roots,
   };
-  const bindings: ProjectionOptions = {
-    ...inventory,
-    statePath,
-    variantsPath: join(home, "variants"),
-  };
-  const addOptions: RetentionOptions = {
-    installation: {
-      statePath,
-      variantsPath: bindings.variantsPath,
-      rootFor: (target) => roots[projectionTargetProfiles[target]]?.[0],
-    },
-    originalsPath: join(home, "originals"),
-  };
+  const bindings: ProjectionOptions = inventory;
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;
@@ -158,10 +144,10 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     roots,
     now,
     statePath,
-    originals: addOptions.originalsPath,
+    originals: join(home, "originals"),
     inventory,
     bindings,
-    addOptions,
+    variantsPath: join(home, "variants"),
     owned,
     durable,
     writeDurable,

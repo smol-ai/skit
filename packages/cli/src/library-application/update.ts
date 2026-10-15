@@ -44,7 +44,6 @@ export class UpdateNotRefreshable
 
 export interface UpdateOptions {
   readonly roots: InventoryRootOptions;
-  readonly variantsPath: string;
 }
 
 const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
@@ -284,7 +283,7 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
             { kind: "projection", subject },
             reconcileLibraryProjections({
               roots: options.roots,
-              variantsPath: options.variantsPath,
+              variantsPath: store.variantsPath,
               onlyBindings: [...current.global_bindings, ...current.local_bindings].filter(
                 (binding) =>
                   binding.entries.some((entry) =>

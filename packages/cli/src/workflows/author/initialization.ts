@@ -188,8 +188,6 @@ export const authorInitCliCommand = Command.make(
           {
             ...configuration.inventory,
             libraryHome: configuration.libraryHome,
-            statePath: join(configuration.libraryHome, "state.json"),
-            variantsPath: join(configuration.libraryHome, "variants"),
           },
           input.register,
         );

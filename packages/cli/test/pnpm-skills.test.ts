@@ -385,7 +385,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     const takeover = yield* Effect.result(
       home.owned(
         applySetupLocalCustody(
-          { setup: options, adoption: { acquisition: home.addOptions, bindings: home.bindings } },
+          { setup: options, adoption: { bindings: home.bindings } },
           observed,
           [{ name: "demo-guide", sourcePath: f.skill }],
         ),

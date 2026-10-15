@@ -219,7 +219,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     takeRemote?: readonly string[];
     keepEnabled?: readonly string[];
     projection?: {
-      variantsPath: string;
       rootFor: (target: ProjectionTarget) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
@@ -230,7 +229,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const store = yield* LibraryStore;
     const projectionOptions = {
       home: store.home,
-      variantsPath: options.projection?.variantsPath ?? store.originalsPath,
+      variantsPath: store.variantsPath,
       ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
     };
     const api = yield* librarySyncApiEffect({ origin: options.origin, token: options.token });

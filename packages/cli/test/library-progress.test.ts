@@ -53,7 +53,6 @@ it.effect("a headless update emits domain progress and records one attributed tr
       .owned(
         updateSubjectsEffect(before, {
           roots: home.inventory,
-          variantsPath: home.bindings.variantsPath,
         }).pipe(
           Effect.provide(
             libraryProgressLayer((event) =>

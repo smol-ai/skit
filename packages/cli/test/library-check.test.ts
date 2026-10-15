@@ -33,6 +33,8 @@ it.effect("checks retained custody without treating an observed local copy as an
         publish: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
+        statePath: join(home, "state.json"),
+        variantsPath: join(home, "variants"),
       }),
     );
     assert.strictEqual(current[0]?.retained_copies[0]?.retained_bytes_current, true);
@@ -49,6 +51,8 @@ it.effect("checks retained custody without treating an observed local copy as an
         publish: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
+        statePath: join(home, "state.json"),
+        variantsPath: join(home, "variants"),
       }),
     );
     assert.strictEqual(changed[0]?.retained_copies[0]?.retained_bytes_current, false);
@@ -65,6 +69,8 @@ it.effect("checks retained custody without treating an observed local copy as an
         publish: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
+        statePath: join(home, "state.json"),
+        variantsPath: join(home, "variants"),
       }),
     );
     assert.strictEqual(withoutObservedCopy[0]?.source_status, "not-applicable");

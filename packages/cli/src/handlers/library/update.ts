@@ -45,7 +45,6 @@ export const updateCliCommand = Command.make(
         const state = yield* store.load;
         const options = {
           roots: configuration.inventory,
-          variantsPath: configuration.pull.bindings.variantsPath,
         };
         if (projectionSelector !== undefined) {
           if (query === undefined)

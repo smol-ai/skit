@@ -79,7 +79,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
             interactive: flags.interactive ?? true,
             dryRun: flags.dryRun ?? false,
             ...(flags.workDirFlag ? { workDirFlag: flags.workDirFlag } : {}),
-            localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+            localCustody: { bindings: home.bindings },
           }).pipe(
             Effect.provideServiceEffect(
               Prompter,

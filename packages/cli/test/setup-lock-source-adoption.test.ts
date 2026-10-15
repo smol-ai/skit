@@ -136,7 +136,7 @@ for (const skillCount of [1, 12]) {
               interactive: true,
               dryRun: false,
               workDirFlag: root,
-              localCustody: { acquisition: home.addOptions, bindings: home.bindings },
+              localCustody: { bindings: home.bindings },
             }).pipe(Effect.provide(interaction.layer)),
           ),
         );
@@ -230,11 +230,9 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const adopted = yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections(
-          { setup, retention: { originalsPath: home.originals } },
-          preview,
-          [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
-        ),
+        applySetupObservedCollections({ setup }, preview, [
+          { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
+        ]),
       ).pipe(Effect.provideService(LibraryActor, "setup")),
     );
     expect(adopted.retained).toHaveLength(1);
@@ -288,11 +286,9 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       home.owned(
         writingTo(
           home.home,
-          applySetupObservedCollections(
-            { setup, retention: { originalsPath: home.originals } },
-            preview,
-            [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
-          ),
+          applySetupObservedCollections({ setup }, preview, [
+            { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
+          ]),
         ),
       ),
     );
@@ -469,11 +465,9 @@ it.effect("adopts a selected member from a two-Skill GitHub lock collection", ()
     const adopted = yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections(
-          { setup, retention: { originalsPath: home.originals } },
-          preview,
-          [{ name: selected.name, paths: selected.paths, groupKey: selected.groupKey }],
-        ),
+        applySetupObservedCollections({ setup }, preview, [
+          { name: selected.name, paths: selected.paths, groupKey: selected.groupKey },
+        ]),
       ),
     );
     expect(adopted.retained).toHaveLength(1);

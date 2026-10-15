@@ -82,11 +82,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const collections = new Set(approval.imports.map((selection) => selection.groupKey)).size;
         yield* options.withStatus(
           `Importing ${collections} installed Collection${collections === 1 ? "" : "s"} (${approval.imports.length} Skill${approval.imports.length === 1 ? "" : "s"})`,
-          applySetupObservedCollections(
-            { setup: approval.setup, retention: options.adoption.acquisition },
-            current,
-            approval.imports,
-          ),
+          applySetupObservedCollections({ setup: approval.setup }, current, approval.imports),
         );
       }
       if (approval.bindings.length) {

@@ -38,7 +38,7 @@ export const previewTestBindings = (options: BindingOptions) => {
     enabled: options.invocation.enabled,
     invocation: options.invocation.invocation,
   };
-  return previewBindingChanges([request], { ...options.roots, variantsPath: options.variantsPath });
+  return previewBindingChanges([request], options.roots);
 };
 
 export const setLibraryBindings = Effect.fn("Test.setLibraryBindings")(function* (

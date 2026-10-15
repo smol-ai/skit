@@ -8,7 +8,6 @@ import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import { Renderer } from "../presentation/renderer.js";
 import { MachineSettings } from "@smolai/skit-core";
-import { hostname } from "node:os";
 import { result } from "./contracts.js";
 
 const path = Argument.String("path");
@@ -28,7 +27,6 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
             selectedHome,
             repository,
             name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
-            hostname(),
           );
           yield* renderer.result(
             result("repositoryPolicy", {

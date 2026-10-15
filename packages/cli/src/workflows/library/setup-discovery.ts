@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { hostname } from "node:os";
 import { basename, dirname, join, posix, relative, resolve, sep } from "node:path";
 import { Context, Effect, FileSystem, Result, Schema } from "effect";
 import {
@@ -608,7 +607,9 @@ export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(funct
     // An empty selection narrows this scan; it never clears saved discovery roots.
     ...(options.repositoryRoots?.length ? { discoveryRoots: options.repositoryRoots } : {}),
     repositories: options.repositoryDecisions,
-    displayName: options.machineDisplayName ?? hostname(),
+    ...(options.machineDisplayName === undefined
+      ? {}
+      : { displayName: options.machineDisplayName }),
   });
 });
 

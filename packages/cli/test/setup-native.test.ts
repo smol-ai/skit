@@ -232,7 +232,8 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       persisted: true,
     });
     expect(JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json")))).toEqual({
-      schemaVersion: 4,
+      schemaVersion: 5,
+      repositoryDecisionsInitialized: true,
       machineId: migrated.machineConfig.machineId,
       displayName: "Test machine",
       discoveryRoots: [f.work],
@@ -282,30 +283,15 @@ it.effect("scans only repositories watched by machine configuration", () =>
 it.effect("watches, ignores, and forgets a repository decision", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    yield* MachineSettings.setRepositoryDecision(
-      f.libraryHome,
-      f.repository,
-      "watched",
-      "Test machine",
-    );
+    yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "watched");
     expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
       repositories: [{ path: f.repository, status: "watched" }],
     });
-    yield* MachineSettings.setRepositoryDecision(
-      f.libraryHome,
-      f.repository,
-      "ignored",
-      "Test machine",
-    );
+    yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, "ignored");
     expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({
       repositories: [{ path: f.repository, status: "ignored" }],
     });
-    yield* MachineSettings.setRepositoryDecision(
-      f.libraryHome,
-      f.repository,
-      undefined,
-      "Test machine",
-    );
+    yield* MachineSettings.setRepositoryDecision(f.libraryHome, f.repository, undefined);
     expect(yield* MachineSettings.read(f.libraryHome)).toMatchObject({ repositories: [] });
   }).pipe(Effect.provide(testPlatformLayer)),
 );

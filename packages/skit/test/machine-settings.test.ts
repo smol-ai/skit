@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
@@ -51,11 +52,15 @@ for (const version of [1, 2, 3] as const) {
         );
         assert.strictEqual(yield* fs.readFileString(path), bytes);
       }
-      yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched", "Replacement name");
+      const identified = yield* MachineSettings.read(home);
+      assert.strictEqual(identified.repositoryDecisionsInitialized, false);
+      assert.deepStrictEqual(identified.discoveryRoots, ["/saved"]);
+      assert.deepStrictEqual(identified.repositories, []);
+      yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched");
       const updated = yield* MachineSettings.read(home);
-      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 4);
+      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 5);
       assert.strictEqual(updated.machineId, identity);
-      assert.strictEqual(updated.displayName, version === 1 ? "SKIT machine" : "Existing name");
+      assert.strictEqual(updated.displayName, version === 1 ? hostname() : "Existing name");
       assert.deepStrictEqual(updated.discoveryRoots, ["/saved"]);
       assert.deepStrictEqual(updated.repositories, [{ path: "/repo", status: "watched" }]);
       assert.strictEqual(updated.repositoryDecisionsInitialized, true);
@@ -82,7 +87,7 @@ it.effect(
               repositories: [{ path: "/one", status: "watched" }],
               displayName: "Discovery name",
             }),
-            MachineSettings.setRepositoryDecision(home, "/two", "ignored", "Repository name"),
+            MachineSettings.setRepositoryDecision(home, "/two", "ignored"),
           ],
           { concurrency: "unbounded" },
         ),
@@ -102,7 +107,7 @@ it.effect(
         final.discoveryRoots,
       );
       assert.deepStrictEqual((yield* MachineSettings.read(home)).repositories, final.repositories);
-      yield* MachineSettings.setRepositoryDecision(home, "/one", undefined, "Another name");
+      yield* MachineSettings.setRepositoryDecision(home, "/one", undefined);
       assert.deepStrictEqual((yield* MachineSettings.read(home)).repositories, [
         { path: "/two", status: "ignored" },
       ]);
@@ -120,12 +125,9 @@ it.effect("refuses an occupied root lock before replacing settings", () =>
     const path = join(home, "machine.json");
     const before = yield* fs.readFileString(path);
     yield* fs.writeFileString(join(home, ".lock"), "4242@elsewhere token\n");
-    const error = yield* MachineSettings.setRepositoryDecision(
-      home,
-      "/repo",
-      "ignored",
-      "New name",
-    ).pipe(Effect.flip);
+    const error = yield* MachineSettings.setRepositoryDecision(home, "/repo", "ignored").pipe(
+      Effect.flip,
+    );
     assert.strictEqual(error._tag, "LibraryBusy");
     assert.strictEqual(yield* fs.readFileString(path), before);
     assert.strictEqual(yield* fs.readFileString(join(home, ".lock")), "4242@elsewhere token\n");
@@ -155,5 +157,48 @@ it.effect("does not interpret an unreadable document as missing settings", () =>
     const error = yield* MachineSettings.ensureIdentity(home).pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.strictEqual((yield* fs.stat(path)).type, "Directory");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("explicit names override a saved default and survive later unnamed mutations", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-name-" });
+    const identity = yield* MachineSettings.ensureIdentity(home);
+    assert.strictEqual((yield* MachineSettings.read(home)).displayName, hostname());
+    yield* MachineSettings.updateDiscovery(home, { displayName: "My workstation" });
+    yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched");
+    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/projects"] });
+    yield* MachineSettings.ensureIdentity(home);
+    const settings = yield* MachineSettings.read(home);
+    assert.strictEqual(settings.machineId, identity);
+    assert.strictEqual(settings.displayName, "My workstation");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("v4 reads stay read-only and preserve an initialized empty repository selection", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-v4-" });
+    const path = join(home, "machine.json");
+    const machineId = makeMachineId();
+    const bytes = JSON.stringify({
+      schemaVersion: 4,
+      machineId,
+      displayName: "Saved machine",
+      discoveryRoots: ["/projects"],
+      repositories: [],
+    });
+    yield* fs.writeFileString(path, bytes);
+    assert.strictEqual(yield* MachineSettings.ensureIdentity(home), machineId);
+    assert.strictEqual(yield* fs.readFileString(path), bytes);
+    const prior = yield* MachineSettings.read(home);
+    assert.strictEqual(prior.repositoryDecisionsInitialized, true);
+    yield* MachineSettings.updateDiscovery(home, { displayName: "Renamed machine" });
+    const updated = yield* MachineSettings.read(home);
+    assert.strictEqual(updated.machineId, machineId);
+    assert.strictEqual(updated.repositoryDecisionsInitialized, true);
+    assert.deepStrictEqual(updated.discoveryRoots, ["/projects"]);
+    assert.deepStrictEqual(updated.repositories, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

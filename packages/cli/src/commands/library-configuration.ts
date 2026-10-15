@@ -24,23 +24,14 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
     configHome: inventory.configHome,
     overrides: inventory.overrides,
   });
-  const installation = libraryInstallationConfiguration(libraryHome, inventory, detectedHarnesses);
+  const installation = libraryInstallationConfiguration(inventory, detectedHarnesses);
   return {
     libraryHome,
     inventory,
     detectedHarnesses: Effect.succeed(detectedHarnesses),
-    acquisition: {
-      installation,
-      originalsPath: paths.originalsPath,
-    },
     pull: {
       installation,
-      originalsPath: paths.originalsPath,
-      bindings: {
-        ...inventory,
-        statePath: paths.libraryStatePath,
-        variantsPath: paths.variantsPath,
-      },
+      bindings: inventory,
     },
   };
 });

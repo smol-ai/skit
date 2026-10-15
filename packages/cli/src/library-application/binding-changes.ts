@@ -47,9 +47,7 @@ export interface BindingChangeRequest extends BindingSelection {
   readonly adoption?: { readonly path: string; readonly observedHash: Digest };
 }
 
-export interface BindingChangeConfiguration extends InventoryRootOptions {
-  readonly variantsPath: string;
-}
+export type BindingChangeConfiguration = InventoryRootOptions;
 
 const planType = Symbol("BindingChangePlan");
 /** Display facts plus an opaque handle to the exact requests and Library previewed. */
@@ -140,7 +138,6 @@ export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelecti
     home: configuration.home,
     configHome: configuration.configHome,
     overrides: structuredClone(configuration.overrides),
-    variantsPath: configuration.variantsPath,
   };
   return {
     library: structuredClone(current),
@@ -244,7 +241,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   const selected = yield* resolveLibrarySubject(current, options.query);
   const reconciled = yield* reconcileLibraryProjections({
     roots: configuration,
-    variantsPath: configuration.variantsPath,
+    variantsPath: store.variantsPath,
     onlyBindings: plan.bindings,
     restoreNativeDeletedSkills: options.enabled
       ? selected.skills

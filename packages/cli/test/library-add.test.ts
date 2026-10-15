@@ -80,7 +80,6 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
       refreshed,
       {
         roots: { home: root, configHome: join(root, "config"), overrides: {} },
-        variantsPath: join(home, "variants"),
       },
       added.collection_id,
     ).pipe(Effect.provide(libraryStoreLayer({ home })), Effect.flip);
@@ -316,7 +315,6 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         executeRemoveEffect(disabled, {
           query: skill.skill_id,
           dryRun: false,
-          variantsPath: options.variantsPath,
         }),
       ),
     );

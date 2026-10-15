@@ -79,7 +79,7 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
               dryRun: false,
             },
             roots: f.home.inventory,
-            variantsPath: f.home.bindings.variantsPath,
+            variantsPath: f.home.variantsPath,
           };
           const preview = yield* setLibraryBindings({
             ...options,
@@ -125,7 +125,7 @@ it.effect.each(["retain-only", "retire-aliases", "keep-both"] as const)(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -225,7 +225,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
             applySetupLocalCustody(
               {
                 setup: options,
-                adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+                adoption: { bindings: f.home.bindings },
               },
               observed,
               [{ name: "review", sourcePath: f.source }],
@@ -274,7 +274,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
             applySetupLocalCustody(
               {
                 setup: options,
-                adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+                adoption: { bindings: f.home.bindings },
               },
               observed,
               [{ name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" }],
@@ -367,7 +367,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
                 dryRun: false,
               },
               roots: f.home.inventory,
-              variantsPath: f.home.bindings.variantsPath,
+              variantsPath: f.home.variantsPath,
               allowedShadowAliases: [
                 {
                   path: f.alias,
@@ -413,7 +413,7 @@ it.effect(
                 dryRun: false,
               },
               roots: f.home.inventory,
-              variantsPath: f.home.bindings.variantsPath,
+              variantsPath: f.home.variantsPath,
             });
             const state = yield* store.load;
             expect(state.projections.some((projection) => projection.target === "claude")).toBe(
@@ -482,7 +482,7 @@ it.effect(
             const applied = yield* applySetupLocalCustody(
               {
                 setup: options,
-                adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+                adoption: { bindings: f.home.bindings },
               },
               observed,
               [
@@ -533,7 +533,7 @@ for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -583,7 +583,7 @@ it.effect.each(["retain-only", "keep-both"] as const)(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -631,7 +631,7 @@ it.effect(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -707,7 +707,7 @@ for (const operation of ["add", "bind"] as const) {
                   ? yield* applySetupLocalCustody(
                       {
                         setup,
-                        adoption: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+                        adoption: { bindings: f.home.bindings },
                       },
                       fresh,
                       [selection],
@@ -779,7 +779,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { acquisition: f.home.addOptions, bindings: f.home.bindings },
+            localCustody: { bindings: f.home.bindings },
           }).pipe(
             Effect.provideService(Renderer, {
               ...renderer,

@@ -11,9 +11,6 @@ export interface ResolvedSkitConfiguration {
   readonly xdgStateHome: string | undefined;
   readonly authPath: string;
   readonly syncBindingsPath: string;
-  readonly libraryStatePath: string;
-  readonly originalsPath: string;
-  readonly variantsPath: string;
 }
 
 export class SkitConfiguration extends Context.Service<
@@ -21,7 +18,16 @@ export class SkitConfiguration extends Context.Service<
   ResolvedSkitConfiguration
 >()("skit/SkitConfiguration") {}
 
-/** Resolve inputs and derived storage paths once at the application boundary. */
+const pathsForHome = (home: string) => {
+  const skitHome = resolve(home);
+  return {
+    skitHome,
+    authPath: join(skitHome, "auth.json"),
+    syncBindingsPath: join(skitHome, "sync-bindings.json"),
+  };
+};
+
+/** Resolve process inputs and CLI-owned paths once at the application boundary. */
 export const resolveSkitConfiguration = Effect.fn("Configuration.resolve")(function* (
   home?: string,
   userHome = homedir(),
@@ -48,15 +54,10 @@ export const resolveSkitConfiguration = Effect.fn("Configuration.resolve")(funct
   const stateHome = xdgStateHome ?? resolve(userHome, ".local", "state");
   return SkitConfiguration.of({
     userHome: resolve(userHome),
-    skitHome,
+    ...pathsForHome(skitHome),
     configHome,
     stateHome,
     xdgStateHome,
-    authPath: join(skitHome, "auth.json"),
-    syncBindingsPath: join(skitHome, "sync-bindings.json"),
-    libraryStatePath: join(skitHome, "state.json"),
-    originalsPath: join(skitHome, "originals"),
-    variantsPath: join(skitHome, "variants"),
   });
 });
 
@@ -64,16 +65,7 @@ export const resolveSkitConfiguration = Effect.fn("Configuration.resolve")(funct
 export const configurationForHome = Effect.fn("Configuration.forHome")(function* (home?: string) {
   const paths = yield* SkitConfiguration;
   if (home === undefined || resolve(home) === paths.skitHome) return paths;
-  const skitHome = resolve(home);
-  return SkitConfiguration.of({
-    ...paths,
-    skitHome,
-    authPath: join(skitHome, "auth.json"),
-    syncBindingsPath: join(skitHome, "sync-bindings.json"),
-    libraryStatePath: join(skitHome, "state.json"),
-    originalsPath: join(skitHome, "originals"),
-    variantsPath: join(skitHome, "variants"),
-  });
+  return SkitConfiguration.of({ ...paths, ...pathsForHome(home) });
 });
 
 /** Construct the shared configuration at an executable or standalone application boundary. */

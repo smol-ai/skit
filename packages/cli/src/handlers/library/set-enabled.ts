@@ -178,7 +178,6 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
   const selection = yield* openBindingChangeSelection({
     ...input.configuration.inventory,
-    variantsPath: input.configuration.pull.bindings.variantsPath,
   });
   const state = selection.library;
   const prompter = yield* Prompter;

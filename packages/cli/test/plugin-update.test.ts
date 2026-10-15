@@ -85,10 +85,10 @@ it.effect(
       yield* skill("plugins/tools/skills/added", "added");
       yield* fs.remove(join(source, "skills/deleted"), { recursive: true });
       bytes = yield* archive();
-      const preview = yield* run(planUpdatesEffect(before, { roots, variantsPath }));
+      const preview = yield* run(planUpdatesEffect(before, { roots }));
       assert.deepStrictEqual(preview[0]?.removed, ["deleted"]);
       assert.deepStrictEqual(preview[0]?.enabled, ["added"]);
-      const outcomes = yield* run(updateSubjectsEffect(before, { roots, variantsPath }));
+      const outcomes = yield* run(updateSubjectsEffect(before, { roots }));
       assert.strictEqual(outcomes.length, 1);
       assert.isFalse("status" in outcomes[0]!);
       const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
@@ -113,12 +113,12 @@ it.effect(
       assert.isTrue(yield* fs.exists(join(root, "codex/legacy/SKILL.md")));
       assert.isTrue(yield* fs.exists(join(root, "codex/added/SKILL.md")));
       assert.isFalse(yield* fs.exists(join(root, "codex/deleted")));
-      const retry = yield* run(updateSubjectsEffect(after, { roots, variantsPath }));
+      const retry = yield* run(updateSubjectsEffect(after, { roots }));
       assert.isTrue("changed" in retry[0]! && retry[0].changed === false);
       const beforeConflict = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
       yield* skill("plugins/tools/skills/review", "review", "A different variant");
       bytes = yield* archive();
-      const conflicted = yield* run(updateSubjectsEffect(beforeConflict, { roots, variantsPath }));
+      const conflicted = yield* run(updateSubjectsEffect(beforeConflict, { roots }));
       assert.isFalse("status" in conflicted[0]!);
       if ("changed" in conflicted[0]!) {
         assert.strictEqual(conflicted[0].changed, false);
