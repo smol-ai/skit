@@ -10,6 +10,22 @@ All front ends import core through `@smolai/skit-core`, preserving one runtime i
 for service tags and schemas. The older `front-end.ts` facade retains presentation/audit
 exports and re-exports the application surface for existing workspace consumers.
 
+`binding-changes.ts` owns enable/disable and invocation changes. Front ends prepare requests
+with `previewBindingChanges`, display the returned facts, and apply the opaque plan with
+`applyBindingChanges`. The plan privately retains the Library home, revision, requests, and
+projection routing; confirmation cannot reconstruct or redirect the operation. Plans are
+in-memory handles for the current process, not persisted or wire contracts. CLI JSON schemas
+remain separate in `set-enabled-contract.ts`, and terminal text belongs to presentation.
+
+Interactive CLI selection uses `openBindingChangeSelection` before asking questions. Its preview
+is tied to the Library shown at that point, so a change during prompting is refused at apply.
+Selection and preview hold no writer and materialize nothing. Application execution owns the
+writer, validates the original revision, publishes Binding intent, reconciles through the existing
+Projection workflow, and advances each change only onto this action's previous publication.
+The environment-free `binding-selection.ts` owns Collection-following and invocation policy;
+filesystem observations and publication stay in the application workflow. TUI session state
+retains the prepared plan and presentation facts, with no operation list or storage revision.
+
 Library updates require an explicit `LibraryProgress` implementation. Stages and completions
 carry subject identity, source change, and projection counts. The terminal adapter maps
 these facts to the existing scoped spinner and completion lines. Other consumers can

@@ -65,7 +65,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
       }),
     );
     const confirmed = yield* home
-      .owned(confirmLibraryChange(proposed, home.bindings))
+      .owned(confirmLibraryChange(proposed))
       .pipe(Effect.provideService(LibraryActor, "tui"));
     assert.notStrictEqual(confirmed.outcome?.kind, "failed");
 
@@ -136,7 +136,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.ok(
       (yield* home.owned(openLibrarySession())).skills.every((row) => row.bindings.length === 0),
     );
-    const enabled = yield* home.owned(confirmLibraryChange(proposed, home.bindings));
+    const enabled = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(enabled.outcome?.kind, "applied");
     assert.ok(enabled.skills.every((row) => row.bindings.length === 1));
     assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
@@ -157,7 +157,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
     );
     assert.strictEqual(repair.outcome.kind, "preview");
-    const repaired = yield* home.owned(confirmLibraryChange(repair, home.bindings));
+    const repaired = yield* home.owned(confirmLibraryChange(repair));
     assert.strictEqual(repaired.outcome?.kind, "applied");
     assert.ok(yield* fs.exists(projection.path));
 
@@ -187,7 +187,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       proposeLibraryDisable(repaired, home.bindings, alphaRow, alphaRow.bindings),
     );
     assert.strictEqual(cleanup.outcome.kind, "preview");
-    const cleaned = yield* home.owned(confirmLibraryChange(cleanup, home.bindings));
+    const cleaned = yield* home.owned(confirmLibraryChange(cleanup));
     assert.strictEqual(cleaned.outcome?.kind, "applied");
     assert.ok(
       !(yield* fs.exists(
@@ -202,55 +202,59 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       proposeLibraryCollectionChange(enabled, home.bindings, collectionId, false, scopes),
     );
     assert.strictEqual(removal.outcome.kind, "preview");
-    const disabled = yield* home.owned(confirmLibraryChange(removal, home.bindings));
+    const disabled = yield* home.owned(confirmLibraryChange(removal));
     assert.strictEqual(disabled.outcome?.kind, "applied");
     assert.ok(disabled.skills.every((row) => row.bindings.length === 0));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 /** One Skill, with a proposal to enable its Collection globally and then in a repository. */
-const twoScopeProposal = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-session-stale-" });
-  const home = yield* libraryHome({ home: join(root, "home") });
-  yield* initializeLibraryMachine(home.home);
-  const source = join(root, "source");
-  const repository = join(root, "repository");
-  yield* fs.makeDirectory(source, { recursive: true });
-  yield* fs.makeDirectory(repository, { recursive: true });
-  yield* fs.writeFileString(join(source, "SKILL.md"), "# review\n");
-  yield* home.owned(
-    writingTo(
-      home.home,
-      retainObservedIn(home.home)({
-        source: { type: "local", path: source },
-        input: source,
-        retainedAt: "2026-10-13T00:00:00.000Z",
-        skills: [
-          {
-            name: "review",
-            sourcePath: source,
-            relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(source),
-          },
-        ],
-        observations: [],
-      }),
-    ),
-  );
-  const session = yield* home.owned(openLibrarySession());
-  const proposed = yield* home.owned(
-    proposeLibraryCollectionChange(
-      session,
-      home.bindings,
-      (yield* home.durable).collections[0]!.collection_id,
-      true,
-      [{ kind: "global" }, { kind: "repository", root: repository }],
-    ),
-  );
-  assert.strictEqual(proposed.pending?.operations.length, 2);
-  return { home, proposed };
-});
+const twoScopeProposal = (scopeCount = 2) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-session-stale-" });
+    const home = yield* libraryHome({ home: join(root, "home") });
+    yield* initializeLibraryMachine(home.home);
+    const source = join(root, "source");
+    const repository = join(root, "repository");
+    yield* fs.makeDirectory(source, { recursive: true });
+    yield* fs.makeDirectory(repository, { recursive: true });
+    yield* fs.writeFileString(join(source, "SKILL.md"), "# review\n");
+    yield* home.owned(
+      writingTo(
+        home.home,
+        retainObservedIn(home.home)({
+          source: { type: "local", path: source },
+          input: source,
+          retainedAt: "2026-10-13T00:00:00.000Z",
+          skills: [
+            {
+              name: "review",
+              sourcePath: source,
+              relativePath: ".",
+              observedHash: yield* deterministicTreeHashEffect(source),
+            },
+          ],
+          observations: [],
+        }),
+      ),
+    );
+    const session = yield* home.owned(openLibrarySession());
+    const proposed = yield* home.owned(
+      proposeLibraryCollectionChange(
+        session,
+        home.bindings,
+        (yield* home.durable).collections[0]!.collection_id,
+        true,
+        ([{ kind: "global" }, { kind: "repository", root: repository }] as const).slice(
+          0,
+          scopeCount,
+        ),
+      ),
+    );
+    assert.strictEqual(proposed.pending?.plan.changes.length, scopeCount);
+    return { home, proposed };
+  });
 
 /** A change from outside the confirming action: it toggles whether custody issues were recorded. */
 const unplanned = (state: LibraryState): LibraryState => {
@@ -260,22 +264,20 @@ const unplanned = (state: LibraryState): LibraryState => {
 };
 
 const confirmThrough = (
-  home: Effect.Success<typeof twoScopeProposal>["home"],
+  home: Effect.Success<ReturnType<typeof twoScopeProposal>>["home"],
   proposed: Parameters<typeof confirmLibraryChange>[0],
   wrap: (store: LibraryStore["Service"]) => LibraryStore["Service"],
 ) =>
   home.owned(
     Effect.flatMap(LibraryStore, (store) =>
-      confirmLibraryChange(proposed, home.bindings).pipe(
-        Effect.provideService(LibraryStore, wrap(store)),
-      ),
+      confirmLibraryChange(proposed).pipe(Effect.provideService(LibraryStore, wrap(store))),
     ),
   );
 
 it.effect("refuses a confirmation when the Library changes after its revision check", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const fixture = yield* twoScopeProposal;
+    const fixture = yield* twoScopeProposal();
     let loads = 0;
     const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
       ...store,
@@ -303,31 +305,21 @@ it.effect("refuses an operation that would apply onto a change made after the pr
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     // Count the publishes of the first operation alone, on an identical Library.
-    const measured = yield* twoScopeProposal;
+    const measured = yield* twoScopeProposal(1);
     let firstOperationPublishes = 0;
-    yield* confirmThrough(
-      measured.home,
-      {
-        ...measured.proposed,
-        pending: {
-          ...measured.proposed.pending!,
-          operations: measured.proposed.pending!.operations.slice(0, 1),
-        },
-      },
-      (store) => ({
-        ...store,
-        publish: (next, base) =>
-          store.publish(next, base).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                firstOperationPublishes++;
-              }),
-            ),
+    yield* confirmThrough(measured.home, measured.proposed, (store) => ({
+      ...store,
+      publish: (next, base) =>
+        store.publish(next, base).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              firstOperationPublishes++;
+            }),
           ),
-      }),
-    );
+        ),
+    }));
 
-    const fixture = yield* twoScopeProposal;
+    const fixture = yield* twoScopeProposal();
     let publishes = 0;
     const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
       ...store,

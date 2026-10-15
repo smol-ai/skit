@@ -98,10 +98,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
     yield* renderer.note("Nothing was written.", "Cancelled");
     return cancelLibraryChange(session);
   }
-  const applied = yield* renderer.withStatus(
-    progress,
-    confirmLibraryChange(session, configuration),
-  );
+  const applied = yield* renderer.withStatus(progress, confirmLibraryChange(session));
   if (applied.outcome?.kind === "failed")
     yield* renderer.note(
       `${applied.outcome.failure.message}\n${applied.outcome.failure.remediation}`,

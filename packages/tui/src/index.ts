@@ -692,21 +692,12 @@ function selectedLibraryRow(): LibrarySkillRow | undefined {
   return item?.kind === "library-skill" ? item.row : undefined;
 }
 
-function confirmationCollection(pending: PendingLibraryChange, index: number): string | undefined {
-  const operation = pending.operations[index];
-  if (!operation?.all) return;
-  return (
-    libraryHost.state?.skills.find((row) => row.collectionId === operation.query)?.heading ??
-    operation.query
-  );
-}
-
 /** The TUI writes its own copy from structured facts rather than reusing CLI output prose. */
 function changeSummary(pending: PendingLibraryChange): string {
   return pending.facts
     .map(
-      (fact, index) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${confirmationCollection(pending, index) ?? fact.skills.join(", ")} for every agent (${fact.destination})`,
+      (fact) =>
+        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every agent (${fact.destination})`,
     )
     .join("; ");
 }
@@ -1422,10 +1413,10 @@ function closeConfirm(): void {
 function confirmationReceiptContent(pending: PendingLibraryChange) {
   return receipt(
     pending.facts.flatMap((fact, index) => [
-      ...(confirmationCollection(pending, index) === undefined
+      ...(fact.collectionLabel === undefined
         ? [kv("skills", fact.skills.join(", "), 14)]
         : [
-            kv("collection", confirmationCollection(pending, index)!, 14),
+            kv("collection", fact.collectionLabel, 14),
             kv("skills", String(fact.skills.length), 14),
             ...(confirmShowSkills ? [kv("included", fact.skills.join(", "), 14)] : []),
           ]),
@@ -1493,7 +1484,7 @@ function openConfirm(): void {
   overlay.add(scroll);
   confirmHelp = text(
     "library-confirm-help",
-    pending.operations.some((operation) => operation.all)
+    pending.facts.some((fact) => fact.wholeCollection)
       ? `Enter apply · Esc cancel · s ${confirmShowSkills ? "hide" : "show"} Skills`
       : isCompact()
         ? "Enter apply · Esc cancel · PgUp/PgDn scroll"
@@ -1727,7 +1718,7 @@ function startInvocation(): void {
 async function applyPending(): Promise<void> {
   closeConfirm();
   if (!libraryHost.state) return;
-  await transitionLibrary((state) => confirmLibraryChange(state, libraryConfiguration));
+  await transitionLibrary((state) => confirmLibraryChange(state));
   render();
 }
 
@@ -1846,7 +1837,7 @@ function handleGlobalKey(key: KeyEvent): void {
       void applyPending();
     } else if (
       key.name === "s" &&
-      libraryHost.state?.pending?.operations.some((operation) => operation.all)
+      libraryHost.state?.pending?.facts.some((fact) => fact.wholeCollection)
     ) {
       key.preventDefault();
       key.stopPropagation();

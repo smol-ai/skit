@@ -11,10 +11,9 @@ import {
   type ObservedSkill,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
-import {
-  applyLibraryBindings,
-  previewLibraryBindings,
-} from "../src/workflows/library/set-enabled.js";
+import { setLibraryBindings, previewTestBindings } from "./helpers/binding-changes.js";
+import { calculateBindingChange } from "../src/workflows/library/binding-selection.js";
+import { applyBindingChanges } from "../src/library-application/binding-changes.js";
 import { planRemoveEffect } from "../src/workflows/library/remove.js";
 import { planUpdatesEffect } from "../src/library-application/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
@@ -133,14 +132,15 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* previewLibraryBindings(ambiguous, {
+      (yield* calculateBindingChange(ambiguous, {
         ...base,
         query: "review",
-        invocation,
+        scope: invocation.scope,
+        enabled: invocation.enabled,
       }).pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
-    const planned = yield* applyLibraryBindings(state, {
+    const planned = yield* setLibraryBindings({
       ...base,
       invocation,
     }).pipe(Effect.provide(layer));
@@ -150,16 +150,16 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const beforeApply = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.deepEqual(beforeApply?.global_bindings, []);
 
+    const previewed = yield* previewTestBindings({ ...base, invocation }).pipe(
+      Effect.provide(layer),
+    );
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
         store.publish({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
       ).pipe(Effect.provide(layer)),
     );
-    const stale = yield* applyLibraryBindings(state, {
-      ...base,
-      invocation: { ...invocation, dryRun: false },
-    }).pipe(Effect.provide(layer), Effect.flip);
+    const stale = yield* applyBindingChanges(previewed).pipe(Effect.provide(layer), Effect.flip);
     assert.strictEqual(stale._tag, "Library.SetEnabledStale");
     yield* writingTo(
       home,
@@ -172,7 +172,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       Effect.gen(function* () {
         const current = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
         assert.ok(current);
-        return yield* applyLibraryBindings(current, {
+        return yield* setLibraryBindings({
           ...base,
           invocation: { ...invocation, enabled, dryRun: false },
         }).pipe(Effect.provide(layer));
@@ -251,10 +251,9 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     const layer = libraryStoreLayer({ home });
     const set = (query: string, enabled: boolean, all: boolean) =>
       Effect.gen(function* () {
-        const current = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
         yield* writingTo(
           home,
-          applyLibraryBindings(current, {
+          setLibraryBindings({
             query,
             all,
             roots: {

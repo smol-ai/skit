@@ -96,7 +96,6 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         const collectionId = session.skills.find((row) => row.heading === label)!.collectionId;
         const confirmed = yield* confirmLibraryChange(
           yield* proposeLibraryCollectionChange(session, configuration, collectionId, true, scopes),
-          configuration,
         );
         if (confirmed.outcome?.kind !== "applied")
           return yield* Effect.die(`binding ${label} was ${confirmed.outcome?.kind}`);

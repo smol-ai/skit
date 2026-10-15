@@ -22,7 +22,7 @@ import {
   readableHarnessRoots,
 } from "../src/projection/harness-shadows.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { Renderer } from "../src/presentation/renderer.js";
@@ -81,7 +81,7 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
             roots: f.home.inventory,
             variantsPath: f.home.bindings.variantsPath,
           };
-          const preview = yield* applyLibraryBindings(before, {
+          const preview = yield* setLibraryBindings({
             ...options,
             invocation: { ...options.invocation, dryRun: true },
           });
@@ -92,15 +92,15 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
               aliases: [expect.objectContaining({ path: f.alias, via: "symlink" })],
             }),
           ]);
-          const result = yield* Effect.result(applyLibraryBindings(before, options));
+          const result = yield* Effect.result(setLibraryBindings(options));
           expect(Result.isFailure(result) && result.failure._tag).toBe("ProjectionWouldDuplicate");
           expect((yield* store.load).global_bindings).toEqual(before.global_bindings);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
-          yield* applyLibraryBindings(before, { ...options, allowDuplicate: true });
+          yield* setLibraryBindings({ ...options, allowDuplicate: true });
           expect(yield* f.fs.readFileString(join(f.destination, "SKILL.md"))).toBe(
             yield* f.fs.readFileString(join(f.source, "SKILL.md")),
           );
-          const policyChange = yield* applyLibraryBindings(yield* store.load, {
+          const policyChange = yield* setLibraryBindings({
             ...options,
             invocation: { ...options.invocation, invocation: "explicit" as const },
           });
@@ -357,9 +357,8 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
         f.home.home,
         Effect.gen(function* () {
           yield* addLibrarySourceEffect(f.source);
-          const state = yield* (yield* LibraryStore).load;
           const result = yield* Effect.result(
-            applyLibraryBindings(state, {
+            setLibraryBindings({
               query: "review",
               all: false,
               invocation: {
@@ -404,7 +403,7 @@ it.effect(
           Effect.gen(function* () {
             yield* addLibrarySourceEffect(f.source);
             const store = yield* LibraryStore;
-            yield* applyLibraryBindings(yield* store.load, {
+            yield* setLibraryBindings({
               query: "review",
               all: false,
               allowDuplicate: true,

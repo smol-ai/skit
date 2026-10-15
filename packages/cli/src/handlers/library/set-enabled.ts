@@ -2,8 +2,6 @@ import { skitConfigurationLayer } from "../../configuration/skit-configuration.j
 import {
   bindingSkillIds,
   currentCollectionSkills,
-  libraryStateRevision,
-  LibraryStore,
   type LibraryState,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
@@ -25,9 +23,9 @@ import { promptForScope } from "../../presentation/scope-prompt.js";
 import { result } from "../contracts.js";
 import {
   applyBindingChanges,
-  applyLibraryBindings,
-  type SetEnabledOptions,
-} from "../../workflows/library/set-enabled.js";
+  openBindingChangeSelection,
+  type BindingChangeRequest,
+} from "../../library-application/binding-changes.js";
 import {
   largeCollectionWarning,
   readDescriptionLoad,
@@ -87,8 +85,6 @@ const setEnabledCliCommand = (enabled: boolean) => {
             | undefined;
           const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
 
-          const store = yield* LibraryStore;
-          yield* store.load;
           yield* presentSetEnabled({
             action,
             enabled,
@@ -180,8 +176,11 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
 ) {
   if (input.subject === undefined && !input.interactive)
     return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
+  const selection = yield* openBindingChangeSelection({
+    ...input.configuration.inventory,
+    variantsPath: input.configuration.pull.bindings.variantsPath,
+  });
+  const state = selection.library;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
   const collectionLabel = (collectionId: string) =>
@@ -264,7 +263,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     : undefined;
   let wholeCollection = input.all;
   if (input.interactive && collection !== undefined && !wholeCollection) {
-    const selection = yield* prompter
+    const selectedMode = yield* prompter
       .select("What would you like to " + input.action + "?", [
         {
           value: "collection",
@@ -272,7 +271,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             ? `Enable whole collection · ${descriptionLoadMessage(
                 yield* readDescriptionLoad(
                   state,
-                  store.originalsPath,
+                  selection.originalsPath,
                   currentCollectionSkills(state, collection.collection_id),
                 ),
               )}`
@@ -292,8 +291,8 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           : []),
       ])
       .pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(DONE)));
-    if (selection === DONE) return;
-    wholeCollection = selection === "collection";
+    if (selectedMode === DONE) return;
+    wholeCollection = selectedMode === "collection";
   }
   let selectedSkills: string[] | undefined;
   if (
@@ -367,7 +366,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     targets = [{ collectionId: query, scope, skillIds: [], location: "" }];
   }
 
-  const changes = targets.flatMap((target): SetEnabledOptions[] => {
+  const changes = targets.flatMap((target): BindingChangeRequest[] => {
     // Several Scopes may each enable a different subset of the selected Skills.
     const names =
       targets.length > 1
@@ -387,14 +386,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         all: wholeCollection,
         allowDuplicate: input.allowDuplicate,
         ...(names === undefined || wholeCollection ? {} : { selectedSkills: names }),
-        invocation: {
-          scope: target.scope,
-          enabled: input.enabled,
-          ...(input.invocation === undefined ? {} : { invocation: input.invocation }),
-          dryRun: input.dryRun,
-        },
-        roots: input.configuration.inventory,
-        variantsPath: input.configuration.pull.bindings.variantsPath,
+        scope: target.scope,
+        enabled: input.enabled,
+        ...(input.invocation === undefined ? {} : { invocation: input.invocation }),
       },
     ];
   });
@@ -404,9 +398,12 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       : input.enabled
         ? "Projecting retained Skills"
         : "Removing retained Projections",
-    input.dryRun
-      ? Effect.forEach(changes, (change) => applyLibraryBindings(state, change))
-      : applyBindingChanges(libraryStateRevision(state), changes),
+    Effect.gen(function* () {
+      const plan = yield* selection.preview(changes);
+      return input.dryRun
+        ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
+        : yield* applyBindingChanges(plan);
+    }),
   );
   for (const outcome of outcomes) {
     if (input.enabled) {

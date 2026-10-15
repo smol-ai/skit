@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
@@ -62,11 +62,10 @@ it.effect(
         overrides: { codex: [join(root, "codex")] },
       };
       const variantsPath = join(home, "variants");
-      const loaded = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
       yield* writingTo(
         home,
         run(
-          applyLibraryBindings(loaded, {
+          setLibraryBindings({
             query: collectionId,
             all: true,
             roots,

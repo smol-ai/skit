@@ -47,3 +47,11 @@ export {
   skitConfigurationLayer,
   type ResolvedSkitConfiguration,
 } from "../configuration/skit-configuration.js";
+
+export {
+  previewBindingChanges,
+  applyBindingChanges,
+  openBindingChangeSelection,
+  type BindingChangeRequest,
+  type BindingChangePlan,
+} from "./binding-changes.js";

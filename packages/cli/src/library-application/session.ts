@@ -10,7 +10,6 @@ import {
   retainedTreePath,
   versionBacking,
   LibraryStore,
-  libraryStateRevision,
   type LibraryState,
   type SourceIdentity,
   type SkitBindingScope as Scope,
@@ -27,8 +26,12 @@ import { bindingRowLabel, destinationLabel, scopeKey } from "./read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
 import { unspecifiedDeclaredInvocation } from "../invocation/library-source.js";
 import type { ProjectionOptions } from "../workflows/library/projection-options.js";
-import { applyBindingChanges, previewLibraryBindings } from "../workflows/library/set-enabled.js";
-import type { SetEnabledInvocation } from "../workflows/library/set-enabled.js";
+import {
+  applyBindingChanges,
+  previewBindingChanges,
+  type BindingChangeRequest,
+  type BindingChangePlan,
+} from "./binding-changes.js";
 
 export interface LibraryBindingRow {
   readonly scope: Scope;
@@ -59,19 +62,13 @@ export interface PreviewFacts {
     | "nothing to change"
     | "copies checked for repair";
   readonly wholeCollection?: boolean;
-}
-
-interface PendingOperation {
-  readonly all?: boolean;
-  readonly query: string;
-  readonly invocation: SetEnabledInvocation;
+  readonly collectionLabel?: string;
 }
 
 export interface PendingLibraryChange {
-  readonly operations: readonly PendingOperation[];
+  readonly plan: BindingChangePlan;
   readonly facts: readonly PreviewFacts[];
   readonly policies: readonly InvocationReadModel[];
-  readonly libraryRevision: string;
 }
 
 export type LibraryActionOutcome =
@@ -195,9 +192,7 @@ export function libraryPolicyAfter(
   });
 }
 
-const factFromPlan = (
-  plan: Effect.Success<ReturnType<typeof previewLibraryBindings>>,
-): PreviewFacts => ({
+const factFromPlan = (plan: BindingChangePlan["changes"][number]): PreviewFacts => ({
   action: plan.enabled ? "enable" : "disable",
   skills: plan.skills,
   scope: plan.scope,
@@ -213,30 +208,19 @@ const factFromPlan = (
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   state: LibrarySessionState,
   configuration: ProjectionOptions,
-  operations: readonly PendingOperation[],
+  operations: readonly BindingChangeRequest[],
   policies: readonly InvocationReadModel[] = [],
 ) {
   const attempted = yield* Effect.result(
-    Effect.gen(function* () {
-      const current = yield* (yield* LibraryStore).load;
-      return {
-        libraryRevision: libraryStateRevision(current),
-        plans: yield* Effect.forEach(operations, ({ query, invocation, all }) =>
-          Effect.gen(function* () {
-            const plan = yield* previewLibraryBindings(current, {
-              query,
-              all: all ?? false,
-              invocation,
-              roots: configuration,
-              variantsPath: configuration.variantsPath,
-            });
-            if (plan.shadows?.length)
-              return yield* new ProjectionWouldDuplicate({ shadows: plan.shadows });
-            return plan;
-          }),
+    previewBindingChanges(operations, configuration).pipe(
+      Effect.tap((plan) =>
+        Effect.forEach(plan.changes, (change) =>
+          change.shadows?.length
+            ? Effect.fail(new ProjectionWouldDuplicate({ shadows: change.shadows }))
+            : Effect.void,
         ),
-      };
-    }),
+      ),
+    ),
   );
   if (Result.isFailure(attempted))
     return {
@@ -245,8 +229,8 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
       outcome: { kind: "failed", failure: classifyFailure(attempted.failure) },
     } satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
   const pending: PendingLibraryChange = {
-    operations,
-    facts: attempted.success.plans.map((plan, index) => ({
+    plan: attempted.success,
+    facts: attempted.success.changes.map((plan, index) => ({
       ...factFromPlan(plan),
       ...(plan.repair
         ? {
@@ -255,12 +239,18 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
               : ("projection removed" as const),
           }
         : {}),
-      ...(operations[index]?.all ? { wholeCollection: true } : {}),
+      ...(operations[index]?.all
+        ? {
+            wholeCollection: true,
+            collectionLabel:
+              state.skills.find((row) => row.collectionId === plan.subject_id)?.heading ??
+              plan.subject_id,
+          }
+        : {}),
     })),
     policies,
-    libraryRevision: attempted.success.libraryRevision,
   };
-  if (attempted.success.plans.every((plan) => !plan.changed && !plan.repair))
+  if (attempted.success.changes.every((plan) => !plan.changed && !plan.repair))
     return {
       ...state,
       pending: undefined,
@@ -282,16 +272,17 @@ export function proposeLibraryEnable(
     readonly invocation?: InvocationOption;
   },
 ) {
-  const invocation: SetEnabledInvocation = {
-    scope: selection.scope,
-    enabled: true,
-    ...(selection.invocation === undefined ? {} : { invocation: selection.invocation }),
-    dryRun: false,
-  };
   return proposeLibraryChange(
     state,
     configuration,
-    [{ query: row.skillVersionId, invocation }],
+    [
+      {
+        query: row.skillVersionId,
+        scope: selection.scope,
+        enabled: true,
+        ...(selection.invocation === undefined ? {} : { invocation: selection.invocation }),
+      },
+    ],
     [libraryPolicyAfter(row, selection.invocation ?? "declared")],
   );
 }
@@ -306,14 +297,7 @@ export function proposeLibraryDisable(
   return proposeLibraryChange(
     state,
     configuration,
-    [...byScope.values()].map((scope) => ({
-      query: row.skillVersionId,
-      invocation: {
-        scope,
-        enabled: false,
-        dryRun: false,
-      },
-    })),
+    [...byScope.values()].map((scope) => ({ query: row.skillVersionId, scope, enabled: false })),
   );
 }
 
@@ -343,7 +327,8 @@ export function proposeLibraryCollectionChange(
     [...uniqueScopes.values()].map((scope) => ({
       query: collectionId,
       all: true,
-      invocation: { scope, enabled, dryRun: false },
+      scope,
+      enabled,
     })),
   );
 }
@@ -361,12 +346,9 @@ export function proposeLibraryInvocation(
     [
       {
         query: row.skillVersionId,
-        invocation: {
-          scope: binding.scope,
-          enabled: true,
-          invocation,
-          dryRun: false,
-        },
+        scope: binding.scope,
+        enabled: true,
+        invocation,
       },
     ],
     [libraryPolicyAfter(row, invocation)],
@@ -388,23 +370,11 @@ export function cancelLibraryChange(
 
 export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function* (
   state: LibrarySessionState,
-  configuration: ProjectionOptions,
 ) {
   const pending = state.pending;
   if (pending === undefined)
     return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
-  const applied = yield* Effect.result(
-    applyBindingChanges(
-      pending.libraryRevision,
-      pending.operations.map(({ query, invocation, all }) => ({
-        query,
-        all: all ?? false,
-        invocation,
-        roots: configuration,
-        variantsPath: configuration.variantsPath,
-      })),
-    ),
-  );
+  const applied = yield* Effect.result(applyBindingChanges(pending.plan));
   const refreshed = yield* openLibrarySession();
   const outcome: LibraryActionOutcome = Result.isSuccess(applied)
     ? { kind: "applied", pending }

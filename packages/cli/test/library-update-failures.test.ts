@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { retainedTreePath } from "@smolai/skit-core";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
 import { addLibrarySourceEffect } from "../src/workflows/library/add.js";
 import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
@@ -136,7 +136,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
       yield* writingTo(
         f.home,
         f.run(
-          applyLibraryBindings(f.before, {
+          setLibraryBindings({
             query: collection.collection_id,
             all: true,
             roots,

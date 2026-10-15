@@ -28,7 +28,11 @@ import {
 } from "./local-adoption.js";
 import { PlanIsStale } from "../../library/failures.js";
 import { addLibrarySourceEffect } from "./add.js";
-import { applyLibraryBindings, type SetEnabledOptions } from "./set-enabled.js";
+import {
+  applyBindingChanges,
+  previewBindingChanges,
+  type BindingChangeRequest,
+} from "../../library-application/binding-changes.js";
 import type { SetupResult } from "./setup-contract.js";
 import type { ProjectionOptions } from "./projection-options.js";
 import type { SetupOptions } from "./setup.js";
@@ -236,28 +240,32 @@ export const bindSetupCopy = Effect.fn("Setup.bindCopy")(function* (
   options: { setup: SetupOptions; bindings: ProjectionOptions },
   selection: SetupCopySelection,
   subjectId: string,
-  adoption: NonNullable<SetEnabledOptions["adoption"]>,
+  adoption: NonNullable<BindingChangeRequest["adoption"]>,
   retirement?: Effect.Success<ReturnType<typeof planSetupAliasRetirement>>,
 ) {
-  const state = yield* (yield* LibraryStore).load;
-  const result = yield* applyLibraryBindings(state, {
-    query: subjectId,
-    all: false,
-    allowDuplicate: selection.duplicateAction === "keep-both",
-    ...(retirement
-      ? {
-          allowedShadowAliases: retirement.entries.map((entry) => ({
-            ...entry,
-            canonicalPath: selection.sourcePath,
-          })),
-        }
-      : {}),
-    selectedSkills: [selection.name],
-    invocation: { scope: { kind: "global" }, enabled: true, dryRun: false },
-    roots: options.bindings,
-    variantsPath: options.bindings.variantsPath,
-    adoption,
-  });
+  const plan = yield* previewBindingChanges(
+    [
+      {
+        query: subjectId,
+        all: false,
+        allowDuplicate: selection.duplicateAction === "keep-both",
+        ...(retirement
+          ? {
+              allowedShadowAliases: retirement.entries.map((entry) => ({
+                ...entry,
+                canonicalPath: selection.sourcePath,
+              })),
+            }
+          : {}),
+        selectedSkills: [selection.name],
+        scope: { kind: "global" },
+        enabled: true,
+        adoption,
+      },
+    ],
+    options.bindings,
+  );
+  const [result] = yield* applyBindingChanges(plan);
   const outcome = retirement
     ? yield* retireSetupAliases(options.setup.inventory, subjectId, selection.name, retirement)
     : undefined;

@@ -18,7 +18,7 @@ import {
 } from "../src/workflows/library/add.js";
 import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
 import { checkSubjectsEffect } from "../src/workflows/library/check.js";
-import { applyLibraryBindings } from "../src/workflows/library/set-enabled.js";
+import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemoveEffect } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
@@ -231,7 +231,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         dryRun: false,
       },
     });
-    yield* writingTo(home, run(applyLibraryBindings(before, bindingInput(true))));
+    yield* writingTo(home, run(setLibraryBindings(bindingInput(true))));
     const enabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(enabled.global_bindings[0]?.entries, [
       { kind: "skill", skill_id: skill.skill_id },
@@ -267,7 +267,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       bindings: [],
     };
     assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
-    yield* writingTo(home, run(applyLibraryBindings(after, bindingInput(false))));
+    yield* writingTo(home, run(setLibraryBindings(bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.global_bindings, []);
     yield* writingTo(
