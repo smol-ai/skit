@@ -1,3 +1,9 @@
+# Coding standards
+
+Follow [docs/coding-standards.md](docs/coding-standards.md). Before substantial
+refactors, sketch before/after call graphs and identify the ownership change.
+Before building infrastructure utilities, investigate the installed Effect v4 APIs.
+
 # Validation
 
 Run the smallest checks that cover the changed behavior.
