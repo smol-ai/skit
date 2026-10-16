@@ -8,6 +8,9 @@ import {
   libraryManifestFromLocalStateEffect,
   makeMachineId,
   prepareRestoreEffect,
+  planRetainedContentEffect,
+  type RestorePhase,
+  type RestoreTick,
   retainedTreePath,
   retainObservedCollectionEffect,
   SourceProcess,
@@ -93,6 +96,8 @@ const fixture = Effect.gen(function* () {
   });
   let release = yield* repack;
   let status = 200;
+  const phases: RestorePhase[] = [];
+  const ticks: RestoreTick[] = [];
   const requests: { url: string; authorization: string | undefined }[] = [];
   const client = HttpClient.make((request) =>
     Effect.sync(() => {
@@ -108,10 +113,26 @@ const fixture = Effect.gen(function* () {
   );
   const restore = (available: readonly SnapshotArchive[] = [privateArchive]) =>
     Effect.scoped(
-      prepareRestoreEffect(manifest, available, {
-        originalsPath,
-        registryBaseUrl: origin,
-        registryToken: "restore-token",
+      Effect.gen(function* () {
+        const plan = yield* planRetainedContentEffect(manifest, {
+          originalsPath,
+          localArchives: available,
+        });
+        return yield* prepareRestoreEffect(manifest, plan, {
+          originalsPath,
+          registryBaseUrl: origin,
+          registryToken: "restore-token",
+          observer: {
+            around: (phase, operation) =>
+              Effect.sync(() => {
+                phases.push(phase);
+              }).pipe(Effect.andThen(operation)),
+            tick: (tick) =>
+              Effect.sync(() => {
+                ticks.push(tick);
+              }),
+          },
+        });
       }).pipe(Effect.provideService(HttpClient.HttpClient, client)),
     );
   return {
@@ -127,6 +148,9 @@ const fixture = Effect.gen(function* () {
     manifest,
     originalsPath,
     requests,
+    client,
+    phases,
+    ticks,
     restore,
     unavailable: () => {
       status = 404;
@@ -142,6 +166,19 @@ it.effect("prepares downloaded private content and exact source content without 
   Effect.gen(function* () {
     const f = yield* fixture;
     const restored = yield* f.restore();
+    assert.deepStrictEqual(f.phases, [
+      { kind: "fetch-source", subject: "https://wrong.example/not-the-source" },
+      { kind: "retain", total: 2 },
+    ]);
+    assert.deepStrictEqual(
+      f.ticks.map(({ phase, completed }) => [phase.kind, completed]),
+      [
+        ["retain", 0],
+        ["retain", 1],
+        ["retain", 1],
+        ["retain", 2],
+      ],
+    );
     assert.deepStrictEqual(restored.state.acquisitions, f.manifest.acquisitions);
     assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
     assert.deepStrictEqual(f.requests, [
@@ -233,8 +270,12 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
         return unpinned;
       }),
     };
+    const plan = yield* planRetainedContentEffect(manifest, {
+      originalsPath: f.originalsPath,
+      localArchives: [f.privateArchive],
+    });
     const error = yield* Effect.scoped(
-      prepareRestoreEffect(manifest, [f.privateArchive], {
+      prepareRestoreEffect(manifest, plan, {
         originalsPath: f.originalsPath,
         registryBaseUrl: origin,
       }),
@@ -244,4 +285,246 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
       assert.strictEqual(error.detail, "manifest has no exact source-restoration acquisition");
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("restoring existing copies avoids temporary trees and still rejects damaged bytes", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.restore();
+    const archives = yield* Effect.forEach(f.manifest.retained_copies, (tree) =>
+      captureSnapshotArchiveEffect(retainedTreePath(f.originalsPath, tree.digest)),
+    );
+    f.unavailable();
+    const ticks: RestoreTick[] = [];
+    const plan = yield* planRetainedContentEffect(f.manifest, {
+      originalsPath: f.originalsPath,
+      localArchives: archives,
+    });
+    const restore = prepareRestoreEffect(f.manifest, plan, {
+      originalsPath: f.originalsPath,
+      observer: {
+        around: (_phase, operation) => operation,
+        tick: (tick) =>
+          Effect.sync(() => {
+            ticks.push(tick);
+          }),
+      },
+    }).pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...f.fs,
+        makeTempDirectoryScoped: () => Effect.die("existing copies must not be unpacked"),
+      }),
+    );
+    const restored = yield* restore;
+    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(
+      ticks.map((tick) => tick.completed),
+      [0, 1, 1, 2],
+    );
+    yield* f.fs.writeFileString(
+      join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+      "Damaged",
+    );
+    const error = yield* restore.pipe(Effect.flip);
+    assert.strictEqual(error._tag, "ContentAddressCollision");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("existing unlisted objects restore without source access or private archives", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.restore();
+    f.requests.length = 0;
+    f.unavailable();
+    f.phases.length = 0;
+    f.ticks.length = 0;
+    const restored = yield* f.restore([]);
+    assert.deepStrictEqual(f.phases, [
+      { kind: "verify-local", total: 2 },
+      { kind: "retain", total: 2 },
+    ]);
+    assert.deepStrictEqual(
+      f.ticks.map(({ phase, completed }) => [phase.kind, completed]),
+      [
+        ["verify-local", 0],
+        ["verify-local", 1],
+        ["verify-local", 1],
+        ["verify-local", 2],
+        ["retain", 0],
+        ["retain", 1],
+        ["retain", 1],
+        ["retain", 2],
+      ],
+    );
+    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(f.requests, []);
+    yield* f.fs.writeFileString(
+      join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+      "Damaged",
+    );
+    const error = yield* f.restore([]).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "ContentAddressCollision");
+    assert.deepStrictEqual(f.requests, []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "planning observes disk availability without reading bytes or writing, then preparation rejects corruption before transport",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* f.restore();
+      f.requests.length = 0;
+      yield* f.fs.writeFileString(
+        join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+        "Damaged",
+      );
+      const plan = yield* planRetainedContentEffect(f.manifest, {
+        originalsPath: f.originalsPath,
+        localArchives: [],
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...f.fs,
+          readFile: () => Effect.die("planning must not read content"),
+          readFileString: () => Effect.die("planning must not read content"),
+          writeFile: () => Effect.die("planning must not write"),
+          makeDirectory: () => Effect.die("planning must not write"),
+        }),
+      );
+      assert.deepStrictEqual(
+        plan.reusable,
+        f.manifest.retained_copies.map((copy) => copy.digest),
+      );
+      assert.deepStrictEqual(plan.download, []);
+      assert.deepStrictEqual(plan.reacquire, []);
+      const error = yield* prepareRestoreEffect(f.manifest, plan, {
+        originalsPath: f.originalsPath,
+        download: () => Effect.die("corrupt reusable content must fail before transport"),
+      }).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "ContentAddressCollision");
+      assert.deepStrictEqual(f.requests, []);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a copy disappearing after planning fails without an unplanned download", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.restore();
+    const plan = yield* planRetainedContentEffect(f.manifest, {
+      originalsPath: f.originalsPath,
+      localArchives: [],
+    });
+    yield* f.fs.remove(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), {
+      recursive: true,
+    });
+    const error = yield* prepareRestoreEffect(f.manifest, plan, {
+      originalsPath: f.originalsPath,
+      download: () => Effect.die("no unplanned download"),
+    }).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "Library.RestoreInvalid");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("verified whole-tree bytes do not bypass member digest verification", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.restore();
+    const manifest = {
+      ...f.manifest,
+      retained_copies: f.manifest.retained_copies.map((copy) => ({
+        ...copy,
+        members: copy.members.map((member) => ({
+          ...member,
+          source_digest: f.source.snapshotDigest,
+        })),
+      })),
+    };
+    const plan = yield* planRetainedContentEffect(manifest, {
+      originalsPath: f.originalsPath,
+      localArchives: [],
+    });
+    const error = yield* prepareRestoreEffect(manifest, plan, {
+      originalsPath: f.originalsPath,
+    }).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "Library.RestoreInvalid");
+    if (error._tag === "Library.RestoreInvalid")
+      assert.include(error.detail, "source bytes disagree");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("an incomplete plan fails before retaining any available archive", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const sourceArchive = yield* captureSnapshotArchiveEffect(
+      retainedTreePath(join(f.home, "originals"), f.source.snapshotDigest),
+    );
+    const plan = yield* planRetainedContentEffect(f.manifest, {
+      originalsPath: f.originalsPath,
+      localArchives: [sourceArchive],
+    });
+    const error = yield* prepareRestoreEffect(
+      f.manifest,
+      { ...plan, download: [] },
+      {
+        originalsPath: f.originalsPath,
+      },
+    ).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "Library.RestoreInvalid");
+    assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "incomplete, foreign, and private-source plans fail before transport, progress, or writes",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const plan = yield* planRetainedContentEffect(f.manifest, {
+        originalsPath: f.originalsPath,
+        localArchives: [],
+      });
+      const foreign = yield* captureSnapshotArchiveEffect(f.sourceRoot);
+      assert.isFalse(f.manifest.retained_copies.some((copy) => copy.digest === foreign.digest));
+      const privateCopy = f.manifest.retained_copies.find(
+        (copy) => copy.digest === f.privateCopy.snapshotDigest,
+      );
+      assert(privateCopy);
+      let downloads = 0;
+      for (const invalid of [
+        { ...plan, download: [] },
+        { ...plan, localArchives: [foreign] },
+        { ...plan, reusable: [foreign.digest] },
+        { ...plan, download: [...plan.download, foreign.digest] },
+        { ...plan, download: [...plan.download, f.source.snapshotDigest] },
+        { ...plan, reacquire: [...plan.reacquire, privateCopy.retained_copy_id] },
+      ]) {
+        const error = yield* prepareRestoreEffect(f.manifest, invalid, {
+          originalsPath: f.originalsPath,
+          download: () =>
+            Effect.sync(() => {
+              downloads++;
+              return f.privateArchive;
+            }),
+          observer: {
+            around: () => Effect.die("invalid plans must fail before opening a phase"),
+            tick: () => Effect.die("invalid plans must not emit ticks"),
+          },
+        }).pipe(Effect.provideService(HttpClient.HttpClient, f.client), Effect.flip);
+        assert.strictEqual(error._tag, "Library.RestoreInvalid");
+        assert.strictEqual(downloads, 0);
+        assert.deepStrictEqual(f.requests, []);
+        assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
+      }
+      // A complete plan without its required transport also fails before phases/source fetches.
+      const error = yield* prepareRestoreEffect(f.manifest, plan, {
+        originalsPath: f.originalsPath,
+        observer: {
+          around: () => Effect.die("missing transport must fail before phases"),
+          tick: () => Effect.void,
+        },
+      }).pipe(Effect.provideService(HttpClient.HttpClient, f.client), Effect.flip);
+      assert.strictEqual(error._tag, "Library.RestoreInvalid");
+      assert.deepStrictEqual(f.requests, []);
+      assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

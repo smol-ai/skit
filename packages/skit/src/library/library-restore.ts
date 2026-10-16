@@ -1,7 +1,12 @@
+import type { RetainedContentPlan } from "./retained-content-plan.js";
+import type { RestoreObserver, RestorePhase } from "./restore-progress.js";
+import type { Digest } from "../contracts.js";
+import { ContentAddressCollision } from "../failures.js";
+import { retainedTreePath } from "./retention/retain-tree.js";
 import { resolveSkitSourceEffect } from "../acquisition/sources.js";
 import { deterministicTreeHashEffect } from "../artifact/skit.js";
 import { prepareObservedCollectionEffect } from "./observed-import.js";
-import { Data, Effect } from "effect";
+import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
 import {
@@ -40,6 +45,7 @@ export interface RestoreOptions {
   readonly originalsPath: string;
   readonly registryBaseUrl?: string;
   readonly registryToken?: string;
+  readonly observer?: RestoreObserver;
 }
 
 /** Preserve the existing diagnostic tag as source restoration moves behind the core boundary. */
@@ -175,54 +181,214 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.restore.reacquireSource"
   return archive;
 });
 
-/** Complete all archives before retaining any bytes. Private snapshots are never reacquired. */
-const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives")(function* (
+const silentObserver: RestoreObserver = {
+  around: (_phase, operation) => operation,
+  tick: () => Effect.void,
+};
+
+/** Reject incomplete or foreign plans before any I/O. Observations still need byte verification. */
+const invalidPlan = (
   manifest: LibraryManifest,
-  available: readonly SnapshotArchive[],
-  options: RestoreOptions,
+  plan: RetainedContentPlan,
+  hasDownload: boolean,
+): string | undefined => {
+  const required = new Set(manifest.retained_copies.map((copy) => copy.digest));
+  const copies = new Map(manifest.retained_copies.map((copy) => [copy.retained_copy_id, copy]));
+  const snapshots = new Set(manifest.snapshot_digests);
+  const covered = new Set<Digest>();
+  for (const digest of [
+    ...plan.localArchives.map((archive) => archive.digest),
+    ...plan.reusable,
+    ...plan.download,
+  ]) {
+    if (!required.has(digest)) return `plan references foreign retained copy ${digest}`;
+    covered.add(digest);
+  }
+  for (const digest of plan.download) {
+    if (!snapshots.has(digest))
+      return `plan requests a private download for source-backed retained copy ${digest}`;
+  }
+  for (const id of plan.reacquire) {
+    const copy = copies.get(id);
+    if (copy === undefined) return `unknown retained copy ${id}`;
+    if (snapshots.has(copy.digest))
+      return `snapshot-backed retained copy ${copy.digest} cannot be reacquired from source`;
+    covered.add(copy.digest);
+  }
+  for (const digest of required) {
+    if (!covered.has(digest)) return `retained copy ${digest} not downloaded`;
+  }
+  if (plan.download.length && !hasDownload)
+    return `snapshot-backed retained copy ${plan.download[0]} not downloaded: no download transport`;
+};
+
+/** Resolve every required byte before writing any new immutable object. */
+const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives")(function* <
+  E = never,
+  R = never,
+>(
+  manifest: LibraryManifest,
+  plan: RetainedContentPlan,
+  options: RestoreOptions & {
+    readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
+  },
 ) {
-  const archives = new Map(available.map((archive) => [archive.digest, archive]));
-  const snapshotDigests = new Set(manifest.snapshot_digests);
-  for (const copy of manifest.retained_copies) {
-    if (archives.has(copy.digest)) continue;
-    if (snapshotDigests.has(copy.digest))
+  const invalid = invalidPlan(manifest, plan, options.download !== undefined);
+  if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
+  const observer = options.observer ?? silentObserver;
+  const archives = new Map(plan.localArchives.map((archive) => [archive.digest, archive]));
+  const fs = yield* FileSystem.FileSystem;
+  const existingPaths = new Map<string, string>();
+  if (plan.reusable.length) {
+    const phase = { kind: "verify-local", total: plan.reusable.length } as const;
+    yield* observer.around(
+      phase,
+      Effect.gen(function* () {
+        for (const [index, digest] of plan.reusable.entries()) {
+          const path = retainedTreePath(options.originalsPath, digest);
+          const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
+          const subject =
+            manifest.acquisitions.find(
+              (candidate) => candidate.retained_copy_id === copy?.retained_copy_id,
+            )?.input.value ?? digest;
+          yield* observer.tick({ phase, completed: index, subject });
+          // Replan on retry rather than silently adding an unplanned transfer.
+          if (!(yield* fs.exists(path)))
+            return yield* new RestoreInvalid({
+              detail: `retained copy ${digest} disappeared after planning`,
+            });
+          if ((yield* originalTreeHashEffect(path)) !== digest)
+            return yield* new ContentAddressCollision();
+          existingPaths.set(digest, path);
+          yield* observer.tick({ phase, completed: index + 1, subject });
+        }
+      }),
+    );
+  }
+  if (plan.download.length) {
+    const phase = { kind: "download", total: plan.download.length } as const;
+    let completed = 0;
+    const downloaded = yield* observer.around(
+      phase,
+      Effect.gen(function* () {
+        yield* observer.tick({ phase, completed: 0 });
+        return yield* Effect.forEach(
+          plan.download,
+          (digest) =>
+            Effect.gen(function* () {
+              if (options.download === undefined)
+                return yield* new RestoreInvalid({
+                  detail: `snapshot-backed retained copy ${digest} not downloaded`,
+                });
+              const archive = yield* options.download(digest);
+              if (archive.digest !== digest)
+                return yield* new RestoreInvalid({
+                  detail: `download returned ${archive.digest}; expected ${digest}`,
+                });
+              yield* observer.tick({ phase, completed: ++completed });
+              return archive;
+            }),
+          { concurrency: 4 },
+        );
+      }),
+    );
+    for (const archive of downloaded) archives.set(archive.digest, archive);
+  }
+  for (const id of plan.reacquire) {
+    const copy = manifest.retained_copies.find((candidate) => candidate.retained_copy_id === id);
+    if (copy === undefined)
+      return yield* new RestoreInvalid({ detail: `unknown retained copy ${id}` });
+    // A stale or mismatched plan must never turn private content into a source fetch.
+    if (manifest.snapshot_digests.includes(copy.digest))
       return yield* new RestoreInvalid({
         detail: `snapshot-backed retained copy ${copy.digest} not downloaded`,
       });
-    const archive = yield* reacquireSourceArchiveEffect(manifest, copy.digest, options);
+    const subject =
+      manifest.acquisitions.find((candidate) => candidate.retained_copy_id === id)?.input.value ??
+      copy.digest;
+    const archive = yield* observer.around(
+      { kind: "fetch-source", subject },
+      reacquireSourceArchiveEffect(manifest, copy.digest, options),
+    );
     archives.set(archive.digest, archive);
   }
-  return [...archives.values()];
+  // Plans describe observations, not authority to omit required content.
+  for (const copy of manifest.retained_copies) {
+    if (!archives.has(copy.digest) && !existingPaths.has(copy.digest))
+      return yield* new RestoreInvalid({ detail: `retained copy ${copy.digest} not downloaded` });
+  }
+  return { archives: [...archives.values()], existingPaths };
 });
 
 /**
  * Prepare the exact content a manifest requires, without publishing Library state or rewriting
  * Acquisition provenance. Available snapshots and exact source reconstruction share verification.
  */
-export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function* (
+export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function* <
+  E = never,
+  R = never,
+>(
   manifest: LibraryManifest,
-  available: readonly SnapshotArchive[],
-  options: RestoreOptions,
+  plan: RetainedContentPlan,
+  options: RestoreOptions & {
+    readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
+  },
 ) {
-  const archives = yield* completeRestoreArchivesEffect(manifest, available, options);
+  const observer = options.observer ?? silentObserver;
+  const { archives, existingPaths } = yield* completeRestoreArchivesEffect(manifest, plan, options);
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
-  for (const tree of manifest.retained_copies) {
-    const archive = received.get(tree.digest);
-    if (archive === undefined)
-      return yield* new RestoreInvalid({
-        detail: `retained copy ${tree.digest} not downloaded`,
-      });
-    const verified = yield* verifySnapshotArchiveEffect(archive);
-    const temporary = yield* materializeVerifiedSnapshotEffect(verified);
-    const path = yield* retainLocalTreeEffect(temporary, options.originalsPath, tree.digest, true);
-    for (const member of tree.members) {
-      const directory = member.source_path === "." ? path : join(path, member.source_path);
-      if ((yield* originalTreeHashEffect(directory)) !== member.source_digest)
-        return yield* new RestoreInvalid({
-          detail: `retained member ${member.source_path} source bytes disagree`,
-        });
-    }
-  }
+  const fs = yield* FileSystem.FileSystem;
+  const verifiedPaths = new Map(existingPaths);
+  const phase: RestorePhase = { kind: "retain", total: manifest.retained_copies.length };
+  if (phase.total)
+    yield* observer.around(
+      phase,
+      Effect.gen(function* () {
+        for (const [index, tree] of manifest.retained_copies.entries()) {
+          const label =
+            manifest.acquisitions.find(
+              (candidate) => candidate.retained_copy_id === tree.retained_copy_id,
+            )?.input.value ?? tree.digest;
+          yield* observer.tick({ phase, completed: index, subject: label });
+          const archive = received.get(tree.digest);
+          let path = verifiedPaths.get(tree.digest);
+          if (path === undefined) {
+            path = retainedTreePath(options.originalsPath, tree.digest);
+            if (yield* fs.exists(path)) {
+              // Existing immutable objects still need verification, but no unpack/copy cycle.
+              if ((yield* originalTreeHashEffect(path)) !== tree.digest)
+                return yield* new ContentAddressCollision();
+            } else {
+              if (archive === undefined)
+                return yield* new RestoreInvalid({
+                  detail: `retained copy ${tree.digest} not downloaded`,
+                });
+              const verified = yield* verifySnapshotArchiveEffect(archive);
+              path = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const temporary = yield* materializeVerifiedSnapshotEffect(verified);
+                  return yield* retainLocalTreeEffect(
+                    temporary,
+                    options.originalsPath,
+                    tree.digest,
+                    true,
+                  );
+                }),
+              );
+            }
+            verifiedPaths.set(tree.digest, path);
+          }
+          for (const member of tree.members) {
+            const directory = member.source_path === "." ? path : join(path, member.source_path);
+            if ((yield* originalTreeHashEffect(directory)) !== member.source_digest)
+              return yield* new RestoreInvalid({
+                detail: `retained member ${member.source_path} source bytes disagree`,
+              });
+          }
+          yield* observer.tick({ phase, completed: index + 1, subject: label });
+        }
+      }),
+    );
   const state = yield* LibraryState.makeEffect(
     currentLibraryState({
       collections: [...manifest.collections],

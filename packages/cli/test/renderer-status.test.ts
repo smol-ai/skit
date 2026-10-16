@@ -68,3 +68,92 @@ for (const [json, tty] of [
     }),
   );
 }
+
+for (const tty of [true, false]) {
+  it.effect(`persists a completed step with elapsed time (tty=${tty})`, () =>
+    Effect.gen(function* () {
+      const writes = capture(tty);
+      const renderer = consoleRenderer(false);
+      const ready = yield* Deferred.make<void>();
+      const finish = yield* Deferred.make<void>();
+      const fiber = yield* renderer
+        .withStatus(
+          {
+            pending: "Fetching example/skills",
+            complete: "Fetched example/skills",
+            persist: "timed",
+          },
+          Deferred.succeed(ready, undefined).pipe(
+            Effect.andThen(Deferred.await(finish)),
+            Effect.as(42),
+          ),
+        )
+        .pipe(Effect.forkScoped);
+      yield* Deferred.await(ready);
+      yield* TestClock.adjust(2350);
+      yield* Deferred.succeed(finish, undefined);
+      expect(yield* Fiber.join(fiber)).toBe(42);
+      expect(writes.at(-1)).toBe("✓ Fetched example/skills · 2.4s\n");
+      if (!tty) expect(writes).toHaveLength(1);
+    }),
+  );
+}
+
+it.effect("persists elapsed time on failure without changing the failure", () =>
+  Effect.gen(function* () {
+    const writes = capture(false);
+    const ready = yield* Deferred.make<void>();
+    const finish = yield* Deferred.make<void>();
+    const fiber = yield* consoleRenderer(false)
+      .withStatus(
+        {
+          pending: "Fetching example/skills",
+          complete: "Fetched example/skills",
+          persist: "timed",
+        },
+        Deferred.succeed(ready, undefined).pipe(
+          Effect.andThen(Deferred.await(finish)),
+          Effect.andThen(Effect.fail("unavailable")),
+        ),
+      )
+      .pipe(Effect.forkScoped);
+    yield* Deferred.await(ready);
+    yield* TestClock.adjust(1200);
+    yield* Deferred.succeed(finish, undefined);
+    expect(yield* Fiber.join(fiber).pipe(Effect.flip)).toBe("unavailable");
+    expect(writes).toEqual(["✖ Fetching example/skills · Incomplete · 1.2s\n"]);
+  }),
+);
+
+it.effect("suppresses persistent timed progress in JSON mode", () =>
+  Effect.gen(function* () {
+    const writes = capture(true);
+    const value = yield* consoleRenderer(true).withStatus(
+      { pending: "Fetching", complete: "Fetched", persist: "timed" },
+      Effect.succeed(42),
+    );
+    expect(value).toBe(42);
+    expect(writes).toEqual([]);
+  }),
+);
+
+it.effect("persists an incomplete timed step when interrupted", () =>
+  Effect.gen(function* () {
+    const writes = capture(false);
+    const ready = yield* Deferred.make<void>();
+    const fiber = yield* consoleRenderer(false)
+      .withStatus(
+        {
+          pending: "Fetching example/skills",
+          complete: "Fetched example/skills",
+          persist: "timed",
+        },
+        Deferred.succeed(ready, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      .pipe(Effect.forkScoped);
+    yield* Deferred.await(ready);
+    yield* TestClock.adjust(1500);
+    yield* Fiber.interrupt(fiber);
+    expect(writes).toEqual(["✖ Fetching example/skills · Incomplete · 1.5s\n"]);
+  }),
+);

@@ -13,7 +13,7 @@ it.effect("replays a real fresh-device sync from a single captured run", () =>
     if (!story) return;
     const recording = yield* recordJourney(story);
     const frames = journeyFrames(recording, defaultTerminalEnvironment);
-    const download = frames.find((frame) => frame.status === "Downloading Skill copies · 0/3");
+    const download = frames.find((frame) => frame.status === "Downloading 3 Skill copies · 0/3");
     expect(download).toBeDefined();
     if (!download) return;
     expect(download.output).toContain("Library sync plan");

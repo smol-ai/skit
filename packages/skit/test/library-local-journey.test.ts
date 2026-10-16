@@ -5,6 +5,7 @@ import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
 import { libraryManifestFromLocalStateEffect } from "../src/library/library-state.js";
+import { planRetainedContentEffect } from "../src/library/retained-content-plan.js";
 import { prepareRestoreEffect } from "../src/library/library-restore.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
@@ -63,9 +64,12 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     const manifest = yield* libraryManifestFromLocalStateEffect(saved.state);
     assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
     const archive = yield* captureSnapshotArchiveEffect(firstOriginal);
-    const restored = yield* Effect.scoped(
-      prepareRestoreEffect(manifest, [archive], { originalsPath: join(secondHome, "originals") }),
-    );
+    const originalsPath = join(secondHome, "originals");
+    const plan = yield* planRetainedContentEffect(manifest, {
+      originalsPath,
+      localArchives: [archive],
+    });
+    const restored = yield* Effect.scoped(prepareRestoreEffect(manifest, plan, { originalsPath }));
     yield* publishLibrary(secondHome, restored.state);
     const second = yield* inspectLibrary(secondHome);
     assert.strictEqual(second.present, true);

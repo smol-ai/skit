@@ -1,12 +1,13 @@
 import {
-  captureSnapshotArchiveEffect,
+  planRetainedContentEffect,
   prepareRestoreEffect,
-  retainedTreePath,
   type LibraryManifest,
   type SnapshotArchive,
+  type RestoreObserver,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import type { librarySyncApiEffect } from "./library-sync-api.js";
+import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
 
 type SnapshotApi = Pick<
   Effect.Success<ReturnType<typeof librarySyncApiEffect>>,
@@ -14,79 +15,64 @@ type SnapshotApi = Pick<
 >;
 type RemoteSnapshots = { readonly library_id: string; readonly manifest: LibraryManifest } | null;
 
-/** Verify local copies before reading the remote; keep archives private to the transfer plan. */
-export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(function* (
-  copies: readonly { readonly digest: string }[],
-  originalsPath: string,
-  progress: (message: string) => Effect.Effect<void>,
+/** Sync owns upload selection and transport; core owns content availability and restoration. */
+export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer")(function* (
+  archives: readonly SnapshotArchive[],
+  desired: LibraryManifest,
+  remote: RemoteSnapshots,
+  api: SnapshotApi,
+  options: {
+    readonly originalsPath: string;
+    readonly origin: string;
+    readonly token?: string;
+    readonly observer?: SyncObserver;
+    readonly restoreObserver?: RestoreObserver;
+  },
 ) {
-  const archives = new Map<string, SnapshotArchive>();
-  for (const [verified, tree] of copies.entries()) {
-    yield* progress(`Verifying retained copies · ${verified}/${copies.length}`);
-    const archive = yield* captureSnapshotArchiveEffect(
-      retainedTreePath(originalsPath, tree.digest),
-    );
-    if (archive.digest !== tree.digest) return { _tag: "Changed" as const, digest: tree.digest };
-    // Verify every reference, including copies sharing the same digest.
-    if (!archives.has(archive.digest)) archives.set(archive.digest, archive);
-  }
+  const observer = options.observer ?? silentSyncObserver;
+  const content = yield* planRetainedContentEffect(desired, {
+    originalsPath: options.originalsPath,
+    localArchives: archives,
+  });
+  const required = new Set(desired.retained_copies.map((tree) => tree.digest));
+  const snapshotSet = new Set(desired.snapshot_digests);
+  const uploads = archives.filter(
+    (archive) =>
+      required.has(archive.digest) &&
+      snapshotSet.has(archive.digest) &&
+      !remote?.manifest.snapshot_digests.includes(archive.digest),
+  );
   return {
-    _tag: "Verified" as const,
-    prepareTransfer: (
-      desired: LibraryManifest,
-      remote: RemoteSnapshots,
-      api: SnapshotApi,
-      registry: { readonly origin: string; readonly token?: string },
-    ) => {
-      const required = new Set(desired.retained_copies.map((tree) => tree.digest));
-      const snapshotSet = new Set(desired.snapshot_digests);
-      const downloads = [...required].filter(
-        (digest) => !archives.has(digest) && snapshotSet.has(digest),
-      );
-      const uploads = [...archives.values()].filter(
-        (archive) =>
-          required.has(archive.digest) &&
-          snapshotSet.has(archive.digest) &&
-          !remote?.manifest.snapshot_digests.includes(archive.digest),
-      );
-      return {
-        snapshotCount: remote === null ? uploads.length : downloads.length,
-        restore: Effect.fn("Library.sync.restoreSnapshots")(function* () {
-          let completed = 0;
-          if (downloads.length) yield* progress(`Downloading Skill copies · 0/${downloads.length}`);
-          const downloaded =
-            remote === null
-              ? []
-              : yield* Effect.forEach(
-                  downloads,
-                  (digest) =>
-                    api
-                      .download(remote.library_id, digest)
-                      .pipe(
-                        Effect.tap(() =>
-                          progress(`Downloading Skill copies · ${++completed}/${downloads.length}`),
-                        ),
-                      ),
-                  // Retention starts only after every download succeeds.
-                  { concurrency: 4 },
-                );
-          yield* progress("Restoring retained Skill copies");
-          return yield* Effect.scoped(
-            prepareRestoreEffect(desired, [...archives.values(), ...downloaded], {
-              originalsPath,
-              registryBaseUrl: registry.origin,
-              ...(registry.token === undefined ? {} : { registryToken: registry.token }),
-            }),
-          );
+    snapshotCount: remote === null ? uploads.length : content.download.length,
+    restore: Effect.fn("Library.sync.restoreSnapshots")(function* () {
+      return yield* Effect.scoped(
+        prepareRestoreEffect(desired, content, {
+          originalsPath: options.originalsPath,
+          ...(options.restoreObserver === undefined ? {} : { observer: options.restoreObserver }),
+          ...(remote === null
+            ? {}
+            : {
+                download: (digest: SnapshotArchive["digest"]) =>
+                  api.download(remote.library_id, digest),
+              }),
+          registryBaseUrl: options.origin,
+          ...(options.token === undefined ? {} : { registryToken: options.token }),
         }),
-        upload: Effect.fn("Library.sync.uploadSnapshots")(function* () {
+      );
+    }),
+    upload: Effect.fn("Library.sync.uploadSnapshots")(function* () {
+      if (uploads.length === 0) return;
+      const phase = { kind: "upload", total: uploads.length } as const;
+      yield* observer.around(
+        phase,
+        Effect.gen(function* () {
           for (const [index, archive] of uploads.entries()) {
-            yield* progress(`Uploading Skill copies · ${index}/${uploads.length}`);
+            yield* observer.tick({ phase, completed: index });
             yield* api.upload(archive);
-            yield* progress(`Uploading Skill copies · ${index + 1}/${uploads.length}`);
+            yield* observer.tick({ phase, completed: index + 1 });
           }
         }),
-      };
-    },
+      );
+    }),
   };
 });

@@ -31,6 +31,7 @@ export const terminalLibraryProgressLayer = Layer.effect(
         renderer.withStatus(
           {
             pending: pendingMessage(stage),
+            persist: "timed",
             complete: (value) => completedMessage(stage, completed(value)),
           },
           operation,

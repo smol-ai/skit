@@ -14,6 +14,7 @@ import { NoStoredCredentials } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { createColors } from "picocolors";
 import { result } from "../contracts.js";
+import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
@@ -27,28 +28,27 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   const auth = yield* Effect.fromResult(options.authState);
   if (auth.origin === undefined) return yield* new NoStoredCredentials();
   const renderer = yield* Renderer;
+  const progress = terminalSyncProgress(renderer);
   return yield* Effect.scoped(
-    renderer.withStatus(
-      "Preparing Library sync",
-      syncLibraryEffect({
-        origin: auth.origin,
-        ...(auth.token === undefined ? {} : { token: auth.token }),
-        apply: options.apply,
-        adopt: options.adopt,
-        ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
-        ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
-        projection: options.projection,
-        onProgress: renderer.updateStatus,
-        ...(options.apply
-          ? {
-              onPlan: (plan) =>
-                renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
-                  renderBody: (color) => renderLibrarySyncPlan(plan, createColors(color)),
-                }),
-            }
-          : {}),
-      }),
-    ),
+    syncLibraryEffect({
+      origin: auth.origin,
+      ...(auth.token === undefined ? {} : { token: auth.token }),
+      apply: options.apply,
+      adopt: options.adopt,
+      ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+      ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
+      projection: options.projection,
+      observer: progress.sync,
+      restoreObserver: progress.restore,
+      ...(options.apply
+        ? {
+            onPlan: (plan) =>
+              renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
+                renderBody: (color) => renderLibrarySyncPlan(plan, createColors(color)),
+              }),
+          }
+        : {}),
+    }),
   );
 });
 
