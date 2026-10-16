@@ -840,3 +840,65 @@ it.effect("a prepared device transition cannot publish into another Library home
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+it.effect("sync reuses an orphan retained snapshot without downloading it", () =>
+  Effect.gen(function* () {
+    const { a, b, c, fs, inject, server } = yield* devices;
+    yield* a.retain("first");
+    yield* a.sync();
+    const digest = server.remote!.manifest.snapshot_digests[0]!;
+    const destination = retainedTreePath(join(b.home, "originals"), digest);
+    yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
+    yield* fs.copy(retainedTreePath(join(a.home, "originals"), digest), destination);
+    inject({ _tag: "FailDownload", digest });
+    assert.strictEqual((yield* b.sync()).status, "pulled");
+    assert.strictEqual((yield* b.state).collections.length, 1);
+    // The unused fault still rejects a fresh device, proving b made no download request.
+    assert.strictEqual((yield* c.sync().pipe(Effect.flip))._tag, "Library.LibraryApiRejected");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("sync exposes completed stages in transfer and publication order", () =>
+  Effect.gen(function* () {
+    const { a, b } = yield* devices;
+    yield* a.retain("first");
+    yield* a.retain("second");
+    const uploads: string[] = [];
+    yield* a.sync({
+      onStep: (status, operation) =>
+        operation.pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              uploads.push(status.complete);
+            }),
+          ),
+        ),
+    });
+    assert.deepStrictEqual(
+      uploads.filter((message) => message.startsWith("Uploaded")),
+      ["Uploaded 2 Skill copies"],
+    );
+    const completed: string[] = [];
+    const result = yield* b.sync({
+      onStep: (status, operation) =>
+        operation.pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              completed.push(status.complete);
+            }),
+          ),
+        ),
+    });
+    assert.strictEqual(result.status, "pulled");
+    assert.include(completed, "Downloaded 2 Skill copies");
+    assert.deepStrictEqual(
+      completed.filter((message) => message.startsWith("Restored")),
+      ["Restored 2 retained copies"],
+    );
+    assert.isBelow(
+      completed.indexOf("Downloaded 2 Skill copies"),
+      completed.indexOf("Saved this device’s Library"),
+    );
+    assert.strictEqual(completed.at(-1), "Reconciled enabled Skills");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

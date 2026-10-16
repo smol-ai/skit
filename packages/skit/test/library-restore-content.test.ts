@@ -288,3 +288,22 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
     assert.strictEqual(error._tag, "ContentAddressCollision");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("existing unlisted objects restore without source access or private archives", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.restore();
+    f.requests.length = 0;
+    f.unavailable();
+    const restored = yield* f.restore([]);
+    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(f.requests, []);
+    yield* f.fs.writeFileString(
+      join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+      "Damaged",
+    );
+    const error = yield* f.restore([]).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "ContentAddressCollision");
+    assert.deepStrictEqual(f.requests, []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

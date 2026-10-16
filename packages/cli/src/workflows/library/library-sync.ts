@@ -7,6 +7,7 @@ import {
   libraryManifestFromLocalStateEffect,
   type LibraryManifest,
   type ProjectionTarget,
+  type RestoreStep,
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-snapshots.js";
 import { librarySyncApiEffect } from "./library-sync-api.js";
@@ -71,8 +72,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       rootFor: (target: ProjectionTarget) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
+    onStep?: RestoreStep;
     onProgress?: (message: string) => Effect.Effect<void>;
   }) {
+    const step: RestoreStep = options.onStep ?? ((_status, operation) => operation);
     const progress = (message: string) => options.onProgress?.(message) ?? Effect.void;
     yield* progress("Inspecting this device’s Library");
     const store = yield* LibraryStore;
@@ -82,19 +85,28 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
     };
     const api = yield* librarySyncApiEffect({ origin: options.origin, token: options.token });
-    const local = yield* store.inspect;
+    const local = yield* step(
+      { pending: "Inspecting this device’s Library", complete: "Inspected this device’s Library" },
+      store.inspect,
+    );
     const manifest = local.present
       ? yield* libraryManifestFromLocalStateEffect(local.state)
       : emptyManifest;
-    const inventory = yield* inspectSyncSnapshots(
-      local.present ? local.state.retained_copies : [],
-      store.originalsPath,
-      progress,
+    const inventory = yield* step(
+      { pending: "Verifying retained copies", complete: "Checked retained copies" },
+      inspectSyncSnapshots(
+        local.present ? local.state.retained_copies : [],
+        store.originalsPath,
+        progress,
+      ),
     );
     if (inventory._tag === "Changed")
       return { status: "local_bytes_changed" as const, digest: inventory.digest };
     yield* progress("Reading remote Library");
-    const remote = yield* api.read();
+    const remote = yield* step(
+      { pending: "Reading remote Library", complete: "Read remote Library" },
+      api.read(),
+    );
     yield* progress("Planning Library sync");
     const ancestry = local.present ? local.state.sync_ancestry : undefined;
     const mismatched =
@@ -135,32 +147,41 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       base_manifest: normalizeLibraryManifest(reconciled),
     });
 
-    const merge = yield* prepareLibraryMerge({
-      base,
-      local: manifest,
-      remote: remoteManifest,
-      ...(local.present ? { device: local.state } : {}),
-      ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
-    });
+    const merge = yield* step(
+      { pending: "Planning Library sync", complete: "Compared Library changes" },
+      prepareLibraryMerge({
+        base,
+        local: manifest,
+        remote: remoteManifest,
+        ...(local.present ? { device: local.state } : {}),
+        ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+      }),
+    );
     if (merge._tag === "InvalidResolution")
       return { status: "resolution_invalid" as const, ...revision };
     if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
     const { device } = merge;
-    const collision = yield* resolveSyncProjectionCollisionsEffect(
-      merge.manifest,
-      options.projection?.rootFor,
-      options.keepEnabled,
-      device,
+    const collision = yield* step(
+      { pending: "Checking Skill destinations", complete: "Checked Skill destinations" },
+      resolveSyncProjectionCollisionsEffect(
+        merge.manifest,
+        options.projection?.rootFor,
+        options.keepEnabled,
+        device,
+      ),
     );
     if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
     if (collision.conflicts.length) return conflicted(collision.conflicts, remote?.revision_id);
     const desired = collision.manifest;
-    const transition = yield* prepareSyncDeviceTransition({
-      current: local.present ? local.state : undefined,
-      aligned: device,
-      manifest: desired,
-      rootFor: options.projection?.rootFor,
-    });
+    const transition = yield* step(
+      { pending: "Checking existing projections", complete: "Checked existing projections" },
+      prepareSyncDeviceTransition({
+        current: local.present ? local.state : undefined,
+        aligned: device,
+        manifest: desired,
+        rootFor: options.projection?.rootFor,
+      }),
+    );
     if (transition._tag === "Conflicted")
       return conflicted(transition.conflicts, remote?.revision_id);
 
@@ -177,11 +198,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       }
       const projections = options.apply
         ? projectionCounts(
-            yield* reconcileLibraryProjections({
-              ...projectionOptions,
-              desiredGlobalBindings: remoteManifest.bindings,
-              includeRepositoryBindings: true,
-            }),
+            yield* step(
+              { pending: "Checking enabled Skills", complete: "Checked enabled Skills" },
+              reconcileLibraryProjections({
+                ...projectionOptions,
+                desiredGlobalBindings: remoteManifest.bindings,
+                includeRepositoryBindings: true,
+              }),
+            ),
           )
         : { projected: 0, retired: 0 };
       return {
@@ -238,19 +262,28 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const saved =
       remote !== null && same(desired, remoteManifest)
         ? remote
-        : yield* api.write(remote?.revision_id ?? null, desired);
+        : yield* step(
+            { pending: "Saving remote Library", complete: "Saved remote Library" },
+            api.write(remote?.revision_id ?? null, desired),
+          );
     // Local state is published only onto exactly what this plan describes. If it moved, the
     // device keeps its old ancestry and the next sync merges both changes.
-    const retired = yield* transition
-      .publishRestored(restored.state, ancestryAt(saved, desired))
-      .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
+    const retired = yield* step(
+      { pending: "Saving this device’s Library", complete: "Saved this device’s Library" },
+      transition
+        .publishRestored(restored.state, ancestryAt(saved, desired))
+        .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged()))),
+    );
     yield* progress("Enabling synced Skills");
     const projections = projectionCounts(
-      yield* reconcileLibraryProjections({
-        ...projectionOptions,
-        desiredGlobalBindings: desired.bindings,
-        includeRepositoryBindings: true,
-      }),
+      yield* step(
+        { pending: "Enabling synced Skills", complete: "Reconciled enabled Skills" },
+        reconcileLibraryProjections({
+          ...projectionOptions,
+          desiredGlobalBindings: desired.bindings,
+          includeRepositoryBindings: true,
+        }),
+      ),
     );
     return {
       status:

@@ -37,11 +37,18 @@ export class RestoreInvalid
   }
 }
 
+/** Front ends observe whole operations without owning restoration policy. Steps must not nest. */
+export type RestoreStep = <A, E, R>(
+  status: { readonly pending: string; readonly complete: string },
+  operation: Effect.Effect<A, E, R>,
+) => Effect.Effect<A, E, R>;
+
 /** Access to historical sources and the destination for verified retained bytes. */
 export interface RestoreOptions {
   readonly originalsPath: string;
   readonly registryBaseUrl?: string;
   readonly registryToken?: string;
+  readonly onStep?: RestoreStep;
   readonly onProgress?: (message: string) => Effect.Effect<void>;
 }
 
@@ -184,10 +191,35 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
   available: readonly SnapshotArchive[],
   options: RestoreOptions,
 ) {
+  const step: RestoreStep = options.onStep ?? ((_status, operation) => operation);
   const archives = new Map(available.map((archive) => [archive.digest, archive]));
   const snapshotDigests = new Set(manifest.snapshot_digests);
+  const fs = yield* FileSystem.FileSystem;
+  const existingPaths = new Map<string, string>();
+  yield* step(
+    { pending: "Checking local retained copies", complete: "Checked for reusable retained copies" },
+    Effect.gen(function* () {
+      for (const [index, copy] of manifest.retained_copies.entries()) {
+        if (archives.has(copy.digest) || existingPaths.has(copy.digest)) continue;
+        const path = retainedTreePath(options.originalsPath, copy.digest);
+        if (!(yield* fs.exists(path))) continue;
+        const label =
+          manifest.acquisitions.find(
+            (candidate) => candidate.retained_copy_id === copy.retained_copy_id,
+          )?.input.value ?? copy.digest;
+        yield* (
+          options.onProgress?.(
+            `Verifying local retained copies · ${index + 1}/${manifest.retained_copies.length} · ${label}`,
+          ) ?? Effect.void
+        );
+        if ((yield* originalTreeHashEffect(path)) !== copy.digest)
+          return yield* new ContentAddressCollision();
+        existingPaths.set(copy.digest, path);
+      }
+    }),
+  );
   for (const copy of manifest.retained_copies) {
-    if (archives.has(copy.digest)) continue;
+    if (archives.has(copy.digest) || existingPaths.has(copy.digest)) continue;
     if (snapshotDigests.has(copy.digest))
       return yield* new RestoreInvalid({
         detail: `snapshot-backed retained copy ${copy.digest} not downloaded`,
@@ -200,10 +232,14 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
         `Fetching retained Skill copy · ${acquisition?.input.value ?? copy.digest}`,
       ) ?? Effect.void
     );
-    const archive = yield* reacquireSourceArchiveEffect(manifest, copy.digest, options);
+    const label = acquisition?.input.value ?? copy.digest;
+    const archive = yield* step(
+      { pending: `Fetching ${label}`, complete: `Fetched ${label}` },
+      reacquireSourceArchiveEffect(manifest, copy.digest, options),
+    );
     archives.set(archive.digest, archive);
   }
-  return [...archives.values()];
+  return { archives: [...archives.values()], existingPaths };
 });
 
 /**
@@ -215,53 +251,69 @@ export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function
   available: readonly SnapshotArchive[],
   options: RestoreOptions,
 ) {
-  const archives = yield* completeRestoreArchivesEffect(manifest, available, options);
+  const step: RestoreStep = options.onStep ?? ((_status, operation) => operation);
+  const { archives, existingPaths } = yield* completeRestoreArchivesEffect(
+    manifest,
+    available,
+    options,
+  );
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
-  const verifiedPaths = new Map<string, string>();
-  for (const [index, tree] of manifest.retained_copies.entries()) {
-    const label = tree.members[0]?.source_path ?? tree.digest;
-    yield* (
-      options.onProgress?.(
-        `Restoring retained Skill copies · ${index + 1}/${manifest.retained_copies.length} · ${label}`,
-      ) ?? Effect.void
-    );
-    const archive = received.get(tree.digest);
-    if (archive === undefined)
-      return yield* new RestoreInvalid({
-        detail: `retained copy ${tree.digest} not downloaded`,
-      });
-    let path = verifiedPaths.get(tree.digest);
-    if (path === undefined) {
-      path = retainedTreePath(options.originalsPath, tree.digest);
-      if (yield* fs.exists(path)) {
-        // Existing immutable objects still need verification, but no unpack/copy cycle.
-        if ((yield* originalTreeHashEffect(path)) !== tree.digest)
-          return yield* new ContentAddressCollision();
-      } else {
-        const verified = yield* verifySnapshotArchiveEffect(archive);
-        path = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const temporary = yield* materializeVerifiedSnapshotEffect(verified);
-            return yield* retainLocalTreeEffect(
-              temporary,
-              options.originalsPath,
-              tree.digest,
-              true,
-            );
-          }),
+  const verifiedPaths = new Map(existingPaths);
+  yield* step(
+    {
+      pending: `Restoring ${manifest.retained_copies.length} retained copies`,
+      complete: `Restored ${manifest.retained_copies.length} retained copies`,
+    },
+    Effect.gen(function* () {
+      for (const [index, tree] of manifest.retained_copies.entries()) {
+        const label =
+          manifest.acquisitions.find(
+            (candidate) => candidate.retained_copy_id === tree.retained_copy_id,
+          )?.input.value ?? tree.digest;
+        yield* (
+          options.onProgress?.(
+            `Restoring retained Skill copies · ${index + 1}/${manifest.retained_copies.length} · ${label}`,
+          ) ?? Effect.void
         );
+        const archive = received.get(tree.digest);
+        let path = verifiedPaths.get(tree.digest);
+        if (path === undefined) {
+          path = retainedTreePath(options.originalsPath, tree.digest);
+          if (yield* fs.exists(path)) {
+            // Existing immutable objects still need verification, but no unpack/copy cycle.
+            if ((yield* originalTreeHashEffect(path)) !== tree.digest)
+              return yield* new ContentAddressCollision();
+          } else {
+            if (archive === undefined)
+              return yield* new RestoreInvalid({
+                detail: `retained copy ${tree.digest} not downloaded`,
+              });
+            const verified = yield* verifySnapshotArchiveEffect(archive);
+            path = yield* Effect.scoped(
+              Effect.gen(function* () {
+                const temporary = yield* materializeVerifiedSnapshotEffect(verified);
+                return yield* retainLocalTreeEffect(
+                  temporary,
+                  options.originalsPath,
+                  tree.digest,
+                  true,
+                );
+              }),
+            );
+          }
+          verifiedPaths.set(tree.digest, path);
+        }
+        for (const member of tree.members) {
+          const directory = member.source_path === "." ? path : join(path, member.source_path);
+          if ((yield* originalTreeHashEffect(directory)) !== member.source_digest)
+            return yield* new RestoreInvalid({
+              detail: `retained member ${member.source_path} source bytes disagree`,
+            });
+        }
       }
-      verifiedPaths.set(tree.digest, path);
-    }
-    for (const member of tree.members) {
-      const directory = member.source_path === "." ? path : join(path, member.source_path);
-      if ((yield* originalTreeHashEffect(directory)) !== member.source_digest)
-        return yield* new RestoreInvalid({
-          detail: `retained member ${member.source_path} source bytes disagree`,
-        });
-    }
-  }
+    }),
+  );
   const state = yield* LibraryState.makeEffect(
     currentLibraryState({
       collections: [...manifest.collections],

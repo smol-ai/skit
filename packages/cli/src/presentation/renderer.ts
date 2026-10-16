@@ -1,7 +1,7 @@
 // Every byte the CLI writes goes through this service. The console implementation owns stdout,
 // stderr and the exit code; a test or the TUI provides its own and nothing below changes.
 
-import { Context, Effect, Exit, Fiber, Layer } from "effect";
+import { Clock, Context, Effect, Exit, Fiber, Layer } from "effect";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import {
   renderFailureFrame,
@@ -38,6 +38,7 @@ export interface RendererShape {
       | string
       | {
           readonly pending: string;
+          readonly timed?: boolean;
           readonly complete: string | ((value: A) => string);
         },
     operation: Effect.Effect<A, E, R>,
@@ -47,6 +48,9 @@ export interface RendererShape {
 export class Renderer extends Context.Service<Renderer, RendererShape>()("skit/Renderer") {}
 
 import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "./terminal-status.js";
+
+const formatElapsed = (milliseconds: number): string =>
+  milliseconds < 1000 ? `${milliseconds}ms` : `${(milliseconds / 1000).toFixed(1)}s`;
 
 const write = (stream: NodeJS.WriteStream, body: string) =>
   Effect.callback<void>((resume) => {
@@ -107,45 +111,55 @@ export function consoleRenderer(json: boolean): RendererShape {
       Effect.sync(() => {
         if (statusVisible) statusMessage = message;
       }),
-    withStatus: (status, operation) =>
-      json || !process.stderr.isTTY
-        ? operation
-        : Effect.scoped(
-            Effect.gen(function* () {
-              const pending = typeof status === "string" ? status : status.pending;
-              let frame = 0;
-              statusMessage = pending;
-              statusVisible = true;
-              const spinner = yield* Effect.forever(
-                Effect.suspend(() =>
-                  write(
+    withStatus: (status, operation) => {
+      if (json) return operation;
+      const timed = typeof status !== "string" && status.timed === true;
+      const interactive = Boolean(process.stderr.isTTY);
+      if (!interactive && !timed) return operation;
+      return Effect.scoped(
+        Effect.gen(function* () {
+          const started = yield* Clock.currentTimeMillis;
+          const pending = typeof status === "string" ? status : status.pending;
+          let frame = 0;
+          statusMessage = pending;
+          statusVisible = interactive;
+          const spinner = interactive
+            ? yield* Effect.forever(
+                Effect.gen(function* () {
+                  const elapsed = (yield* Clock.currentTimeMillis) - started;
+                  const message = timed
+                    ? `${statusMessage} · ${formatElapsed(elapsed)}`
+                    : statusMessage;
+                  yield* write(
                     process.stderr,
-                    `${CLEAR_STATUS_LINE}${renderStatusLine(statusMessage, frame++)}`,
-                  ),
-                ).pipe(Effect.andThen(Effect.sleep(STATUS_FRAME_MS))),
-              ).pipe(Effect.forkScoped);
-              return yield* operation.pipe(
-                Effect.onExit((exit) =>
-                  Fiber.interrupt(spinner).pipe(
-                    Effect.andThen(
-                      typeof status !== "string" && Exit.isSuccess(exit)
-                        ? write(
-                            process.stderr,
-                            `${CLEAR_STATUS_LINE}✓ ${typeof status.complete === "string" ? status.complete : status.complete(exit.value)}\n`,
-                          ).pipe(
-                            Effect.tap(() =>
-                              Effect.sync(() => {
-                                statusVisible = false;
-                              }),
-                            ),
-                          )
-                        : clearStatus,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
+                    `${CLEAR_STATUS_LINE}${renderStatusLine(message, frame++)}`,
+                  );
+                }).pipe(Effect.andThen(Effect.sleep(STATUS_FRAME_MS))),
+              ).pipe(Effect.forkScoped)
+            : undefined;
+          return yield* operation.pipe(
+            Effect.onExit((exit) =>
+              Effect.gen(function* () {
+                if (spinner) yield* Fiber.interrupt(spinner);
+                yield* clearStatus;
+                const elapsed = (yield* Clock.currentTimeMillis) - started;
+                const duration = formatElapsed(elapsed);
+                const suffix = timed ? ` · ${duration}` : "";
+                if (typeof status !== "string" && Exit.isSuccess(exit)) {
+                  const message =
+                    typeof status.complete === "string"
+                      ? status.complete
+                      : status.complete(exit.value);
+                  yield* write(process.stderr, `✓ ${message}${suffix}\n`);
+                } else if (timed) {
+                  yield* write(process.stderr, `✖ ${pending} · Incomplete${suffix}\n`);
+                }
+              }),
+            ),
+          );
+        }),
+      );
+    },
   };
 }
 
