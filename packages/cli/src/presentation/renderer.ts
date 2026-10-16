@@ -38,7 +38,7 @@ export interface RendererShape {
       | string
       | {
           readonly pending: string;
-          readonly timed?: boolean;
+          readonly persist?: "timed";
           readonly complete: string | ((value: A) => string);
         },
     operation: Effect.Effect<A, E, R>,
@@ -113,7 +113,7 @@ export function consoleRenderer(json: boolean): RendererShape {
       }),
     withStatus: (status, operation) => {
       if (json) return operation;
-      const timed = typeof status !== "string" && status.timed === true;
+      const timed = typeof status !== "string" && status.persist === "timed";
       const interactive = Boolean(process.stderr.isTTY);
       if (!interactive && !timed) return operation;
       return Effect.scoped(

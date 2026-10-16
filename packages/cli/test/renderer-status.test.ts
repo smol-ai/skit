@@ -78,7 +78,11 @@ for (const tty of [true, false]) {
       const finish = yield* Deferred.make<void>();
       const fiber = yield* renderer
         .withStatus(
-          { pending: "Fetching example/skills", complete: "Fetched example/skills", timed: true },
+          {
+            pending: "Fetching example/skills",
+            complete: "Fetched example/skills",
+            persist: "timed",
+          },
           Deferred.succeed(ready, undefined).pipe(
             Effect.andThen(Deferred.await(finish)),
             Effect.as(42),
@@ -102,7 +106,11 @@ it.effect("persists elapsed time on failure without changing the failure", () =>
     const finish = yield* Deferred.make<void>();
     const fiber = yield* consoleRenderer(false)
       .withStatus(
-        { pending: "Fetching example/skills", complete: "Fetched example/skills", timed: true },
+        {
+          pending: "Fetching example/skills",
+          complete: "Fetched example/skills",
+          persist: "timed",
+        },
         Deferred.succeed(ready, undefined).pipe(
           Effect.andThen(Deferred.await(finish)),
           Effect.andThen(Effect.fail("unavailable")),
@@ -121,7 +129,7 @@ it.effect("suppresses persistent timed progress in JSON mode", () =>
   Effect.gen(function* () {
     const writes = capture(true);
     const value = yield* consoleRenderer(true).withStatus(
-      { pending: "Fetching", complete: "Fetched", timed: true },
+      { pending: "Fetching", complete: "Fetched", persist: "timed" },
       Effect.succeed(42),
     );
     expect(value).toBe(42);
@@ -135,7 +143,11 @@ it.effect("persists an incomplete timed step when interrupted", () =>
     const ready = yield* Deferred.make<void>();
     const fiber = yield* consoleRenderer(false)
       .withStatus(
-        { pending: "Fetching example/skills", complete: "Fetched example/skills", timed: true },
+        {
+          pending: "Fetching example/skills",
+          complete: "Fetched example/skills",
+          persist: "timed",
+        },
         Deferred.succeed(ready, undefined).pipe(Effect.andThen(Effect.never)),
       )
       .pipe(Effect.forkScoped);

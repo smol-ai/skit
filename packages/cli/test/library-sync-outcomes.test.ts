@@ -755,31 +755,39 @@ it.effect(
       yield* a.retain("second");
       yield* a.sync();
       const events: string[] = [];
+      const ticks: number[] = [];
       const result = yield* b.sync({
         onPlan: () =>
           Effect.sync(() => {
             events.push("plan");
           }),
-        onProgress: (message) =>
-          Effect.sync(() => {
-            events.push(message);
-          }),
+        restoreObserver: {
+          around: (phase, operation) =>
+            Effect.sync(() => {
+              events.push(`start:${phase.kind}`);
+            }).pipe(
+              Effect.andThen(operation),
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  events.push(`complete:${phase.kind}`);
+                }),
+              ),
+            ),
+          tick: ({ phase, completed }) =>
+            Effect.sync(() => {
+              if (phase.kind === "download") ticks.push(completed);
+            }),
+        },
       });
       assert.strictEqual(result.status, "pulled");
-      assert.deepStrictEqual(
-        events.filter((event) => event.startsWith("Downloading")),
-        [
-          "Downloading Skill copies · 0/2",
-          "Downloading Skill copies · 1/2",
-          "Downloading Skill copies · 2/2",
-        ],
-      );
-      assert.ok(events.indexOf("plan") < events.indexOf("Downloading Skill copies · 0/2"));
-      assert.ok(
-        events.indexOf("Downloading Skill copies · 2/2") <
-          events.indexOf("Restoring retained Skill copies"),
-      );
-      assert.strictEqual(events.at(-1), "Enabling synced Skills");
+      assert.deepStrictEqual(events, [
+        "plan",
+        "start:download",
+        "complete:download",
+        "start:retain",
+        "complete:retain",
+      ]);
+      assert.deepStrictEqual(ticks, [0, 1, 2]);
       assert.strictEqual((yield* b.state).collections.length, 2);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -795,14 +803,17 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
     const progress: string[] = [];
     const failure = yield* Effect.flip(
       b.sync({
-        onProgress: (message) =>
-          Effect.sync(() => {
-            progress.push(message);
-          }),
+        restoreObserver: {
+          around: (phase, operation) =>
+            Effect.sync(() => {
+              progress.push(phase.kind);
+            }).pipe(Effect.andThen(operation)),
+          tick: () => Effect.void,
+        },
       }),
     );
     assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
-    assert.notInclude(progress, "Restoring retained Skill copies");
+    assert.notInclude(progress, "retain");
     assert.isFalse(yield* fs.exists(join(b.home, "originals")));
     assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
     assert.strictEqual(b.publishes, 0);
@@ -851,54 +862,70 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
     yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
     yield* fs.copy(retainedTreePath(join(a.home, "originals"), digest), destination);
     inject({ _tag: "FailDownload", digest });
-    assert.strictEqual((yield* b.sync()).status, "pulled");
+    const before = yield* captureDisk(b.disk);
+    const preview = yield* b.sync({ apply: false });
+    assert.strictEqual(preview.status, "pull_ready");
+    assert.strictEqual("snapshots" in preview ? preview.snapshots : undefined, 0);
+    yield* assertDiskUnchanged(before);
+    const applied = yield* b.sync();
+    assert.strictEqual(applied.status, "pulled");
+    assert.strictEqual("snapshots" in applied ? applied.snapshots : undefined, 0);
     assert.strictEqual((yield* b.state).collections.length, 1);
     // The unused fault still rejects a fresh device, proving b made no download request.
     assert.strictEqual((yield* c.sync().pipe(Effect.flip))._tag, "Library.LibraryApiRejected");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("sync exposes completed stages in transfer and publication order", () =>
+it.effect("sync exposes bounded completed phases in transfer and publication order", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.retain("first");
     yield* a.retain("second");
-    const uploads: string[] = [];
+    const uploaded: number[] = [];
     yield* a.sync({
-      onStep: (status, operation) =>
-        operation.pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              uploads.push(status.complete);
-            }),
+      observer: {
+        around: (phase, operation) =>
+          operation.pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                if (phase.kind === "upload") uploaded.push(phase.total);
+              }),
+            ),
           ),
-        ),
+        tick: () => Effect.void,
+      },
     });
-    assert.deepStrictEqual(
-      uploads.filter((message) => message.startsWith("Uploaded")),
-      ["Uploaded 2 Skill copies"],
-    );
+    assert.deepStrictEqual(uploaded, [2]);
     const completed: string[] = [];
+    const retained: number[] = [];
     const result = yield* b.sync({
-      onStep: (status, operation) =>
-        operation.pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              completed.push(status.complete);
-            }),
+      observer: {
+        around: (phase, operation) =>
+          operation.pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                completed.push(phase.kind);
+              }),
+            ),
           ),
-        ),
+        tick: () => Effect.void,
+      },
+      restoreObserver: {
+        around: (phase, operation) =>
+          operation.pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                completed.push(phase.kind);
+                if (phase.kind === "retain") retained.push(phase.total);
+              }),
+            ),
+          ),
+        tick: () => Effect.void,
+      },
     });
     assert.strictEqual(result.status, "pulled");
-    assert.include(completed, "Downloaded 2 Skill copies");
-    assert.deepStrictEqual(
-      completed.filter((message) => message.startsWith("Restored")),
-      ["Restored 2 retained copies"],
-    );
-    assert.isBelow(
-      completed.indexOf("Downloaded 2 Skill copies"),
-      completed.indexOf("Saved this device’s Library"),
-    );
-    assert.strictEqual(completed.at(-1), "Reconciled enabled Skills");
+    assert.deepStrictEqual(retained, [2]);
+    assert.isBelow(completed.indexOf("download"), completed.indexOf("save-local"));
+    assert.strictEqual(completed.at(-1), "enable");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
