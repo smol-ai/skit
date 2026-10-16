@@ -96,7 +96,10 @@ Alternatively, you can supply these flags:
 - `--all` to enable a whole collection, including new skills added when you update
 - `--invocation [declared, explicit, implicit, host-policy]` to control whether an agent can invoke the skill automatically
 
-Before enabling a new skill, SKIT checks the same-scope directories readable by each agent. An existing copy blocks enable, including an identical copy reached through a symlink. `skit enable --dry-run` shows the conflict; `--allow-duplicate` explicitly permits it. Existing Bindings can still change invocation policy. `skit doctor` shows duplicate symlink locations and their resolved targets.
+Before enabling a new skill, SKIT checks the same-scope directories readable by each agent. An existing copy blocks enable, including an identical copy reached through a symlink. `skit enable --dry-run` shows the conflict; `--allow-duplicate` explicitly permits it. Existing Bindings can still change invocation policy. `skit doctor` shows duplicate symlink locations and their resolved targets as well as their context utilization.
+
+<img width="455" height="498" alt="image" src="https://github.com/user-attachments/assets/bcb5b219-5df4-4250-8ef7-c855923b0ee0" />
+
 
 The interactive `skit list` flow allows you to change invocation settings for all skills.
 
