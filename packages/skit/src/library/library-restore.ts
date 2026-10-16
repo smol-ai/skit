@@ -196,8 +196,9 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
       (candidate) => candidate.retained_copy_id === copy.retained_copy_id,
     );
     yield* (
-      options.onProgress?.(`Fetching retained Skill copy · ${acquisition?.input ?? copy.digest}`) ??
-        Effect.void
+      options.onProgress?.(
+        `Fetching retained Skill copy · ${acquisition?.input.value ?? copy.digest}`,
+      ) ?? Effect.void
     );
     const archive = yield* reacquireSourceArchiveEffect(manifest, copy.digest, options);
     archives.set(archive.digest, archive);

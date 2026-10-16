@@ -93,6 +93,7 @@ const fixture = Effect.gen(function* () {
   });
   let release = yield* repack;
   let status = 200;
+  const progress: string[] = [];
   const requests: { url: string; authorization: string | undefined }[] = [];
   const client = HttpClient.make((request) =>
     Effect.sync(() => {
@@ -112,6 +113,10 @@ const fixture = Effect.gen(function* () {
         originalsPath,
         registryBaseUrl: origin,
         registryToken: "restore-token",
+        onProgress: (message) =>
+          Effect.sync(() => {
+            progress.push(message);
+          }),
       }).pipe(Effect.provideService(HttpClient.HttpClient, client)),
     );
   return {
@@ -127,6 +132,7 @@ const fixture = Effect.gen(function* () {
     manifest,
     originalsPath,
     requests,
+    progress,
     restore,
     unavailable: () => {
       status = 404;
@@ -142,6 +148,10 @@ it.effect("prepares downloaded private content and exact source content without 
   Effect.gen(function* () {
     const f = yield* fixture;
     const restored = yield* f.restore();
+    assert.include(
+      f.progress,
+      "Fetching retained Skill copy · https://wrong.example/not-the-source",
+    );
     assert.deepStrictEqual(restored.state.acquisitions, f.manifest.acquisitions);
     assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
     assert.deepStrictEqual(f.requests, [
