@@ -35,7 +35,13 @@ try {
   assert.ok((app.state().count ?? 0) > 8);
   harness.mockInput.pressTab();
   assert.equal(app.state().focus, "preview");
-  while (!app.state().status?.startsWith("Downloading")) harness.mockInput.pressKey("ARROW_RIGHT");
+  for (
+    let frame = 0;
+    frame < (app.state().count ?? 0) && app.state().status !== "Downloading 3 Skill copies · 0/3";
+    frame++
+  )
+    harness.mockInput.pressKey("ARROW_RIGHT");
+  assert.equal(app.state().status, "Downloading 3 Skill copies · 0/3");
   await harness.flush();
   const headingSpan = () =>
     harness
@@ -67,13 +73,13 @@ try {
   await harness.flush();
   assert.equal(app.state().index, pausedIndex);
   assert.notEqual(app.screen().text, before, "spinner should animate while advancement is paused");
-  assert.match(app.screen().text, /Downloading Skill copies · 0\/3/);
+  assert.match(app.screen().text, /Downloading 3 Skill copies · 0\/3/);
   harness.mockInput.pressKey("ARROW_RIGHT");
   await harness.flush();
-  assert.match(app.screen().text, /Downloading Skill copies · 1\/3/);
+  assert.match(app.screen().text, /Downloading 3 Skill copies · 1\/3/);
   harness.mockInput.pressKey("ARROW_LEFT");
   await harness.flush();
-  assert.match(app.screen().text, /Downloading Skill copies · 0\/3/);
+  assert.match(app.screen().text, /Downloading 3 Skill copies · 0\/3/);
   harness.mockInput.pressKey(" ");
   assert.equal(app.state().playing, true);
   app.tick(1000);
