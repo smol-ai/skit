@@ -74,6 +74,7 @@ export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(f
           return yield* Effect.scoped(
             prepareRestoreEffect(desired, [...archives.values(), ...downloaded], {
               originalsPath,
+              onProgress: progress,
               registryBaseUrl: registry.origin,
               ...(registry.token === undefined ? {} : { registryToken: registry.token }),
             }),

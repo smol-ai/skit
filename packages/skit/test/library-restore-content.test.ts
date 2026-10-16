@@ -245,3 +245,36 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("restoring existing copies avoids temporary trees and still rejects damaged bytes", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.restore();
+    const archives = yield* Effect.forEach(f.manifest.retained_copies, (tree) =>
+      captureSnapshotArchiveEffect(retainedTreePath(f.originalsPath, tree.digest)),
+    );
+    f.unavailable();
+    const progress: string[] = [];
+    const restore = prepareRestoreEffect(f.manifest, archives, {
+      originalsPath: f.originalsPath,
+      onProgress: (message) =>
+        Effect.sync(() => {
+          progress.push(message);
+        }),
+    }).pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...f.fs,
+        makeTempDirectoryScoped: () => Effect.die("existing copies must not be unpacked"),
+      }),
+    );
+    const restored = yield* restore;
+    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.strictEqual(progress.length, f.manifest.retained_copies.length);
+    yield* f.fs.writeFileString(
+      join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+      "Damaged",
+    );
+    const error = yield* restore.pipe(Effect.flip);
+    assert.strictEqual(error._tag, "ContentAddressCollision");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
