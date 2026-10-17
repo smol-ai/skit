@@ -54,7 +54,7 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
-  usage: effectOutput("skit.usage.v2", UsageReport),
+  usage: effectOutput("skit.usage.v3", UsageReport),
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(

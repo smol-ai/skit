@@ -14,21 +14,26 @@ import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import type { CommandResult } from "../src/commands/types.js";
 
-test("presents separate evidence and diagnostics; encodes the public JSON contract", () => {
-  expect(renderUsage(emptyUsageStory, true)).toContain("No activity observed.");
-  const body = renderUsage(observedUsageStory, true);
-  expect(body).toContain("Calls | Loads | Reads");
-  expect(body).toContain("example | codex | 0 | 1 | 3");
-  expect(body).toContain("example | claude-code | 2 | 0 | 0");
-  expect(body).toContain("1 unsupported tool wrappers");
-  expect(body).toContain("report is incomplete");
-  expect(body).toContain("same invocation");
+test("presents skill activity without internal counters; preserves the public JSON contract", () => {
+  expect(renderUsage(emptyUsageStory)).toContain("No skill activity observed.");
+  const body = renderUsage(observedUsageStory);
+  expect(body).toMatch(/Skill\s+Harness\s+Uses\s+Explicit\s+Implicit\s+Last seen/);
+  expect(body).not.toMatch(/\b(?:Calls|Loads|Reads)\b/);
+  expect(body).toMatch(/example\s+claude-code, codex\s+3\s+1\s+2\s+7 Oct/);
+  expect(body.match(/^example\s+/gm)).toHaveLength(1);
+  expect(body).not.toContain("|");
+  expect(body).not.toContain("/synthetic");
+  expect(body).not.toContain("unsupported tool wrappers");
+  expect(body).not.toContain("bytes read");
+  expect(body).not.toContain("2026-10-07T");
+  expect(body).not.toContain("Unknown");
+  expect(body.trimEnd().split("\n").at(-1)).toMatch(/^example\s+/);
   const json = renderResultFrame(result("usage", observedUsageStory), {
     ...defaultTerminalEnvironment,
     format: "json",
   });
   expect(JSON.parse(json?.stdout ?? "{}")).toEqual({
-    schema: "skit.usage.v2",
+    schema: "skit.usage.v3",
     data: observedUsageStory,
   });
 });
@@ -44,9 +49,10 @@ test("does not render terminal controls embedded in observed names or paths", ()
       },
     ],
   };
-  const body = renderUsage(report, true);
+  const body = renderUsage(report);
   expect(body).not.toContain("\x1b");
-  expect(body).toContain("/synthetic/ example/SKILL.md");
+  expect(body).not.toContain("/synthetic");
+  expect(body).toContain("example [31m");
 });
 
 test("summarizes by name without dumping paths, scan internals, or test-fixture reads", () => {
@@ -75,24 +81,20 @@ test("summarizes by name without dumping paths, scan internals, or test-fixture 
   const body = renderUsage(report);
   expect(body).toContain("Skill activity · 7 days");
   expect(body.match(/^example\s+/gm)).toHaveLength(1);
-  expect(body).toMatch(/example\s+3\s+2\s+1\s+7 Oct/);
+  expect(body).toMatch(/example\s+claude-code, codex\s+3\s+1\s+2\s+7 Oct/);
+  expect(body).not.toMatch(/\b(?:Reads|Calls|Loads)\b/);
   expect(body).not.toContain("/synthetic");
   expect(body).not.toContain("library");
   expect(body).not.toContain("review");
   expect(body).not.toContain("unsupported tool wrappers");
   expect(body).not.toContain("bytes read");
-  expect(body).toContain("--details");
-  const detailed = renderResultFrame(
-    { ...result("usage", report), detail: "full" },
-    defaultTerminalEnvironment,
-  );
-  // JSON retains all observations even with the terminal details flag.
-  const json = renderResultFrame(
-    { ...result("usage", report), detail: "full" },
-    { ...defaultTerminalEnvironment, format: "json" },
-  );
+  expect(body).not.toContain("--details");
+  // JSON retains all observations omitted from the human table.
+  const json = renderResultFrame(result("usage", report), {
+    ...defaultTerminalEnvironment,
+    format: "json",
+  });
   expect(JSON.parse(json?.stdout ?? "{}").data.rows).toHaveLength(4);
-  expect(detailed).toBeDefined();
 });
 
 test("keeps infrequent skills visible in the compact table", () => {
@@ -108,7 +110,6 @@ test("keeps infrequent skills visible in the compact table", () => {
   const body = renderUsage(report);
   expect(body.match(/^skill-\d+\s+/gm)).toHaveLength(12);
   expect(body).toContain("skill-11");
-  expect(renderUsage(report, true)).toContain("skill-11");
 });
 
 it.effect("exposes the read-only command and output schema", () =>
@@ -118,7 +119,7 @@ it.effect("exposes the read-only command and output schema", () =>
     expect(usage).toMatchObject({
       stability: "experimental",
       effects: { capabilities: ["filesystem.read"] },
-      outputSchemas: expect.arrayContaining(["skit.usage.v2"]),
+      outputSchemas: expect.arrayContaining(["skit.usage.v3"]),
       interactive: false,
     });
   }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-usage-contract"))),
@@ -176,10 +177,34 @@ it.effect("runs the real command against isolated transcripts without creating L
         }),
       ),
     );
-    expect(captured?.schema).toBe("skit.usage.v2");
+    expect(captured?.schema).toBe("skit.usage.v3");
     const report = yield* Schema.decodeUnknownEffect(UsageReport)(captured?.data);
-    expect(report.rows).toMatchObject([{ name: "example", loads: 1, calls: 0, reads: 0 }]);
+    expect(report.rows).toMatchObject([
+      {
+        name: "example",
+        uses: 1,
+        explicit: 1,
+        implicit: 0,
+        unknown: 0,
+        loads: 1,
+        calls: 0,
+        reads: 0,
+      },
+    ]);
     expect(yield* fs.exists(home)).toBe(false);
     expect(yield* fs.readFileString(transcript)).toBe(content);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
+
+test("orders by invocation counts rather than repeated evidence", () => {
+  const base = observedUsageStory.rows[0];
+  const report = {
+    ...emptyUsageStory,
+    rows: [
+      { ...base, name: "older", uses: 1, reads: 100, lastObservedAt: "2026-10-02T12:00:00Z" },
+      { ...base, name: "recent", uses: 2, reads: 1, lastObservedAt: "2026-10-07T12:00:00Z" },
+    ],
+  };
+  const body = renderUsage(report);
+  expect(body.indexOf("recent")).toBeLessThan(body.indexOf("older"));
+});

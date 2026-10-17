@@ -5,7 +5,7 @@ import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 /** The Harnesses whose transcripts SKIT reads; each one's driver carries the grammar. */
 export const UsageHarness = HarnessName.pick(["codex", "claude-code"]);
 export type UsageHarness = typeof UsageHarness.Type;
-export const UsageKind = Schema.Literals(["calls", "loads", "reads"]);
+export const UsageKind = Schema.Literals(["calls", "loads", "reads", "selections"]);
 export type UsageKind = typeof UsageKind.Type;
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export const UsageRow = Schema.Struct({
@@ -17,6 +17,10 @@ export const UsageRow = Schema.Struct({
   calls: Count,
   loads: Count,
   reads: Count,
+  uses: Count,
+  explicit: Count,
+  implicit: Count,
+  unknown: Count,
   lastObservedAt: Schema.String,
 });
 export interface UsageRow extends Schema.Schema.Type<typeof UsageRow> {}

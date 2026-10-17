@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../harnesses/drivers.js";
 import { LinkStat } from "../platform/link-stat.js";
+import { correlateInvocations, type InvocationObservation } from "./invocations.js";
 import { extractUsage, object, type UsageEvent, type ExtractedUsage } from "./events.js";
 import {
   InvalidUsageOptions,
@@ -27,6 +28,9 @@ interface Observation {
   timestamp: string;
   cwd?: string;
   coverage: Coverage;
+  session: string;
+  sessionKnown: boolean;
+  turn?: string;
 }
 const fingerprint = (s: string) => createHash("sha256").update(s).digest("hex");
 const blank = (h: UsageCoverage["harness"], root: string): Coverage => ({
@@ -171,11 +175,22 @@ export const skillUsageLayer = Layer.effect(
       for (const file of files) {
         const c = file.coverage;
         let cwd: string | undefined;
+        let session = file.path;
+        let agent = /\/subagents\/agent-([^/]+)\.jsonl$/.exec(file.path)?.[1];
+        let sessionKnown = false;
+        let turn: string | undefined;
         let observedBytes = 0;
         let pieces: Buffer[] = [];
         let length = 0;
         let dropping = false;
-        const pending: { cwd?: string; timestamp: string; extracted: ExtractedUsage }[] = [];
+        const pending: {
+          cwd?: string;
+          timestamp: string;
+          extracted: ExtractedUsage;
+          session: string;
+          sessionKnown: boolean;
+          turn?: string;
+        }[] = [];
         const projectCwds = new Map<string, string>();
         const flushPending = Effect.fn("SkillUsage.projectRecords")(function* () {
           for (const record of pending) {
@@ -205,6 +220,9 @@ export const skillUsageLayer = Layer.effect(
                 timestamp: record.timestamp,
                 cwd: recordCwd,
                 coverage: c,
+                session: record.session,
+                sessionKnown: record.sessionKnown,
+                turn: record.turn,
               });
           }
           pending.length = 0;
@@ -225,6 +243,62 @@ export const skillUsageLayer = Layer.effect(
           const r = object(raw);
           c.records++;
           const p = object(r.payload);
+          if (c.harness === "codex") {
+            if (r.type === "session_meta" && typeof p.id === "string") {
+              if (session !== p.id) turn = undefined;
+              session = p.id;
+              sessionKnown = true;
+            }
+            if (
+              (r.type === "turn_context" ||
+                (r.type === "event_msg" && p.type === "task_started")) &&
+              typeof p.turn_id === "string"
+            )
+              turn = p.turn_id;
+          } else {
+            if (typeof r.agentId === "string") agent = r.agentId;
+            if (typeof r.sessionId === "string") {
+              const conversation = JSON.stringify([r.sessionId, agent ?? null]);
+              if (session !== conversation) turn = undefined;
+              session = conversation;
+              sessionKnown = true;
+            }
+            const message = object(r.message);
+            const content = message.content;
+            const userText =
+              typeof content === "string"
+                ? content
+                : Array.isArray(content)
+                  ? content
+                      .map((b) => object(b).text)
+                      .filter((t): t is string => typeof t === "string")
+                      .join("\n")
+                  : "";
+            const userInput =
+              typeof content === "string"
+                ? content.length > 0
+                : Array.isArray(content) && content.some((b) => object(b).type !== "tool_result");
+            // Tool results and instruction expansions do not start a user turn.
+            if (
+              r.type === "user" &&
+              r.isMeta !== true &&
+              r.isCompactSummary !== true &&
+              userInput &&
+              !userText.startsWith("Base directory for this skill:")
+            )
+              turn =
+                typeof r.promptId === "string"
+                  ? r.promptId
+                  : typeof r.uuid === "string"
+                    ? r.uuid
+                    : undefined;
+          }
+          if (
+            r.type === "compacted" ||
+            r.isCompactSummary === true ||
+            (r.type === "system" && r.subtype === "compact_boundary")
+          )
+            turn = undefined;
           const nativeCwd =
             typeof r.cwd === "string"
               ? r.cwd
@@ -245,6 +319,9 @@ export const skillUsageLayer = Layer.effect(
           if (stamp < start || stamp >= end) return;
           pending.push({
             cwd,
+            session,
+            sessionKnown,
+            turn,
             timestamp: new Date(stamp).toISOString(),
             extracted: extractUsage(harnessDrivers[c.harness].transcripts.grammar, r),
           });
@@ -322,6 +399,7 @@ export const skillUsageLayer = Layer.effect(
       >();
       const rows = new Map<string, Mutable<UsageRow>>();
       const seen = new Set<string>();
+      const invocationObservations: InvocationObservation[] = [];
       for (const observation of observations) {
         const { event, cwd, timestamp, coverage: c } = observation;
         const rawPath = event.path;
@@ -365,7 +443,9 @@ export const skillUsageLayer = Layer.effect(
         }
         if (!event.id) c.missingIds++;
         const stable = identity.skillId ?? identity.path ?? identityKey;
-        const replay = fingerprint(`${c.harness}:${event.kind}:${event.id ?? timestamp}:${stable}`);
+        const replay = fingerprint(
+          `${c.harness}:${observation.sessionKnown ? observation.session : ""}:${event.kind}:${event.id ?? timestamp}:${stable}`,
+        );
         if (seen.has(replay)) {
           c.duplicates++;
           continue;
@@ -378,22 +458,37 @@ export const skillUsageLayer = Layer.effect(
           calls: 0,
           loads: 0,
           reads: 0,
+          uses: 0,
+          explicit: 0,
+          implicit: 0,
+          unknown: 0,
           lastObservedAt: timestamp,
         };
-        row[event.kind]++;
+        if (event.kind !== "selections") row[event.kind]++;
+        invocationObservations.push({
+          key,
+          row,
+          event,
+          session: observation.session,
+          turn: observation.turn,
+          timestamp,
+        });
         if (timestamp > row.lastObservedAt) row.lastObservedAt = timestamp;
         rows.set(key, row);
       }
+      correlateInvocations(invocationObservations);
       const durationEnd = yield* Clock.monotonicTimeNanos;
       return {
         window,
         project,
-        rows: [...rows.values()].sort(
-          (a, b) =>
-            b.calls + b.loads + b.reads - (a.calls + a.loads + a.reads) ||
-            a.name.localeCompare(b.name) ||
-            String(a.path).localeCompare(String(b.path)),
-        ),
+        rows: [...rows.values()]
+          .filter((row) => row.uses + row.calls + row.loads + row.reads > 0)
+          .sort(
+            (a, b) =>
+              b.uses - a.uses ||
+              a.name.localeCompare(b.name) ||
+              String(a.path).localeCompare(String(b.path)),
+          ),
         coverage,
         incomplete: coverage.some(
           (c) =>

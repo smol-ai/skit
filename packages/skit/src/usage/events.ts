@@ -23,6 +23,8 @@ export interface UsageEvent {
   path?: string;
   id?: string;
   cwd?: string;
+  sourceToolUseId?: string;
+  inspection?: boolean;
 }
 export interface ExtractedUsage {
   events: UsageEvent[];
@@ -38,9 +40,16 @@ export interface ExtractedUsage {
  */
 export type TranscriptGrammar = (r: TranscriptRecord, out: ExtractedUsage) => readonly string[];
 
-const read = (out: ExtractedUsage, file: string, id?: string, cwd?: string) => {
+const read = (out: ExtractedUsage, file: string, id?: string, cwd?: string, inspection = false) => {
   if (/(?:^|\/)SKILL\.md$/.test(file))
-    out.events.push({ kind: "reads", name: file.split("/").at(-2) ?? file, path: file, id, cwd });
+    out.events.push({
+      kind: "reads",
+      name: file.split("/").at(-2) ?? file,
+      path: file,
+      id,
+      cwd,
+      ...(inspection ? { inspection: true } : {}),
+    });
 };
 
 /** The tool calls both grammars share: file reads and shell commands that read a SKILL.md. */
@@ -61,9 +70,12 @@ const toolUsage = (out: ExtractedUsage, name: unknown, input: TranscriptRecord, 
         command = script;
       else out.unsupported++;
     } else if (command === undefined) out.unsupported++;
-    if (command)
-      for (const file of new Set(shellReadPaths(command)))
-        read(out, file, id, text(input.cwd) ?? text(input.workdir));
+    if (command) {
+      const files = [...new Set(shellReadPaths(command))];
+      const inspection = files.filter((file) => /(?:^|\/)SKILL\.md$/.test(file)).length > 1;
+      for (const file of files)
+        read(out, file, id, text(input.cwd) ?? text(input.workdir), inspection);
+    }
   }
 };
 
@@ -89,9 +101,18 @@ export const claudeTranscriptGrammar: TranscriptGrammar = (r, out) => {
             name: dir.split("/").filter(Boolean).at(-1) ?? dir,
             path: dir.replace(/\/$/, "") + "/SKILL.md",
             id: text(r.uuid),
+            sourceToolUseId: text(r.sourceToolUseID),
           });
       }
-      if (/^<command-message>[\s\S]*?<command-name>\//.test(s)) out.slashCommands++;
+      // Current Claude writes name first; older transcripts used message first.
+      const command =
+        /^\s*(?:<command-message>[^<]*<\/command-message>\s*)?<command-name>\/([^<]+)<\/command-name>/.exec(
+          s,
+        );
+      if (command) {
+        out.slashCommands++;
+        out.events.push({ kind: "selections", name: command[1], id: text(r.uuid) });
+      }
     }
   return texts(m.content);
 };

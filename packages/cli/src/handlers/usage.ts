@@ -21,10 +21,6 @@ export const usageCliCommand = Command.make(
   "usage",
   {
     json: jsonFlag,
-    details: Flag.Boolean("details").pipe(
-      Flag.withDefault(false),
-      Flag.withDescription("Show all skills, individual evidence, paths, and scan diagnostics."),
-    ),
     home: homeFlag,
     days: Flag.Int("days").pipe(
       Flag.withDefault(7),
@@ -88,10 +84,7 @@ export const usageCliCommand = Command.make(
                 renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
             }),
           );
-          yield* renderer.result({
-            ...result("usage", report),
-            ...(input.details ? { detail: "full" as const } : {}),
-          });
+          yield* renderer.result(result("usage", report));
         }).pipe(Effect.provide(skillUsageLayer)),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),

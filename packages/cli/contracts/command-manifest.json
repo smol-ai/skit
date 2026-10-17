@@ -2253,7 +2253,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.usage.v2"
+        "skit.usage.v3"
       ],
       "exitCodes": [
         0,
@@ -2271,11 +2271,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
-        },
-        "details": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Show all skills, individual evidence, paths, and scan diagnostics."
         },
         "home": {
           "type": "string",

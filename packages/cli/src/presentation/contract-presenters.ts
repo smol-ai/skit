@@ -913,7 +913,7 @@ const contractPresenters: ContractPresenters = {
   disable: (data) => renderSetEnabled(data, true),
   disablePlan: (data) => renderSetEnabled(data, false),
   doctor: renderDoctor,
-  usage: (data, context) => renderUsage(data, context.detail === "full"),
+  usage: (data) => renderUsage(data),
   inventory: (data, context) => renderInventory(data, data.machine, createColors(context.color)),
   setup: renderSetup,
   repositoryPolicy: (data) =>

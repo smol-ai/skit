@@ -560,3 +560,376 @@ test("shell syntax in adjacent segments does not suppress a literal read or inve
     expect(shellReadPaths(command)).toEqual([]);
   expect(shellReadPaths("sed -n '1,20p' /example/SKILL.md")).toEqual(["/example/SKILL.md"]);
 });
+
+it.effect("correlates Claude selections and linked expansions without double counting", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-attribution-" });
+    const user = (uuid: string, content: string, extra = {}) => ({
+      type: "user",
+      uuid,
+      timestamp: start,
+      sessionId: "claude-session",
+      message: { content },
+      ...extra,
+    });
+    const load = (uuid: string, sourceToolUseID?: string) =>
+      user(uuid, "Base directory for this skill: /synthetic/skills/example\nInstructions", {
+        isMeta: true,
+        ...(sourceToolUseID ? { sourceToolUseID } : {}),
+      });
+    const records = [
+      user(
+        "slash",
+        "<command-name>/plugin:example</command-name>\n            <command-message>plugin:example</command-message>\n<command-args>check this</command-args>",
+      ),
+      load("explicit-load"),
+      user("question", "Do the task"),
+      { ...call(start, "proactive"), sessionId: "claude-session" },
+      load("implicit-load", "proactive"),
+      { ...call(start, "again"), sessionId: "claude-session" },
+      user("help", "<command-message>help</command-message><command-name>/help</command-name>"),
+      user("next-question", "Another task"),
+      load("unknown-load"),
+    ];
+    yield* fs.writeFileString(
+      join(root, "one.jsonl"),
+      records.map((r) => JSON.stringify(r)).join("\n"),
+    );
+    // An independently retained copy must not inflate invocation totals.
+    yield* fs.writeFileString(
+      join(root, "replay.jsonl"),
+      records.map((r) => JSON.stringify(r)).join("\n"),
+    );
+    const report = yield* (yield* SkillUsage).scan({
+      roots: [{ root, harness: "claude-code" }],
+      end,
+    });
+    expect(report.rows.find((r) => r.path === "/synthetic/skills/example/SKILL.md")).toMatchObject({
+      uses: 3,
+      explicit: 1,
+      implicit: 1,
+      unknown: 1,
+    });
+    expect(report.rows.reduce((n, r) => n + r.uses, 0)).toBe(3);
+    expect(report.rows.find((r) => r.name === "help")).toBeUndefined();
+    expect(report.rows.every((r) => r.uses === r.explicit + r.implicit + r.unknown)).toBe(true);
+  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "attributes Codex activity per session and turn, preserving unknown document access",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-attribution-" });
+      const turn = (id: string) => ({
+        type: "turn_context",
+        timestamp: start,
+        payload: { turn_id: id },
+      });
+      const read = (id: string, path = "/synthetic/skills/example/SKILL.md") => ({
+        type: "response_item",
+        timestamp: start,
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          call_id: id,
+          arguments: JSON.stringify({ cmd: `cat ${path}` }),
+        },
+      });
+      const records = [
+        { type: "session_meta", payload: { id: "codex-session" } },
+        turn("explicit"),
+        {
+          type: "response_item",
+          timestamp: start,
+          payload: {
+            type: "message",
+            role: "user",
+            id: "selected",
+            content: [
+              {
+                type: "input_text",
+                text: "<skill>\n<name>example</name>\n<path>/synthetic/skills/example/SKILL.md</path>\nInstructions\n</skill>",
+              },
+            ],
+          },
+        },
+        read("first"),
+        read("second"),
+        turn("implicit"),
+        read("third"),
+        read("fourth"),
+        read("document", "/synthetic/reference/SKILL.md"),
+        { type: "compacted", timestamp: start },
+        read("missing-turn"),
+      ];
+      yield* fs.writeFileString(
+        join(root, "one.jsonl"),
+        records.map((r) => JSON.stringify(r)).join("\n"),
+      );
+      yield* fs.writeFileString(
+        join(root, "replay.jsonl"),
+        records.map((r) => JSON.stringify(r)).join("\n"),
+      );
+      // Native IDs can coincide in different sessions.
+      yield* fs.writeFileString(
+        join(root, "other.jsonl"),
+        [
+          { type: "session_meta", payload: { id: "other-session" } },
+          turn("implicit"),
+          read("third"),
+        ]
+          .map((r) => JSON.stringify(r))
+          .join("\n"),
+      );
+      const report = yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
+      expect(report.rows.find((r) => r.name === "example")).toMatchObject({
+        uses: 4,
+        explicit: 1,
+        implicit: 2,
+        unknown: 1,
+      });
+      expect(report.rows.find((r) => r.name === "reference")).toMatchObject({
+        uses: 1,
+        unknown: 1,
+      });
+    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "keeps ambiguous skill paths separate and correlates native links without turn metadata",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-attribution-" });
+      const load = (uuid: string, path: string, sourceToolUseID?: string) => ({
+        type: "user",
+        timestamp: start,
+        uuid,
+        sessionId: "session",
+        isMeta: true,
+        ...(sourceToolUseID ? { sourceToolUseID } : {}),
+        message: { content: `Base directory for this skill: ${path}\nInstructions` },
+      });
+      const records = [
+        { ...call(start, "linked"), sessionId: "session" },
+        load("linked-load", "/one/skills/example", "linked"),
+        {
+          type: "user",
+          timestamp: start,
+          uuid: "prompt",
+          sessionId: "session",
+          message: { content: "Do it" },
+        },
+        load("one", "/one/skills/example"),
+        load("two", "/two/skills/example"),
+        { ...call(start, "ambiguous"), sessionId: "session" },
+        // An image-only user message is also a new turn.
+        {
+          type: "user",
+          timestamp: start,
+          uuid: "image",
+          sessionId: "session",
+          message: { content: [{ type: "image", source: {} }] },
+        },
+        { ...call(start, "after-image"), sessionId: "session" },
+      ];
+      yield* fs.writeFileString(
+        join(root, "one.jsonl"),
+        records.map((r) => JSON.stringify(r)).join("\n"),
+      );
+      const report = yield* (yield* SkillUsage).scan({
+        roots: [{ root, harness: "claude-code" }],
+        end,
+      });
+      expect(report.rows.find((r) => r.path === "/one/skills/example/SKILL.md")).toMatchObject({
+        uses: 2,
+        implicit: 1,
+        unknown: 1,
+      });
+      expect(report.rows.find((r) => r.path === "/two/skills/example/SKILL.md")).toMatchObject({
+        uses: 1,
+        unknown: 1,
+      });
+      expect(report.rows.find((r) => r.identity === "name-only")).toMatchObject({
+        uses: 2,
+        implicit: 2,
+      });
+    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect("does not collapse Claude subagents sharing a parent session and prompt", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-attribution-" });
+    for (const agentId of ["first", "second"]) {
+      const records = [
+        {
+          type: "user",
+          timestamp: start,
+          uuid: "prompt",
+          promptId: "shared-prompt",
+          sessionId: "parent",
+          agentId,
+          message: { content: "Do it" },
+        },
+        { ...call(start, "shared-native-id"), sessionId: "parent", agentId },
+      ];
+      yield* fs.writeFileString(
+        join(root, `${agentId}.jsonl`),
+        records.map((r) => JSON.stringify(r)).join("\n"),
+      );
+    }
+    const report = yield* (yield* SkillUsage).scan({
+      roots: [{ root, harness: "claude-code" }],
+      end,
+    });
+    expect(report.rows).toMatchObject([{ uses: 2, implicit: 2, calls: 2 }]);
+  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect("keeps Claude document access and Codex multi-skill inspection out of usage counts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-inspection-" });
+    const claude = join(root, "claude");
+    const codex = join(root, "codex");
+    yield* fs.makeDirectory(claude);
+    yield* fs.makeDirectory(codex);
+    const claudeRecords = [
+      {
+        type: "user",
+        timestamp: start,
+        uuid: "edit",
+        sessionId: "claude",
+        message: { content: "Fix typos in these skills" },
+      },
+      {
+        type: "assistant",
+        timestamp: start,
+        sessionId: "claude",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: "read",
+              name: "Read",
+              input: { file_path: "/repo/skills/read/SKILL.md" },
+            },
+            {
+              type: "tool_use",
+              id: "bash",
+              name: "Bash",
+              input: { command: "cat /repo/skills/bash/SKILL.md" },
+            },
+          ],
+        },
+      },
+      {
+        type: "user",
+        timestamp: start,
+        uuid: "clear",
+        sessionId: "claude",
+        message: {
+          content: "<command-name>/clear</command-name>\n <command-message>clear</command-message>",
+        },
+      },
+    ];
+    const codexRecords = [
+      { type: "session_meta", payload: { id: "codex" } },
+      { type: "turn_context", timestamp: start, payload: { turn_id: "inspect" } },
+      {
+        type: "response_item",
+        timestamp: start,
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          call_id: "scan",
+          arguments: JSON.stringify({
+            cmd: "sed -n 1,5p /repo/skills/first/SKILL.md /repo/skills/second/SKILL.md",
+          }),
+        },
+      },
+      {
+        type: "response_item",
+        timestamp: start,
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          call_id: "activate",
+          arguments: JSON.stringify({ cmd: "cat /repo/skills/single/SKILL.md" }),
+        },
+      },
+    ];
+    yield* fs.writeFileString(
+      join(claude, "one.jsonl"),
+      claudeRecords.map((r) => JSON.stringify(r)).join("\n"),
+    );
+    yield* fs.writeFileString(
+      join(codex, "one.jsonl"),
+      codexRecords.map((r) => JSON.stringify(r)).join("\n"),
+    );
+    const report = yield* (yield* SkillUsage).scan({
+      roots: [
+        { root: claude, harness: "claude-code" },
+        { root: codex, harness: "codex" },
+      ],
+      end,
+    });
+    expect(report.rows.find((r) => r.name === "clear")).toBeUndefined();
+    for (const name of ["read", "bash", "first", "second"])
+      expect(report.rows.find((r) => r.name === name)).toMatchObject({
+        reads: 1,
+        uses: 0,
+        explicit: 0,
+        implicit: 0,
+        unknown: 0,
+      });
+    expect(report.rows.find((r) => r.name === "single")).toMatchObject({
+      reads: 1,
+      uses: 1,
+      implicit: 1,
+    });
+    expect(report.rows.reduce((n, r) => n + r.uses, 0)).toBe(1);
+  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "corroborates a namespaced slash selection with a bare Skill call without double counting",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-selection-" });
+      const records = [
+        {
+          type: "user",
+          timestamp: start,
+          uuid: "slash",
+          sessionId: "session",
+          message: {
+            content:
+              "<command-name>/plugin:example</command-name>\n            <command-message>plugin:example</command-message>\n<command-args>test</command-args>",
+          },
+        },
+        { ...call(start, "call"), sessionId: "session" },
+      ];
+      yield* fs.writeFileString(
+        join(root, "one.jsonl"),
+        records.map((r) => JSON.stringify(r)).join("\n"),
+      );
+      const report = yield* (yield* SkillUsage).scan({
+        roots: [{ root, harness: "claude-code" }],
+        end,
+      });
+      expect(report.rows).toHaveLength(1);
+      expect(report.rows[0]).toMatchObject({
+        name: "example",
+        uses: 1,
+        explicit: 1,
+        implicit: 0,
+        unknown: 0,
+      });
+    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
