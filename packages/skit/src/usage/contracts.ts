@@ -42,7 +42,6 @@ export const UsageCoverage = Schema.Struct({
   summaries: Count,
   mentions: Count,
   slashCommands: Count,
-  oversizedLines: Count,
   skippedFiles: Count,
   unreadableFiles: Count,
   changedFiles: Count,

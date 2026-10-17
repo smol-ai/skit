@@ -10,7 +10,6 @@ import {
 } from "../src/usage/events.js";
 import { literalCommands, shellReadPaths } from "../src/usage/literals.js";
 import { systemError } from "effect/PlatformError";
-import { MAX_USAGE_LINE_BYTES } from "../src/usage/scanner.js";
 
 const start = "2026-10-01T00:00:00.000Z",
   end = "2026-10-08T00:00:00.000Z";
@@ -239,7 +238,7 @@ it.effect("path identity joins known projections and keeps same-name documents s
   }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );
 
-it.effect("filters projects from raw cwd, skips oversized records and reports missing roots", () =>
+it.effect("filters projects from raw cwd, reads large records and reports missing roots", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-project-" });
@@ -251,9 +250,18 @@ it.effect("filters projects from raw cwd, skips oversized records and reports mi
         { ...call(start, "selected"), cwd: project },
         { ...call(start, "other"), cwd: root },
         {
-          timestamp: start,
-          type: "user",
-          message: { content: "x".repeat(MAX_USAGE_LINE_BYTES + 1) },
+          ...call(start, "large"),
+          cwd: project,
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "large",
+                name: "Skill",
+                input: { skill: "large", args: "x".repeat(17 * 1024 * 1024) },
+              },
+            ],
+          },
         },
       ]
         .map((r) => JSON.stringify(r))
@@ -269,9 +277,10 @@ it.effect("filters projects from raw cwd, skips oversized records and reports mi
     });
     expect(report.rows[0].calls).toBe(1);
     expect(report.project).toBe(yield* fs.realPath(project));
-    expect(report.coverage[0].oversizedLines).toBe(1);
+    expect(report.rows.find((row) => row.name === "large")).toMatchObject({ calls: 1, uses: 1 });
+    expect(report.coverage[0].malformed).toBe(0);
     expect(report.coverage[1].status).toBe("missing");
-    expect(report.incomplete).toBe(true);
+    expect(report.incomplete).toBe(false);
     const error = yield* (yield* SkillUsage).scan({ roots: [], days: 0 }).pipe(Effect.flip);
     expect(error._tag).toBe("InvalidUsageOptions");
   }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
@@ -932,4 +941,81 @@ it.effect(
         unknown: 0,
       });
     }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect("decodes split UTF-8 and CRLF chunks and reads the final line without a newline", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-lines-" });
+    const first = {
+      ...call(start, "unicode"),
+      message: {
+        content: [{ type: "tool_use", id: "unicode", name: "Skill", input: { skill: "café" } }],
+      },
+    };
+    const content = JSON.stringify(first) + "\r\n\r\n" + JSON.stringify(call(start, "last"));
+    const bytes = Buffer.from(content);
+    const unicodeSplit = bytes.indexOf(Buffer.from("é")) + 1;
+    const crlfSplit = bytes.indexOf(13) + 1;
+    yield* fs.writeFileString(join(root, "one.jsonl"), content);
+    const report = yield* Effect.gen(function* () {
+      return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+    }).pipe(
+      Effect.provide(skillUsageLayer),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        stream: () =>
+          Stream.make(
+            bytes.subarray(0, unicodeSplit),
+            bytes.subarray(unicodeSplit, crlfSplit),
+            bytes.subarray(crlfSplit),
+          ),
+      }),
+    );
+    expect(report.rows.map((row) => row.name).sort()).toEqual(["café", "example"]);
+    expect(report.coverage[0]).toMatchObject({
+      records: 2,
+      malformed: 0,
+      bytesRead: bytes.length,
+      changedFiles: 0,
+    });
+    expect(report.incomplete).toBe(false);
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "retains complete records and diagnoses a truncated final record after a source failure",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-lines-" });
+      const first = JSON.stringify(call(start, "healthy"));
+      yield* fs.writeFileString(
+        join(root, "one.jsonl"),
+        first + "\n" + JSON.stringify(call(start, "unread")),
+      );
+      const error = systemError({
+        _tag: "PermissionDenied",
+        module: "FileSystem",
+        method: "stream",
+      });
+      const report = yield* Effect.gen(function* () {
+        return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+      }).pipe(
+        Effect.provide(skillUsageLayer),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          stream: () =>
+            Stream.make(Buffer.from(first + '\n{"type":')).pipe(Stream.concat(Stream.fail(error))),
+        }),
+      );
+      expect(report.rows).toMatchObject([{ calls: 1, uses: 1 }]);
+      expect(report.coverage[0]).toMatchObject({
+        records: 1,
+        malformed: 1,
+        unreadableFiles: 1,
+        changedFiles: 1,
+      });
+      expect(report.incomplete).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

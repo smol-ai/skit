@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../harnesses/drivers.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { correlateInvocations, type InvocationObservation } from "./invocations.js";
-import { extractUsage, object, type UsageEvent, type ExtractedUsage } from "./events.js";
+import { extractUsage, object, type UsageEvent } from "./events.js";
 import {
   InvalidUsageOptions,
   type UsageCoverage,
@@ -14,7 +14,6 @@ import {
   type UsageRow,
 } from "./contracts.js";
 
-export const MAX_USAGE_LINE_BYTES = 16 * 1024 * 1024;
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type Coverage = Mutable<UsageCoverage>;
 interface SourceFile {
@@ -51,7 +50,6 @@ const blank = (h: UsageCoverage["harness"], root: string): Coverage => ({
   summaries: 0,
   mentions: 0,
   slashCommands: 0,
-  oversizedLines: 0,
   skippedFiles: 0,
   unreadableFiles: 0,
   changedFiles: 0,
@@ -180,58 +178,12 @@ export const skillUsageLayer = Layer.effect(
         let sessionKnown = false;
         let turn: string | undefined;
         let observedBytes = 0;
-        let pieces: Buffer[] = [];
-        let length = 0;
-        let dropping = false;
-        const pending: {
-          cwd?: string;
-          timestamp: string;
-          extracted: ExtractedUsage;
-          session: string;
-          sessionKnown: boolean;
-          turn?: string;
-        }[] = [];
         const projectCwds = new Map<string, string>();
-        const flushPending = Effect.fn("SkillUsage.projectRecords")(function* () {
-          for (const record of pending) {
-            let recordCwd = record.cwd;
-            if (project !== null) {
-              if (!recordCwd) {
-                c.unknownProjectRecords++;
-                continue;
-              }
-              let canonical = projectCwds.get(recordCwd);
-              if (!canonical) {
-                canonical = yield* physical(recordCwd);
-                projectCwds.set(recordCwd, canonical);
-              }
-              if (canonical !== project) continue;
-              recordCwd = canonical;
-            }
-            c.windowRecords++;
-            const extracted = record.extracted;
-            c.unsupported += extracted.unsupported;
-            c.summaries += extracted.summaries;
-            c.mentions += extracted.mentions;
-            c.slashCommands += extracted.slashCommands;
-            for (const event of extracted.events)
-              observations.push({
-                event,
-                timestamp: record.timestamp,
-                cwd: recordCwd,
-                coverage: c,
-                session: record.session,
-                sessionKnown: record.sessionKnown,
-                turn: record.turn,
-              });
-          }
-          pending.length = 0;
-        });
-        const consume = (bytes: Buffer) => {
-          if (!bytes.length) return;
+        const consume = Effect.fn("SkillUsage.record")(function* (line: string) {
+          if (!line.length) return;
           let raw: unknown;
           try {
-            raw = JSON.parse(bytes.toString("utf8"));
+            raw = JSON.parse(line);
           } catch {
             c.malformed++;
             return;
@@ -317,53 +269,53 @@ export const skillUsageLayer = Layer.effect(
             return;
           }
           if (stamp < start || stamp >= end) return;
-          pending.push({
-            cwd,
-            session,
-            sessionKnown,
-            turn,
-            timestamp: new Date(stamp).toISOString(),
-            extracted: extractUsage(harnessDrivers[c.harness].transcripts.grammar, r),
-          });
-        };
-        const segment = (part: Buffer, finished: boolean) => {
-          if (!dropping) {
-            length += part.length;
-            if (length > MAX_USAGE_LINE_BYTES) {
-              dropping = true;
-              c.oversizedLines++;
-              pieces = [];
-            } else if (part.length) pieces.push(part);
+          let recordCwd = cwd;
+          if (project !== null) {
+            if (!recordCwd) {
+              c.unknownProjectRecords++;
+              return;
+            }
+            let canonical = projectCwds.get(recordCwd);
+            if (!canonical) {
+              canonical = yield* physical(recordCwd);
+              projectCwds.set(recordCwd, canonical);
+            }
+            if (canonical !== project) return;
+            recordCwd = canonical;
           }
-          if (finished) {
-            if (!dropping) consume(pieces.length === 1 ? pieces[0] : Buffer.concat(pieces, length));
-            pieces = [];
-            length = 0;
-            dropping = false;
-          }
-        };
+          c.windowRecords++;
+          const extracted = extractUsage(harnessDrivers[c.harness].transcripts.grammar, r);
+          c.unsupported += extracted.unsupported;
+          c.summaries += extracted.summaries;
+          c.mentions += extracted.mentions;
+          c.slashCommands += extracted.slashCommands;
+          for (const event of extracted.events)
+            observations.push({
+              event,
+              timestamp: new Date(stamp).toISOString(),
+              cwd: recordCwd,
+              coverage: c,
+              session,
+              sessionKnown,
+              turn,
+            });
+        });
         yield* fs.stream(file.path, { chunkSize: 256 * 1024, bytesToRead: file.size }).pipe(
-          Stream.runForEach((chunk) =>
+          Stream.tap((chunk) =>
             Effect.sync(() => {
               observedBytes += chunk.length;
               c.bytesRead += chunk.length;
-              const bytes = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-              let begin = 0;
-              let end;
-              while ((end = bytes.indexOf(10, begin)) !== -1) {
-                segment(bytes.subarray(begin, end), true);
-                begin = end + 1;
-              }
-              segment(bytes.subarray(begin), false);
-            }).pipe(Effect.andThen(flushPending())),
+            }),
           ),
-          Effect.catch(() => {
+          // Recover only source reads; decoding and record processing own their failures.
+          Stream.catchTag("PlatformError", () => {
             c.unreadableFiles++;
-            return Effect.void;
+            return Stream.empty;
           }),
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.runForEach(consume),
         );
-        if (pieces.length && !dropping) consume(Buffer.concat(pieces, length));
-        yield* flushPending();
         const after = yield* fs.stat(file.path).pipe(Effect.orElseSucceed(() => undefined));
         if (
           !after ||
@@ -496,7 +448,6 @@ export const skillUsageLayer = Layer.effect(
             c.malformed +
               c.undatedCandidates +
               c.unsupported +
-              c.oversizedLines +
               c.skippedFiles +
               c.unreadableFiles +
               c.changedFiles +

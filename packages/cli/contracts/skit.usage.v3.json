@@ -328,16 +328,6 @@
               }
             ]
           },
-          "oversizedLines": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
           "skippedFiles": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -397,7 +387,6 @@
           "summaries",
           "mentions",
           "slashCommands",
-          "oversizedLines",
           "skippedFiles",
           "unreadableFiles",
           "changedFiles",

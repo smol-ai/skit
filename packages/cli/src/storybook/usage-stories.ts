@@ -61,7 +61,6 @@ export const observedUsageStory: UsageReport = {
       summaries: 1,
       mentions: 3,
       slashCommands: 0,
-      oversizedLines: 0,
       skippedFiles: 0,
       unreadableFiles: 0,
       changedFiles: 0,
