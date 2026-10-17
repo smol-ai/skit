@@ -5,7 +5,9 @@ import {
 import { withLibraryWriter } from "@smolai/skit-core";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
 import { Option, Effect } from "effect";
-import { Command } from "effect/cli";
+import { Command, Flag } from "effect/cli";
+import { terminalPrompterLayer } from "../../presentation/prompter.js";
+import { presentDoctorCleanup } from "../../workflows/library/doctor-cleanup.js";
 import {
   libraryDoctorReport,
   LibraryStore,
@@ -172,25 +174,61 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
   }),
 );
 
-export const doctorCliCommand = Command.make("doctor", localFlags, (input) =>
-  Effect.gen(function* () {
-    const paths = yield* SkitConfiguration;
+export const doctorCliCommand = Command.make(
+  "doctor",
+  {
+    ...localFlags,
+    days: Flag.Int("days").pipe(
+      Flag.filter(
+        (days) => days >= 1 && days <= 3650,
+        () => "Days must be between 1 and 3650.",
+      ),
+      Flag.withDefault(30),
+      Flag.withDescription("Review this many rolling days of local skill activity (1–3650)."),
+    ),
+    reportOnly: Flag.Boolean("report-only").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("Show diagnostics without interactive skill cleanup."),
+    ),
+    dryRun: Flag.Boolean("dry-run").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("Preview interactive cleanup without disabling skills."),
+    ),
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
 
-    const selectedHome = paths.skitHome;
-    const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
-    return yield* handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* doctorCommand(options);
-        yield* renderer.result(result("doctor", value, value.ok ? undefined : 12));
-      }),
-    );
-  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      const selectedHome = paths.skitHome;
+      const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
+      return yield* handleLibraryCommand(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          const value = yield* doctorCommand(options);
+          yield* renderer.result(result("doctor", value, value.ok ? undefined : 12));
+          if (!input.json && !input.reportOnly && process.stdin.isTTY && process.stderr.isTTY) {
+            const changed = yield* presentDoctorCleanup(
+              value.listing_budgets,
+              options,
+              input.days,
+              input.dryRun,
+            ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
+            if (changed) {
+              const checked = yield* doctorCommand(options);
+              yield* renderer.result(result("doctor", checked, checked.ok ? 0 : 12));
+            }
+          }
+        }).pipe(Effect.provide(terminalPrompterLayer)),
+      );
+    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Diagnose local library and projection state."),
+  Command.withDescription(
+    "Diagnose local skills and interactively review over-budget skill context.",
+  ),
   Command.withExamples([{ command: "skit doctor" }]),
   Command.annotate(CommandMetadata, {
     ...localInventoryMetadata,
+    interactive: true,
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
       subprocesses: [
@@ -205,7 +243,7 @@ export const doctorCliCommand = Command.make("doctor", localFlags, (input) =>
         "devin skills list --json",
       ],
     },
-    outputSchemas: [outputContracts.doctor],
-    exitCodes: [0, 12, 65],
+    outputSchemas: [outputContracts.doctor, outputContracts.disablePlan, outputContracts.disable],
+    exitCodes: [0, 11, 12, 64, 65],
   }),
 );

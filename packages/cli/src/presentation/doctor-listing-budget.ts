@@ -66,3 +66,28 @@ export function renderDoctorListingBudget(
     }),
   );
 }
+
+/** Fixed scale for both bars: the limit marker stays put as selections change. */
+export function renderDoctorBudgetSelection(
+  budgets: readonly ListingBudget[],
+  savings: Readonly<Record<string, number>>,
+  columns = 80,
+): string[] {
+  const width = Math.max(8, Math.min(24, columns - 64));
+  return budgets.flatMap((budget) => {
+    if (budget._tag !== "Estimated") return [];
+    const after = Math.max(0, budget.demand - (savings[budget.harness] ?? 0));
+    const scale = Math.max(budget.demand, budget.limit, 1);
+    const limitIndex = Math.min(width - 1, Math.floor((budget.limit / scale) * width));
+    const bar = (demand: number) => {
+      const filled = Math.min(width, Math.round((demand / scale) * width));
+      return Array.from({ length: width }, (_, index) =>
+        index === limitIndex ? "│" : index < filled ? "█" : "░",
+      ).join("");
+    };
+    const unit = budget.unit === "characters" ? "characters" : "tokens";
+    const row = (label: string, demand: number) =>
+      `${label.padEnd(11)} [${bar(demand)}] ${((demand / budget.limit) * 100).toFixed(0)}% · ~${amount(Math.round(demand))} / ${amount(budget.limit)} ${unit}`;
+    return [row(harnessLabel(budget.harness), budget.demand), row("After", after)];
+  });
+}

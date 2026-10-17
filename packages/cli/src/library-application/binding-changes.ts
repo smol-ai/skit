@@ -144,9 +144,26 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     overrides: structuredClone(configuration.overrides),
   };
   const captured = structuredClone(requests);
-  const changes = yield* Effect.forEach(captured, (request) =>
-    previewChange(current, request, routing),
-  );
+  let projected = current;
+  const changes = [];
+  for (const request of captured) {
+    const change = yield* previewChange(projected, request, routing);
+    changes.push(change);
+    // Later previews see earlier intent at the same Scope, just as apply does.
+    for (const binding of change.bindings) {
+      projected = isDeviceBinding(binding)
+        ? { ...projected, global_bindings: [binding] }
+        : {
+            ...projected,
+            local_bindings: [
+              ...projected.local_bindings.filter(
+                (item) => resolve(item.scope.root) !== resolve(binding.scope.root),
+              ),
+              binding,
+            ],
+          };
+    }
+  }
   const plan: BindingChangePlan = { [planType]: true, changes: structuredClone(changes) };
   preparedPlans.set(plan, {
     home,
@@ -164,6 +181,15 @@ export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelecti
   const current = yield* store.load;
   return {
     view: libraryView(current, store.originalsPath),
+    previewMany: Effect.fn("LibraryBindings.previewSelections")(function* (
+      intents: readonly BindingChangeIntent[],
+      configuration: BindingChangeConfiguration,
+    ) {
+      const requests = yield* Effect.forEach(intents, (intent) =>
+        expandBindingIntent(current, intent),
+      );
+      return yield* previewRequests(current, store.home, requests.flat(), configuration);
+    }),
     preview: Effect.fn("LibraryBindings.previewSelection")(function* (
       intent: BindingChangeIntent,
       configuration: BindingChangeConfiguration,
