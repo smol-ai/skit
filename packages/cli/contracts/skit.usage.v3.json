@@ -1,5 +1,5 @@
 {
-  "$id": "skit.usage.v2",
+  "$id": "skit.usage.v3",
   "type": "object",
   "properties": {
     "window": {
@@ -103,6 +103,46 @@
               }
             ]
           },
+          "uses": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "explicit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "implicit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "unknown": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
           "lastObservedAt": {
             "type": "string"
           }
@@ -116,6 +156,10 @@
           "calls",
           "loads",
           "reads",
+          "uses",
+          "explicit",
+          "implicit",
+          "unknown",
           "lastObservedAt"
         ],
         "additionalProperties": true
@@ -284,16 +328,6 @@
               }
             ]
           },
-          "oversizedLines": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
           "skippedFiles": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -353,7 +387,6 @@
           "summaries",
           "mentions",
           "slashCommands",
-          "oversizedLines",
           "skippedFiles",
           "unreadableFiles",
           "changedFiles",
