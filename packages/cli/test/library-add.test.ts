@@ -336,6 +336,8 @@ it.effect("re-adding a changed local source adds a Skill Version and uses it", (
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
     const addedAgain = yield* writingTo(home, retainLibrarySourceEffect(source));
+    assert.strictEqual(added.action, "added");
+    assert.strictEqual(addedAgain.action, "updated");
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -377,6 +379,8 @@ it.effect("repeated identical local re-adds record nothing new", () =>
 
     const first = yield* reAdd;
     const second = yield* reAdd;
+    assert.strictEqual(first.action, "unchanged");
+    assert.strictEqual(second.action, "unchanged");
     const after = yield* load;
 
     assert.strictEqual(first.snapshot_digest, added.snapshot_digest);

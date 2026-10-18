@@ -141,9 +141,25 @@ When you disable a skill, SKIT removes the copy.
 
 ## Sync
 
-SKIT allows you to sync your skills across multiple machines.
+`skit setup` discovers skills on one machine. It does not send your Library to a server; use `skit sync` for that.
 
-Create an account at `https://skit.smol.ai`, and log in using `skit auth login https://skit.smol.ai`.
+On the first machine, add your skill and sign in:
+
+```sh
+skit add ~/Work/skills/my-skill
+skit auth login https://skit.smol.ai
+skit sync
+```
+
+The last command previews changes to the device and the private server Library. **Sync covers the whole Library**, including retained versions and enabled-skill settings; it cannot currently sync only one skill or exclude a collection. Review the plan, then run `skit sync --apply`. On another machine, sign in to the same account, preview with `skit sync`, and apply the plan. Existing local copies or independently created Libraries may require a choice before sync can proceed.
+
+A Library contains Collections; a Collection is a source and its Skills. A saved copy or snapshot is retained source content at a point in time. One copy can contain multiple Skills, and a Skill can have more than one retained version. An installed copy is the version SKIT places where an agent can discover it.
+
+After editing a local source, run `skit add ~/Work/skills/my-skill` again to retain the new version, then preview and apply sync. Local paths do not have an upstream that `skit update` can refresh automatically.
+
+If an installed copy was edited outside SKIT, sync preserves it and reports that it needs review. Run `skit doctor` to find the copy. To preview keeping the installed edits as a Library version, use `skit update <skill> --from-projection <agents-or-claude> --dry-run`; choose that only if those edits are the version you want. A different Library version may already be selected.
+
+For scripts, `skit sync --json --progress` writes JSON to stdout and line-oriented progress to stderr. Add `--apply` to actually synchronize.
 
 Alternatively, you can self-host the SKIT server.
 

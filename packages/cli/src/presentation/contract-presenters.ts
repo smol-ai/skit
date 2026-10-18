@@ -238,6 +238,16 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
+    if (issue.code === "PROJECTION_CONFLICT") {
+      findings.push(
+        "      This installed copy changed outside SKIT, so its files were left in place.",
+      );
+      if (issue.skillId && (issue.target === "agents" || issue.target === "claude"))
+        findings.push(
+          `      To preview keeping its changes in the Library, run skit update ${issue.skillId} --from-projection ${issue.target} --dry-run`,
+          "      Review the copy before choosing it; the Library may contain a different version.",
+        );
+    }
   }
   for (const finding of data.codex.findings) {
     findings.push(
@@ -870,10 +880,16 @@ const contractPresenters: ContractPresenters = {
   authorList: renderAuthorList,
   add: (data) => {
     const count = data.skills.length;
-    return [
-      `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`,
-      ...sourceDiagnosticLines(data.diagnostics),
-    ].join("\n");
+    const noun = `${count} ${count === 1 ? "skill" : "skills"}`;
+    const summary =
+      data.action === "updated"
+        ? `Updated ${noun} in your Library.`
+        : data.action === "unchanged"
+          ? `${noun} already ${count === 1 ? "has" : "have"} the current retained version.`
+          : data.action === "added"
+            ? `Added ${noun} to your Library.`
+            : `Processed ${noun} in your Library.`;
+    return [summary, ...sourceDiagnosticLines(data.diagnostics)].join("\n");
   },
   addPreview: (data) => {
     const count = data.skills.length;

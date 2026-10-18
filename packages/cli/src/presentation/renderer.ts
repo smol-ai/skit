@@ -1,6 +1,7 @@
 // Every byte the CLI writes goes through this service. The console implementation owns stdout,
 // stderr and the exit code; a test or the TUI provides its own and nothing below changes.
 
+import { stripVTControlCharacters } from "node:util";
 import { Clock, Context, Effect, Exit, Fiber, Layer } from "effect";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import {
@@ -32,6 +33,8 @@ export interface RendererShape {
   ) => Effect.Effect<void>;
   /** Replace the message of the currently visible status without starting another spinner. */
   readonly updateStatus: (message: string) => Effect.Effect<void>;
+  /** Explicit, line-oriented progress for automation, including JSON mode. */
+  readonly progress?: (message: string) => Effect.Effect<void>;
   /** Progress around a running effect, released on every exit including interruption. */
   readonly withStatus: <A, E, R>(
     status:
@@ -111,6 +114,8 @@ export function consoleRenderer(json: boolean): RendererShape {
       Effect.sync(() => {
         if (statusVisible) statusMessage = message;
       }),
+    progress: (message) =>
+      write(process.stderr, `${stripVTControlCharacters(message).replace(/[\r\n\t]/g, " ")}\n`),
     withStatus: (status, operation) => {
       if (json) return operation;
       const timed = typeof status !== "string" && status.persist === "timed";

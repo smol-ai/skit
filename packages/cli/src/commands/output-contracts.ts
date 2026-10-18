@@ -100,7 +100,7 @@ export const outputContracts = {
     }),
   ),
   authorDelete: effectOutput("skit.author.delete.v1", AuthorSkitDeleteResponse),
-  add: effectOutput("skit.add.v5", AddResult),
+  add: effectOutput("skit.add.v6", AddResult),
   addPreview: effectOutput("skit.add.preview.v4", AddPreview),
   list: effectOutput("skit.list.v6", ListResult),
   securityReview: effectOutput("skit.security.review.v3", SkillSecurityReview),
@@ -126,7 +126,7 @@ export const outputContracts = {
   disablePlan: effectOutput("skit.disable.plan.v7", SetEnabledPlan),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
-  librarySync: effectOutput("skit.library.sync.v9", SyncResult),
+  librarySync: effectOutput("skit.library.sync.v10", SyncResult),
   libraryHistory: effectOutput(
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),

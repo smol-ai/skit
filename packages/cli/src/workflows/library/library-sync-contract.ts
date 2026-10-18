@@ -62,6 +62,9 @@ export const SyncResult = Schema.Struct({
   digest: Schema.optionalKey(Schema.String),
   projected: Schema.optionalKey(Schema.Number),
   retired: Schema.optionalKey(Schema.Number),
+  projection_conflicts: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ skill: Schema.String, path: Schema.String })),
+  ),
   collections_to_remove: Schema.optionalKey(Schema.Number),
   conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
   conflict_details: Schema.optionalKey(Schema.Array(SyncConflictDetail)),

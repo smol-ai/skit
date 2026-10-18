@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v9">;
+type SyncData = ContractDataForId<"skit.library.sync.v10">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -73,11 +73,30 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
   const notes = data.retired
     ? [`Removed ${plural(data.retired, "Skill")} no longer enabled from this device.`]
     : [];
+  if (data.projection_conflicts?.length) {
+    const conflicts = data.projection_conflicts;
+    notes.push(
+      `${conflicts.length} installed ${conflicts.length === 1 ? "copy" : "copies"} still ${conflicts.length === 1 ? "has" : "have"} local changes and ${conflicts.length === 1 ? "needs" : "need"} review:`,
+      ...conflicts.slice(0, 5).map((conflict) => `  ${conflict.skill}: ${conflict.path}`),
+      ...(conflicts.length > 5 ? [`  … and ${conflicts.length - 5} more.`] : []),
+      "Run `skit doctor` to inspect the copies. SKIT kept their existing files.",
+    );
+  }
   const withNotes = (message: string) =>
     notes.length ? `${message}\n\n${notes.join("\n")}` : message;
   const plan = data.plan ? `${renderLibrarySyncPlan(data.plan, color)}\n\n` : "";
+  const scope =
+    "Sync covers your whole Library, including retained versions and enabled-skill settings; it is not limited to one skill.";
+  const transfer =
+    data.snapshots === undefined
+      ? ""
+      : data.status === "push_ready"
+        ? `\n${data.snapshots} saved ${data.snapshots === 1 ? "copy" : "copies"} to upload. A saved copy may contain multiple skills or an older version.`
+        : data.status === "pull_ready"
+          ? `\n${data.snapshots} saved ${data.snapshots === 1 ? "copy" : "copies"} to download. A saved copy may contain multiple skills or an older version.`
+          : "";
   const unapplied = (command: string) =>
-    `${plan}${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
+    `${plan}${scope}${transfer}\n\n${notes.length ? `${notes.join("\n")}\n\n` : ""}No changes applied. Run ${command} to apply.`;
   switch (data.status) {
     case "clean":
       return withNotes("Library is already in sync.");

@@ -80,6 +80,17 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const observer = options.observer ?? silentSyncObserver;
 
     const store = yield* LibraryStore;
+    const projectionConflicts = Effect.gen(function* () {
+      const state = yield* store.load;
+      return state.projections
+        .filter((projection) => projection.status === "conflicted")
+        .map((projection) => ({
+          skill:
+            state.skills.find((skill) => skill.skill_id === projection.skill_id)?.name ??
+            projection.skill_id,
+          path: projection.path,
+        }));
+    }).pipe(Effect.orElseSucceed(() => undefined));
     const projectionOptions = {
       home: store.home,
       variantsPath: store.variantsPath,
@@ -199,11 +210,13 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
             ),
           )
         : { projected: 0, retired: 0 };
+      const conflicts = options.apply ? yield* projectionConflicts : undefined;
       return {
         status: "clean" as const,
         changed: false,
         revision_id: remote.revision_id,
         ...projections,
+        ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
       };
     }
 
@@ -279,6 +292,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         }),
       ),
     );
+    const conflicts = yield* projectionConflicts;
     return {
       status:
         remote === null
@@ -288,6 +302,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
             : ("merged" as const),
       revision_id: saved.revision_id,
       snapshots,
+      ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
       ...projections,
       retired: retired + projections.retired,
       plan,

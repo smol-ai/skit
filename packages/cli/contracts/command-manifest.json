@@ -234,7 +234,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.add.v5",
+        "skit.add.v6",
         "skit.add.preview.v4"
       ],
       "exitCodes": [
@@ -1870,7 +1870,7 @@
         "setup"
       ],
       "stability": "stable",
-      "summary": "Remember this machine's repository roots and explain existing Skill Instances.",
+      "summary": "Discover and manage this device's existing skills. Use skit sync separately to share your Library between devices.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1983,12 +1983,12 @@
         "sync"
       ],
       "stability": "stable",
-      "summary": "Synchronize private retained Library bytes with skit-server.",
+      "summary": "Preview synchronization of your whole Library with skit-server. Use --apply to send and receive changes.",
       "effects": {
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v9"
+        "skit.library.sync.v10"
       ],
       "exitCodes": [
         0,
@@ -2028,6 +2028,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Select the Registry to synchronize."
+        },
+        "progress": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Write line-oriented progress to stderr, including with --json."
         },
         "json": {
           "type": "boolean",

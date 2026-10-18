@@ -503,7 +503,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v5",
+        schema: "skit.add.v6",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],

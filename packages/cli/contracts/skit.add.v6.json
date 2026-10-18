@@ -1,7 +1,15 @@
 {
-  "$id": "skit.add.v5",
+  "$id": "skit.add.v6",
   "type": "object",
   "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "added",
+        "updated",
+        "unchanged"
+      ]
+    },
     "collection_id": {
       "type": "string"
     },

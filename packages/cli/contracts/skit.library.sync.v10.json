@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v9",
+  "$id": "skit.library.sync.v10",
   "type": "object",
   "properties": {
     "status": {
@@ -73,6 +73,25 @@
           ]
         }
       ]
+    },
+    "projection_conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "skill",
+          "path"
+        ],
+        "additionalProperties": true
+      }
     },
     "collections_to_remove": {
       "anyOf": [
