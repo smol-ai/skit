@@ -44,6 +44,8 @@ export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer
   );
   return {
     snapshotCount: remote === null ? uploads.length : content.download.length,
+    uploadCount: uploads.length,
+    downloadCount: content.download.length,
     restore: Effect.fn("Library.sync.restoreSnapshots")(function* () {
       return yield* Effect.scoped(
         prepareRestoreEffect(desired, content, {

@@ -71,6 +71,46 @@ it.effect("an interrupted login aborts its in-flight request and stores nothing"
   }),
 );
 
+it.effect("a rejected login explains whether the Registry reports reset email configured", () =>
+  Effect.gen(function* () {
+    for (const email of [true, false, undefined] as const) {
+      const home = yield* scratch("skit-login-reset-guidance-");
+      const handler: TestHttpHandler = (request) => {
+        if (request.url.endsWith("/.well-known/skit"))
+          return Effect.succeed(
+            Response.json({
+              schema: "skit.server.v1",
+              download: "/api/skits/{owner}/{slug}/releases/{version}/download",
+              scopes: ["library:sync"],
+            }),
+          );
+        if (request.url.endsWith("/api/auth/sign-in/email"))
+          return Effect.succeed(Response.json({}, { status: 401 }));
+        if (request.url.endsWith("/api/ui/config") && email !== undefined)
+          return Effect.succeed(Response.json({ email }));
+        return Effect.succeed(new Response(null, { status: 404 }));
+      };
+      const failure = yield* Effect.scoped(
+        loginEffect({ ...input, scopes: [...input.scopes], home }).pipe(
+          Effect.provide(registryHttpLayer(testHttpClientLayer(handler))),
+        ),
+      ).pipe(Effect.provide(testPlatformLayer), Effect.flip);
+      expect(failure).toMatchObject({ _tag: "SignInRejected", context: "Sign in" });
+      if (failure._tag === "SignInRejected") {
+        expect(failure.resetEmail).toBe(email);
+        expect(failure.remediation).toContain(
+          email === true
+            ? "email is configured"
+            : email === false
+              ? "not configured"
+              : "could not determine",
+        );
+      }
+      expect(yield* exists(join(home, "auth.json"))).toBe(false);
+    }
+  }),
+);
+
 it.effect("the credential prompts answer from the Prompter and cancel as a typed failure", () =>
   Effect.gen(function* () {
     const answered = yield* makeScriptedInteraction(["user@example.test", "not-stored"]);

@@ -59,6 +59,8 @@ export const SyncResult = Schema.Struct({
   changed: Schema.optionalKey(Schema.Boolean),
   revision_id: Schema.optionalKey(Schema.String),
   snapshots: Schema.optionalKey(Schema.Number),
+  snapshots_to_upload: Schema.optionalKey(Schema.Number),
+  snapshots_to_download: Schema.optionalKey(Schema.Number),
   digest: Schema.optionalKey(Schema.String),
   projected: Schema.optionalKey(Schema.Number),
   retired: Schema.optionalKey(Schema.Number),

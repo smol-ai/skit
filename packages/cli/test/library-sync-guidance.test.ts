@@ -29,6 +29,31 @@ describe("Library guidance", () => {
     expect(output).toContain("skit doctor");
   });
 
+  it("shows both transfer directions for a merge preview", () => {
+    const output = renderLibrarySync({
+      status: "merge_ready",
+      snapshots_to_upload: 3,
+      snapshots_to_download: 2,
+      plan: { local: [], remote: [] },
+    });
+    expect(output).toContain("3 upload, 2 download");
+    expect(output).toContain("this device: no changes; remote: no changes");
+    expect(output).toContain("Locally edited installed copies are preserved");
+  });
+
+  it("summarizes completed transfers and local changes", () => {
+    const output = renderLibrarySync({
+      status: "merged",
+      snapshots_to_upload: 3,
+      snapshots_to_download: 2,
+      plan: { local: [], remote: [] },
+      projection_conflicts: [{ skill: "review", path: "/skills/review" }],
+    });
+    expect(output).toContain("3 uploaded, 2 downloaded");
+    expect(output).toContain("this device: no changes; remote: no changes");
+    expect(output).toContain("needs review");
+  });
+
   it("explains setup and sync are separate", () => {
     expect(setupStepPlan({ scanRepositories: false }).overview).toContain(
       "It does not sync your Library to a server",

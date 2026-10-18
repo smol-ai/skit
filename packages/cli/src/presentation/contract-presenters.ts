@@ -18,6 +18,7 @@ import { renderLibraryList } from "./library-list.js";
 import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, severityHeadline } from "./condition-language.js";
 import { createColors } from "picocolors";
+import { shellQuote } from "./shell-quote.js";
 
 export interface RenderContext {
   readonly color: boolean;
@@ -244,7 +245,9 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
       );
       if (issue.skillId && (issue.target === "agents" || issue.target === "claude"))
         findings.push(
+          `      Compare the Library source and this copy: skit update ${issue.skillId} --from-projection ${issue.target} --diff`,
           `      To preview keeping its changes in the Library, run skit update ${issue.skillId} --from-projection ${issue.target} --dry-run`,
+          `      To preview using the Library version, run skit update ${issue.skillId} --from-projection ${issue.target} --use-library`,
           "      Review the copy before choosing it; the Library may contain a different version.",
         );
     }
@@ -922,6 +925,22 @@ const contractPresenters: ContractPresenters = {
         (projection) => `${projection.target} · ${projection.path} · ${projection.status}`,
       ),
     ].join("\n"),
+  projectionRepair: (data) => {
+    const command = `skit update ${shellQuote(data.skill_name)} --from-projection ${shellQuote(data.path)} --use-library --review ${shellQuote(data.review_token ?? "")}`;
+    if (data.status === "preview")
+      return `Would use the Library version at ${data.path}. If the files differ, SKIT will move the existing copy into a backup first.\n\nNo changes applied. Run ${command} to apply.`;
+    if (data.status === "conflicted")
+      return `The installed copy at ${data.path} still needs review. Run skit doctor.`;
+    if (data.status === "unknown")
+      return `The operation finished, but SKIT could not read the final status of ${data.path}. Run skit doctor before retrying.`;
+    if (!data.backup_path)
+      return data.backup_status === "not-needed"
+        ? `The Library version is installed at ${data.path}; the files already matched, so no backup was needed.`
+        : `The Library version is installed at ${data.path}, but SKIT could not report a backup path. Run skit doctor and inspect the .skit-backups directory before making further changes.`;
+    const aside = `${data.path}.skit-after-repair`;
+    const restore = `test ! -e ${shellQuote(aside)} && test ! -L ${shellQuote(aside)} && mv ${shellQuote(data.path)} ${shellQuote(aside)} && cp -pR ${shellQuote(data.backup_path)} ${shellQuote(data.path)}`;
+    return `Installed the Library version at ${data.path}.\nOriginal copy saved at ${data.backup_path}.\n\nTo restore the backup while keeping the current copy beside it, run:\n${restore}\nThen run skit doctor.`;
+  },
   remove: renderRemove,
   removePlan: renderRemovePlan,
   enable: (data) => renderSetEnabled(data, true),

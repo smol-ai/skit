@@ -227,16 +227,21 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       originalsPath: store.originalsPath,
     });
     const snapshots = transfer.snapshotCount;
+    const transfers = {
+      snapshots_to_upload: transfer.uploadCount,
+      snapshots_to_download: transfer.downloadCount,
+    };
     if (!options.apply)
       return remote === null
-        ? { status: "push_ready" as const, snapshots, plan }
+        ? { status: "push_ready" as const, snapshots, plan, ...transfers }
         : !local.present
-          ? { status: "pull_ready" as const, snapshots, plan }
+          ? { status: "pull_ready" as const, snapshots, plan, ...transfers }
           : {
               status:
                 accepted === undefined ? ("adoption_ready" as const) : ("merge_ready" as const),
               revision_id: remote.revision_id,
               snapshots,
+              ...transfers,
               collections_to_remove: local.state.collections.filter(
                 (collection) =>
                   !desired.collections.some(
@@ -302,6 +307,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
             : ("merged" as const),
       revision_id: saved.revision_id,
       snapshots,
+      ...transfers,
       ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
       ...projections,
       retired: retired + projections.retired,

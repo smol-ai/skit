@@ -463,15 +463,20 @@ export class CredentialsUnusable
 }
 
 export class SignInRejected
-  extends Data.TaggedError("SignInRejected")<{ context: string }>
+  extends Data.TaggedError("SignInRejected")<{ context: string; resetEmail?: boolean }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
   get remediation(): string {
-    return this.context === "Sign in"
-      ? "Check the email and password, then retry."
-      : "Run `skit auth login <origin>` again.";
+    if (this.context !== "Sign in") return "Run `skit auth login <origin>` again.";
+    const recovery =
+      this.resetEmail === true
+        ? "This Registry reports email is configured, but delivery has not been checked. Ask its operator for password-reset help."
+        : this.resetEmail === false
+          ? "This Registry reports reset email is not configured. Ask its operator to help reset your password."
+          : "SKIT could not determine whether reset email is configured. Ask the Registry operator for password-reset help.";
+    return `Check the email and password, then retry. ${recovery}`;
   }
   get message(): string {
     return this.context === "Sign in"
