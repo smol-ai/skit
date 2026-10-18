@@ -183,7 +183,7 @@ export const doctorCliCommand = Command.make(
         (days) => days >= 1 && days <= 3650,
         () => "Days must be between 1 and 3650.",
       ),
-      Flag.withDefault(30),
+      Flag.withDefault(14),
       Flag.withDescription("Review this many rolling days of local skill activity (1–3650)."),
     ),
     reportOnly: Flag.Boolean("report-only").pipe(

@@ -25,6 +25,7 @@ import {
 } from "../../projection/roots.js";
 import { renderDoctorBudgetSelection } from "../../presentation/doctor-listing-budget.js";
 import { Renderer } from "../../presentation/renderer.js";
+import { terminalColorEnabled } from "../../presentation/terminal-style.js";
 import { Prompter } from "../../presentation/prompter.js";
 import { result } from "../../handlers/contracts.js";
 
@@ -134,9 +135,6 @@ export function suggestDoctorCleanup(
   });
 }
 
-const scopeLabel = (scope: SkitBindingScope) =>
-  scope.kind === "global" ? "all projects" : `in ${scope.root}`;
-const unit = (budget: Estimated) => (budget.unit === "characters" ? "characters" : "tokens");
 
 export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   budgets: readonly ListingBudget[],
@@ -178,20 +176,6 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
     }).pipe(Effect.provide(skillUsageLayer)),
   );
   const candidates = suggestDoctorCleanup(state, excessive, usage, configuration);
-  const gaps = [
-    ["unsupported", "unsupported command wrappers"],
-    ["changedFiles", "files changed during scan"],
-    ["unreadableFiles", "unreadable files"],
-    ["malformed", "malformed records"],
-    ["skippedFiles", "skipped files"],
-    ["undatedCandidates", "undated activity records"],
-  ] as const;
-  const coverageNotes = gaps.flatMap(([key, label]) => {
-    const count = usage.coverage.reduce((sum, root) => sum + root[key], 0);
-    return count ? [`${count} ${label}`] : [];
-  });
-  const unreadableRoots = usage.coverage.filter((root) => root.status === "unreadable").length;
-  if (unreadableRoots) coverageNotes.push(`${unreadableRoots} unreadable transcript roots`);
   const withoutHistory = excessive
     .filter(
       (budget) =>
@@ -206,17 +190,11 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   yield* renderer.note(
     [
       `Suggested skills have no observed usage in the last ${days} days across all local projects (${usage.window.start.slice(0, 10)}–${usage.window.end.slice(0, 10)}).`,
-      ...(coverageNotes.length
-        ? [`Scan gaps: ${coverageNotes.join("; ")}. Suggestions use the available history.`]
-        : usage.incomplete
-          ? ["Some transcript records could not be scanned. Suggestions use the available history."]
-          : []),
       ...(withoutHistory.length
         ? [
             `No transcript history in this window for ${withoutHistory.join(", ")}; those suggestions are not preselected.`,
           ]
         : []),
-      "│ marks the budget limit; After reflects checked skills. Disabling affects every agent at the shown scope; skills remain in the Library.",
     ].join("\n"),
     "Suggested skill cleanup",
   );
@@ -239,16 +217,14 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
         ]),
       ),
       columns,
+      terminalColorEnabled(),
     );
   const chosen = yield* prompter.multiselect(
     `Skills to disable · last ${days} days`,
     candidates.map((c) => ({
       value: c.id,
-      label: `${c.name} · ${scopeLabel(c.scope)}`,
-      hint: `no observed usage · ${excessive
-        .filter((b) => c.costs[b.harness])
-        .map((b) => `${b.harness} ~${Math.round(c.costs[b.harness])} ${unit(b)}`)
-        .join(", ")}`,
+      label: c.scope.kind === "global" ? c.name : `${c.name} · in ${c.scope.root}`,
+      hint: `${Math.max(...excessive.map((b) => ((c.costs[b.harness] ?? 0) / b.limit) * 100)).toFixed(1)}% of budget`,
       detail: `Collection: ${selection.view.collections.find((item) => item.id === c.collectionId)?.label ?? c.collectionId}`,
       selected: c.selected,
     })),
@@ -281,7 +257,7 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   for (const change of plan.changes) yield* renderer.result(result("disablePlan", change));
   yield* renderer.note(
     budgetSummary(chosen).join("\n") +
-      "\n│ marks the budget limit. Estimates subtract listed costs; native precedence can expose other skills. Doctor will recheck after applying.\nDisabling part of a followed collection keeps its other current skills individually; that scope stops following future collection additions.",
+      "\nRed marks demand over the limit. Estimates subtract listed costs; native precedence can expose other skills. Doctor will recheck after applying.\nDisabling part of a followed collection keeps its other current skills individually; that scope stops following future collection additions.",
     "Preview",
   );
   if (dryRun) return false;

@@ -84,20 +84,19 @@ test("doctor keeps the estimate and shows rejected skill diagnostics in the summ
   );
 });
 
-test("cleanup bars keep the limit fixed and show the selected savings in native units", () => {
+test("cleanup bars show demand after the selected savings in native units", () => {
   const over = { ...budget, demand: 12400 };
   const before = renderDoctorBudgetSelection([over], {}, 80);
   const after = renderDoctorBudgetSelection([over], { codex: 2650 }, 80);
-  expect(before[0]).toContain("124%");
-  expect(before[1]).toContain("~12,400 / 10,000 tokens");
-  expect(after[1]).toContain("98% · ~9,750 / 10,000 tokens");
-  expect(after[0]).toBe(before[0]);
-  expect(after[0].indexOf("│")).toBe(after[1].indexOf("│"));
-  expect(after[1].split("█").length).toBeLessThan(after[0].split("█").length);
+  expect(before).toHaveLength(1);
+  expect(before[0]).toContain("124% · ~12,400 / 10,000 tokens");
+  expect(before[0]).toContain("▓");
+  expect(after[0]).toContain("98% · ~9,750 / 10,000 tokens");
+  expect(after[0]).not.toContain("▓");
   expect(
     renderDoctorBudgetSelection([{ ...over, harness: "claude-code", unit: "characters" }], {
       "claude-code": 2650,
     }).join("\n"),
   ).toContain("9,750 / 10,000 characters");
-  expect(renderDoctorBudgetSelection([over], { codex: 20000 })[1]).toContain("0% · ~0");
+  expect(renderDoctorBudgetSelection([over], { codex: 20000 })[0]).toContain("0% · ~0");
 });

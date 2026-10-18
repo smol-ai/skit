@@ -443,7 +443,6 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
           text: () => Effect.fail(cancelled),
           password: () => Effect.fail(cancelled),
           multiselect: (_message, choices) => {
-            assert.ok(choices.every((choice) => choice.hint?.startsWith("no observed usage")));
             assert.ok(choices.every((choice) => !choice.hint?.includes("uncertain")));
             if (mode === "dry-run")
               assert.strictEqual(
@@ -486,10 +485,6 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
         ),
       );
       if (mode === "dry-run") {
-        assert.strictEqual(
-          notes.filter((note) => note.includes("Scan gaps: 1 malformed records")).length,
-          1,
-        );
         assert.ok(
           notes.every((note) => !note.includes("No transcript history in this window for codex")),
         );
