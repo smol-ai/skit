@@ -1,7 +1,12 @@
 import { assert, it } from "@effect/vitest";
 import { Clock, ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect, LibraryStore } from "@smolai/skit-core";
+import {
+  deterministicTreeHashEffect,
+  LibraryStore,
+  skillUsageLayer,
+  SkillUsage,
+} from "@smolai/skit-core";
 import {
   applyBindingChanges,
   openBindingChangeSelection,
@@ -14,10 +19,11 @@ import {
   confirmLibraryChange,
 } from "../src/library-application/session.js";
 import { type ListingBudget, type UsageReport } from "@smolai/skit-core";
+import { presentDoctorCleanup } from "../src/workflows/library/doctor-cleanup.js";
 import {
   suggestDoctorCleanup,
-  presentDoctorCleanup,
-} from "../src/workflows/library/doctor-cleanup.js";
+  openDoctorCleanupSelection,
+} from "../src/library-application/doctor-cleanup.js";
 import { observedUsageStory } from "../src/storybook/usage-stories.js";
 import { Prompter, PromptCancelled } from "../src/presentation/prompter.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
@@ -415,6 +421,49 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("cleanup uses one captured Library and an injected usage scanner", () =>
+  Effect.gen(function* () {
+    const f = yield* cleanupFixture;
+    let loads = 0;
+    const capturedStore = yield* f.home.owned(LibraryStore);
+    const store = Layer.succeed(
+      LibraryStore,
+      LibraryStore.of({
+        ...capturedStore,
+        load: Effect.suspend(() => {
+          loads++;
+          return capturedStore.load;
+        }),
+      }),
+    );
+    const scanner = Layer.succeed(
+      SkillUsage,
+      SkillUsage.of({
+        scan: (options) =>
+          Effect.sync(() => {
+            assert.strictEqual(loads, 1);
+            assert.strictEqual(options.days, 14);
+            assert.ok(options.projections?.some((p) => p.name === "alpha"));
+            return f.usage;
+          }),
+      }),
+    );
+    const selection = yield* openDoctorCleanupSelection(
+      [f.budget],
+      f.home.bindings,
+      14,
+      () => Effect.void,
+    ).pipe(Effect.provide(scanner), Effect.provide(store));
+    assert.strictEqual(loads, 1);
+    assert.strictEqual(selection.candidates.length, 2);
+    const plan = yield* selection.preview(selection.candidates.map((c) => c.id));
+    assert.strictEqual(loads, 1);
+    assert.strictEqual(plan.changes.length, 1);
+    yield* f.home.owned(applyBindingChanges(plan));
+    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
   it.effect(`interactive doctor ${mode} preserves review/apply boundaries`, () =>
     Effect.gen(function* () {
@@ -464,6 +513,7 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
       );
       const changed = yield* f.home.owned(
         presentDoctorCleanup([f.budget], f.home.bindings, 30, mode === "dry-run").pipe(
+          Effect.provide(skillUsageLayer),
           Effect.catchTag("PromptCancelled", () => Effect.succeed(false)),
           Effect.provide(prompt),
           Effect.provide(

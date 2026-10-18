@@ -16,6 +16,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
   skitLayer,
+  skillUsageLayer,
 } from "@smolai/skit-core";
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import { presentSetEnabled } from "../handlers/library/set-enabled.js";
@@ -213,7 +214,7 @@ const previewDoctorCleanup = Effect.scoped(
       ),
     );
   }),
-).pipe(Effect.provide(skitLayer));
+).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer));
 
 export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
   {

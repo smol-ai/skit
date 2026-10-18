@@ -175,12 +175,10 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
   return plan;
 });
 
-/** Read facts and accept intents against the Library displayed before asking questions. */
-export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
-  const store = yield* LibraryStore;
-  const current = yield* store.load;
+/** Internal constructor for application operations sharing one captured Library. */
+export function bindingChangeSelection(current: LibraryState, home: string, originalsPath: string) {
   return {
-    view: libraryView(current, store.originalsPath),
+    view: libraryView(current, originalsPath),
     previewMany: Effect.fn("LibraryBindings.previewSelections")(function* (
       intents: readonly BindingChangeIntent[],
       configuration: BindingChangeConfiguration,
@@ -188,16 +186,22 @@ export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelecti
       const requests = yield* Effect.forEach(intents, (intent) =>
         expandBindingIntent(current, intent),
       );
-      return yield* previewRequests(current, store.home, requests.flat(), configuration);
+      return yield* previewRequests(current, home, requests.flat(), configuration);
     }),
     preview: Effect.fn("LibraryBindings.previewSelection")(function* (
       intent: BindingChangeIntent,
       configuration: BindingChangeConfiguration,
     ) {
       const requests = yield* expandBindingIntent(current, intent);
-      return yield* previewRequests(current, store.home, requests, configuration);
+      return yield* previewRequests(current, home, requests, configuration);
     }),
   };
+}
+
+/** Read facts and accept intents against the Library displayed before asking questions. */
+export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
+  const store = yield* LibraryStore;
+  return bindingChangeSelection(yield* store.load, store.home, store.originalsPath);
 });
 export type BindingChangeSelection = Effect.Success<ReturnType<typeof openBindingChangeSelection>>;
 
