@@ -10,7 +10,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
 import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
-import { NoStoredCredentials } from "../../registry/failures.js";
+import { DefaultRegistryNotConfigured } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { createColors } from "picocolors";
 import { result } from "../contracts.js";
@@ -26,7 +26,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly projection: Pick<LibraryInstallationConfiguration, "rootFor">;
 }) {
   const auth = yield* Effect.fromResult(options.authState);
-  if (auth.origin === undefined) return yield* new NoStoredCredentials();
+  if (auth.origin === undefined) return yield* new DefaultRegistryNotConfigured();
   const renderer = yield* Renderer;
   const progress = terminalSyncProgress(renderer);
   return yield* Effect.scoped(

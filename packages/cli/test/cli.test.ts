@@ -192,6 +192,35 @@ describe("CLI contracts", () => {
     expect(JSON.parse(passwordFlag.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 
+  test("missing server guidance explains the hosted and self-hosted options", async () => {
+    const home = await mkdtemp(join(tmpdir(), "skit-no-registry-"));
+    try {
+      const env = { ...process.env, SKIT_SERVER_URL: "", SKIT_TOKEN: "" };
+      for (const args of [["auth", "login"], ["sync"], ["add", "skit:example/skill"]]) {
+        for (const json of [false, true]) {
+          const result = spawnSync(
+            process.execPath,
+            [bin, ...args, "--home", home, ...(json ? ["--json"] : [])],
+            { encoding: "utf8", env, timeout: 10_000 },
+          );
+          expect(result.status).not.toBe(0);
+          const output = json
+            ? Object.values(JSON.parse(result.stderr).error).join(" ")
+            : result.stderr;
+          expect(output).toContain("skit auth login https://skit.smol.ai");
+          expect(output).toContain("hosted reference server");
+          expect(output).toContain("self-host");
+          expect(output).toContain(
+            "https://github.com/smol-ai/skit/tree/main/packages/skit-server-effect",
+          );
+        }
+      }
+      expect(existsSync(join(home, "auth.json"))).toBe(false);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("corrupt authentication state does not brick local commands", async () => {
     const home = await mkdtemp(join(tmpdir(), "skit-auth-corrupt-"));
     await writeFile(join(home, "auth.json"), "not json");
