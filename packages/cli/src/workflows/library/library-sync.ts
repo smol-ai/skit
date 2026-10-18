@@ -128,7 +128,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           options.deviceSelection === "follow-account"
             ? { mode: "follow-account" as const }
             : yield* selectDeviceSkills(emptyManifest, options.deviceSelection);
-        yield* store.publish({ ...state, device_skill_selection: selection }, state);
+        yield* store.publish(
+          {
+            ...state,
+            device_skill_selection: selection,
+            pending_device_selection_origin: options.origin,
+          },
+          state,
+        );
       }
       return { status: "clean" as const, changed: false };
     }
@@ -145,7 +152,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       accepted === undefined &&
       !options.adopt &&
       !equalToRemote &&
-      !same(manifest, emptyManifest)
+      !(
+        local.state.pending_device_selection_origin === options.origin &&
+        same(manifest, emptyManifest)
+      )
     )
       return { status: "adoption_required" as const, revision_id: remote.revision_id };
     const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
@@ -173,6 +183,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     if (merge._tag === "InvalidResolution")
       return { status: "resolution_invalid" as const, ...revision };
     if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
+    const { pending_device_selection_origin: _pendingOrigin, ...mergedDevice } = merge.device;
     const selected =
       options.deviceSelection === undefined
         ? merge.device.device_skill_selection
@@ -180,7 +191,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           ? { mode: "follow-account" as const }
           : yield* selectDeviceSkills(merge.manifest, options.deviceSelection);
     const device =
-      selected === undefined ? merge.device : { ...merge.device, device_skill_selection: selected };
+      selected === undefined ? mergedDevice : { ...mergedDevice, device_skill_selection: selected };
     const choosing = selected?.mode === "choose";
     if (choosing && options.keepEnabled?.length)
       return yield* new OptionCombinationInvalid({
