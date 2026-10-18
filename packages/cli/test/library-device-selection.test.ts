@@ -5,6 +5,65 @@ import { effectiveGlobalBindings } from "@smolai/skit-core";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
+it.effect("persists an empty device choice before either Library exists", () =>
+  Effect.gen(function* () {
+    const { a, b, fs } = yield* devices;
+    assert.strictEqual(
+      (yield* b.sync({ deviceSelection: { skills: [], collections: [] } })).status,
+      "clean",
+    );
+    assert.strictEqual((yield* b.state).device_skill_selection?.mode, "choose");
+    const first = yield* a.retain("first");
+    yield* a.edit((state) => ({
+      ...state,
+      global_bindings: [
+        {
+          scope: { kind: "global" },
+          entries: [{ kind: "skill", skill_id: first.skills[0]!.skill_id }],
+        },
+      ],
+    }));
+    yield* a.sync();
+    yield* b.sync();
+    assert.strictEqual((yield* b.state).skills.length, 1);
+    assert.isFalse(yield* fs.exists(join(b.root, "first")));
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("syncs new Library content while preserving an edited deselected projection", () =>
+  Effect.gen(function* () {
+    const { a, b, fs } = yield* devices;
+    yield* a.retain("first");
+    yield* a.sync();
+    yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
+    const path = join(b.root, "first", "SKILL.md");
+    yield* fs.writeFileString(path, "local edits\n");
+    yield* a.retain("second");
+    yield* a.sync();
+    const result = yield* b.sync({ deviceSelection: { skills: [], collections: [] } });
+    assert.strictEqual(result.status, "enablement_incomplete");
+    assert.strictEqual((yield* b.state).skills.length, 2);
+    assert.strictEqual(yield* fs.readFileString(path), "local edits\n");
+    yield* fs.writeFileString(path, "first\n");
+    assert.strictEqual((yield* b.sync()).status, "clean");
+    assert.isFalse(yield* fs.exists(path));
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("removing a Collection prunes its device choice without leaving choose mode", () =>
+  Effect.gen(function* () {
+    const { a, b } = yield* devices;
+    const first = yield* a.retain("first");
+    yield* a.sync();
+    yield* b.sync({ deviceSelection: { skills: ["first"], collections: ["fixture/first"] } });
+    yield* b.remove(first.collection.collection_id);
+    const selection = (yield* b.state).device_skill_selection;
+    assert.strictEqual(selection?.mode, "choose");
+    if (selection?.mode === "choose") assert.deepStrictEqual(selection.binding.entries, []);
+    assert.notStrictEqual((yield* b.sync()).status, "enablement_incomplete");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("retains the full account Library while persisting an individual device choice", () =>
   Effect.gen(function* () {
     const { a, b, c, fs, remote } = yield* devices;

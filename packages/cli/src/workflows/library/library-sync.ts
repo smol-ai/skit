@@ -121,7 +121,17 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         status: "base_mismatch" as const,
         ...(remote === null ? {} : { revision_id: remote.revision_id }),
       };
-    if (remote === null && !local.present) return { status: "clean" as const, changed: false };
+    if (remote === null && !local.present) {
+      if (options.apply && options.deviceSelection !== undefined) {
+        const state = yield* store.load;
+        const selection =
+          options.deviceSelection === "follow-account"
+            ? { mode: "follow-account" as const }
+            : yield* selectDeviceSkills(emptyManifest, options.deviceSelection);
+        yield* store.publish({ ...state, device_skill_selection: selection }, state);
+      }
+      return { status: "clean" as const, changed: false };
+    }
     // Explicit adoption sets aside ancestry from another Library. Against an empty base the merge
     // can only add records, never infer a deletion.
     const accepted = mismatched ? undefined : ancestry;
@@ -134,7 +144,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       remote !== null &&
       accepted === undefined &&
       !options.adopt &&
-      !equalToRemote
+      !equalToRemote &&
+      !same(manifest, emptyManifest)
     )
       return { status: "adoption_required" as const, revision_id: remote.revision_id };
     const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
@@ -220,10 +231,12 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         baseline: merge.device,
         manifest: effectiveManifest,
         rootFor: options.projection?.rootFor,
+        deferDeviceConflicts: choosing,
       }),
     );
     if (transition._tag === "Conflicted")
       return conflicted(transition.conflicts, remote?.revision_id);
+    const transitionIssues = transition.issues;
 
     if (clean) {
       // Nothing to transfer, write or retire. Publish only to anchor ancestry this state lacks,
@@ -350,6 +363,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         const issues = [
           ...missingSelection,
           ...collision.conflicts.map((conflict) => conflict.message),
+          ...transitionIssues.map((conflict) => conflict.message),
         ];
         const state = yield* store.load;
         if (choosing && options.inventory !== undefined) {
