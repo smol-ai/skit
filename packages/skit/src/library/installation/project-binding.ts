@@ -12,7 +12,7 @@ import { repositorySelectsProjection } from "./retire-unbound.js";
 import { projectionSourceEffect } from "./projection-source.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { Digest, ProjectionTarget } from "../../vocabulary.js";
-import type { ManagedProjection } from "../library-state.js";
+import { effectiveGlobalBindings, type ManagedProjection } from "../library-state.js";
 import { makeProjectionId } from "../entity-ids.js";
 import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
@@ -50,7 +50,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const scope = options.scope ?? { kind: "global" as const };
   const binding =
     scope.kind === "global"
-      ? state.global_bindings[0]
+      ? effectiveGlobalBindings(state)[0]
       : state.local_bindings.find((item) => resolve(item.scope.root) === resolve(scope.root));
   if (binding === undefined) return yield* new ProjectionInvalid({ detail: "Binding is missing" });
 

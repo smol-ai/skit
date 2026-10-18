@@ -35,7 +35,11 @@ import {
   type SkillVersionId as SkillVersionIdType,
 } from "../library/entity-ids.js";
 import type { ManagedProjection } from "../library/library-state.js";
-import { libraryStateRevision, type LibraryState } from "../library/library-state.js";
+import {
+  effectiveGlobalBindings,
+  libraryStateRevision,
+  type LibraryState,
+} from "../library/library-state.js";
 import { projectionSourceEffect } from "../library/installation/projection-source.js";
 import {
   backUpProjectionEffect,
@@ -520,7 +524,7 @@ const reproducibleEffect = Effect.fn("Projection.reproducible")(function* (
   const expected = yield* losslessTreeEffect(backup);
   if (source.kind === "invalid" || expected === undefined) return false;
   const policies = new Set(
-    [...prior.global_bindings, ...prior.local_bindings].flatMap((binding) => {
+    [...effectiveGlobalBindings(prior), ...prior.local_bindings].flatMap((binding) => {
       const policy = binding.invocation_policies?.[skill.skill_id];
       return policy === undefined ? [] : [policy];
     }),

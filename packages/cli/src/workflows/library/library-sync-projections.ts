@@ -335,6 +335,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
   function* (options: {
     readonly current: LibraryState | undefined;
     readonly aligned: LibraryState;
+    readonly baseline?: LibraryState;
     readonly manifest: LibraryManifest;
     readonly rootFor: ((target: ProjectionTarget) => string | undefined) | undefined;
   }) {
@@ -348,7 +349,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
         ? undefined
         : yield* planSyncProjectionsEffect(current, aligned, options.manifest, options.rootFor);
     if (plan?.conflicts.length) return { _tag: "Conflicted" as const, conflicts: plan.conflicts };
-    const baseline = current ?? aligned;
+    const baseline = current ?? options.baseline ?? aligned;
     return {
       _tag: "Ready" as const,
       publishRestored: Effect.fn("Library.sync.publishDeviceTransition")(function* (

@@ -147,6 +147,25 @@ Create an account at `https://skit.smol.ai`, and log in using `skit auth login h
 
 Alternatively, you can self-host the SKIT server.
 
+By default, each device follows the account's enabled Skills. To retain the whole
+Library while choosing a different set for this device, run, for example:
+
+```sh
+skit sync --apply --device-skill programmatic-agents
+```
+
+The choice persists across later syncs. Repeat `--device-skill` to select several
+individual Skills, or use `--device-collection <label>` to follow all current and
+future members of a Collection. These flags replace the device's selection;
+`--device-only` selects none. While this mode is active, global `skit enable` and
+`skit disable` update the device's selection, not the account's. Run
+`skit sync --apply --follow-account` to return to the account's enabled selections.
+Existing installations keep following the account until changed.
+
+If a selected Skill cannot be enabled after the Library syncs, SKIT preserves the
+Library and reports incomplete enablement. Review the existing installation,
+resolve the conflict, and retry `skit sync --apply`.
+
 The [SKIT server](packages/skit-server-effect/README.md) is open source, and supports self-hosting on Cloudflare.
 
 This repository is licensed under the [MIT licence](LICENSE).

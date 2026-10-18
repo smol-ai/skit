@@ -181,6 +181,20 @@ export function aliasDevice(state: LibraryState, aliases: LibraryAliases): Libra
       ...policies(binding),
       entries: binding.entries.map((entry) => bindingEntry(entry, aliases)),
     })),
+    ...(state.device_skill_selection?.mode !== "choose"
+      ? {}
+      : {
+          device_skill_selection: {
+            mode: "choose" as const,
+            binding: {
+              ...state.device_skill_selection.binding,
+              ...policies(state.device_skill_selection.binding),
+              entries: state.device_skill_selection.binding.entries.map((entry) =>
+                bindingEntry(entry, aliases),
+              ),
+            },
+          },
+        }),
     projections: state.projections.map((projection) => {
       const skill = skillId(projection.skill_id, aliases);
       return {

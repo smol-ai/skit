@@ -1988,7 +1988,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v9"
+        "skit.library.sync.v10"
       ],
       "exitCodes": [
         0,
@@ -2028,6 +2028,26 @@
           "type": "string",
           "valueName": "string",
           "description": "Select the Registry to synchronize."
+        },
+        "device-skill": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Choose an individual Skill for this device (repeatable)."
+        },
+        "device-collection": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Choose a whole Collection for this device (repeatable)."
+        },
+        "device-only": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Replace this device's selection, allowing an empty selection."
+        },
+        "follow-account": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Follow the account's enabled selections on this device."
         },
         "json": {
           "type": "boolean",

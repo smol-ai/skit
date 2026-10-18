@@ -5,13 +5,17 @@ import {
   LibraryStateDocument,
 } from "../library-state.js";
 
-const { sync_ancestry: _syncAncestry, ...fields } = LibraryState.fields;
+const {
+  sync_ancestry: _syncAncestry,
+  device_skill_selection: _deviceSelection,
+  ...fields
+} = LibraryState.fields;
 
 /** Frozen v7 state: v8 added only optional sync ancestry. */
 export const LibraryStateV7 = Schema.Struct({ ...fields, schemaVersion: Schema.Literal(7) });
 export type LibraryStateV7 = typeof LibraryStateV7.Type;
 
-/** v7 → v8: a v7 document never has sync ancestry, so only its version changes. */
+/** A v7 document has neither sync ancestry nor a device-specific selection. */
 export const LibraryStateFromV7 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV7)),
   Schema.decodeTo(LibraryStateDocument, {

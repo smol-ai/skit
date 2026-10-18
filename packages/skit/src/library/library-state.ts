@@ -63,12 +63,20 @@ export const SyncAncestry = Schema.Struct({
 });
 export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
 
-export const CURRENT_LIBRARY_STATE_VERSION = 8 as const;
+/** Account bindings remain portable; a device may independently choose what it projects. */
+export const DeviceSkillSelection = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("follow-account") }),
+  Schema.Struct({ mode: Schema.Literal("choose"), binding: DeviceBinding }),
+]);
+export type DeviceSkillSelection = typeof DeviceSkillSelection.Type;
+
+export const CURRENT_LIBRARY_STATE_VERSION = 9 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
   schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
   sync_ancestry: Schema.optionalKey(SyncAncestry),
+  device_skill_selection: Schema.optionalKey(DeviceSkillSelection),
   collections: Schema.mutable(Schema.Array(Collection)),
   skills: Schema.mutable(Schema.Array(Skill)),
   retained_copies: Schema.mutable(Schema.Array(RetainedCopy)),
@@ -109,6 +117,12 @@ export const LibraryState = Schema.Struct({
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
 
+/** Effective global intent for this device; absence preserves the historical account-following mode. */
+export const effectiveGlobalBindings = (state: LibraryState): readonly DeviceBinding[] =>
+  state.device_skill_selection?.mode === "choose"
+    ? [state.device_skill_selection.binding]
+    : state.global_bindings;
+
 export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
   ...fields,
   schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
@@ -136,6 +150,7 @@ export const LibraryInventory = LibraryState.mapFields(
     "schemaVersion",
     "assessmentAcceptances",
     "sync_ancestry",
+    "device_skill_selection",
     "collections",
     "retained_copies",
     "acquisitions",

@@ -5,6 +5,7 @@ import {
   LibraryStore,
   libraryStateRevision,
   bindingSkillIds,
+  effectiveGlobalBindings,
   currentSkillVersion,
   prepareObservedCollectionEffect,
   projectBindingEffect,
@@ -161,7 +162,7 @@ const bindingForProjection = (
   state: LibraryState,
   projection: ManagedProjection,
 ): DeviceBinding | RepositoryBinding | undefined =>
-  [...state.global_bindings, ...state.local_bindings].find(
+  [...effectiveGlobalBindings(state), ...state.local_bindings].find(
     (binding) =>
       projection.target !== "legacy" &&
       bindingSkillIds(state, binding).includes(projection.skill_id) &&

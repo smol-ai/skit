@@ -1,6 +1,10 @@
 import { Effect } from "effect";
 import { pathIsWithin } from "../../platform/path-identity.js";
-import type { LibraryState, ManagedProjection } from "../library-state.js";
+import {
+  effectiveGlobalBindings,
+  type LibraryState,
+  type ManagedProjection,
+} from "../library-state.js";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
 import { LibraryStore } from "../store/library-store.js";
 import { bindingSkillIds, type Binding } from "../library-contracts.js";
@@ -39,7 +43,7 @@ export const retireUnboundGlobalProjectionsEffect = Effect.fn(
     (projection) =>
       !(options.activeTargets as readonly string[]).includes(projection.target) ||
       (!options.inactiveOnly &&
-        !(options.desiredBindings ?? loaded.global_bindings).some((binding) =>
+        !(options.desiredBindings ?? effectiveGlobalBindings(loaded)).some((binding) =>
           bindingSkillIds(loaded, binding).includes(projection.skill_id),
         ) &&
         !repositorySelectsProjection(loaded, projection)),
