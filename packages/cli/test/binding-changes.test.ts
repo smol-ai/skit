@@ -82,6 +82,92 @@ const fixture = Effect.gen(function* () {
   return { fs, root, home, destination, request };
 });
 
+it.effect("global enablement changes the device choice without changing account bindings", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        LibraryStore.use((store) =>
+          Effect.flatMap(store.load, (state) =>
+            store.publish(
+              {
+                ...state,
+                global_bindings: [
+                  {
+                    scope: { kind: "global" },
+                    entries: [
+                      {
+                        kind: "skill",
+                        skill_id: state.skills.find((skill) => skill.name === "beta")!.skill_id,
+                      },
+                    ],
+                  },
+                ],
+                device_skill_selection: {
+                  mode: "choose",
+                  binding: { scope: { kind: "global" }, entries: [] },
+                },
+              },
+              state,
+            ),
+          ),
+        ),
+      ),
+    );
+    const account = (yield* f.home.durable).global_bindings;
+    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+    yield* f.home.owned(applyBindingChanges(plan));
+    const after = yield* f.home.durable;
+    assert.deepStrictEqual(after.global_bindings, account);
+    assert.strictEqual(after.device_skill_selection?.mode, "choose");
+    assert.isTrue(yield* f.fs.exists(join(f.destination, "alpha", "SKILL.md")));
+    assert.isFalse(yield* f.fs.exists(join(f.destination, "beta")));
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("retrying an already selected device Skill still checks unmanaged copies", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        LibraryStore.use((store) =>
+          Effect.flatMap(store.load, (state) =>
+            store.publish(
+              {
+                ...state,
+                device_skill_selection: {
+                  mode: "choose",
+                  binding: {
+                    scope: { kind: "global" },
+                    entries: [
+                      {
+                        kind: "skill",
+                        skill_id: state.skills.find((skill) => skill.name === "alpha")!.skill_id,
+                      },
+                    ],
+                  },
+                },
+              },
+              state,
+            ),
+          ),
+        ),
+      ),
+    );
+    const native = join(f.home.inventory.home, ".codex", "skills", "alpha");
+    yield* f.fs.makeDirectory(native, { recursive: true });
+    yield* f.fs.writeFileString(join(native, "SKILL.md"), "native copy\n");
+    const plan = yield* f.home.owned(
+      previewBindingChanges([f.request], { ...f.home.bindings, overrides: {} }),
+    );
+    const error = yield* f.home.owned(applyBindingChanges(plan)).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "ProjectionWouldDuplicate");
+    assert.strictEqual(yield* f.fs.readFileString(join(native, "SKILL.md")), "native copy\n");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("preparing a Binding plan changes neither Library metadata nor native copies", () =>
   Effect.gen(function* () {
     const f = yield* fixture;

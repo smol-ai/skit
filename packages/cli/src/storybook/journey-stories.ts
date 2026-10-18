@@ -42,7 +42,7 @@ const skillId = makeSkillId();
 const acquisitionId = makeAcquisitionId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 8,
+  schemaVersion: 9,
   collections: [
     {
       collection_id: collectionId,

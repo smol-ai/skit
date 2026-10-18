@@ -16,6 +16,8 @@ import { createColors } from "picocolors";
 import { result } from "../contracts.js";
 import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
+import { OptionCombinationInvalid } from "../../workflows/failures.js";
+import type { InventoryRootOptions } from "../../projection/roots.js";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
@@ -24,6 +26,10 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
   readonly projection: Pick<LibraryInstallationConfiguration, "rootFor">;
+  readonly inventory?: InventoryRootOptions;
+  readonly deviceSelection?:
+    | "follow-account"
+    | { readonly skills: readonly string[]; readonly collections: readonly string[] };
 }) {
   const auth = yield* Effect.fromResult(options.authState);
   if (auth.origin === undefined) return yield* new DefaultRegistryNotConfigured();
@@ -38,6 +44,10 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
       ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
       projection: options.projection,
+      ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
+      ...(options.deviceSelection === undefined
+        ? {}
+        : { deviceSelection: options.deviceSelection }),
       observer: progress.sync,
       restoreObserver: progress.restore,
       ...(options.apply
@@ -75,14 +85,51 @@ const keepEnabled = Flag.String("keep-enabled").pipe(
   ),
   Flag.atLeast(0),
 );
+const deviceSkill = Flag.String("device-skill").pipe(
+  Flag.withDescription("Choose an individual Skill for this device (repeatable)."),
+  Flag.atLeast(0),
+);
+const deviceCollection = Flag.String("device-collection").pipe(
+  Flag.withDescription("Choose a whole Collection for this device (repeatable)."),
+  Flag.atLeast(0),
+);
+const deviceOnly = Flag.Boolean("device-only").pipe(
+  Flag.withDescription("Replace this device's selection, allowing an empty selection."),
+  Flag.withDefault(false),
+);
+const followAccount = Flag.Boolean("follow-account").pipe(
+  Flag.withDescription("Follow the account's enabled selections on this device."),
+  Flag.withDefault(false),
+);
 
 export const librarySyncCliCommand = Command.make(
   "sync",
-  { apply, adopt, takeRemote, keepEnabled, registry, ...localFlags },
+  {
+    apply,
+    adopt,
+    takeRemote,
+    keepEnabled,
+    registry,
+    deviceSkill,
+    deviceCollection,
+    deviceOnly,
+    followAccount,
+    ...localFlags,
+  },
   (input) =>
     handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
+        const choosing =
+          input.deviceOnly || input.deviceSkill.length > 0 || input.deviceCollection.length > 0;
+        if (input.followAccount && choosing)
+          return yield* new OptionCombinationInvalid({
+            detail: "Choose either --follow-account or a device selection.",
+          });
+        if ((input.followAccount || choosing) && !input.apply)
+          return yield* new OptionCombinationInvalid({
+            detail: "Changing device selection requires --apply.",
+          });
         const configuration = yield* libraryCommandConfiguration(input);
         const registryAuth = yield* RegistryAuth;
         const { authState } = yield* registryAuth.resolve(optionValue(input.registry), "skit sync");
@@ -93,6 +140,17 @@ export const librarySyncCliCommand = Command.make(
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
           projection: configuration.pull.installation,
+          inventory: configuration.inventory,
+          ...(input.followAccount
+            ? { deviceSelection: "follow-account" as const }
+            : choosing
+              ? {
+                  deviceSelection: {
+                    skills: input.deviceSkill,
+                    collections: input.deviceCollection,
+                  },
+                }
+              : {}),
         });
         yield* renderer.result(
           result(
@@ -101,7 +159,8 @@ export const librarySyncCliCommand = Command.make(
             value.status === "conflicted" ||
               value.status === "adoption_required" ||
               value.status === "base_mismatch" ||
-              value.status === "resolution_invalid"
+              value.status === "resolution_invalid" ||
+              value.status === "enablement_incomplete"
               ? 12
               : undefined,
           ),

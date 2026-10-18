@@ -13,6 +13,7 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { currentSkillVersion } from "../src/library/library-contracts.js";
+import { effectiveGlobalBindings, emptyLibraryState } from "../src/library/library-state.js";
 import { inspectLibrary, publishLibrary } from "./helpers/library-store.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
@@ -21,7 +22,27 @@ interface LegacySkillVersionFixture {
   readonly [field: string]: unknown;
 }
 
-it.effect("migrates a persisted v4 well-known subset to v8 once at the state-file boundary", () =>
+it.effect("v8 state migrates to account-following without changing portable intent", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v8-migration-" });
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      JSON.stringify({ ...emptyLibraryState(), schemaVersion: 8 }),
+    );
+    const migrated = yield* inspectLibrary(home);
+    assert.isTrue(migrated.present);
+    if (!migrated.present) return;
+    assert.strictEqual(migrated.state.schemaVersion, 9);
+    assert.isUndefined(migrated.state.device_skill_selection);
+    assert.deepStrictEqual(effectiveGlobalBindings(migrated.state), migrated.state.global_bindings);
+    assert.isTrue(
+      (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v8.backup-")),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("migrates a persisted v4 well-known subset to v9 once at the state-file boundary", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v4-migration-" });
@@ -31,7 +52,7 @@ it.effect("migrates a persisted v4 well-known subset to v8 once at the state-fil
     const migrated = yield* inspectLibrary(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 8);
+    assert.strictEqual(migrated.state.schemaVersion, 9);
     assert.strictEqual(migrated.state.collections.length, 1);
     assert.strictEqual(migrated.state.acquisitions[0]?.kind, "source");
     assert.strictEqual(
@@ -337,7 +358,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 8);
+    assert.strictEqual(state.schemaVersion, 9);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -444,7 +465,7 @@ for (const agreed of [true, false])
         const migrated = yield* inspectLibrary(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
-        assert.strictEqual(migrated.state.schemaVersion, 8);
+        assert.strictEqual(migrated.state.schemaVersion, 9);
         assert.deepStrictEqual(migrated.state.global_bindings, [
           {
             scope: { kind: "global" },

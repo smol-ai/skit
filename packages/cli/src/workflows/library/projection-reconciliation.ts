@@ -1,5 +1,6 @@
 import {
   LibraryStore,
+  effectiveGlobalBindings,
   projectBindingEffect,
   retireUnboundGlobalProjectionsEffect,
   withLibraryWriter,
@@ -43,20 +44,27 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
         ? yield* activeProjectionTargetsEffect(options.roots)
         : targets;
   // Copies at a former or inactive target are never wanted, whichever Bindings changed.
+  const state = yield* (yield* LibraryStore).load;
+  const effective = effectiveGlobalBindings(state);
   const retired = yield* retireUnboundGlobalProjectionsEffect({
     variantsPath: options.variantsPath,
     activeTargets,
-    ...(options.desiredGlobalBindings === undefined
+    ...(options.desiredGlobalBindings === undefined &&
+    state.device_skill_selection?.mode !== "choose"
       ? {}
-      : { desiredBindings: options.desiredGlobalBindings }),
+      : {
+          desiredBindings:
+            state.device_skill_selection?.mode === "choose"
+              ? effective
+              : options.desiredGlobalBindings,
+        }),
     inactiveOnly: options.onlyBindings !== undefined && options.desiredGlobalBindings === undefined,
   });
 
-  const state = yield* (yield* LibraryStore).load;
   let projected = 0;
   const bindings = options.includeRepositoryBindings
-    ? [...state.global_bindings, ...state.local_bindings]
-    : (options.onlyBindings ?? [...state.global_bindings, ...state.local_bindings]);
+    ? [...effective, ...state.local_bindings]
+    : (options.onlyBindings ?? [...effective, ...state.local_bindings]);
   const outcomes: Array<{ target: ProjectionTarget; scope: (typeof bindings)[number]["scope"] }> =
     [];
   for (const binding of bindings) {

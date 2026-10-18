@@ -319,7 +319,7 @@ describe("experimental capability audit", () => {
         false,
       );
       const migrated = JSON.parse(yield* fs.readFileString(join(library, "state.json")));
-      expect(migrated.schemaVersion).toBe(8);
+      expect(migrated.schemaVersion).toBe(9);
       const backups = (yield* fs.readDirectory(library)).filter((name) =>
         name.startsWith("state.json.v4.backup-"),
       );

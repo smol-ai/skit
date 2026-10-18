@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v9",
+  "$id": "skit.library.sync.v10",
   "type": "object",
   "properties": {
     "status": {
@@ -17,7 +17,8 @@
         "merged",
         "conflicted",
         "base_mismatch",
-        "resolution_invalid"
+        "resolution_invalid",
+        "enablement_incomplete"
       ]
     },
     "changed": {
@@ -121,6 +122,21 @@
           "resolution"
         ],
         "additionalProperties": true
+      }
+    },
+    "sync_status": {
+      "type": "string",
+      "enum": [
+        "clean",
+        "pulled",
+        "pushed",
+        "merged"
+      ]
+    },
+    "enablement_issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     },
     "plan": {

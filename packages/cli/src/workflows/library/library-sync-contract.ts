@@ -55,6 +55,7 @@ export const SyncResult = Schema.Struct({
     "conflicted",
     "base_mismatch",
     "resolution_invalid",
+    "enablement_incomplete",
   ]),
   changed: Schema.optionalKey(Schema.Boolean),
   revision_id: Schema.optionalKey(Schema.String),
@@ -65,6 +66,8 @@ export const SyncResult = Schema.Struct({
   collections_to_remove: Schema.optionalKey(Schema.Number),
   conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
   conflict_details: Schema.optionalKey(Schema.Array(SyncConflictDetail)),
+  sync_status: Schema.optionalKey(Schema.Literals(["clean", "pulled", "pushed", "merged"])),
+  enablement_issues: Schema.optionalKey(Schema.Array(Schema.String)),
   plan: Schema.optionalKey(SyncPlan),
 });
 export type SyncResult = typeof SyncResult.Type;

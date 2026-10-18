@@ -31,12 +31,15 @@ export const devices = Effect.gen(function* () {
   );
   // Registry write requests and local publications, in the order they happened.
   const events: string[] = [];
+  let snapshotReads = 0;
   const server = librarySyncServer(faults, events);
   const http = registryHttpLayer(
     Layer.succeed(
       HttpClient.HttpClient,
       HttpClient.make((incoming) =>
         Effect.gen(function* () {
+          if (incoming.method === "GET" && new URL(incoming.url).pathname.includes("/snapshots/"))
+            snapshotReads++;
           const response = yield* Effect.try(() => server.transport(incoming));
           const change =
             incoming.method === "GET" && new URL(incoming.url).pathname === "/api/library/portable"
@@ -159,6 +162,31 @@ export const devices = Effect.gen(function* () {
             observations: [],
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
+      retainMany: (repository: string, names: readonly string[], retainedAt: string) =>
+        Effect.gen(function* () {
+          const sourcePath = join(workspace, repository);
+          const skills = yield* Effect.forEach(names, (skillName) =>
+            Effect.gen(function* () {
+              const path = join(sourcePath, skillName);
+              yield* fs.makeDirectory(path, { recursive: true });
+              yield* fs.writeFileString(join(path, "SKILL.md"), `${skillName}\n`);
+              return {
+                name: skillName,
+                sourcePath: path,
+                relativePath: skillName,
+                observedHash: yield* deterministicTreeHashEffect(path),
+              };
+            }),
+          );
+          return yield* retainObservedCollectionEffect({
+            machineId,
+            source: { type: "github", owner: "fixture", repository },
+            input: sourcePath,
+            retainedAt,
+            skills,
+            observations: [],
+          });
+        }).pipe(withLibraryWriter, Effect.provide(layer)),
       remove: (collectionId: string) =>
         Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.flatMap((state) =>
@@ -186,6 +214,8 @@ export const devices = Effect.gen(function* () {
           adopt?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
+          deviceSelection?: Parameters<typeof syncLibraryEffect>[0]["deviceSelection"];
+          inventory?: Parameters<typeof syncLibraryEffect>[0]["inventory"];
           rootFor?: (target: ProjectionTarget) => string | undefined;
         } = {},
       ) =>
@@ -208,6 +238,9 @@ export const devices = Effect.gen(function* () {
     inject: faults.inject,
     server,
     events,
+    get snapshotReads() {
+      return snapshotReads;
+    },
     remote: Effect.sync(() => server.remote),
     /** The Registry loses the Library, as a deleted account or reset database would. */
     resetRemote: Effect.sync(() => server.reset()),

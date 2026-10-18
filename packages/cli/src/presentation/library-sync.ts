@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v9">;
+type SyncData = ContractDataForId<"skit.library.sync.v10">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -103,5 +103,7 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
       return "This device last synced with a different Library; sync stopped. Run sync --adopt to merge with this Library without inferring deletions.";
     case "resolution_invalid":
       return "The requested resolution isn't available. Use --take-remote for a listed resolvable conflict, or --keep-enabled for one Skill in a listed destination collision.";
+    case "enablement_incomplete":
+      return `Library synced, but enablement is incomplete:\n${data.enablement_issues?.map((issue) => `  ${issue}`).join("\n") ?? "  Inspect the selected Skills."}\n\nResolve the listed issues, then run skit sync --apply again.`;
   }
 }

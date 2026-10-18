@@ -104,6 +104,19 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
         const survivingCopyIds = new Set(
           acquisitions.map((acquisition) => acquisition.retained_copy_id),
         );
+        if (candidate.device_skill_selection?.mode === "choose") {
+          const { invocation_policies, ...binding } = candidate.device_skill_selection.binding;
+          Object.assign(candidate, {
+            device_skill_selection: {
+              mode: "choose",
+              binding: {
+                ...binding,
+                entries: binding.entries.filter(keepEntry),
+                ...remainingPolicies(invocation_policies),
+              },
+            },
+          });
+        }
         Object.assign(candidate, {
           collections: candidate.collections.filter(
             (item) => item.collection_id !== options.collectionId,

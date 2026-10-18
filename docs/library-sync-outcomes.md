@@ -50,6 +50,20 @@ Every applying path commits in one order, stated once in `syncLibraryEffect`:
 5. Publish local state, with ancestry naming exactly the written revision, onto exactly the state this sync planned from.
 6. Reconcile Projections.
 
+The device may instead persist a local global Binding selection. In that mode the
+portable merge, account Bindings, and accepted base still use the account's
+manifest; destination planning and projection use the device's selection. The
+selection is stored in the same versioned state document as device custody and
+is aligned when Skill or Collection identities are aligned. Individual Skill
+entries remain individual, while Collection entries expand against the current
+Collection membership. Existing state migrates to follow-account behavior.
+
+For a device selection, an unmanaged duplicate, a destination collision, a
+projection conflict, or a reconciliation failure after publication returns
+`enablement_incomplete` and a nonzero command exit. The accepted Library and
+ancestry remain committed, conflicting files are preserved, and a retry can use
+the retained snapshots. The normal account-following behavior is unchanged.
+
 Remote commits before local, so an interruption leaves R ahead of B and the next sync re-derives the same result from the old base; local state never names a revision R does not hold. A merge or pull re-inspects L after step 1 and stops with `SyncLocalChanged` if it moved; a push relies on the check in step 5. A clean sync has nothing to commit: it skips steps 1–4, publishes only when its state's ancestry does not already name R, and then reconciles.
 
 Sync rebuilds the device state it publishes through the Library schema, so it carries only fields this CLI declares. Loading and publishing `state.json` keep undeclared fields at every depth, and a preview or a clean sync with nothing to anchor writes nothing, but an applied push, pull, merge or anchoring clean drops them. Any persisted field whose meaning matters must therefore come with a state or manifest version bump, never as an undeclared extension.
