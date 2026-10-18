@@ -430,7 +430,7 @@
         "doctor"
       ],
       "stability": "stable",
-      "summary": "Diagnose local library and projection state.",
+      "summary": "Diagnose local skills and interactively review over-budget skill context.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -450,14 +450,18 @@
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v7"
+        "skit.doctor.v7",
+        "skit.disable.plan.v7",
+        "skit.disable.v7"
       ],
       "exitCodes": [
         0,
+        11,
         12,
+        64,
         65
       ],
-      "interactive": false,
+      "interactive": true,
       "examples": [
         "skit doctor"
       ],
@@ -492,6 +496,21 @@
           "type": "string",
           "valueName": "string",
           "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+        },
+        "days": {
+          "type": "integer",
+          "valueName": "integer",
+          "description": "Review this many rolling days of local skill activity (1–3650)."
+        },
+        "report-only": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show diagnostics without interactive skill cleanup."
+        },
+        "dry-run": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Preview interactive cleanup without disabling skills."
         },
         "help": {
           "type": "boolean",

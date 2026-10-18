@@ -47,6 +47,13 @@ export interface Choice<Value> {
   preview?: () => Effect.Effect<string>;
 }
 
+export interface MultiselectOptions<Value> {
+  /** Maximum visible choices; all choices remain searchable and selectable. */
+  readonly maxItems?: number;
+  /** Live context derived from every selected value, including off-screen choices. */
+  readonly summary?: (selected: readonly Value[], columns: number) => readonly string[];
+}
+
 /** The person answering went back with Escape or interrupted the prompt with Ctrl+C/Ctrl+D. */
 export class PromptCancelled
   extends Data.TaggedError("PromptCancelled")<{
@@ -76,6 +83,7 @@ export interface PrompterShape {
   readonly multiselect: <Value extends string>(
     message: string,
     choices: readonly Choice<Value>[],
+    options?: MultiselectOptions<Value>,
   ) => Effect.Effect<Value[], PromptCancelled>;
   readonly confirm: (message: string) => Effect.Effect<boolean, PromptCancelled>;
   readonly text: (message: string) => Effect.Effect<string, PromptCancelled>;
@@ -105,6 +113,7 @@ const eraseRenderedLines = (lines: number): string => {
 const filterableMultiSelect = <Value extends string>(
   message: string,
   items: readonly Choice<Value>[],
+  options: MultiselectOptions<Value> = {},
 ): Prompt.Prompt<Value[]> => {
   const hasPreview = items.some((item) => item.preview !== undefined);
   const hasRemoval = items.some((item) => item.removeValue !== undefined);
@@ -136,7 +145,15 @@ const filterableMultiSelect = <Value extends string>(
         : [],
     );
   };
-  const renderedLines = (state: typeof initial, maxItems = AUTOCOMPLETE_MAX_ITEMS): string[] => {
+  const renderedLines = (state: typeof initial, maxLines = 22, columns = 80): string[] => {
+    const summary = (
+      options.summary?.(
+        [...state.selected].map((index) => items[index].value),
+        columns,
+      ) ?? []
+    ).slice(0, Math.max(0, maxLines - 4));
+    const pageBudget = Math.max(1, maxLines - summary.length - (hasPreview ? 2 : 1) - 1);
+    const maxItems = Math.max(1, Math.min(options.maxItems ?? AUTOCOMPLETE_MAX_ITEMS, pageBudget));
     const visible = visibleChoices(state);
     const cursor = Math.min(state.cursor, Math.max(visible.length - 1, 0));
     const start = Math.max(
@@ -155,7 +172,7 @@ const filterableMultiSelect = <Value extends string>(
         const group = items[itemIndex].group;
         return group !== undefined && (index === 0 || group !== items[page[index - 1]].group);
       }).length;
-    while (pageLineCount() > maxItems && page.length > 1) {
+    while (pageLineCount() > pageBudget && page.length > 1) {
       if (page.at(-1) === visible[cursor]) page.shift();
       else page.pop();
     }
@@ -163,8 +180,8 @@ const filterableMultiSelect = <Value extends string>(
     const color = terminalColors();
     const title = `${color.cyan("?")} ${color.bold(message)} ${color.dim(`› ${filter}`)}`;
     const lines = hasPreview
-      ? [title, color.dim(shortcuts)]
-      : [`${title}  ${color.dim(`(${shortcuts})`)}`];
+      ? [...summary, title, color.dim(shortcuts)]
+      : [...summary, `${title}  ${color.dim(`(${shortcuts})`)}`];
     if (page.length === 0) lines.push("  No matches");
     let previousGroup: string | undefined;
     for (const itemIndex of page) {
@@ -195,7 +212,13 @@ const filterableMultiSelect = <Value extends string>(
         for (const line of item.detail?.split("\n") ?? [])
           lines.push(`${indent}    ${color.dim(line)}`);
     }
-    return lines;
+    const range = page.length
+      ? `${visible.indexOf(page[0]) + 1}–${visible.indexOf(page.at(-1)!) + 1}`
+      : "0";
+    const footer = color.dim(
+      `  ${range} of ${visible.length}${visible.length !== items.length ? ` matches (${items.length} total)` : ""} · ${state.selected.size} selected${page.length < visible.length ? " · ↑↓ scroll" : ""}`,
+    );
+    return [...lines.slice(0, Math.max(1, maxLines - 1)), footer];
   };
   const previews = new Map<number, string>();
   let renderedCount = 1;
@@ -228,7 +251,7 @@ const filterableMultiSelect = <Value extends string>(
           const pickerHeight =
             columns >= 110 ? height : Math.max(2, Math.floor((height - 1) * 0.4));
           const frame = renderSkillPreview({
-            picker: renderedLines(state, Math.max(1, pickerHeight - 2)),
+            picker: renderedLines(state, Math.max(1, pickerHeight - 2), columns),
             title: item?.label ?? "No matches",
             content,
             columns,
@@ -239,7 +262,7 @@ const filterableMultiSelect = <Value extends string>(
           previewOffset = frame.offset;
           previewPageSize = frame.pageSize;
         } else {
-          lines = renderedLines(state, Math.max(1, (rows || 24) - 3));
+          lines = renderedLines(state, Math.max(1, (rows || 24) - 2), columns);
           if (columns > 0) lines = lines.map((line) => fitTerminalLine(line, columns));
         }
         renderedCount = lines.length;
@@ -448,7 +471,8 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
             maxPerPage: AUTOCOMPLETE_MAX_ITEMS,
           }),
         ),
-      multiselect: (message, items) => ask(message, filterableMultiSelect(message, items)),
+      multiselect: (message, items, options) =>
+        ask(message, filterableMultiSelect(message, items, options)),
       confirm: (message) => ask(message, Prompt.Confirm({ message })),
       text: (message) => ask(message, Prompt.String({ message })),
       password: (message) =>

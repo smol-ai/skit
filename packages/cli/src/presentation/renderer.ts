@@ -101,8 +101,13 @@ export function consoleRenderer(json: boolean): RendererShape {
         process.exitCode = frame.exitCode;
       }),
     help: (text) => write(process.stdout, renderHelpFrame(text, format).stdout),
-    note: (body, title, options) =>
-      note(options?.renderBody(terminalColorEnabled()) ?? body, terminalColors().bold(title)),
+    note: (body, title, options) => {
+      const color = terminalColors();
+      return note(
+        options?.renderBody(terminalColorEnabled()) ?? body,
+        color.cyan(color.bold(title)),
+      );
+    },
     step: ({ index, total, title }, body) => {
       const color = terminalColors();
       return note(body, `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`);

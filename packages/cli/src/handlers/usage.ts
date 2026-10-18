@@ -1,15 +1,8 @@
 import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
-import {
-  LibraryStore,
-  SkillUsage,
-  UsageHarness,
-  harnessDrivers,
-  skillUsageLayer,
-  type UsageRoot,
-} from "@smolai/skit-core";
-import { Config, Effect, Option } from "effect";
+import { LibraryStore, UsageHarness, skillUsageLayer } from "@smolai/skit-core";
+import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
-import { join, resolve } from "node:path";
+import { scanLocalUsage } from "../library-application/local-usage.js";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
@@ -47,39 +40,20 @@ export const usageCliCommand = Command.make(
       return yield* handleLibraryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const usage = yield* SkillUsage;
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          const homes: Record<UsageHarness, Option.Option<string>> = {
-            codex: input.codexHome,
-            "claude-code": input.claudeHome,
-          };
-          const roots: UsageRoot[] = [];
-          for (const harness of UsageHarness.literals) {
-            if (input.harness !== "all" && input.harness !== harness) continue;
-            const transcripts = harnessDrivers[harness].transcripts;
-            const home =
-              Option.getOrUndefined(homes[harness]) ??
-              (yield* Config.String(transcripts.home.variable).pipe(
-                Config.withDefault(join(paths.userHome, transcripts.home.directory)),
-              ));
-            for (const directory of transcripts.directories)
-              roots.push({ harness, root: join(resolve(home), directory) });
-          }
-          const projections = state.projections.flatMap((projection) => {
-            const skill = state.skills.find((s) => s.skill_id === projection.skill_id);
-            return skill
-              ? [{ path: projection.path, skillId: skill.skill_id, name: skill.name }]
-              : [];
-          });
           const report = yield* renderer.withStatus(
             "Scanning local transcripts",
-            usage.scan({
-              roots,
+            scanLocalUsage(state, {
+              userHome: paths.userHome,
+              harness: input.harness,
+              homes: {
+                codex: Option.getOrUndefined(input.codexHome),
+                "claude-code": Option.getOrUndefined(input.claudeHome),
+              },
               days: input.days,
               end: Option.getOrUndefined(input.end),
               project: Option.getOrUndefined(input.project),
-              projections,
               progress: (completed, total) =>
                 renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
             }),

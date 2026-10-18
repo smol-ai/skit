@@ -144,9 +144,26 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     overrides: structuredClone(configuration.overrides),
   };
   const captured = structuredClone(requests);
-  const changes = yield* Effect.forEach(captured, (request) =>
-    previewChange(current, request, routing),
-  );
+  let projected = current;
+  const changes = [];
+  for (const request of captured) {
+    const change = yield* previewChange(projected, request, routing);
+    changes.push(change);
+    // Later previews see earlier intent at the same Scope, just as apply does.
+    for (const binding of change.bindings) {
+      projected = isDeviceBinding(binding)
+        ? { ...projected, global_bindings: [binding] }
+        : {
+            ...projected,
+            local_bindings: [
+              ...projected.local_bindings.filter(
+                (item) => resolve(item.scope.root) !== resolve(binding.scope.root),
+              ),
+              binding,
+            ],
+          };
+    }
+  }
   const plan: BindingChangePlan = { [planType]: true, changes: structuredClone(changes) };
   preparedPlans.set(plan, {
     home,
@@ -158,20 +175,33 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
   return plan;
 });
 
-/** Read facts and accept intents against the Library displayed before asking questions. */
-export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
-  const store = yield* LibraryStore;
-  const current = yield* store.load;
+/** Internal constructor for application operations sharing one captured Library. */
+export function bindingChangeSelection(current: LibraryState, home: string, originalsPath: string) {
   return {
-    view: libraryView(current, store.originalsPath),
+    view: libraryView(current, originalsPath),
+    previewMany: Effect.fn("LibraryBindings.previewSelections")(function* (
+      intents: readonly BindingChangeIntent[],
+      configuration: BindingChangeConfiguration,
+    ) {
+      const requests = yield* Effect.forEach(intents, (intent) =>
+        expandBindingIntent(current, intent),
+      );
+      return yield* previewRequests(current, home, requests.flat(), configuration);
+    }),
     preview: Effect.fn("LibraryBindings.previewSelection")(function* (
       intent: BindingChangeIntent,
       configuration: BindingChangeConfiguration,
     ) {
       const requests = yield* expandBindingIntent(current, intent);
-      return yield* previewRequests(current, store.home, requests, configuration);
+      return yield* previewRequests(current, home, requests, configuration);
     }),
   };
+}
+
+/** Read facts and accept intents against the Library displayed before asking questions. */
+export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
+  const store = yield* LibraryStore;
+  return bindingChangeSelection(yield* store.load, store.home, store.originalsPath);
 });
 export type BindingChangeSelection = Effect.Success<ReturnType<typeof openBindingChangeSelection>>;
 

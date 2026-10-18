@@ -66,3 +66,36 @@ export function renderDoctorListingBudget(
     }),
   );
 }
+
+/** Scaled to the unselected demand so the limit stays put; filled cells past the limit are red (▓ without color). */
+export function renderDoctorBudgetSelection(
+  budgets: readonly ListingBudget[],
+  savings: Readonly<Record<string, number>>,
+  columns = 80,
+  useColor = false,
+): string[] {
+  const color = createColors(useColor);
+  const width = Math.max(8, Math.min(24, columns - 64));
+  return budgets.flatMap((budget) => {
+    if (budget._tag !== "Estimated") return [];
+    const after = Math.max(0, budget.demand - (savings[budget.harness] ?? 0));
+    const scale = Math.max(budget.demand, budget.limit, 1);
+    const limitCells = Math.round((budget.limit / scale) * width);
+    const bar = (demand: number) => {
+      const filled = Math.min(width, Math.round((demand / scale) * width));
+      return Array.from({ length: width }, (_, index) =>
+        index >= filled
+          ? color.dim("░")
+          : index < limitCells
+            ? "█"
+            : useColor
+              ? color.red("█")
+              : "▓",
+      ).join("");
+    };
+    const unit = budget.unit === "characters" ? "characters" : "tokens";
+    return [
+      `${harnessLabel(budget.harness).padEnd(11)} ${bar(after)} ${((after / budget.limit) * 100).toFixed(0)}% · ~${amount(Math.round(after))} / ${amount(budget.limit)} ${unit}`,
+    ];
+  });
+}

@@ -76,10 +76,80 @@ Codex discovery includes `$CODEX_HOME/sessions` and `$CODEX_HOME/archived_sessio
 
 JSON uses the versioned `skit.usage.v3` contract. It includes per-root availability, bytes and record counts, replay counts, unsupported wrappers, unreadable/skipped/changed files, undated candidates, and an `incomplete` flag. Partial results are returned with diagnostics; an invalid window/project is an argument error. Missing roots remain visible and are not proof of zero historical usage. Even a scan without diagnosed failures is limited by transcript retention and format support.
 
-Compressed transcripts and transcript symlinks are also skipped. The scanner reads only the inventoried byte prefix and reports changes detected through final metadata; it is not an atomic snapshot and cannot recover overwritten content. Individual malformed or truncated records do not discard the rest of the transcript. Undated evidence is never assigned a neighboring timestamp.
+Plain `.jsonl` and Zstandard-compressed `.jsonl.zst` transcripts are streamed through the same scanner. Transcript symlinks are skipped. Bytes and byte-read counters measure the on-disk input before decompression. Decoder errors count as unreadable files, preserving results from other files. Node 22's native Zstandard decoder can accept truncated frames without an error, so this is not a strict compressed-file integrity check. The scanner reads only the inventoried byte prefix and reports changes detected through final metadata; it is not an atomic snapshot and cannot recover overwritten content. Individual malformed or truncated records do not discard the rest of the transcript. Undated evidence is never assigned a neighboring timestamp.
 
 Codex JavaScript wrappers are parsed with a pinned Acorn parser, never evaluated. Recognition is bounded to literal eager `tools.exec_command` arguments and simple constant string bindings. Calls inside function bodies or uncertain branches, dynamic arguments, and more complicated wrappers are not reconstructed. Unsupported-wrapper diagnostics concern unresolved exec calls or parser failures; filename mentions in patches, searches, and messages, and unrelated output callbacks do not trigger them. Constant lookup respects block declarations and shadowing. Shell recognition covers literal read operands for a small set of commands, including legacy array-form shell calls shaped as `[shell, "-c" | "-lc", script]`. Unsupported shell syntax suppresses only its own command segment, so a literal read alongside an unrelated expansion or redirect can still be counted. Nested substitutions, function bodies, and heredoc contents are never interpreted as read commands. Other command array shapes are diagnosed as unsupported. Current document recognition expects POSIX path spellings; Windows-style document paths are not yet covered. Results are read attempts, not success counts. JSON output contains aggregate skill identities and paths, not prompts, instruction bodies, tool results, or raw parser errors.
 
 The scanner is an on-demand Effect service with cancellable streaming reads. Effect decodes UTF-8 across chunks and splits lines; each complete record is parsed without a record-size cutoff. Progress goes through the existing terminal renderer and does not contaminate JSON output. It writes neither transcripts nor usage state; no cache, background process, sync feature, or TUI integration is introduced.
 
 A local warm scan of approximately 3.39 GB across 2,183 retained files took 7.9 seconds on Node 22.22.3 / Darwin arm64. For the fixed seven-day interval [2026-09-30T15:49:15Z, 2026-10-07T15:49:15Z), it found 4 calls, 7 loads, and 81 read attempts. These are historical measurements from before legacy shell-array support; the OS page cache was uncontrolled. There is no modification-time prefilter because imported or restored files can carry recent events with old modification times.
+
+## Interactive doctor cleanup spike
+
+In a terminal, `skit doctor` now offers cleanup when a measured Codex or Claude
+skill listing exceeds its estimated budget. It scans all local projects over 30
+rolling days and suggests managed, enabled skills with no observed activity.
+Observed activity in either harness protects a skill, including raw document
+reads and conservatively matched name-only activity. Unmanaged skills are not
+changed.
+
+```sh
+skit doctor --dry-run       # choose skills and inspect the disable preview
+skit doctor --days 60       # use a longer observation window
+skit doctor --report-only  # diagnostics without the cleanup flow
+skit doctor --json         # existing noninteractive diagnostic contract
+pnpm --filter @smolai/skit stories journey/doctor/cleanup-preview
+```
+
+Suggestions are ranked by their fraction of the affected listing budgets, largest
+first. Current and after-selection budget bars update as skills are checked, with
+a fixed marker for each harness limit. The picker shows at most eight choices at
+a time (fewer on short terminals), with a visible range and selection count. All
+candidates remain available through scrolling and filtering; hidden selections
+still contribute to the budget preview. The picker preselects only enough candidates to cover the estimated excess.
+Scan gaps are reported once above the picker and do not prevent preselection
+when the harness has usable transcript history in the observation window.
+Missing optional roots such as `archived_sessions` do not invalidate available
+history. A harness with no available records in the window leaves its suggestions
+unselected. No activity is evidence about retained
+transcripts, not proof that a skill is unnecessary. A long scan can still be
+cancelled; there is no usage cache.
+
+The picker shows the affected scope. A global disable affects every project and
+agent. Selected skills remain retained in the Library. Disabling individual
+members of a followed collection keeps its other current members individually;
+that scope stops following future additions to the collection. The existing
+binding preview is displayed before a final confirmation. Escape, declining, and
+`--dry-run` leave bindings unchanged.
+
+Budget savings subtract the selected entries' current listing costs. This is an
+estimate: removing one copy can expose another through native discovery
+precedence. After applying, doctor runs its checks again and displays the actual
+new estimate. Cleanup currently requires exact managed document paths; aliases
+that cannot be matched conservatively are omitted. JSON and redirected command
+runs remain diagnostic-only; this spike does not add machine-readable suggestions.
+
+The ownership change relative to `d662d595f` is:
+
+```text
+Before
+CLI doctor → refresh inventory → native discovery and listing budget report
+CLI disable → held binding selection → preview one collection → apply captured plan
+
+After
+CLI doctor → refresh inventory → native discovery and listing budget report
+           → cleanup workflow
+             ├─ usage scanner: transcript evidence and coverage
+             ├─ suggestion policy: managed path/scope matching, protection, ranking
+             ├─ picker and confirmation outside the Library writer
+             └─ held binding selection.previewMany → apply captured plan
+                ├─ owns expansion of intents into per-scope requests
+                ├─ previews later requests against earlier binding intent
+                └─ owns revision validation, writer and projection reconciliation
+```
+
+The cleanup caller supplies collection/member/scope intent. It does not construct
+binding entries, coordinate separate writes per collection, or implement stale
+plan recovery. Sequential previews are necessary when multiple selected
+collections change the same scope. Apply retains its existing ordered writer
+lifecycle; this does not introduce rollback across projection failures.

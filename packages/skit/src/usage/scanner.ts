@@ -1,3 +1,6 @@
+import { NodeStream } from "@effect/platform-node";
+import { systemError } from "effect/PlatformError";
+import { createZstdDecompress } from "node:zlib";
 import { Clock, Context, DateTime, Effect, FileSystem, Layer, Option, Stream } from "effect";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
@@ -126,7 +129,7 @@ export const skillUsageLayer = Layer.effect(
           return;
         }
         if (info.type === "File") {
-          if (dir.endsWith(".jsonl")) {
+          if (dir.endsWith(".jsonl") || dir.endsWith(".jsonl.zst")) {
             const snapshot = yield* fs.stat(dir).pipe(
               Effect.catch(() => {
                 c.unreadableFiles++;
@@ -146,7 +149,7 @@ export const skillUsageLayer = Layer.effect(
               }),
               coverage: c,
             });
-          } else if (dir.endsWith(".jsonl.zst")) c.skippedFiles++;
+          }
           return;
         }
         if (info.type !== "Directory") {
@@ -174,7 +177,7 @@ export const skillUsageLayer = Layer.effect(
         const c = file.coverage;
         let cwd: string | undefined;
         let session = file.path;
-        let agent = /\/subagents\/agent-([^/]+)\.jsonl$/.exec(file.path)?.[1];
+        let agent = /\/subagents\/agent-([^/]+)\.jsonl(?:\.zst)?$/.exec(file.path)?.[1];
         let sessionKnown = false;
         let turn: string | undefined;
         let observedBytes = 0;
@@ -300,14 +303,31 @@ export const skillUsageLayer = Layer.effect(
               turn,
             });
         });
-        yield* fs.stream(file.path, { chunkSize: 256 * 1024, bytesToRead: file.size }).pipe(
+        const bytes = fs.stream(file.path, { chunkSize: 256 * 1024, bytesToRead: file.size }).pipe(
           Stream.tap((chunk) =>
             Effect.sync(() => {
               observedBytes += chunk.length;
               c.bytesRead += chunk.length;
             }),
           ),
-          // Recover only source reads; decoding and record processing own their failures.
+        );
+        const contents = file.path.endsWith(".zst")
+          ? bytes.pipe(
+              NodeStream.pipeThroughDuplex({
+                evaluate: () => createZstdDecompress(),
+                onError: (cause) =>
+                  systemError({
+                    _tag: "InvalidData",
+                    module: "FileSystem",
+                    method: "zstdDecompress",
+                    pathOrDescriptor: file.path,
+                    cause,
+                  }),
+              }),
+            )
+          : bytes;
+        yield* contents.pipe(
+          // Recover only file reads and decompression; parsing owns its failures.
           Stream.catchTag("PlatformError", () => {
             c.unreadableFiles++;
             return Stream.empty;
