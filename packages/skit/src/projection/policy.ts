@@ -30,8 +30,15 @@ export function applyInvocationPolicyEffect(
   const policy = intent.source === "declared" ? declaredPolicy : intent.policy;
   if (!policy) return Effect.void;
   // Each reader's native field lives in its own file or key, so one copy carries them all.
+  // Cursor and Pi consume the same frontmatter field as Claude, but Claude is not a
+  // reader of the shared target in our routing model. Keep that field writer separate
+  // from the reader map used by inventory and setup.
+  const adapters =
+    target === "agents"
+      ? [...projectionTargetHarnesses[target], "claude-code" as const]
+      : projectionTargetHarnesses[target];
   return Effect.forEach(
-    projectionTargetHarnesses[target],
+    adapters,
     (harness) => applyHarnessInvocationPolicyEffect(directory, harness, policy),
     { discard: true },
   );

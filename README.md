@@ -107,7 +107,7 @@ The interactive `skit list` flow allows you to change invocation settings for al
 
 Each harness supported by SKIT has its own unique way to disable an agents ability to use a skill without you explicitly invoking it.
 
-Claude Code uses `SKILL.md` frontmatter:
+Claude Code, Cursor and Pi use `SKILL.md` frontmatter:
 
 ```
 disable-model-invocation: true
