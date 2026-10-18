@@ -28,8 +28,8 @@ Harness.
 SKIT materializes every Binding into fixed Projection Targets:
 
 - `agents`: `.agents/skills` at the Binding's Scope. Always active. Its copies carry the native
-  invocation metadata of every Harness that reads it and that SKIT can write: Codex, OpenCode, and
-  Devin. Each lives in its own file or key, so one copy carries them all.
+  invocation metadata for Codex, OpenCode V2, Devin, Cursor, and Pi. Cursor and Pi share
+  Claude Code's `disable-model-invocation` field. Each lives in its own file or key, so one copy carries them all.
 - `claude`: `.claude/skills` at the Binding's Scope. Active only when Claude Code is detected,
   because Claude Code does not document reading `.agents`.
 
