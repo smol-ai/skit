@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { skitLayer } from "@smolai/skit-core";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { result } from "../src/handlers/contracts.js";
@@ -8,13 +9,15 @@ import {
   BootstrapConfigInvalid,
   BootstrapExternalFailure,
   BootstrapOperations,
+  BootstrapStatusInvalid,
+  BootstrapTimedOut,
   bootstrapServerEffect,
   originFromWranglerConfigEffect,
   removeBootstrapSecretInvocation,
   type BootstrapOperationsShape,
 } from "../src/bootstrap/server-bootstrap.js";
 
-function operations(statuses: Array<boolean | BootstrapExternalFailure>) {
+function operations(statuses: Array<boolean | BootstrapExternalFailure | BootstrapStatusInvalid>) {
   const observed: {
     installedSecret?: string;
     openedUrl?: string;
@@ -140,6 +143,231 @@ describe("server bootstrap journey", () => {
       }),
     );
   });
+
+  it.effect("rejects an invalid status response without retrying", () => {
+    const invalid = new BootstrapStatusInvalid({ message: "Invalid response" });
+    const fixture = operations([invalid, false]);
+    return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+      Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+      Effect.flip,
+      Effect.map((failure) => {
+        assert.strictEqual(failure, invalid);
+        assert.strictEqual(fixture.observed.statusChecks, 1);
+        assert.isUndefined(fixture.observed.openedUrl);
+        assert.isTrue(fixture.observed.secretRemoved);
+      }),
+    );
+  });
+
+  it.effect("stops after five failed status attempts and preserves the last failure", () =>
+    Effect.gen(function* () {
+      const failures = Array.from({ length: 5 }, (_, i) => statusFailure(`failure ${i}`));
+      const fixture = operations([...failures, false]);
+      const fiber = yield* bootstrapServerEffect({
+        origin: "https://skit.example",
+        pollIntervalMs: 1_000,
+      }).pipe(Effect.provide(Layer.merge(fixture.layer, skitLayer)), Effect.flip, Effect.forkChild);
+      yield* TestClock.adjust(4_000);
+      assert.strictEqual(yield* Fiber.join(fiber), failures[4]);
+      assert.strictEqual(fixture.observed.statusChecks, 5);
+      assert.isTrue(fixture.observed.secretRemoved);
+    }),
+  );
+
+  for (const phase of ["status", "browser", "poll-delay"] as const) {
+    it.effect(`enforces the setup deadline during ${phase} and finishes cleanup afterwards`, () =>
+      Effect.gen(function* () {
+        const fixture = operations([true, true, false]);
+        const cleanupStarted = yield* Deferred.make<void>();
+        const finishCleanup = yield* Deferred.make<void>();
+        let interrupted = false;
+        const stalled = Effect.never.pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              interrupted = true;
+            }),
+          ),
+        );
+        if (phase === "status") fixture.value.bootstrapNeeded = () => stalled;
+        if (phase === "browser") fixture.value.openBrowser = () => stalled;
+        fixture.value.removeSecret = () =>
+          Deferred.succeed(cleanupStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(finishCleanup)),
+          );
+        const fiber = yield* bootstrapServerEffect({
+          origin: "https://skit.example",
+          timeoutMs: 100,
+          pollIntervalMs: 1_000,
+        }).pipe(
+          Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+          Effect.flip,
+          Effect.forkChild,
+        );
+        yield* TestClock.adjust(100);
+        yield* Deferred.await(cleanupStarted);
+        // Cleanup has its own budget and must not be cut off by the setup deadline.
+        yield* TestClock.adjust(500);
+        yield* Deferred.succeed(finishCleanup, undefined);
+        assert.instanceOf(yield* Fiber.join(fiber), BootstrapTimedOut);
+        if (phase !== "poll-delay") assert.isTrue(interrupted);
+        if (phase === "poll-delay") assert.strictEqual(fixture.observed.statusChecks, 2);
+      }),
+    );
+  }
+
+  it.effect("cleans up an unsuccessful secret installation without starting setup", () => {
+    const fixture = operations([]);
+    const failure = new BootstrapExternalFailure({
+      operation: "install-secret",
+      message: "Wrangler lost its connection after writing the secret",
+    });
+    fixture.value.installSecret = () => Effect.fail(failure);
+    return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+      Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+      Effect.flip,
+      Effect.map((actual) => {
+        assert.strictEqual(actual, failure);
+        assert.strictEqual(fixture.observed.statusChecks, 0);
+        assert.isTrue(fixture.observed.secretRemoved);
+      }),
+    );
+  });
+
+  for (const operation of ["install-secret", "remove-secret"] as const) {
+    it.effect(`bounds a stalled ${operation} and interrupts the operation`, () =>
+      Effect.gen(function* () {
+        const fixture = operations([false]);
+        let interrupted = false;
+        const stalled = () =>
+          Effect.never.pipe(
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                interrupted = true;
+              }),
+            ),
+          );
+        if (operation === "install-secret") fixture.value.installSecret = stalled;
+        else fixture.value.removeSecret = stalled;
+        const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+          Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+          Effect.flip,
+          Effect.forkChild,
+        );
+        yield* TestClock.adjust("1 minute");
+        const failure = yield* Fiber.join(fiber);
+        assert.isTrue(interrupted);
+        if (operation === "install-secret") {
+          assert.instanceOf(failure, BootstrapExternalFailure);
+          assert.strictEqual(failure.operation, operation);
+          assert.match(failure.remediation, /network connectivity and Cloudflare service status/);
+          assert.strictEqual(fixture.observed.statusChecks, 0);
+          assert.isTrue(fixture.observed.secretRemoved);
+        } else {
+          assert.instanceOf(failure, BootstrapCleanupFailed);
+          assert.strictEqual(failure.cleanup.operation, operation);
+          assert.match(
+            failure.cleanup.remediation,
+            /network connectivity and Cloudflare service status/,
+          );
+          assert.match(failure.message, /wrangler secret delete SKIT_BOOTSTRAP_SECRET/);
+        }
+      }),
+    );
+  }
+
+  it.effect(
+    "keeps the installation diagnosis and remediation first when cleanup also fails",
+    () => {
+      const fixture = operations([]);
+      const original = new BootstrapExternalFailure({
+        operation: "install-secret",
+        message: "Not logged in",
+      });
+      const cleanup = new BootstrapExternalFailure({
+        operation: "remove-secret",
+        message: "Not logged in",
+      });
+      fixture.value.installSecret = () => Effect.fail(original);
+      fixture.value.removeSecret = () => Effect.fail(cleanup);
+      return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+        Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+        Effect.flip,
+        Effect.map((failure) => {
+          assert.instanceOf(failure, BootstrapCleanupFailed);
+          assert.strictEqual(failure.original, original);
+          assert.strictEqual(failure.cleanup, cleanup);
+          assert.match(failure.message, /^Bootstrap secret installation failed: Not logged in/);
+          assert.match(failure.message, /If the secret was installed/);
+          assert.match(failure.remediation, /^Check that Wrangler is installed and signed in/);
+          assert.strictEqual(fixture.observed.statusChecks, 0);
+        }),
+      );
+    },
+  );
+
+  it.effect("holds external cancellation during installation until its own timer expires", () =>
+    Effect.gen(function* () {
+      const fixture = operations([]);
+      const installing = yield* Deferred.make<void>();
+      let interrupted = false;
+      fixture.value.installSecret = () =>
+        Deferred.succeed(installing, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              interrupted = true;
+            }),
+          ),
+        );
+      const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+        Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+        Effect.forkChild,
+      );
+      yield* Deferred.await(installing);
+      const cancellation = yield* Fiber.interrupt(fiber).pipe(Effect.forkChild);
+      yield* TestClock.adjust("59 seconds");
+      assert.isFalse(interrupted);
+      assert.isUndefined(fiber.pollUnsafe());
+      assert.isFalse(fixture.observed.secretRemoved);
+      yield* TestClock.adjust("1 second");
+      yield* Fiber.join(cancellation);
+      assert.isTrue(interrupted);
+      assert.isTrue(fixture.observed.secretRemoved);
+    }),
+  );
+
+  it.effect("bounds secret cleanup even when the workflow has already been cancelled", () =>
+    Effect.gen(function* () {
+      const fixture = operations([]);
+      const polling = yield* Deferred.make<void>();
+      const removing = yield* Deferred.make<void>();
+      let cleanupInterrupted = false;
+      fixture.value.bootstrapNeeded = () =>
+        Deferred.succeed(polling, undefined).pipe(Effect.andThen(Effect.never));
+      fixture.value.removeSecret = () =>
+        Deferred.succeed(removing, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              cleanupInterrupted = true;
+            }),
+          ),
+        );
+      const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+        Effect.provide(Layer.merge(fixture.layer, skitLayer)),
+        Effect.forkChild,
+      );
+      yield* Deferred.await(polling);
+      const cancellation = yield* Fiber.interrupt(fiber).pipe(Effect.forkChild);
+      yield* Deferred.await(removing);
+      yield* TestClock.adjust("59 seconds");
+      assert.isFalse(cleanupInterrupted);
+      assert.isUndefined(fiber.pollUnsafe());
+      yield* TestClock.adjust("1 second");
+      yield* Fiber.join(cancellation);
+      assert.isTrue(cleanupInterrupted);
+    }),
+  );
 
   it.effect("reports cleanup remediation with the original typed failure", () => {
     const fixture = operations([true]);
