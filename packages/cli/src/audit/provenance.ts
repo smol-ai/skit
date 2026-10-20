@@ -1,13 +1,13 @@
 import {
   artifactUsesSymlinkEffect,
+  inspectOwnershipMarkerEffect,
   isJsonObject,
-  parseOwnershipMarker,
   stringAt,
   type JsonObject,
 } from "@smolai/skit-core";
 import { dirname, join, normalize, sep } from "node:path";
 import { Effect } from "effect";
-import { canonical, read } from "./io.js";
+import { canonical } from "./io.js";
 import { pnpmSkillOwner, type PnpmSkillObserver } from "../projection/pnpm-skills.js";
 
 function codexSystemSkillsRoot(path: string): string | null {
@@ -34,15 +34,10 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
       evidence: pnpm.ledgerPath,
     };
   const markerPath = join(dirname(path), ".skit-ownership.json");
-  const markerSource = yield* read(markerPath);
-  let markerValue: unknown;
-  try {
-    markerValue = markerSource === null ? undefined : JSON.parse(markerSource);
-  } catch {
-    markerValue = undefined;
-  }
-  const markerInspection = markerSource === null ? null : parseOwnershipMarker(markerValue);
-  if (markerInspection?.kind === "valid") {
+  const markerInspection = yield* inspectOwnershipMarkerEffect(dirname(path)).pipe(
+    Effect.orElseSucceed(() => ({ kind: "absent" }) as const),
+  );
+  if (markerInspection.kind === "valid") {
     const marker = markerInspection.marker;
     const claim = {
       skillId: marker.skill_id,
