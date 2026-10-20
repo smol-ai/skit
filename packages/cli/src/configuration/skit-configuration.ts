@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Config, Context, Effect, Layer, Option } from "effect";
+import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 
 export interface ResolvedSkitConfiguration {
   readonly userHome: string;
@@ -11,6 +11,10 @@ export interface ResolvedSkitConfiguration {
   readonly xdgStateHome: string | undefined;
   readonly authPath: string;
   readonly syncBindingsPath: string;
+  /** `SKIT_SERVER_URL`; an environment credential applies only to this origin. */
+  readonly registryOrigin: string | undefined;
+  /** `SKIT_TOKEN`, redacted so the configuration snapshot never logs or traces it. */
+  readonly registryToken: Redacted.Redacted<string> | undefined;
 }
 
 export class SkitConfiguration extends Context.Service<
@@ -37,19 +41,16 @@ export const resolveSkitConfiguration = Effect.fn("Configuration.resolve")(funct
       ? yield* Config.String("SKIT_HOME").pipe(Config.withDefault(join(userHome, ".skit")))
       : home,
   );
-  const xdgDirectory = (name: string) =>
+  // An empty variable is unset, so `NAME= skit …` can clear an inherited value.
+  const nonEmpty = (name: string) =>
     Config.option(Config.String(name)).pipe(
-      Config.map((value) =>
-        Option.getOrUndefined(
-          Option.map(
-            Option.filter(value, (path) => path !== ""),
-            (path) => resolve(path),
-          ),
-        ),
-      ),
+      Config.map((value) => Option.getOrUndefined(Option.filter(value, (text) => text !== ""))),
     );
+  const xdgDirectory = (name: string) =>
+    nonEmpty(name).pipe(Config.map((path) => (path === undefined ? undefined : resolve(path))));
   const xdgConfigHome = yield* xdgDirectory("XDG_CONFIG_HOME");
   const xdgStateHome = yield* xdgDirectory("XDG_STATE_HOME");
+  const registryToken = yield* nonEmpty("SKIT_TOKEN");
   const configHome = xdgConfigHome ?? resolve(userHome, ".config");
   const stateHome = xdgStateHome ?? resolve(userHome, ".local", "state");
   return SkitConfiguration.of({
@@ -58,6 +59,8 @@ export const resolveSkitConfiguration = Effect.fn("Configuration.resolve")(funct
     configHome,
     stateHome,
     xdgStateHome,
+    registryOrigin: yield* nonEmpty("SKIT_SERVER_URL"),
+    registryToken: registryToken === undefined ? undefined : Redacted.make(registryToken),
   });
 });
 

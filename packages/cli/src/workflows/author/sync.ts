@@ -366,7 +366,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const root = resolve(rootInput);
-  const configuredBase = options.baseUrl ?? process.env.SKIT_SERVER_URL;
+  const configuredBase = options.baseUrl;
   const storedRemote = yield* readAuthorRemoteEffect(root);
   if (storedRemote && options.to)
     return yield* new AuthorRemoteAlreadyExists({ locator: skitLocator(storedRemote) });
@@ -391,7 +391,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const base = remote.origin;
   const owner = remote.namespace;
   const slug = remote.skit;
-  const token = options.token ?? process.env.SKIT_TOKEN;
+  const token = options.token;
   if (configuredBase && new URL(configuredBase).origin !== base)
     return yield* new RegistryMismatch({
       active: new URL(configuredBase).origin,
