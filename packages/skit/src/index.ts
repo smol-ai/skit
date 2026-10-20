@@ -35,7 +35,6 @@ export * from "./projection/policy.js";
 export {
   ProjectionFailure,
   inspectOwnershipMarkerEffect,
-  parseOwnershipMarker,
   projectionCustodyEffect,
   projectionNameEffect,
   withProjectionMutationEffect,
