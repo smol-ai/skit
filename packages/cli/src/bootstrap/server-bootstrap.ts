@@ -2,13 +2,13 @@ import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import {
   Data,
   Cause,
-  Clock,
   Context,
   Effect,
   Exit,
   FileSystem,
   Layer,
   Result,
+  Schedule,
   Schema,
   Stream,
   Option,
@@ -69,12 +69,17 @@ export class BootstrapExternalFailure
   extends Data.TaggedError("BootstrapExternalFailure")<{
     readonly operation: "install-secret" | "remove-secret" | "open-browser" | "status";
     readonly message: string;
+    readonly timedOut?: boolean;
   }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check that Wrangler is installed and signed in, then retry.";
+  get remediation(): string {
+    return this.timedOut
+      ? "Check network connectivity and Cloudflare service status before retrying setup."
+      : "Check that Wrangler is installed and signed in, then retry.";
+  }
 }
 export class BootstrapStatusInvalid
   extends Data.TaggedError("BootstrapStatusInvalid")<{
@@ -106,8 +111,18 @@ export class BootstrapCleanupFailed
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Remove the bootstrap secret with the wrangler command above.";
+  get remediation(): string {
+    return this.original?._tag === "BootstrapExternalFailure" &&
+      this.original.operation === "install-secret"
+      ? `${this.original.remediation} If the secret was installed, remove it with the command above.`
+      : "Remove the bootstrap secret with the wrangler command above.";
+  }
   get message(): string {
+    if (
+      this.original?._tag === "BootstrapExternalFailure" &&
+      this.original.operation === "install-secret"
+    )
+      return `Bootstrap secret installation failed: ${this.original.message}. Cleanup could not be confirmed: ${this.cleanup.message}. If the secret was installed, remove it manually with: wrangler secret delete ${SECRET_NAME} --config ${this.configPath}`;
     const original: string = this.original ? ` Original error: ${this.original.message}.` : "";
     return `Bootstrap secret cleanup failed: ${this.cleanup.message}.${original} Remove it manually with: wrangler secret delete ${SECRET_NAME} --config ${this.configPath}`;
   }
@@ -142,6 +157,26 @@ export class BootstrapOperations extends Context.Service<
 const externalFailure = (operation: BootstrapExternalFailure["operation"], message: string) =>
   new BootstrapExternalFailure({ operation, message });
 
+// Mask external cancellation while changing the secret, but race the action against its
+// own timer. The process finalizer also needs forceKillAfter: the race waits for cleanup.
+const secretOperation = (
+  operation: "install-secret" | "remove-secret",
+  action: Effect.Effect<void, BootstrapExternalFailure>,
+) =>
+  action.pipe(
+    Effect.timeoutOrElse({
+      duration: "1 minute",
+      orElse: () =>
+        Effect.fail(
+          new BootstrapExternalFailure({
+            operation,
+            message: `${operation} timed out after 1 minute`,
+            timedOut: true,
+          }),
+        ),
+    }),
+  );
+
 function run(
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   operation: BootstrapExternalFailure["operation"],
@@ -152,6 +187,7 @@ function run(
   const output = options.stdio ?? "inherit";
   const process = ChildProcess.make(command, [...args], {
     shell: platform() === "win32",
+    forceKillAfter: "5 seconds",
     stdin:
       options.input === undefined
         ? output === "capture"
@@ -318,19 +354,16 @@ const parseOrigin = (origin: string) =>
 
 const waitForBootstrapStatus = Effect.fn("Bootstrap.waitForStatus")(function* (
   origin: URL,
-  deadline: number,
   pollIntervalMs: number,
 ) {
   const operations = yield* BootstrapOperations;
-  let consecutiveErrors = 0;
-  while (true) {
-    if ((yield* Clock.currentTimeMillis) >= deadline)
-      return yield* Effect.fail(new BootstrapTimedOut());
-    const attempt = yield* Effect.result(operations.bootstrapNeeded(origin));
-    if (Result.isSuccess(attempt)) return attempt.success;
-    if (++consecutiveErrors >= 5) return yield* Effect.fail(attempt.failure);
-    yield* Effect.sleep(pollIntervalMs);
-  }
+  return yield* Effect.suspend(() => operations.bootstrapNeeded(origin)).pipe(
+    Effect.retry({
+      times: 4,
+      schedule: Schedule.spaced(pollIntervalMs),
+      while: (error) => error._tag === "BootstrapExternalFailure",
+    }),
+  );
 });
 
 export const bootstrapServerEffect = Effect.fn("Bootstrap.server")(function* (
@@ -349,22 +382,37 @@ export const bootstrapServerEffect = Effect.fn("Bootstrap.server")(function* (
   const secret = yield* operations.createSecret;
   const setupUrl = new URL(`/setup#token=${encodeURIComponent(secret)}`, origin);
   const pollIntervalMs = options.pollIntervalMs ?? 1_000;
-  const deadline = (yield* Clock.currentTimeMillis) + (options.timeoutMs ?? 10 * 60_000);
 
   const provision = Effect.gen(function* () {
-    if (!(yield* waitForBootstrapStatus(origin, deadline, pollIntervalMs)))
+    if (!(yield* waitForBootstrapStatus(origin, pollIntervalMs)))
       return { origin: origin.origin, status: "already_complete" as const };
     if (options.open !== false) yield* operations.openBrowser(setupUrl);
-    while (yield* waitForBootstrapStatus(origin, deadline, pollIntervalMs))
-      yield* Effect.sleep(pollIntervalMs);
+    yield* waitForBootstrapStatus(origin, pollIntervalMs).pipe(
+      Effect.repeat({ schedule: Schedule.spaced(pollIntervalMs), while: (needed) => needed }),
+    );
     return { origin: origin.origin, setupUrl: setupUrl.href, status: "complete" as const };
   });
 
   return yield* Effect.uninterruptibleMask((restore) =>
-    Effect.flatMap(operations.installSecret(secret, configPath), () =>
-      Effect.flatMap(Effect.exit(restore(provision)), (exit) =>
+    Effect.flatMap(
+      Effect.exit(
+        secretOperation("install-secret", operations.installSecret(secret, configPath)).pipe(
+          Effect.andThen(
+            restore(
+              provision.pipe(
+                Effect.timeoutOrElse({
+                  duration: options.timeoutMs ?? 10 * 60_000,
+                  orElse: () => Effect.fail(new BootstrapTimedOut()),
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+      (exit) =>
         Effect.flatMap(
-          Effect.exit(operations.removeSecret(configPath)),
+          // Even a failed install may have reached Cloudflare before Wrangler failed locally.
+          Effect.exit(secretOperation("remove-secret", operations.removeSecret(configPath))),
           (removed): Effect.Effect<BootstrapResult, BootstrapFailure> => {
             if (Exit.isFailure(removed)) {
               const cleanup = Cause.findError(removed.cause);
@@ -385,7 +433,6 @@ export const bootstrapServerEffect = Effect.fn("Bootstrap.server")(function* (
             return Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause);
           },
         ),
-      ),
     ),
   );
 });

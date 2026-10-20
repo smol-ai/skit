@@ -14,6 +14,7 @@ export default defineConfig({
       "test/explicit-binding-command.test.ts",
       "test/harness-probe.test.ts",
       "test/native-probes.test.ts",
+      "test/server-bootstrap-process.test.ts",
       "test/single-machine-journey.test.ts",
       "test/source-acquisition.test.ts",
     ],
