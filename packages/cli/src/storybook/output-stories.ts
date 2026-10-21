@@ -11,6 +11,11 @@ import {
 } from "@smolai/skit-core";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { result } from "../handlers/contracts.js";
+import { classifyFailure } from "../failure-classification.js";
+import {
+  ProjectionRepairFailed,
+  ProjectionRetentionStale,
+} from "../workflows/library/projection-retention.js";
 
 export type OutputStory = Data.TaggedEnum<{
   Result: { readonly name: string; readonly group: string; readonly result: CommandResult };
@@ -745,6 +750,53 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       backup_path: "/home/story/.agents/.skit-backups/kept-review",
       backup_status: "saved",
     }),
+  ),
+  ...(["conflicted", "unknown"] as const).map((status) =>
+    resultStory(
+      "update-projection",
+      `use-library-${status}`,
+      result(
+        "projectionRepair",
+        {
+          skill_id: skillId,
+          skill_name: "review",
+          path: "/home/story/.agents/skills/review",
+          status,
+          backup_status: "unavailable",
+        },
+        1,
+      ),
+    ),
+  ),
+  ...(["not-needed", "unavailable"] as const).map((backup_status) =>
+    resultStory(
+      "update-projection",
+      `use-library-backup-${backup_status}`,
+      result("projectionRepair", {
+        skill_id: skillId,
+        skill_name: "review",
+        path: "/home/story/.agents/skills/review",
+        status: "installed",
+        backup_status,
+      }),
+    ),
+  ),
+  failureStory(
+    "projection-review-stale",
+    classifyFailure(
+      new ProjectionRetentionStale({
+        message: "The Library or an installed copy changed since review",
+      }),
+    ),
+  ),
+  failureStory(
+    "projection-repair-failed",
+    classifyFailure(
+      new ProjectionRepairFailed({
+        directory: "/home/story/.agents/.skit-backups",
+        cause: new Error("Permission denied while replacing the installed copy"),
+      }),
+    ),
   ),
   resultStory(
     "remove",

@@ -37,3 +37,13 @@ the existing storybook text/canvas colours. The header labels the palette as
 The storybook controls retain their existing UI palette.
 
 Run the terminal/key-input smoke check with `pnpm --filter @smolai/skit-storybook test:preview`.
+
+Installed-copy recovery fixtures under `update-projection/use-library-` cover
+preview, successful backup/restore instructions, remaining conflicts, unreadable
+final status, unnecessary backups and unavailable backup reporting. The failures
+`failure/projection-review-stale` and `failure/projection-repair-failed` use the
+production failure classes and classifier.
+
+`journey/update-projection/comparison-guidance` renders the CLI's shared notes
+before and after the comparison. It is presentation-only: Git's directory diff
+and external pager remain terminal-only and are not emulated by Storybook.

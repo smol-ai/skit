@@ -10,7 +10,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonRequested, localFlags } from "../../commands/parameters.js";
 import { CommandLineInvalid } from "../../commands/runtime.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { shellQuote } from "../../presentation/shell-quote.js";
+import { projectionComparisonNotes } from "../../presentation/projection-comparison.js";
 import { result } from "../contracts.js";
 import {
   planUpdatesEffect,
@@ -117,16 +117,10 @@ export const updateCliCommand = Command.make(
               prepareProjectionRetention(query, projectionSelector),
             );
             const paths = yield* projectionComparisonPaths(prepared.preview);
-            yield* renderer.note(
-              "Library source is on the left; the installed copy is on the right. Agent-generated files and metadata can differ. Press q to exit the pager. No changes will be applied.",
-              "Compare copies",
-            );
+            const notes = projectionComparisonNotes(query, projectionSelector);
+            yield* renderer.note(notes.introduction.body, notes.introduction.title);
             yield* showDiff(paths.libraryPath, paths.installedPath);
-            const command = `skit update ${shellQuote(query)} --from-projection ${shellQuote(projectionSelector)}`;
-            return yield* renderer.note(
-              `No files were changed.\n\nKeep the installed copy: ${command} --dry-run\nUse the Library version: ${command} --use-library --dry-run`,
-              "Comparison complete",
-            );
+            return yield* renderer.note(notes.completion.body, notes.completion.title);
           }
           if (input.useLibrary) {
             const prepared = yield* renderer.withStatus(
