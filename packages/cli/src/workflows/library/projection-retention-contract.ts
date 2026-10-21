@@ -47,3 +47,14 @@ export const ProjectionRetentionResult = Schema.Struct({
   ),
 });
 export type ProjectionRetentionResult = typeof ProjectionRetentionResult.Type;
+
+export const ProjectionRepair = Schema.Struct({
+  skill_id: SkillId,
+  skill_name: Schema.String,
+  path: Schema.String,
+  status: Schema.Literals(["preview", "installed", "conflicted", "unknown"]),
+  backup_path: Schema.optionalKey(Schema.String),
+  backup_status: Schema.optionalKey(Schema.Literals(["saved", "not-needed", "unavailable"])),
+  review_token: Schema.optionalKey(Schema.String),
+});
+export type ProjectionRepair = typeof ProjectionRepair.Type;

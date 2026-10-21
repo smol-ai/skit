@@ -1,6 +1,7 @@
 import {
   canonicalJson,
   deterministicTreeHashEffect,
+  originalTreeHashEffect,
   inspectOwnershipMarkerEffect,
   LibraryStore,
   libraryStateRevision,
@@ -9,6 +10,8 @@ import {
   currentSkillVersion,
   prepareObservedCollectionEffect,
   projectBindingEffect,
+  projectionWorkDirectoryEffect,
+  pathIsWithin,
   retainChangedProjectionEffect,
   retainedTreePath,
   versionBacking,
@@ -21,11 +24,13 @@ import {
   type RepositoryBinding,
   type ProjectionId,
 } from "@smolai/skit-core";
-import { Data, Clock, Effect } from "effect";
-import { resolve } from "node:path";
+import { Data, Clock, Effect, FileSystem } from "effect";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 import type {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
+  ProjectionRepair,
 } from "./projection-retention-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
@@ -57,6 +62,30 @@ export class ProjectionRetentionStale
   readonly code = "CONFLICT" as const;
   readonly remediation = "Preview the Projection retention again.";
 }
+
+export class ProjectionRepairFailed
+  extends Data.TaggedError("Library.ProjectionRepairFailed")<{ directory: string; cause: unknown }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get message(): string {
+    return `Could not finish replacing the installed copy: ${String(this.cause)}`;
+  }
+  get remediation(): string {
+    return `Run skit doctor and inspect ${this.directory} for a pending backup before retrying.`;
+  }
+}
+
+/** Bind the review to Library state and verbatim skill files, including ownership markers. */
+export const projectionReviewToken = Effect.fn("Library.projectionReviewToken")(function* (
+  preview: ProjectionRetentionPlan,
+) {
+  const copies = yield* Effect.forEach(preview.projections, (projection) =>
+    originalTreeHashEffect(projection.path),
+  );
+  return createHash("sha256").update(canonicalJson({ preview, copies })).digest("hex");
+});
 
 const matchingSkill = Effect.fn("Library.ProjectionRetention.matchSkill")(function* (
   state: LibraryState,
@@ -161,13 +190,120 @@ const observeProjectionRetention = Effect.fn("Library.planProjectionRetention")(
 const bindingForProjection = (
   state: LibraryState,
   projection: ManagedProjection,
-): DeviceBinding | RepositoryBinding | undefined =>
-  [...effectiveGlobalBindings(state), ...state.local_bindings].find(
-    (binding) =>
-      projection.target !== "legacy" &&
-      bindingSkillIds(state, binding).includes(projection.skill_id) &&
-      (binding.scope.kind === "global" || resolve(binding.scope.root) === resolve(projection.root)),
+): DeviceBinding | RepositoryBinding | undefined => {
+  if (projection.target === "legacy") return undefined;
+  const local = state.local_bindings
+    .filter((binding) => pathIsWithin(binding.scope.root, projection.root))
+    .sort((a, b) => b.scope.root.length - a.scope.root.length)[0];
+  if (local) return bindingSkillIds(state, local).includes(projection.skill_id) ? local : undefined;
+  return effectiveGlobalBindings(state).find((binding) =>
+    bindingSkillIds(state, binding).includes(projection.skill_id),
   );
+};
+
+/** Revalidate the reviewed copy under the writer; core moves the old copy to a kept backup. */
+export const useLibraryProjection = Effect.fn("Library.useLibraryProjection")(function* (
+  preview: ProjectionRetentionPlan,
+  query: string,
+  selector: string,
+  expectedToken: string,
+) {
+  const store = yield* LibraryStore;
+  return yield* withLibraryWriter(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const state = yield* store.load;
+      if (libraryStateRevision(state) !== preview.revision)
+        return yield* new ProjectionRetentionStale({ message: "Library changed after review" });
+      const revalidated = yield* observeProjectionRetention(state, query, selector);
+      if (canonicalJson(revalidated) !== canonicalJson(preview))
+        return yield* new ProjectionRetentionStale({ message: "Copies changed after review" });
+      if ((yield* projectionReviewToken(revalidated)) !== expectedToken)
+        return yield* new ProjectionRetentionStale({
+          message: "Reviewed files changed after review",
+        });
+      const projection = state.projections.find(
+        (item) => item.projection_id === preview.selected_projection_id,
+      );
+      const binding = projection && bindingForProjection(state, projection);
+      if (!projection || !binding || projection.target === "legacy")
+        return yield* new ProjectionRetentionMissing({
+          message: "The selected copy is not enabled",
+        });
+      const marker = yield* inspectOwnershipMarkerEffect(projection.path);
+      if (
+        marker.kind !== "valid" ||
+        marker.marker.projection_id !== projection.projection_id ||
+        marker.marker.skill_id !== projection.skill_id ||
+        marker.marker.expected_digest !== projection.expected_digest
+      )
+        return yield* new ProjectionRetentionStale({
+          message: "The installed copy's ownership marker changed",
+        });
+      const directory = join(
+        yield* projectionWorkDirectoryEffect(projection.root),
+        ".skit-backups",
+      );
+      const before = yield* fs
+        .readDirectory(directory)
+        .pipe(
+          Effect.catchTag("PlatformError", (error) =>
+            error.reason._tag === "NotFound" ? Effect.succeed([]) : Effect.fail(error),
+          ),
+        );
+      const existingBackups = new Set<string>(before);
+      yield* projectBindingEffect({
+        target: projection.target,
+        scope: binding.scope,
+        root: projection.root,
+        variantsPath: store.variantsPath,
+        onlyProjection: { projectionId: projection.projection_id, skillId: projection.skill_id },
+        acceptedObservations: new Map([
+          [
+            projection.projection_id,
+            {
+              observedHash: preview.observed_digest,
+              marker: marker.marker,
+              allowDifferent: true,
+            },
+          ],
+        ]),
+      }).pipe(Effect.mapError((cause) => new ProjectionRepairFailed({ directory, cause })));
+      // Reporting is best effort after the write; it must not turn a completed replacement into failure.
+      const settled = yield* store.load.pipe(Effect.orElseSucceed(() => undefined));
+      const after = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => undefined));
+      const backup = after?.find(
+        (name) =>
+          !existingBackups.has(name) &&
+          (name.startsWith(`kept-${projection.projection_id}-`) ||
+            name.startsWith(`pending-${projection.projection_id}-`)),
+      );
+      const installed = settled?.projections.find(
+        (item) => item.projection_id === projection.projection_id,
+      );
+      return {
+        skill_id: preview.skill_id,
+        skill_name: preview.skill_name,
+        path: projection.path,
+        status:
+          installed === undefined
+            ? "unknown"
+            : installed.status === "installed"
+              ? "installed"
+              : "conflicted",
+        ...(backup
+          ? { backup_path: join(directory, backup), backup_status: "saved" }
+          : {
+              backup_status:
+                installed?.status === "installed" &&
+                installed.expected_digest === preview.observed_digest
+                  ? "not-needed"
+                  : "unavailable",
+            }),
+      } satisfies ProjectionRepair;
+    }),
+  );
+});
 
 /** Capture the Library and observations once; callers only render or apply this operation. */
 export const prepareProjectionRetention = Effect.fn("Library.prepareProjectionRetention")(
@@ -181,6 +317,34 @@ export const prepareProjectionRetention = Effect.fn("Library.prepareProjectionRe
     };
   },
 );
+
+/** Locate the two reviewed trees without changing either; apply still revalidates the preview. */
+export const projectionComparisonPaths = Effect.fn("Library.projectionComparisonPaths")(function* (
+  preview: ProjectionRetentionPlan,
+) {
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  if (libraryStateRevision(state) !== preview.revision)
+    return yield* new ProjectionRetentionStale({ message: "Library changed before comparison" });
+  const skill = state.skills.find((item) => item.skill_id === preview.skill_id);
+  const projection = state.projections.find(
+    (item) => item.projection_id === preview.selected_projection_id,
+  );
+  const version = skill && currentSkillVersion(state, skill);
+  const backing = skill && version && versionBacking(state, skill, version);
+  if (!skill || !projection || !version || !backing)
+    return yield* new ProjectionRetentionMissing({ message: "The selected copy is unavailable" });
+  const root = retainedTreePath(store.originalsPath, backing.copy.digest);
+  const libraryPath =
+    backing.member.source_path === "." ? root : join(root, backing.member.source_path);
+  if ((yield* originalTreeHashEffect(libraryPath)) !== version.source_digest)
+    return yield* new ProjectionRetentionStale({ message: "The retained Library source changed" });
+  if ((yield* deterministicTreeHashEffect(projection.path)) !== preview.observed_digest)
+    return yield* new ProjectionRetentionStale({
+      message: "The installed copy changed before comparison",
+    });
+  return { libraryPath, installedPath: projection.path };
+});
 
 const applyPreparedProjectionRetention = Effect.fn("Library.applyProjectionRetention")(function* (
   home: string,

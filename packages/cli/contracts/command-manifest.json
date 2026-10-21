@@ -234,7 +234,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.add.v5",
+        "skit.add.v6",
         "skit.add.preview.v4"
       ],
       "exitCodes": [
@@ -1889,7 +1889,7 @@
         "setup"
       ],
       "stability": "stable",
-      "summary": "Remember this machine's repository roots and explain existing Skill Instances.",
+      "summary": "Discover and manage this device's existing skills. Use skit sync separately to share your Library between devices.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -2002,12 +2002,12 @@
         "sync"
       ],
       "stability": "stable",
-      "summary": "Synchronize private retained Library bytes with skit-server.",
+      "summary": "Preview synchronization of your whole Library with skit-server. Use --apply to send and receive changes.",
       "effects": {
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.library.sync.v10"
+        "skit.library.sync.v11"
       ],
       "exitCodes": [
         0,
@@ -2047,6 +2047,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Select the Registry to synchronize."
+        },
+        "progress": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Write line-oriented progress to stderr, including with --json."
         },
         "device-skill": {
           "type": "string",
@@ -2138,7 +2143,8 @@
         "skit.update.v8",
         "skit.update.plan.v6",
         "skit.update.projection-retention.v2",
-        "skit.update.projection-retention.plan.v2"
+        "skit.update.projection-retention.plan.v2",
+        "skit.update.projection-repair.v1"
       ],
       "exitCodes": [
         0,
@@ -2151,7 +2157,9 @@
       "interactive": false,
       "examples": [
         "skit update --dry-run",
-        "skit update my-skill --from-projection claude-code --dry-run"
+        "skit update my-skill --from-projection claude-code --dry-run",
+        "skit update my-skill --from-projection agents --diff",
+        "skit update my-skill --from-projection agents --use-library --dry-run"
       ],
       "positionals": [
         {
@@ -2169,6 +2177,21 @@
           "type": "string",
           "valueName": "string",
           "description": "Retain changed bytes from this Projection ID, Harness, or path."
+        },
+        "diff": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Review the Library source and installed copy with a scrollable diff; no changes are applied."
+        },
+        "use-library": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Replace the reviewed installed copy with the Library version, preserving the old copy in a backup."
+        },
+        "review": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Apply the exact conflict review token printed by the preview."
         },
         "json": {
           "type": "boolean",

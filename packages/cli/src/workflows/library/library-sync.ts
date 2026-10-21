@@ -93,6 +93,17 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const observer = options.observer ?? silentSyncObserver;
 
     const store = yield* LibraryStore;
+    const projectionConflicts = Effect.gen(function* () {
+      const state = yield* store.load;
+      return state.projections
+        .filter((projection) => projection.status === "conflicted")
+        .map((projection) => ({
+          skill:
+            state.skills.find((skill) => skill.skill_id === projection.skill_id)?.name ??
+            projection.skill_id,
+          path: projection.path,
+        }));
+    }).pipe(Effect.orElseSucceed(() => undefined));
     const projectionOptions = {
       home: store.home,
       variantsPath: store.variantsPath,
@@ -243,6 +254,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       const projections = options.apply
         ? yield* reconcileSelected()
         : { projected: 0, retired: 0, issues: [] as string[] };
+      const conflicts = options.apply ? yield* projectionConflicts : undefined;
       return {
         status: projections.issues.length ? ("enablement_incomplete" as const) : ("clean" as const),
         ...(projections.issues.length
@@ -251,6 +263,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         changed: false,
         revision_id: remote.revision_id,
         ...projectionCounts(projections),
+        ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
       };
     }
 
@@ -261,16 +274,21 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       originalsPath: store.originalsPath,
     });
     const snapshots = transfer.snapshotCount;
+    const transfers = {
+      snapshots_to_upload: transfer.uploadCount,
+      snapshots_to_download: transfer.downloadCount,
+    };
     if (!options.apply)
       return remote === null
-        ? { status: "push_ready" as const, snapshots, plan }
+        ? { status: "push_ready" as const, snapshots, plan, ...transfers }
         : !local.present
-          ? { status: "pull_ready" as const, snapshots, plan }
+          ? { status: "pull_ready" as const, snapshots, plan, ...transfers }
           : {
               status:
                 accepted === undefined ? ("adoption_ready" as const) : ("merge_ready" as const),
               revision_id: remote.revision_id,
               snapshots,
+              ...transfers,
               collections_to_remove: local.state.collections.filter(
                 (collection) =>
                   !desired.collections.some(
@@ -317,6 +335,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     );
 
     const projections = yield* reconcileSelected();
+    const conflicts = yield* projectionConflicts;
     const syncStatus =
       remote === null
         ? ("pushed" as const)
@@ -330,6 +349,8 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         : {}),
       revision_id: saved.revision_id,
       snapshots,
+      ...transfers,
+      ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
       ...projectionCounts(projections),
       retired: retired + projections.retired,
       plan,

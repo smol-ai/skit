@@ -7,6 +7,8 @@ import { afterAll, describe, expect, test } from "vitest";
 import { Schema } from "effect";
 import { LibraryState } from "@smolai/skit-core";
 import { outputContracts } from "../src/commands/output-contracts.js";
+import { result as commandResult } from "../src/handlers/contracts.js";
+import { renderContract } from "../src/presentation/contract-presenters.js";
 import { copySkitFixture } from "./helpers/skit-fixture.js";
 
 const bin = join(process.cwd(), "bin", "skit.js");
@@ -532,7 +534,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v5",
+        schema: "skit.add.v6",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],
@@ -669,6 +671,111 @@ describe("CLI contracts", () => {
     expect(result.status).toBe(12);
     expect(JSON.parse(result.stderr).error.code).toBe("CONFLICT");
     expect(result.stdout).toBe("");
+  });
+
+  test("reviews and backs up an edited installed copy before using the Library", async () => {
+    const root = await mkdtemp(join(tmpdir(), "skit-cli-repair-'-"));
+    const home = join(root, "home"),
+      source = join(root, "source"),
+      codex = join(root, "codex"),
+      claude = join(root, "claude");
+    await mkdir(source, { recursive: true });
+    await writeFile(
+      join(source, "SKILL.md"),
+      "---\nname: review\ndescription: Review code.\n---\noriginal\n",
+    );
+    const run = (json: boolean, ...args: string[]) =>
+      spawnSync(
+        process.execPath,
+        [
+          bin,
+          ...args,
+          "--home",
+          home,
+          "--codex-root",
+          codex,
+          "--claude-root",
+          claude,
+          ...(json ? ["--json"] : []),
+        ],
+        {
+          encoding: "utf8",
+          env: { ...process.env, HOME: root, XDG_CONFIG_HOME: join(root, "config") },
+        },
+      );
+    expect(run(true, "add", source).status).toBe(0);
+    expect(run(true, "enable", "review").status).toBe(0);
+    const installed = join(codex, "review", "SKILL.md");
+    const other = join(claude, "review", "SKILL.md");
+    const changed = "---\nname: review\ndescription: Review code.\n---\nlocal edit\n";
+    await writeFile(installed, changed);
+    const stateBefore = await readFile(join(home, "state.json"), "utf8");
+    const diff = run(false, "update", "review", "--from-projection", "agents", "--diff");
+    expect(diff.status).toBe(0);
+    // oxlint-disable-next-line skit/no-cli-output-text-assertions -- Git diff has no JSON mode; prove the installed edit reaches the comparison output.
+    expect(diff.stdout).toContain("local edit");
+    // oxlint-disable-next-line skit/no-cli-output-text-assertions -- Prove the comparison includes the Library source as well as the installed edit.
+    expect(diff.stdout).toContain("original");
+    expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBefore);
+    const preview = run(
+      true,
+      "update",
+      "review",
+      "--from-projection",
+      "agents",
+      "--use-library",
+      "--dry-run",
+    );
+    expect(preview.status).toBe(0);
+    const reviewed = JSON.parse(preview.stdout).data;
+    expect(reviewed.status).toBe("preview");
+    expect(reviewed.review_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(await readFile(installed, "utf8")).toBe(changed);
+    await writeFile(installed, changed + "newer edit\n");
+    const stale = run(
+      true,
+      "update",
+      "review",
+      "--from-projection",
+      "agents",
+      "--use-library",
+      "--review",
+      reviewed.review_token,
+    );
+    expect(stale.status).not.toBe(0);
+    expect(await readFile(installed, "utf8")).toBe(changed + "newer edit\n");
+    await writeFile(installed, changed);
+    const applied = run(
+      true,
+      "update",
+      "review",
+      "--from-projection",
+      "agents",
+      "--use-library",
+      "--review",
+      reviewed.review_token,
+    );
+    expect(applied.status).toBe(0);
+    const data = JSON.parse(applied.stdout).data;
+    expect(data.status).toBe("installed");
+    expect(data.backup_status).toBe("saved");
+    expect(await readFile(join(data.backup_path, "SKILL.md"), "utf8")).toBe(changed);
+    expect(await readFile(installed, "utf8")).toContain("original");
+    expect(await readFile(other, "utf8")).toContain("original");
+    const rendered = renderContract(commandResult("projectionRepair", data), {
+      color: false,
+      detail: "summary",
+    });
+    const restore = rendered.split("\n").find((line) => line.startsWith("test ! -e "));
+    expect(restore).toBeDefined();
+    expect(spawnSync("/bin/sh", ["-c", restore!]).status).toBe(0);
+    expect(await readFile(installed, "utf8")).toBe(changed);
+    expect(await readFile(`${join(codex, "review")}.skit-after-repair/SKILL.md`, "utf8")).toContain(
+      "original",
+    );
+    expect(spawnSync("/bin/sh", ["-c", restore!]).status).not.toBe(0);
+    expect(await readFile(installed, "utf8")).toBe(changed);
+    await rm(root, { recursive: true, force: true });
   });
 
   test("retains selected Projection bytes through the built CLI without overwriting disagreement", async () => {

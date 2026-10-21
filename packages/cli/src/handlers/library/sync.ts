@@ -22,6 +22,7 @@ import type { InventoryRootOptions } from "../../projection/roots.js";
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
   readonly apply: boolean;
+  readonly reportProgress?: boolean;
   readonly adopt: boolean;
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
@@ -34,7 +35,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   const auth = yield* Effect.fromResult(options.authState);
   if (auth.origin === undefined) return yield* new DefaultRegistryNotConfigured();
   const renderer = yield* Renderer;
-  const progress = terminalSyncProgress(renderer);
+  const progress = terminalSyncProgress(renderer, options.reportProgress);
   return yield* Effect.scoped(
     syncLibraryEffect({
       origin: auth.origin,
@@ -64,6 +65,10 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
 
 const apply = Flag.Boolean("apply").pipe(
   Flag.withDescription("Apply the current Library reconciliation plan."),
+  Flag.withDefault(false),
+);
+const progress = Flag.Boolean("progress").pipe(
+  Flag.withDescription("Write line-oriented progress to stderr, including with --json."),
   Flag.withDefault(false),
 );
 const adopt = Flag.Boolean("adopt").pipe(
@@ -110,6 +115,7 @@ export const librarySyncCliCommand = Command.make(
     takeRemote,
     keepEnabled,
     registry,
+    progress,
     deviceSkill,
     deviceCollection,
     deviceOnly,
@@ -136,6 +142,7 @@ export const librarySyncCliCommand = Command.make(
         const value = yield* librarySyncCommand({
           authState,
           apply: input.apply,
+          reportProgress: input.progress,
           adopt: input.adopt,
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
@@ -168,7 +175,9 @@ export const librarySyncCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Synchronize private retained Library bytes with skit-server."),
+  Command.withDescription(
+    "Preview synchronization of your whole Library with skit-server. Use --apply to send and receive changes.",
+  ),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.librarySync],
