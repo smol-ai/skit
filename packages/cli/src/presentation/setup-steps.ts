@@ -34,6 +34,7 @@ export const setupStepPlan = (input: { readonly scanRepositories: boolean }): Se
       ...keys.map((key, index) => `  ${index + 1}. ${setupStepTitles[key]}`),
       "",
       "Nothing is imported or removed until you confirm.",
+      "Setup discovers skills on this device. It does not sync your Library to a server.",
     ].join("\n"),
     step: (key) => ({
       index: keys.indexOf(key) + 1,
