@@ -7,6 +7,7 @@ describe("storybook browser model", () => {
     expect(catalog.some(({ kind }) => kind === "journey")).toBe(true);
     expect(filterCatalog("library-sync/merged").map(({ key }) => key)).toEqual([
       "library-sync/merged",
+      "library-sync/merged-with-local-edits",
     ]);
     for (const kind of ["output", "journey"] as const) {
       const keys = catalog.filter((item) => item.kind === kind).map(({ key }) => key);

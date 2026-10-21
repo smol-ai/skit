@@ -100,7 +100,7 @@ try {
   harness.mockInput.pressKey("f", { ctrl: true });
   await settle();
   assert.equal(app.state().count, 2, "JSON replay should contain only ready and result");
-  assert.match(harness.captureCharFrame(), /skit.library.sync.v10/);
+  assert.match(harness.captureCharFrame(), /skit.library.sync.v11/);
   assert.doesNotMatch(harness.captureCharFrame(), /Downloading/);
   harness.mockInput.pressKey("f", { ctrl: true });
   await settle();
@@ -117,8 +117,25 @@ try {
   assert.match(app.screen().text, /Error:/);
   assert.doesNotMatch(app.screen().text, /Library synced\./);
   assert.equal(app.state().status, undefined);
+  harness.mockInput.pressTab();
+  harness.mockInput.pressEscape();
+  await settle();
+  await harness.mockInput.typeText("journey/library-sync/explicit-progress");
+  await settle();
+  assert.equal(app.state().key, "journey/library-sync/explicit-progress");
+  harness.mockInput.pressKey("f", { ctrl: true });
+  await settle();
+  assert.ok((app.state().count ?? 0) > 2, "explicit progress must remain visible in JSON mode");
+  harness.mockInput.pressTab();
+  harness.mockInput.pressKey("ARROW_RIGHT");
+  await harness.flush();
+  assert.match(harness.captureCharFrame(), /Inspecting this device/);
+  assert.equal(app.state().status, undefined, "JSON progress is persistent, not a spinner");
+  for (let index = 0; index < (app.state().count ?? 0); index++) harness.mockInput.pressEnter();
+  await harness.flush();
+  assert.equal(app.state().index, (app.state().count ?? 0) - 1);
   console.log(
-    "Storybook playback smoke passed: stepping, animation, playback, transcript, JSON, failure.",
+    "Storybook playback smoke passed: stepping, animation, playback, transcript, JSON, failure, explicit progress.",
   );
 } finally {
   harness.renderer.destroy();

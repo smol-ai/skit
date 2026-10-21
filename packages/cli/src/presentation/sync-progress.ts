@@ -1,6 +1,7 @@
 import type { RestoreObserver, RestorePhase } from "@smolai/skit-core";
 import type { SyncObserver, SyncPhase } from "../workflows/library/library-sync-progress.js";
 import type { RendererShape } from "./renderer.js";
+import { Effect } from "effect";
 
 const copies = (count: number, qualifier = "Skill") =>
   `${count} ${qualifier} cop${count === 1 ? "y" : "ies"}`;
@@ -62,25 +63,51 @@ const restoreStatus = (phase: RestorePhase) => {
 
 /** Domain operations supply facts; this adapter owns terminal wording and persistence. */
 export const terminalSyncProgress = (
-  renderer: Pick<RendererShape, "withStatus" | "updateStatus">,
+  renderer: Pick<RendererShape, "withStatus" | "updateStatus" | "progress">,
+  reportProgress = false,
 ): {
   readonly sync: SyncObserver;
   readonly restore: RestoreObserver;
-} => ({
-  sync: {
-    around: (phase, operation) =>
-      renderer.withStatus({ ...syncStatus(phase), persist: "timed" }, operation),
-    tick: ({ phase, completed }) =>
-      renderer.updateStatus(
-        `${syncStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}`,
-      ),
-  },
-  restore: {
-    around: (phase, operation) =>
-      renderer.withStatus({ ...restoreStatus(phase), persist: "timed" }, operation),
-    tick: ({ phase, completed, subject }) =>
-      renderer.updateStatus(
-        `${restoreStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}${subject === undefined ? "" : ` · ${subject}`}`,
-      ),
-  },
-});
+} => {
+  const progress = (message: string) =>
+    reportProgress && renderer.progress ? renderer.progress(message) : Effect.void;
+  const tick = (message: string, completed: number, total?: number) =>
+    Effect.gen(function* () {
+      yield* renderer.updateStatus(message);
+      if (
+        total !== undefined &&
+        (completed === 0 ||
+          completed === total ||
+          completed % Math.max(1, Math.ceil(total / 10)) === 0)
+      )
+        yield* progress(message);
+    });
+  return {
+    sync: {
+      around: (phase, operation) =>
+        renderer.withStatus(
+          { ...syncStatus(phase), persist: "timed" },
+          progress(syncStatus(phase).pending).pipe(Effect.andThen(operation)),
+        ),
+      tick: ({ phase, completed }) =>
+        tick(
+          `${syncStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}`,
+          completed,
+          "total" in phase ? phase.total : undefined,
+        ),
+    },
+    restore: {
+      around: (phase, operation) =>
+        renderer.withStatus(
+          { ...restoreStatus(phase), persist: "timed" },
+          progress(restoreStatus(phase).pending).pipe(Effect.andThen(operation)),
+        ),
+      tick: ({ phase, completed, subject }) =>
+        tick(
+          `${restoreStatus(phase).pending}${"total" in phase ? ` · ${completed}/${phase.total}` : ""}${subject === undefined ? "" : ` · ${subject}`}`,
+          completed,
+          "total" in phase ? phase.total : undefined,
+        ),
+    },
+  };
+};

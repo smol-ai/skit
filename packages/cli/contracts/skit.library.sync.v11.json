@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v10",
+  "$id": "skit.library.sync.v11",
   "type": "object",
   "properties": {
     "status": {
@@ -28,6 +28,36 @@
       "type": "string"
     },
     "snapshots": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "snapshots_to_upload": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "snapshots_to_download": {
       "anyOf": [
         {
           "type": "number"
@@ -74,6 +104,25 @@
           ]
         }
       ]
+    },
+    "projection_conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "skill",
+          "path"
+        ],
+        "additionalProperties": true
+      }
     },
     "collections_to_remove": {
       "anyOf": [

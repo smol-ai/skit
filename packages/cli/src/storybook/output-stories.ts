@@ -11,6 +11,7 @@ import {
 } from "@smolai/skit-core";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { result } from "../handlers/contracts.js";
+import type { SyncPlan } from "../workflows/library/library-sync-contract.js";
 
 export type OutputStory = Data.TaggedEnum<{
   Result: { readonly name: string; readonly group: string; readonly result: CommandResult };
@@ -69,6 +70,30 @@ const doctorListingBudget = estimateCodexListing({
     },
   ],
 });
+
+const syncMergePlan: SyncPlan = {
+  local: [
+    {
+      kind: "collection",
+      action: "update",
+      subject_id: collectionId,
+      label: "team/review-tools",
+      skills_added: ["triage"],
+      skills_removed: [],
+      skills_changed: ["review"],
+      evidence_only: false,
+    },
+  ],
+  remote: [
+    {
+      kind: "binding",
+      action: "update",
+      entries_added: [{ kind: "skill", label: "testing" }],
+      entries_removed: [{ kind: "skill", label: "legacy-review" }],
+    },
+  ],
+};
+const installedConflicts = [{ skill: "review", path: "/home/story/.agents/skills/review" }];
 
 export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("usage", "empty", result("usage", emptyUsageStory)),
@@ -838,6 +863,96 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       changed: false,
       conflicts: [{ path: "SKIT.md", kind: "both_modified" }],
     }),
+  ),
+
+  resultStory(
+    "library-sync",
+    "upload-preview",
+    result("librarySync", {
+      status: "push_ready",
+      snapshots: 100,
+      snapshots_to_upload: 100,
+      snapshots_to_download: 0,
+      plan: { local: [], remote: syncMergePlan.local },
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "download-preview",
+    result("librarySync", {
+      status: "pull_ready",
+      snapshots: 3,
+      snapshots_to_upload: 0,
+      snapshots_to_download: 3,
+      plan: { local: syncMergePlan.local, remote: [] },
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "merge-preview",
+    result("librarySync", {
+      status: "merge_ready",
+      revision_id: "revision-story",
+      snapshots: 5,
+      snapshots_to_upload: 3,
+      snapshots_to_download: 2,
+      plan: syncMergePlan,
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "merged-with-local-edits",
+    result("librarySync", {
+      status: "merged",
+      revision_id: "revision-story",
+      snapshots: 5,
+      projected: 2,
+      retired: 1,
+      snapshots_to_upload: 3,
+      snapshots_to_download: 2,
+      plan: syncMergePlan,
+      projection_conflicts: installedConflicts,
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "clean-with-local-edits",
+    result("librarySync", {
+      status: "clean",
+      changed: false,
+      projected: 0,
+      retired: 0,
+      projection_conflicts: installedConflicts,
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "many-local-edits",
+    result("librarySync", {
+      status: "pulled",
+      snapshots_to_upload: 0,
+      snapshots_to_download: 7,
+      projection_conflicts: Array.from({ length: 7 }, (_, index) => ({
+        skill: `review-${index + 1}`,
+        path: `/home/story/.agents/skills/review-${index + 1}`,
+      })),
+    }),
+  ),
+  resultStory(
+    "library-sync",
+    "enablement-incomplete",
+    result(
+      "librarySync",
+      {
+        status: "enablement_incomplete",
+        sync_status: "pulled",
+        enablement_issues: [
+          "Cannot install at /home/story/.agents/skills/review: existing content or ownership conflicts. Preserve it and review before retrying.",
+        ],
+        projection_conflicts: installedConflicts,
+      },
+      12,
+    ),
   ),
   resultStory(
     "library-sync",

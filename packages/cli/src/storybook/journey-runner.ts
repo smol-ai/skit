@@ -37,6 +37,7 @@ function renderEvent(
     StatusStarted: ({ message }) => `${message}…`,
     StatusUpdated: ({ message }) => `${message}…`,
     StatusEnded: () => "status cleared",
+    Progress: ({ message }) => `stderr: ${message}`,
     Result: ({ result }) => {
       const frame = renderResultFrame(result, environment);
       return [frame.stdout, frame.stderr].filter(Boolean).join("\n");

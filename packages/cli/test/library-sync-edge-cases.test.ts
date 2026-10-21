@@ -224,10 +224,13 @@ for (const repository of [false, true]) {
             "merge_ready",
           );
           assert.deepEqual(yield* b.state, before);
-          assert.equal(
-            (yield* b.sync({ takeRemote: [`skill:${skill.skill_id}`] })).status,
-            "merged",
-          );
+          const applied = yield* b.sync({ takeRemote: [`skill:${skill.skill_id}`] });
+          assert.equal(applied.status, "merged");
+          if ("projection_conflicts" in applied)
+            assert.deepEqual(
+              applied.projection_conflicts,
+              edited ? [{ skill: "review", path: join(root, "review") }] : [],
+            );
           const after = yield* b.state;
           assert.equal(after.projections[0]?.projection_id, before.projections[0]?.projection_id);
           assert.equal(

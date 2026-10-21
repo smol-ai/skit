@@ -25,7 +25,7 @@ import { Renderer } from "../presentation/renderer.js";
 import { registryHttpLayer } from "../registry/registry-http.js";
 
 /** Run the real sync command against a fixture Registry and disposable device homes. */
-export const syncJourney = (failDownload: boolean) =>
+export const syncJourney = (failDownload: boolean, reportProgress = false) =>
   Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -123,6 +123,7 @@ export const syncJourney = (failDownload: boolean) =>
           source: "stored",
         }),
         apply: true,
+        reportProgress,
         adopt: false,
         projection: {
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),

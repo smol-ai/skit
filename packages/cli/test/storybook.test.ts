@@ -63,7 +63,10 @@ describe("CLI storybook catalogs", () => {
 
   it.effect("renders a scripted journey defect instead of failing the viewer", () =>
     Effect.gen(function* () {
-      const story = journeyStories[0];
+      const story = journeyStories.find(
+        (story) => story.name === "preview-enable-portable-collection",
+      );
+      expect(story).toBeDefined();
       if (!story) return;
       const rendered = yield* renderJourney(
         { ...story, answers: [] },

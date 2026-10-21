@@ -203,6 +203,7 @@ it.effect("an anchored home that matches the remote: an applied clean writes not
       revision_id: server.remote!.revision_id,
       projected: 0,
       retired: 0,
+      projection_conflicts: [],
     });
     yield* unchanged;
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

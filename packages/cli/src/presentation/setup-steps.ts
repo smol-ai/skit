@@ -34,6 +34,7 @@ export const setupStepPlan = (input: { readonly scanRepositories: boolean }): Se
       ...keys.map((key, index) => `  ${index + 1}. ${setupStepTitles[key]}`),
       "",
       "Nothing is imported or removed until you confirm.",
+      "Setup discovers skills on this device. It does not sync your Library to a server.",
     ].join("\n"),
     step: (key) => ({
       index: keys.indexOf(key) + 1,
@@ -48,4 +49,10 @@ export const setupPrompts = {
   collections: "Select skills.sh collections to add",
   skills: "Choose a copy to add, or mark Remove",
   confirm: "Apply these changes?",
+} as const;
+
+/** Shared by the setup command and its presentation-only Storybook journey. */
+export const setupCompletion = {
+  title: "Setup complete",
+  body: "Selected setup changes were applied on this device.\n\nTo sync your Library between devices, run `skit auth login` and then `skit sync` to review the plan. Sync is separate from setup.",
 } as const;

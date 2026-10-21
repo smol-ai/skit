@@ -16,6 +16,7 @@ import { compactHomePath } from "../../presentation/home-path.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   setupOverviewTitle,
+  setupCompletion,
   setupPrompts,
   setupStepPlan,
   type SetupStepPlan,
@@ -151,7 +152,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       `Removed installed locations are saved at ${plan.summary.removals.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
       "Removed copies saved",
     );
-  yield* renderer.note("Selected setup changes were applied.", "Setup complete");
+  yield* renderer.note(setupCompletion.body, setupCompletion.title);
   yield* offerSkillsShUpdateCheck();
   return applied.observed;
 });
@@ -300,7 +301,7 @@ export const setupCliCommand = Command.make(
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Remember this machine's repository roots and explain existing Skill Instances.",
+    "Discover and manage this device's existing skills. Use skit sync separately to share your Library between devices.",
   ),
   Command.withExamples([
     { command: "skit setup" },

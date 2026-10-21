@@ -37,3 +37,14 @@ the existing storybook text/canvas colours. The header labels the palette as
 The storybook controls retain their existing UI palette.
 
 Run the terminal/key-input smoke check with `pnpm --filter @smolai/skit-storybook test:preview`.
+
+Sync/setup output fixtures include `library-sync/upload-preview`, `download-preview`,
+`merge-preview`, `merged-with-local-edits`, `clean-with-local-edits`, `many-local-edits`,
+and `enablement-incomplete`. Search `journey/setup/guidance` for the setup overview
+and completion copy (presentation only; it does not apply setup).
+
+`journey/library-sync/explicit-progress` runs a real fixture sync with `--progress`.
+Its progress lines persist on stderr even in JSON mode, while the result on stdout
+remains valid JSON. The terminal preview interleaves both streams; captured replay
+frames also expose them separately. The ordinary fresh-device story keeps progress
+disabled so it still demonstrates JSON output without progress.
