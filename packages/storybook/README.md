@@ -42,3 +42,45 @@ The `add/added`, `add/updated` and `add/unchanged` fixtures show each source
 acquisition outcome, returned directly by the retention workflow. Each fixture can
 be viewed in human and JSON mode; the outcomes use `skit.add.v6` with a required
 `action` field.
+
+## Static image export
+
+The image exporter uses the real CLI presenters and recorded journey frames, with
+colour explicitly enabled. It adds a fixed dark ANSI palette, bundled JetBrains
+Mono regular/bold fonts, and a 2× PNG capture through Playwright. These are
+storybook development dependencies; the distributed CLI does not include them.
+
+One-time browser setup:
+
+```sh
+pnpm --filter @smolai/skit-storybook exec playwright install chromium
+```
+
+From the repository root:
+
+```sh
+pnpm cli:image --list
+pnpm cli:image add/added --command 'skit add ~/Work/skills/review' --output .tmp/cli-images/added.png
+pnpm cli:image failure/projection-conflict --output .tmp/cli-images/failure.png
+pnpm cli:image journey/preview-enable-portable-collection --frames
+pnpm cli:image journey/preview-enable-portable-collection --frame 1 --command 'skit enable' --output .tmp/cli-images/prompt.png
+```
+
+Story keys must match exactly. Journeys default to their final frame; `--frames`
+prints available frame indices and labels. Each journey runs once in disposable
+fixtures to obtain its recording. Frame selection does not drive the real CLI or
+repeat the operation. An optional `--command` is a display caption only.
+
+Outputs are relative to the invoking working directory. Each PNG has a
+self-contained HTML sibling with embedded fonts, for inspecting or sharing the
+render. Use `--columns 72` to change the content width (default 88), and
+`--detail full` for full command output. Long lines wrap to the selected width.
+No network resources are loaded by the generated HTML.
+
+This tool exports presenter output, not arbitrary live terminal sessions: it
+does not emulate cursor movement or terminal resizing. It preserves the CLI's
+existing colours rather than adding highlighting to uncoloured errors. Some
+journey frames contain temporary paths or fixture-generated identifiers; those
+need normalization before use as reproducible documentation assets. Unicode
+symbols outside the bundled Latin font subset may use platform fallback fonts.
+The exporter does not upload images or update Markdown automatically.
