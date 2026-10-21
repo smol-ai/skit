@@ -118,11 +118,12 @@ export const LibraryState = Schema.Struct({
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
 
-/** Effective global intent for this device; absence preserves the historical account-following mode. */
-export const effectiveGlobalBindings = (state: LibraryState): readonly DeviceBinding[] =>
-  state.device_skill_selection?.mode === "choose"
-    ? [state.device_skill_selection.binding]
-    : state.global_bindings;
+export {
+  effectiveGlobalBindings,
+  scopeBinding,
+  replaceScopeBinding,
+  pruneEmptyBindings,
+} from "./binding-intent.js";
 
 export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
   ...fields,

@@ -126,6 +126,82 @@ it.effect("global enablement changes the device choice without changing account 
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect.each(["follows-collection", "empty"] as const)(
+  "batch previews accumulate device choices with $ account bindings exactly as apply does",
+  (accountBinding) =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const collection = (yield* f.home.durable).collections[0];
+      assert.ok(collection);
+      yield* f.home.owned(
+        writingTo(
+          f.home.home,
+          LibraryStore.use((store) =>
+            Effect.flatMap(store.load, (state) =>
+              store.publish(
+                {
+                  ...state,
+                  global_bindings: [
+                    {
+                      scope: { kind: "global" },
+                      entries:
+                        accountBinding === "follows-collection"
+                          ? [{ kind: "collection", collection_id: collection.collection_id }]
+                          : [],
+                    },
+                  ],
+                  device_skill_selection: {
+                    mode: "choose",
+                    binding: { scope: { kind: "global" }, entries: [] },
+                  },
+                },
+                state,
+              ),
+            ),
+          ),
+        ),
+      );
+      const enabled = yield* f.home.owned(
+        previewBindingChanges(
+          [{ ...f.request, selectedSkills: ["alpha", "beta"] }],
+          f.home.bindings,
+        ),
+      );
+      yield* f.home.owned(applyBindingChanges(enabled));
+      const account = (yield* f.home.durable).global_bindings;
+      const selection = yield* f.home.owned(openBindingChangeSelection());
+      const before = yield* f.fs.readFileString(f.home.statePath);
+      const plan = yield* f.home.owned(
+        selection.previewMany(
+          ["alpha", "beta"].map((name) => ({
+            subject: f.request.query,
+            enabled: false,
+            members: [name],
+            where: [{ kind: "global" }],
+          })),
+          f.home.bindings,
+        ),
+      );
+      assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
+      assert.strictEqual(plan.changes[0]?.bindings[0]?.entries.length, 1);
+      assert.strictEqual(plan.changes[1]?.bindings[0]?.entries.length, 0);
+      const outcomes = yield* f.home.owned(applyBindingChanges(plan));
+      assert.deepStrictEqual(outcomes[0]?.value.bindings, plan.changes[0]?.bindings);
+      assert.deepStrictEqual(outcomes[1]?.value.bindings, []);
+      const after = yield* f.home.durable;
+      assert.deepStrictEqual(
+        after.global_bindings,
+        accountBinding === "follows-collection" ? account : [],
+      );
+      assert.deepStrictEqual(after.device_skill_selection, {
+        mode: "choose",
+        binding: { scope: { kind: "global" }, entries: [] },
+      });
+      assert.isFalse(yield* f.fs.exists(join(f.destination, "alpha")));
+      assert.isFalse(yield* f.fs.exists(join(f.destination, "beta")));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("retrying an already selected device Skill still checks unmanaged copies", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
