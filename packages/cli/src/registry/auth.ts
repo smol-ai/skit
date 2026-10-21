@@ -331,7 +331,28 @@ export const loginEffect = Effect.fn("Auth.login")(
       const body = yield* response.json.pipe(
         Effect.catchTag("HttpClientError", () => Effect.succeed({})),
       );
-      if (response.status === 401) return yield* new SignInRejected({ context });
+      if (response.status === 401) {
+        // Reset email is optional and some Registries do not expose this configuration.
+        // Never hide the original sign-in error if this informational request fails.
+        const resetEmail =
+          context === "Sign in"
+            ? yield* send(new URL("/api/ui/config", origin)).pipe(
+                Effect.flatMap((config) =>
+                  ok(config) ? config.json : Effect.fail(new Error("Configuration unavailable")),
+                ),
+                Effect.flatMap(
+                  Schema.decodeUnknownEffect(Schema.Struct({ email: Schema.Boolean })),
+                ),
+                Effect.map((config) => config.email),
+                Effect.timeout("2 seconds"),
+                Effect.orElseSucceed(() => undefined),
+              )
+            : undefined;
+        return yield* new SignInRejected({
+          context,
+          ...(resetEmail === undefined ? {} : { resetEmail }),
+        });
+      }
       if (response.status === 429) return yield* new TooManyAuthAttempts();
       const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
         Effect.map(({ error }) => error),

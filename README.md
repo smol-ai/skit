@@ -145,6 +145,8 @@ SKIT allows you to sync your skills across multiple machines.
 
 Create an account at `https://skit.smol.ai`, and log in using `skit auth login https://skit.smol.ai`.
 
+If sign-in fails, SKIT reports whether the Registry says email is configured. Email configuration alone does not prove delivery, and password-reset UI is not yet available in the CLI; ask the Registry operator for reset help.
+
 Alternatively, you can self-host the SKIT server.
 
 By default, each device follows the account's enabled Skills. To retain the whole
