@@ -80,8 +80,8 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
       Effect.provide(libraryStoreLayer({ home })),
       Effect.flip,
     );
-    if (failure._tag !== "Library.UpdateNotRefreshable")
-      return assert.fail(`Expected UpdateNotRefreshable, received ${failure._tag}`);
+    if (failure._tag !== "Library.CollectionNotUpdatable")
+      return assert.fail(`Expected CollectionNotUpdatable, received ${failure._tag}`);
     assert.strictEqual(failure.subject_id, added.collection_id);
     assert.strictEqual(failure.source, source);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

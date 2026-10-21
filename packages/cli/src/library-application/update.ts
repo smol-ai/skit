@@ -6,8 +6,8 @@ import {
   latestSubjectAcquisition,
   resolveOwningLibrarySubjects,
 } from "../workflows/library/subject-resolution.js";
-import { previewCollectionRefresh, refreshCollection } from "./collection-refresh.js";
-export { UpdateNotRefreshable } from "./collection-refresh.js";
+import { previewCollectionUpdate, updateCollection } from "./collection-update.js";
+export { CollectionNotUpdatable } from "./collection-update.js";
 
 export interface UpdateOptions {
   readonly roots: InventoryRootOptions;
@@ -32,7 +32,7 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
 export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (query?: string) {
   const state = yield* (yield* LibraryStore).load;
   const selected = yield* selectSubjects(state, query);
-  return yield* Effect.forEach(selected, (subject) => previewCollectionRefresh(state, subject));
+  return yield* Effect.forEach(selected, (subject) => previewCollectionUpdate(state, subject));
 });
 
 /** Preserve a uniform failure code; mixed success or failure types use the batch code. */
@@ -53,5 +53,5 @@ export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function
 ) {
   const state = yield* (yield* LibraryStore).load;
   const selected = yield* selectSubjects(state, query);
-  return yield* Effect.forEach(selected, (subject) => refreshCollection(state, subject, options));
+  return yield* Effect.forEach(selected, (subject) => updateCollection(state, subject, options));
 }, withLibraryWriter);
