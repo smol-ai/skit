@@ -2,6 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import {
   retainAuthoredCollectionUnderLockEffect,
@@ -216,4 +217,134 @@ for (const kind of ["observed", "authored"] as const) {
       assert.strictEqual(replaced.skills[0]?.local_version_id, undefined);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+}
+
+for (const kind of ["observed", "authored"] as const) {
+  for (const change of ["edit-member", "add-member", "remove-member"] as const) {
+    it.effect(`${kind} Collection outcome for ${change} preserves unaffected Versions`, () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-collection-outcome-" });
+        const home = join(root, "library");
+        const source = join(root, "source");
+        const write = Effect.fn("Test.writeCollectionMember")(function* (
+          name: string,
+          body: string,
+        ) {
+          const path = join(source, "skills", name);
+          yield* fs.makeDirectory(path, { recursive: true });
+          yield* fs.writeFileString(
+            join(path, "SKILL.md"),
+            `---\nname: ${name}\ndescription: ${name}\n---\n${body}\n`,
+          );
+        });
+        const machineId = makeMachineId();
+        const retain = Effect.fn("Test.retainCollectionOutcome")(function* (
+          names: readonly string[],
+        ) {
+          if (kind === "authored")
+            yield* fs.writeFileString(
+              join(source, "skit.json"),
+              JSON.stringify({
+                slug: "tools",
+                skills: names.map((name) => ({ name, path: `skills/${name}` })),
+              }),
+            );
+          const request = {
+            machineId,
+            source: { type: "local" as const, path: source },
+            input: source,
+            retainedAt: "2026-10-22T00:00:00.000Z",
+          };
+          return yield* Effect.scoped(
+            withLibraryWriter(
+              kind === "authored"
+                ? retainAuthoredCollectionUnderLockEffect({ ...request, root: source })
+                : retainObservedCollectionEffect({
+                    ...request,
+                    observations: [],
+                    skills: yield* Effect.forEach(names, (name) =>
+                      Effect.gen(function* () {
+                        const path = join(source, "skills", name);
+                        return {
+                          name,
+                          sourcePath: path,
+                          relativePath: `skills/${name}`,
+                          observedHash: yield* deterministicTreeHashEffect(path),
+                        };
+                      }),
+                    ),
+                  }),
+            ).pipe(inLibrary(home)),
+          );
+        });
+        yield* write("review", "original review");
+        yield* write("plan", "stable plan");
+        const initial = yield* retain(["review", "plan"]);
+        assert.strictEqual(initial.action, "added");
+        const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
+        const before = yield* store.load;
+        const planBefore = before.skills.find((skill) => skill.name === "plan");
+        const reviewBefore = before.skills.find((skill) => skill.name === "review");
+        assert.ok(planBefore);
+        assert.ok(reviewBefore);
+        if (change === "edit-member") yield* write("review", "updated review");
+        if (change === "add-member") yield* write("test", "new member");
+        if (change === "remove-member")
+          yield* fs.remove(join(source, "skills", "review"), { recursive: true });
+        const names =
+          change === "add-member"
+            ? ["review", "plan", "test"]
+            : change === "remove-member"
+              ? ["plan"]
+              : ["review", "plan"];
+        const result = yield* retain(names);
+        const after = yield* store.load;
+        assert.strictEqual(result.collection.collection_id, initial.collection.collection_id);
+        assert.strictEqual(after.collections.length, 1);
+        assert.strictEqual(after.acquisitions.length, 2);
+        assert.deepStrictEqual(result.skills.map((skill) => skill.name).sort(), [...names].sort());
+        assert.deepStrictEqual(
+          currentCollectionSkills(after, initial.collection.collection_id)
+            .map((skill) => skill.name)
+            .sort(),
+          [...names].sort(),
+        );
+        const planAfter = after.skills.find((skill) => skill.skill_id === planBefore.skill_id);
+        const reviewAfter = after.skills.find((skill) => skill.skill_id === reviewBefore.skill_id);
+        assert.ok(planAfter);
+        assert.ok(reviewAfter);
+        assert.deepStrictEqual(planAfter, planBefore);
+        assert.strictEqual(
+          currentSkillVersion(after, planAfter)?.skill_version_id,
+          currentSkillVersion(before, planBefore)?.skill_version_id,
+        );
+        if (change === "edit-member") {
+          assert.strictEqual(result.action, "updated");
+          assert.strictEqual(reviewAfter.versions.length, reviewBefore.versions.length + 1);
+          assert.notStrictEqual(
+            currentSkillVersion(after, reviewAfter)?.skill_version_id,
+            currentSkillVersion(before, reviewBefore)?.skill_version_id,
+          );
+        } else if (change === "add-member") {
+          assert.strictEqual(result.action, "updated");
+          assert.deepStrictEqual(reviewAfter, reviewBefore);
+          const added = after.skills.find((skill) => skill.name === "test");
+          assert.ok(added);
+          assert.strictEqual(added.versions.length, 1);
+          assert.ok(currentSkillVersion(after, added));
+        } else {
+          // A removed upstream member keeps its last Version, but leaves current membership.
+          assert.strictEqual(result.action, "unchanged");
+          assert.deepStrictEqual(reviewAfter, reviewBefore);
+          assert.strictEqual(
+            currentSkillVersion(after, reviewAfter)?.skill_version_id,
+            currentSkillVersion(before, reviewBefore)?.skill_version_id,
+          );
+        }
+        assert.strictEqual((yield* retain(names)).action, "unchanged");
+        assert.strictEqual((yield* store.load).acquisitions.length, 2);
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    );
+  }
 }
