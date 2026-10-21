@@ -37,3 +37,8 @@ the existing storybook text/canvas colours. The header labels the palette as
 The storybook controls retain their existing UI palette.
 
 Run the terminal/key-input smoke check with `pnpm --filter @smolai/skit-storybook test:preview`.
+
+The `add/added`, `add/updated` and `add/unchanged` fixtures show each source
+acquisition outcome. `add/outcome-unavailable` shows the neutral fallback when
+post-acquisition reporting could not determine the outcome. Each fixture can be
+viewed in human and JSON mode; the outcomes use `skit.add.v6`.
