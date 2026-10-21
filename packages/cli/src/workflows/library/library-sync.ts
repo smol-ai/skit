@@ -8,7 +8,10 @@ import {
   type LibraryManifest,
   type ProjectionTarget,
   type RestoreObserver,
-  effectiveGlobalBindings,
+  deviceInstallationIntent,
+  prepareDeviceInstallation,
+  withDeviceSkillSelection,
+  sameDeviceSkillSelection,
   bindingSkillIds,
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-inspection.js";
@@ -128,14 +131,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           options.deviceSelection === "follow-account"
             ? { mode: "follow-account" as const }
             : yield* selectDeviceSkills(emptyManifest, options.deviceSelection);
-        yield* store.publish(
-          {
-            ...state,
-            device_skill_selection: selection,
-            pending_device_selection_origin: options.origin,
-          },
-          state,
-        );
+        yield* store.publish(withDeviceSkillSelection(state, selection, options.origin), state);
       }
       return { status: "clean" as const, changed: false };
     }
@@ -183,47 +179,28 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     if (merge._tag === "InvalidResolution")
       return { status: "resolution_invalid" as const, ...revision };
     if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
-    const { pending_device_selection_origin: _pendingOrigin, ...mergedDevice } = merge.device;
     const selected =
       options.deviceSelection === undefined
-        ? merge.device.device_skill_selection
+        ? undefined
         : options.deviceSelection === "follow-account"
           ? { mode: "follow-account" as const }
           : yield* selectDeviceSkills(merge.manifest, options.deviceSelection);
-    const device =
-      selected === undefined ? mergedDevice : { ...mergedDevice, device_skill_selection: selected };
-    const choosing = selected?.mode === "choose";
+    const device = withDeviceSkillSelection(merge.device, selected);
+    const installation = prepareDeviceInstallation(device, merge.manifest);
+    const choosing = installation.independent;
     if (choosing && options.keepEnabled?.length)
       return yield* new OptionCombinationInvalid({
         detail:
           "--keep-enabled changes account bindings and cannot be combined with a device selection.",
       });
-    const missingSelection: string[] = [];
-    const localBindings = choosing
-      ? effectiveGlobalBindings(device).map((binding) => ({
-          ...binding,
-          entries: binding.entries.filter((entry) => {
-            const present =
-              entry.kind === "skill"
-                ? merge.manifest.skills.some((skill) => skill.skill_id === entry.skill_id)
-                : merge.manifest.collections.some(
-                    (collection) => collection.collection_id === entry.collection_id,
-                  );
-            if (!present)
-              missingSelection.push(
-                `The selected ${entry.kind} ${entry.kind === "skill" ? entry.skill_id : entry.collection_id} is no longer in the Library; update this device's selection.`,
-              );
-            return present;
-          }),
-        }))
-      : [];
-    const projectionManifest = choosing
-      ? { ...merge.manifest, bindings: localBindings }
-      : merge.manifest;
+    const missingSelection = installation.missing.map(
+      (entry) =>
+        `The selected ${entry.kind} ${entry.kind === "skill" ? entry.skill_id : entry.collection_id} is no longer in the Library; update this device's selection.`,
+    );
     const collision = yield* observer.around(
       { kind: "check-destinations" },
       resolveSyncProjectionCollisionsEffect(
-        projectionManifest,
+        installation.manifest,
         options.projection?.rootFor,
         options.keepEnabled,
         device,
@@ -232,8 +209,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
     if (collision.conflicts.length && !choosing)
       return conflicted(collision.conflicts, remote?.revision_id);
-    const desired = choosing ? merge.manifest : collision.manifest;
-    const effectiveManifest = choosing ? projectionManifest : desired;
+    const { account: desired, installation: effectiveManifest } = installation.resolveBindings(
+      collision.manifest.bindings,
+    );
     const transition = yield* observer.around(
       { kind: "check-projections" },
       prepareSyncDeviceTransition({
@@ -256,15 +234,14 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         const sync_ancestry = ancestryAt(remote, remoteManifest);
         if (
           canonicalJson(local.state.sync_ancestry ?? null) !== canonicalJson(sync_ancestry) ||
-          canonicalJson(local.state.device_skill_selection ?? null) !==
-            canonicalJson(device.device_skill_selection ?? null)
+          !sameDeviceSkillSelection(local.state, device)
         )
           yield* store
             .publish({ ...device, sync_ancestry }, local.state)
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       }
       const projections = options.apply
-        ? yield* reconcileSelected(remoteManifest.bindings)
+        ? yield* reconcileSelected()
         : { projected: 0, retired: 0, issues: [] as string[] };
       return {
         status: projections.issues.length ? ("enablement_incomplete" as const) : ("clean" as const),
@@ -339,7 +316,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged()))),
     );
 
-    const projections = yield* reconcileSelected(desired.bindings);
+    const projections = yield* reconcileSelected();
     const syncStatus =
       remote === null
         ? ("pushed" as const)
@@ -358,14 +335,13 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       plan,
     };
 
-    function reconcileSelected(bindings: LibraryManifest["bindings"]) {
+    function reconcileSelected() {
       return Effect.gen(function* () {
         if (!choosing) {
           const result = yield* observer.around(
             { kind: "enable" },
             reconcileLibraryProjections({
               ...projectionOptions,
-              desiredGlobalBindings: bindings,
               includeRepositoryBindings: true,
             }),
           );
@@ -379,7 +355,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         const state = yield* store.load;
         if (choosing && options.inventory !== undefined) {
           const ids = new Set(
-            effectiveGlobalBindings(state).flatMap((binding) => bindingSkillIds(state, binding)),
+            deviceInstallationIntent(state).bindings.flatMap((binding) =>
+              bindingSkillIds(state, binding),
+            ),
           );
           const names = state.skills
             .filter((skill) => ids.has(skill.skill_id))
@@ -405,7 +383,6 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
             { kind: "enable" },
             reconcileLibraryProjections({
               ...projectionOptions,
-              desiredGlobalBindings: bindings,
               includeRepositoryBindings: true,
             }),
           ),
@@ -418,7 +395,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           };
         const after = yield* store.load;
         const ids = new Set(
-          effectiveGlobalBindings(after).flatMap((binding) => bindingSkillIds(after, binding)),
+          deviceInstallationIntent(after).bindings.flatMap((binding) =>
+            bindingSkillIds(after, binding),
+          ),
         );
         for (const projection of after.projections.filter(
           (item) =>

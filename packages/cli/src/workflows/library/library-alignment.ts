@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   Upstream,
+  remapBindingEntities,
   type BindingEntry,
   type CollectionId,
   type LibraryManifest,
@@ -147,21 +148,8 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
  * reidentified Skill must be retired before a state carrying these aliases is published.
  */
 export function aliasDevice(state: LibraryState, aliases: LibraryAliases): LibraryState {
-  const policies = (
-    binding: LibraryState["global_bindings"][number] | LibraryState["local_bindings"][number],
-  ) =>
-    binding.invocation_policies === undefined
-      ? {}
-      : {
-          invocation_policies: Object.fromEntries(
-            Object.entries(binding.invocation_policies).map(([id, policy]) => [
-              aliases.skills.find((alias) => alias.from === id)?.to ?? id,
-              policy,
-            ]),
-          ),
-        };
   return {
-    ...state,
+    ...remapBindingEntities(state, aliases),
     collections: state.collections.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
@@ -171,30 +159,6 @@ export function aliasDevice(state: LibraryState, aliases: LibraryAliases): Libra
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
-    global_bindings: state.global_bindings.map((binding) => ({
-      ...binding,
-      ...policies(binding),
-      entries: binding.entries.map((entry) => bindingEntry(entry, aliases)),
-    })),
-    local_bindings: state.local_bindings.map((binding) => ({
-      ...binding,
-      ...policies(binding),
-      entries: binding.entries.map((entry) => bindingEntry(entry, aliases)),
-    })),
-    ...(state.device_skill_selection?.mode !== "choose"
-      ? {}
-      : {
-          device_skill_selection: {
-            mode: "choose" as const,
-            binding: {
-              ...state.device_skill_selection.binding,
-              ...policies(state.device_skill_selection.binding),
-              entries: state.device_skill_selection.binding.entries.map((entry) =>
-                bindingEntry(entry, aliases),
-              ),
-            },
-          },
-        }),
     projections: state.projections.map((projection) => {
       const skill = skillId(projection.skill_id, aliases);
       return {

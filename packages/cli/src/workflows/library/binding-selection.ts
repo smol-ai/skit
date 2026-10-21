@@ -4,6 +4,7 @@ import {
   currentCollectionSkills,
   DeviceBinding,
   effectiveGlobalBindings,
+  scopeBinding,
   RepositoryBinding,
   type LibraryState,
   type SkillId,
@@ -23,15 +24,6 @@ export interface BindingSelection {
   readonly enabled: boolean;
   readonly invocation?: InvocationOption;
 }
-
-/** The one Binding at a Scope, if anything is enabled there. */
-export const scopeBinding = (
-  state: LibraryState,
-  scope: SkitBindingScope,
-): DeviceBinding | RepositoryBinding | undefined =>
-  scope.kind === "global"
-    ? effectiveGlobalBindings(state)[0]
-    : state.local_bindings.find((binding) => resolve(binding.scope.root) === resolve(scope.root));
 
 /** Binding policy only: no filesystem, storage, target discovery, or presentation. */
 export const calculateBindingChange = Effect.fn("LibraryBindings.calculate")(function* (

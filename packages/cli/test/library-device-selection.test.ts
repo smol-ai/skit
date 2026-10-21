@@ -64,6 +64,88 @@ it.effect("removing a Collection prunes its device choice without leaving choose
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("remote removal reports a missing device choice without silently pruning it", () =>
+  Effect.gen(function* () {
+    const { a, b, remote } = yield* devices;
+    const first = yield* a.retain("first");
+    yield* a.retain("second");
+    yield* a.sync();
+    yield* b.sync({ deviceSelection: { skills: ["first", "second"], collections: [] } });
+    const selected = (yield* b.state).device_skill_selection;
+    yield* a.remove(first.collection.collection_id);
+    yield* a.sync();
+    const head = yield* remote;
+    for (const _attempt of [1, 2]) {
+      const result = yield* b.sync();
+      assert.strictEqual(result.status, "enablement_incomplete");
+      if (result.status === "enablement_incomplete")
+        assert.isTrue(
+          result.enablement_issues?.some((issue) => issue.includes("no longer in the Library")),
+        );
+      const state = yield* b.state;
+      assert.deepStrictEqual(state.device_skill_selection, selected);
+      assert.isFalse(
+        state.collections.some(
+          (collection) => collection.collection_id === first.collection.collection_id,
+        ),
+      );
+      assert.deepStrictEqual(yield* remote, head);
+    }
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "identity alignment preserves device entries and invocation policy without changing account intent",
+  () =>
+    Effect.gen(function* () {
+      const { a, b, remote, fs } = yield* devices;
+      const published = yield* a.retain("first");
+      const local = yield* b.retain("first");
+      const publishedSkill = published.skills[0];
+      const localSkill = local.skills[0];
+      assert.ok(publishedSkill);
+      assert.ok(localSkill);
+      yield* a.edit((state) => ({
+        ...state,
+        global_bindings: [
+          {
+            scope: { kind: "global" },
+            entries: [{ kind: "collection", collection_id: published.collection.collection_id }],
+          },
+        ],
+      }));
+      yield* a.sync();
+      const account = (yield* remote)?.manifest.bindings;
+      yield* b.edit((state) => ({
+        ...state,
+        device_skill_selection: {
+          mode: "choose",
+          binding: {
+            scope: { kind: "global" },
+            entries: [
+              { kind: "skill", skill_id: localSkill.skill_id },
+              { kind: "collection", collection_id: local.collection.collection_id },
+            ],
+            invocation_policies: { [localSkill.skill_id]: "explicit" },
+          },
+        },
+      }));
+      const result = yield* b.sync({ adopt: true });
+      assert.strictEqual(result.status, "merged");
+      const state = yield* b.state;
+      const binding = effectiveGlobalBindings(state)[0];
+      assert.deepStrictEqual(binding?.entries, [
+        { kind: "skill", skill_id: publishedSkill.skill_id },
+        { kind: "collection", collection_id: published.collection.collection_id },
+      ]);
+      assert.deepStrictEqual(binding?.invocation_policies, {
+        [publishedSkill.skill_id]: "explicit",
+      });
+      assert.deepStrictEqual((yield* remote)?.manifest.bindings, account);
+      assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("retains the full account Library while persisting an individual device choice", () =>
   Effect.gen(function* () {
     const { a, b, c, fs, remote } = yield* devices;
