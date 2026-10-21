@@ -319,7 +319,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const skills = persistedSkills.map((skill) =>
     successor.skills.find((candidate) => candidate.skill_id === skill.skill_id)!,
   );
-  const action = added ? "added" : versionsChanged ? "updated" : "unchanged";
+  const action = added
+    ? ("added" as const)
+    : versionsChanged
+      ? ("updated" as const)
+      : ("unchanged" as const);
   yield* store.publish(successor, base);
   return { action, collection, skills, ...receipt };
 });
