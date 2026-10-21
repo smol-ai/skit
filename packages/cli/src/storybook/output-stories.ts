@@ -724,6 +724,29 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     }),
   ),
   resultStory(
+    "update-projection",
+    "use-library-preview",
+    result("projectionRepair", {
+      skill_id: skillId,
+      skill_name: "review",
+      path: "/home/story/.agents/skills/review",
+      status: "preview",
+      review_token: "a".repeat(64),
+    }),
+  ),
+  resultStory(
+    "update-projection",
+    "use-library-applied",
+    result("projectionRepair", {
+      skill_id: skillId,
+      skill_name: "review",
+      path: "/home/story/.agents/skills/review",
+      status: "installed",
+      backup_path: "/home/story/.agents/.skit-backups/kept-review",
+      backup_status: "saved",
+    }),
+  ),
+  resultStory(
     "remove",
     "preview",
     result("removePlan", {

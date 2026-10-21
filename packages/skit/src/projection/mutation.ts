@@ -81,6 +81,8 @@ export interface MaterializeProjectionRequest {
     projectionId: ProjectionIdType;
     observedHash: Digest;
     marker: OwnershipMarker;
+    /** Explicitly choosing the Library permits replacing the reviewed different bytes. */
+    allowDifferent?: boolean;
   };
   state: ProjectionState;
   identity: {
@@ -360,10 +362,12 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           request.replacement !== undefined &&
           request.replacement.projectionId === projectionId &&
           request.replacement.observedHash === observed &&
-          observed === desiredHash &&
           marker !== null &&
           sameMarker(marker, request.replacement.marker);
-        if (replacementMatches) return yield* commit("marker", "replacement");
+        if (replacementMatches && observed === desiredHash)
+          return yield* commit("marker", "replacement");
+        if (replacementMatches && request.replacement?.allowDifferent)
+          return yield* commit("replace", "reviewed replacement");
         if (!marker || !markerMatches(marker, request)) {
           if (
             markerInspection.kind === "absent" &&

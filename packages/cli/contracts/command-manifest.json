@@ -2138,7 +2138,8 @@
         "skit.update.v8",
         "skit.update.plan.v6",
         "skit.update.projection-retention.v2",
-        "skit.update.projection-retention.plan.v2"
+        "skit.update.projection-retention.plan.v2",
+        "skit.update.projection-repair.v1"
       ],
       "exitCodes": [
         0,
@@ -2151,7 +2152,9 @@
       "interactive": false,
       "examples": [
         "skit update --dry-run",
-        "skit update my-skill --from-projection claude-code --dry-run"
+        "skit update my-skill --from-projection claude-code --dry-run",
+        "skit update my-skill --from-projection agents --diff",
+        "skit update my-skill --from-projection agents --use-library --dry-run"
       ],
       "positionals": [
         {
@@ -2169,6 +2172,21 @@
           "type": "string",
           "valueName": "string",
           "description": "Retain changed bytes from this Projection ID, Harness, or path."
+        },
+        "diff": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Review the Library source and installed copy with a scrollable diff; no changes are applied."
+        },
+        "use-library": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Replace the reviewed installed copy with the Library version, preserving the old copy in a backup."
+        },
+        "review": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Apply the exact conflict review token printed by the preview."
         },
         "json": {
           "type": "boolean",
