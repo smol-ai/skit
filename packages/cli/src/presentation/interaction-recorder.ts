@@ -35,6 +35,8 @@ export type InteractionEvent = Data.TaggedEnum<{
   StatusStarted: { readonly message: string };
   StatusUpdated: { readonly message: string };
   StatusEnded: {};
+  /** Explicit stderr progress persists in human and JSON modes. */
+  Progress: { readonly message: string };
   Result: { readonly result: CommandResult };
   Failure: { readonly failure: CommandFailure };
   Help: { readonly text: string };
@@ -183,6 +185,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
       record(InteractionEvent.Note({ title, body, ...(options === undefined ? {} : options) })),
     step: (step, body) => record(InteractionEvent.Step({ ...step, body })),
     updateStatus: (message) => record(InteractionEvent.StatusUpdated({ message })),
+    progress: (message) => record(InteractionEvent.Progress({ message })),
     withStatus: (status, operation) =>
       record(
         InteractionEvent.StatusStarted({

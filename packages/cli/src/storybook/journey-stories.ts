@@ -21,7 +21,8 @@ import {
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import { presentSetEnabled } from "../handlers/library/set-enabled.js";
 import type { Prompter } from "../presentation/prompter.js";
-import type { Renderer } from "../presentation/renderer.js";
+import { Renderer } from "../presentation/renderer.js";
+import { setupCompletion, setupOverviewTitle, setupStepPlan } from "../presentation/setup-steps.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
 import { openLibrarySession } from "../library-application/session.js";
 
@@ -217,6 +218,26 @@ const previewDoctorCleanup = Effect.scoped(
 ).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer));
 
 export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
+  {
+    name: "setup/guidance",
+    initialState: "Presentation fixture · setup overview and completion messages",
+    answers: [],
+    run: Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      yield* renderer.note(setupStepPlan({ scanRepositories: true }).overview, setupOverviewTitle);
+      yield* renderer.note(setupCompletion.body, setupCompletion.title);
+      return "Presentation only · no setup changes applied";
+    }),
+    finalState: (state) => state,
+  },
+  {
+    name: "library-sync/explicit-progress",
+    initialState: "Fresh fixture device · sync --apply --progress (human or JSON)",
+    answers: [],
+    run: syncJourney(false, true).pipe(Effect.provide(skitConfigurationLayer())),
+    finalState: (state) => state,
+  },
+
   {
     name: "doctor/cleanup-preview",
     initialState: "Codex listing ~12,000 / 10,000 tokens · no retained usage transcripts",

@@ -6,6 +6,7 @@ import {
 } from "../presentation/interaction-recorder.js";
 import {
   renderFailureFrame,
+  renderHelpFrame,
   renderNoteFrame,
   renderResultFrame,
   type TerminalEnvironment,
@@ -16,6 +17,9 @@ import type { RecordedJourney } from "./journey-runner.js";
 export interface ReplayFrame {
   readonly label: string;
   readonly output: string;
+  /** Captured streams are separate even when the terminal preview interleaves them. */
+  readonly stdout?: string;
+  readonly stderr?: string;
   readonly status?: string;
   readonly prompt?: string;
 }
@@ -28,6 +32,13 @@ export function journeyFrames(
   const color = createColors(environment.color);
   const frames: ReplayFrame[] = [{ label: "Ready", output: "" }];
   let output = "";
+  let stdout = "";
+  let stderr = "";
+  const append = (frame: { readonly stdout: string; readonly stderr: string }) => {
+    stdout += frame.stdout;
+    stderr += frame.stderr;
+    output += frame.stdout + frame.stderr;
+  };
   let status: string | undefined;
   let prompt: Extract<Event, { _tag: "PromptShown" }> | undefined;
   const promptText = () =>
@@ -55,20 +66,29 @@ export function journeyFrames(
         status = undefined;
         label = "Status cleared";
       },
+      Progress: ({ message }) => {
+        const line = `${stripVTControlCharacters(message).replace(/[\r\n\t]/g, " ")}\n`;
+        append({ stdout: "", stderr: line });
+        label = `Progress: ${message}`;
+      },
       Note: ({ body, title, renderBody }) => {
-        output += renderNoteFrame(
-          renderBody?.(environment.color) ?? body,
-          color.bold(title),
-          environment.format,
-        ).stderr;
+        append(
+          renderNoteFrame(
+            renderBody?.(environment.color) ?? body,
+            color.bold(title),
+            environment.format,
+          ),
+        );
         label = title;
       },
       Step: ({ index, total, title, body }) => {
-        output += renderNoteFrame(
-          body,
-          `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`,
-          environment.format,
-        ).stderr;
+        append(
+          renderNoteFrame(
+            body,
+            `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`,
+            environment.format,
+          ),
+        );
         label = title;
       },
       PromptShown: (event) => {
@@ -82,23 +102,26 @@ export function journeyFrames(
             prompt?.choices.find((choice) => choice.value === value)?.label ??
             (value === true ? "yes" : value === false ? "no" : String(value)),
         );
-        output += `${color.green("✔")} ${prompt?.message ?? "Answer"} … ${labels.join(", ")}\n`;
+        append({
+          stdout: "",
+          stderr: `${color.green("✔")} ${prompt?.message ?? "Answer"} … ${labels.join(", ")}\n`,
+        });
         prompt = undefined;
         label = "Scripted answer";
       },
       Result: ({ result }) => {
         const frame = renderResultFrame(result, environment);
-        output += frame.stdout + frame.stderr;
+        append(frame);
         status = undefined;
         label = "Result";
       },
       Failure: ({ failure }) => {
-        output += renderFailureFrame(failure, environment.format).stderr;
+        append(renderFailureFrame(failure, environment.format));
         status = undefined;
         label = "Failed";
       },
       Help: ({ text }) => {
-        output += `${text}\n`;
+        append(renderHelpFrame(text, environment.format));
         label = "Help";
       },
     });
@@ -113,6 +136,8 @@ export function journeyFrames(
     frames.push({
       label,
       output,
+      stdout,
+      stderr,
       ...(status === undefined ? {} : { status }),
       ...(prompt === undefined ? {} : { prompt: promptText() }),
     });

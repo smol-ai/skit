@@ -50,3 +50,9 @@ export const setupPrompts = {
   skills: "Choose a copy to add, or mark Remove",
   confirm: "Apply these changes?",
 } as const;
+
+/** Shared by the setup command and its presentation-only Storybook journey. */
+export const setupCompletion = {
+  title: "Setup complete",
+  body: "Selected setup changes were applied on this device.\n\nTo sync your Library between devices, run `skit auth login` and then `skit sync` to review the plan. Sync is separate from setup.",
+} as const;

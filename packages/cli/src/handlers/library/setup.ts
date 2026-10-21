@@ -16,6 +16,7 @@ import { compactHomePath } from "../../presentation/home-path.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   setupOverviewTitle,
+  setupCompletion,
   setupPrompts,
   setupStepPlan,
   type SetupStepPlan,
@@ -151,10 +152,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       `Removed installed locations are saved at ${plan.summary.removals.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
       "Removed copies saved",
     );
-  yield* renderer.note(
-    "Selected setup changes were applied on this device.\n\nTo sync your Library between devices, run `skit auth login` and then `skit sync` to review the plan. Sync is separate from setup.",
-    "Setup complete",
-  );
+  yield* renderer.note(setupCompletion.body, setupCompletion.title);
   yield* offerSkillsShUpdateCheck();
   return applied.observed;
 });

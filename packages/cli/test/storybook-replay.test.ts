@@ -49,3 +49,38 @@ it.effect("a failed-download preview clears status and shows the command failure
     expect(frames.at(-1)?.output).not.toContain("Library synced.");
   }),
 );
+
+/* oxlint-disable skit/no-cli-output-text-assertions -- Replay stream routing is the behavior under test; progress has no JSON representation. */
+it.effect.each(["human", "json"] as const)(
+  "replays explicit sync progress on stderr with %s results on stdout",
+  (format) =>
+    Effect.gen(function* () {
+      const story = journeyStories.find((story) => story.name === "library-sync/explicit-progress");
+      expect(story).toBeDefined();
+      if (!story) return;
+      const recording = yield* recordJourney(story);
+      const frames = journeyFrames(recording, { ...defaultTerminalEnvironment, format });
+      const progress = frames.find(
+        (frame) => frame.label === "Progress: Downloading 3 Skill copies · 0/3",
+      );
+      expect(progress).toBeDefined();
+      expect(progress?.stdout).toBe("");
+      expect(progress?.stderr).toContain("Downloading 3 Skill copies · 0/3\n");
+      const final = frames.at(-1);
+      expect(final?.stderr).toContain("Downloading 3 Skill copies · 3/3\n");
+      expect(final?.stdout).not.toContain("Downloading");
+      if (format === "json") {
+        expect(JSON.parse(final?.stdout ?? "")).toMatchObject({
+          schema: "skit.library.sync.v11",
+          data: { status: "pulled" },
+        });
+        expect(frames.every((frame) => frame.status === undefined)).toBe(true);
+        expect(final?.stderr).not.toContain("Library sync plan");
+      } else {
+        expect(final?.stdout).toContain("Library synced.");
+        expect(final?.stderr).toContain("Library sync plan");
+      }
+    }),
+);
+
+/* oxlint-enable skit/no-cli-output-text-assertions */
