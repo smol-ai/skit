@@ -201,6 +201,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
           Schema.toEquivalence(SourceIdentity)(acquisition.source_identity, source),
         )),
   );
+  const added = collection === undefined;
   if (collection === undefined) {
     collection = {
       collection_id: makeCollectionId(),
@@ -249,11 +250,13 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     }) &&
     unchangedSkills.every((skill) => skill !== undefined)
   )
-    return { collection, skills: unchangedSkills, ...receipt };
+    return { action: "unchanged" as const, collection, skills: unchangedSkills, ...receipt };
   const previousCopy = state.retained_copies.find(
     (copy) => copy.retained_copy_id === previous?.retained_copy_id,
   );
   const persistedSkills = [];
+  // Acquisition metadata can change without changing the Versions the Library uses.
+  let versionsChanged = false;
   for (const fact of request.facts) {
     let skill = skillAt(fact.sourcePath);
     if (skill === undefined) {
@@ -279,7 +282,10 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     const previousMember = previousCopy?.members.find(
       (member) => member.source_path === fact.sourcePath,
     );
-    if (previousMember?.artifact_digest !== fact.artifactDigest) delete skill.local_version_id;
+    if (previousMember?.artifact_digest !== fact.artifactDigest) {
+      delete skill.local_version_id;
+      versionsChanged = true;
+    }
   }
   if (retainedCopy === undefined)
     state.retained_copies.push({
@@ -310,14 +316,16 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         }),
     ),
   );
+  const skills = persistedSkills.map((skill) =>
+    successor.skills.find((candidate) => candidate.skill_id === skill.skill_id)!,
+  );
+  const action = added
+    ? ("added" as const)
+    : versionsChanged
+      ? ("updated" as const)
+      : ("unchanged" as const);
   yield* store.publish(successor, base);
-  return {
-    collection,
-    skills: persistedSkills.map((skill) =>
-      successor.skills.find((candidate) => candidate.skill_id === skill.skill_id)!,
-    ),
-    ...receipt,
-  };
+  return { action, collection, skills, ...receipt };
 });
 
 /** Retain observed bytes and return their receipt while the caller holds Library write authority. */

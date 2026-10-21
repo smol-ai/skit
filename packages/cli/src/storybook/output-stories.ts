@@ -214,16 +214,19 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       archive_cleanup: "complete",
     }),
   ),
-  resultStory(
-    "add",
-    "retained",
-    result("add", {
-      collection_id: collectionId,
-      skill_ids: [skillId],
-      retained_version_id: versionId,
-      snapshot_digest: digest,
-      skills: [{ name: "review", verbatim_path: "." }],
-    }),
+  ...(["added", "updated", "unchanged"] as const).map((action) =>
+    resultStory(
+      "add",
+      action,
+      result("add", {
+        action,
+        collection_id: collectionId,
+        skill_ids: [skillId],
+        retained_version_id: versionId,
+        snapshot_digest: digest,
+        skills: [{ name: "review", verbatim_path: "." }],
+      }),
+    ),
   ),
   resultStory(
     "add",

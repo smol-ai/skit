@@ -234,7 +234,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.add.v5",
+        "skit.add.v6",
         "skit.add.preview.v4"
       ],
       "exitCodes": [

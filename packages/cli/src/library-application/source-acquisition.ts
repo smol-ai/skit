@@ -208,6 +208,7 @@ export const retainLibrarySourceEffect = Effect.fn("Library.addSource")(function
                 observations: [],
               });
         return {
+          action: retained.action,
           collection_id: retained.collection.collection_id,
           skill_ids: retained.skills.map((skill) => skill.skill_id),
           retained_version_id: retained.retainedCopyId,

@@ -22,8 +22,8 @@ import { sourceLocator } from "@smolai/skit-core";
 import { sourceFromUpstream } from "../workflows/library/upstream-source.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class UpdateNotRefreshable
-  extends Data.TaggedError("Library.UpdateNotRefreshable")<{
+export class CollectionNotUpdatable
+  extends Data.TaggedError("Library.CollectionNotUpdatable")<{
     subject_id: string;
     label: string;
     source?: string;
@@ -49,7 +49,7 @@ const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
   const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
   const resolved = upstream === undefined ? undefined : sourceFromUpstream(upstream);
   if (resolved === undefined)
-    return yield* new UpdateNotRefreshable({
+    return yield* new CollectionNotUpdatable({
       subject_id: subject.subjectId,
       label: subject.label,
       ...(sourceInput === undefined ? {} : { source: sourceInput }),
@@ -58,7 +58,7 @@ const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
 });
 
 /**
- * What a refresh of one Collection means for this device: Skills a followed Collection enables
+ * What an update of one Collection means for this device: Skills a followed Collection enables
  * or retires, enabled Skills that changed, individually enabled Skills kept after upstream
  * deleted them, and how many new Skills nothing enables. Unenabled Skills are only counted, so a
  * Source with thousands of Skills stays readable.
@@ -117,7 +117,7 @@ const skillChanges = (
   };
 };
 
-const resolveRefresh = Effect.fn("Library.resolveCollectionRefresh")(function* (
+const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
 ) {
@@ -129,17 +129,20 @@ const resolveRefresh = Effect.fn("Library.resolveCollectionRefresh")(function* (
           (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
         );
   if (acquisition === undefined || priorTree === undefined)
-    return yield* new UpdateNotRefreshable({ subject_id: subject.subjectId, label: subject.label });
+    return yield* new CollectionNotUpdatable({
+      subject_id: subject.subjectId,
+      label: subject.label,
+    });
   const input = yield* subjectSourceEffect(subject, acquisition.input.value);
   return { acquisition, priorTree, input };
 });
 
 /** Observe one Collection without retaining content or reconciling Projections. */
-export const previewCollectionRefresh = Effect.fn("Library.previewCollectionRefresh")(function* (
+export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
 ) {
-  const { acquisition, priorTree: tree, input } = yield* resolveRefresh(state, subject);
+  const { acquisition, priorTree: tree, input } = yield* resolveUpdate(state, subject);
   const inspected = yield* inspectLibrarySourceEffect(
     input,
     undefined,
@@ -191,10 +194,10 @@ const canonicalStoragePath = Effect.fn("Library.canonicalStoragePath")(function*
 });
 
 /**
- * Own one refresh through scope cleanup. Recoverable failures report persisted evidence;
+ * Own one update through scope cleanup. Recoverable failures report persisted evidence;
  * shared-storage failures, interruption and programming defects remain failures of the action.
  */
-export const refreshCollection = Effect.fn("Library.refreshCollection")(function* (
+export const updateCollection = Effect.fn("Library.updateCollection")(function* (
   state: LibraryState,
   before: LibrarySubject,
   options: { readonly roots: InventoryRootOptions },
@@ -207,7 +210,7 @@ export const refreshCollection = Effect.fn("Library.refreshCollection")(function
   let sourceRetained = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const { priorTree, input } = yield* resolveRefresh(state, before);
+      const { priorTree, input } = yield* resolveUpdate(state, before);
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
       const retained = yield* progress.around(

@@ -14,6 +14,7 @@ export const AddPreview = Schema.Struct({
 export type AddPreview = typeof AddPreview.Type;
 
 export const AddResult = Schema.Struct({
+  action: Schema.Literals(["added", "updated", "unchanged"]),
   collection_id: Schema.optionalKey(Schema.String),
   skill_ids: Schema.Array(Schema.String),
   retained_version_id: Schema.String,

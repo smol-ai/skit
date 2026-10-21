@@ -870,10 +870,14 @@ const contractPresenters: ContractPresenters = {
   authorList: renderAuthorList,
   add: (data) => {
     const count = data.skills.length;
-    return [
-      `Added ${count} ${count === 1 ? "skill" : "skills"} to your library.`,
-      ...sourceDiagnosticLines(data.diagnostics),
-    ].join("\n");
+    const noun = plural(count, "skill");
+    const summary =
+      data.action === "updated"
+        ? `Updated ${noun} in your Library.`
+        : data.action === "unchanged"
+          ? `${noun} already ${count === 1 ? "has" : "have"} the current retained version.`
+          : `Added ${noun} to your Library.`;
+    return [summary, ...sourceDiagnosticLines(data.diagnostics)].join("\n");
   },
   addPreview: (data) => {
     const count = data.skills.length;
