@@ -15,7 +15,6 @@ import * as MachineSettings from "./machine-settings.js";
 import { acquisitionObservations } from "./acquisition-evidence.js";
 import {
   Acquisition,
-  currentSkillVersion,
   type MaterializationProfile,
   type SkitSource,
   sourceAcquisitions,
@@ -256,6 +255,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     (copy) => copy.retained_copy_id === previous?.retained_copy_id,
   );
   const persistedSkills = [];
+  // Acquisition metadata can change without changing the Versions the Library uses.
+  let versionsChanged = false;
   for (const fact of request.facts) {
     let skill = skillAt(fact.sourcePath);
     if (skill === undefined) {
@@ -281,7 +282,10 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     const previousMember = previousCopy?.members.find(
       (member) => member.source_path === fact.sourcePath,
     );
-    if (previousMember?.artifact_digest !== fact.artifactDigest) delete skill.local_version_id;
+    if (previousMember?.artifact_digest !== fact.artifactDigest) {
+      delete skill.local_version_id;
+      versionsChanged = true;
+    }
   }
   if (retainedCopy === undefined)
     state.retained_copies.push({
@@ -315,21 +319,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const skills = persistedSkills.map((skill) =>
     successor.skills.find((candidate) => candidate.skill_id === skill.skill_id)!,
   );
-  // Acquisition metadata can change without changing the Versions the Library uses.
-  const action = added
-    ? ("added" as const)
-    : skills.some((skill) => {
-          const previousSkill = base.skills.find(
-            (candidate) => candidate.skill_id === skill.skill_id,
-          );
-          return (
-            previousSkill === undefined ||
-            currentSkillVersion(base, previousSkill)?.skill_version_id !==
-              currentSkillVersion(successor, skill)?.skill_version_id
-          );
-        })
-      ? ("updated" as const)
-      : ("unchanged" as const);
+  const action = added ? "added" : versionsChanged ? "updated" : "unchanged";
   yield* store.publish(successor, base);
   return { action, collection, skills, ...receipt };
 });

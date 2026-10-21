@@ -870,7 +870,7 @@ const contractPresenters: ContractPresenters = {
   authorList: renderAuthorList,
   add: (data) => {
     const count = data.skills.length;
-    const noun = `${count} ${count === 1 ? "skill" : "skills"}`;
+    const noun = plural(count, "skill");
     const summary =
       data.action === "updated"
         ? `Updated ${noun} in your Library.`
