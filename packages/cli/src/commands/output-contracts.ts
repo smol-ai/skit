@@ -128,7 +128,7 @@ export const outputContracts = {
   disablePlan: effectOutput("skit.disable.plan.v7", SetEnabledPlan),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
-  librarySync: effectOutput("skit.library.sync.v10", SyncResult),
+  librarySync: effectOutput("skit.library.sync.v11", SyncResult),
   libraryHistory: effectOutput(
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),

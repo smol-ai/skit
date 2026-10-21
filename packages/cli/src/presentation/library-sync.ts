@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v10">;
+type SyncData = ContractDataForId<"skit.library.sync.v11">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 const visibleChanges = (changes: SyncPlan["local"]) =>

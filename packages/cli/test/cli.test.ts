@@ -712,7 +712,9 @@ describe("CLI contracts", () => {
     const stateBefore = await readFile(join(home, "state.json"), "utf8");
     const diff = run(false, "update", "review", "--from-projection", "agents", "--diff");
     expect(diff.status).toBe(0);
+    // oxlint-disable-next-line skit/no-cli-output-text-assertions -- Git diff has no JSON mode; prove the installed edit reaches the comparison output.
     expect(diff.stdout).toContain("local edit");
+    // oxlint-disable-next-line skit/no-cli-output-text-assertions -- Prove the comparison includes the Library source as well as the installed edit.
     expect(diff.stdout).toContain("original");
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBefore);
     const preview = run(
