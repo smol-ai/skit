@@ -129,7 +129,10 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
           (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
         );
   if (acquisition === undefined || priorTree === undefined)
-    return yield* new CollectionNotUpdatable({ subject_id: subject.subjectId, label: subject.label });
+    return yield* new CollectionNotUpdatable({
+      subject_id: subject.subjectId,
+      label: subject.label,
+    });
   const input = yield* subjectSourceEffect(subject, acquisition.input.value);
   return { acquisition, priorTree, input };
 });
