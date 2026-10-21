@@ -37,3 +37,9 @@ the existing storybook text/canvas colours. The header labels the palette as
 The storybook controls retain their existing UI palette.
 
 Run the terminal/key-input smoke check with `pnpm --filter @smolai/skit-storybook test:preview`.
+
+Rejected-login stories are `failure/sign-in-email-configured`,
+`failure/sign-in-email-unconfigured` and `failure/sign-in-email-unavailable`.
+They use the production `SignInRejected` failure and shared classifier, so the
+human recovery advice and JSON error output follow the actual CLI wording.
+These fixtures perform no authentication, configuration lookup or email delivery.

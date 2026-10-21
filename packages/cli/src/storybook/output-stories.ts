@@ -11,6 +11,8 @@ import {
 } from "@smolai/skit-core";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { result } from "../handlers/contracts.js";
+import { classifyFailure } from "../failure-classification.js";
+import { SignInRejected } from "../registry/failures.js";
 
 export type OutputStory = Data.TaggedEnum<{
   Result: { readonly name: string; readonly group: string; readonly result: CommandResult };
@@ -1001,6 +1003,15 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         findings: 1,
       },
     }),
+  ),
+  ...(
+    [
+      { name: "sign-in-email-configured", resetEmail: true },
+      { name: "sign-in-email-unconfigured", resetEmail: false },
+      { name: "sign-in-email-unavailable" },
+    ] as const
+  ).map(({ name, ...recovery }) =>
+    failureStory(name, classifyFailure(new SignInRejected({ context: "Sign in", ...recovery }))),
   ),
   failureStory("not-found", {
     code: "NOT_FOUND",
