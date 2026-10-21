@@ -9,13 +9,13 @@ import { dirname, join, resolve } from "node:path";
 import {
   LibraryStore,
   libraryStoreLayer,
+  inspectOwnershipMarkerEffect,
   objectAt,
   observationPathIdentityEffect,
-  parseOwnershipMarker,
 } from "@smolai/skit-core";
 import { auditClaude } from "./claude.js";
 import { auditCodex } from "./codex.js";
-import { pathExists, read, readJson as json } from "./io.js";
+import { pathExists, readJson as json } from "./io.js";
 import { runAuditProbesEffect, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
 import type { AuditFinding, AuditObservation } from "./types.js";
@@ -82,15 +82,10 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
     if (inspected.has(identity.comparisonKey)) continue;
     inspected.add(identity.comparisonKey);
     const markerPath = join(directory, ".skit-ownership.json");
-    const source = yield* read(markerPath);
-    if (source === null) continue;
-    let value: unknown;
-    try {
-      value = JSON.parse(source);
-    } catch {
-      value = undefined;
-    }
-    const inspection = parseOwnershipMarker(value);
+    // An unreadable marker is no evidence either way, like an absent one.
+    const inspection = yield* inspectOwnershipMarkerEffect(directory).pipe(
+      Effect.orElseSucceed(() => ({ kind: "absent" }) as const),
+    );
     if (inspection.kind === "invalid") {
       findings.push({
         severity: "error",
@@ -145,9 +140,9 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
 /**
  * Observe local Harness capabilities.
  *
- * Every read and traversal goes through `audit/io.ts`, which is now Effects over the platform
- * services: the observation belongs to the caller's fiber rather than re-entering a runtime per
- * path. `suppliedProbes` carries subprocess results the caller already ran, so nothing spawns from
+ * Reads and traversals go through `audit/io.ts`, and ownership markers through the core marker
+ * inspector, all Effects over the platform services: the observation belongs to the caller's
+ * fiber rather than re-entering a runtime per path. `suppliedProbes` carries subprocess results the caller already ran, so nothing spawns from
  * inside the observation.
  */
 export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(function* (

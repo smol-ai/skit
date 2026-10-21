@@ -190,9 +190,11 @@ export class DefaultRegistryNotConfigured
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
   readonly remediation =
-    "Pass a Registry name or HTTPS origin, or set a default with `skit registry default <name>`.";
+    "For the simplest setup, run `skit auth login https://skit.smol.ai` to use our hosted reference server. " +
+    "You can also self-host the server: https://github.com/smol-ai/skit/tree/main/packages/skit-server-effect. " +
+    "Pass your own Registry URL or set a configured default with `skit registry default <name>`.";
   get message() {
-    return "No default Registry is configured; pass a Registry alias or HTTPS origin";
+    return "No default Registry is configured. SKIT leaves the server choice to you, including self-hosting.";
   }
 }
 

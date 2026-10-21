@@ -57,27 +57,30 @@ it.effect("one .agents copy carries every reader's native invocation metadata", 
     expect(frontmatter(yield* read(join(agents, "SKILL.md")))).toMatchObject({
       metadata: { "opencode/autoinvoke": "false" },
       triggers: ["user"],
+      "disable-model-invocation": true,
     });
-    expect(yield* read(join(agents, "SKILL.md"))).not.toContain("disable-model-invocation");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("projects implicit intent as portable OpenCode metadata", () =>
   Effect.gen(function* () {
-    const directory = yield* skill("name: review\nmetadata:\n  other: keep");
+    const directory = yield* skill(
+      "name: review\ndisable-model-invocation: true\nmetadata:\n  other: keep",
+    );
 
     yield* applyInvocationPolicyEffect(directory, "agents", "implicit");
 
     expect(frontmatter(yield* read(join(directory, "SKILL.md")))).toMatchObject({
       metadata: { other: "keep", "opencode/autoinvoke": "true" },
+      "disable-model-invocation": false,
     });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("OpenCode host policy removes only its invocation constraint", () =>
+it.effect("shared host policy clears invocation constraints and preserves unrelated metadata", () =>
   Effect.gen(function* () {
     const directory = yield* skill(
-      'name: review\nmetadata:\n  opencode/autoinvoke: "false"\n  other: keep',
+      'name: review\ndisable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: "false"\n  other: keep',
     );
     yield* applyInvocationPolicyEffect(
       directory,

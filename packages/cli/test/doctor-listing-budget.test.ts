@@ -1,6 +1,9 @@
 import { expect, test } from "vitest";
 import type { ListingBudget } from "@smolai/skit-core";
-import { renderDoctorListingBudget } from "../src/presentation/doctor-listing-budget.js";
+import {
+  renderDoctorListingBudget,
+  renderDoctorBudgetSelection,
+} from "../src/presentation/doctor-listing-budget.js";
 
 const budget: Extract<ListingBudget, { _tag: "Estimated" }> = {
   _tag: "Estimated",
@@ -79,4 +82,21 @@ test("doctor keeps the estimate and shows rejected skill diagnostics in the summ
   expect(output).toContain(
     "Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---",
   );
+});
+
+test("cleanup bars show demand after the selected savings in native units", () => {
+  const over = { ...budget, demand: 12400 };
+  const before = renderDoctorBudgetSelection([over], {}, 80);
+  const after = renderDoctorBudgetSelection([over], { codex: 2650 }, 80);
+  expect(before).toHaveLength(1);
+  expect(before[0]).toContain("124% · ~12,400 / 10,000 tokens");
+  expect(before[0]).toContain("▓");
+  expect(after[0]).toContain("98% · ~9,750 / 10,000 tokens");
+  expect(after[0]).not.toContain("▓");
+  expect(
+    renderDoctorBudgetSelection([{ ...over, harness: "claude-code", unit: "characters" }], {
+      "claude-code": 2650,
+    }).join("\n"),
+  ).toContain("9,750 / 10,000 characters");
+  expect(renderDoctorBudgetSelection([over], { codex: 20000 })[0]).toContain("0% · ~0");
 });

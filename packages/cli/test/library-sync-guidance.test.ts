@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
+import { it } from "@effect/vitest";
 import { renderLibrarySync } from "../src/presentation/library-sync.js";
 import { setupStepPlan } from "../src/presentation/setup-steps.js";
 import { terminalSyncProgress } from "../src/presentation/sync-progress.js";
@@ -25,6 +26,19 @@ describe("Library guidance", () => {
     });
     expect(output).toContain("Library synced.");
     expect(output).toContain("review: /skills/review");
+    expect(output).toContain("SKIT kept their existing files");
+    expect(output).toContain("skit doctor");
+  });
+
+  it("keeps installed-copy guidance when device enablement is incomplete", () => {
+    const output = renderLibrarySync({
+      status: "enablement_incomplete",
+      sync_status: "pulled",
+      enablement_issues: ["Cannot install at /skills/review"],
+      projection_conflicts: [{ skill: "review", path: "/skills/review" }],
+    });
+    expect(output).toContain("enablement is incomplete");
+    expect(output).toContain("Cannot install at /skills/review");
     expect(output).toContain("SKIT kept their existing files");
     expect(output).toContain("skit doctor");
   });
@@ -60,25 +74,26 @@ describe("Library guidance", () => {
     );
   });
 
-  it("offers bounded explicit progress independently of terminal status", async () => {
-    const lines: string[] = [];
-    const progress = terminalSyncProgress(
-      {
-        withStatus: (_status, effect) => effect,
-        updateStatus: () => Effect.void,
-        progress: (line) => Effect.sync(() => void lines.push(line)),
-      },
-      true,
-    );
-    const phase = { kind: "upload" as const, total: 100 };
-    await Effect.runPromise(progress.sync.around(phase, Effect.void));
-    for (const completed of [0, 1, 10, 100])
-      await Effect.runPromise(progress.sync.tick({ phase, completed }));
-    expect(lines).toEqual([
-      "Uploading 100 Skill copies",
-      "Uploading 100 Skill copies · 0/100",
-      "Uploading 100 Skill copies · 10/100",
-      "Uploading 100 Skill copies · 100/100",
-    ]);
-  });
+  it.effect("offers bounded explicit progress independently of terminal status", () =>
+    Effect.gen(function* () {
+      const lines: string[] = [];
+      const progress = terminalSyncProgress(
+        {
+          withStatus: (_status, effect) => effect,
+          updateStatus: () => Effect.void,
+          progress: (line) => Effect.sync(() => void lines.push(line)),
+        },
+        true,
+      );
+      const phase = { kind: "upload" as const, total: 100 };
+      yield* progress.sync.around(phase, Effect.void);
+      for (const completed of [0, 1, 10, 100]) yield* progress.sync.tick({ phase, completed });
+      expect(lines).toEqual([
+        "Uploading 100 Skill copies",
+        "Uploading 100 Skill copies · 0/100",
+        "Uploading 100 Skill copies · 10/100",
+        "Uploading 100 Skill copies · 100/100",
+      ]);
+    }),
+  );
 });

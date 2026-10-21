@@ -1,6 +1,6 @@
 import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
-import { Clock, Config, Effect, FileSystem, Result, Schema } from "effect";
+import { Clock, Config, Effect, FileSystem, Redacted, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
@@ -55,12 +55,15 @@ import {
   type ResolvedAuth,
 } from "./accounts.js";
 const decodeAuthConfig = Schema.decodeUnknownEffect(AuthConfig);
-const accountEnvironment = () => ({
-  origin: process.env.SKIT_SERVER_URL,
-  token: process.env.SKIT_TOKEN,
+const accountEnvironment = Effect.gen(function* () {
+  const { registryOrigin, registryToken } = yield* SkitConfiguration;
+  return {
+    origin: registryOrigin,
+    token: registryToken === undefined ? undefined : Redacted.value(registryToken),
+  };
 });
 const readAccounts = Effect.fn("Auth.readAccounts")(function* (home?: string) {
-  return new RegistryAccounts(yield* readConfigEffect(home), accountEnvironment());
+  return new RegistryAccounts(yield* readConfigEffect(home), yield* accountEnvironment);
 });
 
 export type RegistryConfigurationError =
@@ -195,7 +198,7 @@ export function resolveAuthForOriginEffect(
 > {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);
-    const environment = yield* environmentCredential(accountEnvironment(), origin);
+    const environment = yield* environmentCredential(yield* accountEnvironment, origin);
     if (environment) return environment;
     return yield* (yield* readAccounts(home)).credential(origin);
   });
@@ -209,7 +212,7 @@ export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
   home?: string;
 }) {
   const origin = yield* parseOrigin(input.origin);
-  if (yield* environmentCredential(accountEnvironment(), origin)) return undefined;
+  if (yield* environmentCredential(yield* accountEnvironment, origin)) return undefined;
   const accounts = yield* readAccounts(input.home);
   const auth = yield* accounts.credential(origin);
   if (!auth.token || !auth.scopes || !input.scopes.every((scope) => auth.scopes?.includes(scope)))

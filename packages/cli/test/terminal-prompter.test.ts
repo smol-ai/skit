@@ -97,6 +97,78 @@ describe("the terminal prompter", () => {
     { value: "keep", label: "Keep", selected: true, removeValue: "remove-keep" },
     { value: "other", label: "Other", removeValue: "remove-other" },
   ];
+  it.effect(
+    "caps visible choices, scrolls to hidden results and updates the summary for every selection",
+    () =>
+      Effect.gen(function* () {
+        const choices = Array.from({ length: 30 }, (_, index) => ({
+          value: String(index),
+          label: `Candidate ${index}`,
+          selected: index === 0,
+          detail: `Collection ${index}`,
+        }));
+        const selected = yield* (yield* Prompter).multiselect("Cleanup", choices, {
+          maxItems: 8,
+          summary: (values) => ["Current budget: 120%", `After: ${120 - values.length * 10}%`],
+        });
+        expect(selected).toEqual(["0", "29"]);
+        const frames = stderr.mock.calls
+          .map(([frame]) => String(frame))
+          .filter((frame) => frame.includes("\u001b[?25l"));
+        expect(frames.every((frame) => (frame.match(/[☐☒]/g) ?? []).length <= 8)).toBe(true);
+        expect(frames.every((frame) => frame.split("\n").length <= 22)).toBe(true);
+        expect(frames[0]).toContain("1–8 of 30 · 1 selected · ↑↓ scroll");
+        expect(frames.some((frame) => frame.includes("23–30 of 30"))).toBe(true);
+        expect(frames.some((frame) => frame.includes("After: 100%"))).toBe(true);
+        expect(frames.some((frame) => frame.includes("❯ ☒ Candidate 29"))).toBe(true);
+      }).pipe(Effect.provide(promptedWith(["up", "space", "enter"]))),
+  );
+  it.effect("reserves space for the budget chart on a short terminal", () =>
+    Effect.gen(function* () {
+      const original = Object.getOwnPropertyDescriptor(process.stderr, "rows");
+      Object.defineProperty(process.stderr, "rows", { configurable: true, value: 12 });
+      try {
+        const selected = yield* (yield* Prompter).multiselect(
+          "Cleanup",
+          Array.from({ length: 30 }, (_, index) => ({
+            value: String(index),
+            label: `Candidate ${index}`,
+            detail: `Collection ${index}`,
+          })),
+          {
+            maxItems: 8,
+            summary: () => ["Codex current", "Codex after", "Claude current", "Claude after"],
+          },
+        );
+        expect(selected).toEqual(["29"]);
+        const frames = stderr.mock.calls
+          .map(([frame]) => String(frame))
+          .filter((frame) => frame.includes("\u001b[?25l"));
+        expect(frames.every((frame) => frame.split("\n").length <= 10)).toBe(true);
+        expect(frames.some((frame) => frame.includes("Claude after"))).toBe(true);
+        expect(frames.some((frame) => frame.includes("❯ ☒ Candidate 29"))).toBe(true);
+      } finally {
+        if (original) Object.defineProperty(process.stderr, "rows", original);
+        else Reflect.deleteProperty(process.stderr, "rows");
+      }
+    }).pipe(Effect.provide(promptedWith(["up", "space", "enter"]))),
+  );
+  it.effect("filtering keeps off-screen selections in the budget summary", () =>
+    Effect.gen(function* () {
+      const selected = yield* (yield* Prompter).multiselect(
+        "Cleanup",
+        [
+          { value: "alpha", label: "Alpha", selected: true },
+          { value: "codex", label: "Codex" },
+        ],
+        { maxItems: 1, summary: (values) => [`Selected: ${values.join(", ")}`] },
+      );
+      expect(selected).toEqual(["alpha", "codex"]);
+      const frames = stderr.mock.calls.map(([frame]) => String(frame)).join("\n");
+      expect(frames).toContain("1–1 of 1 matches (2 total) · 2 selected");
+      expect(frames).toContain("Selected: alpha, codex");
+    }).pipe(Effect.provide(promptedWith(["c", "o", "d", "e", "x", "space", "enter"]))),
+  );
   it.effect("marks removal explicitly and bulk selection preserves it", () =>
     Effect.gen(function* () {
       const chosen = yield* (yield* Prompter).multiselect("Manage skills", removable);

@@ -1,9 +1,10 @@
 import {
   bindingSkillIds,
+  bindingShadowCheckSkills,
   LinkStat,
   deterministicTreeHashEffect,
-  DeviceBinding,
-  RepositoryBinding,
+  replaceScopeBinding,
+  pruneEmptyBindings,
   lastPublishedLibraryState,
   LibraryStore,
   libraryStateRevision,
@@ -14,7 +15,6 @@ import {
   type Digest,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem } from "effect";
-import { resolve } from "node:path";
 import {
   activeProjectionTargetsEffect,
   bindingRoot,
@@ -84,9 +84,6 @@ export class SetEnabledStale
 const stale = () =>
   new SetEnabledStale({ message: "Library changed after this Binding change was previewed" });
 
-const isDeviceBinding = (binding: DeviceBinding | RepositoryBinding): binding is DeviceBinding =>
-  binding.scope.kind === "global";
-
 const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   state: LibraryState,
   options: BindingChangeRequest,
@@ -95,8 +92,14 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   const { plan, skillIds, newlyEnabledSkills } = yield* calculateBindingChange(state, options);
   const { scope, bindings, changed } = plan;
   const warnings: ShadowObservationError[] = [];
-  const shadows = newlyEnabledSkills.length
-    ? yield* observeHarnessShadows(configuration, scope, newlyEnabledSkills, warnings)
+  const namesToCheck = bindingShadowCheckSkills(
+    state,
+    scope,
+    options.enabled ? plan.skills : [],
+    newlyEnabledSkills,
+  );
+  const shadows = namesToCheck.length
+    ? yield* observeHarnessShadows(configuration, scope, namesToCheck, warnings)
     : [];
   // An unchanged Binding still repairs its copies when they are missing, edited, or left behind.
   let repair = false;
@@ -144,9 +147,14 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     overrides: structuredClone(configuration.overrides),
   };
   const captured = structuredClone(requests);
-  const changes = yield* Effect.forEach(captured, (request) =>
-    previewChange(current, request, routing),
-  );
+  let projected = current;
+  const changes = [];
+  for (const request of captured) {
+    const change = yield* previewChange(projected, request, routing);
+    changes.push(change);
+    // Later previews see earlier intent at the same Scope, just as apply does.
+    for (const binding of change.bindings) projected = replaceScopeBinding(projected, binding);
+  }
   const plan: BindingChangePlan = { [planType]: true, changes: structuredClone(changes) };
   preparedPlans.set(plan, {
     home,
@@ -158,20 +166,33 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
   return plan;
 });
 
-/** Read facts and accept intents against the Library displayed before asking questions. */
-export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
-  const store = yield* LibraryStore;
-  const current = yield* store.load;
+/** Internal constructor for application operations sharing one captured Library. */
+export function bindingChangeSelection(current: LibraryState, home: string, originalsPath: string) {
   return {
-    view: libraryView(current, store.originalsPath),
+    view: libraryView(current, originalsPath),
+    previewMany: Effect.fn("LibraryBindings.previewSelections")(function* (
+      intents: readonly BindingChangeIntent[],
+      configuration: BindingChangeConfiguration,
+    ) {
+      const requests = yield* Effect.forEach(intents, (intent) =>
+        expandBindingIntent(current, intent),
+      );
+      return yield* previewRequests(current, home, requests.flat(), configuration);
+    }),
     preview: Effect.fn("LibraryBindings.previewSelection")(function* (
       intent: BindingChangeIntent,
       configuration: BindingChangeConfiguration,
     ) {
       const requests = yield* expandBindingIntent(current, intent);
-      return yield* previewRequests(current, store.home, requests, configuration);
+      return yield* previewRequests(current, home, requests, configuration);
     }),
   };
+}
+
+/** Read facts and accept intents against the Library displayed before asking questions. */
+export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
+  const store = yield* LibraryStore;
+  return bindingChangeSelection(yield* store.load, store.home, store.originalsPath);
 });
 export type BindingChangeSelection = Effect.Success<ReturnType<typeof openBindingChangeSelection>>;
 
@@ -198,8 +219,14 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   const calculated = yield* calculateBindingChange(current, options);
   const { plan, skillIds, newlyEnabledSkills } = calculated;
   const warnings: ShadowObservationError[] = [];
-  const shadows = newlyEnabledSkills.length
-    ? yield* observeHarnessShadows(configuration, plan.scope, newlyEnabledSkills, warnings)
+  const namesToCheck = bindingShadowCheckSkills(
+    current,
+    plan.scope,
+    options.enabled ? plan.skills : [],
+    newlyEnabledSkills,
+  );
+  const shadows = namesToCheck.length
+    ? yield* observeHarnessShadows(configuration, plan.scope, namesToCheck, warnings)
     : [];
   if (options.enabled && !options.allowDuplicate) {
     const links = yield* LinkStat;
@@ -228,21 +255,11 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     if (remaining.length) return yield* new ProjectionWouldDuplicate({ shadows: remaining });
   }
   if (plan.changed) {
-    const global_bindings = [...current.global_bindings];
-    const local_bindings = [...current.local_bindings];
-    for (const binding of plan.bindings) {
-      if (isDeviceBinding(binding)) global_bindings.splice(0, global_bindings.length, binding);
-      else {
-        const index = local_bindings.findIndex(
-          (item) => resolve(item.scope.root) === resolve(binding.scope.root),
-        );
-        if (index < 0) local_bindings.push(binding);
-        else local_bindings[index] = binding;
-      }
-    }
+    let next = current;
+    for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);
     // Publishing onto `current`, the previewed revision, makes the check above atomic.
     yield* store
-      .publish({ ...current, global_bindings, local_bindings }, current)
+      .publish(next, current)
       .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(stale())));
   }
   const reconciled = yield* reconcileLibraryProjections({
@@ -261,13 +278,8 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   if (!options.enabled) {
     // Reconciliation needs empty Bindings to retire their copies; prune them only afterward.
     const settled = yield* store.load;
-    const global_bindings = settled.global_bindings.filter((binding) => binding.entries.length > 0);
-    const local_bindings = settled.local_bindings.filter((binding) => binding.entries.length > 0);
-    if (
-      global_bindings.length !== settled.global_bindings.length ||
-      local_bindings.length !== settled.local_bindings.length
-    )
-      yield* store.publish({ ...settled, global_bindings, local_bindings }, settled);
+    const pruned = pruneEmptyBindings(settled);
+    if (pruned !== settled) yield* store.publish(pruned, settled);
     result = {
       ...result,
       bindings: plan.bindings.filter((binding) => binding.entries.length > 0),

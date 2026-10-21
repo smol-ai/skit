@@ -1,8 +1,8 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { join } from "node:path";
-import { afterEach, describe, expect } from "vitest";
+import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Schema } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
 import { HttpClientResponse } from "effect/http";
 import {
   addRegistryRemoteEffect,
@@ -19,6 +19,7 @@ import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-c
 import { authLoginCommand } from "../src/handlers/auth/login.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { RegistryAuth, registryAuthLayer } from "../src/registry/auth-service.js";
+import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
 
 /**
  * The native login with an injected Registry transport.
@@ -208,14 +209,17 @@ describe("saved login reuse", () => {
 const readText = (path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path));
 
-const originalServer = process.env.SKIT_SERVER_URL;
-const originalToken = process.env.SKIT_TOKEN;
-afterEach(() => {
-  if (originalServer === undefined) delete process.env.SKIT_SERVER_URL;
-  else process.env.SKIT_SERVER_URL = originalServer;
-  if (originalToken === undefined) delete process.env.SKIT_TOKEN;
-  else process.env.SKIT_TOKEN = originalToken;
-});
+/** Resolve the application configuration from exactly these process variables. */
+const withEnvironment = (environment: Record<string, string>) =>
+  Effect.provide(
+    skitConfigurationLayer().pipe(
+      Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(environment))),
+    ),
+  );
+const environmentCredential = {
+  SKIT_SERVER_URL: "https://environment.example/path",
+  SKIT_TOKEN: "skit_pat_environment",
+};
 
 /**
  * The request payload, however the transport chose to carry it.
@@ -672,9 +676,9 @@ describe("CLI authentication journey", () => {
         },
         successfulServer(observed),
       );
-      process.env.SKIT_SERVER_URL = "https://environment.example/path";
-      process.env.SKIT_TOKEN = "skit_pat_environment";
-      expect(yield* resolveAuthEffect(home)).toMatchObject({
+      expect(
+        yield* resolveAuthEffect(home).pipe(withEnvironment(environmentCredential)),
+      ).toMatchObject({
         origin: "https://environment.example",
         token: "skit_pat_environment",
         source: "environment",
@@ -755,10 +759,7 @@ describe("CLI authentication journey", () => {
         },
         successfulServer(observed),
       );
-      process.env.SKIT_SERVER_URL = "https://environment.example/path";
-      process.env.SKIT_TOKEN = "skit_pat_environment";
-
-      const status = yield* authStatusCommand(home);
+      const status = yield* authStatusCommand(home).pipe(withEnvironment(environmentCredential));
       expect(status.credentials).toMatchObject([
         { origin: "https://stored.example", source: "stored" },
         { origin: "https://environment.example", source: "environment" },
@@ -771,10 +772,11 @@ describe("CLI authentication journey", () => {
       const home = yield* authHome;
       const fs = yield* FileSystem.FileSystem;
       yield* fs.writeFileString(join(home, "auth.json"), "{");
-      process.env.SKIT_SERVER_URL = "https://environment.example/path";
-      process.env.SKIT_TOKEN = "skit_pat_environment";
-
-      expect(yield* resolveAuthForOriginEffect("https://environment.example", home)).toMatchObject({
+      expect(
+        yield* resolveAuthForOriginEffect("https://environment.example", home).pipe(
+          withEnvironment(environmentCredential),
+        ),
+      ).toMatchObject({
         origin: "https://environment.example",
         token: "skit_pat_environment",
         source: "environment",
@@ -796,9 +798,11 @@ describe("CLI authentication journey", () => {
         },
         successfulServer(observed),
       );
-      process.env.SKIT_SERVER_URL = "https://stored.example";
-      delete process.env.SKIT_TOKEN;
-      expect(yield* resolveAuthEffect(home)).toMatchObject({
+      expect(
+        yield* resolveAuthEffect(home).pipe(
+          withEnvironment({ SKIT_SERVER_URL: "https://stored.example" }),
+        ),
+      ).toMatchObject({
         token: "skit_pat_secret_one",
         source: "stored",
       });

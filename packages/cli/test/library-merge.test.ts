@@ -432,7 +432,7 @@ it.effect(
       });
       const original = structuredClone(local);
       const state = yield* Schema.decodeUnknownEffect(LibraryState)({
-        schemaVersion: 8,
+        schemaVersion: 9,
         ...local,
         global_bindings: [
           {

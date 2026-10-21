@@ -1,4 +1,4 @@
-// The audit's filesystem seam: every read and traversal the audit performs goes through it.
+// The audit's filesystem seam for reads and traversals; ownership markers use the core inspector.
 //
 // These are Effects over the platform FileSystem and LinkStat services, so the audit's I/O belongs
 // to the caller's fiber: an interrupted `skit audit` stops mid-walk instead of finishing it. The

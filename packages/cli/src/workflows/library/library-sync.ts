@@ -1,5 +1,5 @@
 import { withLibraryWriter } from "@smolai/skit-core";
-import { Data, Effect } from "effect";
+import { Data, Effect, Result } from "effect";
 import {
   canonicalJson,
   currentLibraryManifest,
@@ -8,6 +8,11 @@ import {
   type LibraryManifest,
   type ProjectionTarget,
   type RestoreObserver,
+  deviceInstallationIntent,
+  prepareDeviceInstallation,
+  withDeviceSkillSelection,
+  sameDeviceSkillSelection,
+  bindingSkillIds,
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-inspection.js";
 import { prepareSyncTransferEffect } from "./library-sync-snapshots.js";
@@ -23,6 +28,10 @@ import {
 } from "./library-sync-projections.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { selectDeviceSkills } from "./device-selection.js";
+import { OptionCombinationInvalid } from "../failures.js";
+import { observeHarnessShadows } from "../../projection/harness-shadows.js";
+import type { InventoryRootOptions } from "../../projection/roots.js";
 
 const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({
   status: "conflicted" as const,
@@ -70,6 +79,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     adopt?: boolean;
     takeRemote?: readonly string[];
     keepEnabled?: readonly string[];
+    deviceSelection?:
+      | "follow-account"
+      | { readonly skills: readonly string[]; readonly collections: readonly string[] };
+    inventory?: InventoryRootOptions;
     projection?: {
       rootFor: (target: ProjectionTarget) => string | undefined;
     };
@@ -122,7 +135,17 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         status: "base_mismatch" as const,
         ...(remote === null ? {} : { revision_id: remote.revision_id }),
       };
-    if (remote === null && !local.present) return { status: "clean" as const, changed: false };
+    if (remote === null && !local.present) {
+      if (options.apply && options.deviceSelection !== undefined) {
+        const state = yield* store.load;
+        const selection =
+          options.deviceSelection === "follow-account"
+            ? { mode: "follow-account" as const }
+            : yield* selectDeviceSkills(emptyManifest, options.deviceSelection);
+        yield* store.publish(withDeviceSkillSelection(state, selection, options.origin), state);
+      }
+      return { status: "clean" as const, changed: false };
+    }
     // Explicit adoption sets aside ancestry from another Library. Against an empty base the merge
     // can only add records, never infer a deletion.
     const accepted = mismatched ? undefined : ancestry;
@@ -135,7 +158,11 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       remote !== null &&
       accepted === undefined &&
       !options.adopt &&
-      !equalToRemote
+      !equalToRemote &&
+      !(
+        local.state.pending_device_selection_origin === options.origin &&
+        same(manifest, emptyManifest)
+      )
     )
       return { status: "adoption_required" as const, revision_id: remote.revision_id };
     const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
@@ -163,59 +190,79 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     if (merge._tag === "InvalidResolution")
       return { status: "resolution_invalid" as const, ...revision };
     if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
-    const { device } = merge;
+    const selected =
+      options.deviceSelection === undefined
+        ? undefined
+        : options.deviceSelection === "follow-account"
+          ? { mode: "follow-account" as const }
+          : yield* selectDeviceSkills(merge.manifest, options.deviceSelection);
+    const device = withDeviceSkillSelection(merge.device, selected);
+    const installation = prepareDeviceInstallation(device, merge.manifest);
+    const choosing = installation.independent;
+    if (choosing && options.keepEnabled?.length)
+      return yield* new OptionCombinationInvalid({
+        detail:
+          "--keep-enabled changes account bindings and cannot be combined with a device selection.",
+      });
+    const missingSelection = installation.missing.map(
+      (entry) =>
+        `The selected ${entry.kind} ${entry.kind === "skill" ? entry.skill_id : entry.collection_id} is no longer in the Library; update this device's selection.`,
+    );
     const collision = yield* observer.around(
       { kind: "check-destinations" },
       resolveSyncProjectionCollisionsEffect(
-        merge.manifest,
+        installation.manifest,
         options.projection?.rootFor,
         options.keepEnabled,
         device,
       ),
     );
     if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
-    if (collision.conflicts.length) return conflicted(collision.conflicts, remote?.revision_id);
-    const desired = collision.manifest;
+    if (collision.conflicts.length && !choosing)
+      return conflicted(collision.conflicts, remote?.revision_id);
+    const { account: desired, installation: effectiveManifest } = installation.resolveBindings(
+      collision.manifest.bindings,
+    );
     const transition = yield* observer.around(
       { kind: "check-projections" },
       prepareSyncDeviceTransition({
         current: local.present ? local.state : undefined,
         aligned: device,
-        manifest: desired,
+        baseline: merge.device,
+        manifest: effectiveManifest,
         rootFor: options.projection?.rootFor,
+        deferDeviceConflicts: choosing,
       }),
     );
     if (transition._tag === "Conflicted")
       return conflicted(transition.conflicts, remote?.revision_id);
+    const transitionIssues = transition.issues;
 
     if (clean) {
       // Nothing to transfer, write or retire. Publish only to anchor ancestry this state lacks,
       // and only onto the state compared with R.
       if (options.apply) {
         const sync_ancestry = ancestryAt(remote, remoteManifest);
-        if (canonicalJson(local.state.sync_ancestry ?? null) !== canonicalJson(sync_ancestry))
+        if (
+          canonicalJson(local.state.sync_ancestry ?? null) !== canonicalJson(sync_ancestry) ||
+          !sameDeviceSkillSelection(local.state, device)
+        )
           yield* store
             .publish({ ...device, sync_ancestry }, local.state)
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       }
       const projections = options.apply
-        ? projectionCounts(
-            yield* observer.around(
-              { kind: "check-enabled" },
-              reconcileLibraryProjections({
-                ...projectionOptions,
-                desiredGlobalBindings: remoteManifest.bindings,
-                includeRepositoryBindings: true,
-              }),
-            ),
-          )
-        : { projected: 0, retired: 0 };
+        ? yield* reconcileSelected()
+        : { projected: 0, retired: 0, issues: [] as string[] };
       const conflicts = options.apply ? yield* projectionConflicts : undefined;
       return {
-        status: "clean" as const,
+        status: projections.issues.length ? ("enablement_incomplete" as const) : ("clean" as const),
+        ...(projections.issues.length
+          ? { sync_status: "clean" as const, enablement_issues: projections.issues }
+          : {}),
         changed: false,
         revision_id: remote.revision_id,
-        ...projections,
+        ...projectionCounts(projections),
         ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
       };
     }
@@ -287,32 +334,105 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged()))),
     );
 
-    const projections = projectionCounts(
-      yield* observer.around(
-        { kind: "enable" },
-        reconcileLibraryProjections({
-          ...projectionOptions,
-          desiredGlobalBindings: desired.bindings,
-          includeRepositoryBindings: true,
-        }),
-      ),
-    );
+    const projections = yield* reconcileSelected();
     const conflicts = yield* projectionConflicts;
+    const syncStatus =
+      remote === null
+        ? ("pushed" as const)
+        : !local.present
+          ? ("pulled" as const)
+          : ("merged" as const);
     return {
-      status:
-        remote === null
-          ? ("pushed" as const)
-          : !local.present
-            ? ("pulled" as const)
-            : ("merged" as const),
+      status: projections.issues.length ? ("enablement_incomplete" as const) : syncStatus,
+      ...(projections.issues.length
+        ? { sync_status: syncStatus, enablement_issues: projections.issues }
+        : {}),
       revision_id: saved.revision_id,
       snapshots,
       ...transfers,
       ...(conflicts === undefined ? {} : { projection_conflicts: conflicts }),
-      ...projections,
+      ...projectionCounts(projections),
       retired: retired + projections.retired,
       plan,
     };
+
+    function reconcileSelected() {
+      return Effect.gen(function* () {
+        if (!choosing) {
+          const result = yield* observer.around(
+            { kind: "enable" },
+            reconcileLibraryProjections({
+              ...projectionOptions,
+              includeRepositoryBindings: true,
+            }),
+          );
+          return { ...projectionCounts(result), issues: [] as string[] };
+        }
+        const issues = [
+          ...missingSelection,
+          ...collision.conflicts.map((conflict) => conflict.message),
+          ...transitionIssues.map((conflict) => conflict.message),
+        ];
+        const state = yield* store.load;
+        if (choosing && options.inventory !== undefined) {
+          const ids = new Set(
+            deviceInstallationIntent(state).bindings.flatMap((binding) =>
+              bindingSkillIds(state, binding),
+            ),
+          );
+          const names = state.skills
+            .filter((skill) => ids.has(skill.skill_id))
+            .map((skill) => skill.name);
+          if (names.length) {
+            const observed = yield* Effect.result(
+              observeHarnessShadows(options.inventory, { kind: "global" }, names),
+            );
+            if (Result.isFailure(observed))
+              issues.push(
+                `Could not inspect existing Skill installations: ${String(observed.failure)}`,
+              );
+            else
+              for (const shadow of observed.success)
+                issues.push(
+                  `${shadow.name} already exists at ${shadow.aliases.map((alias) => (alias.linkPath === undefined ? alias.path : `${alias.path} (symlink ${alias.linkPath} → ${alias.linkTarget})`)).join(", ")} (resolved: ${shadow.canonicalPath}); review it before enabling.`,
+                );
+          }
+        }
+        if (issues.length) return { projected: 0, retired: 0, issues };
+        const attempt = yield* Effect.result(
+          observer.around(
+            { kind: "enable" },
+            reconcileLibraryProjections({
+              ...projectionOptions,
+              includeRepositoryBindings: true,
+            }),
+          ),
+        );
+        if (Result.isFailure(attempt))
+          return {
+            projected: 0,
+            retired: 0,
+            issues: [`Enablement failed: ${String(attempt.failure)}`],
+          };
+        const after = yield* store.load;
+        const ids = new Set(
+          deviceInstallationIntent(after).bindings.flatMap((binding) =>
+            bindingSkillIds(after, binding),
+          ),
+        );
+        for (const projection of after.projections.filter(
+          (item) =>
+            ids.has(item.skill_id) &&
+            item.status === "conflicted" &&
+            (item.target === "agents" || item.target === "claude") &&
+            options.projection?.rootFor(item.target) !== undefined,
+        ))
+          issues.push(
+            `Cannot install at ${projection.path}: existing content or ownership conflicts. Preserve it and review before retrying.`,
+          );
+        return { ...projectionCounts(attempt.success), issues };
+      });
+    }
   },
   (effect, options) => (options.apply ? withLibraryWriter(effect) : effect),
 );

@@ -3,8 +3,9 @@ import { projectionRoot } from "./catalog.js";
 import type { HarnessRootContext } from "./contracts.js";
 
 /**
- * The Harnesses whose native invocation metadata each target's copies carry. Cursor and Pi also
- * read `.agents/skills`, but SKIT has no invocation metadata to write for them.
+ * The Harnesses with dedicated invocation metadata carried by each target. Cursor and Pi also
+ * read `.agents/skills`; projection policy writes their shared `disable-model-invocation` field
+ * separately, using the Claude adapter.
  */
 export const projectionTargetHarnesses = {
   agents: ["codex", "opencode", "devin"],

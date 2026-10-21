@@ -2,11 +2,9 @@ import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
 import { withProjectionMutationEffect } from "../../projection/mutation.js";
-import type { SkillId } from "../entity-ids.js";
+import { removeBindingEntities } from "../binding-intent.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { InvocationPolicy } from "../../vocabulary.js";
-import type { BindingEntry } from "../library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 export class CollectionRemovalMissing
@@ -62,16 +60,6 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
       .filter((skill) => skill.collection_id === options.collectionId)
       .map((skill) => skill.skill_id),
   );
-  const keepEntry = (entry: BindingEntry) =>
-    entry.kind === "collection"
-      ? entry.collection_id !== options.collectionId
-      : !removedSkillIds.has(entry.skill_id);
-  const remainingPolicies = (policies?: Readonly<Record<SkillId, InvocationPolicy>>) => {
-    const invocation_policies = Object.fromEntries(
-      Object.entries(policies ?? {}).filter(([skillId]) => !removedSkillIds.has(skillId)),
-    );
-    return Object.keys(invocation_policies).length === 0 ? {} : { invocation_policies };
-  };
   const result = yield* withProjectionMutationEffect(
     planned,
     {
@@ -105,23 +93,13 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
           acquisitions.map((acquisition) => acquisition.retained_copy_id),
         );
         Object.assign(candidate, {
+          ...removeBindingEntities(candidate, {
+            skills: removedSkillIds,
+            collections: new Set([options.collectionId]),
+          }),
           collections: candidate.collections.filter(
             (item) => item.collection_id !== options.collectionId,
           ),
-          global_bindings: candidate.global_bindings
-            .map(({ invocation_policies, ...binding }) => ({
-              ...binding,
-              entries: binding.entries.filter(keepEntry),
-              ...remainingPolicies(invocation_policies),
-            }))
-            .filter((item) => item.entries.length > 0),
-          local_bindings: candidate.local_bindings
-            .map(({ invocation_policies, ...binding }) => ({
-              ...binding,
-              entries: binding.entries.filter(keepEntry),
-              ...remainingPolicies(invocation_policies),
-            }))
-            .filter((item) => item.entries.length > 0),
           projections: candidate.projections.filter((item) => !removedSkillIds.has(item.skill_id)),
           skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
           acquisitions,

@@ -6,6 +6,7 @@ import {
   LibraryStore,
   libraryStateRevision,
   bindingSkillIds,
+  effectiveGlobalBindings,
   currentSkillVersion,
   prepareObservedCollectionEffect,
   projectBindingEffect,
@@ -195,7 +196,7 @@ const bindingForProjection = (
     .filter((binding) => pathIsWithin(binding.scope.root, projection.root))
     .sort((a, b) => b.scope.root.length - a.scope.root.length)[0];
   if (local) return bindingSkillIds(state, local).includes(projection.skill_id) ? local : undefined;
-  return state.global_bindings.find((binding) =>
+  return effectiveGlobalBindings(state).find((binding) =>
     bindingSkillIds(state, binding).includes(projection.skill_id),
   );
 };

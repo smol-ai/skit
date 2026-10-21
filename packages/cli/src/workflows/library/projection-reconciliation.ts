@@ -1,9 +1,9 @@
 import {
   LibraryStore,
+  deviceInstallationIntent,
   projectBindingEffect,
   retireUnboundGlobalProjectionsEffect,
   withLibraryWriter,
-  type Binding,
   type DeviceBinding,
   type RepositoryBinding,
   type Digest,
@@ -22,7 +22,6 @@ export interface LibraryProjectionReconciliationOptions {
   /** A target's global root, or undefined when it is inactive; overrides `roots` for routing. */
   readonly rootFor?: (target: ProjectionTarget) => string | undefined;
   readonly variantsPath: string;
-  readonly desiredGlobalBindings?: readonly Binding[];
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
   readonly adoption?: { readonly path: string; readonly observedHash: Digest };
   readonly restoreNativeDeletedSkills?: readonly string[];
@@ -43,20 +42,19 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
         ? yield* activeProjectionTargetsEffect(options.roots)
         : targets;
   // Copies at a former or inactive target are never wanted, whichever Bindings changed.
+  const state = yield* (yield* LibraryStore).load;
+  const intent = deviceInstallationIntent(state);
   const retired = yield* retireUnboundGlobalProjectionsEffect({
     variantsPath: options.variantsPath,
     activeTargets,
-    ...(options.desiredGlobalBindings === undefined
-      ? {}
-      : { desiredBindings: options.desiredGlobalBindings }),
-    inactiveOnly: options.onlyBindings !== undefined && options.desiredGlobalBindings === undefined,
+    desiredBindings: intent.bindings,
+    inactiveOnly: options.onlyBindings !== undefined,
   });
 
-  const state = yield* (yield* LibraryStore).load;
   let projected = 0;
   const bindings = options.includeRepositoryBindings
-    ? [...state.global_bindings, ...state.local_bindings]
-    : (options.onlyBindings ?? [...state.global_bindings, ...state.local_bindings]);
+    ? intent.allBindings
+    : (options.onlyBindings ?? intent.allBindings);
   const outcomes: Array<{ target: ProjectionTarget; scope: (typeof bindings)[number]["scope"] }> =
     [];
   for (const binding of bindings) {

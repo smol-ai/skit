@@ -35,7 +35,6 @@ export * from "./projection/policy.js";
 export {
   ProjectionFailure,
   inspectOwnershipMarkerEffect,
-  parseOwnershipMarker,
   projectionCustodyEffect,
   projectionNameEffect,
   withProjectionMutationEffect,
@@ -65,6 +64,7 @@ export {
 export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
 export * from "./library/library-state.js";
+export * from "./library/binding-intent.js";
 export * from "./library/library-restore.js";
 export * from "./library/retained-content-plan.js";
 export * from "./library/restore-progress.js";

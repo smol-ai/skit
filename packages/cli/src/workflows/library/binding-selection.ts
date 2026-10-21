@@ -3,6 +3,8 @@ import {
   bindingSkillIds,
   currentCollectionSkills,
   DeviceBinding,
+  effectiveGlobalBindings,
+  scopeBinding,
   RepositoryBinding,
   type LibraryState,
   type SkillId,
@@ -22,15 +24,6 @@ export interface BindingSelection {
   readonly enabled: boolean;
   readonly invocation?: InvocationOption;
 }
-
-/** The one Binding at a Scope, if anything is enabled there. */
-export const scopeBinding = (
-  state: LibraryState,
-  scope: SkitBindingScope,
-): DeviceBinding | RepositoryBinding | undefined =>
-  scope.kind === "global"
-    ? state.global_bindings[0]
-    : state.local_bindings.find((binding) => resolve(binding.scope.root) === resolve(scope.root));
 
 /** Binding policy only: no filesystem, storage, target discovery, or presentation. */
 export const calculateBindingChange = Effect.fn("LibraryBindings.calculate")(function* (
@@ -208,7 +201,7 @@ export const uniqueBindingScopes = (scopes: readonly SkitBindingScope[]) => [
 
 /** One Collection's enabled members and invocation intent at a Scope, including empty follows. */
 export const bindingPlacements = (state: LibraryState): BindingPlacement[] =>
-  [...state.global_bindings, ...state.local_bindings].flatMap((binding) => {
+  [...effectiveGlobalBindings(state), ...state.local_bindings].flatMap((binding) => {
     const ids = bindingSkillIds(state, binding);
     const collections = new Set([
       ...state.skills

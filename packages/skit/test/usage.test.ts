@@ -2,6 +2,7 @@ import { it } from "@effect/vitest";
 import { expect, test } from "vitest";
 import { Clock, Deferred, Effect, Fiber, FileSystem, Stream } from "effect";
 import { join } from "node:path";
+import { zstdCompressSync } from "node:zlib";
 import { SkillUsage, skillUsageLayer, skitLayer } from "../src/index.js";
 import {
   claudeTranscriptGrammar,
@@ -286,29 +287,31 @@ it.effect("filters projects from raw cwd, reads large records and reports missin
   }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );
 
-it.effect("interrupts the source stream and runs its finalizer", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-cancel-" });
-    yield* fs.writeFileString(join(root, "records.jsonl"), "{}\n");
-    const started = yield* Deferred.make<void>();
-    const closed = yield* Deferred.make<void>();
-    const stream = Stream.fromEffect(Deferred.succeed(started, undefined)).pipe(
-      Stream.drain,
-      Stream.concat(Stream.never),
-      Stream.ensuring(Deferred.succeed(closed, undefined)),
-    );
-    const fiber = yield* Effect.gen(function* () {
-      return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
-    }).pipe(
-      Effect.provide(skillUsageLayer),
-      Effect.provideService(FileSystem.FileSystem, { ...fs, stream: () => stream }),
-      Effect.forkScoped,
-    );
-    yield* Deferred.await(started);
-    yield* Fiber.interrupt(fiber);
-    expect(yield* Deferred.isDone(closed)).toBe(true);
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+it.effect.each(["jsonl", "jsonl.zst"])(
+  "interrupts the %s source stream and runs its finalizer",
+  (extension) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-cancel-" });
+      yield* fs.writeFileString(join(root, `records.${extension}`), "{}\n");
+      const started = yield* Deferred.make<void>();
+      const closed = yield* Deferred.make<void>();
+      const stream = Stream.fromEffect(Deferred.succeed(started, undefined)).pipe(
+        Stream.drain,
+        Stream.concat(Stream.never),
+        Stream.ensuring(Deferred.succeed(closed, undefined)),
+      );
+      const fiber = yield* Effect.gen(function* () {
+        return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
+      }).pipe(
+        Effect.provide(skillUsageLayer),
+        Effect.provideService(FileSystem.FileSystem, { ...fs, stream: () => stream }),
+        Effect.forkScoped,
+      );
+      yield* Deferred.await(started);
+      yield* Fiber.interrupt(fiber);
+      expect(yield* Deferred.isDone(closed)).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("retains healthy evidence when another transcript is unreadable", () =>
@@ -1018,4 +1021,207 @@ it.effect(
       });
       expect(report.incomplete).toBe(true);
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "compressed Codex rollouts preserve activity, project filtering and replay suppression",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-zstd-" });
+      const plain = join(root, "plain");
+      const compressed = join(root, "compressed");
+      yield* fs.makeDirectory(plain);
+      yield* fs.makeDirectory(compressed);
+      const transcript = [
+        { type: "session_meta", timestamp: start, payload: { id: "session", cwd: root } },
+        { type: "turn_context", timestamp: start, payload: { turn_id: "turn", cwd: root } },
+        {
+          type: "response_item",
+          timestamp: start,
+          payload: {
+            type: "message",
+            role: "user",
+            id: "selected",
+            content: [
+              {
+                type: "input_text",
+                text: "<skill>\n<name>example</name>\n<path>/synthetic/skills/example/SKILL.md</path>\nInstructions\n</skill>",
+              },
+            ],
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: end,
+          payload: {
+            type: "function_call",
+            name: "exec_command",
+            call_id: "outside-window",
+            arguments: JSON.stringify({ cmd: "cat /synthetic/skills/outside/SKILL.md" }),
+          },
+        },
+      ]
+        .map((record) => JSON.stringify(record))
+        .join("\n");
+      const bytes = zstdCompressSync(transcript);
+      const plainPath = join(plain, "records.jsonl");
+      const compressedPath = join(compressed, "records.jsonl.zst");
+      yield* fs.writeFileString(plainPath, transcript);
+      yield* fs.writeFile(compressedPath, bytes);
+      const scanner = yield* SkillUsage;
+      const options = {
+        end,
+        project: root,
+        projections: [
+          { path: "/synthetic/skills/example", skillId: "example-id", name: "example" },
+        ],
+      };
+      const expected = yield* scanner.scan({
+        ...options,
+        roots: [{ root: plain, harness: "codex" }],
+      });
+      const actual = yield* scanner.scan({
+        ...options,
+        roots: [{ root: compressed, harness: "codex" }],
+      });
+      expect(actual.rows).toEqual(expected.rows);
+      expect(actual.rows).toMatchObject([{ skillId: "example-id", uses: 1, explicit: 1 }]);
+      expect(actual.coverage[0]).toMatchObject({
+        files: 1,
+        bytes: bytes.length,
+        bytesRead: bytes.length,
+        records: 4,
+        windowRecords: 3,
+        skippedFiles: 0,
+        changedFiles: 0,
+        unreadableFiles: 0,
+      });
+      expect(actual.incomplete).toBe(false);
+      const both = yield* scanner.scan({
+        ...options,
+        roots: [
+          { root: plain, harness: "codex" },
+          { root: compressed, harness: "codex" },
+        ],
+      });
+      expect(both.rows).toEqual(expected.rows);
+      expect(both.coverage[1].duplicates).toBe(1);
+      expect(yield* fs.readFile(compressedPath)).toEqual(bytes);
+    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "decodes compressed byte chunks, large Unicode records and a final unterminated line",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-zstd-chunks-" });
+      const first = {
+        ...call(start, "unicode"),
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: "unicode",
+              name: "Skill",
+              input: { skill: "café", args: "😀é".repeat(30000) },
+            },
+          ],
+        },
+      };
+      const bytes = zstdCompressSync(
+        JSON.stringify(first) + "\r\n\r\n" + JSON.stringify(call(start, "last")),
+      );
+      yield* fs.writeFile(join(root, "records.jsonl.zst"), bytes);
+      const report = yield* Effect.gen(function* () {
+        return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+      }).pipe(
+        Effect.provide(skillUsageLayer),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          stream: () =>
+            Stream.fromIterable(
+              Array.from({ length: Math.ceil(bytes.length / 3) }, (_, index) =>
+                bytes.subarray(index * 3, index * 3 + 3),
+              ),
+            ),
+        }),
+      );
+      expect(report.rows.map((row) => row.name).sort()).toEqual(["café", "example"]);
+      expect(report.coverage[0]).toMatchObject({
+        records: 2,
+        malformed: 0,
+        bytesRead: bytes.length,
+        changedFiles: 0,
+        unreadableFiles: 0,
+      });
+      expect(report.incomplete).toBe(false);
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("corrupt compressed files are diagnosed without losing healthy transcripts", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-zstd-errors-" });
+    yield* fs.writeFileString(join(root, "a-corrupt.jsonl.zst"), "not zstd");
+    yield* fs.writeFile(
+      join(root, "c-healthy.jsonl.zst"),
+      zstdCompressSync(JSON.stringify(call(start, "healthy"))),
+    );
+    const report = yield* (yield* SkillUsage).scan({
+      roots: [{ root, harness: "claude-code" }],
+      end,
+    });
+    expect(report.rows).toMatchObject([{ name: "example", calls: 1 }]);
+    expect(report.coverage[0]).toMatchObject({
+      files: 2,
+      skippedFiles: 0,
+      unreadableFiles: 1,
+      changedFiles: 0,
+    });
+    expect(report.incomplete).toBe(true);
+  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+);
+
+it.effect("compressed reads keep the inventoried byte bound and diagnose concurrent appends", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-zstd-change-" });
+    const path = join(root, "records.jsonl.zst");
+    const before = zstdCompressSync(JSON.stringify(call(start, "before")) + "\n");
+    const appended = zstdCompressSync(
+      JSON.stringify({
+        ...call(start, "after"),
+        message: {
+          content: [{ type: "tool_use", id: "after", name: "Skill", input: { skill: "after" } }],
+        },
+      }),
+    );
+    yield* fs.writeFile(path, before);
+    const report = yield* Effect.gen(function* () {
+      return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+    }).pipe(
+      Effect.provide(skillUsageLayer),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        stream: (file, options) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              yield* fs.writeFile(file, appended, { flag: "a" });
+              return fs.stream(file, options);
+            }),
+          ),
+      }),
+    );
+    expect(report.rows).toMatchObject([{ name: "example", calls: 1 }]);
+    expect(report.rows).toHaveLength(1);
+    expect(report.coverage[0]).toMatchObject({
+      bytes: before.length,
+      bytesRead: before.length,
+      changedFiles: 1,
+      unreadableFiles: 0,
+    });
+    expect(report.incomplete).toBe(true);
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

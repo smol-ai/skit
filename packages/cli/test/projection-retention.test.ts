@@ -86,11 +86,34 @@ const projectionFixture = Effect.gen(function* () {
   return { fs, workspace, roots, home, source, now, skill, storeLayer };
 });
 
-it.effect(
-  "using the Library backs up only the selected edited copy and leaves other copies untouched",
-  () =>
+it.effect.each(["account", "device"] as const)(
+  "using the Library with %s selection backs up only the selected copy",
+  (selection) =>
     Effect.gen(function* () {
-      const { fs, roots, skill, storeLayer } = yield* projectionFixture;
+      const { fs, roots, home, skill, storeLayer } = yield* projectionFixture;
+      if (selection === "device")
+        yield* writingTo(
+          home,
+          LibraryStore.use((store) =>
+            Effect.gen(function* () {
+              const state = yield* store.load;
+              yield* store.publish(
+                {
+                  ...state,
+                  global_bindings: [],
+                  device_skill_selection: {
+                    mode: "choose",
+                    binding: {
+                      scope: { kind: "global" },
+                      entries: [{ kind: "skill", skill_id: skill.skill_id }],
+                    },
+                  },
+                },
+                state,
+              );
+            }),
+          ).pipe(Effect.provide(storeLayer)),
+        );
       const agents = join(roots.codexRoot, "review");
       const claude = join(roots.claudeRoot, "review");
       yield* fs.writeFileString(join(agents, "notes.txt"), "local supporting file\n");
@@ -106,7 +129,7 @@ it.effect(
       ).pipe(Effect.provide(storeLayer));
       assert.strictEqual(result.status, "installed");
       assert.strictEqual(result.backup_status, "saved");
-      if (!("backup_path" in result)) throw new Error("Expected backup path");
+      assert.ok("backup_path" in result);
       assert.ok(result.backup_path);
       assert.strictEqual(
         yield* fs.readFileString(join(result.backup_path, "SKILL.md")),

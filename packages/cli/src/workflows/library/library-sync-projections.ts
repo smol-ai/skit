@@ -142,6 +142,7 @@ const SyncProjectionPlan = Schema.Struct({
   retire: Schema.Array(ProjectionId),
   remove: Schema.Array(ProjectionId),
   conflicts: Schema.Array(SyncConflictDetail),
+  issues: Schema.Array(SyncConflictDetail),
 });
 type SyncProjectionPlan = typeof SyncProjectionPlan.Type;
 
@@ -151,11 +152,13 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
   aligned: LibraryState,
   manifest: LibraryManifest,
   rootFor: ((target: ProjectionTarget) => string | undefined) | undefined,
+  deferDeviceConflicts: boolean,
 ) {
   const projections: ManagedProjection[] = [];
   const retire: ProjectionId[] = [];
   const remove: ProjectionId[] = [];
   const conflicts: SyncConflictDetail[] = [];
+  const issues: SyncConflictDetail[] = [];
   const enabledIds = new Set(
     [...manifest.bindings, ...aligned.local_bindings].flatMap((binding) =>
       bindingSkillIds(manifest, binding),
@@ -164,7 +167,10 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
   for (const skill of manifest.skills) {
     if (!enabledIds.has(skill.skill_id) || currentSkillVersion(manifest, skill) !== undefined)
       continue;
-    conflicts.push(
+    const repositorySelected = aligned.local_bindings.some((binding) =>
+      bindingSkillIds(manifest, binding).includes(skill.skill_id),
+    );
+    (deferDeviceConflicts && !repositorySelected ? issues : conflicts).push(
       SyncConflictDetail.make({
         key: `skill:${skill.skill_id}:no-selected-version`,
         message: `${skill.name} has no selected retained Version. Update it or disable its Binding before syncing.`,
@@ -225,6 +231,28 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
     if (changing) {
       const custody = yield* projectionCustodyEffect(original);
       if (custody.kind === "conflicted") {
+        if (
+          deferDeviceConflicts &&
+          removing &&
+          !reidentifying &&
+          !relocating &&
+          skill !== undefined &&
+          !missingVersion
+        ) {
+          issues.push(
+            SyncConflictDetail.make({
+              key: `device:${original.projection_id}:modified-projection`,
+              message: `Cannot retire modified Skill at ${original.path}. Save the edited directory outside the projection root, then restore the managed copy before retrying.`,
+              resolution: "local",
+            }),
+          );
+          projections.push({
+            ...projection,
+            status: "conflicted",
+            observed_digest: custody.observed,
+          });
+          continue;
+        }
         // Normal updates preserve edited bytes as variants. Inactive routes are reported by
         // reconciliation while their references remain valid; neither requires strict retirement.
         if (
@@ -283,7 +311,7 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
         : {}),
     });
   }
-  return yield* SyncProjectionPlan.makeEffect({ projections, retire, remove, conflicts });
+  return yield* SyncProjectionPlan.makeEffect({ projections, retire, remove, conflicts, issues });
 });
 
 /**
@@ -335,8 +363,10 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
   function* (options: {
     readonly current: LibraryState | undefined;
     readonly aligned: LibraryState;
+    readonly baseline?: LibraryState;
     readonly manifest: LibraryManifest;
     readonly rootFor: ((target: ProjectionTarget) => string | undefined) | undefined;
+    readonly deferDeviceConflicts?: boolean;
   }) {
     const store = yield* LibraryStore;
     const home = store.home;
@@ -346,11 +376,18 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
     const plan =
       current === undefined
         ? undefined
-        : yield* planSyncProjectionsEffect(current, aligned, options.manifest, options.rootFor);
+        : yield* planSyncProjectionsEffect(
+            current,
+            aligned,
+            options.manifest,
+            options.rootFor,
+            options.deferDeviceConflicts ?? false,
+          );
     if (plan?.conflicts.length) return { _tag: "Conflicted" as const, conflicts: plan.conflicts };
-    const baseline = current ?? aligned;
+    const baseline = current ?? options.baseline ?? aligned;
     return {
       _tag: "Ready" as const,
+      issues: plan?.issues ?? [],
       publishRestored: Effect.fn("Library.sync.publishDeviceTransition")(function* (
         restored: LibraryState,
         ancestry: NonNullable<LibraryState["sync_ancestry"]>,

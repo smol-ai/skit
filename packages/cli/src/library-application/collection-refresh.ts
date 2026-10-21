@@ -1,5 +1,6 @@
 import {
   bindingSkillIds,
+  effectiveGlobalBindings,
   withLibraryWriter,
   LibraryStore,
   type LibraryState,
@@ -72,7 +73,7 @@ const skillChanges = (
     readonly artifact_digest?: string;
   }>,
 ) => {
-  const bindings = [...state.global_bindings, ...state.local_bindings];
+  const bindings = [...effectiveGlobalBindings(state), ...state.local_bindings];
   const followed = bindings.some((binding) =>
     binding.entries.some(
       (entry) => entry.kind === "collection" && entry.collection_id === collectionId,
@@ -236,7 +237,7 @@ export const refreshCollection = Effect.fn("Library.refreshCollection")(function
           reconcileLibraryProjections({
             roots: options.roots,
             variantsPath: store.variantsPath,
-            onlyBindings: [...current.global_bindings, ...current.local_bindings].filter(
+            onlyBindings: [...effectiveGlobalBindings(current), ...current.local_bindings].filter(
               (binding) =>
                 binding.entries.some((entry) =>
                   entry.kind === "collection"

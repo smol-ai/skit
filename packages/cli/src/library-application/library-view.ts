@@ -1,5 +1,6 @@
 import {
   bindingSkillIds,
+  effectiveGlobalBindings,
   currentCollectionSkills,
   currentSkillVersion,
   LibraryStore,
@@ -114,7 +115,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       }));
     }),
     globalBindings: structuredClone(
-      state.global_bindings.map((binding) => ({
+      effectiveGlobalBindings(state).map((binding) => ({
         scope: binding.scope,
         entries: binding.entries.map((entry) =>
           entry.kind === "collection"
@@ -150,7 +151,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       new Set(
         [
           ...change.bindings,
-          ...(change.scope.kind === "repository" ? state.global_bindings : []),
+          ...(change.scope.kind === "repository" ? effectiveGlobalBindings(state) : []),
         ].flatMap((binding) => bindingSkillIds(state, binding)),
       ).size,
   };
