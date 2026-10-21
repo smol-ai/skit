@@ -230,17 +230,6 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ),
   resultStory(
     "add",
-    "outcome-unavailable",
-    result("add", {
-      collection_id: collectionId,
-      skill_ids: [skillId],
-      retained_version_id: versionId,
-      snapshot_digest: digest,
-      skills: [{ name: "review", verbatim_path: "." }],
-    }),
-  ),
-  resultStory(
-    "add",
     "preview",
     result("addPreview", {
       kind: "plain",

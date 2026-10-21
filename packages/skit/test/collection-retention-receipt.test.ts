@@ -100,12 +100,14 @@ for (const kind of ["observed", "authored"] as const) {
 
         const before = yield* fs.readFileString(join(home, "state.json"));
         const repeated = yield* retain(source, "2026-10-16T01:00:00.000Z");
-        assert.deepStrictEqual(repeated, receipt);
+        assert.strictEqual(receipt.action, "added");
+        assert.deepStrictEqual(repeated, { ...receipt, action: "unchanged" });
         assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
 
         const otherSource = join(root, "other-source");
         yield* fs.copy(source, otherSource);
         const reused = yield* retain(otherSource, "2026-10-16T02:00:00.000Z");
+        assert.strictEqual(reused.action, "added");
         assert.strictEqual(reused.retainedCopyId, receipt.retainedCopyId);
         assert.strictEqual(reused.snapshotDigest, receipt.snapshotDigest);
         assert.notStrictEqual(reused.collection.collection_id, receipt.collection.collection_id);
@@ -114,5 +116,104 @@ for (const kind of ["observed", "authored"] as const) {
         assert.strictEqual(final.collections.length, 2);
         assert.strictEqual(final.acquisitions.length, 2);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+}
+
+for (const kind of ["observed", "authored"] as const) {
+  it.effect(`${kind} outcomes follow current Versions rather than acquisition writes`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-retention-outcomes-" });
+      const home = join(root, "library");
+      const source = join(root, "source");
+      yield* fs.makeDirectory(source);
+      const write = (body: string) =>
+        fs.writeFileString(
+          join(source, "SKILL.md"),
+          `---\nname: review\ndescription: Review carefully\n---\n${body}\n`,
+        );
+      if (kind === "authored")
+        yield* fs.writeFileString(
+          join(source, "skit.json"),
+          JSON.stringify({ slug: "tools", skills: [{ name: "review", path: "." }] }),
+        );
+      const machineId = makeMachineId();
+      let tick = 0;
+      const retain = Effect.fn("Test.retainOutcome")(function* (commit: string) {
+        const request = {
+          machineId,
+          source: { type: "github" as const, owner: "fixture", repository: "skills" },
+          input: "https://github.com/fixture/skills",
+          revision: { kind: "commit" as const, commit },
+          retainedAt: new Date(Date.UTC(2026, 9, 22, 0, tick++)).toISOString(),
+        };
+        return yield* Effect.scoped(
+          withLibraryWriter(
+            kind === "authored"
+              ? retainAuthoredCollectionUnderLockEffect({ ...request, root: source })
+              : retainObservedCollectionEffect({
+                  ...request,
+                  skills: [
+                    {
+                      name: "review",
+                      sourcePath: source,
+                      relativePath: ".",
+                      observedHash: yield* deterministicTreeHashEffect(source),
+                    },
+                  ],
+                  observations: [],
+                }),
+          ).pipe(inLibrary(home)),
+        );
+      });
+      const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
+      yield* write("first");
+      const first = yield* retain("a".repeat(40));
+      assert.strictEqual(first.action, "added");
+      assert.strictEqual((yield* retain("a".repeat(40))).action, "unchanged");
+      assert.strictEqual((yield* store.load).acquisitions.length, 1);
+
+      // A new upstream revision is recorded even when it contains the same bytes.
+      assert.strictEqual((yield* retain("b".repeat(40))).action, "unchanged");
+      assert.strictEqual((yield* store.load).acquisitions.length, 2);
+      yield* write("second");
+      const changed = yield* retain("c".repeat(40));
+      assert.strictEqual(changed.action, "updated");
+      const secondVersion = changed.skills[0]?.versions[1];
+      assert.ok(secondVersion);
+
+      // Reverting selects an existing Version; no new Version is created.
+      yield* write("first");
+      const reverted = yield* retain("d".repeat(40));
+      assert.strictEqual(reverted.action, "updated");
+      assert.strictEqual(reverted.skills[0]?.versions.length, 2);
+      assert.strictEqual(reverted.retainedCopyId, first.retainedCopyId);
+
+      // A retained local selection survives identical Source bytes, but a Source change clears it.
+      yield* Effect.scoped(
+        withLibraryWriter(
+          Effect.gen(function* () {
+            const base = yield* store.load;
+            yield* store.publish(
+              {
+                ...base,
+                skills: base.skills.map((skill) => ({
+                  ...skill,
+                  local_version_id: secondVersion.skill_version_id,
+                })),
+              },
+              base,
+            );
+          }),
+        ).pipe(inLibrary(home)),
+      );
+      const preserved = yield* retain("e".repeat(40));
+      assert.strictEqual(preserved.action, "unchanged");
+      assert.strictEqual(preserved.skills[0]?.local_version_id, secondVersion.skill_version_id);
+      yield* write("third");
+      const replaced = yield* retain("f".repeat(40));
+      assert.strictEqual(replaced.action, "updated");
+      assert.strictEqual(replaced.skills[0]?.local_version_id, undefined);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 }

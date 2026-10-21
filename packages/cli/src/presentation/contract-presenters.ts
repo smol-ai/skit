@@ -876,9 +876,7 @@ const contractPresenters: ContractPresenters = {
         ? `Updated ${noun} in your Library.`
         : data.action === "unchanged"
           ? `${noun} already ${count === 1 ? "has" : "have"} the current retained version.`
-          : data.action === "added"
-            ? `Added ${noun} to your Library.`
-            : `Processed ${noun} in your Library.`;
+          : `Added ${noun} to your Library.`;
     return [summary, ...sourceDiagnosticLines(data.diagnostics)].join("\n");
   },
   addPreview: (data) => {

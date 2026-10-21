@@ -1,8 +1,6 @@
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
   deterministicTreeHashEffect,
-  currentSkillVersion,
-  LibraryStore,
   originalTreeHashEffect,
   validateSkitDirectoryEffect,
   readSkitDescriptorEffect,
@@ -182,8 +180,6 @@ export const retainLibrarySourceEffect = Effect.fn("Library.addSource")(function
     previousSkillPaths,
     ({ resolved, historicalInput, registryOrigin }) =>
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        const before = yield* store.load;
         const authority =
           resolved.source.type === "registry"
             ? (resolved.source.authority ?? registryOrigin)
@@ -211,28 +207,8 @@ export const retainLibrarySourceEffect = Effect.fn("Library.addSource")(function
                 skills: yield* observeSourceSkills(resolved, historicalInput),
                 observations: [],
               });
-        // Reporting the outcome must not turn an already committed acquisition into a failure.
-        const after = yield* store.load.pipe(Effect.orElseSucceed(() => undefined));
-        const selected = (state: typeof before) =>
-          state.skills
-            .filter((skill) => skill.collection_id === retained.collection.collection_id)
-            .map(
-              (skill) =>
-                `${skill.skill_id}:${currentSkillVersion(state, skill)?.skill_version_id ?? ""}`,
-            )
-            .sort()
-            .join("\n");
-        const action = !before.collections.some(
-          (collection) => collection.collection_id === retained.collection.collection_id,
-        )
-          ? ("added" as const)
-          : after === undefined
-            ? undefined
-            : selected(before) === selected(after)
-              ? ("unchanged" as const)
-              : ("updated" as const);
         return {
-          ...(action === undefined ? {} : { action }),
+          action: retained.action,
           collection_id: retained.collection.collection_id,
           skill_ids: retained.skills.map((skill) => skill.skill_id),
           retained_version_id: retained.retainedCopyId,

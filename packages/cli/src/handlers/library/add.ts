@@ -80,7 +80,7 @@ export const addCliCommand = Command.make(
         );
         yield* renderer.result(
           result("add", {
-            ...(retained.action === undefined ? {} : { action: retained.action }),
+            action: retained.action,
             ...(retained.collection_id === undefined
               ? {}
               : { collection_id: retained.collection_id }),
