@@ -38,8 +38,8 @@ const archiveEntryNamesUnsafe = (archive: Uint8Array): Array<string> => {
     }
   if (end < 0) throw invalidArchive();
   // Inflaters disagree on which end-record count to trust, so both counts, the single disk, and a
-  // directory ending exactly at the end record must agree before any of it is believed. Writers add
-  // ZIP64 records there only past limits this preflight already rejects.
+  // directory ending exactly at the end record must agree before any of it is believed. SKIT's
+  // archive writer adds ZIP64 records there only past limits this preflight already rejects.
   const disk = view.getUint16(end + 4, true);
   const centralDisk = view.getUint16(end + 6, true);
   const entriesOnDisk = view.getUint16(end + 8, true);
@@ -78,6 +78,8 @@ const archiveEntryNamesUnsafe = (archive: Uint8Array): Array<string> => {
     if (
       (flags & 1) !== 0 ||
       ![0, 8].includes(method) ||
+      // A stored entry is copied at its compressed size, so that must be the size budgeted here.
+      (method === 0 && compressed !== uncompressed) ||
       compressed === 0xffffffff ||
       uncompressed === 0xffffffff ||
       next > end

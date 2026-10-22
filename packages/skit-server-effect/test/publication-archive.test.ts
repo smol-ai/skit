@@ -53,7 +53,33 @@ const smuggledArchive = (entriesOnDisk: number, hiddenInGap: boolean) => {
   return archive;
 };
 
+/** A valid one-entry stored archive with one end-record or central-record field overwritten. */
+const storedArchiveWith = (record: "end" | "central", field: number, value: number) => {
+  const archive = zipSync({ "a.txt": [bytes("visible"), { level: 0 }] });
+  const view = new DataView(archive.buffer);
+  const end = archive.byteLength - 22;
+  const offset = record === "end" ? end : view.getUint32(end + 16, true);
+  view.setUint16(offset + field, value, true);
+  return archive;
+};
+
 describe("Publication release archives", () => {
+  for (const [label, record, field, value] of [
+    ["a second disk", "end", 4, 1],
+    ["a central directory on another disk", "end", 6, 1],
+    ["more entries on this disk than in total", "end", 8, 2],
+    // An inflater copies a stored entry at its compressed size, not the uncompressed size budgeted.
+    ["a stored entry claiming no uncompressed bytes", "central", 24, 0],
+  ] as const)
+    it.effect(`rejects an archive with ${label}`, () =>
+      Effect.gen(function* () {
+        const outcome = yield* Effect.result(readArchive(storedArchiveWith(record, field, value)));
+
+        expect(outcome._tag).toBe("Failure");
+        if (outcome._tag === "Failure") expect(outcome.failure.code).toBe("INVALID_ARCHIVE");
+      }),
+    );
+
   for (const [entriesOnDisk, hiddenInGap] of [
     [2, true],
     [1, true],
