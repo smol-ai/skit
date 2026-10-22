@@ -37,18 +37,27 @@ const archiveEntryNamesUnsafe = (archive: Uint8Array): Array<string> => {
       break;
     }
   if (end < 0) throw invalidArchive();
+  // Inflaters disagree on which end-record count to trust, so both counts, the single disk, and a
+  // directory ending exactly at the end record must agree before any of it is believed. Writers add
+  // ZIP64 records there only past limits this preflight already rejects.
+  const disk = view.getUint16(end + 4, true);
+  const centralDisk = view.getUint16(end + 6, true);
+  const entriesOnDisk = view.getUint16(end + 8, true);
   const entries = view.getUint16(end + 10, true);
   const centralBytes = view.getUint32(end + 12, true);
   const centralOffset = view.getUint32(end + 16, true);
   const commentBytes = view.getUint16(end + 20, true);
   if (
+    disk !== 0 ||
+    centralDisk !== 0 ||
+    entriesOnDisk !== entries ||
     entries === 0xffff ||
     centralBytes === 0xffffffff ||
     centralOffset === 0xffffffff ||
     end + 22 + commentBytes !== archive.byteLength ||
     entries < 1 ||
     entries > MAX_ARTIFACT_FILES ||
-    centralOffset + centralBytes > end
+    centralOffset + centralBytes !== end
   )
     throw invalidArchive();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -91,8 +100,18 @@ export const readArchive = Effect.fn("Integrity.readArchive")(function* (archive
     try: () => archiveEntryNamesUnsafe(archive),
     catch: () => invalidArchive(),
   });
+  // Inflate only what the preflight validated, each name once, within the content budget.
+  const unread = new Set(names);
+  let budget = MAX_ARTIFACT_CONTENT_BYTES;
   const files = yield* Effect.try({
-    try: () => unzipSync(archive),
+    try: () =>
+      unzipSync(archive, {
+        filter: ({ name, originalSize }) => {
+          budget -= originalSize;
+          if (!unread.delete(name) || budget < 0) throw invalidArchive();
+          return true;
+        },
+      }),
     catch: () => invalidArchive(),
   });
   if (

@@ -15,7 +15,75 @@ const bindingsLayer = Layer.merge(
 );
 const testLayer = Layer.merge(bindingsLayer, BrowserCrypto.layer);
 
+/**
+ * One validated `a.txt`, plus a second `a.txt` record the end record hides: it counts one entry for
+ * the preflight but `entriesOnDisk` for an inflater that reads that field, and the hidden record sits
+ * between the declared central directory and the end record.
+ */
+const smuggledArchive = (entriesOnDisk: number, hiddenInGap: boolean) => {
+  const parts = (content: string) => {
+    const archive = zipSync({ "a.txt": [bytes(content), { level: 0 }] });
+    const view = new DataView(archive.buffer);
+    const end = archive.byteLength - 22;
+    const central = view.getUint32(end + 16, true);
+    return {
+      local: archive.subarray(0, central),
+      central: archive.slice(central, central + view.getUint32(end + 12, true)),
+      end: archive.slice(end),
+    };
+  };
+  const visible = parts("visible");
+  const hidden = parts("smuggled");
+  new DataView(hidden.central.buffer).setUint32(42, visible.local.byteLength, true);
+  const end = new DataView(visible.end.buffer);
+  end.setUint16(8, entriesOnDisk, true);
+  end.setUint32(16, visible.local.byteLength + hidden.local.byteLength, true);
+  if (!hiddenInGap) end.setUint32(12, visible.central.byteLength + hidden.central.byteLength, true);
+  const archive = new Uint8Array(
+    [visible.local, hidden.local, visible.central, hidden.central, visible.end].reduce(
+      (length, part) => length + part.byteLength,
+      0,
+    ),
+  );
+  let offset = 0;
+  for (const part of [visible.local, hidden.local, visible.central, hidden.central, visible.end]) {
+    archive.set(part, offset);
+    offset += part.byteLength;
+  }
+  return archive;
+};
+
 describe("Publication release archives", () => {
+  for (const [entriesOnDisk, hiddenInGap] of [
+    [2, true],
+    [1, true],
+    [2, false],
+  ] as const)
+    it.effect(
+      `rejects a record the end record hides (entries on disk ${entriesOnDisk}, ${hiddenInGap ? "in a gap" : "inside the directory"})`,
+      () =>
+        Effect.gen(function* () {
+          const outcome = yield* Effect.result(
+            readArchive(smuggledArchive(entriesOnDisk, hiddenInGap)),
+          );
+
+          expect(outcome._tag).toBe("Failure");
+          if (outcome._tag === "Failure") expect(outcome.failure.code).toBe("INVALID_ARCHIVE");
+        }),
+    );
+
+  it.effect("reads an archive whose end record describes exactly its directory", () =>
+    Effect.gen(function* () {
+      const { names, files } = yield* readArchive(
+        zipSync({ "a.txt": bytes("visible"), "b/c.txt": [bytes("stored"), { level: 0 }] }),
+      );
+
+      expect(names).toEqual(["a.txt", "b/c.txt"]);
+      expect(new TextDecoder().decode(files["a.txt"])).toBe("visible");
+      expect(new TextDecoder().decode(files["b/c.txt"])).toBe("stored");
+    }),
+  );
+
   it.effect("rejects traversal paths even when the inflater accepts them", () =>
     Effect.gen(function* () {
       const outcome = yield* Effect.result(readArchive(zipSync({ "../escape": bytes("no") })));
