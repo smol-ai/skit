@@ -46,15 +46,13 @@ be viewed in human and JSON mode; the outcomes use `skit.add.v6` with a required
 ## Static image export
 
 The image exporter uses the real CLI presenters and recorded journey frames, with
-colour explicitly enabled. It adds a fixed dark ANSI palette, bundled JetBrains
-Mono regular/bold fonts, and a 2× PNG capture through Playwright. These are
-storybook development dependencies; the distributed CLI does not include them.
-
-One-time browser setup:
-
-```sh
-pnpm --filter @smolai/skit-storybook exec playwright install chromium
-```
+colour explicitly enabled. It writes the ANSI output into a headless xterm.js
+terminal at the selected width, draws the resulting cell grid as SVG with a
+fixed dark palette, and rasterizes a 2× PNG with resvg. No browser is involved.
+Text uses DejaVu Sans Mono, with DejaVu Sans for the braille spinner, both from
+the `dejavu-fonts-ttf` package. System fonts are never loaded, so output is
+identical across platforms. These are storybook development dependencies; the
+distributed CLI does not include them.
 
 From the repository root:
 
@@ -71,16 +69,15 @@ prints available frame indices and labels. Each journey runs once in disposable
 fixtures to obtain its recording. Frame selection does not drive the real CLI or
 repeat the operation. An optional `--command` is a display caption only.
 
-Outputs are relative to the invoking working directory. Each PNG has a
-self-contained HTML sibling with embedded fonts, for inspecting or sharing the
-render. Use `--columns 72` to change the content width (default 88), and
-`--detail full` for full command output. Long lines wrap to the selected width.
-No network resources are loaded by the generated HTML.
+Relative output paths resolve against the directory `pnpm` was invoked from.
+Each PNG has an SVG sibling with DejaVu Sans Mono embedded, for inspecting or
+sharing the render. Use `--columns 72` to change the content width (default
+88), and `--detail full` for full command output. Long lines wrap exactly as a
+terminal of that width would.
 
-This tool exports presenter output, not arbitrary live terminal sessions: it
-does not emulate cursor movement or terminal resizing. It preserves the CLI's
-existing colours rather than adding highlighting to uncoloured errors. Some
-journey frames contain temporary paths or fixture-generated identifiers; those
-need normalization before use as reproducible documentation assets. Unicode
-symbols outside the bundled Latin font subset may use platform fallback fonts.
-The exporter does not upload images or update Markdown automatically.
+This tool exports presenter output, not arbitrary live terminal sessions. It
+preserves the CLI's existing colours rather than adding highlighting to
+uncoloured errors. Some journey frames contain temporary paths or
+fixture-generated identifiers; those need normalization before use as
+reproducible documentation assets. The exporter does not upload images or
+update Markdown automatically.

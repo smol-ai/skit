@@ -36,13 +36,21 @@ export const filterCatalog = (query: string): ReadonlyArray<CatalogItem> => {
   return needle ? catalog.filter(({ key }) => key.toLowerCase().includes(needle)) : catalog;
 };
 
-export function renderOutput(index: number, environment: TerminalEnvironment): string {
+/** Renders an output story exactly as the CLI front end would. */
+export function renderOutputFrame(index: number, environment: TerminalEnvironment) {
   const story = outputStories[index];
-  if (!story) return "Story not found";
-  const frame = OutputStory.$match(story, {
-    Result: ({ result }) => renderResultFrame(result, environment),
-    Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
-  });
+  return (
+    story &&
+    OutputStory.$match(story, {
+      Result: ({ result }) => renderResultFrame(result, environment),
+      Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
+    })
+  );
+}
+
+export function renderOutput(index: number, environment: TerminalEnvironment): string {
+  const frame = renderOutputFrame(index, environment);
+  if (!frame) return "Story not found";
   return [
     frame.stdout && frame.stdout.trimEnd(),
     frame.stderr && `STDERR\n${frame.stderr.trimEnd()}`,
