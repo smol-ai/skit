@@ -27,6 +27,7 @@ import {
   NoProjectionRoot,
   OwnershipMarkerDisagrees,
   ProjectionRetireConflict,
+  UnsafeProjectionBackups,
   UnsafeProjectionName,
 } from "../failures.js";
 import {
@@ -244,7 +245,7 @@ export function expectedProjectionHashResult(
 type BackUp = (
   projection: ManagedProjection,
   action: "replace" | "retire",
-) => Effect.Effect<void, PlatformError, FileSystem.FileSystem>;
+) => Effect.Effect<void, UnsafeProjectionBackups | PlatformError, TreeRequirements>;
 
 const materializeProjectionEffect = Effect.fn("Projection.materialize")(function* (
   request: MaterializeProjectionRequest,
@@ -456,7 +457,11 @@ const retireProjectionEffect = Effect.fn("Projection.retire")(function* (
   backUp: BackUp,
 ): Effect.fn.Return<
   RetireProjectionResult,
-  ProjectionRetireConflict | OwnershipMarkerDisagrees | TreeError | PlatformError,
+  | ProjectionRetireConflict
+  | OwnershipMarkerDisagrees
+  | UnsafeProjectionBackups
+  | TreeError
+  | PlatformError,
   TreeRequirements | TreeHasher
 > {
   const custody = yield* projectionCustodyEffect(projection);
@@ -555,6 +560,7 @@ export type ProjectionMutationError =
   | UnsafeProjectionName
   | OwnershipMarkerDisagrees
   | ProjectionRetireConflict
+  | UnsafeProjectionBackups
   | HarnessInvocationWriteFailure
   | TreeError
   | PlatformError;

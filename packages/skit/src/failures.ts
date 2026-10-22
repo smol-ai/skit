@@ -285,6 +285,21 @@ export class UnsafeProjectionName
   }
 }
 
+export class UnsafeProjectionBackups
+  extends Data.TaggedError("UnsafeProjectionBackups")<{
+    path: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation =
+    "Remove the link, or replace it with a regular directory or file, then retry.";
+  get message(): string {
+    return `Projection backups must not pass through a link or special file: ${this.path}`;
+  }
+}
+
 export class SharedTargetCollision
   extends Data.TaggedError("SharedTargetCollision")<{
     target: string;

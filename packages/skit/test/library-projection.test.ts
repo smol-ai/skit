@@ -1276,6 +1276,39 @@ it.effect("backs up beside a symlinked root's real directory, on the copy's own 
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
+for (const planted of ["ignore file", "backups directory"] as const)
+  it.effect(`never backs up through a planted ${planted} link`, () =>
+    Effect.gen(function* () {
+      const { fs, home, targetRoot, load, edit, project, retire } = yield* projectionFixture();
+      yield* project();
+      // A repository can commit its own `.skit-backups` beside the skills root it shares.
+      const outside = join(home, "outside");
+      const sentinel = join(outside, "sentinel");
+      yield* fs.makeDirectory(outside);
+      yield* fs.writeFileString(sentinel, "unrelated bytes\n");
+      const backups = join(dirname(targetRoot), ".skit-backups");
+      if (planted === "ignore file") {
+        yield* fs.makeDirectory(backups);
+        yield* fs.symlink(sentinel, join(backups, ".gitignore"));
+      } else yield* fs.symlink(outside, backups);
+      yield* edit(unbound);
+
+      const failed = yield* retire.pipe(Effect.result);
+
+      assert.strictEqual(
+        Result.isFailure(failed) && failed.failure._tag,
+        "UnsafeProjectionBackups",
+      );
+      assert.strictEqual(yield* fs.readFileString(sentinel), "unrelated bytes\n");
+      assert.deepStrictEqual(yield* fs.readDirectory(outside), ["sentinel"]);
+      assert.strictEqual(
+        yield* fs.readFileString(join(targetRoot, "review", "SKILL.md")),
+        "raw Skill bytes\n",
+      );
+      assert.strictEqual((yield* load).projections[0]?.status, "installed");
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
 it("works beside a root on its parent's device, and inside a root mounted from another", () => {
   assert.strictEqual(projectionWorkDirectory("/home/me/.claude/skills", 1, 1), "/home/me/.claude");
   assert.strictEqual(

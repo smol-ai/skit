@@ -2,6 +2,7 @@ import { Clock, Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
+import { UnsafeProjectionBackups } from "../failures.js";
 import { makeOperationId } from "../library/entity-ids.js";
 import type { ManagedProjection } from "../library/library-state.js";
 import { LinkStat } from "../platform/link-stat.js";
@@ -40,10 +41,23 @@ export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
   action: "replace" | "retire",
 ) {
   const fs = yield* FileSystem.FileSystem;
+  const links = yield* LinkStat;
   const backups = join(yield* projectionWorkDirectoryEffect(projection.root), BACKUPS_DIRECTORY);
   yield* fs.makeDirectory(backups, { recursive: true, mode: 0o700 });
+  // A repository can commit its own `.skit-backups`, so never follow a link planted there.
+  if ((yield* links.lstat(backups)).type !== "Directory")
+    return yield* new UnsafeProjectionBackups({ path: backups });
   // Backups beside a repository's skills root must never be committed with it.
-  yield* fs.writeFileString(join(backups, ".gitignore"), "*\n", { mode: 0o600 });
+  const ignore = join(backups, ".gitignore");
+  yield* fs
+    .writeFileString(ignore, "*\n", { mode: 0o600, flag: "wx" })
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
+      ),
+    );
+  if ((yield* links.lstat(ignore)).type !== "File")
+    return yield* new UnsafeProjectionBackups({ path: ignore });
   const stamp = new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "-");
   const backup = join(
     backups,
