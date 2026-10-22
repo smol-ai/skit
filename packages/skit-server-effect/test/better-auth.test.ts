@@ -4,7 +4,6 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { vi } from "vitest";
 import { makeWebHandler } from "../src/http.js";
-import { githubAccountLinkingPolicy } from "../src/auth/better-auth.js";
 import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
 import { expectedMigrations } from "../src/readiness/migrations.generated.js";
 import {
@@ -34,15 +33,131 @@ const prepareDatabase = webPromise(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 });
 
-describe("Better Auth adapter", () => {
-  it("trusts only same-email GitHub linking for an unverified bootstrap identity", () => {
-    expect(githubAccountLinkingPolicy).toEqual({
-      enabled: true,
-      trustedProviders: ["github"],
-      requireLocalEmailVerified: false,
+const githubEnv = { GITHUB_CLIENT_ID: "github-client", GITHUB_CLIENT_SECRET: "github-secret" };
+
+// Completes GitHub OAuth for a verified GitHub email, faking only GitHub's outbound endpoints.
+const signInWithGitHub = (handler: ReturnType<typeof makeWebHandler>, email: string) =>
+  Effect.gen(function* () {
+    const started = yield* webPromise(() =>
+      handler.handler(
+        new Request("https://registry.test/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "https://registry.test" },
+          body: JSON.stringify({ provider: "github", callbackURL: "https://registry.test" }),
+        }),
+      ),
+    );
+    const { url } = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }))(
+      yield* webPromise(() => started.json()),
+    );
+    const state = new URL(url).searchParams.get("state") ?? "";
+    const cookie = started.headers
+      .getSetCookie()
+      .map((value) => value.split(";", 1)[0])
+      .join("; ");
+    const realFetch = globalThis.fetch;
+    const github = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const target = new Request(input, init).url;
+      if (target === "https://github.com/login/oauth/access_token")
+        return Promise.resolve(
+          Response.json({
+            access_token: "github-token",
+            token_type: "bearer",
+            scope: "user:email",
+          }),
+        );
+      if (target === "https://api.github.com/user")
+        return Promise.resolve(Response.json({ id: 4242, login: "octo", name: "Octo", email }));
+      if (target === "https://api.github.com/user/emails")
+        return Promise.resolve(Response.json([{ email, primary: true, verified: true }]));
+      return realFetch(input, init);
     });
-    expect("allowDifferentEmails" in githubAccountLinkingPolicy).toBe(false);
+    return yield* webPromise(() =>
+      handler.handler(
+        new Request(
+          `https://registry.test/api/auth/callback/github?code=github-code&state=${encodeURIComponent(state)}`,
+          { headers: { cookie } },
+        ),
+      ),
+    ).pipe(Effect.ensuring(Effect.sync(() => github.mockRestore())));
   });
+
+const identityByEmail = (email: string) =>
+  Effect.flatMap(
+    D1Client.D1Client,
+    (sql) => sql`SELECT u.emailVerified, a.providerId FROM user u
+      JOIN account a ON a.userId = u.id WHERE u.email = ${email} ORDER BY a.providerId`,
+  );
+
+describe("Better Auth adapter", () => {
+  it.effect("links GitHub into the unverified bootstrapped operator", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const github = makeWebHandler({ ...env, ...githubEnv });
+      const bootstrap = yield* webPromise(() =>
+        github.handler(
+          new Request("https://registry.test/api/bootstrap", {
+            method: "POST",
+            headers: { "content-type": "application/json", origin: "https://registry.test" },
+            body: JSON.stringify({
+              token: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+              username: "operator",
+              email: "operator@example.test",
+              password: "correct horse battery staple",
+            }),
+          }),
+        ),
+      );
+      expect(bootstrap.status).toBe(201);
+
+      yield* signInWithGitHub(github, "operator@example.test");
+
+      expect(yield* identityByEmail("operator@example.test")).toEqual([
+        { emailVerified: 1, providerId: "credential" },
+        { emailVerified: 1, providerId: "github" },
+      ]);
+      yield* webPromise(() => github.dispose());
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
+
+  it.effect("keeps GitHub out of an unverified registrant's password account", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const github = makeWebHandler({
+        ...env,
+        ...githubEnv,
+        ACCOUNT_REGISTRATION_MODE: "open",
+        EMAIL_FROM: "SKIT <noreply@registry.test>",
+        EMAIL: { send: () => Promise.resolve({ messageId: "verification-message" }) },
+      });
+      const passwordSignIn = (path: string, body: object) =>
+        webPromise(() =>
+          github.handler(
+            new Request(`https://registry.test${path}`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                origin: "https://registry.test",
+                "cf-connecting-ip": "192.0.2.61",
+              },
+              body: JSON.stringify(body),
+            }),
+          ),
+        );
+      const credentials = { email: "victim@example.test", password: "attacker chosen password" };
+      expect(
+        (yield* passwordSignIn("/api/auth/sign-up/email", { ...credentials, name: "x" })).status,
+      ).toBe(200);
+
+      yield* signInWithGitHub(github, "victim@example.test");
+
+      expect(yield* identityByEmail("victim@example.test")).toEqual([
+        { emailVerified: 0, providerId: "credential" },
+      ]);
+      expect((yield* passwordSignIn("/api/auth/sign-in/email", credentials)).status).toBe(403);
+      yield* webPromise(() => github.dispose());
+    }).pipe(Effect.provide(bindingsLayer)),
+  );
 
   it.effect("advertises only configured optional authentication services", () =>
     Effect.gen(function* () {
