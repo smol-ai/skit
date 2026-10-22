@@ -8,6 +8,7 @@ import type { ManagedProjection } from "../library/library-state.js";
 import { LinkStat } from "../platform/link-stat.js";
 
 const BACKUPS_DIRECTORY = ".skit-backups";
+const IGNORE_EVERYTHING = "*\n";
 
 /**
  * Where SKIT stages and backs up copies for a root. Beside the real root, a scan of the root never
@@ -47,16 +48,22 @@ export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
   // A repository can commit its own `.skit-backups`, so never follow a link planted there.
   if ((yield* links.lstat(backups)).type !== "Directory")
     return yield* new UnsafeProjectionBackups({ path: backups });
-  // Backups beside a repository's skills root must never be committed with it.
+  // Backups beside a repository's skills root must never be committed with it. An existing ignore
+  // file is only read, never rewritten, and must still ignore everything.
   const ignore = join(backups, ".gitignore");
-  yield* fs
-    .writeFileString(ignore, "*\n", { mode: 0o600, flag: "wx" })
+  const created = yield* fs
+    .writeFileString(ignore, IGNORE_EVERYTHING, { mode: 0o600, flag: "wx" })
     .pipe(
+      Effect.as(true),
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
+        error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
       ),
     );
-  if ((yield* links.lstat(ignore)).type !== "File")
+  if (
+    !created &&
+    ((yield* links.lstat(ignore)).type !== "File" ||
+      (yield* fs.readFileString(ignore)) !== IGNORE_EVERYTHING)
+  )
     return yield* new UnsafeProjectionBackups({ path: ignore });
   const stamp = new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "-");
   const backup = join(
@@ -72,19 +79,23 @@ export const pendingProjectionBackupsEffect = Effect.fn("Projection.pendingBacku
   projection: Pick<ManagedProjection, "root" | "projection_id">,
 ) {
   const fs = yield* FileSystem.FileSystem;
+  const links = yield* LinkStat;
   const realRoot = yield* fs
     .realPath(projection.root)
     .pipe(Effect.orElseSucceed(() => resolve(projection.root)));
   const pending: string[] = [];
   for (const workDirectory of [dirname(realRoot), realRoot]) {
     const backups = join(workDirectory, BACKUPS_DIRECTORY);
-    const names = yield* fs
-      .readDirectory(backups)
-      .pipe(
-        Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "NotFound" ? Effect.succeed([]) : Effect.fail(error),
-        ),
-      );
+    // SKIT never backs up through a link, so a planted one holds none of its backups; keeping or
+    // discarding what it points at would rename or delete files outside the backups.
+    const type = yield* links.lstat(backups).pipe(
+      Effect.map((info) => info.type),
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+      ),
+    );
+    if (type !== "Directory") continue;
+    const names = yield* fs.readDirectory(backups);
     pending.push(
       ...names
         .filter((name) => name.startsWith(`pending-${projection.projection_id}-`))

@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
@@ -1276,8 +1276,12 @@ it.effect("backs up beside a symlinked root's real directory, on the copy's own 
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-for (const planted of ["ignore file", "backups directory"] as const)
-  it.effect(`never backs up through a planted ${planted} link`, () =>
+for (const planted of [
+  "ignore file link",
+  "backups directory link",
+  "permissive ignore file",
+] as const)
+  it.effect(`refuses to back up through a planted ${planted}`, () =>
     Effect.gen(function* () {
       const { fs, home, targetRoot, load, edit, project, retire } = yield* projectionFixture();
       yield* project();
@@ -1287,10 +1291,14 @@ for (const planted of ["ignore file", "backups directory"] as const)
       yield* fs.makeDirectory(outside);
       yield* fs.writeFileString(sentinel, "unrelated bytes\n");
       const backups = join(dirname(targetRoot), ".skit-backups");
-      if (planted === "ignore file") {
+      if (planted === "backups directory link") yield* fs.symlink(outside, backups);
+      else {
         yield* fs.makeDirectory(backups);
-        yield* fs.symlink(sentinel, join(backups, ".gitignore"));
-      } else yield* fs.symlink(outside, backups);
+        if (planted === "ignore file link")
+          yield* fs.symlink(sentinel, join(backups, ".gitignore"));
+        // An ignore file that ignores nothing would let backups be committed.
+        else yield* fs.writeFileString(join(backups, ".gitignore"), "");
+      }
       yield* edit(unbound);
 
       const failed = yield* retire.pipe(Effect.result);
@@ -1306,6 +1314,30 @@ for (const planted of ["ignore file", "backups directory"] as const)
         "raw Skill bytes\n",
       );
       assert.strictEqual((yield* load).projections[0]?.status, "installed");
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+for (const location of ["beside", "inside"] as const)
+  it.effect(`never keeps or discards backups through a planted link ${location} the root`, () =>
+    Effect.gen(function* () {
+      const { fs, home, targetRoot, load, project, refresh } = yield* projectionFixture();
+      yield* project();
+      const projection = (yield* load).projections[0]!;
+      // Projection ids are readable from ownership markers, so a planted entry can match one.
+      const outside = join(home, "outside");
+      const entry = join(outside, `pending-${projection.projection_id}-planted`);
+      yield* fs.makeDirectory(entry, { recursive: true });
+      yield* fs.writeFileString(join(entry, "SKILL.md"), "unrelated bytes\n");
+      yield* fs.symlink(
+        outside,
+        join(location === "beside" ? dirname(targetRoot) : targetRoot, ".skit-backups"),
+      );
+
+      yield* refresh;
+      yield* project();
+
+      assert.deepStrictEqual(yield* fs.readDirectory(outside), [basename(entry)]);
+      assert.strictEqual(yield* fs.readFileString(join(entry, "SKILL.md")), "unrelated bytes\n");
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
   );
 

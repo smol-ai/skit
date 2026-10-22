@@ -293,10 +293,9 @@ export class UnsafeProjectionBackups
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation =
-    "Remove the link, or replace it with a regular directory or file, then retry.";
+  readonly remediation = "Remove it so SKIT can recreate it, then retry.";
   get message(): string {
-    return `Projection backups must not pass through a link or special file: ${this.path}`;
+    return `Projection backups need a real directory whose .gitignore ignores everything: ${this.path}`;
   }
 }
 
