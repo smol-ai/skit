@@ -285,6 +285,21 @@ export class UnsafeProjectionName
   }
 }
 
+export class UnsafeProjectionBackups
+  extends Data.TaggedError("UnsafeProjectionBackups")<{
+    path: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation =
+    "Replace the link or special file with a real directory, or make its .gitignore contain only `*`, keeping any existing backups, then retry.";
+  get message(): string {
+    return `Projection backups need a real directory whose .gitignore ignores everything: ${this.path}`;
+  }
+}
+
 export class SharedTargetCollision
   extends Data.TaggedError("SharedTargetCollision")<{
     target: string;

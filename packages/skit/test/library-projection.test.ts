@@ -26,7 +26,11 @@ import {
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
-import { backUpProjectionEffect, projectionWorkDirectory } from "../src/projection/backups.js";
+import {
+  backUpProjectionEffect,
+  losslessTreeEffect,
+  projectionWorkDirectory,
+} from "../src/projection/backups.js";
 import {
   inspectOwnershipMarkerEffect,
   withProjectionMutationEffect,
@@ -1275,6 +1279,80 @@ it.effect("backs up beside a symlinked root's real directory, on the copy's own 
     assert.strictEqual(yield* fs.exists(join(home, ".skit-backups")), false);
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const planted of [
+  "ignore file link",
+  "backups directory link",
+  "permissive ignore file",
+] as const)
+  it.effect(`refuses to back up through a planted ${planted}`, () =>
+    Effect.gen(function* () {
+      const { fs, home, targetRoot, load, edit, project, retire } = yield* projectionFixture();
+      yield* project();
+      // A repository can commit its own `.skit-backups` beside the skills root it shares.
+      const outside = join(home, "outside");
+      const sentinel = join(outside, "sentinel");
+      yield* fs.makeDirectory(outside);
+      yield* fs.writeFileString(sentinel, "unrelated bytes\n");
+      const backups = join(dirname(targetRoot), ".skit-backups");
+      if (planted === "backups directory link") yield* fs.symlink(outside, backups);
+      else {
+        yield* fs.makeDirectory(backups);
+        if (planted === "ignore file link")
+          yield* fs.symlink(sentinel, join(backups, ".gitignore"));
+        // An ignore file that ignores nothing would let backups be committed.
+        else yield* fs.writeFileString(join(backups, ".gitignore"), "");
+      }
+      yield* edit(unbound);
+
+      const failed = yield* retire.pipe(Effect.result);
+
+      assert.strictEqual(
+        Result.isFailure(failed) && failed.failure._tag,
+        "UnsafeProjectionBackups",
+      );
+      assert.strictEqual(yield* fs.readFileString(sentinel), "unrelated bytes\n");
+      assert.deepStrictEqual(yield* fs.readDirectory(outside), ["sentinel"]);
+      assert.strictEqual(
+        yield* fs.readFileString(join(targetRoot, "review", "SKILL.md")),
+        "raw Skill bytes\n",
+      );
+      assert.strictEqual((yield* load).projections[0]?.status, "installed");
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+for (const location of ["beside", "inside"] as const)
+  for (const settlement of ["keep", "discard"] as const)
+    it.effect(
+      `never settles a backup by ${settlement} through a planted link ${location} the root`,
+      () =>
+        Effect.gen(function* () {
+          const { fs, home, targetRoot, load, project, refresh } = yield* projectionFixture();
+          yield* project();
+          const projection = (yield* load).projections[0]!;
+          // Projection ids are readable from ownership markers, so a planted entry can match one.
+          const outside = join(home, "outside");
+          const entry = join(outside, `pending-${projection.projection_id}-planted`);
+          yield* fs.makeDirectory(outside);
+          // Settling discards a copy SKIT could write again, and keeps anything else.
+          if (settlement === "discard") yield* fs.copy(projection.path, entry);
+          else {
+            yield* fs.makeDirectory(entry);
+            yield* fs.writeFileString(join(entry, "SKILL.md"), "unrelated bytes\n");
+          }
+          const before = yield* losslessTreeEffect(outside);
+          yield* fs.symlink(
+            outside,
+            join(location === "beside" ? dirname(targetRoot) : targetRoot, ".skit-backups"),
+          );
+
+          if (settlement === "keep") yield* refresh;
+          yield* project();
+
+          assert.ok(before);
+          assert.strictEqual(yield* losslessTreeEffect(outside), before);
+        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    );
 
 it("works beside a root on its parent's device, and inside a root mounted from another", () => {
   assert.strictEqual(projectionWorkDirectory("/home/me/.claude/skills", 1, 1), "/home/me/.claude");
