@@ -42,3 +42,42 @@ The `add/added`, `add/updated` and `add/unchanged` fixtures show each source
 acquisition outcome, returned directly by the retention workflow. Each fixture can
 be viewed in human and JSON mode; the outcomes use `skit.add.v6` with a required
 `action` field.
+
+## Static image export
+
+The image exporter uses the real CLI presenters and recorded journey frames, with
+colour explicitly enabled. It writes the ANSI output into a headless xterm.js
+terminal at the selected width, draws the resulting cell grid as SVG with a
+fixed dark palette, and rasterizes a 2× PNG with resvg. No browser is involved.
+Text uses DejaVu Sans Mono, with DejaVu Sans for the braille spinner, both from
+the `dejavu-fonts-ttf` package. System fonts are never loaded, so output is
+identical across platforms. These are storybook development dependencies; the
+distributed CLI does not include them.
+
+From the repository root:
+
+```sh
+pnpm cli:image --list
+pnpm cli:image add/added --command 'skit add ~/Work/skills/review' --output .tmp/cli-images/added.png
+pnpm cli:image failure/projection-conflict --output .tmp/cli-images/failure.png
+pnpm cli:image journey/preview-enable-portable-collection --frames
+pnpm cli:image journey/preview-enable-portable-collection --frame 1 --command 'skit enable' --output .tmp/cli-images/prompt.png
+```
+
+Story keys must match exactly. Journeys default to their final frame; `--frames`
+prints available frame indices and labels. Each journey runs once in disposable
+fixtures to obtain its recording. Frame selection does not drive the real CLI or
+repeat the operation. An optional `--command` is a display caption only.
+
+Relative output paths resolve against the directory `pnpm` was invoked from.
+Each PNG has an SVG sibling with DejaVu Sans Mono embedded, for inspecting or
+sharing the render. Use `--columns 72` to change the content width (default
+88), and `--detail full` for full command output. Long lines wrap exactly as a
+terminal of that width would.
+
+This tool exports presenter output, not arbitrary live terminal sessions. It
+preserves the CLI's existing colours rather than adding highlighting to
+uncoloured errors. Some journey frames contain temporary paths or
+fixture-generated identifiers; those need normalization before use as
+reproducible documentation assets. The exporter does not upload images or
+update Markdown automatically.

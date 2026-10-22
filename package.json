@@ -22,7 +22,8 @@
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck",
     "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test",
     "check:ci": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm test:ci && pnpm --fail-if-no-match --filter @smolai/skit-server-effect test:e2e",
-    "test:collections": "pnpm --filter @smolai/skit test:collections"
+    "test:collections": "pnpm --filter @smolai/skit test:collections",
+    "cli:image": "bun packages/storybook/src/image/main.ts"
   },
   "devDependencies": {
     "oxfmt": "^0.64.0",
