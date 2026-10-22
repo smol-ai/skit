@@ -149,8 +149,14 @@ describe("Better Auth adapter", () => {
         (yield* passwordSignIn("/api/auth/sign-up/email", { ...credentials, name: "x" })).status,
       ).toBe(200);
 
-      yield* signInWithGitHub(github, "victim@example.test");
+      const callback = yield* signInWithGitHub(github, "victim@example.test");
 
+      expect(new URL(callback.headers.get("location") ?? "").searchParams.get("error")).toBe(
+        "unable_to_link_account",
+      );
+      expect(callback.headers.getSetCookie().some((value) => value.includes("session_token"))).toBe(
+        false,
+      );
       expect(yield* identityByEmail("victim@example.test")).toEqual([
         { emailVerified: 0, providerId: "credential" },
       ]);
