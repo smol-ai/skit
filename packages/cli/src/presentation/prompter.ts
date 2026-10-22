@@ -21,6 +21,7 @@ import {
 import { Prompt } from "effect/cli";
 import { terminalColors } from "./terminal-style.js";
 import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
+import { terminalText } from "./terminal-text.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export interface Choice<Value> {
@@ -460,23 +461,50 @@ export const terminalPrompterLayer: Layer.Layer<Prompter, never, Prompt.Environm
         );
       });
 
+    // Choices and messages carry Skill and repository names, so their controls never reach the
+    // terminal; the prompt's own drawing is added after.
+    const safe = <Value>(items: readonly Choice<Value>[]): Choice<Value>[] =>
+      items.map((item) => ({
+        ...item,
+        label: terminalText(item.label),
+        ...(item.hint === undefined ? {} : { hint: terminalText(item.hint) }),
+        ...(item.detail === undefined ? {} : { detail: terminalText(item.detail) }),
+        ...(item.description === undefined ? {} : { description: terminalText(item.description) }),
+        ...(item.group === undefined ? {} : { group: terminalText(item.group) }),
+      }));
     return Prompter.of({
-      select: (message, items) => ask(message, Prompt.Select({ message, choices: choices(items) })),
+      select: (message, items) =>
+        ask(
+          message,
+          Prompt.Select({ message: terminalText(message), choices: choices(safe(items)) }),
+        ),
       autocomplete: (message, items) =>
         ask(
           message,
           Prompt.AutoComplete({
-            message,
-            choices: choices(items),
+            message: terminalText(message),
+            choices: choices(safe(items)),
             maxPerPage: AUTOCOMPLETE_MAX_ITEMS,
           }),
         ),
-      multiselect: (message, items, options) =>
-        ask(message, filterableMultiSelect(message, items, options)),
-      confirm: (message) => ask(message, Prompt.Confirm({ message })),
-      text: (message) => ask(message, Prompt.String({ message })),
+      multiselect: (message, items, options) => {
+        const summary = options?.summary;
+        return ask(
+          message,
+          filterableMultiSelect(terminalText(message), safe(items), {
+            ...options,
+            ...(summary && {
+              summary: (selected, columns) => summary(selected, columns).map(terminalText),
+            }),
+          }),
+        );
+      },
+      confirm: (message) => ask(message, Prompt.Confirm({ message: terminalText(message) })),
+      text: (message) => ask(message, Prompt.String({ message: terminalText(message) })),
       password: (message) =>
-        ask(message, Prompt.Password({ message })).pipe(Effect.map(Redacted.value)),
+        ask(message, Prompt.Password({ message: terminalText(message) })).pipe(
+          Effect.map(Redacted.value),
+        ),
     });
   }),
 );

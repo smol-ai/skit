@@ -48,6 +48,7 @@ export interface RendererShape {
 export class Renderer extends Context.Service<Renderer, RendererShape>()("skit/Renderer") {}
 
 import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "./terminal-status.js";
+import { terminalText } from "./terminal-text.js";
 
 const formatElapsed = (milliseconds: number): string =>
   milliseconds < 1000 ? `${milliseconds}ms` : `${(milliseconds / 1000).toFixed(1)}s`;
@@ -104,17 +105,20 @@ export function consoleRenderer(json: boolean): RendererShape {
     note: (body, title, options) => {
       const color = terminalColors();
       return note(
-        options?.renderBody(terminalColorEnabled()) ?? body,
-        color.cyan(color.bold(title)),
+        options?.renderBody(terminalColorEnabled()) ?? terminalText(body),
+        color.cyan(color.bold(terminalText(title))),
       );
     },
     step: ({ index, total, title }, body) => {
       const color = terminalColors();
-      return note(body, `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(title)}`);
+      return note(
+        terminalText(body),
+        `${color.dim(`Step ${index} of ${total} ·`)} ${color.bold(terminalText(title))}`,
+      );
     },
     updateStatus: (message) =>
       Effect.sync(() => {
-        if (statusVisible) statusMessage = message;
+        if (statusVisible) statusMessage = terminalText(message);
       }),
     withStatus: (status, operation) => {
       if (json) return operation;
@@ -124,7 +128,7 @@ export function consoleRenderer(json: boolean): RendererShape {
       return Effect.scoped(
         Effect.gen(function* () {
           const started = yield* Clock.currentTimeMillis;
-          const pending = typeof status === "string" ? status : status.pending;
+          const pending = terminalText(typeof status === "string" ? status : status.pending);
           let frame = 0;
           statusMessage = pending;
           statusVisible = interactive;
@@ -151,10 +155,11 @@ export function consoleRenderer(json: boolean): RendererShape {
                 const duration = formatElapsed(elapsed);
                 const suffix = timed ? ` · ${duration}` : "";
                 if (typeof status !== "string" && Exit.isSuccess(exit)) {
-                  const message =
+                  const message = terminalText(
                     typeof status.complete === "string"
                       ? status.complete
-                      : status.complete(exit.value);
+                      : status.complete(exit.value),
+                  );
                   yield* write(process.stderr, `✓ ${message}${suffix}\n`);
                 } else if (timed) {
                   yield* write(process.stderr, `✖ ${pending} · Incomplete${suffix}\n`);

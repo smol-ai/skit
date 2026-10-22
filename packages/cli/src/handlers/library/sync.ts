@@ -16,6 +16,7 @@ import { createColors } from "picocolors";
 import { result } from "../contracts.js";
 import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
+import { terminalData } from "../../presentation/terminal-text.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 
@@ -54,7 +55,8 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
         ? {
             onPlan: (plan) =>
               renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
-                renderBody: (color) => renderLibrarySyncPlan(plan, createColors(color)),
+                renderBody: (color) =>
+                  renderLibrarySyncPlan(terminalData(plan), createColors(color)),
               }),
           }
         : {}),

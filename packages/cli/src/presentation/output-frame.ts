@@ -1,6 +1,7 @@
 import type { ContractKey } from "../commands/output-contracts.js";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { renderContract } from "./contract-presenters.js";
+import { terminalText } from "./terminal-text.js";
 
 export interface TerminalFrame {
   readonly stdout: string;
@@ -52,7 +53,7 @@ export function renderFailureFrame(
           null,
           2,
         )}\n`
-      : `Error: ${failure.message}\nNext: ${failure.remediation}\n`;
+      : `Error: ${terminalText(failure.message)}\nNext: ${terminalText(failure.remediation)}\n`;
   return { stdout: "", stderr, exitCode: failure.exitCode };
 }
 

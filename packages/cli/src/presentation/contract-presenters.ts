@@ -17,6 +17,7 @@ import { renderLibrarySync } from "./library-sync.js";
 import { renderLibraryList } from "./library-list.js";
 import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, severityHeadline } from "./condition-language.js";
+import { terminalData } from "./terminal-text.js";
 import { createColors } from "picocolors";
 
 export interface RenderContext {
@@ -950,5 +951,5 @@ export function renderContract<K extends ContractKey>(
   result: CommandResult<K>,
   context: RenderContext,
 ): string {
-  return contractPresenters[result.contract](result.data, context);
+  return contractPresenters[result.contract](terminalData(result.data), context);
 }
