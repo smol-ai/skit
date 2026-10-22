@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
 import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
@@ -26,7 +26,11 @@ import {
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
-import { backUpProjectionEffect, projectionWorkDirectory } from "../src/projection/backups.js";
+import {
+  backUpProjectionEffect,
+  losslessTreeEffect,
+  projectionWorkDirectory,
+} from "../src/projection/backups.js";
 import {
   inspectOwnershipMarkerEffect,
   withProjectionMutationEffect,
@@ -1318,28 +1322,37 @@ for (const planted of [
   );
 
 for (const location of ["beside", "inside"] as const)
-  it.effect(`never keeps or discards backups through a planted link ${location} the root`, () =>
-    Effect.gen(function* () {
-      const { fs, home, targetRoot, load, project, refresh } = yield* projectionFixture();
-      yield* project();
-      const projection = (yield* load).projections[0]!;
-      // Projection ids are readable from ownership markers, so a planted entry can match one.
-      const outside = join(home, "outside");
-      const entry = join(outside, `pending-${projection.projection_id}-planted`);
-      yield* fs.makeDirectory(entry, { recursive: true });
-      yield* fs.writeFileString(join(entry, "SKILL.md"), "unrelated bytes\n");
-      yield* fs.symlink(
-        outside,
-        join(location === "beside" ? dirname(targetRoot) : targetRoot, ".skit-backups"),
-      );
+  for (const settlement of ["keep", "discard"] as const)
+    it.effect(
+      `never settles a backup by ${settlement} through a planted link ${location} the root`,
+      () =>
+        Effect.gen(function* () {
+          const { fs, home, targetRoot, load, project, refresh } = yield* projectionFixture();
+          yield* project();
+          const projection = (yield* load).projections[0]!;
+          // Projection ids are readable from ownership markers, so a planted entry can match one.
+          const outside = join(home, "outside");
+          const entry = join(outside, `pending-${projection.projection_id}-planted`);
+          yield* fs.makeDirectory(outside);
+          // Settling discards a copy SKIT could write again, and keeps anything else.
+          if (settlement === "discard") yield* fs.copy(projection.path, entry);
+          else {
+            yield* fs.makeDirectory(entry);
+            yield* fs.writeFileString(join(entry, "SKILL.md"), "unrelated bytes\n");
+          }
+          const before = yield* losslessTreeEffect(outside);
+          yield* fs.symlink(
+            outside,
+            join(location === "beside" ? dirname(targetRoot) : targetRoot, ".skit-backups"),
+          );
 
-      yield* refresh;
-      yield* project();
+          if (settlement === "keep") yield* refresh;
+          yield* project();
 
-      assert.deepStrictEqual(yield* fs.readDirectory(outside), [basename(entry)]);
-      assert.strictEqual(yield* fs.readFileString(join(entry, "SKILL.md")), "unrelated bytes\n");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
-  );
+          assert.ok(before);
+          assert.strictEqual(yield* losslessTreeEffect(outside), before);
+        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    );
 
 it("works beside a root on its parent's device, and inside a root mounted from another", () => {
   assert.strictEqual(projectionWorkDirectory("/home/me/.claude/skills", 1, 1), "/home/me/.claude");
