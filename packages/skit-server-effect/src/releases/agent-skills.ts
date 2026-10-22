@@ -3,11 +3,11 @@ import {
   parseSkitConfig,
   parseSkitReadme,
   projectSkillFiles,
-  sha256Digest,
   type SkitDescriptor,
 } from "@smolai/skit-core/universal/consumer";
 import { Effect, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
+import { projectionLimitExceeded } from "../integrity/projection-limits.js";
 
 export const AGENT_SKILLS_DISCOVERY_SCHEMA =
   "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
@@ -15,11 +15,11 @@ export const AGENT_SKILLS_DISCOVERY_SCHEMA =
 const DISCOVERABLE_NAME = /^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$/;
 const ARTIFACT_TIMESTAMP = Date.UTC(1980, 0, 1);
 
+/** A Skill the Release can serve, with the files its archive would hold, not yet archived. */
 export interface DiscoverableSkill {
   readonly name: string;
   readonly description: string;
-  readonly artifact: Uint8Array;
-  readonly digest: `sha256:${string}`;
+  readonly files: ReadonlyMap<string, { readonly bytes: Uint8Array }>;
 }
 
 export class AgentSkillsArchiveInvalid extends Schema.TaggedError<AgentSkillsArchiveInvalid>()(
@@ -50,6 +50,9 @@ export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(fu
       entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })),
     };
   });
+  // A Release published before projection limits may exceed them; serving it would build them.
+  if (projectionLimitExceeded(entries, descriptor.skills))
+    return yield* new AgentSkillsArchiveInvalid({ cause: "PROJECTED_CONTENT_TOO_LARGE" });
   const decoder = new TextDecoder();
   const skills: DiscoverableSkill[] = [];
   for (const skill of descriptor.skills) {
@@ -62,28 +65,30 @@ export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(fu
     const frontmatter = yield* attempt(() => parseSkillFrontmatter(decoder.decode(primary.bytes)));
     const description = frontmatter?.description;
     if (typeof description !== "string" || !description || description.length > 1024) continue;
-    const artifact = yield* attempt(() =>
-      zipSync(
-        Object.fromEntries(
-          [...projected.keys()]
-            .sort()
-            .map((path) => [path, [projected.get(path)!.bytes, { mtime: ARTIFACT_TIMESTAMP }]]),
-        ),
-        { level: 0, mtime: ARTIFACT_TIMESTAMP },
-      ),
-    );
-    skills.push({
-      name: skill.name,
-      description,
-      artifact,
-      digest: yield* sha256Digest(artifact),
-    });
+    skills.push({ name: skill.name, description, files: projected });
   }
   return skills;
 });
 
+/** One Skill's deterministic archive, built only when it is served or indexed. */
+export const skillArtifact = (skill: DiscoverableSkill) =>
+  attempt(() =>
+    zipSync(
+      Object.fromEntries(
+        [...skill.files.keys()]
+          .sort()
+          .map((path) => [path, [skill.files.get(path)!.bytes, { mtime: ARTIFACT_TIMESTAMP }]]),
+      ),
+      { level: 0, mtime: ARTIFACT_TIMESTAMP },
+    ),
+  );
+
 export const agentSkillsIndex = (
-  skills: readonly DiscoverableSkill[],
+  skills: ReadonlyArray<{
+    readonly name: string;
+    readonly description: string;
+    readonly digest: string;
+  }>,
   artifactUrl: (name: string) => string,
 ) => ({
   $schema: AGENT_SKILLS_DISCOVERY_SCHEMA,

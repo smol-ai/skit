@@ -101,6 +101,16 @@ export type AuthorSkitDeleteResponse = typeof AuthorSkitDeleteResponse.Type;
 export const MAX_ARTIFACT_FILES = 5_000;
 export const MAX_ARTIFACT_CONTENT_BYTES = 25 * 1024 * 1024;
 export const MAX_RELEASE_ARCHIVE_BYTES = 25 * 1024 * 1024;
+/**
+ * The most one Skill's served archive may hold, and all of a Release's Skills together: entries, and
+ * stored-archive bytes including ZIP headers and names. Shared mappings reuse one file across many
+ * projected entries, so these bound what serving a Release builds, which file limits alone do not.
+ * Entries stay far below the 65,535 a ZIP without ZIP64 records can describe.
+ */
+export const MAX_PROJECTED_SKILL_BYTES = 8 * 1024 * 1024;
+export const MAX_PROJECTED_RELEASE_BYTES = 32 * 1024 * 1024;
+export const MAX_PROJECTED_SKILL_ENTRIES = 1_000;
+export const MAX_PROJECTED_RELEASE_ENTRIES = 10_000;
 export const MAX_RELEASE_ARCHIVE_BASE64_LENGTH = Math.ceil(MAX_RELEASE_ARCHIVE_BYTES / 3) * 4;
 export const releasePublishRequestSchema = Schema.Struct({
   version: semver,

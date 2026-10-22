@@ -13,6 +13,7 @@ import {
 } from "@smolai/skit-core/universal/authoring";
 import { Effect } from "effect";
 import { type ArtifactFile, IntegrityError, type ValidationDiagnostic } from "./contracts.js";
+import { projectionLimitExceeded } from "./projection-limits.js";
 import {
   hashProjectedSkillFiles,
   normalizeDescriptorDeclarations,
@@ -60,6 +61,8 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
   const paths = new Set(files.map(({ path }) => path));
   const text = new TextDecoder();
   const diagnostics: Array<ValidationDiagnostic> = [];
+  const overLimit = projectionLimitExceeded(files, descriptor.skills);
+  if (overLimit) return yield* fail(overLimit.code, overLimit.path);
   for (const skill of descriptor.skills) {
     const primary = `${skill.path}/SKILL.md`;
     const primaryFile = files.find(({ path }) => path === primary);
