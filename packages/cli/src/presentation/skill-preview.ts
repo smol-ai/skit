@@ -1,17 +1,14 @@
 import sliceAnsi from "slice-ansi";
 import stringWidth from "string-width";
 import { terminalColors } from "./terminal-style.js";
+import { terminalText } from "./terminal-text.js";
 
 /** Clip terminal cells, preserving ANSI colors and wide Unicode characters. */
 export const fitTerminalLine = (line: string, width: number): string =>
   stringWidth(line) <= width ? line : `${sliceAnsi(line, 0, Math.max(0, width - 1))}…`;
 
 const previewLines = (text: string, width: number): string[] => {
-  const safe = text
-    .replace(/\r\n/g, "\n")
-    // oxlint-disable-next-line no-control-regex -- File contents must not inject terminal commands.
-    .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "")
-    .replace(/\t/g, "  ");
+  const safe = terminalText(text.replace(/\r\n/g, "\n")).replace(/\t/g, "  ");
   const segments = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   return safe.split("\n").flatMap((line) => {
     const lines: string[] = [];
