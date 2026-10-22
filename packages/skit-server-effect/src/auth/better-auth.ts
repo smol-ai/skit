@@ -91,6 +91,7 @@ export const githubAccountLinkingPolicy = {
   // A bootstrapped operator has proven control of the one-time server secret,
   // but a Registry without an Email Service cannot verify its local email.
   // GitHub still has to return the same email; allowDifferentEmails stays false.
+  // The account.create hook refuses this exception for every other password account.
   requireLocalEmailVerified: false,
 };
 
@@ -235,6 +236,27 @@ export const layer = (configuration: BetterAuthConfiguration) =>
           },
         },
         databaseHooks: {
+          account: {
+            create: {
+              before: async (account) => {
+                if (account.providerId === "credential") return { data: account };
+                // Anyone could have registered an unverified email with a password of their
+                // choosing, so a provider proving that email must not inherit that password.
+                const unverifiedPassword = await bindings.database
+                  .prepare(
+                    `SELECT 1 FROM user u
+               JOIN account a ON a.userId = u.id AND a.providerId = 'credential'
+               WHERE u.id = ? AND u.emailVerified = 0 AND NOT EXISTS (
+                 SELECT 1 FROM principals p
+                 JOIN server_operators o ON o.principal_id = p.principal_id
+                 WHERE p.better_auth_user_id = u.id)`,
+                  )
+                  .bind(account.userId)
+                  .first();
+                return unverifiedPassword ? false : { data: account };
+              },
+            },
+          },
           user: {
             create: {
               before: async (user) => {
