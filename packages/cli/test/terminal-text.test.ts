@@ -12,6 +12,13 @@ describe("terminal text", () => {
     );
   });
 
+  it("removes exactly the C0 and C1 ranges, apart from tab and newline", () => {
+    const edges = [0x00, 0x08, 0x09, 0x0a, 0x0b, 0x1f, 0x20, 0x7e, 0x7f, 0x9f, 0xa0];
+    expect(edges.filter((code) => terminalText(String.fromCharCode(code)) !== "")).toEqual([
+      0x09, 0x0a, 0x20, 0x7e, 0xa0,
+    ]);
+  });
+
   it("cleans every string in contract data, keys included, keeping other values", () => {
     expect(
       terminalData({
