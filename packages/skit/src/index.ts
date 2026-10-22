@@ -73,7 +73,6 @@ export * from "./library/installation/remove.js";
 export * from "./library/skill-materialization.js";
 export * from "./library/observed-import.js";
 export * from "./library/installation/project-binding.js";
-export { projectionWorkDirectoryEffect } from "./projection/backups.js";
 export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";

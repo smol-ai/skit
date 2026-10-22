@@ -39,14 +39,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   variantsPath: string;
   acceptedObservations?: ReadonlyMap<
     string,
-    {
-      readonly observedHash: Digest;
-      readonly marker: OwnershipMarker;
-      readonly allowDifferent?: boolean;
-    }
+    { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
-  /** Reconcile just this existing Projection, without changing other copies in the Binding. */
-  onlyProjection?: { readonly projectionId: string; readonly skillId: string };
   /** The one existing copy the operator chose to take custody of, as previewed. */
   adoption?: { readonly path: string; readonly observedHash: Digest };
   restoreNativeDeletedSkills?: readonly string[];
@@ -57,14 +51,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const binding = scopeBinding(state, scope);
   if (binding === undefined) return yield* new ProjectionInvalid({ detail: "Binding is missing" });
 
-  const allBoundSkillIds = bindingSkillIds(state, binding);
-  const boundSkillIds = options.onlyProjection
-    ? allBoundSkillIds.filter((id) => id === options.onlyProjection!.skillId)
-    : allBoundSkillIds;
-  if (options.onlyProjection && boundSkillIds.length !== 1)
-    return yield* new ProjectionInvalid({
-      detail: "The selected copy is not enabled in this Binding",
-    });
+  const boundSkillIds = bindingSkillIds(state, binding);
   const selected = state.skills
     .filter((candidate) => boundSkillIds.includes(candidate.skill_id))
     .flatMap((skill) => {
@@ -99,20 +86,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const atTarget = (projection: ManagedProjection) =>
     projection.target === options.target &&
     rootKeys.get(projection.root) === rootKeys.get(options.root);
-  if (
-    options.onlyProjection &&
-    !state.projections.some(
-      (projection) =>
-        projection.projection_id === options.onlyProjection!.projectionId &&
-        projection.skill_id === options.onlyProjection!.skillId &&
-        atTarget(projection),
-    )
-  )
-    return yield* new ProjectionInvalid({
-      detail: "The selected copy is no longer at this destination",
-    });
   const former =
-    scope.kind === "global" && !options.onlyProjection
+    scope.kind === "global"
       ? state.projections.filter(
           (projection) =>
             projection.target === options.target &&
@@ -147,8 +122,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     (mutation) =>
       Effect.gen(function* () {
         for (const existing of mutation.state.projections.filter(
-          (item) =>
-            !options.onlyProjection && atTarget(item) && !boundSkillIds.includes(item.skill_id),
+          (item) => atTarget(item) && !boundSkillIds.includes(item.skill_id),
         )) {
           const skill = mutation.state.skills.find((item) => item.skill_id === existing.skill_id);
           if (skill === undefined) continue;
@@ -162,12 +136,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         mutation.state.projections.splice(
           0,
           mutation.state.projections.length,
-          ...mutation.state.projections.filter(
-            (item) =>
-              !atTarget(item) ||
-              (options.onlyProjection !== undefined &&
-                item.projection_id !== options.onlyProjection.projectionId),
-          ),
+          ...mutation.state.projections.filter((item) => !atTarget(item)),
         );
         const toRetire: ManagedProjection[] = [];
         for (const item of selected) {
@@ -180,11 +149,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           if (source.kind === "invalid")
             return yield* new ProjectionInvalid({ detail: source.detail });
           const previousRows = state.projections.filter(
-            (candidate) =>
-              candidate.skill_id === item.skill.skill_id &&
-              atTarget(candidate) &&
-              (options.onlyProjection === undefined ||
-                candidate.projection_id === options.onlyProjection.projectionId),
+            (candidate) => candidate.skill_id === item.skill.skill_id && atTarget(candidate),
           );
           const priorProjection = previousRows[0];
           const projectionId = priorProjection?.projection_id ?? makeProjectionId();

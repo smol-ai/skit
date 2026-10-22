@@ -147,7 +147,7 @@ Create an account at `https://skit.smol.ai`, and log in using `skit auth login h
 
 If an installed copy was edited outside SKIT, sync preserves it and reports that it needs review. Run `skit doctor` to find it, then compare the Library source and installed directory with `skit update <skill> --from-projection <agents-or-claude> --diff`. On a terminal the diff uses a pager: scroll with the arrow keys or Page Up/Down, and press `q` to exit. Agent-generated files and metadata can differ from the original source.
 
-To keep the installed edits as a Library version, preview with `skit update <skill> --from-projection <agents-or-claude> --dry-run` and rerun without `--dry-run` to apply. To use the Library version instead, run `skit update <skill> --from-projection <agents-or-claude> --use-library` to preview, then run the printed command to apply that exact review. SKIT backs up the replaced copy and prints its location and a restore command. Only the chosen installed copy is replaced; other copies stay in place.
+To keep the installed edits as a Library version, preview with `skit update <skill> --from-projection <agents-or-claude> --dry-run` and rerun without `--dry-run` to apply. To use the Library version instead, preview with `skit update <skill> --from-projection <agents-or-claude> --use-library --dry-run` and rerun without `--dry-run` to apply. SKIT saves the edited copy as another version of the Skill first, so it can be brought back with `skit update <skill> --use-version <version>`.
 
 Alternatively, you can self-host the SKIT server.
 

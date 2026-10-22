@@ -1,7 +1,6 @@
 import {
   canonicalJson,
   deterministicTreeHashEffect,
-  originalTreeHashEffect,
   inspectOwnershipMarkerEffect,
   LibraryStore,
   libraryStateRevision,
@@ -10,7 +9,6 @@ import {
   currentSkillVersion,
   prepareObservedCollectionEffect,
   projectBindingEffect,
-  projectionWorkDirectoryEffect,
   pathIsWithin,
   retainChangedProjectionEffect,
   retainedTreePath,
@@ -23,14 +21,15 @@ import {
   type DeviceBinding,
   type RepositoryBinding,
   type ProjectionId,
+  type SkillId,
+  type SkillVersionId,
 } from "@smolai/skit-core";
-import { Data, Clock, Effect, FileSystem } from "effect";
+import { Data, Clock, Effect } from "effect";
 import { join, resolve } from "node:path";
-import { createHash } from "node:crypto";
 import type {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
-  ProjectionRepair,
+  SkillVersionChange,
 } from "./projection-retention-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
@@ -62,30 +61,6 @@ export class ProjectionRetentionStale
   readonly code = "CONFLICT" as const;
   readonly remediation = "Preview the Projection retention again.";
 }
-
-export class ProjectionRepairFailed
-  extends Data.TaggedError("Library.ProjectionRepairFailed")<{ directory: string; cause: unknown }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  get message(): string {
-    return `Could not finish replacing the installed copy: ${String(this.cause)}`;
-  }
-  get remediation(): string {
-    return `Run skit doctor and inspect ${this.directory} for a pending backup before retrying.`;
-  }
-}
-
-/** Bind the review to Library state and verbatim skill files, including ownership markers. */
-export const projectionReviewToken = Effect.fn("Library.projectionReviewToken")(function* (
-  preview: ProjectionRetentionPlan,
-) {
-  const copies = yield* Effect.forEach(preview.projections, (projection) =>
-    originalTreeHashEffect(projection.path),
-  );
-  return createHash("sha256").update(canonicalJson({ preview, copies })).digest("hex");
-});
 
 const matchingSkill = Effect.fn("Library.ProjectionRetention.matchSkill")(function* (
   state: LibraryState,
@@ -201,108 +176,78 @@ const bindingForProjection = (
   );
 };
 
-/** Revalidate the reviewed copy under the writer; core moves the old copy to a kept backup. */
-export const useLibraryProjection = Effect.fn("Library.useLibraryProjection")(function* (
-  preview: ProjectionRetentionPlan,
-  query: string,
-  selector: string,
-  expectedToken: string,
+/** Reconcile every Binding destination holding a copy of this Skill. Caller owns the writer. */
+const reconcileSkillCopies = Effect.fn("Library.reconcileSkillCopies")(function* (
+  skillId: SkillId,
+  acceptedObservations?: ReadonlyMap<
+    ProjectionId,
+    { readonly observedHash: Digest; readonly marker: OwnershipMarker }
+  >,
 ) {
   const store = yield* LibraryStore;
-  return yield* withLibraryWriter(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const state = yield* store.load;
-      if (libraryStateRevision(state) !== preview.revision)
-        return yield* new ProjectionRetentionStale({ message: "Library changed after review" });
-      const revalidated = yield* observeProjectionRetention(state, query, selector);
-      if (canonicalJson(revalidated) !== canonicalJson(preview))
-        return yield* new ProjectionRetentionStale({ message: "Copies changed after review" });
-      if ((yield* projectionReviewToken(revalidated)) !== expectedToken)
-        return yield* new ProjectionRetentionStale({
-          message: "Reviewed files changed after review",
-        });
-      const projection = state.projections.find(
-        (item) => item.projection_id === preview.selected_projection_id,
-      );
-      const binding = projection && bindingForProjection(state, projection);
-      if (!projection || !binding || projection.target === "legacy")
-        return yield* new ProjectionRetentionMissing({
-          message: "The selected copy is not enabled",
-        });
-      const marker = yield* inspectOwnershipMarkerEffect(projection.path);
-      if (
-        marker.kind !== "valid" ||
-        marker.marker.projection_id !== projection.projection_id ||
-        marker.marker.skill_id !== projection.skill_id ||
-        marker.marker.expected_digest !== projection.expected_digest
-      )
-        return yield* new ProjectionRetentionStale({
-          message: "The installed copy's ownership marker changed",
-        });
-      const directory = join(
-        yield* projectionWorkDirectoryEffect(projection.root),
-        ".skit-backups",
-      );
-      const before = yield* fs
-        .readDirectory(directory)
-        .pipe(
-          Effect.catchTag("PlatformError", (error) =>
-            error.reason._tag === "NotFound" ? Effect.succeed([]) : Effect.fail(error),
-          ),
-        );
-      const existingBackups = new Set<string>(before);
-      yield* projectBindingEffect({
-        target: projection.target,
-        scope: binding.scope,
-        root: projection.root,
-        variantsPath: store.variantsPath,
-        onlyProjection: { projectionId: projection.projection_id, skillId: projection.skill_id },
-        acceptedObservations: new Map([
-          [
-            projection.projection_id,
-            {
-              observedHash: preview.observed_digest,
-              marker: marker.marker,
-              allowDifferent: true,
-            },
-          ],
-        ]),
-      }).pipe(Effect.mapError((cause) => new ProjectionRepairFailed({ directory, cause })));
-      // Reporting is best effort after the write; it must not turn a completed replacement into failure.
-      const settled = yield* store.load.pipe(Effect.orElseSucceed(() => undefined));
-      const after = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => undefined));
-      const backup = after?.find(
-        (name) =>
-          !existingBackups.has(name) &&
-          (name.startsWith(`kept-${projection.projection_id}-`) ||
-            name.startsWith(`pending-${projection.projection_id}-`)),
-      );
-      const installed = settled?.projections.find(
-        (item) => item.projection_id === projection.projection_id,
-      );
-      return {
-        skill_id: preview.skill_id,
-        skill_name: preview.skill_name,
-        path: projection.path,
-        status:
-          installed === undefined
-            ? "unknown"
-            : installed.status === "installed"
-              ? "installed"
-              : "conflicted",
-        ...(backup
-          ? { backup_path: join(directory, backup), backup_status: "saved" }
-          : {
-              backup_status:
-                installed?.status === "installed" &&
-                installed.expected_digest === preview.observed_digest
-                  ? "not-needed"
-                  : "unavailable",
-            }),
-      } satisfies ProjectionRepair;
-    }),
-  );
+  const state = yield* store.load;
+  const reconciled = new Set<string>();
+  for (const projection of state.projections) {
+    if (projection.skill_id !== skillId) continue;
+    const binding = bindingForProjection(state, projection);
+    if (binding === undefined || projection.target === "legacy") continue;
+    const coordinate = `${projection.target}\0${canonicalJson(binding.scope)}\0${projection.root}`;
+    if (reconciled.has(coordinate)) continue;
+    reconciled.add(coordinate);
+    yield* projectBindingEffect({
+      target: projection.target,
+      scope: binding.scope,
+      root: projection.root,
+      variantsPath: store.variantsPath,
+      ...(acceptedObservations === undefined ? {} : { acceptedObservations }),
+    });
+  }
+});
+
+/**
+ * Make a Version the Skill's current one and reinstall its unchanged copies. Choosing the Version
+ * its Source provides follows the Source again. Caller owns the writer.
+ */
+const selectSkillVersion = Effect.fn("Library.selectSkillVersion")(function* (
+  skillId: SkillId,
+  skillVersionId: SkillVersionId,
+) {
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  const next = structuredClone(state);
+  const skill = next.skills.find((item) => item.skill_id === skillId);
+  if (!skill?.versions.some((version) => version.skill_version_id === skillVersionId))
+    return yield* new ProjectionRetentionMissing({
+      message: `${skill?.name ?? skillId} has no Version ${skillVersionId}`,
+    });
+  delete skill.local_version_id;
+  if (currentSkillVersion(next, skill)?.skill_version_id !== skillVersionId)
+    skill.local_version_id = skillVersionId;
+  yield* store.publish(next, state);
+  yield* reconcileSkillCopies(skillId);
+});
+
+/** Switch a Skill to one of its Library Versions; unchanged copies are reinstalled. */
+export const useSkillVersion = Effect.fn("Library.useSkillVersion")(function* (
+  query: string,
+  versionQuery: string,
+  dryRun: boolean,
+) {
+  const store = yield* LibraryStore;
+  const skill = yield* matchingSkill(yield* store.load, query);
+  const version = skill.versions.find((item) => item.skill_version_id === versionQuery);
+  if (version === undefined)
+    return yield* new ProjectionRetentionMissing({
+      message: `${skill.name} has no Version ${versionQuery}`,
+    });
+  if (!dryRun)
+    yield* withLibraryWriter(selectSkillVersion(skill.skill_id, version.skill_version_id));
+  return {
+    skill_id: skill.skill_id,
+    skill_name: skill.name,
+    skill_version_id: version.skill_version_id,
+    applied: !dryRun,
+  } satisfies SkillVersionChange;
 });
 
 /** Capture the Library and observations once; callers only render or apply this operation. */
@@ -311,158 +256,144 @@ export const prepareProjectionRetention = Effect.fn("Library.prepareProjectionRe
     const store = yield* LibraryStore;
     const initial = yield* store.load;
     const preview = yield* observeProjectionRetention(initial, query, selector);
+    /** Refuse before taking the writer when applied against a different Library home. */
+    const writing = <A, E, R>(program: Effect.Effect<A, E, R>) =>
+      Effect.gen(function* () {
+        if ((yield* LibraryStore).home !== store.home)
+          return yield* new ProjectionRetentionStale({
+            message: "Projection retention belongs to a different Library",
+          });
+        return yield* withLibraryWriter(program);
+      });
     return {
       preview: structuredClone(preview),
-      apply: () => applyPreparedProjectionRetention(store.home, preview, query, selector),
+      apply: () => writing(retainPreviewed(preview, query, selector)),
+      /** Save the edited copy as a Version, then reinstall the Version the Skill used before. */
+      useLibrary: () =>
+        writing(
+          Effect.gen(function* () {
+            const saved = yield* retainPreviewed(preview, query, selector);
+            yield* selectSkillVersion(preview.skill_id, preview.previous_skill_version_id);
+            return {
+              skill_id: preview.skill_id,
+              skill_name: preview.skill_name,
+              skill_version_id: preview.previous_skill_version_id,
+              saved_skill_version_id: saved.retained_skill_version_id,
+              applied: true,
+            } satisfies SkillVersionChange;
+          }),
+        ),
     };
   },
 );
 
-/** Locate the two reviewed trees without changing either; apply still revalidates the preview. */
+/** Locate the Library source and installed copy to compare; neither is changed. */
 export const projectionComparisonPaths = Effect.fn("Library.projectionComparisonPaths")(function* (
   preview: ProjectionRetentionPlan,
 ) {
   const store = yield* LibraryStore;
   const state = yield* store.load;
-  if (libraryStateRevision(state) !== preview.revision)
-    return yield* new ProjectionRetentionStale({ message: "Library changed before comparison" });
   const skill = state.skills.find((item) => item.skill_id === preview.skill_id);
   const projection = state.projections.find(
     (item) => item.projection_id === preview.selected_projection_id,
   );
   const version = skill && currentSkillVersion(state, skill);
   const backing = skill && version && versionBacking(state, skill, version);
-  if (!skill || !projection || !version || !backing)
+  if (!projection || !backing)
     return yield* new ProjectionRetentionMissing({ message: "The selected copy is unavailable" });
   const root = retainedTreePath(store.originalsPath, backing.copy.digest);
   const libraryPath =
     backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-  if ((yield* originalTreeHashEffect(libraryPath)) !== version.source_digest)
-    return yield* new ProjectionRetentionStale({ message: "The retained Library source changed" });
-  if ((yield* deterministicTreeHashEffect(projection.path)) !== preview.observed_digest)
-    return yield* new ProjectionRetentionStale({
-      message: "The installed copy changed before comparison",
-    });
   return { libraryPath, installedPath: projection.path };
 });
 
-const applyPreparedProjectionRetention = Effect.fn("Library.applyProjectionRetention")(function* (
-  home: string,
+/** Retain the previewed copy as the Skill's Version and reconcile its copies. Caller owns the writer. */
+const retainPreviewed = Effect.fn("Library.retainPreviewedProjection")(function* (
   preview: ProjectionRetentionPlan,
   query: string,
   selector: string,
 ) {
   const store = yield* LibraryStore;
-  if (store.home !== home)
+  const current = yield* store.load;
+  if (libraryStateRevision(current) !== preview.revision)
     return yield* new ProjectionRetentionStale({
-      message: "Projection retention belongs to a different Library",
+      message: "Library state changed after Projection retention was previewed",
     });
-  return yield* withLibraryWriter(
-    Effect.gen(function* () {
-      const current = yield* store.load;
-      if (libraryStateRevision(current) !== preview.revision)
-        return yield* new ProjectionRetentionStale({
-          message: "Library state changed after Projection retention was previewed",
-        });
-      const revalidated = yield* observeProjectionRetention(current, query, selector);
-      if (canonicalJson(revalidated) !== canonicalJson(preview))
-        return yield* new ProjectionRetentionStale({
-          message: "Projection bytes changed after Projection retention was previewed",
-        });
-      const selected = current.projections.find(
-        (projection) => projection.projection_id === preview.selected_projection_id,
-      )!;
-      const retained = preview.retention_required
-        ? yield* Effect.scoped(
-            retainChangedProjectionEffect({
-              skillId: preview.skill_id,
-              projectionId: preview.selected_projection_id,
-              path: selected.path,
-              observedHash: preview.observed_digest,
-              retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-            }),
-          )
-        : yield* Effect.gen(function* () {
-            const skill = current.skills.find(
-              (candidate) => candidate.skill_id === preview.skill_id,
-            );
-            const version = skill === undefined ? undefined : currentSkillVersion(current, skill);
-            const acquisition =
-              skill === undefined || version === undefined
-                ? undefined
-                : versionBacking(current, skill, version)?.acquisition;
-            if (version === undefined || acquisition === undefined)
-              return yield* new ProjectionRetentionStale({
-                message: "Selected retained Version is incomplete",
-              });
-            return {
-              skillVersionId: version.skill_version_id,
-              retainedCopyId: acquisition.retained_copy_id,
-              snapshotDigest: preview.snapshot_digest,
-            };
-          });
-      const accepted = new Map<
-        ProjectionId,
-        { readonly observedHash: Digest; readonly marker: OwnershipMarker }
-      >();
-      for (const projection of preview.projections) {
-        if (projection.observed_digest !== preview.observed_digest) continue;
-        const marker = yield* inspectOwnershipMarkerEffect(projection.path);
-        if (marker.kind === "valid")
-          accepted.set(projection.projection_id, {
-            observedHash: projection.observed_digest,
-            marker: marker.marker,
-          });
-      }
-      const afterRetention = yield* store.load;
-      const reconciled = new Set<string>();
-      for (const observation of preview.projections) {
-        const projection = afterRetention.projections.find(
-          (candidate) => candidate.projection_id === observation.projection_id,
-        );
-        const binding =
-          projection === undefined ? undefined : bindingForProjection(afterRetention, projection);
-        if (projection === undefined || binding === undefined || projection.target === "legacy")
-          continue;
-        const coordinate = `${projection.target}\0${canonicalJson(binding.scope)}\0${projection.root}`;
-        if (reconciled.has(coordinate)) continue;
-        reconciled.add(coordinate);
-        yield* projectBindingEffect({
-          target: projection.target,
-          scope: binding.scope,
-          root: projection.root,
-          variantsPath: store.variantsPath,
-          acceptedObservations: accepted,
-        });
-      }
-      const settled = yield* store.load;
-      return {
-        skill_id: preview.skill_id,
-        skill_name: preview.skill_name,
-        previous_skill_version_id: preview.previous_skill_version_id,
-        retained_skill_version_id: retained.skillVersionId,
-        retained_copy_id: retained.retainedCopyId,
-        snapshot_digest: retained.snapshotDigest,
-        retained: preview.retention_required,
-        projections: preview.projections.map((observation) => {
-          const projection = settled.projections.find(
-            (candidate) => candidate.projection_id === observation.projection_id,
-          );
-          const hasBinding =
-            projection === undefined ? undefined : bindingForProjection(settled, projection);
-          return {
-            projection_id: observation.projection_id,
-            target: observation.target,
-            path: observation.path,
-            status:
-              hasBinding === undefined
-                ? ("deferred" as const)
-                : projection?.status === "installed"
-                  ? ("projected" as const)
-                  : ("conflicted" as const),
-          };
+  const revalidated = yield* observeProjectionRetention(current, query, selector);
+  if (canonicalJson(revalidated) !== canonicalJson(preview))
+    return yield* new ProjectionRetentionStale({
+      message: "Projection bytes changed after Projection retention was previewed",
+    });
+  const selected = current.projections.find(
+    (projection) => projection.projection_id === preview.selected_projection_id,
+  )!;
+  const retained = preview.retention_required
+    ? yield* Effect.scoped(
+        retainChangedProjectionEffect({
+          skillId: preview.skill_id,
+          projectionId: preview.selected_projection_id,
+          path: selected.path,
+          observedHash: preview.observed_digest,
+          retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         }),
-      } satisfies ProjectionRetentionResult;
+      )
+    : yield* Effect.gen(function* () {
+        const skill = current.skills.find((candidate) => candidate.skill_id === preview.skill_id);
+        const version = skill === undefined ? undefined : currentSkillVersion(current, skill);
+        const acquisition =
+          skill === undefined || version === undefined
+            ? undefined
+            : versionBacking(current, skill, version)?.acquisition;
+        if (version === undefined || acquisition === undefined)
+          return yield* new ProjectionRetentionStale({
+            message: "Selected retained Version is incomplete",
+          });
+        return {
+          skillVersionId: version.skill_version_id,
+          retainedCopyId: acquisition.retained_copy_id,
+          snapshotDigest: preview.snapshot_digest,
+        };
+      });
+  const accepted = new Map<
+    ProjectionId,
+    { readonly observedHash: Digest; readonly marker: OwnershipMarker }
+  >();
+  for (const projection of preview.projections) {
+    if (projection.observed_digest !== preview.observed_digest) continue;
+    const marker = yield* inspectOwnershipMarkerEffect(projection.path);
+    if (marker.kind === "valid")
+      accepted.set(projection.projection_id, {
+        observedHash: projection.observed_digest,
+        marker: marker.marker,
+      });
+  }
+  yield* reconcileSkillCopies(preview.skill_id, accepted);
+  const settled = yield* store.load;
+  return {
+    skill_id: preview.skill_id,
+    skill_name: preview.skill_name,
+    previous_skill_version_id: preview.previous_skill_version_id,
+    retained_skill_version_id: retained.skillVersionId,
+    retained_copy_id: retained.retainedCopyId,
+    snapshot_digest: retained.snapshotDigest,
+    retained: preview.retention_required,
+    projections: preview.projections.map((observation) => {
+      const projection = settled.projections.find(
+        (candidate) => candidate.projection_id === observation.projection_id,
+      );
+      const hasBinding =
+        projection === undefined ? undefined : bindingForProjection(settled, projection);
+      return {
+        projection_id: observation.projection_id,
+        target: observation.target,
+        path: observation.path,
+        status:
+          hasBinding === undefined
+            ? ("deferred" as const)
+            : projection?.status === "installed"
+              ? ("projected" as const)
+              : ("conflicted" as const),
+      };
     }),
-  );
+  } satisfies ProjectionRetentionResult;
 });

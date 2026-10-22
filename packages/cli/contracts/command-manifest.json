@@ -2139,7 +2139,7 @@
         "skit.update.plan.v6",
         "skit.update.projection-retention.v2",
         "skit.update.projection-retention.plan.v2",
-        "skit.update.projection-repair.v1"
+        "skit.update.version.v1"
       ],
       "exitCodes": [
         0,
@@ -2154,7 +2154,9 @@
         "skit update --dry-run",
         "skit update my-skill --from-projection claude-code --dry-run",
         "skit update my-skill --from-projection agents --diff",
-        "skit update my-skill --from-projection agents --use-library --dry-run"
+        "skit update my-skill --from-projection agents --use-library --dry-run",
+        "skit update my-skill --from-projection agents --use-library",
+        "skit update my-skill --use-version skv_01example"
       ],
       "positionals": [
         {
@@ -2183,10 +2185,10 @@
           "valueName": "boolean",
           "description": "Replace the reviewed installed copy with the Library version, preserving the old copy in a backup."
         },
-        "review": {
+        "use-version": {
           "type": "string",
           "valueName": "string",
-          "description": "Apply the exact conflict review token printed by the preview."
+          "description": "Switch the Skill to this Library Version and reinstall its unchanged copies."
         },
         "json": {
           "type": "boolean",

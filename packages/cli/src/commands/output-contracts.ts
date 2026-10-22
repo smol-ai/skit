@@ -28,7 +28,7 @@ import { RepositoryPolicyResult, SetupResult } from "../workflows/library/setup-
 import {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
-  ProjectionRepair,
+  SkillVersionChange,
 } from "../workflows/library/projection-retention-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
@@ -119,7 +119,7 @@ export const outputContracts = {
     "skit.update.projection-retention.plan.v2",
     ProjectionRetentionPlan,
   ),
-  projectionRepair: effectOutput("skit.update.projection-repair.v1", ProjectionRepair),
+  skillVersion: effectOutput("skit.update.version.v1", SkillVersionChange),
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),
   enable: effectOutput("skit.enable.v7", SetEnabledResult),

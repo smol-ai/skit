@@ -48,13 +48,13 @@ export const ProjectionRetentionResult = Schema.Struct({
 });
 export type ProjectionRetentionResult = typeof ProjectionRetentionResult.Type;
 
-export const ProjectionRepair = Schema.Struct({
+export const SkillVersionChange = Schema.Struct({
   skill_id: SkillId,
   skill_name: Schema.String,
-  path: Schema.String,
-  status: Schema.Literals(["preview", "installed", "conflicted", "unknown"]),
-  backup_path: Schema.optionalKey(Schema.String),
-  backup_status: Schema.optionalKey(Schema.Literals(["saved", "not-needed", "unavailable"])),
-  review_token: Schema.optionalKey(Schema.String),
+  /** The Version the Skill uses after the change. */
+  skill_version_id: SkillVersionId,
+  /** The Version the edited installed copy was saved as, when it was replaced. */
+  saved_skill_version_id: Schema.optionalKey(SkillVersionId),
+  applied: Schema.Boolean,
 });
-export type ProjectionRepair = typeof ProjectionRepair.Type;
+export type SkillVersionChange = typeof SkillVersionChange.Type;

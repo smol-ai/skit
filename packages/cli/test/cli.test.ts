@@ -7,8 +7,6 @@ import { afterAll, describe, expect, test } from "vitest";
 import { Schema } from "effect";
 import { LibraryState } from "@smolai/skit-core";
 import { outputContracts } from "../src/commands/output-contracts.js";
-import { result as commandResult } from "../src/handlers/contracts.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
 import { copySkitFixture } from "./helpers/skit-fixture.js";
 
 const bin = join(process.cwd(), "bin", "skit.js");
@@ -727,53 +725,15 @@ describe("CLI contracts", () => {
       "--dry-run",
     );
     expect(preview.status).toBe(0);
-    const reviewed = JSON.parse(preview.stdout).data;
-    expect(reviewed.status).toBe("preview");
-    expect(reviewed.review_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(preview.stdout).data.applied).toBe(false);
     expect(await readFile(installed, "utf8")).toBe(changed);
-    await writeFile(installed, changed + "newer edit\n");
-    const stale = run(
-      true,
-      "update",
-      "review",
-      "--from-projection",
-      "agents",
-      "--use-library",
-      "--review",
-      reviewed.review_token,
-    );
-    expect(stale.status).not.toBe(0);
-    expect(await readFile(installed, "utf8")).toBe(changed + "newer edit\n");
-    await writeFile(installed, changed);
-    const applied = run(
-      true,
-      "update",
-      "review",
-      "--from-projection",
-      "agents",
-      "--use-library",
-      "--review",
-      reviewed.review_token,
-    );
+    const applied = run(true, "update", "review", "--from-projection", "agents", "--use-library");
     expect(applied.status).toBe(0);
     const data = JSON.parse(applied.stdout).data;
-    expect(data.status).toBe("installed");
-    expect(data.backup_status).toBe("saved");
-    expect(await readFile(join(data.backup_path, "SKILL.md"), "utf8")).toBe(changed);
     expect(await readFile(installed, "utf8")).toContain("original");
     expect(await readFile(other, "utf8")).toContain("original");
-    const rendered = renderContract(commandResult("projectionRepair", data), {
-      color: false,
-      detail: "summary",
-    });
-    const restore = rendered.split("\n").find((line) => line.startsWith("test ! -e "));
-    expect(restore).toBeDefined();
-    expect(spawnSync("/bin/sh", ["-c", restore!]).status).toBe(0);
-    expect(await readFile(installed, "utf8")).toBe(changed);
-    expect(await readFile(`${join(codex, "review")}.skit-after-repair/SKILL.md`, "utf8")).toContain(
-      "original",
-    );
-    expect(spawnSync("/bin/sh", ["-c", restore!]).status).not.toBe(0);
+    const restored = run(true, "update", "review", "--use-version", data.saved_skill_version_id);
+    expect(restored.status).toBe(0);
     expect(await readFile(installed, "utf8")).toBe(changed);
     await rm(root, { recursive: true, force: true });
   });

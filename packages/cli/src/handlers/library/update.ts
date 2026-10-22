@@ -10,7 +10,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonRequested, localFlags } from "../../commands/parameters.js";
 import { CommandLineInvalid } from "../../commands/runtime.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { projectionComparisonNotes } from "../../presentation/projection-comparison.js";
+import { shellQuote } from "../../presentation/shell-quote.js";
 import { result } from "../contracts.js";
 import {
   planUpdatesEffect,
@@ -20,9 +20,7 @@ import {
 import {
   prepareProjectionRetention,
   projectionComparisonPaths,
-  useLibraryProjection,
-  projectionReviewToken,
-  ProjectionRetentionStale,
+  useSkillVersion,
   ProjectionRetentionMissing,
 } from "../../workflows/library/projection-retention.js";
 
@@ -47,8 +45,11 @@ const useLibrary = Flag.Boolean("use-library").pipe(
   ),
   Flag.withDefault(false),
 );
-const review = Flag.String("review").pipe(
-  Flag.withDescription("Apply the exact conflict review token printed by the preview."),
+
+const useVersion = Flag.String("use-version").pipe(
+  Flag.withDescription(
+    "Switch the Skill to this Library Version and reinstall its unchanged copies.",
+  ),
   Flag.optional,
 );
 
@@ -56,21 +57,20 @@ const showDiff = (libraryPath: string, installedPath: string) =>
   Effect.tryPromise({
     try: (signal) =>
       new Promise<void>((resolve, reject) => {
-        // Git invokes less on a terminal; redirected output can be piped to the caller's pager.
+        // Git pages on a terminal with the user's pager; redirected output is left unpaged.
         const child = spawn(
           "git",
           [
             "--paginate",
             "diff",
             "--no-index",
-            "--no-color",
             "--no-ext-diff",
             "--no-textconv",
             "--",
             libraryPath,
             installedPath,
           ],
-          { stdio: "inherit", signal, env: { ...process.env, GIT_PAGER: "less", LESSSECURE: "1" } },
+          { stdio: "inherit", signal },
         );
         child.once("error", reject);
         child.once("close", (code, terminationSignal) =>
@@ -85,7 +85,7 @@ const showDiff = (libraryPath: string, installedPath: string) =>
 
 export const updateCliCommand = Command.make(
   "update",
-  { subject, dryRun, fromProjection, diff, useLibrary, review, ...localFlags },
+  { subject, dryRun, fromProjection, diff, useLibrary, useVersion, ...localFlags },
   (input) =>
     handleSourceCommand(
       Effect.gen(function* () {
@@ -100,12 +100,18 @@ export const updateCliCommand = Command.make(
           return yield* new CommandLineInvalid({
             message: "--use-library needs --from-projection; review separately with --diff",
           });
-        const reviewToken = Option.getOrUndefined(input.review);
-        if (reviewToken !== undefined && (!input.useLibrary || input.dryRun))
-          return yield* new CommandLineInvalid({
-            message:
-              "--review applies a --use-library preview and cannot be combined with --dry-run",
-          });
+        const versionQuery = Option.getOrUndefined(input.useVersion);
+        if (versionQuery !== undefined) {
+          if (query === undefined || projectionSelector !== undefined)
+            return yield* new CommandLineInvalid({
+              message: "--use-version needs a Skill and cannot be combined with --from-projection",
+            });
+          const changed = yield* renderer.withStatus(
+            "Switching the Skill Version",
+            useSkillVersion(query, versionQuery, input.dryRun),
+          );
+          return yield* renderer.result(result("skillVersion", changed));
+        }
         if (projectionSelector !== undefined) {
           if (query === undefined)
             return yield* new ProjectionRetentionMissing({
@@ -117,44 +123,32 @@ export const updateCliCommand = Command.make(
               prepareProjectionRetention(query, projectionSelector),
             );
             const paths = yield* projectionComparisonPaths(prepared.preview);
-            const notes = projectionComparisonNotes(query, projectionSelector);
-            yield* renderer.note(notes.introduction.body, notes.introduction.title);
+            const command = `skit update ${shellQuote(query)} --from-projection ${shellQuote(projectionSelector)}`;
+            yield* renderer.note(
+              "Library source is on the left; the installed copy is on the right. Agent-generated files and metadata can differ. Press q to exit the pager. No changes will be applied.",
+              "Compare copies",
+            );
             yield* showDiff(paths.libraryPath, paths.installedPath);
-            return yield* renderer.note(notes.completion.body, notes.completion.title);
+            return yield* renderer.note(
+              `No files were changed.\n\nKeep the installed copy: ${command} --dry-run\nUse the Library version: ${command} --use-library --dry-run`,
+              "Comparison complete",
+            );
           }
           if (input.useLibrary) {
             const prepared = yield* renderer.withStatus(
-              "Reviewing the installed copy",
+              "Inspecting the installed copy",
               prepareProjectionRetention(query, projectionSelector),
             );
-            const selected = prepared.preview.projections.find(
-              (item) => item.projection_id === prepared.preview.selected_projection_id,
-            )!;
-            const currentToken = yield* projectionReviewToken(prepared.preview);
-            if (reviewToken !== undefined && reviewToken !== currentToken)
-              return yield* new ProjectionRetentionStale({
-                message: "The Library or an installed copy changed since review",
-              });
-            const repaired =
-              reviewToken === undefined
-                ? {
-                    skill_id: prepared.preview.skill_id,
-                    skill_name: prepared.preview.skill_name,
-                    path: selected.path,
-                    status: "preview" as const,
-                    review_token: currentToken,
-                  }
-                : yield* renderer.withStatus(
-                    "Restoring the Library version",
-                    useLibraryProjection(prepared.preview, query, projectionSelector, reviewToken),
-                  );
-            return yield* renderer.result(
-              result(
-                "projectionRepair",
-                repaired,
-                repaired.status === "conflicted" || repaired.status === "unknown" ? 1 : undefined,
-              ),
-            );
+            const { preview } = prepared;
+            const changed = input.dryRun
+              ? {
+                  skill_id: preview.skill_id,
+                  skill_name: preview.skill_name,
+                  skill_version_id: preview.previous_skill_version_id,
+                  applied: false,
+                }
+              : yield* renderer.withStatus("Installing the Library version", prepared.useLibrary());
+            return yield* renderer.result(result("skillVersion", changed));
           }
           const value = yield* renderer.withStatus(
             input.dryRun
@@ -190,6 +184,8 @@ export const updateCliCommand = Command.make(
     { command: "skit update my-skill --from-projection claude-code --dry-run" },
     { command: "skit update my-skill --from-projection agents --diff" },
     { command: "skit update my-skill --from-projection agents --use-library --dry-run" },
+    { command: "skit update my-skill --from-projection agents --use-library" },
+    { command: "skit update my-skill --use-version skv_01example" },
   ]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [
@@ -197,7 +193,7 @@ export const updateCliCommand = Command.make(
       outputContracts.updatePlan,
       outputContracts.projectionRetention,
       outputContracts.projectionRetentionPlan,
-      outputContracts.projectionRepair,
+      outputContracts.skillVersion,
     ],
     exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: false,

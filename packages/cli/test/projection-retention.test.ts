@@ -11,8 +11,7 @@ import {
 import {
   prepareProjectionRetention,
   projectionComparisonPaths,
-  useLibraryProjection,
-  projectionReviewToken,
+  useSkillVersion,
 } from "../src/workflows/library/projection-retention.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
@@ -87,7 +86,7 @@ const projectionFixture = Effect.gen(function* () {
 });
 
 it.effect.each(["account", "device"] as const)(
-  "using the Library with %s selection backs up only the selected copy",
+  "using the Library with %s selection saves the edit as a Version and can switch back to it",
   (selection) =>
     Effect.gen(function* () {
       const { fs, roots, home, skill, storeLayer } = yield* projectionFixture;
@@ -120,70 +119,42 @@ it.effect.each(["account", "device"] as const)(
       const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
         Effect.provide(storeLayer),
       );
-      const token = yield* projectionReviewToken(prepared.preview);
-      const result = yield* useLibraryProjection(
-        prepared.preview,
-        skill.name,
-        "agents",
-        token,
-      ).pipe(Effect.provide(storeLayer));
-      assert.strictEqual(result.status, "installed");
-      assert.strictEqual(result.backup_status, "saved");
-      assert.ok("backup_path" in result);
-      assert.ok(result.backup_path);
-      assert.strictEqual(
-        yield* fs.readFileString(join(result.backup_path, "SKILL.md")),
-        "selected change\n",
+      const result = yield* prepared.useLibrary().pipe(Effect.provide(storeLayer));
+      assert.ok(result.saved_skill_version_id);
+      assert.strictEqual(result.skill_version_id, prepared.preview.previous_skill_version_id);
+      assert.strictEqual(yield* fs.readFileString(join(agents, "SKILL.md")), "original\n");
+      assert.strictEqual(yield* fs.exists(join(agents, "notes.txt")), false);
+      assert.strictEqual(yield* fs.readFileString(join(claude, "SKILL.md")), "different change\n");
+      const reverted = yield* LibraryStore.use((store) => store.load).pipe(
+        Effect.provide(storeLayer),
       );
+      assert.strictEqual(reverted.skills[0]?.local_version_id, undefined);
+
+      yield* useSkillVersion(skill.name, result.saved_skill_version_id, false).pipe(
+        Effect.provide(storeLayer),
+      );
+      assert.strictEqual(yield* fs.readFileString(join(agents, "SKILL.md")), "selected change\n");
       assert.strictEqual(
-        yield* fs.readFileString(join(result.backup_path, "notes.txt")),
+        yield* fs.readFileString(join(agents, "notes.txt")),
         "local supporting file\n",
       );
-      assert.strictEqual(yield* fs.readFileString(join(agents, "SKILL.md")), "original\n");
       assert.strictEqual(yield* fs.readFileString(join(claude, "SKILL.md")), "different change\n");
-      assert.strictEqual(yield* fs.exists(join(agents, "notes.txt")), false);
       const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
       assert.strictEqual(state.projections.length, 2);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("using the Library refuses when the reviewed files change", () =>
+it.effect("using the Library refuses when the previewed files change", () =>
   Effect.gen(function* () {
     const { fs, roots, skill, storeLayer } = yield* projectionFixture;
     const path = join(roots.codexRoot, "review", "SKILL.md");
     const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
       Effect.provide(storeLayer),
     );
-    const token = yield* projectionReviewToken(prepared.preview);
     yield* fs.writeFileString(path, "changed since preview\n");
-    const failure = yield* useLibraryProjection(prepared.preview, skill.name, "agents", token).pipe(
-      Effect.provide(storeLayer),
-      Effect.flip,
-    );
+    const failure = yield* prepared.useLibrary().pipe(Effect.provide(storeLayer), Effect.flip);
     assert.strictEqual(failure._tag, "Library.ProjectionRetentionStale");
     assert.strictEqual(yield* fs.readFileString(path), "changed since preview\n");
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("review detects changes to the ownership marker even when content hashes match", () =>
-  Effect.gen(function* () {
-    const { fs, roots, skill, storeLayer } = yield* projectionFixture;
-    const marker = join(roots.codexRoot, "review", ".skit-ownership.json");
-    const before = yield* fs.readFileString(marker);
-    const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
-      Effect.provide(storeLayer),
-    );
-    const token = yield* projectionReviewToken(prepared.preview);
-    yield* fs.writeFileString(marker, before + "\n");
-    const failure = yield* useLibraryProjection(prepared.preview, skill.name, "agents", token).pipe(
-      Effect.provide(storeLayer),
-      Effect.flip,
-    );
-    assert.strictEqual(failure._tag, "Library.ProjectionRetentionStale");
-    assert.strictEqual(
-      yield* fs.readFileString(join(roots.codexRoot, "review", "SKILL.md")),
-      "selected change\n",
-    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -249,11 +220,8 @@ it.effect("repair leaves a different Skill in the same agent directory alone", (
     const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
       Effect.provide(storeLayer),
     );
-    const token = yield* projectionReviewToken(prepared.preview);
-    const result = yield* useLibraryProjection(prepared.preview, skill.name, "agents", token).pipe(
-      Effect.provide(storeLayer),
-    );
-    assert.strictEqual(result.status, "installed");
+    const result = yield* prepared.useLibrary().pipe(Effect.provide(storeLayer));
+    assert.ok(result.saved_skill_version_id);
     assert.strictEqual(yield* fs.readFileString(siblingPath), siblingBefore);
     const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
     assert.ok(

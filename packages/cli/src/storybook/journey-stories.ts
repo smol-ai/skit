@@ -21,8 +21,7 @@ import {
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import { presentSetEnabled } from "../handlers/library/set-enabled.js";
 import type { Prompter } from "../presentation/prompter.js";
-import { Renderer } from "../presentation/renderer.js";
-import { projectionComparisonNotes } from "../presentation/projection-comparison.js";
+import type { Renderer } from "../presentation/renderer.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
 import { openLibrarySession } from "../library-application/session.js";
 
@@ -250,20 +249,6 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     initialState: "Empty fixture device · Registry rejects the second download",
     answers: [],
     run: syncJourney(true).pipe(Effect.provide(skitConfigurationLayer())),
-    finalState: (state) => state,
-  },
-  {
-    name: "update-projection/comparison-guidance",
-    initialState:
-      "Presentation fixture · notes before and after Git's directory diff (pager not emulated)",
-    answers: [],
-    run: Effect.gen(function* () {
-      const renderer = yield* Renderer;
-      const notes = projectionComparisonNotes("review", "/home/story/.agents/skills/review");
-      yield* renderer.note(notes.introduction.body, notes.introduction.title);
-      yield* renderer.note(notes.completion.body, notes.completion.title);
-      return "Presentation only · no copies compared or changed";
-    }),
     finalState: (state) => state,
   },
 ];
