@@ -252,6 +252,71 @@ export function projectSkillFiles(
   return Result.succeed(projected);
 }
 
+/** A Release's file paths, NFC-normalised and sorted so every directory is one contiguous range. */
+export interface ProjectionIndex {
+  readonly paths: readonly string[];
+  readonly sizes: readonly number[];
+}
+
+export function projectionIndex(
+  files: ReadonlyArray<{ path: string; bytes: Uint8Array }>,
+): ProjectionIndex {
+  const sorted = files
+    .map((file) => ({ path: file.path.normalize("NFC"), size: file.bytes.byteLength }))
+    .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+  return { paths: sorted.map(({ path }) => path), sizes: sorted.map(({ size }) => size) };
+}
+
+/**
+ * The entries and stored-archive bytes a Skill's projection would produce, counted without building
+ * it: each entry costs its content, 76 bytes of ZIP headers and its name twice, plus a 22-byte end
+ * record. Counting stops once `limit` is exceeded, so a projection that shared mappings expand
+ * without bound is never walked in full.
+ */
+export function measureSkillProjection(
+  index: ProjectionIndex,
+  skillPath: string,
+  shared: ReadonlyArray<{ from: string; to: string }>,
+  limit: { readonly entries: number; readonly archiveBytes: number },
+): { entries: number; archiveBytes: number } {
+  const encoder = new TextEncoder();
+  const measured = { entries: 0, archiveBytes: 22 };
+  const exceeded = () =>
+    measured.entries > limit.entries || measured.archiveBytes > limit.archiveBytes;
+  const add = (name: string, position: number) => {
+    measured.entries += 1;
+    measured.archiveBytes += index.sizes[position]! + 76 + 2 * encoder.encode(name).byteLength;
+  };
+  const firstAtOrAfter = (path: string) => {
+    let low = 0;
+    let high = index.paths.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (index.paths[middle]! < path) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  };
+  const within = (directory: string, target: (suffix: string) => string) => {
+    const prefix = `${directory}/`;
+    for (
+      let position = firstAtOrAfter(prefix);
+      position < index.paths.length && index.paths[position]!.startsWith(prefix) && !exceeded();
+      position++
+    )
+      add(target(index.paths[position]!.slice(prefix.length)), position);
+  };
+  within(skillPath.normalize("NFC"), (suffix) => suffix);
+  for (const mapping of shared) {
+    if (exceeded()) break;
+    const from = mapping.from.normalize("NFC");
+    const exact = firstAtOrAfter(from);
+    if (index.paths[exact] === from) add(mapping.to.normalize("NFC"), exact);
+    within(from, (suffix) => `${mapping.to}/${suffix}`.normalize("NFC"));
+  }
+  return measured;
+}
+
 export function hashProjectedSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,

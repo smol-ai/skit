@@ -84,6 +84,36 @@ const sharedBundle = Effect.fn("Test.sharedBundle")(function* (skills: number, m
   };
 });
 
+/** Skills that each map one directory of nine empty files `mappings` times: 1 + 9 × mappings entries. */
+const emptyDirectoryBundle = Effect.fn("Test.emptyDirectoryBundle")(function* (
+  skills: number,
+  mappings: number,
+) {
+  const declared = Array.from({ length: skills }, (_, index) => ({
+    name: `skill-${index}`,
+    path: `skills/skill-${index}`,
+    default_enabled: true,
+    shared: Array.from({ length: mappings }, (_, copy) => ({
+      from: "shared/empty",
+      to: `references/copy-${copy}`,
+    })),
+  }));
+  const files = [
+    yield* file("skit.json", JSON.stringify({ slug: "tools", skills: declared })),
+    ...(yield* Effect.forEach(
+      Array.from({ length: 9 }, (_, index) => index),
+      (index) => file(`shared/empty/file-${index}.md`, ""),
+    )),
+    ...(yield* Effect.forEach(declared, (skill) =>
+      file(`${skill.path}/SKILL.md`, `---\nname: ${skill.name}\n---\n# Shared\n`),
+    )),
+  ];
+  return {
+    descriptor: { skit: 1 as const, id: "alice/tools", slug: "tools", skills: declared },
+    files,
+  };
+});
+
 describe("Integrity draft validation", () => {
   it.effect("accepts a complete conforming draft", () =>
     Effect.gen(function* () {
@@ -186,4 +216,31 @@ describe("Integrity draft validation", () => {
       expect(outcome._tag).toBe("Success");
     }).pipe(Effect.provide(BrowserCrypto.layer)),
   );
+
+  // Empty files cost no content but still cost archive entries.
+  for (const [label, skills, mappings, code] of [
+    ["one Skill projects 1,000 entries", 1, 111, undefined],
+    ["one Skill projects more than 1,000 entries", 1, 112, "PROJECTED_SKILL_TOO_LARGE"],
+    ["its Skills together project 10,000 entries", 10, 111, undefined],
+    [
+      "its Skills together project more than 10,000 entries",
+      11,
+      111,
+      "PROJECTED_RELEASE_TOO_LARGE",
+    ],
+  ] as const)
+    it.effect(`${code ? "rejects" : "accepts"} a draft when ${label}`, () =>
+      Effect.gen(function* () {
+        const bundle = yield* emptyDirectoryBundle(skills, mappings);
+        const outcome = yield* Effect.result(
+          validateArtifactBundle("alice", "tools", bundle.descriptor, bundle.files),
+        );
+
+        if (code === undefined) expect(outcome._tag).toBe("Success");
+        else {
+          expect(outcome._tag).toBe("Failure");
+          if (outcome._tag === "Failure") expect(outcome.failure).toMatchObject({ code });
+        }
+      }).pipe(Effect.provide(BrowserCrypto.layer)),
+    );
 });

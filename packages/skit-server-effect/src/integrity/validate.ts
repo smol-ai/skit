@@ -9,12 +9,11 @@ import {
 import type { IntegrityErrorCode } from "@smolai/skit-core/universal/api";
 import {
   MAX_ARTIFACT_CONTENT_BYTES,
-  MAX_PROJECTED_RELEASE_BYTES,
-  MAX_PROJECTED_SKILL_BYTES,
   MAX_ARTIFACT_FILES,
 } from "@smolai/skit-core/universal/authoring";
 import { Effect } from "effect";
 import { type ArtifactFile, IntegrityError, type ValidationDiagnostic } from "./contracts.js";
+import { projectionLimitExceeded } from "./projection-limits.js";
 import {
   hashProjectedSkillFiles,
   normalizeDescriptorDeclarations,
@@ -62,7 +61,8 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
   const paths = new Set(files.map(({ path }) => path));
   const text = new TextDecoder();
   const diagnostics: Array<ValidationDiagnostic> = [];
-  let projectedReleaseBytes = 0;
+  const overLimit = projectionLimitExceeded(files, descriptor.skills);
+  if (overLimit) return yield* fail(overLimit.code, overLimit.path);
   for (const skill of descriptor.skills) {
     const primary = `${skill.path}/SKILL.md`;
     const primaryFile = files.find(({ path }) => path === primary);
@@ -71,16 +71,7 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
       if (!files.some(({ path }) => path === mapping.from || path.startsWith(`${mapping.from}/`)))
         return yield* fail("SHARED_SOURCE_MISSING", mapping.from);
     }
-    const projected = yield* projectSkillFiles(files, skill.path, skill.shared);
-    const projectedBytes = [...projected.values()].reduce(
-      (total, file) => total + file.bytes.byteLength,
-      0,
-    );
-    if (projectedBytes > MAX_PROJECTED_SKILL_BYTES)
-      return yield* fail("PROJECTED_SKILL_TOO_LARGE", skill.path);
-    projectedReleaseBytes += projectedBytes;
-    if (projectedReleaseBytes > MAX_PROJECTED_RELEASE_BYTES)
-      return yield* fail("PROJECTED_RELEASE_TOO_LARGE", skill.path);
+    yield* projectSkillFiles(files, skill.path, skill.shared);
     const decision = evaluateSkillAudit(
       auditSkill(text.decode(primaryFile.bytes), {
         declaredCapabilities: [...(skill.capabilities ?? [])],

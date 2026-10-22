@@ -3,7 +3,9 @@ import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
+import { measureSkillProjection, projectionIndex } from "@smolai/skit-core/universal/consumer";
 import { makeWebHandler } from "../src/http.js";
+import { discoverableSkills, skillArtifact } from "../src/releases/agent-skills.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const web = makeWebHandler(env);
@@ -72,6 +74,41 @@ const Index = Schema.Struct({
 });
 
 describe("Agent Skills discovery", () => {
+  it.effect("measures exactly the archive a Skill is served as", () =>
+    Effect.gen(function* () {
+      const shared = [
+        { from: "shared/reference.md", to: "references/réf.md" },
+        { from: "shared/assets", to: "assets" },
+      ];
+      const files = {
+        "skit.json": text(
+          JSON.stringify({ slug: "tools", skills: [skill("review", shared), skill("lint")] }),
+        ),
+        "skills/review/SKILL.md": text("---\nname: review\ndescription: Reviews\n---\n"),
+        "skills/review/notes/empty.md": new Uint8Array(0),
+        "skills/lint/SKILL.md": text("---\nname: lint\ndescription: Lints\n---\n"),
+        "shared/reference.md": text("reference"),
+        "shared/assets/font.ttf": new Uint8Array(300),
+        "shared/assets/nested/icon.svg": text("<svg/>"),
+      };
+      const index = projectionIndex(
+        Object.entries(files).map(([path, bytes]) => ({ path, bytes })),
+      );
+      const limit = { entries: Number.MAX_SAFE_INTEGER, archiveBytes: Number.MAX_SAFE_INTEGER };
+
+      for (const served of yield* discoverableSkills(zipSync(files))) {
+        const archive = yield* skillArtifact(served);
+        expect(
+          measureSkillProjection(
+            index,
+            `skills/${served.name}`,
+            served.name === "review" ? shared : [],
+            limit,
+          ),
+        ).toEqual({ entries: served.files.size, archiveBytes: archive.byteLength });
+      }
+    }),
+  );
   it.effect("indexes each Skill with the digest of the archive it serves", () =>
     Effect.gen(function* () {
       yield* publishRelease(
@@ -111,9 +148,23 @@ describe("Agent Skills discovery", () => {
   );
 
   // Releases published before projection limits may exceed them; discovery refuses to build them.
-  for (const [label, skills] of [
+  for (const [label, sharedBytes, skills] of [
+    [
+      "one Skill projects more than 1,000 entries of an empty file",
+      0,
+      [
+        skill(
+          "wide",
+          Array.from({ length: 1_001 }, (_, copy) => ({
+            from: "shared/reference.bin",
+            to: `copy-${copy}.bin`,
+          })),
+        ),
+      ],
+    ],
     [
       "one Skill projects more than 8 MiB",
+      1024 * 1024,
       [
         skill(
           "big",
@@ -126,6 +177,7 @@ describe("Agent Skills discovery", () => {
     ],
     [
       "its Skills together project more than 32 MiB",
+      1024 * 1024,
       Array.from({ length: 5 }, (_, index) =>
         skill(
           `part-${index}`,
@@ -139,7 +191,7 @@ describe("Agent Skills discovery", () => {
   ] as const)
     it.effect(`refuses to serve a Release where ${label}`, () =>
       Effect.gen(function* () {
-        yield* publishRelease(skills, 1024 * 1024);
+        yield* publishRelease(skills, sharedBytes);
 
         expect((yield* request("/tim/tools/.well-known/agent-skills/index.json")).status).toBe(404);
         expect((yield* request(`/tim/tools/skills/${skills[0]!.name}/skill.zip`)).status).toBe(404);
