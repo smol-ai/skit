@@ -101,6 +101,13 @@ export type AuthorSkitDeleteResponse = typeof AuthorSkitDeleteResponse.Type;
 export const MAX_ARTIFACT_FILES = 5_000;
 export const MAX_ARTIFACT_CONTENT_BYTES = 25 * 1024 * 1024;
 export const MAX_RELEASE_ARCHIVE_BYTES = 25 * 1024 * 1024;
+/**
+ * The most bytes one Skill may project, each shared mapping counted every time it applies, and the
+ * most all of a Release's Skills may project together. Shared mappings reuse one file across many
+ * projections, so these bound what serving a Release builds, which file limits alone do not.
+ */
+export const MAX_PROJECTED_SKILL_BYTES = 8 * 1024 * 1024;
+export const MAX_PROJECTED_RELEASE_BYTES = 32 * 1024 * 1024;
 export const MAX_RELEASE_ARCHIVE_BASE64_LENGTH = Math.ceil(MAX_RELEASE_ARCHIVE_BYTES / 3) * 4;
 export const releasePublishRequestSchema = Schema.Struct({
   version: semver,

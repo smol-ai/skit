@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { r2BodyEffect } from "../platform/cloudflare.js";
-import { agentSkillsIndex, discoverableSkills } from "./agent-skills.js";
+import { agentSkillsIndex, discoverableSkills, skillArtifact } from "./agent-skills.js";
 import { ReleaseStore } from "./store.js";
 
 const discoveryHeaders = { "cache-control": "public, no-cache" };
@@ -30,8 +30,12 @@ const routeParams = Effect.map(HttpRouter.RouteContext, ({ params }) => ({
 export const indexResponse = Effect.gen(function* () {
   const { owner, slug } = yield* routeParams;
   const skills = yield* loadSkills(owner, slug);
+  // One archive at a time: each is hashed and released before the next is built.
+  const indexed = yield* Effect.forEach(skills, (skill) =>
+    Effect.map(skillArtifact(skill), ({ digest }) => ({ ...skill, digest })),
+  );
   return yield* HttpServerResponse.json(
-    agentSkillsIndex(skills, (name) => `/${owner}/${slug}/skills/${name}/skill.zip`),
+    agentSkillsIndex(indexed, (name) => `/${owner}/${slug}/skills/${name}/skill.zip`),
     { headers: discoveryHeaders },
   );
 }).pipe(
@@ -50,7 +54,8 @@ export const artifactResponse = Effect.gen(function* () {
   const skills = yield* loadSkills(owner, slug);
   const selected = skills.find((candidate) => candidate.name === skill);
   if (selected === undefined) return yield* Effect.fail("not_found" as const);
-  return HttpServerResponse.uint8Array(selected.artifact, {
+  const { artifact } = yield* skillArtifact(selected);
+  return HttpServerResponse.uint8Array(artifact, {
     contentType: "application/zip",
     headers: discoveryHeaders,
   });
