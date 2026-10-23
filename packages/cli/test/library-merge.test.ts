@@ -1,6 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
+  currentCollectionSkills,
+  currentSkillVersion,
+  sourceAcquisitions,
   makeAcquisitionId,
   makeCollectionId,
   makeMachineId,
@@ -13,6 +16,7 @@ import {
   restoreCustodyConflicts,
 } from "@smolai/skit-core";
 import {
+  normalizeLibraryManifest,
   mergeLibraryManifests,
   prepareLibraryMerge,
 } from "../src/workflows/library/library-merge.js";
@@ -772,4 +776,31 @@ it.effect("merge preparation rejects a requested key when there is no resolvable
     });
     assert.strictEqual(prepared._tag, "InvalidResolution");
   }),
+);
+
+it.effect(
+  "normalization and input order preserve selected content when acquisition times tie",
+  () =>
+    Effect.gen(function* () {
+      const input = yield* decode({
+        ...manifest(),
+        acquisitions: manifest().acquisitions.map((acquisition) => ({
+          ...acquisition,
+          kind: "source",
+        })),
+      });
+      const ordered = [...input.acquisitions].sort((a, b) =>
+        b.acquisition_id.localeCompare(a.acquisition_id),
+      );
+      const expected = currentSkillVersion(input, input.skills[0]!);
+      const expectedMembers = currentCollectionSkills(input, collectionId);
+      for (const acquisitions of [ordered, ordered.toReversed()]) {
+        const candidate = { ...input, acquisitions };
+        const normalized = normalizeLibraryManifest(candidate);
+        assert.deepStrictEqual(sourceAcquisitions(candidate, collectionId), ordered);
+        assert.deepStrictEqual(currentSkillVersion(candidate, candidate.skills[0]!), expected);
+        assert.deepStrictEqual(currentSkillVersion(normalized, normalized.skills[0]!), expected);
+        assert.deepStrictEqual(currentCollectionSkills(normalized, collectionId), expectedMembers);
+      }
+    }),
 );

@@ -295,13 +295,16 @@ function libraryRow(row: LibrarySkillRow): LibraryRow {
     name: row.name,
     kind: "library-skill",
     location: row.heading,
-    status: "clear",
+    status: row.invocationWarning ? "warning" : "clear",
     summary: enabled
       ? `Active in ${row.bindings.length} place${row.bindings.length === 1 ? "" : "s"}.`
       : "Not active anywhere.",
-    evidence: enabled
-      ? row.bindings.map((binding) => binding.label)
-      : ["not active anywhere · press e to enable"],
+    evidence: [
+      ...(enabled
+        ? row.bindings.map((binding) => binding.label)
+        : ["not active anywhere · press e to enable"]),
+      ...(row.invocationWarning ? [row.invocationWarning] : []),
+    ],
     agents: enabled ? ["every agent"] : [],
     row,
   };

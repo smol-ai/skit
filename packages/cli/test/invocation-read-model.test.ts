@@ -1,4 +1,4 @@
-import { resolveDeclaredInvocation, type HarnessName } from "@smolai/skit-core";
+import { resolveDeclaredInvocation } from "@smolai/skit-core";
 import { describe, expect, test } from "vitest";
 import { Result } from "effect";
 import { invocationPolicyChoices, invocationReadModel } from "../src/invocation/read-model.js";
@@ -7,13 +7,10 @@ import type { InvocationOption } from "../src/invocation/policy.js";
 const CLAUDE = "skills/review/SKILL.md";
 
 function model(options: {
-  /** Whose native metadata supplies the author's default. */
-  harness?: HarnessName;
   invocation?: "explicit" | "implicit" | "host-policy";
   files?: Record<string, string>;
   storedIntent?: InvocationOption;
 }) {
-  const harness = options.harness ?? "claude-code";
   const author = Result.getOrThrow(
     resolveDeclaredInvocation(
       {
@@ -26,7 +23,7 @@ function model(options: {
   );
   return invocationReadModel({
     skill: "review",
-    author: author[harness],
+    author,
     storedIntent: options.storedIntent ?? "declared",
   });
 }
@@ -35,19 +32,19 @@ describe("invocation read model", () => {
   test("an author default becomes the effective policy", () => {
     const resolved = model({ invocation: "explicit" });
 
-    expect(resolved.authorPolicy).toBe("explicit");
-    expect(resolved.authorPolicySource).toEqual({ kind: "skit-declaration" });
-    expect(resolved.effectivePolicy).toBe("explicit");
-    expect(resolved.policySource).toBe("author");
+    expect(resolved.agents["claude-code"].authorPolicy).toBe("explicit");
+    expect(resolved.agents["claude-code"].authorPolicySource).toEqual({ kind: "skit-declaration" });
+    expect(resolved.agents["claude-code"].effectivePolicy).toBe("explicit");
+    expect(resolved.agents["claude-code"].policySource).toBe("author");
   });
 
   test("a local override wins and is named as the operator's own setting", () => {
     const resolved = model({ invocation: "implicit", storedIntent: "explicit" });
 
-    expect(resolved.authorPolicy).toBe("implicit");
+    expect(resolved.agents["claude-code"].authorPolicy).toBe("implicit");
     expect(resolved.overridePolicy).toBe("explicit");
-    expect(resolved.effectivePolicy).toBe("explicit");
-    expect(resolved.policySource).toBe("local-override");
+    expect(resolved.agents["claude-code"].effectivePolicy).toBe("explicit");
+    expect(resolved.agents["claude-code"].policySource).toBe("local-override");
   });
 
   test("an explicit policy warns that OpenCode V1 cannot enforce it", () => {
@@ -57,10 +54,10 @@ describe("invocation read model", () => {
   });
 
   test("an unspecified author policy defers visibly to each agent", () => {
-    const resolved = model({ harness: "codex" });
+    const resolved = model({});
 
-    expect(resolved.effectivePolicy).toBe("host-policy");
-    expect(resolved.policySource).toBe("harness-default");
+    expect(resolved.agents.codex.effectivePolicy).toBe("host-policy");
+    expect(resolved.agents.codex.policySource).toBe("harness-default");
   });
 
   test("native metadata supplies the author default where no declaration exists", () => {
@@ -68,13 +65,13 @@ describe("invocation read model", () => {
       files: { [CLAUDE]: "---\nname: review\ndisable-model-invocation: true\n---\n" },
     });
 
-    expect(resolved.authorPolicy).toBe("explicit");
-    expect(resolved.authorPolicySource).toEqual({
+    expect(resolved.agents["claude-code"].authorPolicy).toBe("explicit");
+    expect(resolved.agents["claude-code"].authorPolicySource).toEqual({
       kind: "native-metadata",
       path: CLAUDE,
       field: "disable-model-invocation",
     });
-    expect(resolved.effectivePolicy).toBe("explicit");
+    expect(resolved.agents["claude-code"].effectivePolicy).toBe("explicit");
   });
 
   test("a contradiction is reported as a defect naming the file and field", () => {
@@ -84,9 +81,9 @@ describe("invocation read model", () => {
     });
 
     expect(resolved.defect).toBeDefined();
-    expect(resolved.conformance.state).toBe("non-conforming");
+    expect(resolved.agents["claude-code"].conformance.state).toBe("non-conforming");
     // The declaration still governs; the contradiction is reported, never offered as a choice.
-    expect(resolved.effectivePolicy).toBe("explicit");
+    expect(resolved.agents["claude-code"].effectivePolicy).toBe("explicit");
     expect(invocationPolicyChoices(resolved).map((choice) => choice.value)).toEqual([
       "declared",
       "implicit",
@@ -101,7 +98,7 @@ describe("invocation read model", () => {
       files: { [CLAUDE]: "---\nname: review\n---\n" },
     });
 
-    expect(resolved.conformance).toEqual({
+    expect(resolved.agents["claude-code"].conformance).toEqual({
       state: "unverified-legacy",
       path: CLAUDE,
       field: "disable-model-invocation",

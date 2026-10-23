@@ -23,11 +23,13 @@ export interface InvocationMetadataAdapter {
   readonly required: boolean;
   /** Whether SKIT holds the author's artifact to carry a declared policy in this metadata. */
   readonly authored: boolean;
+  /** Agent default leaves this native metadata intact rather than clearing its policy. */
+  readonly hostPolicyPreservesNative: boolean;
   read(
     text: string | undefined,
     path: string,
   ): Result.Result<NativeInvocationPolicy | undefined, HarnessMetadataInvalid>;
-  /** The file's new text, or `null` when the file should not exist. `host-policy` clears the field. */
+  /** The file's new text, or `null` when the file should not exist. `host-policy` clears the field unless `hostPolicyPreservesNative`. */
   write(
     text: string | undefined,
     policy: InvocationPolicy,
@@ -51,6 +53,7 @@ const claudeAdapter: InvocationMetadataAdapter = {
   file: "SKILL.md",
   required: true,
   authored: true,
+  hostPolicyPreservesNative: false,
   read: (text, path) =>
     Result.gen(function* () {
       const match = text?.match(CLAUDE_FRONTMATTER);
@@ -138,6 +141,7 @@ const codexAdapter: InvocationMetadataAdapter = {
   file: "agents/openai.yaml",
   required: false,
   authored: true,
+  hostPolicyPreservesNative: false,
   read: (text, path) =>
     Result.gen(function* () {
       if (text === undefined) return undefined;
@@ -187,6 +191,7 @@ const opencodeAdapter: InvocationMetadataAdapter = {
   file: "SKILL.md",
   required: true,
   authored: false,
+  hostPolicyPreservesNative: false,
   read: (text, path) =>
     Result.gen(function* () {
       const match = text?.match(CLAUDE_FRONTMATTER);
@@ -244,6 +249,7 @@ const devinAdapter: InvocationMetadataAdapter = {
   file: "SKILL.md",
   required: true,
   authored: false,
+  hostPolicyPreservesNative: true,
   read: (text, path) =>
     Result.gen(function* () {
       const match = text?.match(CLAUDE_FRONTMATTER);

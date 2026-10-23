@@ -520,6 +520,13 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
   }
   details.scrollTo(0);
   if (item.kind === "library-skill") {
+    if (item.row.invocationWarning)
+      details.add(
+        text("library-invocation-unavailable", item.row.invocationWarning, {
+          width: "100%",
+          fg: tone.warning,
+        }),
+      );
     const content = text("library-skill-content", "Loading…", { width: "100%" });
     details.add(content);
     pendingSkillPreview = libraryHost.run(readLibrarySkillContent(item.row.skillVersionId)).then(

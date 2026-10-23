@@ -320,8 +320,8 @@ interface LibraryEntities {
 }
 
 /**
- * A Collection's Acquisitions, newest first. Acquisitions are appended as they happen, so of two
- * with the same timestamp the later one is newer.
+ * A Collection's Acquisitions, newest first. IDs break observation-time ties so serialization
+ * and sync normalization cannot change selected content merely by reordering the array.
  */
 const collectionAcquisitions = (
   library: Pick<LibraryEntities, "acquisitions">,
@@ -329,8 +329,11 @@ const collectionAcquisitions = (
 ): Acquisition[] =>
   library.acquisitions
     .filter((acquisition) => acquisition.collection_id === collectionId)
-    .toReversed()
-    .toSorted((left, right) => right.acquired_at.localeCompare(left.acquired_at));
+    .toSorted(
+      (left, right) =>
+        right.acquired_at.localeCompare(left.acquired_at) ||
+        right.acquisition_id.localeCompare(left.acquisition_id),
+    );
 
 /** A Collection's Source Acquisitions, newest first. */
 export const sourceAcquisitions = (

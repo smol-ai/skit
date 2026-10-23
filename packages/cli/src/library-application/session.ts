@@ -4,6 +4,7 @@ import {
   retainedTreePath,
   versionBacking,
   LibraryStore,
+  RetainedContentInvalid,
   type SourceIdentity,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
@@ -15,9 +16,9 @@ import {
 } from "../workflows/library/subject-resolution.js";
 import type { InvocationOption } from "../invocation/policy.js";
 import { invocationReadModel, type InvocationReadModel } from "../invocation/read-model.js";
+import type { AuthorInvocationRead } from "../invocation/library-source.js";
 import { bindingRowLabel, destinationLabel } from "./read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
-import { unspecifiedDeclaredInvocation } from "../invocation/library-source.js";
 import type { ProjectionOptions } from "../workflows/library/projection-options.js";
 import {
   applyBindingChanges,
@@ -37,7 +38,10 @@ export interface LibraryBindingRow {
 
 export interface LibrarySkillRow extends SkillMetadata {
   readonly name: string;
+  readonly skillId: string;
   readonly skillVersionId: string;
+  readonly authorInvocation: AuthorInvocationRead;
+  readonly invocationWarning?: string;
   readonly collectionId: string;
   readonly heading: string;
   readonly hasCollection?: boolean;
@@ -91,15 +95,26 @@ export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () 
     source_updated_at: row.source_updated_at,
     acquired_at: row.acquired_at,
     name: row.name,
+    skillId: row.id,
     skillVersionId: row.versionId,
+    authorInvocation: row.authorInvocation,
+    ...(Result.isFailure(row.authorInvocation)
+      ? { invocationWarning: `Author preference unavailable: ${row.authorInvocation.failure}` }
+      : {}),
     collectionId: row.collectionId,
     heading: row.collectionLabel ?? row.name,
     hasCollection: row.collectionLabel !== undefined,
     ...(row.collectionSource === undefined ? {} : { collectionSource: row.collectionSource }),
     bindings: row.bindings.map(({ scope, invocation }) => {
+      if (Result.isFailure(row.authorInvocation))
+        return {
+          scope,
+          invocation,
+          label: `${destinationLabel(scope)} · Author preference unavailable`,
+        };
       const policy = invocationReadModel({
         skill: row.name,
-        author: unspecifiedDeclaredInvocation(),
+        author: row.authorInvocation.success,
         storedIntent: invocation,
       });
       return { scope, invocation, policy, label: bindingRowLabel({ scope, policy }) };
@@ -143,13 +158,28 @@ export const refreshLibrarySession = Effect.fn("LibrarySession.refresh")(functio
 export function libraryPolicyAfter(
   row: LibrarySkillRow,
   intent: InvocationOption,
-): InvocationReadModel {
-  return invocationReadModel({
-    skill: row.name,
-    author: unspecifiedDeclaredInvocation(),
-    storedIntent: intent,
-  });
+): Result.Result<InvocationReadModel, string> {
+  return Result.map(row.authorInvocation, (author) =>
+    invocationReadModel({
+      skill: row.name,
+      author,
+      storedIntent: intent,
+    }),
+  );
 }
+
+const unavailablePolicyChange = (
+  state: LibrarySessionState,
+  reason: string,
+): Effect.Success<ReturnType<typeof proposeLibraryChange>> =>
+  ({
+    ...state,
+    pending: undefined,
+    outcome: {
+      kind: "failed",
+      failure: classifyFailure(new RetainedContentInvalid({ diagnostics: [reason] })),
+    },
+  }) satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
 
 const factFromPlan = (plan: BindingChangePlan["changes"][number]): PreviewFacts => ({
   action: plan.enabled ? "enable" : "disable",
@@ -231,16 +261,19 @@ export function proposeLibraryEnable(
   row: LibrarySkillRow,
   selection: { readonly scope: Scope; readonly invocation?: InvocationOption },
 ) {
+  const policy = libraryPolicyAfter(row, selection.invocation ?? "declared");
+  if (Result.isFailure(policy) && selection.invocation !== undefined)
+    return Effect.succeed(unavailablePolicyChange(state, policy.failure));
   return proposeLibraryChange(
     state,
     configuration,
     {
-      subject: row.skillVersionId,
+      subject: row.skillId,
       where: [selection.scope],
       enabled: true,
       invocation: selection.invocation,
     },
-    [libraryPolicyAfter(row, selection.invocation ?? "declared")],
+    Result.isSuccess(policy) ? [policy.success] : [],
   );
 }
 
@@ -251,7 +284,7 @@ export function proposeLibraryDisable(
   bindings: readonly LibraryBindingRow[],
 ) {
   return proposeLibraryChange(state, configuration, {
-    subject: row.skillVersionId,
+    subject: row.skillId,
     where: bindings.map((binding) => binding.scope),
     enabled: false,
   });
@@ -284,16 +317,19 @@ export function proposeLibraryInvocation(
   binding: LibraryBindingRow,
   invocation: InvocationOption,
 ) {
+  const policy = libraryPolicyAfter(row, invocation);
+  if (Result.isFailure(policy))
+    return Effect.succeed(unavailablePolicyChange(state, policy.failure));
   return proposeLibraryChange(
     state,
     configuration,
     {
-      subject: row.skillVersionId,
+      subject: row.skillId,
       where: [binding.scope],
       enabled: true,
       invocation,
     },
-    [libraryPolicyAfter(row, invocation)],
+    [policy.success],
   );
 }
 

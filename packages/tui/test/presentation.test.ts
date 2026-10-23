@@ -1,3 +1,5 @@
+import { resolveDeclaredInvocation } from "@smolai/skit-core";
+import { Result } from "effect";
 import { expect, test } from "vitest";
 import type { AuditReportV1Alpha4, HarnessProbeResult } from "../../cli/src/front-end";
 import type {
@@ -129,7 +131,11 @@ const skill = (
   name,
   collectionId,
   heading,
+  skillId: `${collectionId}-skill-${name}`,
   skillVersionId: `${collectionId}-${name}`,
+  authorInvocation: resolveDeclaredInvocation({ name, path: "." }, () => undefined).pipe(
+    Result.mapError((error) => error.message),
+  ),
   source: null,
   revision: null,
   acquired_at: null,
