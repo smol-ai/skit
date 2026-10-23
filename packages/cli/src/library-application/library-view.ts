@@ -19,6 +19,7 @@ import {
 import { librarySubjects } from "../workflows/library/subject-resolution.js";
 import { readDescriptionLoad } from "../workflows/library/collection-load.js";
 import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
+import { makeLibrarySkillInvocationReader } from "../invocation/library-source.js";
 
 /** Internal constructor: derive a read model from the same snapshot used by a prepared action. */
 export const libraryView = (current: LibraryState, originalsPath: string) => {
@@ -99,8 +100,19 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       ),
     readSkills: Effect.fn("LibraryView.readSkills")(function* () {
       const facts = yield* readFacts();
-      return facts.flatMap((skill) =>
-        skill.versionId === undefined ? [] : [{ ...skill, versionId: skill.versionId }],
+      const readInvocation = yield* makeLibrarySkillInvocationReader(state, originalsPath);
+      return yield* Effect.forEach(
+        facts.flatMap((skill) =>
+          skill.versionId === undefined ? [] : [{ ...skill, versionId: skill.versionId }],
+        ),
+        (skill) =>
+          Effect.gen(function* () {
+            const retained = state.skills.find((retained) => retained.skill_id === skill.id);
+            if (retained === undefined)
+              return yield* Effect.die(`Missing retained Skill ${skill.id}`);
+            const authorInvocation = yield* readInvocation(retained);
+            return { ...skill, authorInvocation };
+          }),
       );
     }),
     readSubjects: Effect.fn("LibraryView.readSubjects")(function* () {

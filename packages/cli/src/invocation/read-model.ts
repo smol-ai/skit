@@ -1,48 +1,52 @@
-// The one structured account of invocation policy both front ends render. It answers the
-// operator's question — when may an agent choose this Skill? — from the author's declaration,
-// the device-local override, and what SKIT will actually project. It is pure: no prompts, no
-// filesystem, no streams. Adapters render these strings; they do not re-derive them.
-
+// The structured account of invocation policy both front ends render: author declarations,
+// the local override, and what projection will write. Pure: no filesystem, prompts or streams.
+// Author evidence is per agent; a plain Skill can carry different policies in one shared copy.
 import {
   DeclaredInvocation,
   DeclaredPolicySource,
   DeclaredInvocationResolution,
+  HarnessName,
   InvocationConformance,
   InvocationPolicy,
+  invocationMetadataAdapters,
   LibraryInvocationOption,
   ResolvedDeclaredPolicy,
 } from "@smolai/skit-core";
-import { Schema } from "effect";
+import { Record, Schema } from "effect";
+import { harnessLabel } from "../harness/catalog.js";
 import type { InvocationOption } from "./policy.js";
 import type { SkitBindingScope as Scope } from "@smolai/skit-core";
 
 export type { ResolvedDeclaredPolicy };
 
-/** Where the effective policy comes from, in the operator's terms rather than storage's. */
-export const PolicySource = Schema.Literals(["author", "local-override", "harness-default"]);
-export type PolicySource = typeof PolicySource.Type;
+export const AuthorInvocation = Schema.Record(HarnessName, DeclaredInvocationResolution);
+export type AuthorInvocation = typeof AuthorInvocation.Type;
 
-export const InvocationReadModel = Schema.Struct({
-  skill: Schema.String,
+const PolicySource = Schema.Literals(["author", "local-override", "harness-default"]);
+const AgentInvocation = Schema.Struct({
   authorPolicy: ResolvedDeclaredPolicy,
   authorPolicySource: DeclaredPolicySource,
   authorDeclarations: Schema.Array(DeclaredInvocation),
   conformance: InvocationConformance,
-  overridePolicy: Schema.optionalKey(InvocationPolicy),
-  /** The policy SKIT will project for every agent. `host-policy` means each agent decides. */
+  /** Policy the adapter will leave in this agent's copy; host-policy delegates to its default. */
   effectivePolicy: InvocationPolicy,
   policySource: PolicySource,
-  /** The stored intent this Binding carries, unchanged: presentation never edits persistence. */
+});
+
+export const InvocationReadModel = Schema.Struct({
+  skill: Schema.String,
+  agents: Schema.Record(HarnessName, AgentInvocation),
+  overridePolicy: Schema.optionalKey(InvocationPolicy),
+  /** Presentation never edits the persisted intent. */
   storedIntent: LibraryInvocationOption,
   question: Schema.String,
   authorSummary: Schema.String,
   effectiveSummary: Schema.String,
-  /** Present only when the artifact itself is at fault, in the operator's language. */
+  /** Present only when the artifact itself fails to demonstrate its declaration. */
   defect: Schema.optionalKey(Schema.String),
 });
 export type InvocationReadModel = typeof InvocationReadModel.Type;
 
-/** Decision-oriented names. The stored enum stays the enum; this is what a person reads. */
 export function policyLabel(policy: InvocationPolicy): string {
   if (policy === "implicit") return "Automatically";
   if (policy === "explicit") return "Only when asked";
@@ -56,7 +60,6 @@ export function policyExplanation(policy: InvocationPolicy): string {
   return "Each agent decides, using its own default.";
 }
 
-/** The author's default, or said to be absent. */
 export function authorPolicyLabel(policy: ResolvedDeclaredPolicy): string {
   return policy === "unspecified" ? "Not specified" : policyLabel(policy);
 }
@@ -73,59 +76,88 @@ function conformanceDefect(conformance: InvocationConformance, skill: string): s
   return undefined;
 }
 
-function effectiveSummary(model: {
-  effectivePolicy: InvocationPolicy;
-  policySource: PolicySource;
-  authorPolicy: ResolvedDeclaredPolicy;
-}): string {
-  const behaviour = policyExplanation(model.effectivePolicy);
-  if (model.policySource === "local-override") return `${behaviour} Set on this device.`;
-  if (model.policySource === "author") return `${behaviour} Set by the author.`;
-  return `${behaviour} The author did not specify a preference.`;
-}
+const agentEntries = (model: Pick<InvocationReadModel, "agents">) =>
+  HarnessName.literals.map((harness) => ({ harness, ...model.agents[harness] }));
 
-/**
- * Resolve one Binding's invocation policy into everything both front ends need to say about it.
- * One policy applies to every agent; SKIT writes it into each agent's native metadata.
- *
- * Precedence is local override, then the author's SKIT declaration, then native metadata, then
- * each agent's own default. In a conforming Release the middle two agree, so the
- * ordering decides nothing; it matters only for legacy and non-conforming artifacts.
- */
+const authorPreference = (model: Pick<InvocationReadModel, "agents">): string => {
+  const policy = model.agents.codex.authorPolicy;
+  return agentEntries(model).every((agent) => agent.authorPolicy === policy)
+    ? authorPolicyLabel(policy)
+    : "Varies by agent";
+};
+
+/** Match projection: an override or descriptor policy is written; otherwise native fields survive. */
 export function invocationReadModel(input: {
   skill: string;
-  author: Omit<DeclaredInvocationResolution, "harness">;
+  author: AuthorInvocation;
   storedIntent: InvocationOption;
 }): InvocationReadModel {
   const { skill, author, storedIntent } = input;
   const overridePolicy = storedIntent === "declared" ? undefined : storedIntent;
-  const effectivePolicy: InvocationPolicy =
-    overridePolicy ?? (author.policy === "unspecified" ? "host-policy" : author.policy);
-  const policySource: PolicySource = overridePolicy
-    ? "local-override"
-    : author.policy === "unspecified"
-      ? "harness-default"
-      : "author";
-  return {
-    skill,
-    authorPolicy: author.policy,
-    authorPolicySource: author.source,
-    authorDeclarations: author.declarations,
-    conformance: author.conformance,
-    ...(overridePolicy ? { overridePolicy } : {}),
-    effectivePolicy,
-    policySource,
-    storedIntent,
-    question: `When can agents use ‘${skill}’?`,
-    authorSummary: `Author preference: ${authorPolicyLabel(author.policy)}`,
-    effectiveSummary: effectiveSummary({
+  const defects = new Set<string>();
+  const agents = Record.map(author, (declared, harness): typeof AgentInvocation.Type => {
+    let effectivePolicy =
+      overridePolicy ?? (declared.policy === "unspecified" ? "host-policy" : declared.policy);
+    let policySource: typeof PolicySource.Type = overridePolicy
+      ? "local-override"
+      : declared.policy === "unspecified"
+        ? "harness-default"
+        : "author";
+    // Read and write policy share the adapter's default-preservation rule.
+    if (
+      invocationMetadataAdapters[harness].hostPolicyPreservesNative &&
+      effectivePolicy === "host-policy"
+    ) {
+      const native = declared.declarations.find((item) => item.origin === "native-metadata");
+      if (native !== undefined) {
+        effectivePolicy = native.policy;
+        policySource = "author";
+      }
+    }
+    const agent = {
+      authorPolicy: declared.policy,
+      authorPolicySource: declared.source,
+      authorDeclarations: declared.declarations,
+      conformance: declared.conformance,
       effectivePolicy,
       policySource,
-      authorPolicy: author.policy,
-    }),
-    ...(conformanceDefect(author.conformance, skill)
-      ? { defect: conformanceDefect(author.conformance, skill)! }
-      : {}),
+    };
+    const defect = conformanceDefect(declared.conformance, skill);
+    if (defect !== undefined) defects.add(`${harnessLabel(harness)}: ${defect}`);
+    return agent;
+  });
+  const entries = agentEntries({ agents });
+  const common = agents.codex;
+  const uniform = entries.every(
+    (agent) =>
+      agent.effectivePolicy === common.effectivePolicy &&
+      agent.policySource === common.policySource,
+  );
+  const effectiveSummary = uniform
+    ? `${policyExplanation(common.effectivePolicy)} ${
+        common.policySource === "local-override"
+          ? "Set on this device."
+          : common.policySource === "author"
+            ? "Set by the author."
+            : "The author did not specify a preference."
+      }`
+    : [
+        entries
+          .map((agent) => `${harnessLabel(agent.harness)}: ${policyLabel(agent.effectivePolicy)}`)
+          .join("; "),
+        ...(agents.opencode.effectivePolicy === "explicit"
+          ? ["OpenCode V1 ignores this setting."]
+          : []),
+      ].join(". ");
+  return {
+    skill,
+    agents,
+    ...(overridePolicy === undefined ? {} : { overridePolicy }),
+    storedIntent,
+    question: `When can agents use ‘${skill}’?`,
+    authorSummary: `Author preference: ${authorPreference({ agents })}`,
+    effectiveSummary,
+    ...(defects.size ? { defect: [...defects].join("\n") } : {}),
   };
 }
 
@@ -135,17 +167,17 @@ export interface InvocationPolicyChoice {
   hint?: string;
 }
 
-/**
- * The four stored intents, named as decisions. `declared` resolves to whatever the author actually
- * declared, so the operator never has to know what "declared" would turn out to mean.
- */
+/** Name the four stored intents as decisions, including what following the author will mean. */
 export function invocationPolicyChoices(model: InvocationReadModel): InvocationPolicyChoice[] {
-  const authorDefault =
-    model.authorPolicy === "unspecified"
-      ? "Author preference — none (agent default)"
-      : `Author preference — ${authorPolicyLabel(model.authorPolicy).toLowerCase()}`;
+  const preference = authorPreference(model);
   const options: InvocationPolicyChoice[] = [
-    { value: "declared", label: authorDefault },
+    {
+      value: "declared",
+      label:
+        preference === "Not specified"
+          ? "Author preference — none (agent default)"
+          : `Author preference — ${preference.toLowerCase()}`,
+    },
     { value: "implicit", label: policyLabel("implicit") },
     { value: "explicit", label: policyLabel("explicit") },
     { value: "host-policy", label: policyLabel("host-policy") },
@@ -155,28 +187,28 @@ export function invocationPolicyChoices(model: InvocationReadModel): InvocationP
   );
 }
 
-/**
- * What a screen says about the author, the operator's own setting, and the resulting behaviour
- * before asking them to decide. Both front ends show this; neither writes its own version.
- */
+/** Explain author evidence, the local choice and resulting behavior before asking for a change. */
 export function invocationBriefing(policy: InvocationReadModel): string {
-  const current = policyLabel(policy.effectivePolicy);
-  const source =
-    policy.policySource === "local-override"
-      ? "set on this device"
-      : policy.policySource === "author"
-        ? "author preference"
-        : "no author preference";
+  const summary = invocationRowSummary(policy);
   return [
-    ...(policy.overridePolicy ? [policy.authorSummary] : []),
-    `Current: ${current} (${source})`,
+    ...(policy.overridePolicy || summary === "Varies by agent" ? [policy.authorSummary] : []),
+    `Current: ${summary}`,
+    ...(summary === "Varies by agent" ? [policy.effectiveSummary] : []),
     ...(policy.defect ? ["", policy.defect] : []),
   ].join("\n");
 }
 
-/** The one-line account of a Binding shown in Library rows and choosers. */
 export function invocationRowSummary(model: InvocationReadModel): string {
-  if (model.policySource === "harness-default") return policyLabel(model.effectivePolicy);
-  const source = model.policySource === "local-override" ? "you" : "author";
-  return `${policyLabel(model.effectivePolicy)} · ${source}`;
+  const entries = agentEntries(model);
+  const common = model.agents.codex;
+  if (
+    entries.some(
+      (agent) =>
+        agent.effectivePolicy !== common.effectivePolicy ||
+        agent.policySource !== common.policySource,
+    )
+  )
+    return "Varies by agent";
+  if (common.policySource === "harness-default") return policyLabel(common.effectivePolicy);
+  return `${policyLabel(common.effectivePolicy)} · ${common.policySource === "local-override" ? "you" : "author"}`;
 }

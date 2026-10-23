@@ -295,6 +295,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
             terminalColors().cyan(row.heading),
             `  ${terminalColors().bold(row.name)}`,
             ...skillMetadataLines(row).map((line) => `    ${terminalColors().dim(line)}`),
+            ...(row.invocationWarning ? [`    ${row.invocationWarning}`] : []),
             `  ${row.bindings.length === 0 ? "not enabled" : row.bindings.map((binding) => binding.label).join("\n  ")}`,
           ].join("\n"),
           "Skill",

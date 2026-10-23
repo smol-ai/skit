@@ -69,6 +69,24 @@ server ─────┘
 
 Within the CLI, command orchestration depends on focused adapters and shared audit types. Audit adapters do not depend back on the audit orchestrator.
 
+Library sessions read invocation evidence from the selected retained Version, never from a working
+source or Projection. The retained invocation reader loads the descriptor when the materialization
+profile declares one, pre-reads native metadata, and uses core's per-Harness declaration resolver.
+It performs no Projection assessment or mutation. The reader verifies retained copy and Skill digests before trusting metadata. Hash results are
+shared within one Library read pass and discarded before the next pass, so a Collection
+with many Skills hashes its retained copy once per pass. Missing, unreadable,
+changed or malformed content is reported as unavailable evidence on that Skill alone; it does not
+prevent browsing other Skills or disabling the affected one. Policy previews require readable
+author evidence rather than an invented unspecified preference. Public list JSON
+continues to read provenance without requiring invocation metadata.
+
+The shared invocation read model combines captured per-Harness author evidence with the local
+override. CLI and TUI display “Varies by agent” when behavior differs and show each agent's policy
+in review. Policy previews reuse that evidence; session enablement names the stable Skill ID.
+Each adapter declares whether agent default preserves native policy, which the read model also
+reflects. Summaries describe metadata for the supported Harness adapters; they do not imply that
+every Harness is installed or that each copy is read by every Harness.
+
 ## CLI execution ownership
 
 [ADR-0018](adr/0018-own-cli-workflows-with-effect.md) defines the Effect execution model.
@@ -90,7 +108,7 @@ do not need to become Effect services.
 
 ### Source
 
-A source records a locator and acquisition policy: a registry reference, Git reference, local directory, archive, or URL. A Library Entry associates the retained artifact with that source, its resolved revision, retained original, normalized artifact, and contained Skills. Provenance is the derivation history of an artifact instance, not another name for its source.
+A source records a locator and acquisition policy: a registry reference, Git reference, local directory, archive, or URL. A Library Entry associates the retained artifact with that source, its resolved revision, retained original, normalized artifact, and contained Skills. Provenance is the derivation history of an artifact instance, not another name for its source. Acquisition queries order observations by `acquired_at` and then Acquisition ID, both descending. Array ordering and manifest normalization therefore cannot change the selected content.
 
 The supported locators, current check behavior, and candidate version signals are listed in
 [Sources and version checks](sources-and-version-checks.md).

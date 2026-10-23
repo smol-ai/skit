@@ -1,11 +1,101 @@
-import type { DeclaredInvocationResolution } from "@smolai/skit-core";
+import {
+  currentSkillVersion,
+  invocationMetadataAdapters,
+  readSkitDescriptorEffect,
+  originalTreeHashEffect,
+  RetainedContentInvalid,
+  resolveDeclaredInvocation,
+  retainedTreePath,
+  versionBacking,
+  type LibraryState,
+  type Skill,
+} from "@smolai/skit-core";
+import { Cache, Effect, FileSystem, Result } from "effect";
+import { join, posix } from "node:path";
+import type { AuthorInvocation } from "./read-model.js";
+import { errorMessage } from "../failure-classification.js";
 
-/** An author who declared no invocation policy, for Skills SKIT has no declaration for. */
-export function unspecifiedDeclaredInvocation(): Omit<DeclaredInvocationResolution, "harness"> {
-  return {
-    policy: "unspecified",
-    source: { kind: "unspecified" },
-    declarations: [],
-    conformance: { state: "conforming" },
-  };
-}
+export type AuthorInvocationRead = Result.Result<AuthorInvocation, string>;
+
+/** Verify retained bytes and read invocation evidence, without projection assessment or writes. */
+const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
+  state: LibraryState,
+  originalsPath: string,
+  skill: Skill,
+  hashTree: (path: string) => ReturnType<typeof originalTreeHashEffect>,
+) {
+  const version = currentSkillVersion(state, skill);
+  const backing = version === undefined ? undefined : versionBacking(state, skill, version);
+  if (backing === undefined)
+    return yield* new RetainedContentInvalid({
+      diagnostics: [`Skill ${skill.name} has no selected retained backing`],
+    });
+  const root = retainedTreePath(originalsPath, backing.copy.digest);
+  if ((yield* hashTree(root)) !== backing.copy.digest)
+    return yield* new RetainedContentInvalid({
+      diagnostics: [`Retained copy for ${skill.name} changed`],
+    });
+  const retainedPath = join(root, backing.member.source_path);
+  if (version === undefined || (yield* hashTree(retainedPath)) !== version.source_digest)
+    return yield* new RetainedContentInvalid({
+      diagnostics: [`Retained Skill ${skill.name} changed`],
+    });
+  const descriptor =
+    backing.member.materialization_profile === "declared-skit-skill/v1"
+      ? yield* readSkitDescriptorEffect(root)
+      : undefined;
+  // Match projectionSourceEffect: descriptor names choose their declared source directory.
+  const member = descriptor?.skills.find((member) => member.name === skill.name);
+  if (descriptor !== undefined && member === undefined)
+    return yield* new RetainedContentInvalid({
+      diagnostics: [`Retained descriptor lacks Skill ${skill.name}`],
+    });
+  const declaring = member ?? { name: skill.name, path: backing.member.source_path };
+  const fs = yield* FileSystem.FileSystem;
+  const files = new Map<string, string | undefined>();
+  for (const adapter of Object.values(invocationMetadataAdapters)) {
+    const path = posix.join(declaring.path, adapter.file);
+    if (files.has(path)) continue;
+    // Shared mappings can supply native metadata absent from the member directory. Read the
+    // retained source of that file without staging or assessing an entire artifact to browse it.
+    const mapping = member?.shared
+      ?.filter(({ to }) => {
+        const target = posix.normalize(to);
+        return adapter.file === target || adapter.file.startsWith(`${target}/`);
+      })
+      .toSorted((left, right) => right.to.length - left.to.length)[0];
+    const sourcePath =
+      mapping === undefined
+        ? path
+        : posix.join(mapping.from, posix.relative(mapping.to, adapter.file));
+    const text = yield* fs
+      .readFileString(join(root, sourcePath))
+      .pipe(
+        Effect.catchTag("PlatformError", (error) =>
+          error.reason._tag === "NotFound" && !adapter.required
+            ? Effect.succeed(undefined)
+            : Effect.fail(error),
+        ),
+      );
+    files.set(path, text);
+  }
+  return yield* Effect.fromResult(resolveDeclaredInvocation(declaring, (path) => files.get(path)));
+});
+
+/** One reader per Library read pass: copies shared by many Skills are hashed once, including
+ * failed reads. A new pass gets fresh hashes. No state or hash result survives a refresh.
+ * Checked failures become per-row evidence; defects and interruption still propagate.
+ */
+export const makeLibrarySkillInvocationReader = Effect.fn("Library.skillInvocationReader")(
+  function* (state: LibraryState, originalsPath: string) {
+    const hashes = yield* Cache.make({
+      capacity: Math.max(1, state.retained_copies.length + state.skills.length),
+      lookup: originalTreeHashEffect,
+    });
+    return (skill: Skill) =>
+      readInvocation(state, originalsPath, skill, (path) => Cache.get(hashes, path)).pipe(
+        Effect.mapError(errorMessage),
+        Effect.result,
+      );
+  },
+);

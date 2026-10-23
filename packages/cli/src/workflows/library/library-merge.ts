@@ -260,7 +260,8 @@ export function mergeLibraryManifests(
     if (!membershipDiffers && !selectionDiffers) continue;
     const key = `collection:${id}`;
     const latest = sourceAcquisitions(remote, id)[0];
-    // Equal timestamps do not establish precedence; preserve only strictly older history.
+    // Selection has an ID tiebreak, but equal observation times do not authorize discarding history.
+    // Preserve only strictly older history; any dropped equal-time content must be source-restorable.
     const kept = local.acquisitions.filter(
       (item) =>
         item.collection_id === id && latest !== undefined && item.acquired_at < latest.acquired_at,
