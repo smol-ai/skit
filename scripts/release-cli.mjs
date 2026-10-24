@@ -21,8 +21,8 @@ export async function retryInstall(
     try {
       return install();
     } catch (error) {
-      if (attempt === 4) throw error;
-      await sleep(1000 * 2 ** attempt);
+      if (attempt === 32) throw error;
+      await sleep(Math.min(1000 * 2 ** attempt, 30_000));
     }
   }
 }
