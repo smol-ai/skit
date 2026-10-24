@@ -726,6 +726,24 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       ],
     }),
   ),
+  ...(
+    [
+      ["use-library-preview", { applied: false }],
+      ["use-library-applied", { applied: true, saved_skill_version_id: skillVersionId }],
+      ["use-version-applied", { applied: true }],
+    ] as const
+  ).map(([name, outcome]) =>
+    resultStory(
+      "update-projection",
+      name,
+      result("skillVersion", {
+        skill_id: skillId,
+        skill_name: "review",
+        skill_version_id: skillVersionId,
+        ...outcome,
+      }),
+    ),
+  ),
   resultStory(
     "remove",
     "preview",

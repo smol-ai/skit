@@ -8,7 +8,11 @@ import {
   projectBindingEffect,
   skitLayer,
 } from "@smolai/skit-core";
-import { prepareProjectionRetention } from "../src/workflows/library/projection-retention.js";
+import {
+  prepareProjectionRetention,
+  projectionComparisonPaths,
+  useSkillVersion,
+} from "../src/workflows/library/projection-retention.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
@@ -81,6 +85,153 @@ const projectionFixture = Effect.gen(function* () {
   return { fs, workspace, roots, home, source, now, skill, storeLayer };
 });
 
+it.effect.each(["account", "device"] as const)(
+  "using the Library with %s selection saves the edit as a Version and can switch back to it",
+  (selection) =>
+    Effect.gen(function* () {
+      const { fs, roots, home, skill, storeLayer } = yield* projectionFixture;
+      if (selection === "device")
+        yield* writingTo(
+          home,
+          LibraryStore.use((store) =>
+            Effect.gen(function* () {
+              const state = yield* store.load;
+              yield* store.publish(
+                {
+                  ...state,
+                  global_bindings: [],
+                  device_skill_selection: {
+                    mode: "choose",
+                    binding: {
+                      scope: { kind: "global" },
+                      entries: [{ kind: "skill", skill_id: skill.skill_id }],
+                    },
+                  },
+                },
+                state,
+              );
+            }),
+          ).pipe(Effect.provide(storeLayer)),
+        );
+      const agents = join(roots.codexRoot, "review");
+      const claude = join(roots.claudeRoot, "review");
+      yield* fs.writeFileString(join(agents, "notes.txt"), "local supporting file\n");
+      const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
+        Effect.provide(storeLayer),
+      );
+      const result = yield* prepared.useLibrary().pipe(Effect.provide(storeLayer));
+      assert.ok(result.saved_skill_version_id);
+      assert.strictEqual(result.skill_version_id, prepared.preview.previous_skill_version_id);
+      assert.strictEqual(yield* fs.readFileString(join(agents, "SKILL.md")), "original\n");
+      assert.strictEqual(yield* fs.exists(join(agents, "notes.txt")), false);
+      assert.strictEqual(yield* fs.readFileString(join(claude, "SKILL.md")), "different change\n");
+      const reverted = yield* LibraryStore.use((store) => store.load).pipe(
+        Effect.provide(storeLayer),
+      );
+      assert.strictEqual(reverted.skills[0]?.local_version_id, undefined);
+
+      yield* useSkillVersion(skill.name, result.saved_skill_version_id, false).pipe(
+        Effect.provide(storeLayer),
+      );
+      assert.strictEqual(yield* fs.readFileString(join(agents, "SKILL.md")), "selected change\n");
+      assert.strictEqual(
+        yield* fs.readFileString(join(agents, "notes.txt")),
+        "local supporting file\n",
+      );
+      assert.strictEqual(yield* fs.readFileString(join(claude, "SKILL.md")), "different change\n");
+      const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+      assert.strictEqual(state.projections.length, 2);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("using the Library refuses when the previewed files change", () =>
+  Effect.gen(function* () {
+    const { fs, roots, skill, storeLayer } = yield* projectionFixture;
+    const path = join(roots.codexRoot, "review", "SKILL.md");
+    const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
+      Effect.provide(storeLayer),
+    );
+    yield* fs.writeFileString(path, "changed since preview\n");
+    const failure = yield* prepared.useLibrary().pipe(Effect.provide(storeLayer), Effect.flip);
+    assert.strictEqual(failure._tag, "Library.ProjectionRetentionStale");
+    assert.strictEqual(yield* fs.readFileString(path), "changed since preview\n");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("repair leaves a different Skill in the same agent directory alone", () =>
+  Effect.gen(function* () {
+    const { fs, workspace, roots, home, skill, storeLayer } = yield* projectionFixture;
+    const source = join(workspace, "sibling-source");
+    yield* fs.makeDirectory(source);
+    yield* fs.writeFileString(join(source, "SKILL.md"), "sibling\n");
+    const added = yield* Effect.scoped(
+      writingTo(
+        home,
+        retainObservedIn(home)({
+          source: { type: "local", path: source },
+          input: source,
+          retainedAt: "2026-09-17T00:00:00.000Z",
+          skills: [
+            {
+              name: "sibling",
+              sourcePath: source,
+              relativePath: ".",
+              observedHash: yield* deterministicTreeHashEffect(source),
+            },
+          ],
+          observations: [],
+        }),
+      ),
+    );
+    const before = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+    const sibling = before.skills.find(
+      (item) => item.collection_id === added.collection?.collection_id,
+    )!;
+    yield* writingTo(
+      home,
+      LibraryStore.use((store) =>
+        store.publish(
+          {
+            ...before,
+            global_bindings: [
+              {
+                scope: { kind: "global" },
+                entries: [
+                  { kind: "skill", skill_id: skill.skill_id },
+                  { kind: "skill", skill_id: sibling.skill_id },
+                ],
+              },
+            ],
+          },
+          before,
+        ),
+      ).pipe(Effect.provide(storeLayer)),
+    );
+    yield* writingTo(
+      home,
+      projectBindingEffect({
+        target: "agents",
+        root: roots.codexRoot,
+        variantsPath: join(home, "variants"),
+      }).pipe(Effect.provide(storeLayer)),
+    );
+    const siblingPath = join(roots.codexRoot, "sibling", "SKILL.md");
+    const siblingBefore = yield* fs.readFileString(siblingPath);
+    const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
+      Effect.provide(storeLayer),
+    );
+    const result = yield* prepared.useLibrary().pipe(Effect.provide(storeLayer));
+    assert.ok(result.saved_skill_version_id);
+    assert.strictEqual(yield* fs.readFileString(siblingPath), siblingBefore);
+    const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+    assert.ok(
+      after.projections.some(
+        (item) => item.skill_id === sibling.skill_id && item.target === "agents",
+      ),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect(
   "retains explicitly selected Projection bytes and accepts only identical observations",
   () =>
@@ -103,6 +254,15 @@ it.effect(
       );
       assert.strictEqual(before.skills[0]?.versions.length, 1);
       assert.strictEqual(yield* fs.exists(plan.retained_path), false);
+      const comparison = yield* projectionComparisonPaths(plan).pipe(Effect.provide(storeLayer));
+      assert.strictEqual(
+        yield* fs.readFileString(join(comparison.libraryPath, "SKILL.md")),
+        "original\n",
+      );
+      assert.strictEqual(
+        yield* fs.readFileString(join(comparison.installedPath, "SKILL.md")),
+        "selected change\n",
+      );
 
       const result = yield* prepared.apply().pipe(Effect.provide(storeLayer));
       assert.deepStrictEqual(

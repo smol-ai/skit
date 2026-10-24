@@ -239,6 +239,18 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
+    if (issue.code === "PROJECTION_CONFLICT") {
+      findings.push(
+        "      This installed copy changed outside SKIT, so its files were left in place.",
+      );
+      if (issue.skillId && (issue.target === "agents" || issue.target === "claude"))
+        findings.push(
+          `      Compare the Library source and this copy: skit update ${issue.skillId} --from-projection ${issue.target} --diff`,
+          `      To preview keeping its changes in the Library, run skit update ${issue.skillId} --from-projection ${issue.target} --dry-run`,
+          `      To preview using the Library version, run skit update ${issue.skillId} --from-projection ${issue.target} --use-library --dry-run`,
+          "      Review the copy before choosing it; the Library may contain a different version.",
+        );
+    }
   }
   for (const finding of data.codex.findings) {
     findings.push(
@@ -911,6 +923,13 @@ const contractPresenters: ContractPresenters = {
         (projection) => `${projection.target} · ${projection.path} · ${projection.status}`,
       ),
     ].join("\n"),
+  skillVersion: (data) => {
+    if (data.saved_skill_version_id !== undefined)
+      return `Reinstalled ${data.skill_name} version ${data.skill_version_id}.\nThe edited copy is saved as version ${data.saved_skill_version_id}. To use it again, run skit update ${data.skill_name} --use-version ${data.saved_skill_version_id}`;
+    return data.applied
+      ? `${data.skill_name} now uses version ${data.skill_version_id}; unchanged copies were reinstalled.`
+      : `Would save the edited copy as a new version of ${data.skill_name}, then reinstall version ${data.skill_version_id}.\n\nNo changes applied. Rerun without --dry-run to apply.`;
+  },
   remove: renderRemove,
   removePlan: renderRemovePlan,
   enable: (data) => renderSetEnabled(data, true),

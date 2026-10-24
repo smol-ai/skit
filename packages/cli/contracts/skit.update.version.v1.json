@@ -1,0 +1,29 @@
+{
+  "$id": "skit.update.version.v1",
+  "type": "object",
+  "properties": {
+    "skill_id": {
+      "type": "string"
+    },
+    "skill_name": {
+      "type": "string"
+    },
+    "skill_version_id": {
+      "type": "string"
+    },
+    "saved_skill_version_id": {
+      "type": "string"
+    },
+    "applied": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "skill_id",
+    "skill_name",
+    "skill_version_id",
+    "applied"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
