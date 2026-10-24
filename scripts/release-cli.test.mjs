@@ -84,12 +84,16 @@ test("propagation retries are bounded and apply to installs only", async () => {
   const delays = [];
   await retryInstall(
     () => {
-      if (++attempts < 3) throw new Error("ETARGET");
+      if (++attempts < 20) throw new Error("ETARGET");
     },
     async (ms) => delays.push(ms),
   );
-  assert.equal(attempts, 3);
-  assert.deepEqual(delays, [1000, 2000]);
+  assert.equal(attempts, 20);
+  assert.deepEqual(delays.slice(0, 6), [1000, 2000, 4000, 8000, 16000, 30000]);
+  assert.equal(
+    delays.reduce((sum, delay) => sum + delay, 0),
+    451_000,
+  );
   attempts = 0;
   await assert.rejects(
     retryInstall(
@@ -101,5 +105,5 @@ test("propagation retries are bounded and apply to installs only", async () => {
     ),
     /offline/,
   );
-  assert.equal(attempts, 5);
+  assert.equal(attempts, 33);
 });

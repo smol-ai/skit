@@ -45,10 +45,11 @@ Subsequent dispatches use `bootstrap: false` and OIDC. The workflow pins npm
 Dispatches verify a clean tagged commit, supported version,
 and registry availability, build and smoke-test a packed artifact, publish
 with provenance under `staging`, smoke-test the published version, then promote
-its computed release channel. Published installation is retried with bounded
-backoff for propagation delays. Re-running the same tag after a failed promotion
-resumes only if the published tarball integrity matches the newly built tarball
-exactly; it smoke-tests that publication again before promotion. A mismatched
+its computed release channel. Published installation is retried for up to about
+14 minutes with bounded backoff for npm processing delays. Re-running the same
+tag after a failed promotion resumes only if the published tarball integrity
+matches the newly built tarball exactly; it smoke-tests that publication again
+before promotion. A mismatched
 artifact needs a new version and tag. Tags may be missing or
 point at prereleases during initial publication; clients handle both safely.
 
