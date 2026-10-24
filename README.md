@@ -33,7 +33,7 @@ SKIT exists because we think the UX for skills can and should be better than thi
 Install:
 
 ```sh
-npm i -G @smolai/skit
+npm i -g @smolai/skit
 ```
 
 ## Setup
