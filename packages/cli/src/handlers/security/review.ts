@@ -22,7 +22,11 @@ export const securityReviewCommand = Effect.fn("CLI.securityReview")(function* <
   ReviewServices,
 >(library: SecurityReviewLibrary<Review, ReviewError, ReviewServices>, query?: string) {
   if (!query)
-    return yield* new MissingRequirement({ command: "security review", requires: "<skill>" });
+    return yield* new MissingRequirement({
+      command: "security review",
+      requires: "<skill>",
+      hint: "`skit list --json` lists retained skills.",
+    });
   return yield* library.securityReviewEffect(query);
 });
 

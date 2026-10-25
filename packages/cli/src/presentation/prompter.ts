@@ -65,7 +65,8 @@ export class PromptCancelled
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run the command again to make a choice.";
+  readonly remediation =
+    "Run the command again to make a choice, or pass it as a flag to skip the prompt; `--help` lists them.";
   get message(): string {
     return `${this.prompt} cancelled`;
   }

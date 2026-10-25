@@ -65,7 +65,11 @@ export const addCliCommand = Command.make(
               });
         const selectedSource = locator?.input ?? source;
         if (!selectedSource)
-          return yield* new MissingRequirement({ command: "add", requires: "<source>" });
+          return yield* new MissingRequirement({
+            command: "add",
+            requires: "<source>",
+            hint: "A source is `owner/repo`, a Git or GitHub URL, or a local path; `--list` previews it without adding.",
+          });
         yield* rejectDedicatedInstallerSourceEffect(selectedSource);
         if (input.preview) {
           const value = yield* renderer.withStatus(

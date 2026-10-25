@@ -152,7 +152,11 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   input: SetEnabledCommandInput,
 ) {
   if (input.subject === undefined && !input.interactive)
-    return yield* new MissingRequirement({ command: input.action, requires: "a skill" });
+    return yield* new MissingRequirement({
+      command: input.action,
+      requires: "a skill or collection",
+      hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
+    });
   const selection = yield* openBindingChangeSelection();
   const view = selection.view;
   const prompter = yield* Prompter;
