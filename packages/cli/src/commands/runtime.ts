@@ -1,6 +1,6 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data, Console, Effect } from "effect";
-import { CliError, CliOutput, Command } from "effect/cli";
+import { CliConfig, CliError, CliOutput, Command, GlobalFlag } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
 import { renderCommandFailures } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";
@@ -41,6 +41,13 @@ export function formatHelpDocument(document: HelpDoc.HelpDoc): string {
   );
 }
 
+/**
+ * Effect's built-in global flags, without the interactive command wizard. SKIT asks its own
+ * questions, and the wizard ignored them: without a terminal it printed a prompt to stdout and
+ * exited 0 without running anything, which an agent reads as success.
+ */
+const builtIns = GlobalFlag.BuiltIns.filter((flag) => flag !== GlobalFlag.Wizard);
+
 /** Run the typed grammar while keeping SKIT's help and error presentation boundary. */
 export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
@@ -65,6 +72,7 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
     const renderer = yield* Renderer;
     yield* Command.runWith(command, { version, renderErrors: false })(argv).pipe(
       Effect.provideService(CliOutput.Formatter, formatter),
+      Effect.provide(CliConfig.layer({ builtIns })),
       Effect.provideService(Console.Console, quietConsole),
       Effect.catchIf(
         (error): error is CliError.ShowHelp =>

@@ -145,6 +145,31 @@ describe("CLI contracts", () => {
     );
   });
 
+  // Effect's wizard printed a prompt and exited 0 without running anything when no one could
+  // answer it, which reads as success to an agent. SKIT does not offer it.
+  test("rejects the wizard flag instead of silently doing nothing", () => {
+    const result = spawnSync(process.execPath, [bin, "enable", "--wizard", "--json"], {
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(64);
+    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stderr).error).toEqual(
+      expect.objectContaining({ code: "INVALID_ARGUMENT" }),
+    );
+  });
+
+  test("enable takes one scope: --global or --repo", () => {
+    const result = spawnSync(
+      process.execPath,
+      [bin, "enable", "review", "--global", "--repo", ".", "--json"],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(64);
+    expect(JSON.parse(result.stderr).error).toEqual(
+      expect.objectContaining({ code: "INVALID_ARGUMENT" }),
+    );
+  });
+
   test("authentication status never prints credential material", async () => {
     const home = await mkdtemp(join(tmpdir(), "skit-auth-status-"));
     const status = spawnSync(process.execPath, [bin, "auth", "status", "--home", home, "--json"], {

@@ -1,3 +1,4 @@
+import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import type { SkitBindingScope as Scope } from "@smolai/skit-core";
@@ -30,6 +31,10 @@ import {
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");
+const global = Flag.Boolean("global").pipe(
+  Flag.withDescription("Use global scope, for every project, without asking."),
+  Flag.withDefault(false),
+);
 const all = Flag.Boolean("all").pipe(
   Flag.withDescription("Select every eligible skill in the collection."),
   Flag.withDefault(false),
@@ -59,6 +64,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
     {
       subject,
       repo,
+      global,
       all,
       invocation,
       dryRun,
@@ -68,14 +74,20 @@ const setEnabledCliCommand = (enabled: boolean) => {
     (input) =>
       handleLibraryCommand(
         Effect.gen(function* () {
+          if (input.global && Option.isSome(input.repo))
+            return yield* new OptionCombinationInvalid({
+              detail: "Choose one scope: --global or --repo <path>",
+            });
           const configuration = yield* libraryCommandConfiguration(input);
           const selectedSubject = Option.getOrUndefined(input.subject);
-          const selectedScope = Option.getOrUndefined(
-            Option.map(input.repo, (root): Scope => ({
-              kind: "repository",
-              root: resolve(root),
-            })),
-          );
+          const selectedScope: Scope | undefined = input.global
+            ? { kind: "global" }
+            : Option.getOrUndefined(
+                Option.map(input.repo, (root): Scope => ({
+                  kind: "repository",
+                  root: resolve(root),
+                })),
+              );
           const selectedInvocation = Option.getOrUndefined(input.invocation) as
             | InvocationOption
             | undefined;

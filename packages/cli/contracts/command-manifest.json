@@ -576,6 +576,11 @@
           "valueName": "string",
           "description": "Use repository scope."
         },
+        "global": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Use global scope, for every project, without asking."
+        },
         "all": {
           "type": "boolean",
           "valueName": "boolean",
@@ -684,6 +689,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Use repository scope."
+        },
+        "global": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Use global scope, for every project, without asking."
         },
         "all": {
           "type": "boolean",
