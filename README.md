@@ -70,6 +70,10 @@ If SKIT finds multiple versions of skills from the same source across the reposi
 
 - SKIT does not currently support taking custody of skills found in repositories during setup. After adding one to your Library, remove it from the repository and enable it using `skit enable`.
 
+## Using SKIT with agents
+
+Agents such as Codex and Claude Code can run setup for you: they review the plan with `skit setup --json` and apply it with the printed `skit setup --apply <planId>` command, and SKIT never prompts when an agent drives it. Codex's default sandbox cannot write `~/.agents/skills`; see [using SKIT with coding agents](docs/agents.md) for the one rule file that lets it, and for the `skit` skill that teaches agents the workflow.
+
 ## Skill activity
 
 The experimental `skit usage` command shows observed skill calls, instruction loads, and document reads from local Claude Code and Codex transcripts over the last seven days. Use `--days 30`, `--harness codex`, `--project .`, or `--json` to narrow the report or read structured output. See [local skill activity](docs/skill-usage.md) for evidence categories and coverage limits.

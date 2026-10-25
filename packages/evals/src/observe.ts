@@ -28,7 +28,10 @@ export interface TrialReport {
   readonly prompt: string;
   /** Whether a Codex rule let `skit setup` and `skit enable` run outside the sandbox. */
   readonly allowSkit: boolean;
-  readonly codex: Omit<CodexOutcome, "events"> & { readonly usage: unknown };
+  /** Whether SKIT's own `skit` skill was installed for the agent. */
+  readonly withSkill: boolean;
+  /** Token usage of each turn, in order. */
+  readonly codex: Omit<CodexOutcome, "events"> & { readonly usage: readonly unknown[] };
   readonly skitTarballSha256: string;
   readonly skitGitHead: string;
   readonly transcript: {
@@ -84,6 +87,7 @@ export function buildReport(input: {
   run: RunRoot;
   prompt: string;
   allowSkit: boolean;
+  withSkill: boolean;
   outcome: CodexOutcome;
   fixture: Fixture;
   skitTarballSha256: string;
@@ -93,9 +97,9 @@ export function buildReport(input: {
   const commands: ShellCommand[] = [];
   const messages: string[] = [];
   const errors: unknown[] = [];
-  let usage: unknown = null;
+  const usage: unknown[] = [];
   for (const event of outcome.events) {
-    if (event.type === "turn.completed") usage = event.usage ?? null;
+    if (event.type === "turn.completed") usage.push(event.usage ?? null);
     if (event.type === "turn.failed" || event.type === "error") errors.push(event);
     if (event.type !== "item.completed") continue;
     const item = event.item;
@@ -125,6 +129,7 @@ export function buildReport(input: {
     runId: run.id,
     prompt: input.prompt,
     allowSkit: input.allowSkit,
+    withSkill: input.withSkill,
     codex: { ...codex, usage },
     skitTarballSha256: input.skitTarballSha256,
     skitGitHead: input.skitGitHead,
@@ -148,7 +153,7 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `# ${report.runId}`,
     "",
     `Prompt: ${report.prompt}`,
-    `Permissions: ${report.allowSkit ? "Codex rule allows `skit setup` and `skit enable`" : "Codex defaults"}`,
+    `Permissions: ${report.allowSkit ? "Codex rule allows `skit setup` and `skit enable`" : "Codex defaults"}${report.withSkill ? " · skit skill installed" : ""}`,
     `Codex: ${report.codex.codexVersion} · exit ${report.codex.exitCode} · ${Math.round(report.codex.durationMs / 1000)}s${report.codex.timedOut ? " · TIMED OUT" : ""}`,
     `skit: ${report.skitGitHead.slice(0, 9)} · tarball ${report.skitTarballSha256.slice(0, 12)}`,
     `Usage: ${JSON.stringify(report.codex.usage)}`,

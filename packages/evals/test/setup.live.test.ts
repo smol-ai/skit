@@ -6,6 +6,8 @@ const model = process.env.SKIT_EVAL_MODEL;
 const only = process.env.SKIT_EVAL_CASE;
 // Model a user who has allowed Codex to run `skit setup` and `skit enable` (see skitCommandRules).
 const allowSkit = process.env.SKIT_EVAL_ALLOW_SKIT === "1";
+// Install SKIT's own `skit` skill for the agent, as a user who enabled it would have.
+const withSkill = process.env.SKIT_EVAL_SKILL === "1";
 const cases = [baseCase, messyHomeCase].filter((evalCase) => !only || evalCase.id === only);
 
 // Observation first: the only assertions are the hard failures. Everything else is in each run's
@@ -15,6 +17,7 @@ describe.each(cases)("$id", (evalCase) => {
     it(`attempt ${attempt}`, async () => {
       const { report, summaryPath } = await runTrial(evalCase, {
         allowSkit,
+        withSkill,
         timeoutMs: 600_000,
         ...(model ? { model } : {}),
       });

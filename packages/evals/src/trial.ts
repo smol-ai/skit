@@ -1,4 +1,7 @@
-import { runCodexTurn } from "./codex.ts";
+import { copyFileSync, mkdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runCodexSession } from "./codex.ts";
 import { baseCaseFixture, messyHomeFixture, type Fixture } from "./fixtures.ts";
 import { buildReport, writeReport, type TrialReport } from "./observe.ts";
 import { createRunRoot } from "./run-root.ts";
@@ -8,6 +11,8 @@ import { installSkitPackage, linkTools } from "./skit-package.ts";
 export interface EvalCase {
   readonly id: string;
   readonly prompt: string;
+  /** What the user answers if the agent asks, in order. */
+  readonly replies?: readonly string[];
   readonly fixture: (home: string) => Fixture;
 }
 
@@ -26,8 +31,13 @@ export const baseCase: EvalCase = {
 export const messyHomeCase: EvalCase = {
   id: "setup-messy",
   prompt: baseCase.prompt,
+  // A user who keeps what agents see unchanged and wants their repositories included.
+  replies: ["retain-only, and yes, include the repositories in ~/Work"],
   fixture: messyHomeFixture,
 };
+
+/** The `skit` skill as this checkout ships it. */
+const skitSkill = resolve(dirname(fileURLToPath(import.meta.url)), "../../../skills/skit/SKILL.md");
 
 export interface Trial {
   readonly report: TrialReport;
@@ -36,14 +46,21 @@ export interface Trial {
 
 export async function runTrial(
   evalCase: EvalCase,
-  options: { allowSkit: boolean; timeoutMs: number; model?: string },
+  options: { allowSkit: boolean; withSkill: boolean; timeoutMs: number; model?: string },
 ): Promise<Trial> {
   const skit = installSkitPackage();
   const run = createRunRoot(evalCase.id);
   linkTools(run, skit);
   const fixture = evalCase.fixture(run.home);
-  const outcome = await runCodexTurn(run, {
+  // As a user who enabled SKIT's own skill: Codex lists skills from `$HOME/.agents/skills`.
+  if (options.withSkill) {
+    const installed = join(run.home, ".agents", "skills", "skit", "SKILL.md");
+    mkdirSync(dirname(installed), { recursive: true });
+    copyFileSync(skitSkill, installed);
+  }
+  const outcome = await runCodexSession(run, {
     prompt: evalCase.prompt,
+    replies: evalCase.replies ?? [],
     allowSkit: options.allowSkit,
     timeoutMs: options.timeoutMs,
     ...(options.model ? { model: options.model } : {}),
@@ -52,6 +69,7 @@ export async function runTrial(
     run,
     prompt: evalCase.prompt,
     allowSkit: options.allowSkit,
+    withSkill: options.withSkill,
     outcome,
     fixture,
     skitTarballSha256: skit.tarballSha256,

@@ -14,8 +14,13 @@ import { join } from "node:path";
 import { agentPath } from "./skit-package.ts";
 import type { RunRoot } from "./run-root.ts";
 
-export interface CodexTurn {
+export interface CodexSession {
   readonly prompt: string;
+  /**
+   * What the user says next, in order. Each is sent on the same thread only when the agent's last
+   * message asks something, as a person replying in the conversation would.
+   */
+  readonly replies: readonly string[];
   /**
    * Whether the user has told Codex it may run skit's setup and enable commands. Codex command
    * rules with `decision = "allow"` skip approval and run outside the sandbox, but only when every
@@ -40,13 +45,22 @@ prefix_rule(
 )
 `;
 
-export interface CodexOutcome {
+export interface CodexTurnOutcome {
   readonly command: readonly string[];
-  readonly codexVersion: string;
   readonly exitCode: number | null;
   readonly timedOut: boolean;
   readonly durationMs: number;
-  /** Parsed `codex exec --json` events, in order. */
+}
+
+export interface CodexOutcome {
+  readonly codexVersion: string;
+  readonly turns: readonly CodexTurnOutcome[];
+  /** The last turn's exit code. */
+  readonly exitCode: number | null;
+  /** Whether any turn timed out. */
+  readonly timedOut: boolean;
+  readonly durationMs: number;
+  /** Parsed `codex exec --json` events of every turn, in order. */
   readonly events: readonly CodexEvent[];
 }
 
@@ -56,6 +70,7 @@ export interface CodexOutcome {
  */
 export interface CodexEvent {
   readonly type?: string;
+  readonly thread_id?: string;
   readonly usage?: unknown;
   readonly item?: {
     readonly type?: string;
@@ -78,7 +93,8 @@ export function codexExecutable(): string {
 }
 
 /**
- * Run one non-interactive Codex turn inside the run root.
+ * Run one non-interactive Codex session inside the run root: the prompt, then each scripted reply
+ * resumed on the same thread.
  *
  * The agent's working directory and `$HOME` are the run's home, so "set up skit for me" acts on a
  * machine we built. The sandbox is always `workspace-write` rooted at that home, which is Codex's
@@ -89,17 +105,16 @@ export function codexExecutable(): string {
  * than inherited, so ambient `SKIT_HOME`, `XDG_*` or `CODEX_HOME` cannot leak into a trial.
  * Stdin is closed, as it would be for any agent-driven shell.
  */
-export async function runCodexTurn(run: RunRoot, turn: CodexTurn): Promise<CodexOutcome> {
+export async function runCodexSession(run: RunRoot, session: CodexSession): Promise<CodexOutcome> {
   const executable = codexExecutable();
   const codexVersion = execFileSync(executable, ["--version"], { encoding: "utf8" }).trim();
   const credentials = seedCredentials(run);
   // CODEX_HOME is isolated, so its rules directory holds only what this trial writes there.
-  if (turn.allowSkit) {
+  if (session.allowSkit) {
     mkdirSync(join(run.codexHome, "rules"), { recursive: true });
     writeFileSync(join(run.codexHome, "rules", "skit.rules"), skitCommandRules);
   }
-  const args = [
-    "exec",
+  const options = [
     "--json",
     "--skip-git-repo-check",
     "--ignore-user-config",
@@ -111,8 +126,7 @@ export async function runCodexTurn(run: RunRoot, turn: CodexTurn): Promise<Codex
     run.tmp,
     "-c",
     'approval_policy="never"',
-    ...(turn.model ? ["--model", turn.model] : []),
-    turn.prompt,
+    ...(session.model ? ["--model", session.model] : []),
   ];
   const env: NodeJS.ProcessEnv = {
     HOME: run.home,
@@ -125,30 +139,57 @@ export async function runCodexTurn(run: RunRoot, turn: CodexTurn): Promise<Codex
     LANG: "en_US.UTF-8",
   };
 
-  const streamPath = join(run.evidence, "codex-stream.jsonl");
-  const stderrPath = join(run.evidence, "codex-stderr.txt");
+  const turns: CodexTurnOutcome[] = [];
+  const events: CodexEvent[] = [];
   const started = Date.now();
   try {
-    const { exitCode, timedOut } = await settle(
-      executable,
-      args,
-      env,
-      run.home,
-      turn.timeoutMs,
-      streamPath,
-      stderrPath,
-    );
+    let prompt = session.prompt;
+    let threadId: string | undefined;
+    for (let index = 0; ; index++) {
+      const args = ["exec", ...options, ...(threadId ? ["resume", threadId] : []), prompt];
+      const streamPath = join(run.evidence, `codex-stream-${index + 1}.jsonl`);
+      const turnStarted = Date.now();
+      const { exitCode, timedOut } = await settle(
+        executable,
+        args,
+        env,
+        run.home,
+        session.timeoutMs,
+        streamPath,
+        join(run.evidence, `codex-stderr-${index + 1}.txt`),
+      );
+      const turnEvents = readJsonl(streamPath);
+      events.push(...turnEvents);
+      turns.push({
+        command: [executable, ...args],
+        exitCode,
+        timedOut,
+        durationMs: Date.now() - turnStarted,
+      });
+      threadId ??= turnEvents.find((event) => event.type === "thread.started")?.thread_id;
+      const reply = session.replies[index];
+      if (reply === undefined || exitCode !== 0 || timedOut || !threadId || !asksUser(turnEvents))
+        break;
+      prompt = reply;
+    }
+    const last = turns.at(-1)!;
     return {
-      command: [executable, ...args],
       codexVersion,
-      exitCode,
-      timedOut,
+      turns,
+      exitCode: last.exitCode,
+      timedOut: turns.some((turn) => turn.timedOut),
       durationMs: Date.now() - started,
-      events: readJsonl(streamPath),
+      events,
     };
   } finally {
     rmSync(credentials, { force: true });
   }
+}
+
+/** Whether the turn ended by asking the user something. */
+function asksUser(events: readonly CodexEvent[]): boolean {
+  const messages = events.filter((event) => event.item?.type === "agent_message");
+  return messages.at(-1)?.item?.text?.includes("?") ?? false;
 }
 
 /**
