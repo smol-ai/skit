@@ -160,7 +160,7 @@ export const outputContracts = {
     }),
   ),
   authStatus: effectOutput(
-    "skit.auth.status.v2",
+    "skit.auth.status.v3",
     Schema.Struct({
       credentials: Schema.Array(
         Schema.Struct({
@@ -173,6 +173,8 @@ export const outputContracts = {
           expired: Schema.Boolean,
           isDefault: Schema.Boolean,
           source: Schema.Literals(["environment", "stored"]),
+          /** Where the token is kept: an OS store, the 0600 credential file, or the environment. */
+          storage: Schema.Literals(["keychain", "secret-service", "file", "environment"]),
         }),
       ),
     }),

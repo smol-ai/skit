@@ -15,7 +15,9 @@ import {
  * about must not render the whole credential file unusable.
  */
 export const StoredCredential = Schema.Struct({
-  token: Schema.String,
+  /** Absent when the token lives in the OS store named by `tokenStorage`. */
+  token: Schema.optionalKey(Schema.String),
+  tokenStorage: Schema.optionalKey(Schema.Literals(["keychain", "secret-service"])),
   tokenId: Schema.String,
   tokenPrefix: Schema.String,
   scopes: Schema.Array(Schema.String),
@@ -55,6 +57,7 @@ type AuthStatusCredential = {
   expired: boolean;
   isDefault: boolean;
   source: "stored" | "environment";
+  storage: "keychain" | "secret-service" | "file" | "environment";
 };
 
 // URL syntax errors retain their generic command classification; programming defects do not.
@@ -213,6 +216,7 @@ export class RegistryAccounts {
         expired: credential.expiresAt ? Date.parse(credential.expiresAt) <= now : false,
         isDefault: this.defaultOrigin === origin,
         source: "stored",
+        storage: credential.tokenStorage ?? "file",
       }));
     const origin = this.environment.origin
       ? yield* parseOrigin(this.environment.origin)
@@ -228,6 +232,7 @@ export class RegistryAccounts {
         expired: false,
         isDefault: this.defaultOrigin === origin,
         source: "environment",
+        storage: "environment",
       });
     return { credentials };
   });

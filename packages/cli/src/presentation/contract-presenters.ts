@@ -451,7 +451,7 @@ function renderAuthExpiry(expiresAt: string | undefined): string {
 }
 
 function renderAuthStatus(
-  data: ContractDataForId<"skit.auth.status.v2">,
+  data: ContractDataForId<"skit.auth.status.v3">,
   context: RenderContext,
 ): string {
   if (!data.credentials.length) return "No credentials configured; run `skit auth login`";
@@ -467,6 +467,14 @@ function renderAuthStatus(
         ...(credential.aliases.length ? [`Registry: ${credential.origin}`] : []),
         `Access: ${renderAuthAccess(credential.scopes)}`,
         `Expires: ${renderAuthExpiry(credential.expiresAt)}${credential.expired ? " (expired)" : ""}`,
+        `Stored in: ${
+          {
+            keychain: "macOS Keychain",
+            "secret-service": "the system secret store",
+            file: "the credential file (no system secret store was available)",
+            environment: "SKIT_TOKEN",
+          }[credential.storage]
+        }`,
         ...(context.detail === "full" ? [`Credential: ${credential.tokenPrefix}`] : []),
       ].join("\n");
     })

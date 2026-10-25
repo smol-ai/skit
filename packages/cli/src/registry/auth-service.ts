@@ -1,6 +1,7 @@
 import { SkitConfiguration, configurationForHome } from "../configuration/skit-configuration.js";
 import { Context, Effect, Layer, Result } from "effect";
 import type { FileSystem } from "effect/FileSystem";
+import { ChildProcessSpawner } from "effect/process";
 import {
   resolveAuthEffect,
   resolveRegistryLocatorEffect,
@@ -53,9 +54,12 @@ export const registryAuthLayer = (home?: string) =>
     RegistryAuth,
     Effect.gen(function* () {
       const paths = yield* configurationForHome(home);
+      // Stored tokens may live in the OS credential store, read through its command-line tool.
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const ambient = yield* Effect.cached(
         resolveAuthEffect(home).pipe(
           Effect.provideService(SkitConfiguration, paths),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
           Effect.result,
           Effect.map(accessFrom),
         ),
@@ -66,6 +70,7 @@ export const registryAuthLayer = (home?: string) =>
             ? ambient
             : resolveAuthEffect(home, registry, undefined, command).pipe(
                 Effect.provideService(SkitConfiguration, paths),
+                Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
                 Effect.result,
                 Effect.map(accessFrom),
               ),

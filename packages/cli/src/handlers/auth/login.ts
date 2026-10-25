@@ -115,7 +115,7 @@ export const authLoginCliCommand = Command.make(
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
   Command.withDescription(
-    "Reuse saved authentication or sign in and store a CLI credential in ~/.skit/auth.json.",
+    "Reuse saved authentication or sign in and store a CLI credential in the system keychain, or ~/.skit/auth.json without one.",
   ),
   Command.withExamples([
     { command: "skit auth login" },

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.auth.status.v2",
+  "$id": "skit.auth.status.v3",
   "type": "object",
   "properties": {
     "credentials": {
@@ -47,6 +47,15 @@
               "environment",
               "stored"
             ]
+          },
+          "storage": {
+            "type": "string",
+            "enum": [
+              "keychain",
+              "secret-service",
+              "file",
+              "environment"
+            ]
           }
         },
         "required": [
@@ -57,7 +66,8 @@
           "expiry",
           "expired",
           "isDefault",
-          "source"
+          "source",
+          "storage"
         ],
         "additionalProperties": true
       }

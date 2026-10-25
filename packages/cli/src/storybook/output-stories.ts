@@ -645,6 +645,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           expired: false,
           isDefault: true,
           source: "stored",
+          storage: "keychain",
         },
       ],
     }),

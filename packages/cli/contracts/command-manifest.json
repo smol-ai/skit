@@ -6,7 +6,7 @@
         "login"
       ],
       "stability": "stable",
-      "summary": "Reuse saved authentication or sign in and store a CLI credential in ~/.skit/auth.json.",
+      "summary": "Reuse saved authentication or sign in and store a CLI credential in the system keychain, or ~/.skit/auth.json without one.",
       "effects": {
         "capabilities": [
           "network.write",
@@ -170,7 +170,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.auth.status.v2"
+        "skit.auth.status.v3"
       ],
       "exitCodes": [
         0,

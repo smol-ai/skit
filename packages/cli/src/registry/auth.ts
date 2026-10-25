@@ -1,8 +1,9 @@
 import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
-import { Clock, Config, Effect, FileSystem, Redacted, Result, Schema } from "effect";
+import { Clock, Config, Effect, FileSystem, Option, Redacted, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
+import { ChildProcessSpawner } from "effect/process";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import { hostname } from "node:os";
 import { dirname } from "node:path";
@@ -22,6 +23,12 @@ import {
   TooManyAuthAttempts,
 } from "./failures.js";
 import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
+import {
+  osTokenStorage,
+  readStoredToken,
+  removeStoredToken,
+  writeStoredToken,
+} from "./credential-store.js";
 import { Renderer } from "../presentation/renderer.js";
 import { serverDiscoverySchema } from "@smolai/skit-core";
 import {
@@ -77,7 +84,8 @@ export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
   return (yield* configurationForHome(home)).authPath;
 });
 
-export function readConfigEffect(home?: string) {
+/** auth.json exactly as written: tokens kept in an OS store are absent. */
+function readAuthDocument(home?: string) {
   return Effect.gen(function* () {
     const path = yield* authPath(home);
     const fs = yield* FileSystem.FileSystem;
@@ -100,18 +108,68 @@ export function readConfigEffect(home?: string) {
   });
 }
 
+/**
+ * The account configuration with each stored token in place, wherever it is kept. A token the OS
+ * store cannot supply is left absent; requests then go unauthenticated and ask the user to log in
+ * again, rather than every command failing on a locked keychain.
+ */
+export function readConfigEffect(home?: string) {
+  return Effect.gen(function* () {
+    const path = yield* authPath(home);
+    const config = yield* readAuthDocument(home);
+    const servers: Record<string, StoredCredential> = {};
+    for (const [origin, credential] of Object.entries(config.servers)) {
+      const token =
+        credential.token === undefined && credential.tokenStorage !== undefined
+          ? yield* readStoredToken(credential.tokenStorage, path, origin)
+          : undefined;
+      servers[origin] = token === undefined ? credential : { ...credential, token };
+    }
+    return { ...config, servers };
+  });
+}
+
+/**
+ * Write the account configuration, keeping each token in the OS store when one accepts it and in
+ * this 0600 file otherwise. Store items are written before the file names them and removed only
+ * after the file stops naming them, so an interruption never leaves the file pointing at nothing.
+ */
 const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
   config: AuthConfig,
   home?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* authPath(home);
+  const previous = yield* Effect.option(readAuthDocument(home));
+  const storage = osTokenStorage();
+  const servers: Record<string, StoredCredential> = {};
+  for (const [origin, credential] of Object.entries(config.servers)) {
+    // A token this run could not read stays wherever it already is.
+    if (credential.token === undefined) {
+      servers[origin] = credential;
+      continue;
+    }
+    const { token, tokenStorage: _previous, ...metadata } = credential;
+    servers[origin] =
+      storage !== undefined && (yield* writeStoredToken(storage, path, origin, token))
+        ? { ...metadata, tokenStorage: storage }
+        : { ...metadata, token };
+  }
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${process.pid}`;
-  yield* fs.writeFileString(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  yield* fs.writeFileString(temporary, `${JSON.stringify({ ...config, servers }, null, 2)}\n`, {
+    mode: 0o600,
+  });
   // The write mode is subject to umask; credentials get the permission set explicitly.
   yield* fs.chmod(temporary, 0o600);
   yield* fs.rename(temporary, path);
+  if (Option.isNone(previous)) return;
+  for (const [origin, credential] of Object.entries(previous.value.servers))
+    if (
+      credential.tokenStorage !== undefined &&
+      servers[origin]?.tokenStorage !== credential.tokenStorage
+    )
+      yield* removeStoredToken(credential.tokenStorage, path, origin);
 });
 
 export const resolveAuthEffect = Effect.fnUntraced(function* (
@@ -122,7 +180,7 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   ResolvedAuth,
   RegistryConfigurationError,
-  FileSystem.FileSystem | SkitConfiguration
+  FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
 > {
   const accounts = yield* readAccounts(home);
   return yield* accounts.credential(
@@ -194,7 +252,7 @@ export function resolveAuthForOriginEffect(
 ): Effect.Effect<
   ResolvedAuth,
   RegistryOriginInvalid | CredentialsUnusable | Config.ConfigError,
-  FileSystem.FileSystem | SkitConfiguration
+  FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
 > {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);

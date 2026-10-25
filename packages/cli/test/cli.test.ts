@@ -183,7 +183,7 @@ describe("CLI contracts", () => {
     expect(status.status).toBe(0);
     const statusBody = JSON.parse(status.stdout);
     expect(statusBody).toMatchObject({
-      schema: "skit.auth.status.v2",
+      schema: "skit.auth.status.v3",
       data: {
         credentials: [
           {
