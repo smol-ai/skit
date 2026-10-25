@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { runCodexSession } from "./codex.ts";
 import { baseCaseFixture, messyHomeFixture, type Fixture } from "./fixtures.ts";
 import { buildReport, writeReport, type TrialReport } from "./observe.ts";
-import { createRunRoot } from "./run-root.ts";
+import { archiveRun } from "./archive.ts";
+import { createRunRoot, removeRunRoot } from "./run-root.ts";
 import { installSkitPackage, linkTools } from "./skit-package.ts";
 
 /** One agent task: the machine it starts on and what the user says. */
@@ -74,6 +75,10 @@ export async function runTrial(
     fixture,
     skitTarballSha256: skit.tarballSha256,
     skitGitHead: skit.gitHead,
+    skitGitDirty: skit.gitDirty,
   });
-  return { report, summaryPath: writeReport(run, report) };
+  writeReport(run, report);
+  const archived = archiveRun(run, evalCase.id, report);
+  removeRunRoot(run);
+  return { report, summaryPath: join(archived, "evidence", "summary.md") };
 }

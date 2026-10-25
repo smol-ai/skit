@@ -1,11 +1,11 @@
-import { mkdirSync, realpathSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Every run root lives here. Nothing is cleaned up: a run is evidence. It is outside the skit
- * checkout on purpose: an agent that runs `pwd` or walks up from its home must not land in the
- * repository and read the source, the docs or the tests that define the expected answer.
+ * Live run roots, removed once a run is archived. They are outside the skit checkout, and hold
+ * nothing but the current run, so an agent that runs `pwd` or walks up from its home finds neither
+ * the repository nor earlier runs' transcripts that would tell it the expected answer.
  */
 export const runsDir = process.env.SKIT_EVAL_RUNS_DIR ?? join(realpathSync(tmpdir()), "skit-evals");
 
@@ -23,6 +23,10 @@ export interface RunRoot {
   readonly bin: string;
   readonly tmp: string;
   readonly evidence: string;
+}
+
+export function removeRunRoot(run: RunRoot): void {
+  rmSync(run.root, { recursive: true, force: true });
 }
 
 export function createRunRoot(caseId: string): RunRoot {

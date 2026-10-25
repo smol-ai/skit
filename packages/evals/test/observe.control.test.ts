@@ -1,16 +1,20 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { baseCaseFixture } from "../src/fixtures.ts";
 import { observe } from "../src/observe.ts";
-import { createRunRoot, type RunRoot } from "../src/run-root.ts";
+import { createRunRoot, removeRunRoot, type RunRoot } from "../src/run-root.ts";
 import { agentPath, installSkitPackage, linkTools } from "../src/skit-package.ts";
 
 // The control proves the verifier reads real skit state, using the same packaged skit, PATH and
 // home an agent gets, before any model usage is spent on trusting it.
+const controlRuns: RunRoot[] = [];
+afterAll(() => controlRuns.forEach(removeRunRoot));
+
 function controlRun(): RunRoot {
   const run = createRunRoot("control");
+  controlRuns.push(run);
   linkTools(run, installSkitPackage());
   return run;
 }

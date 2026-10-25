@@ -34,6 +34,7 @@ export interface TrialReport {
   readonly codex: Omit<CodexOutcome, "events"> & { readonly usage: readonly unknown[] };
   readonly skitTarballSha256: string;
   readonly skitGitHead: string;
+  readonly skitGitDirty: boolean;
   readonly transcript: {
     readonly commands: readonly ShellCommand[];
     readonly skitCommands: readonly string[];
@@ -92,6 +93,7 @@ export function buildReport(input: {
   fixture: Fixture;
   skitTarballSha256: string;
   skitGitHead: string;
+  skitGitDirty: boolean;
 }): TrialReport {
   const { run, outcome } = input;
   const commands: ShellCommand[] = [];
@@ -133,6 +135,7 @@ export function buildReport(input: {
     codex: { ...codex, usage },
     skitTarballSha256: input.skitTarballSha256,
     skitGitHead: input.skitGitHead,
+    skitGitDirty: input.skitGitDirty,
     transcript: {
       commands,
       skitCommands: commands.map((c) => c.command).filter((c) => /\bskit\b/.test(c)),
@@ -155,7 +158,7 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `Prompt: ${report.prompt}`,
     `Permissions: ${report.allowSkit ? "Codex rule allows `skit setup` and `skit enable`" : "Codex defaults"}${report.withSkill ? " · skit skill installed" : ""}`,
     `Codex: ${report.codex.codexVersion} · exit ${report.codex.exitCode} · ${Math.round(report.codex.durationMs / 1000)}s${report.codex.timedOut ? " · TIMED OUT" : ""}`,
-    `skit: ${report.skitGitHead.slice(0, 9)} · tarball ${report.skitTarballSha256.slice(0, 12)}`,
+    `skit: ${report.skitGitHead.slice(0, 9)}${report.skitGitDirty ? " + uncommitted changes" : ""} · tarball ${report.skitTarballSha256.slice(0, 12)}`,
     `Usage: ${JSON.stringify(report.codex.usage)}`,
     "",
     `## Hard failures`,
