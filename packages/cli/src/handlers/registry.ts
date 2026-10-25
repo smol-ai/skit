@@ -2,7 +2,11 @@ import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handlePlatformCommand } from "../application.js";
-import { CommandMetadata } from "../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  credentialStoreSubprocesses,
+} from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import {
@@ -37,7 +41,10 @@ export const registryAddCliCommand = Command.make(
   Command.withDescription("Name a Registry for use in source references."),
   Command.withExamples([{ command: "skit registry add public https://registry.example.com" }]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
+      subprocesses: credentialStoreSubprocesses,
+    },
     outputSchemas: [outputContracts.registryRemote],
     exitCodes: [0, 12, 64],
     interactive: false,
@@ -64,7 +71,10 @@ export const registryListCliCommand = Command.make(
   Command.withDescription("List named Registries."),
   Command.withExamples([{ command: "skit registry list" }]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read"] },
+    effects: {
+      capabilities: ["filesystem.read", "process.execute"],
+      subprocesses: credentialStoreReadSubprocesses,
+    },
     outputSchemas: [outputContracts.registryList],
     exitCodes: [0, 12, 64],
     interactive: false,
@@ -96,7 +106,10 @@ export const registryDefaultCliCommand = Command.make(
   Command.withDescription("Select the Registry used by registry shorthand."),
   Command.withExamples([{ command: "skit registry default public" }]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
+      subprocesses: credentialStoreSubprocesses,
+    },
     outputSchemas: [outputContracts.registryRemote],
     exitCodes: [0, 11, 12, 64],
     interactive: false,
@@ -128,7 +141,10 @@ export const registryRemoveCliCommand = Command.make(
   Command.withDescription("Remove a Registry name."),
   Command.withExamples([{ command: "skit registry remove work" }]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
+      subprocesses: credentialStoreSubprocesses,
+    },
     outputSchemas: [outputContracts.registryRemote],
     exitCodes: [0, 11, 12, 64],
     interactive: false,

@@ -6,7 +6,7 @@ import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { authStatusCommand } from "../../registry/auth.js";
-import { CommandMetadata } from "../../commands/metadata.js";
+import { CommandMetadata, credentialStoreReadSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString, optionValue } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -36,7 +36,10 @@ export const authStatusCliCommand = Command.make(
   Command.withDescription("Show stored Registry credential metadata."),
   Command.withExamples([{ command: "skit auth status" }]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read"] },
+    effects: {
+      capabilities: ["filesystem.read", "process.execute"],
+      subprocesses: credentialStoreReadSubprocesses,
+    },
     outputSchemas: [outputContracts.authStatus],
     exitCodes: [0, 11, 12, 64],
     interactive: false,

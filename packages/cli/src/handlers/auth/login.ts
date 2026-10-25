@@ -17,7 +17,7 @@ import {
 } from "../../registry/auth.js";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
-import { CommandMetadata } from "../../commands/metadata.js";
+import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, jsonRequested } from "../../commands/parameters.js";
 import { InteractiveLoginUnavailable, ScopesInvalid } from "../../registry/failures.js";
@@ -208,7 +208,15 @@ export const authLoginCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     effects: {
-      capabilities: ["filesystem.read", "filesystem.write", "network.read", "network.write"],
+      capabilities: [
+        "filesystem.read",
+        "filesystem.write",
+        "network.read",
+        "network.write",
+        "process.execute",
+        "browser.open",
+      ],
+      subprocesses: [...credentialStoreSubprocesses, "open", "xdg-open"],
     },
     outputSchemas: [outputContracts.authLogin, outputContracts.authLoginPending],
     exitCodes: [0, 11, 12, 64],

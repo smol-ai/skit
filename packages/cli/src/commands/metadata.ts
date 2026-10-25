@@ -31,6 +31,21 @@ export const sourceAcquisitionSubprocesses = [
   "git check-ignore",
 ] as const;
 
+/** Commands the OS credential store is read through when stored Registry tokens are loaded. */
+export const credentialStoreReadSubprocesses = [
+  "/usr/bin/security find-generic-password",
+  "secret-tool lookup",
+] as const;
+
+/** Commands the OS credential store is read, written, and cleared through. */
+export const credentialStoreSubprocesses = [
+  ...credentialStoreReadSubprocesses,
+  "/usr/bin/security -i (add-generic-password)",
+  "/usr/bin/security delete-generic-password",
+  "secret-tool store",
+  "secret-tool clear",
+] as const;
+
 /** Metadata that belongs to SKIT's public contract rather than Effect's CLI grammar. */
 export const CommandMetadata = Context.Service<never, CommandMetadataShape>(
   "skit/cli/CommandMetadata",

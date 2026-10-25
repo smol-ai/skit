@@ -5,7 +5,11 @@ import { Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { CommandMetadata, sourceAcquisitionSubprocesses } from "../../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  sourceAcquisitionSubprocesses,
+} from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
 import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
@@ -181,7 +185,7 @@ export const librarySyncCliCommand = Command.make(
         "network.write",
         "process.execute",
       ],
-      subprocesses: sourceAcquisitionSubprocesses,
+      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.librarySync],
     exitCodes: [0, 11, 12, 64, 65],

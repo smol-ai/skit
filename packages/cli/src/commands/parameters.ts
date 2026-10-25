@@ -1,8 +1,18 @@
 import { Option, Record } from "effect";
-import { Flag, GlobalFlag } from "effect/cli";
+import { CliConfig, Flag, GlobalFlag } from "effect/cli";
 import type { HarnessName } from "@smolai/skit-core";
 import type { ResolvedSkitConfiguration } from "../configuration/skit-configuration.js";
 import type { InventoryRootOptions } from "../projection/roots.js";
+
+/**
+ * Effect's built-in global flags, without the interactive command wizard. SKIT asks its own
+ * questions, and the wizard ignored them: without a terminal it printed a prompt to stdout and
+ * exited 0 without running anything, which an agent reads as success. Execution and the help
+ * documents the command manifest is generated from share this grammar.
+ */
+export const skitCliConfigLayer = CliConfig.layer({
+  builtIns: GlobalFlag.BuiltIns.filter((flag) => flag !== GlobalFlag.Wizard),
+});
 
 export const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit structured JSON."),

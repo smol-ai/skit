@@ -12,7 +12,19 @@
           "filesystem.read",
           "filesystem.write",
           "network.read",
-          "network.write"
+          "network.write",
+          "process.execute",
+          "browser.open"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup",
+          "/usr/bin/security -i (add-generic-password)",
+          "/usr/bin/security delete-generic-password",
+          "secret-tool store",
+          "secret-tool clear",
+          "open",
+          "xdg-open"
         ]
       },
       "outputSchemas": [
@@ -74,11 +86,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -102,7 +109,16 @@
         "capabilities": [
           "filesystem.read",
           "filesystem.write",
-          "network.write"
+          "network.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup",
+          "/usr/bin/security -i (add-generic-password)",
+          "/usr/bin/security delete-generic-password",
+          "secret-tool store",
+          "secret-tool clear"
         ]
       },
       "outputSchemas": [
@@ -146,11 +162,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -172,7 +183,12 @@
       "summary": "Show stored Registry credential metadata.",
       "effects": {
         "capabilities": [
-          "filesystem.read"
+          "filesystem.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
         ]
       },
       "outputSchemas": [
@@ -215,11 +231,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -251,7 +262,9 @@
           "git checkout --detach",
           "git rev-parse",
           "git ls-files",
-          "git check-ignore"
+          "git check-ignore",
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
         ]
       },
       "outputSchemas": [
@@ -327,11 +340,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show help information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -428,11 +436,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -542,11 +545,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -659,11 +657,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -782,11 +775,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -875,11 +863,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -937,11 +920,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1023,11 +1001,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1050,7 +1023,16 @@
       "effects": {
         "capabilities": [
           "filesystem.read",
-          "filesystem.write"
+          "filesystem.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup",
+          "/usr/bin/security -i (add-generic-password)",
+          "/usr/bin/security delete-generic-password",
+          "secret-tool store",
+          "secret-tool clear"
         ]
       },
       "outputSchemas": [
@@ -1096,11 +1078,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1123,7 +1100,16 @@
       "effects": {
         "capabilities": [
           "filesystem.read",
-          "filesystem.write"
+          "filesystem.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup",
+          "/usr/bin/security -i (add-generic-password)",
+          "/usr/bin/security delete-generic-password",
+          "secret-tool store",
+          "secret-tool clear"
         ]
       },
       "outputSchemas": [
@@ -1166,11 +1152,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1192,7 +1173,12 @@
       "summary": "List named Registries.",
       "effects": {
         "capabilities": [
-          "filesystem.read"
+          "filesystem.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
         ]
       },
       "outputSchemas": [
@@ -1229,11 +1215,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1256,7 +1237,16 @@
       "effects": {
         "capabilities": [
           "filesystem.read",
-          "filesystem.write"
+          "filesystem.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup",
+          "/usr/bin/security -i (add-generic-password)",
+          "/usr/bin/security delete-generic-password",
+          "secret-tool store",
+          "secret-tool clear"
         ]
       },
       "outputSchemas": [
@@ -1298,11 +1288,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1358,11 +1343,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1426,11 +1406,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1493,11 +1468,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1559,11 +1529,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1655,11 +1620,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1767,11 +1727,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1857,11 +1812,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -1937,11 +1887,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -2064,11 +2009,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -2101,7 +2041,9 @@
           "git checkout --detach",
           "git rev-parse",
           "git ls-files",
-          "git check-ignore"
+          "git check-ignore",
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
         ]
       },
       "outputSchemas": [
@@ -2206,11 +2148,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -2242,7 +2179,9 @@
           "git checkout --detach",
           "git rev-parse",
           "git ls-files",
-          "git check-ignore"
+          "git check-ignore",
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
         ]
       },
       "outputSchemas": [
@@ -2321,11 +2260,6 @@
           "valueName": "boolean",
           "description": "Show version information"
         },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
-        },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
           "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -2378,11 +2312,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",
@@ -2473,11 +2402,6 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show version information"
-        },
-        "wizard": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Start wizard mode for a command"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",

@@ -8,7 +8,11 @@ import {
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../../workflows/failures.js";
-import { CommandMetadata, sourceAcquisitionSubprocesses } from "../../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  sourceAcquisitionSubprocesses,
+} from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -124,7 +128,7 @@ export const addCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
-      subprocesses: sourceAcquisitionSubprocesses,
+      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.add, outputContracts.addPreview],
     exitCodes: [0, 11, 12, 64, 65],

@@ -4,7 +4,11 @@ import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { CommandMetadata, sourceAcquisitionSubprocesses } from "../../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  sourceAcquisitionSubprocesses,
+} from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -79,7 +83,7 @@ export const updateCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
-      subprocesses: sourceAcquisitionSubprocesses,
+      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [
       outputContracts.update,

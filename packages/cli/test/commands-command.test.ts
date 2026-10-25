@@ -18,3 +18,16 @@ it.effect("derives public command metadata from the executable tree", () =>
     Effect.provide(commandApplicationLayer(false, "/tmp/skit-commands-command-test")),
   ),
 );
+
+// The manifest is read from help documents; they must use the grammar the CLI executes with.
+it.effect("publishes only flags the executing parser accepts", () =>
+  commandDescriptions(skitCommand).pipe(
+    Effect.map((commands) => {
+      const withWizard = commands
+        .filter((command) => Object.hasOwn(command.flags, "wizard"))
+        .map((command) => command.path.join(" "));
+      assert.deepStrictEqual(withWizard, []);
+    }),
+    Effect.provide(commandApplicationLayer(false, "/tmp/skit-commands-flags-test")),
+  ),
+);
