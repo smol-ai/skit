@@ -1,5 +1,5 @@
 import { runCodexTurn } from "./codex.ts";
-import { baseCaseFixture, type Fixture } from "./fixtures.ts";
+import { baseCaseFixture, messyHomeFixture, type Fixture } from "./fixtures.ts";
 import { buildReport, writeReport, type TrialReport } from "./observe.ts";
 import { createRunRoot } from "./run-root.ts";
 import { installSkitPackage, linkTools } from "./skit-package.ts";
@@ -20,6 +20,13 @@ export const baseCase: EvalCase = {
   id: "setup-base",
   prompt: "set up skit for me. it's installed, run it with `skit`",
   fixture: baseCaseFixture,
+};
+
+/** Case 1: the same request on a machine with every kind of copy setup has to decide about. */
+export const messyHomeCase: EvalCase = {
+  id: "setup-messy",
+  prompt: baseCase.prompt,
+  fixture: messyHomeFixture,
 };
 
 export interface Trial {
