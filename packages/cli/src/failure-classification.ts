@@ -11,6 +11,8 @@ export const failureExitCodes = {
   TARGET_COLLISION: 12,
   INVALID_ARGUMENT: 64,
   VALIDATION_FAILED: 65,
+  // EX_NOPERM: the command was valid, but its user must sign in first.
+  AUTHENTICATION_REQUIRED: 77,
   OPERATION_FAILED: 1,
 } as const satisfies Record<FailureCode, number>;
 

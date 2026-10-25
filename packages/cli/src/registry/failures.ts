@@ -384,7 +384,7 @@ export class AuthenticationRequired
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
+  readonly code = "AUTHENTICATION_REQUIRED" as const;
   get remediation(): string {
     const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
     return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\`, then retry.`;
@@ -404,7 +404,7 @@ export class CredentialLacksScope
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
+  readonly code = "AUTHENTICATION_REQUIRED" as const;
   get remediation(): string {
     return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\`, then retry.`;
   }

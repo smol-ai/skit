@@ -83,7 +83,7 @@ export const publishCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.publish],
-    exitCodes: [0, 12, 64, 65],
+    exitCodes: [0, 12, 64, 65, 77],
     interactive: false,
   }),
 );

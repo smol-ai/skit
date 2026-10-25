@@ -27,7 +27,8 @@ export class SetupPlanStale
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
+  // Like every other plan that changed after it was reviewed.
+  readonly code = "CONFLICT" as const;
   readonly remediation =
     "Run `skit setup` again and review the current plan; `skit setup --json` reports its planId.";
   get message() {
