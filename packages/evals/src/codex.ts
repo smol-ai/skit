@@ -186,10 +186,16 @@ export async function runCodexSession(run: RunRoot, session: CodexSession): Prom
   }
 }
 
-/** Whether the turn ended by asking the user something. */
+/**
+ * Whether the turn ended by asking the user something: a question, or a request such as "Please
+ * choose how to handle…". A person would answer either.
+ */
 function asksUser(events: readonly CodexEvent[]): boolean {
   const messages = events.filter((event) => event.item?.type === "agent_message");
-  return messages.at(-1)?.item?.text?.includes("?") ?? false;
+  const text = messages.at(-1)?.item?.text ?? "";
+  return /\?|\b(please (choose|confirm|decide|tell me|let me know)|let me know|which (option|one)|choose)\b/iu.test(
+    text,
+  );
 }
 
 /**
