@@ -1,0 +1,49 @@
+import { runCodexTurn, type CodexSandbox } from "./codex.ts";
+import { baseCaseFixture, type Fixture } from "./fixtures.ts";
+import { buildReport, writeReport, type TrialReport } from "./observe.ts";
+import { createRunRoot } from "./run-root.ts";
+import { installSkitPackage, linkTools } from "./skit-package.ts";
+
+/** One agent task: the machine it starts on and what the user says. */
+export interface EvalCase {
+  readonly id: string;
+  readonly prompt: string;
+  readonly fixture: (home: string) => Fixture;
+}
+
+/** Case 0: observe what an agent does with the vague request swyx made, on the simplest machine. */
+export const baseCase: EvalCase = {
+  id: "setup-base",
+  prompt: "set up skit for me",
+  fixture: baseCaseFixture,
+};
+
+export interface Trial {
+  readonly report: TrialReport;
+  readonly summaryPath: string;
+}
+
+export async function runTrial(
+  evalCase: EvalCase,
+  options: { sandbox: CodexSandbox; timeoutMs: number; model?: string },
+): Promise<Trial> {
+  const skit = installSkitPackage();
+  const run = createRunRoot(evalCase.id);
+  linkTools(run, skit);
+  const fixture = evalCase.fixture(run.home);
+  const outcome = await runCodexTurn(run, {
+    prompt: evalCase.prompt,
+    sandbox: options.sandbox,
+    timeoutMs: options.timeoutMs,
+    ...(options.model ? { model: options.model } : {}),
+  });
+  const report = buildReport({
+    run,
+    prompt: evalCase.prompt,
+    outcome,
+    fixture,
+    skitTarballSha256: skit.tarballSha256,
+    skitGitHead: skit.gitHead,
+  });
+  return { report, summaryPath: writeReport(run, report) };
+}
