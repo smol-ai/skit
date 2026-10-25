@@ -5,6 +5,7 @@ import { inspectOwnershipMarkerEffect, skitLayer } from "@smolai/skit-core";
 import { setupApplyCommand, setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { SetupPlanStale } from "../src/workflows/library/setup.js";
+import { OptionCombinationInvalid } from "../src/workflows/failures.js";
 import type { SetupDuplicateAction } from "../src/workflows/library/setup-decisions.js";
 import { SetupDuplicateDecisionRequired } from "../src/workflows/library/setup-review.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
@@ -19,6 +20,7 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
   alias: boolean;
   identical?: boolean;
   linked?: boolean;
+  skillsSh?: boolean;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* scratch("skit-setup-reviewed-");
@@ -43,6 +45,11 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
   if (input.linked) {
     yield* write(join(root, "dotfiles", "skills", "delta"), "delta");
     yield* fs.symlink(join(root, "dotfiles", "skills", "delta"), join(claudeRoot, "delta"));
+  }
+  // `npx skills add` keeps the skill in the shared root and links Claude's root to it.
+  if (input.skillsSh) {
+    yield* write(join(root, ".agents", "skills", "eps"), "eps");
+    yield* fs.symlink(join(root, ".agents", "skills", "eps"), join(claudeRoot, "eps"));
   }
   if (input.identical)
     for (const skills of [claudeRoot, join(root, ".agents", "skills")])
@@ -216,5 +223,42 @@ it.effect("a skill linked into a destination is replaced only on an explicit ret
     const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
     assert.lengthOf(saved, 1);
     assert.strictEqual(yield* fs.readLink(join(backups, saved[0]!)), source(retired));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("keep-both is refused for a linked skill before anything is written", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ alias: false, linked: true });
+    const planId = (yield* f.review).onboarding.planId;
+    const before = yield* captureDisk(f.disk);
+
+    const refused = failure(yield* f.run({ planId, duplicates: "keep-both" }));
+
+    assert.instanceOf(refused, OptionCombinationInvalid);
+    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a skills.sh link from Claude's root to the shared root needs a decision", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const f = yield* fixture({ alias: false, skillsSh: true });
+    const reviewed = yield* f.review;
+    assert.deepStrictEqual(
+      reviewed.onboarding.candidates.find((candidate) => candidate.name === "eps")
+        ?.destinationLinks,
+      [join(f.root, ".claude", "skills", "eps")],
+    );
+
+    const refused = failure(yield* f.run({ planId: reviewed.onboarding.planId }));
+    assert.instanceOf(refused, SetupDuplicateDecisionRequired);
+    assert.include(refused.names, "eps");
+
+    const kept = yield* f.run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" });
+    assert.isTrue(Exit.isSuccess(kept));
+    assert.strictEqual(
+      yield* fs.readLink(join(f.root, ".claude", "skills", "eps")),
+      join(f.root, ".agents", "skills", "eps"),
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -206,6 +206,8 @@ export type SetupProjection = typeof SetupProjection.Type;
 
 const SetupOnboardingBase = {
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
+  destinationLinks: Schema.optionalKey(Schema.Array(Schema.String)),
   name: Schema.String,
   paths: Schema.Array(Schema.String),
   owner: SetupInstanceOwner,

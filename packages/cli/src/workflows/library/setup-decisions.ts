@@ -43,6 +43,11 @@ export type SetupCopyConflict =
       readonly kind: "retirable" | "preserve-copies";
       readonly shadows: readonly HarnessShadow[];
       readonly aliases: readonly string[];
+      /**
+       * A link sits where SKIT writes this skill's copy. Enabling replaces it, so the copies cannot
+       * be kept side by side: `keep-both` is not a choice.
+       */
+      readonly replacesLink: boolean;
     };
 
 /** Eligible global copies have harness readers and no repository custody. */
@@ -68,7 +73,12 @@ export function copyConflict(
   )
     return { kind: "none" };
   const aliases = retirableShadowAliases(selection.sourcePath, shadows);
-  return { kind: aliases.length ? "retirable" : "preserve-copies", shadows, aliases };
+  return {
+    kind: aliases.length ? "retirable" : "preserve-copies",
+    shadows,
+    aliases,
+    replacesLink: (candidate?.destinationLinks?.length ?? 0) > 0,
+  };
 }
 
 export const SetupCopySelection = Schema.Struct({

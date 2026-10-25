@@ -300,10 +300,19 @@ export type LocalAdoptionRequest =
 export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function* <E>(
   selection: SetupCopySelection,
   conflict: SetupCopyConflict,
-  invalid: (reason: "duplicate-action-required" | "aliases-not-retirable") => E,
+  invalid: (
+    reason: "duplicate-action-required" | "aliases-not-retirable" | "keep-both-replaces-link",
+  ) => E,
 ) {
   if (conflict.kind !== "none" && !selection.duplicateAction)
     return yield* Effect.fail(invalid("duplicate-action-required"));
+  // A link at SKIT's destination is replaced by the copy, so the two cannot both stay.
+  if (
+    conflict.kind !== "none" &&
+    conflict.replacesLink &&
+    selection.duplicateAction === "keep-both"
+  )
+    return yield* Effect.fail(invalid("keep-both-replaces-link"));
   if (selection.duplicateAction !== "retire-aliases")
     return { ...selection, duplicateAction: selection.duplicateAction };
   if (conflict.kind !== "retirable")

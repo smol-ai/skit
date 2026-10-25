@@ -19,6 +19,14 @@ export const SkillAlias = Schema.Struct({
   linkPath: Schema.optionalKey(Schema.String),
   linkTarget: Schema.optionalKey(Schema.String),
 });
+
+/**
+ * Whether this entry is itself a symlink. A path reached through a linked parent (macOS `/var` is
+ * a link to `/private/var`) is also reported `via: "symlink"`, but the skill entry there is an
+ * ordinary directory and replacing it removes no link.
+ */
+export const isEntryLink = (alias: SkillAlias): boolean =>
+  alias.via === "symlink" && alias.linkPath === alias.path;
 export type SkillAlias = typeof SkillAlias.Type;
 export const HarnessShadow = Schema.Struct({
   name: Schema.String,
@@ -196,21 +204,38 @@ export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(func
     { blockingNames: names, errors },
   );
   return instances
-    .filter(
-      (instance) =>
-        names.includes(instance.name) && !canonicalDestinations.has(instance.canonicalPath),
-    )
+    .filter((instance) => names.includes(instance.name))
     .map((instance) => ({
       ...instance,
       // SKIT's own destination is not another copy, unless a link sits there. SKIT never writes a
       // link, so one there is the user's: often a skill kept elsewhere and linked in on purpose.
       // Projecting would replace it, so it needs the same decision as any other agent copy.
       aliases: instance.aliases.filter(
-        (alias) => !destinations.includes(alias.path) || alias.via === "symlink",
+        (alias) => !destinations.includes(alias.path) || isEntryLink(alias),
       ),
     }))
-    .filter((instance) => instance.aliases.length > 0);
+    .filter(
+      (instance) =>
+        instance.aliases.length > 0 &&
+        // A copy already at a destination is SKIT's to adopt, not a duplicate of itself; it still
+        // counts when another destination links to it, as skills.sh links `.claude` to `.agents`.
+        (!canonicalDestinations.has(instance.canonicalPath) || instance.aliases.some(isEntryLink)),
+    );
 });
+
+/** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
+export class ProjectionWouldReplaceLink
+  extends Data.TaggedError("ProjectionWouldReplaceLink")<{ links: readonly string[] }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation =
+    "Remove the link and enable again, or run `skit setup` and choose `--duplicates retire-aliases` to replace it with a recovery receipt.";
+  get message() {
+    return `Enabling would replace the link at ${this.links.join(", ")} with SKIT's copy, so both cannot be kept`;
+  }
+}
 
 export class ProjectionWouldDuplicate
   extends Data.TaggedError("ProjectionWouldDuplicate")<{

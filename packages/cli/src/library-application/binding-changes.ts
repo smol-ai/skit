@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   bindingSkillIds,
   bindingShadowCheckSkills,
@@ -23,8 +24,10 @@ import {
   type InventoryRootOptions,
 } from "../projection/roots.js";
 import {
+  isEntryLink,
   observeHarnessShadows,
   ProjectionWouldDuplicate,
+  ProjectionWouldReplaceLink,
   type ShadowObservationError,
 } from "../projection/harness-shadows.js";
 import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
@@ -255,6 +258,18 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       if (aliases.length) remaining.push({ ...shadow, aliases });
     }
     if (remaining.length) return yield* new ProjectionWouldDuplicate({ shadows: remaining });
+  }
+  if (options.enabled && options.allowDuplicate) {
+    const destinations: string[] = [];
+    for (const target of yield* activeProjectionTargetsEffect(configuration))
+      for (const skill of plan.skills)
+        destinations.push(join(bindingRoot(target, plan.scope, configuration), skill));
+    const links = shadows.flatMap((shadow) =>
+      shadow.aliases
+        .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
+        .map((alias) => alias.path),
+    );
+    if (links.length) return yield* new ProjectionWouldReplaceLink({ links });
   }
   // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
   // published, so enabling never records intent its copies cannot follow.

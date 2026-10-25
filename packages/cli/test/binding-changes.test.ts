@@ -880,3 +880,23 @@ it.effect("a different copy at the destination is reported, and disabling leaves
     assert.deepStrictEqual((yield* f.home.durable).projections, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+it.effect("allow-duplicate refuses to replace the user's link at the destination", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const elsewhere = join(f.root, "dotfiles", "alpha");
+    yield* f.fs.makeDirectory(elsewhere, { recursive: true });
+    yield* f.fs.writeFileString(join(elsewhere, "SKILL.md"), "# alpha\n");
+    yield* f.fs.makeDirectory(f.destination, { recursive: true });
+    yield* f.fs.symlink(elsewhere, join(f.destination, "alpha"));
+    const plan = yield* f.home.owned(
+      previewBindingChanges([{ ...f.request, allowDuplicate: true }], f.home.bindings),
+    );
+
+    const error = yield* f.home.owned(applyBindingChanges(plan)).pipe(Effect.flip);
+
+    assert.strictEqual(error._tag, "ProjectionWouldReplaceLink");
+    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.strictEqual(yield* f.fs.readLink(join(f.destination, "alpha")), elsewhere);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

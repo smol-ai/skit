@@ -433,7 +433,12 @@ it.effect(
                 duplicateAction: "retire-aliases",
                 approvedAliases,
               },
-              { kind: "retirable", shadows, aliases: approvedAliases.map((alias) => alias.path) },
+              {
+                kind: "retirable",
+                shadows,
+                aliases: approvedAliases.map((alias) => alias.path),
+                replacesLink: false,
+              },
               () => new Error("Expected retirable aliases"),
             );
             const adoption = yield* prepareLocalAdoption(

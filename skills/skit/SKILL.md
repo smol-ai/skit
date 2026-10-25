@@ -23,7 +23,8 @@ SKIT never prompts when you run it, so every decision is a flag you choose with 
 2. Tell the user what the plan will do. If `applyCommand` contains `--duplicates <…>`, some skills
    are already visible to agents elsewhere; ask the user which option they want:
    - `retain-only`: keep them in the Library without enabling, changing nothing agents see.
-   - `keep-both`: enable them alongside the existing copies.
+   - `keep-both`: enable them alongside the existing copies. Not offered when a candidate lists
+     `destinationLinks`: the link sits where SKIT writes its copy, so both cannot stay.
    - `retire-aliases`: replace redundant symlinks with SKIT's managed copies.
 3. Apply: run `applyCommand` exactly as printed, substituting only the `--duplicates` choice. Do not
    rewrite paths with `~` or `$`; the user's agent permissions may match only the literal command.

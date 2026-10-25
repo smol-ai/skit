@@ -23,13 +23,15 @@ export class SetupDuplicateDecisionRequired
   extends Data.TaggedError("SetupDuplicateDecisionRequired")<{
     names: readonly string[];
     retirable: boolean;
+    /** False when one of them is linked where SKIT writes its copy, so both cannot stay. */
+    keepBoth: boolean;
   }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
   get remediation() {
-    return `Pass --duplicates retain-only to keep them in the Library without enabling, --duplicates keep-both to enable them alongside the existing copies${this.retirable ? ", or --duplicates retire-aliases to replace the redundant symlinks" : ""}.`;
+    return `Pass --duplicates retain-only to keep them in the Library without enabling${this.keepBoth ? ", --duplicates keep-both to enable them alongside the existing copies" : ""}${this.retirable ? ", or --duplicates retire-aliases to replace the redundant symlinks" : ""}.`;
   }
   get message() {
     return `Enabling ${this.names.join(", ")} would create another copy agents already see`;
@@ -248,6 +250,9 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       return yield* new SetupDuplicateDecisionRequired({
         names: conflicting.map((copy) => copy.name),
         retirable: conflicting.every((copy) => copy.conflict.kind === "retirable"),
+        keepBoth: !conflicting.some(
+          (copy) => copy.conflict.kind !== "none" && copy.conflict.replacesLink,
+        ),
       });
     const decide = Effect.fn("Setup.decideRecommendedCopy")(function* (
       copy: SetupSelectedCopy,
@@ -257,6 +262,10 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       Effect.Services<ReturnType<typeof captureLocalAdoptionAliases>>
     > {
       if (copy.conflict.kind === "none" || duplicates === undefined) return copy;
+      if (duplicates === "keep-both" && copy.conflict.replacesLink)
+        return yield* invalid(
+          `${copy.name} is linked where SKIT writes its copy, so both cannot stay; use --duplicates retain-only or retire-aliases`,
+        );
       if (duplicates !== "retire-aliases") return { ...copy, duplicateAction: duplicates };
       if (copy.conflict.kind !== "retirable")
         return yield* invalid(

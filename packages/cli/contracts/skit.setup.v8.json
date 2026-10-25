@@ -403,6 +403,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -754,6 +760,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1089,6 +1101,12 @@
                         "documentDigest"
                       ],
                       "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "name": {
@@ -1428,6 +1446,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1761,6 +1785,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -2087,6 +2117,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -2411,6 +2447,12 @@
                         "documentDigest"
                       ],
                       "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "name": {
@@ -2749,6 +2791,12 @@
                         "documentDigest"
                       ],
                       "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "name": {

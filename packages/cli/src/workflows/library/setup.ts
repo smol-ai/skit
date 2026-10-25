@@ -1,8 +1,13 @@
+import { join } from "node:path";
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
 import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
-import { observeHarnessShadows } from "../../projection/harness-shadows.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import { isEntryLink, observeHarnessShadows } from "../../projection/harness-shadows.js";
+import {
+  activeProjectionTargetsEffect,
+  bindingRoot,
+  type InventoryRootOptions,
+} from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
@@ -84,9 +89,23 @@ const observeSetup = Effect.fn("Library.setup")(
     const shadows = globalNames.length
       ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
       : [];
+    const targets = shadows.length ? yield* activeProjectionTargetsEffect(options.inventory) : [];
     const onboarding = candidates.map((candidate) => {
       const matches = shadows.filter((shadow) => shadow.name === candidate.name);
-      return matches.length ? { ...candidate, shadows: matches } : candidate;
+      if (!matches.length) return candidate;
+      const destinations = targets.map((target) =>
+        join(bindingRoot(target, { kind: "global" }, options.inventory), candidate.name),
+      );
+      const destinationLinks = matches.flatMap((shadow) =>
+        shadow.aliases
+          .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
+          .map((alias) => alias.path),
+      );
+      return {
+        ...candidate,
+        shadows: matches,
+        ...(destinationLinks.length ? { destinationLinks } : {}),
+      };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
     const recommended = recommendedSetupSelection(

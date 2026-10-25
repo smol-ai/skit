@@ -19,6 +19,7 @@ export class SetupExistingBindingInvalid
       | "path-not-projection-target"
       | "content-identity-missing"
       | "duplicate-action-required"
+      | "keep-both-replaces-link"
       | "aliases-not-retirable";
   }>
   implements SkitFailure
