@@ -92,7 +92,6 @@ export const flagsForRequest = (
       username,
       suggestedUsername: user?.username ?? user?.name ?? "",
       setupNeeded,
-      userCode: url.searchParams.get("user_code") ?? "",
     };
   });
 

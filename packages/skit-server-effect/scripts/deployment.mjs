@@ -460,9 +460,12 @@ export const deploy = async (
     await write(configuration);
   const deployment = await build(configuration);
   const deploymentConfigPath = deployment.configPath;
-  run(["d1", "migrations", "apply", "DB", "--remote"]);
+  // `wrangler d1 migrations` ignores the configured account_id when the login can reach several
+  // accounts, so name it in the environment for every command.
+  const env = configuration.account_id ? { CLOUDFLARE_ACCOUNT_ID: configuration.account_id } : {};
+  run(["d1", "migrations", "apply", "DB", "--remote"], { env });
   if (!installSecret) {
-    run(["deploy"], { configPath: deploymentConfigPath });
+    run(["deploy"], { configPath: deploymentConfigPath, env });
     log(`Deployed SKIT server ${describeBuild(deployment.build)}`);
     return;
   }
@@ -476,7 +479,7 @@ export const deploy = async (
     });
     run(["deploy", "--secrets-file", secretFile], {
       configPath: deploymentConfigPath,
-      env: { WRANGLER_OUTPUT_FILE_PATH: outputFile },
+      env: { ...env, WRANGLER_OUTPUT_FILE_PATH: outputFile },
     });
     const targets = deployTargets(await readFile(outputFile, "utf8"));
     if (expectedOrigin && !targets.includes(expectedOrigin))

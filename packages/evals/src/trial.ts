@@ -37,6 +37,17 @@ export const messyHomeCase: EvalCase = {
   fixture: messyHomeFixture,
 };
 
+/**
+ * Case 2: sign in for sync. Nobody approves the code, so the case observes how far the agent gets:
+ * whether it can reach the Registry from the sandbox and hands the user the URL and code.
+ */
+export const loginCase: EvalCase = {
+  id: "login",
+  prompt:
+    "log in to skit so I can sync my skills. it's installed, run it with `skit`. my registry is https://skit.timhanlon.com",
+  fixture: baseCaseFixture,
+};
+
 /** The `skit` skill as this checkout ships it. */
 const skitSkill = resolve(dirname(fileURLToPath(import.meta.url)), "../../../skills/skit/SKILL.md");
 

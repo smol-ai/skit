@@ -14,7 +14,8 @@
         ]
       },
       "outputSchemas": [
-        "skit.auth.login.v2"
+        "skit.auth.login.v2",
+        "skit.auth.login.pending.v1"
       ],
       "exitCodes": [
         0,

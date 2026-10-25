@@ -51,7 +51,6 @@ export const Flags = S.Struct({
   username: S.String,
   suggestedUsername: S.String,
   setupNeeded: S.Boolean,
-  userCode: S.String,
 });
 export type Flags = typeof Flags.Type;
 
@@ -211,10 +210,7 @@ export const update = (model: Model, message: Message): Update =>
             "github",
             jsonRequest("/api/auth/sign-in/social", S.Struct({ url: S.String }), {
               provider: "github",
-              callbackURL:
-                model.page === "device"
-                  ? `${model.origin}/device?user_code=${encodeURIComponent(model.userCode)}`
-                  : model.origin,
+              callbackURL: model.page === "device" ? `${model.origin}/device` : model.origin,
             }).pipe(Effect.map(({ url }) => url)),
           ),
         ],
@@ -384,6 +380,9 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = (flags) => {
   const model: Model = {
     ...flags,
     claimUsername: flags.suggestedUsername,
+    // Typed, never taken from the link: a link with the code filled in is what a phishing message
+    // would send, while typing it makes the user read it from their own terminal.
+    userCode: "",
     signInEmail: "",
     signInPassword: "",
     signUpUsername: "",

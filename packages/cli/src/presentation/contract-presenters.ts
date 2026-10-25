@@ -1006,6 +1006,12 @@ const contractPresenters: ContractPresenters = {
   authLogout: (data) => `Logged out from ${data.origin}`,
   authStatus: renderAuthStatus,
   authLogin: renderAuthLogin,
+  authLoginPending: (data) =>
+    [
+      `Open ${data.verificationUri} and enter the code ${data.userCode} to approve this login.`,
+      `The code expires at ${data.expiresAt}.`,
+      `Next: ${data.next} once it is approved.`,
+    ].join("\n"),
   registryRemote: renderRegistryChange,
   registryList: renderRegistryList,
   serverBootstrap: (data) =>

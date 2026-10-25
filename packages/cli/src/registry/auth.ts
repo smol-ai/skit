@@ -16,7 +16,7 @@ import { HttpApiClient } from "effect/http-api";
 import { ChildProcessSpawner } from "effect/process";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import { hostname } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { isErrno } from "../platform/errno.js";
 import {
   CredentialsUnusable,
@@ -337,6 +337,222 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
   return yield* accounts.status(selectedRegistry, yield* Clock.currentTimeMillis);
 });
 
+/** The Registry's own words for a rejected request, in the shape every branch reported. */
+const rejected = Effect.fn("Auth.rejected")(function* (
+  response: HttpClientResponse,
+  context: string,
+) {
+  const body = yield* response.json.pipe(
+    Effect.catchTag("HttpClientError", () => Effect.succeed({})),
+  );
+  if (response.status === 401) return yield* new SignInRejected({ context });
+  if (response.status === 429) return yield* new TooManyAuthAttempts();
+  const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
+    Effect.map(({ error }) => error),
+    Effect.orElseSucceed(() => "unknown_error"),
+  );
+  return yield* new SignInFailed({
+    message: `${context} failed (${response.status}): ${detail}`,
+  });
+});
+
+/** A Registry's transport and discovery document, checked to offer every requested scope. */
+const openExchange = Effect.fn("Auth.openExchange")(function* (
+  origin: string,
+  scopes: readonly AuthScope[],
+) {
+  const http = yield* (yield* RegistryHttp).client;
+  const send = (
+    url: URL,
+    init: {
+      readonly method?: "GET" | "POST" | "PUT" | "DELETE";
+      readonly headers?: Readonly<Record<string, string>>;
+      readonly body?: string;
+    } = {},
+  ): Effect.Effect<HttpClientResponse, RegistryUnreachable> => {
+    let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
+    if (init.body !== undefined)
+      request = HttpClientRequest.bodyText(request, init.body, "application/json");
+    return http
+      .execute(request)
+      .pipe(Effect.mapError((error) => new RegistryUnreachable({ origin, cause: error.cause })));
+  };
+
+  const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
+  if (!ok(discoveryResponse))
+    return yield* new SignInFailed({
+      message: `Registry discovery failed (${discoveryResponse.status})`,
+    });
+  const discovery = yield* discoveryResponse.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
+    Effect.mapError(
+      (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
+    ),
+  );
+  const unsupportedScopes = scopes.filter((scope) => !discovery.scopes.includes(scope));
+  if (unsupportedScopes.length > 0)
+    return yield* new SignInFailed({
+      message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
+    });
+  // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than acting as
+  // a security boundary. Browser requests still receive real origin enforcement.
+  const json = { "content-type": "application/json", origin };
+  return { http, send, discovery, json };
+});
+type Exchange = Effect.Success<ReturnType<typeof openExchange>>;
+
+/** The only device-authorization client the Registry accepts. */
+const CLI_DEVICE_CLIENT_ID = "skit-cli";
+const DeviceCodeResponse = Schema.Struct({
+  device_code: Schema.String,
+  user_code: Schema.String,
+  verification_uri: Schema.String,
+  expires_in: Schema.Number,
+  interval: Schema.Number,
+});
+const DeviceTokenResponse = Schema.Struct({ access_token: Schema.String });
+const DeviceTokenError = Schema.Struct({ error: Schema.String });
+
+/**
+ * A browser login waiting for the user to approve its code. A run that cannot wait for the user
+ * saves it, and the next `skit auth login` for the same Registry polls with it.
+ */
+export const PendingDeviceLogin = Schema.Struct({
+  origin: Schema.String,
+  deviceCode: Schema.String,
+  userCode: Schema.String,
+  verificationUri: Schema.String,
+  interval: Schema.Number,
+  expiresAt: Schema.String,
+});
+export type PendingDeviceLogin = typeof PendingDeviceLogin.Type;
+
+const requestDeviceCode = Effect.fn("Auth.requestDeviceCode")(function* (
+  exchange: Exchange,
+  origin: string,
+) {
+  const { discovery, send, json } = exchange;
+  if (discovery.deviceAuthorization === undefined || discovery.deviceToken === undefined)
+    return yield* new DeviceLoginUnavailable({ origin });
+  const started = yield* send(new URL(discovery.deviceAuthorization, origin), {
+    method: "POST",
+    headers: json,
+    body: JSON.stringify({ client_id: CLI_DEVICE_CLIENT_ID }),
+  });
+  if (!ok(started)) return yield* rejected(started, "Device authorization");
+  const code = yield* started.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(DeviceCodeResponse)),
+    Effect.mapError(
+      (error) => new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+    ),
+  );
+  return {
+    origin,
+    deviceCode: code.device_code,
+    userCode: code.user_code,
+    verificationUri: code.verification_uri,
+    interval: code.interval,
+    expiresAt: new Date((yield* Clock.currentTimeMillis) + code.expires_in * 1_000).toISOString(),
+  } satisfies PendingDeviceLogin;
+});
+
+/** Where a started browser login waits for its next run: beside auth.json, as private. */
+const pendingLoginPath = (home?: string) =>
+  Effect.map(authPath(home), (path) => join(dirname(path), "login-pending.json"));
+
+/** The browser login waiting on `origin`, unless none was started, it expired, or it is unreadable. */
+export const readPendingLogin = Effect.fn("Auth.readPendingLogin")(function* (
+  origin: string,
+  home?: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const pending = yield* fs
+    .readFileString(yield* pendingLoginPath(home))
+    .pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(PendingDeviceLogin))),
+      Effect.option,
+    );
+  if (Option.isNone(pending) || pending.value.origin !== origin) return undefined;
+  return Date.parse(pending.value.expiresAt) > (yield* Clock.currentTimeMillis)
+    ? pending.value
+    : undefined;
+});
+
+export const savePendingLogin = Effect.fn("Auth.savePendingLogin")(function* (
+  pending: PendingDeviceLogin,
+  home?: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* pendingLoginPath(home);
+  yield* fs.makeDirectory(dirname(path), { recursive: true });
+  yield* fs.writeFileString(path, `${JSON.stringify(pending, null, 2)}\n`, { mode: 0o600 });
+  yield* fs.chmod(path, 0o600);
+});
+
+export const clearPendingLogin = Effect.fn("Auth.clearPendingLogin")(function* (home?: string) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove(yield* pendingLoginPath(home), { force: true });
+});
+
+/** Start a browser login without waiting for it, for a caller that cannot wait for the user. */
+export const startDeviceLoginEffect = Effect.fn("Auth.startDeviceLogin")(function* (input: {
+  origin: string;
+  scopes: readonly AuthScope[];
+}) {
+  const origin = yield* validateAuthenticationOrigin(input.origin);
+  return yield* requestDeviceCode(yield* openExchange(origin, input.scopes), origin);
+});
+
+/** Poll until the user approves `pending`, returning the approved session's token. */
+const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
+  exchange: Exchange,
+  pending: PendingDeviceLogin,
+) {
+  const { discovery, send, json } = exchange;
+  if (discovery.deviceToken === undefined)
+    return yield* new DeviceLoginUnavailable({ origin: pending.origin });
+  const deadline = Date.parse(pending.expiresAt);
+  // RFC 8628 §3.5: wait the interval between polls, and five seconds longer after slow_down.
+  let interval = pending.interval;
+  while (true) {
+    if ((yield* Clock.currentTimeMillis) >= deadline)
+      return yield* new DeviceLoginEnded({ reason: "expired" });
+    yield* Effect.sleep(Duration.seconds(interval));
+    const polled = yield* send(new URL(discovery.deviceToken, pending.origin), {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        device_code: pending.deviceCode,
+        client_id: CLI_DEVICE_CLIENT_ID,
+      }),
+    });
+    if (ok(polled)) {
+      const granted = yield* polled.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenResponse)),
+        Effect.mapError(
+          (error) =>
+            new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+        ),
+      );
+      return granted.access_token;
+    }
+    const error = yield* polled.json.pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenError)),
+      Effect.map((body) => body.error),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (error === "authorization_pending") continue;
+    if (error === "slow_down") {
+      interval += 5;
+      continue;
+    }
+    if (error === "access_denied") return yield* new DeviceLoginEnded({ reason: "denied" });
+    if (error === "expired_token") return yield* new DeviceLoginEnded({ reason: "expired" });
+    return yield* rejected(polled, "Device authorization");
+  }
+});
+
 /**
  * Sign in, mint a CLI credential, and end the temporary session that minted it.
  *
@@ -347,34 +563,16 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
  * Those cleanups are the existing behaviour carried into the Scope, not new guarantees: a process
  * killed outright can still leave a live token, and the messages say so.
  */
-/** The only device-authorization client the Registry accepts. */
-const CLI_DEVICE_CLIENT_ID = "skit-cli";
-const DeviceCodeResponse = Schema.Struct({
-  device_code: Schema.String,
-  user_code: Schema.String,
-  verification_uri: Schema.String,
-  verification_uri_complete: Schema.optionalKey(Schema.String),
-  interval: Schema.Number,
-});
-const DeviceTokenResponse = Schema.Struct({ access_token: Schema.String });
-const DeviceTokenError = Schema.Struct({ error: Schema.String });
-
-/** Where the user approves a browser login, and the code they confirm there. */
-export interface DeviceApproval {
-  readonly userCode: string;
-  readonly verificationUri: string;
-  /** The verification page with the code filled in. */
-  readonly verificationUriComplete: string;
-}
-
 export const loginEffect = Effect.fn("Auth.login")(
   function* (input: {
     origin: string;
     /** Sign in with these, or leave both out to have the user approve the login in a browser. */
     email?: string;
     password?: string;
-    /** Show the user where to approve a browser login; called once, before polling starts. */
-    onDeviceCode?: (approval: DeviceApproval) => Effect.Effect<void>;
+    /** A browser login an earlier run started, to wait for instead of starting another. */
+    pending?: PendingDeviceLogin;
+    /** Show the user the code to approve; called once, before polling starts. */
+    onDeviceCode?: (pending: PendingDeviceLogin) => Effect.Effect<void>;
     scopes: AuthScope[];
     alias?: string;
     home?: string;
@@ -383,60 +581,8 @@ export const loginEffect = Effect.fn("Auth.login")(
     const accounts = yield* readAccounts(input.home);
     yield* accounts.checkLoginAlias(origin, input.alias);
     const existing = accounts.stored(origin);
-    const http = yield* (yield* RegistryHttp).client;
-    const send = (
-      url: URL,
-      init: {
-        readonly method?: "GET" | "POST" | "PUT" | "DELETE";
-        readonly headers?: Readonly<Record<string, string>>;
-        readonly body?: string;
-      } = {},
-    ): Effect.Effect<HttpClientResponse, RegistryUnreachable> => {
-      let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
-      if (init.body !== undefined)
-        request = HttpClientRequest.bodyText(request, init.body, "application/json");
-      return http
-        .execute(request)
-        .pipe(Effect.mapError((error) => new RegistryUnreachable({ origin, cause: error.cause })));
-    };
-
-    const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
-    if (!ok(discoveryResponse))
-      return yield* new SignInFailed({
-        message: `Registry discovery failed (${discoveryResponse.status})`,
-      });
-    const discovery = yield* discoveryResponse.json.pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
-      Effect.mapError(
-        (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
-      ),
-    );
-    const unsupportedScopes = input.scopes.filter((scope) => !discovery.scopes.includes(scope));
-    if (unsupportedScopes.length > 0)
-      return yield* new SignInFailed({
-        message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
-      });
-    /** The Registry's own words for a rejected request, in the shape every branch reported. */
-    const rejected = Effect.fn("Auth.rejected")(function* (
-      response: HttpClientResponse,
-      context: string,
-    ) {
-      const body = yield* response.json.pipe(
-        Effect.catchTag("HttpClientError", () => Effect.succeed({})),
-      );
-      if (response.status === 401) return yield* new SignInRejected({ context });
-      if (response.status === 429) return yield* new TooManyAuthAttempts();
-      const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
-        Effect.map(({ error }) => error),
-        Effect.orElseSucceed(() => "unknown_error"),
-      );
-      return yield* new SignInFailed({
-        message: `${context} failed (${response.status}): ${detail}`,
-      });
-    });
-    // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than acting as
-    // a security boundary. Browser requests still receive real origin enforcement.
-    const json = { "content-type": "application/json", origin };
+    const exchange = yield* openExchange(origin, input.scopes);
+    const { http, send, json } = exchange;
     /** The temporary session's credential, as request headers. */
     const session: Readonly<Record<string, string>> = yield* Effect.gen(function* () {
       if (input.email !== undefined && input.password !== undefined) {
@@ -451,64 +597,10 @@ export const loginEffect = Effect.fn("Auth.login")(
           return yield* new SignInFailed({ message: "Sign in did not establish a session" });
         return { ...json, cookie };
       }
-      if (discovery.deviceAuthorization === undefined || discovery.deviceToken === undefined)
-        return yield* new DeviceLoginUnavailable({ origin });
-      const started = yield* send(new URL(discovery.deviceAuthorization, origin), {
-        method: "POST",
-        headers: json,
-        body: JSON.stringify({ client_id: CLI_DEVICE_CLIENT_ID }),
-      });
-      if (!ok(started)) return yield* rejected(started, "Device authorization");
-      const code = yield* started.json.pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(DeviceCodeResponse)),
-        Effect.mapError(
-          (error) =>
-            new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
-        ),
-      );
-      if (input.onDeviceCode)
-        yield* input.onDeviceCode({
-          userCode: code.user_code,
-          verificationUri: code.verification_uri,
-          verificationUriComplete: code.verification_uri_complete ?? code.verification_uri,
-        });
-      // RFC 8628 §3.5: wait the interval between polls, and five seconds longer after slow_down.
-      let interval = code.interval;
-      while (true) {
-        yield* Effect.sleep(Duration.seconds(interval));
-        const polled = yield* send(new URL(discovery.deviceToken, origin), {
-          method: "POST",
-          headers: json,
-          body: JSON.stringify({
-            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-            device_code: code.device_code,
-            client_id: CLI_DEVICE_CLIENT_ID,
-          }),
-        });
-        if (ok(polled)) {
-          const granted = yield* polled.json.pipe(
-            Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenResponse)),
-            Effect.mapError(
-              (error) =>
-                new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
-            ),
-          );
-          return { ...json, authorization: `Bearer ${granted.access_token}` };
-        }
-        const pending = yield* polled.json.pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenError)),
-          Effect.map(({ error }) => error),
-          Effect.orElseSucceed(() => undefined),
-        );
-        if (pending === "authorization_pending") continue;
-        if (pending === "slow_down") {
-          interval += 5;
-          continue;
-        }
-        if (pending === "access_denied") return yield* new DeviceLoginEnded({ reason: "denied" });
-        if (pending === "expired_token") return yield* new DeviceLoginEnded({ reason: "expired" });
-        return yield* rejected(polled, "Device authorization");
-      }
+      const pending = input.pending ?? (yield* requestDeviceCode(exchange, origin));
+      if (input.onDeviceCode) yield* input.onDeviceCode(pending);
+      const token = yield* awaitDeviceApproval(exchange, pending);
+      return { ...json, authorization: `Bearer ${token}` };
     });
     const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
       httpClient: http,

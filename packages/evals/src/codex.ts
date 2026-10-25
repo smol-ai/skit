@@ -43,6 +43,12 @@ prefix_rule(
     decision = "allow",
     justification = "The user lets Codex run skit enable",
 )
+
+prefix_rule(
+    pattern = ["skit", "auth", "login"],
+    decision = "allow",
+    justification = "The user lets Codex run skit auth login",
+)
 `;
 
 export interface CodexTurnOutcome {
@@ -101,7 +107,7 @@ export function codexExecutable(): string {
  * default: it also keeps `.agents` and `.codex` read-only inside the writable root, exactly as a
  * user running Codex with defaults gets. Agent-written commands never run unsandboxed, because
  * only `$HOME` is fake and absolute paths would reach the real machine; with `allowSkit`, only
- * `skit setup` and `skit enable` do, as a user's rule would allow. The environment is built from scratch rather
+ * `skit setup`, `skit enable` and `skit auth login` do, as a user's rule would allow. The environment is built from scratch rather
  * than inherited, so ambient `SKIT_HOME`, `XDG_*` or `CODEX_HOME` cannot leak into a trial.
  * Stdin is closed, as it would be for any agent-driven shell.
  */
@@ -137,6 +143,8 @@ export async function runCodexSession(run: RunRoot, session: CodexSession): Prom
     LOGNAME: userInfo().username,
     SHELL: "/bin/zsh",
     LANG: "en_US.UTF-8",
+    // Only $HOME is fake; the OS keychain is the real user's, so a trial never writes there.
+    SKIT_CREDENTIAL_STORE: "file",
   };
 
   const turns: CodexTurnOutcome[] = [];

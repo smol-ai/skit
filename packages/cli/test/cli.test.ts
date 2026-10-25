@@ -197,16 +197,14 @@ describe("CLI contracts", () => {
     expect(statusBody.data.credentials[0]).not.toHaveProperty("token");
   });
 
-  test("login requires a terminal and never accepts a password option", () => {
-    const nonInteractive = spawnSync(
+  test("login needs a person to approve it and never accepts a password option", () => {
+    const nobodyToApprove = spawnSync(
       process.execPath,
       [bin, "auth", "login", "https://registry.test", "--json"],
-      { encoding: "utf8" },
+      { encoding: "utf8", env: { ...process.env, SKIT_NO_INPUT: "1" } },
     );
-    expect(nonInteractive.status).toBe(64);
-    expect(JSON.parse(nonInteractive.stderr).error.message).toContain(
-      "Interactive login requires a terminal",
-    );
+    expect(nobodyToApprove.status).toBe(64);
+    expect(JSON.parse(nobodyToApprove.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
 
     const passwordFlag = spawnSync(
       process.execPath,
@@ -218,11 +216,11 @@ describe("CLI contracts", () => {
   });
 
   // With no Registry configured, login targets the hosted Registry; there is no server to choose.
-  // Without a terminal it stops before any network request: there is no one to sign in.
-  test("login needs no server choice and fails without a terminal before any request", async () => {
+  // Under SKIT_NO_INPUT it stops before any network request: there is no one to approve it.
+  test("login needs no server choice and fails with nobody to approve before any request", async () => {
     const home = await mkdtemp(join(tmpdir(), "skit-no-registry-"));
     try {
-      const env = { ...process.env, SKIT_SERVER_URL: "", SKIT_TOKEN: "" };
+      const env = { ...process.env, SKIT_SERVER_URL: "", SKIT_TOKEN: "", SKIT_NO_INPUT: "1" };
       const result = spawnSync(process.execPath, [bin, "auth", "login", "--home", home, "--json"], {
         encoding: "utf8",
         env,

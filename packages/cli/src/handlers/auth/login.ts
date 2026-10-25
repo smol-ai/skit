@@ -6,10 +6,14 @@ import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
 import {
-  type DeviceApproval,
+  clearPendingLogin,
   loginEffect,
+  type PendingDeviceLogin,
+  readPendingLogin,
   resolveLoginTargetEffect,
   reuseLoginEffect,
+  savePendingLogin,
+  startDeviceLoginEffect,
 } from "../../registry/auth.js";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
@@ -35,6 +39,10 @@ const openInBrowser = (url: string) => {
     yield* handle.exitCode;
   }).pipe(Effect.scoped, Effect.ignore);
 };
+
+// The Registry accepts the code with or without the separator; it only aids reading.
+const displayUserCode = (userCode: string) =>
+  /^[A-Z0-9]{8}$/u.test(userCode) ? `${userCode.slice(0, 4)}-${userCode.slice(4)}` : userCode;
 
 const AuthScopes = Schema.Array(
   Schema.Literals(["library:sync", "authoring:write", "publication:write"]),
@@ -77,31 +85,28 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
     }
     const renderer = yield* Renderer;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const onDeviceCode = (approval: DeviceApproval) =>
+    const announce = (pending: PendingDeviceLogin) =>
       Effect.gen(function* () {
         yield* renderer.instruction(
-          `Open ${approval.verificationUriComplete}\nand check that it shows ${
-            // The Registry accepts the code with or without the separator; it only aids reading.
-            /^[A-Z0-9]{8}$/u.test(approval.userCode)
-              ? `${approval.userCode.slice(0, 4)}-${approval.userCode.slice(4)}`
-              : approval.userCode
-          }.`,
+          `Open ${pending.verificationUri}\nand enter the code ${displayUserCode(pending.userCode)}.`,
           "Approve this login in your browser",
         );
         yield* renderer.updateStatus("Waiting for approval in the browser");
         if (options.interactive)
-          yield* openInBrowser(approval.verificationUriComplete).pipe(
+          yield* openInBrowser(pending.verificationUri).pipe(
             Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
           );
       });
-    const login = (credentials?: { readonly email: string; readonly password: string }) =>
+    const login = (
+      method: { email?: string; password?: string; pending?: PendingDeviceLogin } = {},
+    ) =>
       renderer.withStatus(
         "Signing in",
         Effect.scoped(
           loginEffect({
             origin,
-            ...credentials,
-            onDeviceCode,
+            ...method,
+            onDeviceCode: announce,
             scopes: [...scopes],
             alias: options.alias,
             home: options.home,
@@ -116,7 +121,32 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       return yield* login({ email, password });
     });
     if (!(options.browserApproval ?? options.interactive)) return yield* promptForPassword;
-    return yield* login().pipe(Effect.catchTag("DeviceLoginUnavailable", () => promptForPassword));
+
+    const pending = yield* readPendingLogin(origin, options.home);
+    if (pending)
+      return yield* login({ pending }).pipe(
+        Effect.tap(() => clearPendingLogin(options.home)),
+        Effect.catchTag("DeviceLoginEnded", (ended) =>
+          clearPendingLogin(options.home).pipe(Effect.andThen(Effect.fail(ended))),
+        ),
+      );
+    if (options.interactive)
+      return yield* login().pipe(
+        Effect.catchTag("DeviceLoginUnavailable", () => promptForPassword),
+      );
+    // An agent's user sees its command's output only once the command ends, so start the login,
+    // hand back the code, and leave waiting for approval to the next run.
+    const started = yield* startDeviceLoginEffect({ origin, scopes }).pipe(
+      Effect.catchTag("DeviceLoginUnavailable", () => new InteractiveLoginUnavailable()),
+    );
+    yield* savePendingLogin(started, options.home);
+    return {
+      origin,
+      userCode: displayUserCode(started.userCode),
+      verificationUri: started.verificationUri,
+      expiresAt: started.expiresAt,
+      next: options.registry ? `skit auth login ${options.registry}` : "skit auth login",
+    };
   },
   Effect.catchTag("PromptCancelled", () => new SelectionCancelled({ subject: "Login" })),
 );
@@ -156,7 +186,11 @@ export const authLoginCliCommand = Command.make(
             interactive: promptsAllowed({ json: jsonRequested() }),
             browserApproval: personReachable(),
           });
-          yield* renderer.result(result("authLogin", value));
+          yield* renderer.result(
+            "verificationUri" in value
+              ? result("authLoginPending", value)
+              : result("authLogin", value),
+          );
         }).pipe(Effect.provide(terminalPrompterLayer)),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
@@ -174,7 +208,7 @@ export const authLoginCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["network.write", "filesystem.write"] },
-    outputSchemas: [outputContracts.authLogin],
+    outputSchemas: [outputContracts.authLogin, outputContracts.authLoginPending],
     exitCodes: [0, 11, 12, 64],
     interactive: true,
   }),

@@ -129,7 +129,6 @@ describe("Foldkit server rendering", () => {
         username: "",
         suggestedUsername: "",
         setupNeeded: true,
-        userCode: "",
       };
       const initial = init(flags).model;
       const completed = update(
@@ -180,7 +179,7 @@ describe("Foldkit server rendering", () => {
     }),
   );
 
-  it.effect("carries the CLI's code onto the device page and records the decision", () =>
+  it.effect("asks for the CLI's code on the device page and records the decision", () =>
     Effect.gen(function* () {
       const flags = yield* flagsForRequest(
         new Request("https://registry.example/device?user_code=ABCD-EFGH"),
@@ -189,7 +188,9 @@ describe("Foldkit server rendering", () => {
             ? Promise.resolve(Response.json({ username: "tim" }))
             : handler(request),
       );
-      expect(flags).toMatchObject({ page: "device", userCode: "ABCD-EFGH", username: "tim" });
+      expect(flags).toMatchObject({ page: "device", username: "tim" });
+      // A link cannot fill in the code; the user types it from their terminal.
+      expect(init(flags).model.userCode).toBe("");
 
       const decided = (action: "approve" | "deny") =>
         update(
@@ -212,7 +213,6 @@ describe("Foldkit server rendering", () => {
       username: "",
       suggestedUsername: "",
       setupNeeded: false,
-      userCode: "",
     };
     const finished = (message: string) =>
       update(

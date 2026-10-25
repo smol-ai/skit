@@ -159,6 +159,18 @@ export const outputContracts = {
       credentialPath: Schema.optionalKey(Schema.String),
     }),
   ),
+  authLoginPending: effectOutput(
+    "skit.auth.login.pending.v1",
+    Schema.Struct({
+      origin: Schema.String,
+      /** The code the user enters at `verificationUri`. */
+      userCode: Schema.String,
+      verificationUri: Schema.String,
+      expiresAt: Schema.String,
+      /** Run once the user has approved the code; it waits for approval if they have not yet. */
+      next: Schema.String,
+    }),
+  ),
   authStatus: effectOutput(
     "skit.auth.status.v3",
     Schema.Struct({

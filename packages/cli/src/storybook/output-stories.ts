@@ -919,6 +919,17 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     }),
   ),
   resultStory(
+    "auth-login",
+    "pending-approval",
+    result("authLoginPending", {
+      origin: "https://registry.example",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://registry.example/device",
+      expiresAt: "2027-01-01T00:10:00.000Z",
+      next: "skit auth login",
+    }),
+  ),
+  resultStory(
     "auth-logout",
     "revoked",
     result("authLogout", {

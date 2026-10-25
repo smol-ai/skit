@@ -130,7 +130,7 @@ describe("saved login reuse", () => {
             ),
           ),
         );
-        expect(value.alreadyAuthenticated).toBe(true);
+        expect(value).toMatchObject({ alreadyAuthenticated: true });
         expect(yield* interaction.prompts).toEqual([]);
       }).pipe(Effect.provide(testPlatformLayer)),
     );

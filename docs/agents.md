@@ -54,12 +54,15 @@ printed.
 
 ## Signing in for sync
 
-`skit auth login` never asks an agent for a password. It prints a verification URL and code to
-stderr, even with `--json`, and waits up to ten minutes for the user to approve the code in their
-browser. Codex and Claude Code show running command output to the user, so they can open the URL
-there; the agent should also pass it on. The command needs network access and, on macOS, the
-Keychain, so a sandboxed agent may need the user to run it in their own terminal. Under `CI` or
-`SKIT_NO_INPUT` login fails immediately; automation uses `SKIT_TOKEN` instead.
+`skit auth login` never asks an agent for a password. Run by an agent, it returns at once with a
+verification URL and code (`skit.auth.login.pending.v1`) for the agent to give the user, who opens
+the URL and types the code. Running the reported `next` command, `skit auth login`, then waits
+until they approve it, up to the code's ten minutes, and saves the credential. In a terminal the
+same command shows the code, opens the browser, and waits in one step.
+
+The command needs network access and, on macOS, the Keychain, so a sandboxed agent may need the
+user to run it in their own terminal. Under `CI` or `SKIT_NO_INPUT` login fails immediately;
+automation uses `SKIT_TOKEN` instead.
 
 ## Teaching the agent
 
