@@ -865,6 +865,11 @@ it.effect("a different copy at the destination is reported, and disabling leaves
     yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
     yield* f.fs.writeFileString(theirs, "# alpha, edited by hand\n");
     const enable = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+    // The preview names the folder, so a dry run does not promise a clean enable.
+    assert.deepStrictEqual(
+      enable.changes[0]?.unmanaged_destinations?.map((folder) => folder.path),
+      [join(f.destination, "alpha")],
+    );
 
     const [enabled] = yield* f.home.owned(applyBindingChanges(enable));
 

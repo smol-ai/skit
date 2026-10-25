@@ -5,6 +5,9 @@ import {
   LinkStat,
   deterministicTreeHashEffect,
   ensureProjectionRootWritable,
+  inspectOwnershipMarkerEffect,
+  projectionNameEffect,
+  type ProjectionTarget,
   replaceScopeBinding,
   pruneEmptyBindings,
   lastPublishedLibraryState,
@@ -17,7 +20,7 @@ import {
   type ProjectionAdoption,
   type SkitBindingScope,
 } from "@smolai/skit-core";
-import { Data, Effect, FileSystem } from "effect";
+import { Data, Effect, FileSystem, Option } from "effect";
 import {
   activeProjectionTargetsEffect,
   bindingRoot,
@@ -106,6 +109,24 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   const shadows = namesToCheck.length
     ? yield* observeHarnessShadows(configuration, scope, namesToCheck, warnings)
     : [];
+  // Apply settles these only once it has staged SKIT's copy to compare; a preview can say they
+  // are there. A link at a destination is a shadow, reported above.
+  const unmanaged: Array<{ target: ProjectionTarget; path: string }> = [];
+  if (options.enabled) {
+    const fs = yield* FileSystem.FileSystem;
+    for (const target of yield* activeProjectionTargetsEffect(configuration)) {
+      const root = bindingRoot(target, scope, configuration);
+      for (const skillId of skillIds) {
+        const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
+        if (skill === undefined) continue;
+        const path = join(root, yield* projectionNameEffect(skill.name));
+        if (!(yield* fs.exists(path))) continue;
+        if (Option.isSome(yield* Effect.option(fs.readLink(path)))) continue;
+        if ((yield* inspectOwnershipMarkerEffect(path)).kind === "valid") continue;
+        unmanaged.push({ target, path });
+      }
+    }
+  }
   // An unchanged Binding still repairs its copies when they are missing, edited, or left behind.
   let repair = false;
   if (!changed) {
@@ -134,6 +155,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   return {
     ...plan,
     ...(shadows.length ? { shadows } : {}),
+    ...(unmanaged.length ? { unmanaged_destinations: unmanaged } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...(repair ? { repair } : {}),
   };

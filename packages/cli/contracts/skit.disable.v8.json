@@ -119,6 +119,29 @@
         "additionalProperties": true
       }
     },
+    "unmanaged_destinations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "path"
+        ],
+        "additionalProperties": true
+      }
+    },
     "warnings": {
       "type": "array",
       "items": {

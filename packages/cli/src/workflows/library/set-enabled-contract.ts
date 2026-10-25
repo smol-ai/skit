@@ -28,6 +28,14 @@ export const SetEnabledPlan = Schema.Struct({
   /** An unchanged Binding whose copies are missing, edited, or left behind and will be repaired. */
   repair: Schema.optionalKey(Schema.Boolean),
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  /**
+   * Folders SKIT does not manage, already at destinations it would write. Enable adopts one only
+   * when it holds exactly SKIT's copy; otherwise it leaves it in place, reports it `conflicted`,
+   * and exits 12.
+   */
+  unmanaged_destinations: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ target: ProjectionTarget, path: Schema.String })),
+  ),
   warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
 });
