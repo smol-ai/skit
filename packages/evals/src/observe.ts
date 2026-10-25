@@ -26,6 +26,8 @@ export interface Observation {
 export interface TrialReport {
   readonly runId: string;
   readonly prompt: string;
+  /** Whether a Codex rule let `skit setup` and `skit enable` run outside the sandbox. */
+  readonly allowSkit: boolean;
   readonly codex: Omit<CodexOutcome, "events"> & { readonly usage: unknown };
   readonly skitTarballSha256: string;
   readonly skitGitHead: string;
@@ -81,6 +83,7 @@ function listFiles(home: string, dir: string): string[] {
 export function buildReport(input: {
   run: RunRoot;
   prompt: string;
+  allowSkit: boolean;
   outcome: CodexOutcome;
   fixture: Fixture;
   skitTarballSha256: string;
@@ -121,6 +124,7 @@ export function buildReport(input: {
   return {
     runId: run.id,
     prompt: input.prompt,
+    allowSkit: input.allowSkit,
     codex: { ...codex, usage },
     skitTarballSha256: input.skitTarballSha256,
     skitGitHead: input.skitGitHead,
@@ -144,6 +148,7 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `# ${report.runId}`,
     "",
     `Prompt: ${report.prompt}`,
+    `Permissions: ${report.allowSkit ? "Codex rule allows `skit setup` and `skit enable`" : "Codex defaults"}`,
     `Codex: ${report.codex.codexVersion} · exit ${report.codex.exitCode} · ${Math.round(report.codex.durationMs / 1000)}s${report.codex.timedOut ? " · TIMED OUT" : ""}`,
     `skit: ${report.skitGitHead.slice(0, 9)} · tarball ${report.skitTarballSha256.slice(0, 12)}`,
     `Usage: ${JSON.stringify(report.codex.usage)}`,

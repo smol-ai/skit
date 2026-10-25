@@ -36,7 +36,7 @@ export interface Trial {
 
 export async function runTrial(
   evalCase: EvalCase,
-  options: { timeoutMs: number; model?: string },
+  options: { allowSkit: boolean; timeoutMs: number; model?: string },
 ): Promise<Trial> {
   const skit = installSkitPackage();
   const run = createRunRoot(evalCase.id);
@@ -44,12 +44,14 @@ export async function runTrial(
   const fixture = evalCase.fixture(run.home);
   const outcome = await runCodexTurn(run, {
     prompt: evalCase.prompt,
+    allowSkit: options.allowSkit,
     timeoutMs: options.timeoutMs,
     ...(options.model ? { model: options.model } : {}),
   });
   const report = buildReport({
     run,
     prompt: evalCase.prompt,
+    allowSkit: options.allowSkit,
     outcome,
     fixture,
     skitTarballSha256: skit.tarballSha256,

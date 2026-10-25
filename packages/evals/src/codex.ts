@@ -4,8 +4,10 @@ import {
   copyFileSync,
   createWriteStream,
   existsSync,
+  mkdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
@@ -14,9 +16,29 @@ import type { RunRoot } from "./run-root.ts";
 
 export interface CodexTurn {
   readonly prompt: string;
+  /**
+   * Whether the user has told Codex it may run skit's setup and enable commands. Codex command
+   * rules with `decision = "allow"` skip approval and run outside the sandbox, but only when every
+   * segment of the command matches an allow rule; everything else the agent runs stays sandboxed.
+   */
+  readonly allowSkit: boolean;
   readonly model?: string;
   readonly timeoutMs: number;
 }
+
+/** The rules file a user would put in `~/.codex/rules/` to let Codex run skit setup and enable. */
+export const skitCommandRules = `prefix_rule(
+    pattern = ["skit", "setup"],
+    decision = "allow",
+    justification = "The user lets Codex run skit setup",
+)
+
+prefix_rule(
+    pattern = ["skit", "enable"],
+    decision = "allow",
+    justification = "The user lets Codex run skit enable",
+)
+`;
 
 export interface CodexOutcome {
   readonly command: readonly string[];
@@ -61,8 +83,9 @@ export function codexExecutable(): string {
  * The agent's working directory and `$HOME` are the run's home, so "set up skit for me" acts on a
  * machine we built. The sandbox is always `workspace-write` rooted at that home, which is Codex's
  * default: it also keeps `.agents` and `.codex` read-only inside the writable root, exactly as a
- * user running Codex with defaults gets. No trial runs unsandboxed, because only `$HOME` is fake and
- * absolute paths would reach the real machine. The environment is built from scratch rather
+ * user running Codex with defaults gets. Agent-written commands never run unsandboxed, because
+ * only `$HOME` is fake and absolute paths would reach the real machine; with `allowSkit`, only
+ * `skit setup` and `skit enable` do, as a user's rule would allow. The environment is built from scratch rather
  * than inherited, so ambient `SKIT_HOME`, `XDG_*` or `CODEX_HOME` cannot leak into a trial.
  * Stdin is closed, as it would be for any agent-driven shell.
  */
@@ -70,12 +93,16 @@ export async function runCodexTurn(run: RunRoot, turn: CodexTurn): Promise<Codex
   const executable = codexExecutable();
   const codexVersion = execFileSync(executable, ["--version"], { encoding: "utf8" }).trim();
   const credentials = seedCredentials(run);
+  // CODEX_HOME is isolated, so its rules directory holds only what this trial writes there.
+  if (turn.allowSkit) {
+    mkdirSync(join(run.codexHome, "rules"), { recursive: true });
+    writeFileSync(join(run.codexHome, "rules", "skit.rules"), skitCommandRules);
+  }
   const args = [
     "exec",
     "--json",
     "--skip-git-repo-check",
     "--ignore-user-config",
-    "--ignore-rules",
     "--sandbox",
     "workspace-write",
     "--cd",
