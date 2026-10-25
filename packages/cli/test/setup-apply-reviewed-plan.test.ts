@@ -18,6 +18,7 @@ const skillBytes = (name: string) => `---\nname: ${name}\ndescription: ${name} f
 const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
   alias: boolean;
   identical?: boolean;
+  linked?: boolean;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* scratch("skit-setup-reviewed-");
@@ -38,6 +39,11 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
     yield* fs.symlink(source, join(devinRoot, "alpha"));
   } else yield* write(join(claudeRoot, "alpha"), "alpha");
   // The same bytes installed for Claude and in the shared root, as `npx skills add` leaves them.
+  // A skill kept in dotfiles and linked into Claude's root, where SKIT also writes its copy.
+  if (input.linked) {
+    yield* write(join(root, "dotfiles", "skills", "delta"), "delta");
+    yield* fs.symlink(join(root, "dotfiles", "skills", "delta"), join(claudeRoot, "delta"));
+  }
   if (input.identical)
     for (const skills of [claudeRoot, join(root, ".agents", "skills")])
       yield* write(join(skills, "gamma"), "gamma");
@@ -84,6 +90,7 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
       join(root, ".agents"),
       join(root, "config"),
       join(root, "Work"),
+      join(root, "dotfiles"),
     ],
   };
 });
@@ -171,5 +178,43 @@ it.effect("identical copies at each target are adopted in place, not left to con
         (yield* inspectOwnershipMarkerEffect(join(skills, "gamma"))).kind,
         "valid",
       );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// A link at SKIT's own destination is the user's choice about where the skill lives. Projecting
+// would replace it, so it needs the same decision as any other copy an agent already sees.
+it.effect("a skill linked into a destination is replaced only on an explicit retire-aliases", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
+    const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
+
+    const undecided = yield* fixture({ alias: false, linked: true });
+    const before = yield* captureDisk(undecided.disk);
+    const planId = (yield* undecided.review).onboarding.planId;
+    const refused = failure(yield* undecided.run({ planId }));
+    assert.instanceOf(refused, SetupDuplicateDecisionRequired);
+    assert.deepStrictEqual(refused.names, ["delta"]);
+    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+
+    const retained = yield* fixture({ alias: false, linked: true });
+    const retainedPlan = (yield* retained.review).onboarding.planId;
+    const kept = yield* retained.run({ planId: retainedPlan, duplicates: "retain-only" });
+    assert.isTrue(Exit.isSuccess(kept));
+    assert.strictEqual(yield* fs.readLink(link(retained)), source(retained));
+    assert.include(
+      (yield* retained.home.durable).skills.map((skill) => skill.name),
+      "delta",
+    );
+
+    const retired = yield* fixture({ alias: false, linked: true });
+    const retiredPlan = (yield* retired.review).onboarding.planId;
+    const replaced = yield* retired.run({ planId: retiredPlan, duplicates: "retire-aliases" });
+    assert.isTrue(Exit.isSuccess(replaced));
+    assert.strictEqual((yield* inspectOwnershipMarkerEffect(link(retired))).kind, "valid");
+    const backups = join(retired.root, ".claude", ".skit-backups");
+    const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
+    assert.lengthOf(saved, 1);
+    assert.strictEqual(yield* fs.readLink(join(backups, saved[0]!)), source(retired));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -202,7 +202,12 @@ export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(func
     )
     .map((instance) => ({
       ...instance,
-      aliases: instance.aliases.filter((alias) => !destinations.includes(alias.path)),
+      // SKIT's own destination is not another copy, unless a link sits there. SKIT never writes a
+      // link, so one there is the user's: often a skill kept elsewhere and linked in on purpose.
+      // Projecting would replace it, so it needs the same decision as any other agent copy.
+      aliases: instance.aliases.filter(
+        (alias) => !destinations.includes(alias.path) || alias.via === "symlink",
+      ),
     }))
     .filter((instance) => instance.aliases.length > 0);
 });

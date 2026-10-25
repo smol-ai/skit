@@ -135,7 +135,12 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
       inventoryHome: root,
       roots: { codex: [codexRoot] },
     });
-    const interaction = yield* makeScriptedInteraction([["ai-readme", "review"], true]);
+    // ai-readme is linked into the destination, so setup asks before replacing the link.
+    const interaction = yield* makeScriptedInteraction([
+      ["ai-readme", "review"],
+      "retire-aliases",
+      true,
+    ]);
     yield* home.owned(
       writingTo(
         home.home,

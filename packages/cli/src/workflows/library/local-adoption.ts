@@ -417,12 +417,19 @@ const prepareAliasRetirement = Effect.fn("LocalAdoption.prepareAliasRetirement")
   if (selection.duplicateAction !== "retire-aliases") return undefined;
   const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
   const shadows = yield* observeHarnessShadows(roots, { kind: "global" }, [selection.name]);
+  // A link at SKIT's own destination is replaced by the projection itself, which keeps it in that
+  // root's backups; moving it afterwards would find the new copy there instead.
+  const destinations = (yield* activeProjectionTargetsEffect(roots)).map((target) =>
+    join(bindingRoot(target, { kind: "global" }, roots), selection.name),
+  );
+  const store = yield* LibraryStore;
   return yield* planAliasRetirement(
-    (yield* LibraryStore).home,
+    store.home,
     selection.name,
     selection.sourcePath,
     shadows,
     approvedAliases,
+    destinations,
   );
 });
 
@@ -463,7 +470,9 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
   return {
     result,
     recoveryDirectories:
-      retirement && outcome?.kind === "retired" ? [retirement.moves.recoveryDirectory] : [],
+      retirement && outcome?.kind === "retired" && retirement.moves.entries.length
+        ? [retirement.moves.recoveryDirectory]
+        : [],
     warnings:
       outcome?.kind === "preserved" ? [{ name: selection.name, message: outcome.message }] : [],
   };
@@ -518,16 +527,19 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
   name: string,
   sourcePath: string,
   shadows: readonly HarnessShadow[],
-  approvedAliases?: readonly SetupApprovedAlias[],
+  approvedAliases: readonly SetupApprovedAlias[] | undefined,
+  destinations: readonly string[],
 ) {
   const aliases = yield* captureLocalAdoptionAliases(sourcePath, shadows, approvedAliases);
   const moves = yield* prepareRecoveryMoves(
     libraryHome,
-    aliases.map((alias) => ({
-      name,
-      path: alias.path,
-      approvedLink: alias,
-    })),
+    aliases
+      .filter((alias) => !destinations.includes(alias.path))
+      .map((alias) => ({
+        name,
+        path: alias.path,
+        approvedLink: alias,
+      })),
   );
   const harnesses = [...new Set(shadows.map((shadow) => shadow.harness).filter(hasHarnessProfile))];
   return { moves, aliases, harnesses };
