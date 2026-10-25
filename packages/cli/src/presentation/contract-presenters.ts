@@ -761,6 +761,36 @@ function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): st
   ];
 }
 
+/** What `skit setup --apply` did, then why the rest was left alone. */
+function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): string {
+  const lines = [
+    ...data.imported.map(({ source, names }) => `Imported ${source}: ${names.join(", ")}`),
+    ...(data.added.length
+      ? [`Added to Library: ${data.added.map((copy) => copy.name).join(", ")}`]
+      : []),
+    ...(data.reconnected.length
+      ? [`Reconnected: ${data.reconnected.map((copy) => copy.name).join(", ")}`]
+      : []),
+  ];
+  if (!lines.length) lines.push("Nothing to apply; the plan recommended no changes.");
+  if (data.projections.length)
+    lines.push(
+      "",
+      "Copies",
+      ...data.projections.map(
+        (projection) =>
+          `  ${projection.name} · ${projection.target} · ${projection.status} · ${projection.path}`,
+      ),
+    );
+  if (data.leftAlone.length)
+    lines.push(
+      "",
+      "Left alone",
+      ...data.leftAlone.map((skill) => `  ${skill.name} · ${skill.reason}`),
+    );
+  return lines.join("\n");
+}
+
 function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
@@ -953,6 +983,7 @@ const contractPresenters: ContractPresenters = {
   usage: (data) => renderUsage(data),
   inventory: (data, context) => renderInventory(data, data.machine, createColors(context.color)),
   setup: renderSetup,
+  setupApplied: renderSetupApplied,
   repositoryPolicy: (data) =>
     data.action === "list"
       ? data.repositories.length

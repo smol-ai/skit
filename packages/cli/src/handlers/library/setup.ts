@@ -26,6 +26,7 @@ import { openSetupReview, type SetupReview } from "../../workflows/library/setup
 import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
 import { result } from "../contracts.js";
 import { Digest, LibraryStore } from "@smolai/skit-core";
+import type { SetupApplied } from "../../workflows/library/setup-contract.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { SetupPlanStale } from "../../workflows/library/setup.js";
 import {
@@ -67,8 +68,6 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly interactive: boolean;
   readonly dryRun: boolean;
   readonly workDirFlag?: string;
-  /** Apply the recommended plan the caller reviewed, never prompting. */
-  readonly apply?: { readonly planId: string; readonly duplicates?: SetupDuplicateActionType };
 }) {
   const roots = input.workDirFlag ? [resolve(input.workDirFlag)] : [];
   const persistRoots = Boolean(input.workDirFlag) && !input.dryRun;
@@ -78,7 +77,6 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots: !input.interactive && persistRoots,
   };
   const renderer = yield* Renderer;
-  if (input.apply) return yield* applyReviewedPlan(setupOptions, persistRoots, input, input.apply);
   const guided = input.interactive && !input.dryRun && input.localCustody !== undefined;
   const steps = setupStepPlan({ scanRepositories: roots.length > 0 });
   if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
@@ -169,40 +167,71 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
 });
 
 /**
- * The non-interactive apply. The plan ID is the caller's consent: it must match a fresh
- * observation, and the recommendation it covers is applied through the same review and apply as
- * guided setup. Duplicate copies need an explicit `--duplicates`; removals are never applied.
+ * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must
+ * match a fresh observation, and the recommendation it covers is applied through the same review
+ * and apply as guided setup. Duplicate copies need an explicit `--duplicates`; removals are never
+ * applied. The result says what was applied and why everything else was left alone, so a caller
+ * never has to re-observe to find out whether the apply happened.
  */
-const applyReviewedPlan = Effect.fn("CLI.setup.applyReviewedPlan")(function* (
-  setupOptions: SetupOptions,
-  persistRoots: boolean,
-  input: { readonly localCustody?: LocalAdoptionOptions },
-  apply: { readonly planId: string; readonly duplicates?: SetupDuplicateActionType },
-) {
+export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (input: {
+  readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
+  readonly localCustody: LocalAdoptionOptions;
+  readonly workDirFlag?: string;
+  readonly planId: string;
+  readonly duplicates?: SetupDuplicateActionType;
+}) {
   const renderer = yield* Renderer;
-  const planId = Schema.decodeUnknownOption(Digest)(apply.planId);
-  if (Option.isNone(planId) || input.localCustody === undefined)
+  const planId = Schema.decodeUnknownOption(Digest)(input.planId);
+  if (Option.isNone(planId))
     return yield* new OptionCombinationInvalid({
-      detail: "--apply takes the full planId printed by `skit setup --json`",
+      detail: "--apply takes the full planId that `skit setup` prints",
     });
-  const observed = yield* renderer.withStatus(
-    "Observing local skills",
-    runSetup({ ...setupOptions, persistRoots: false }),
-  );
+  const setupOptions: SetupOptions = {
+    ...input.options,
+    repositoryRoots: input.workDirFlag ? [resolve(input.workDirFlag)] : [],
+    persistRoots: false,
+  };
+  const observed = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
   if (observed.onboarding.planId !== planId.value)
     return yield* new SetupPlanStale({
       approvedPlanId: planId.value,
       currentPlanId: observed.onboarding.planId,
     });
   const review = yield* openSetupReview(
-    { ...setupOptions, persistRoots },
+    { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
     observed,
     input.localCustody,
   );
-  const plan = yield* review.prepareRecommended(apply.duplicates);
-  if (!plan.hasChanges) return observed;
-  const applied = yield* plan.apply(renderer.withStatus);
-  return applied.observed;
+  const plan = yield* review.prepareRecommended(input.duplicates);
+  if (plan.hasChanges) yield* plan.apply(renderer.withStatus);
+  const { sources, additions, reconnects } = plan.summary;
+  const taken = new Set([
+    ...sources.flatMap((source) => source.names),
+    ...additions.map((copy) => copy.name),
+    ...reconnects.map((copy) => copy.name),
+  ]);
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
+  return {
+    planId: planId.value,
+    imported: sources.map(({ source, names }) => ({ source, names })),
+    added: additions,
+    reconnected: reconnects,
+    projections: state.projections.flatMap((projection) => {
+      const name = names.get(projection.skill_id);
+      return name !== undefined && taken.has(name)
+        ? [{ name, target: projection.target, path: projection.path, status: projection.status }]
+        : [];
+    }),
+    leftAlone: observed.onboarding.candidates
+      .filter((candidate) => !taken.has(candidate.name))
+      .map((candidate) => ({
+        name: candidate.name,
+        paths: candidate.paths,
+        reason: candidate.action === "blocked" ? candidate.reason : candidate.action,
+      })),
+  } satisfies SetupApplied;
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
@@ -334,23 +363,34 @@ export const setupCliCommand = Command.make(
           if (duplicates !== undefined && apply === undefined)
             return yield* new OptionCombinationInvalid({ detail: "--duplicates requires --apply" });
           const configuration = yield* libraryCommandConfiguration(input);
+          const workDirFlag = Option.getOrUndefined(input.workDir);
+          const options = {
+            libraryHome: selectedHome,
+            inventory: configuration.inventory,
+            probePath: process.env.PATH,
+            skillsStateHome: paths.xdgStateHome,
+          };
+          const localCustody = { bindings: configuration.pull.bindings };
+          if (apply !== undefined)
+            return yield* renderer.result(
+              result(
+                "setupApplied",
+                yield* setupApplyCommand({
+                  options,
+                  localCustody,
+                  planId: apply,
+                  ...(workDirFlag === undefined ? {} : { workDirFlag }),
+                  ...(duplicates === undefined ? {} : { duplicates }),
+                }),
+              ),
+            );
           const value = yield* setupCommand({
-            workDirFlag: Option.getOrUndefined(input.workDir),
+            ...(workDirFlag === undefined ? {} : { workDirFlag }),
             interactive,
-            ...(apply === undefined
-              ? {}
-              : { apply: { planId: apply, ...(duplicates === undefined ? {} : { duplicates }) } }),
-            // Without --apply, JSON output observes only; it never reaches the guided apply.
-            dryRun: input.dryRun || (input.json && apply === undefined),
-            options: {
-              libraryHome: selectedHome,
-              inventory: configuration.inventory,
-              probePath: process.env.PATH,
-              skillsStateHome: paths.xdgStateHome,
-            },
-            localCustody: {
-              bindings: configuration.pull.bindings,
-            },
+            // JSON output observes only; it never reaches the guided apply.
+            dryRun: input.dryRun || input.json,
+            options,
+            localCustody,
           });
           if (!interactive) yield* renderer.result(result("setup", value));
         }).pipe(Effect.provide(terminalPrompterLayer)),
@@ -384,7 +424,7 @@ export const setupCliCommand = Command.make(
         "devin --version",
       ],
     },
-    outputSchemas: [outputContracts.setup],
+    outputSchemas: [outputContracts.setup, outputContracts.setupApplied],
     exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: true,
   }),

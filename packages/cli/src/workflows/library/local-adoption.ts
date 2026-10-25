@@ -289,6 +289,11 @@ export type LocalAdoptionRequest =
         readonly harnesses: readonly HarnessNameType[];
         readonly machineId: MachineId | undefined;
       };
+      /**
+       * Other copies setup observed with exactly these bytes. Where one sits at a target's
+       * destination it is adopted in place, rather than left for that target to conflict with.
+       */
+      readonly equalCopies?: readonly string[];
     };
 
 /** Validate every duplicate decision before applying any of the selected copies. */
@@ -359,7 +364,11 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
           });
         return empty;
       }
-      const adoption = { path: selection.sourcePath, observedHash };
+      const equalPaths = request.kind === "retain" ? (request.equalCopies ?? []) : [];
+      for (const path of equalPaths)
+        if ((yield* deterministicTreeHashEffect(path)) !== observedHash)
+          return yield* new PlanIsStale();
+      const adoption = { path: selection.sourcePath, equalPaths, observedHash };
       let subjectId: string;
       if (request.kind === "existing") subjectId = request.subjectId;
       else {

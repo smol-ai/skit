@@ -78,7 +78,7 @@ export interface MaterializeProjectionRequest {
   invocationIntent: InvocationIntent;
   previous?: ManagedProjection;
   /** Exact preview evidence authorizing Custody transfer of this unmanaged target. */
-  adoption?: { path: string; observedHash: Digest };
+  adoption?: ProjectionAdoption;
   /** Exact preview evidence authorizing a changed managed Projection as the selected Version. */
   replacement?: {
     projectionId: ProjectionIdType;
@@ -352,13 +352,17 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         const markerInspection = yield* inspectOwnershipMarkerEffect(destination);
         const marker = markerInspection.kind === "valid" ? markerInspection.marker : null;
         const observed = yield* hasher.hash(destination);
-        const adoptionPath = request.adoption?.path;
-        const adoptionMatchesDestination = adoptionPath
-          ? (yield* fs
-              .realPath(adoptionPath)
-              .pipe(Effect.orElseSucceed(() => resolve(adoptionPath)))) ===
-            (yield* fs.realPath(destination).pipe(Effect.orElseSucceed(() => resolve(destination))))
-          : false;
+        const realDestination = yield* fs
+          .realPath(destination)
+          .pipe(Effect.orElseSucceed(() => resolve(destination)));
+        const adoptionPaths = request.adoption
+          ? [request.adoption.path, ...(request.adoption.equalPaths ?? [])]
+          : [];
+        let adoptionMatchesDestination = false;
+        for (const path of adoptionPaths)
+          adoptionMatchesDestination ||=
+            (yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)))) ===
+            realDestination;
         const replacementMatches =
           request.replacement !== undefined &&
           request.replacement.projectionId === projectionId &&
@@ -554,6 +558,17 @@ const reproducibleEffect = Effect.fn("Projection.reproducible")(function* (
   }
   return false;
 });
+/**
+ * Unmanaged copies the operator approved taking custody of in place: the selected copy, and any
+ * copies with identical bytes already at another target's destination. Each is adopted only while
+ * its content still hashes to `observedHash`, so adopting one adds SKIT's marker and nothing else.
+ */
+export interface ProjectionAdoption {
+  readonly path: string;
+  readonly equalPaths?: readonly string[];
+  readonly observedHash: Digest;
+}
+
 export type ProjectionMutationError =
   | AdoptionContentMismatch
   | AdoptionTargetChanged

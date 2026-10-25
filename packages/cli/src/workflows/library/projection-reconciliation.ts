@@ -8,6 +8,7 @@ import {
   type RepositoryBinding,
   type Digest,
   type ProjectionTarget,
+  type ProjectionAdoption,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
@@ -23,7 +24,7 @@ export interface LibraryProjectionReconciliationOptions {
   readonly rootFor?: (target: ProjectionTarget) => string | undefined;
   readonly variantsPath: string;
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
-  readonly adoption?: { readonly path: string; readonly observedHash: Digest };
+  readonly adoption?: ProjectionAdoption;
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
   readonly includeRepositoryBindings?: boolean;

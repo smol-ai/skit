@@ -14,6 +14,7 @@ import {
   type SkitFailure,
   type LibraryState,
   type Digest,
+  type ProjectionAdoption,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem } from "effect";
 import {
@@ -50,7 +51,7 @@ export interface BindingChangeRequest extends BindingSelection {
     readonly ino: number;
     readonly linkTarget?: string;
   }[];
-  readonly adoption?: { readonly path: string; readonly observedHash: Digest };
+  readonly adoption?: ProjectionAdoption;
 }
 
 export type BindingChangeConfiguration = InventoryRootOptions;

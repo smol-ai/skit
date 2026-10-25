@@ -41,6 +41,7 @@ export {
   type ProjectionMutation,
   type NativeProjectionContext,
   type ProjectionMutationError,
+  type ProjectionAdoption,
 } from "./projection/mutation.js";
 export { ensureProjectionRootWritable } from "./projection/writable.js";
 export * from "./distribution/registry-identity.js";

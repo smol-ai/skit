@@ -348,6 +348,37 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     }),
   ),
   resultStory(
+    "setup",
+    "applied",
+    result("setupApplied", {
+      planId: `sha256:${"0".repeat(64)}`,
+      imported: [],
+      added: [{ name: "review", sourcePath: "/home/story/.claude/skills/review" }],
+      reconnected: [],
+      projections: [
+        {
+          name: "review",
+          target: "agents",
+          path: "/home/story/.agents/skills/review",
+          status: "installed",
+        },
+        {
+          name: "review",
+          target: "claude",
+          path: "/home/story/.claude/skills/review",
+          status: "installed",
+        },
+      ],
+      leftAlone: [
+        {
+          name: "commit",
+          paths: ["/home/story/.agents/skills/commit", "/home/story/.claude/skills/commit"],
+          reason: "divergent-copies",
+        },
+      ],
+    }),
+  ),
+  resultStory(
     "repository",
     "policy",
     result("repositoryPolicy", {

@@ -313,3 +313,30 @@ export const SetupResult = Schema.Struct({
   suppressed: Schema.Array(SetupSuppressed),
 });
 export type SetupResult = typeof SetupResult.Type;
+
+/** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
+ * every other observed skill was left alone. */
+export const SetupApplied = Schema.Struct({
+  planId: Digest,
+  imported: Schema.Array(
+    Schema.Struct({ source: Schema.String, names: Schema.Array(Schema.String) }),
+  ),
+  added: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
+  reconnected: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
+  projections: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      target: Schema.String,
+      path: Schema.String,
+      status: Schema.String,
+    }),
+  ),
+  leftAlone: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      paths: Schema.Array(Schema.String),
+      reason: Schema.String,
+    }),
+  ),
+});
+export type SetupApplied = typeof SetupApplied.Type;

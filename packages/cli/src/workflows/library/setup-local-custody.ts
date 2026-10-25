@@ -87,9 +87,21 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
           name: selection.name,
           reason: "source-not-candidate",
         });
+      const observedHash = selectedInstance.contentIdentity.observedHash;
+      const equalCopies = current.instances
+        .filter(
+          (instance) =>
+            instance.name === selection.name &&
+            instance.path !== selection.sourcePath &&
+            observedHash !== undefined &&
+            instance.contentIdentity.observedHash === observedHash &&
+            isSetupProjectionTarget(instance),
+        )
+        .map((instance) => instance.path);
       const adoption = yield* prepareLocalAdoption(options, selection, {
         kind: "retain",
-        observedHash: selectedInstance.contentIdentity.observedHash,
+        observedHash,
+        ...(equalCopies.length ? { equalCopies } : {}),
         ...(candidate.action === "repository-owned" || !isSetupProjectionTarget(selectedInstance)
           ? {}
           : {

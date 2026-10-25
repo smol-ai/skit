@@ -5,6 +5,7 @@ import { declaredInvocationIntent, overrideInvocationIntent } from "../../projec
 import {
   projectionCustodyEffect,
   withProjectionMutationEffect,
+  type ProjectionAdoption,
 } from "../../projection/mutation.js";
 import { pathIsWithin, projectionTargetPathIdentityEffect } from "../../platform/path-identity.js";
 import { ProjectionRetireConflict } from "../../failures.js";
@@ -41,8 +42,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     string,
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
-  /** The one existing copy the operator chose to take custody of, as previewed. */
-  adoption?: { readonly path: string; readonly observedHash: Digest };
+  /** The existing copies the operator chose to take custody of, as previewed. */
+  adoption?: ProjectionAdoption;
   restoreNativeDeletedSkills?: readonly string[];
 }) {
   const store = yield* LibraryStore;

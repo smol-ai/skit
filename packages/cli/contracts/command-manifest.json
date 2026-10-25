@@ -1913,7 +1913,8 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v8"
+        "skit.setup.v8",
+        "skit.setup.applied.v1"
       ],
       "exitCodes": [
         0,

@@ -24,7 +24,11 @@ import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.j
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
-import { RepositoryPolicyResult, SetupResult } from "../workflows/library/setup-contract.js";
+import {
+  RepositoryPolicyResult,
+  SetupApplied,
+  SetupResult,
+} from "../workflows/library/setup-contract.js";
 import {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
@@ -132,6 +136,7 @@ export const outputContracts = {
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
   setup: effectOutput("skit.setup.v8", SetupResult),
+  setupApplied: effectOutput("skit.setup.applied.v1", SetupApplied),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
