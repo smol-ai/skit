@@ -37,7 +37,7 @@ export const authLogoutCliCommand = Command.make(
     { command: "skit auth logout https://skit.example.com" },
   ]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["network.write", "filesystem.write"] },
+    effects: { capabilities: ["filesystem.read", "filesystem.write", "network.write"] },
     outputSchemas: [outputContracts.authLogout],
     exitCodes: [0, 11, 12, 64],
     interactive: false,

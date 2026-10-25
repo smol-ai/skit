@@ -59,6 +59,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
   Command.withDescription("Browse retained Skills and Collections and manage enablement."),
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.list],
     exitCodes: [0, 12, 64, 65],
     interactive: true,

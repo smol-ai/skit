@@ -36,8 +36,9 @@ export const authStatusCliCommand = Command.make(
   Command.withDescription("Show stored Registry credential metadata."),
   Command.withExamples([{ command: "skit auth status" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.authStatus],
-    exitCodes: [0, 12],
+    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

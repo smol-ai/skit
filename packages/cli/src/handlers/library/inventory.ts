@@ -119,12 +119,6 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
   return { ...report, ...native };
 });
 
-const localInventoryMetadata = {
-  effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-  exitCodes: [0, 65],
-  interactive: false,
-} as const;
-
 const machineInventoryMetadata = {
   effects: {
     capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
@@ -137,7 +131,7 @@ const machineInventoryMetadata = {
       "devin --version",
     ],
   },
-  exitCodes: [0, 65],
+  exitCodes: [0, 12, 64, 65],
   interactive: false,
 } as const;
 
@@ -231,7 +225,6 @@ export const doctorCliCommand = Command.make(
   ),
   Command.withExamples([{ command: "skit doctor" }]),
   Command.annotate(CommandMetadata, {
-    ...localInventoryMetadata,
     interactive: true,
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "process.execute"],

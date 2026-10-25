@@ -9,8 +9,10 @@
       "summary": "Reuse saved authentication or sign in by approving this login in your browser, and store a CLI credential in the system keychain, or ~/.skit/auth.json without one.",
       "effects": {
         "capabilities": [
-          "network.write",
-          "filesystem.write"
+          "filesystem.read",
+          "filesystem.write",
+          "network.read",
+          "network.write"
         ]
       },
       "outputSchemas": [
@@ -98,8 +100,9 @@
       "summary": "Revoke and remove a stored CLI credential.",
       "effects": {
         "capabilities": [
-          "network.write",
-          "filesystem.write"
+          "filesystem.read",
+          "filesystem.write",
+          "network.write"
         ]
       },
       "outputSchemas": [
@@ -168,14 +171,18 @@
       "stability": "stable",
       "summary": "Show stored Registry credential metadata.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read"
+        ]
       },
       "outputSchemas": [
         "skit.auth.status.v3"
       ],
       "exitCodes": [
         0,
-        12
+        11,
+        12,
+        64
       ],
       "interactive": false,
       "examples": [
@@ -232,7 +239,20 @@
       "stability": "stable",
       "summary": "Add a source to the local library without enabling it.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "git clone --filter=blob:none --no-checkout",
+          "git fetch --filter=blob:none",
+          "git checkout --detach",
+          "git rev-parse",
+          "git ls-files",
+          "git check-ignore"
+        ]
       },
       "outputSchemas": [
         "skit.add.v6",
@@ -547,7 +567,10 @@
       "stability": "stable",
       "summary": "Disable retained Skills for every agent at a scope.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.disable.v8",
@@ -661,7 +684,10 @@
       "stability": "stable",
       "summary": "Enable retained Skills for every agent at a scope.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.enable.v8",
@@ -799,6 +825,8 @@
       ],
       "exitCodes": [
         0,
+        12,
+        64,
         65
       ],
       "interactive": false,
@@ -872,14 +900,16 @@
       "stability": "stable",
       "summary": "Show device-local Library change history.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read"
+        ]
       },
       "outputSchemas": [
         "skit.library.history.v1"
       ],
       "exitCodes": [
         0,
-        65
+        64
       ],
       "interactive": false,
       "examples": [
@@ -932,7 +962,10 @@
       "stability": "stable",
       "summary": "Browse retained Skills and Collections and manage enablement.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.list.v6"
@@ -1015,7 +1048,10 @@
       "stability": "stable",
       "summary": "Name a Registry for use in source references.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.registry.remote.v1"
@@ -1085,7 +1121,10 @@
       "stability": "stable",
       "summary": "Select the Registry used by registry shorthand.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.registry.remote.v1"
@@ -1093,6 +1132,7 @@
       "exitCodes": [
         0,
         11,
+        12,
         64
       ],
       "interactive": false,
@@ -1151,14 +1191,17 @@
       "stability": "stable",
       "summary": "List named Registries.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read"
+        ]
       },
       "outputSchemas": [
         "skit.registry.list.v1"
       ],
       "exitCodes": [
         0,
-        12
+        12,
+        64
       ],
       "interactive": false,
       "examples": [
@@ -1211,7 +1254,10 @@
       "stability": "stable",
       "summary": "Remove a Registry name.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.registry.remote.v1"
@@ -1219,6 +1265,7 @@
       "exitCodes": [
         0,
         11,
+        12,
         64
       ],
       "interactive": false,
@@ -1285,7 +1332,8 @@
         "skit.repository.policy.v1"
       ],
       "exitCodes": [
-        0
+        0,
+        64
       ],
       "interactive": false,
       "examples": [],
@@ -1346,6 +1394,7 @@
       ],
       "exitCodes": [
         0,
+        12,
         64
       ],
       "interactive": false,
@@ -1412,6 +1461,7 @@
       ],
       "exitCodes": [
         0,
+        12,
         64
       ],
       "interactive": false,
@@ -1478,6 +1528,7 @@
       ],
       "exitCodes": [
         0,
+        12,
         64
       ],
       "interactive": false,
@@ -1533,7 +1584,10 @@
       "stability": "stable",
       "summary": "Remove a retained Collection and its owned Projections.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
       },
       "outputSchemas": [
         "skit.remove.v4",
@@ -1628,6 +1682,7 @@
       "summary": "Accept one finding for Projection of an exact retained Skill Artifact.",
       "effects": {
         "capabilities": [
+          "filesystem.read",
           "filesystem.write"
         ]
       },
@@ -1737,7 +1792,9 @@
       "stability": "stable",
       "summary": "Review security findings for an exact retained Skill Artifact.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read"
+        ]
       },
       "outputSchemas": [
         "skit.security.review.v3"
@@ -1826,6 +1883,8 @@
       "summary": "Create the first operator for a deployed skit-server.",
       "effects": {
         "capabilities": [
+          "filesystem.read",
+          "network.read",
           "network.write",
           "process.execute",
           "browser.open"
@@ -1839,7 +1898,8 @@
         "skit.server.bootstrap.v1"
       ],
       "exitCodes": [
-        0
+        0,
+        64
       ],
       "interactive": true,
       "examples": [
@@ -1905,7 +1965,7 @@
         "capabilities": [
           "filesystem.read",
           "filesystem.write",
-          "network.write",
+          "network.read",
           "process.execute"
         ],
         "subprocesses": [
@@ -2028,7 +2088,21 @@
       "stability": "stable",
       "summary": "Synchronize private retained Library bytes with skit-server.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.read",
+          "network.write",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "git clone --filter=blob:none --no-checkout",
+          "git fetch --filter=blob:none",
+          "git checkout --detach",
+          "git rev-parse",
+          "git ls-files",
+          "git check-ignore"
+        ]
       },
       "outputSchemas": [
         "skit.library.sync.v10"
@@ -2156,7 +2230,20 @@
       "stability": "stable",
       "summary": "Update sources from their recorded origins.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "git clone --filter=blob:none --no-checkout",
+          "git fetch --filter=blob:none",
+          "git checkout --detach",
+          "git rev-parse",
+          "git ls-files",
+          "git check-ignore"
+        ]
       },
       "outputSchemas": [
         "skit.update.v8",
@@ -2258,13 +2345,18 @@
       "stability": "stable",
       "summary": "Show build details and check npm for an upgrade.",
       "effects": {
-        "capabilities": []
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write",
+          "network.read"
+        ]
       },
       "outputSchemas": [
         "skit.version.v2"
       ],
       "exitCodes": [
-        0
+        0,
+        64
       ],
       "interactive": false,
       "examples": [
@@ -2320,7 +2412,9 @@
       ],
       "exitCodes": [
         0,
-        64
+        12,
+        64,
+        65
       ],
       "interactive": false,
       "examples": [

@@ -111,7 +111,7 @@ export const securityAcceptCliCommand = Command.make(
     },
   ]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.write"] },
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.securityAccept],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

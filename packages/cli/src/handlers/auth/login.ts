@@ -207,7 +207,9 @@ export const authLoginCliCommand = Command.make(
     },
   ]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["network.write", "filesystem.write"] },
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "network.read", "network.write"],
+    },
     outputSchemas: [outputContracts.authLogin, outputContracts.authLoginPending],
     exitCodes: [0, 11, 12, 64],
     interactive: true,

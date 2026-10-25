@@ -37,6 +37,7 @@ export const registryAddCliCommand = Command.make(
   Command.withDescription("Name a Registry for use in source references."),
   Command.withExamples([{ command: "skit registry add public https://registry.example.com" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.registryRemote],
     exitCodes: [0, 12, 64],
     interactive: false,
@@ -63,8 +64,9 @@ export const registryListCliCommand = Command.make(
   Command.withDescription("List named Registries."),
   Command.withExamples([{ command: "skit registry list" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.registryList],
-    exitCodes: [0, 12],
+    exitCodes: [0, 12, 64],
     interactive: false,
   }),
 );
@@ -94,8 +96,9 @@ export const registryDefaultCliCommand = Command.make(
   Command.withDescription("Select the Registry used by registry shorthand."),
   Command.withExamples([{ command: "skit registry default public" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.registryRemote],
-    exitCodes: [0, 11, 64],
+    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );
@@ -125,8 +128,9 @@ export const registryRemoveCliCommand = Command.make(
   Command.withDescription("Remove a Registry name."),
   Command.withExamples([{ command: "skit registry remove work" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.registryRemote],
-    exitCodes: [0, 11, 64],
+    exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
 );

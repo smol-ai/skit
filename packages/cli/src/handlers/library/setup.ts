@@ -408,7 +408,7 @@ export const setupCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     effects: {
-      capabilities: ["filesystem.read", "filesystem.write", "network.write", "process.execute"],
+      capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
       subprocesses: [
         "git ls-files",
         "git status --porcelain",

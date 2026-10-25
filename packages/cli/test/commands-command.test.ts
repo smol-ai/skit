@@ -11,7 +11,7 @@ it.effect("derives public command metadata from the executable tree", () =>
       assert.ok(commands.some((command) => command.path.join(" ") === "registry list"));
       const inventory = commands.find((command) => command.path.join(" ") === "inventory");
       assert.ok(inventory);
-      assert.deepStrictEqual(inventory.successExitCodes, [0, 65]);
+      assert.deepStrictEqual(inventory.successExitCodes, [0, 12, 64, 65]);
       assert.ok(inventory.outputSchemas.includes("skit.inventory.v11"));
       assert.ok(inventory.outputSchemas.includes("skit.error.v1"));
     }),

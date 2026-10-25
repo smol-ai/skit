@@ -118,6 +118,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
         : [{ command: "skit disable review" }, { command: "skit disable owner/tools --all" }],
     ),
     Command.annotate(CommandMetadata, {
+      effects: { capabilities: ["filesystem.read", "filesystem.write"] },
       outputSchemas: enabled
         ? [outputContracts.enable, outputContracts.enablePlan]
         : [outputContracts.disable, outputContracts.disablePlan],

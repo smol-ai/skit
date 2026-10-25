@@ -5,7 +5,7 @@ import { Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { CommandMetadata } from "../../commands/metadata.js";
+import { CommandMetadata, sourceAcquisitionSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
 import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
@@ -173,6 +173,16 @@ export const librarySyncCliCommand = Command.make(
   Command.withDescription("Synchronize private retained Library bytes with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),
   Command.annotate(CommandMetadata, {
+    effects: {
+      capabilities: [
+        "filesystem.read",
+        "filesystem.write",
+        "network.read",
+        "network.write",
+        "process.execute",
+      ],
+      subprocesses: sourceAcquisitionSubprocesses,
+    },
     outputSchemas: [outputContracts.librarySync],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

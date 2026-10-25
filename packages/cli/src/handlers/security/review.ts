@@ -47,6 +47,7 @@ export const securityReviewCliCommand = Command.make(
   Command.withDescription("Review security findings for an exact retained Skill Artifact."),
   Command.withExamples([{ command: "skit security review owner/tools:review --json" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.securityReview],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

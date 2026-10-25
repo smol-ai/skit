@@ -55,6 +55,28 @@ describe("declared exit codes", () => {
     }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-taxonomy-test"))),
   );
 
+  // The parser rejects an unknown flag or extra argument on any command before its handler runs.
+  it.effect("every command declares the command-line rejection exit 64", () =>
+    Effect.gen(function* () {
+      const commands = yield* commandDescriptions(skitCommand);
+      const undeclared = commands
+        .filter((command) => !command.successExitCodes.includes(failureExitCodes.INVALID_ARGUMENT))
+        .map((command) => command.path.join(" "));
+      expect(undeclared).toEqual([]);
+    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-parse-test"))),
+  );
+
+  // A missing effects annotation publishes `capabilities: []`, which reads as "no side effects".
+  it.effect("every command declares the side effects it may have", () =>
+    Effect.gen(function* () {
+      const commands = yield* commandDescriptions(skitCommand);
+      const undeclared = commands
+        .filter((command) => command.effects.capabilities.length === 0)
+        .map((command) => command.path.join(" "));
+      expect(undeclared).toEqual([]);
+    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-effects-test"))),
+  );
+
   test("a named failure classifies by its own code and remediation", () => {
     for (const failure of [
       new NoStoredCredentials(),
