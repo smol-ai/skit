@@ -35,8 +35,17 @@ export type SetEnabledPlan = typeof SetEnabledPlan.Type;
 
 export const SetEnabledResult = SetEnabledPlan.pipe(
   Schema.fieldsAssign({
-    /** Each target this change materialized; `.claude` appears only when Claude Code is present. */
-    projections: Schema.Array(Schema.Struct({ target: ProjectionTarget })),
+    /**
+     * Every copy of the changed skills at this scope after the change, with its status. A
+     * `conflicted` copy is a folder SKIT found at its destination and did not overwrite.
+     */
+    projections: Schema.Array(
+      Schema.Struct({
+        target: ProjectionTarget,
+        path: Schema.String,
+        status: Schema.String,
+      }),
+    ),
   }),
 );
 export type SetEnabledResult = typeof SetEnabledResult.Type;

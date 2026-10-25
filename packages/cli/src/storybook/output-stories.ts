@@ -811,7 +811,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       enabled: true,
       changed: true,
       bindings: [binding],
-      projections: [{ target: "agents" }],
+      projections: [
+        { target: "agents", path: "/home/story/.agents/skills/review", status: "installed" },
+      ],
     }),
   ),
   resultStory(
@@ -836,7 +838,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       enabled: false,
       changed: true,
       bindings: [],
-      projections: [{ target: "agents" }],
+      projections: [],
     }),
   ),
   resultStory(

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.enable.v7",
+  "$id": "skit.disable.v8",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -322,10 +322,18 @@
               "agents",
               "claude"
             ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         },
         "required": [
-          "target"
+          "target",
+          "path",
+          "status"
         ],
         "additionalProperties": true
       }

@@ -3,6 +3,7 @@ import { Clock, ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHashEffect,
+  inspectOwnershipMarkerEffect,
   LibraryStore,
   ProjectionRootNotWritable,
   skillUsageLayer,
@@ -833,4 +834,49 @@ it.effect(
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "gamma")), false);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), true);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+// `skit add ~/.claude/skills/x` then `skit enable x` is how an agent improvises setup: the
+// destination already holds the user's own copy of the skill.
+it.effect("enabling adopts an unmanaged copy that already holds the projected bytes", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
+    yield* f.fs.writeFileString(join(f.destination, "alpha", "SKILL.md"), "# alpha\n");
+    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+
+    const [outcome] = yield* f.home.owned(applyBindingChanges(plan));
+
+    assert.deepStrictEqual(
+      outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+      ["installed"],
+    );
+    assert.strictEqual(
+      (yield* inspectOwnershipMarkerEffect(join(f.destination, "alpha"))).kind,
+      "valid",
+    );
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a different copy at the destination is reported, and disabling leaves it in place", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const theirs = join(f.destination, "alpha", "SKILL.md");
+    yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
+    yield* f.fs.writeFileString(theirs, "# alpha, edited by hand\n");
+    const enable = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+
+    const [enabled] = yield* f.home.owned(applyBindingChanges(enable));
+
+    assert.deepStrictEqual(
+      enabled?.kind === "applied" ? enabled.value.projections.map((p) => p.status) : [],
+      ["conflicted"],
+    );
+    const disable = yield* f.home.owned(
+      previewBindingChanges([{ ...f.request, enabled: false }], f.home.bindings),
+    );
+    yield* f.home.owned(applyBindingChanges(disable));
+    assert.strictEqual(yield* f.fs.readFileString(theirs), "# alpha, edited by hand\n");
+    assert.deepStrictEqual((yield* f.home.durable).projections, []);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

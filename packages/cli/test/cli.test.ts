@@ -382,7 +382,7 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v7",
+        schema: "skit.enable.v8",
         data: expect.objectContaining({ enabled: true }),
       }),
     );

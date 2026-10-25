@@ -14,6 +14,7 @@ import {
   type SkitFailure,
   type LibraryState,
   type ProjectionAdoption,
+  type SkitBindingScope,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem } from "effect";
 import {
@@ -274,6 +275,9 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     onlyBindings: plan.bindings,
     restoreNativeDeletedSkills: options.enabled ? skillIds : [],
     ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
+    // Enabling a skill the user already installed by hand takes custody of an identical copy
+    // instead of recording a conflict with it.
+    adoptIdentical: options.enabled,
   });
   let result = {
     ...plan,
@@ -295,9 +299,27 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     kind: "applied" as const,
     value: {
       ...result,
-      projections: reconciled.outcomes.map(({ target }) => ({ target })),
+      projections: yield* changedProjections(configuration, plan.scope, skillIds),
     },
   };
+});
+
+/** Every copy of the changed skills at this scope after reconciling, as recorded. */
+const changedProjections = Effect.fn("LibraryBindings.changedProjections")(function* (
+  configuration: BindingChangeConfiguration,
+  scope: SkitBindingScope,
+  skillIds: readonly string[],
+) {
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  const roots: string[] = [];
+  for (const target of yield* activeProjectionTargetsEffect(configuration))
+    roots.push(bindingRoot(target, scope, configuration));
+  return state.projections.flatMap(({ target, root, path, status, skill_id }) =>
+    target !== "legacy" && skillIds.includes(skill_id) && roots.includes(root)
+      ? [{ target, path, status }]
+      : [],
+  );
 });
 
 /** Revalidate and apply the prepared requests in order under one recording writer. */

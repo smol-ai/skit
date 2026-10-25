@@ -79,6 +79,11 @@ export interface MaterializeProjectionRequest {
   previous?: ManagedProjection;
   /** Exact preview evidence authorizing Custody transfer of this unmanaged target. */
   adoption?: ProjectionAdoption;
+  /**
+   * Take custody of an unmanaged directory at the destination when it already holds exactly the
+   * bytes this projection would write. Adopting it adds SKIT's marker and changes nothing else.
+   */
+  adoptIdentical?: boolean;
   /** Exact preview evidence authorizing a changed managed Projection as the selected Version. */
   replacement?: {
     projectionId: ProjectionIdType;
@@ -384,6 +389,13 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             // Equal content is adopted in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
           }
+          if (
+            markerInspection.kind === "absent" &&
+            request.adoptIdentical &&
+            observed === desiredHash &&
+            (yield* (yield* LinkStat).lstat(destination)).type === "Directory"
+          )
+            return yield* commit("marker", "adoption");
           projection.status = "conflicted";
           projection.observed_digest = observed;
           return settled();

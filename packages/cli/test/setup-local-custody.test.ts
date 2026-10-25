@@ -276,46 +276,54 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("reconnects only the selected exact Library copy", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* scratch("skit-setup-exact-copy-");
-    const source = join(root, "source", "review");
-    const claude = join(root, ".claude", "skills");
-    const codex = join(root, ".codex", "skills");
-    for (const path of [source, join(claude, "review"), join(codex, "review")]) {
-      yield* fs.makeDirectory(path, { recursive: true });
-      yield* fs.writeFileString(join(path, "SKILL.md"), skillDocument("review", "Same content"));
-    }
-    const home = yield* libraryHome({
-      home: join(root, "library"),
-      inventoryHome: root,
-      roots: { "claude-code": [claude], codex: [codex] },
-    });
-    const selected = yield* fs.realPath(join(claude, "review"));
-    const interaction = yield* makeScriptedInteraction([[`review\0${selected}`], true]);
-    yield* home.owned(
-      writingTo(
-        home.home,
-        Effect.gen(function* () {
-          yield* retainLibrarySourceEffect(source);
-          yield* setupCommand({
-            options: {
-              libraryHome: home.home,
-              inventory: home.inventory,
-              probePath: "",
-              skillsStateHome: join(root, "state"),
-            },
-            interactive: true,
-            dryRun: false,
-            localCustody: { bindings: home.bindings },
-          }).pipe(Effect.provide(interaction.layer));
-        }),
-      ),
-    );
-    expect((yield* inspectOwnershipMarkerEffect(join(claude, "review"))).kind).toBe("valid");
-    expect((yield* inspectOwnershipMarkerEffect(join(codex, "review"))).kind).toBe("absent");
-    expect((yield* home.durable).collections).toHaveLength(1);
-    expect((yield* interaction.prompts)[0].choices).toHaveLength(2);
-  }).pipe(Effect.provide(skitLayer)),
+it.effect(
+  "reconnects the selected exact Library copy without conflicting with an identical one",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-setup-exact-copy-");
+      const source = join(root, "source", "review");
+      const claude = join(root, ".claude", "skills");
+      const codex = join(root, ".codex", "skills");
+      for (const path of [source, join(claude, "review"), join(codex, "review")]) {
+        yield* fs.makeDirectory(path, { recursive: true });
+        yield* fs.writeFileString(join(path, "SKILL.md"), skillDocument("review", "Same content"));
+      }
+      const home = yield* libraryHome({
+        home: join(root, "library"),
+        inventoryHome: root,
+        roots: { "claude-code": [claude], codex: [codex] },
+      });
+      const selected = yield* fs.realPath(join(claude, "review"));
+      const interaction = yield* makeScriptedInteraction([[`review\0${selected}`], true]);
+      yield* home.owned(
+        writingTo(
+          home.home,
+          Effect.gen(function* () {
+            yield* retainLibrarySourceEffect(source);
+            yield* setupCommand({
+              options: {
+                libraryHome: home.home,
+                inventory: home.inventory,
+                probePath: "",
+                skillsStateHome: join(root, "state"),
+              },
+              interactive: true,
+              dryRun: false,
+              localCustody: { bindings: home.bindings },
+            }).pipe(Effect.provide(interaction.layer));
+          }),
+        ),
+      );
+      expect((yield* inspectOwnershipMarkerEffect(join(claude, "review"))).kind).toBe("valid");
+      // The Codex root is SKIT's shared destination and already holds the projected bytes, so
+      // enabling takes custody of that copy in place rather than recording a conflict with it.
+      expect((yield* inspectOwnershipMarkerEffect(join(codex, "review"))).kind).toBe("valid");
+      expect((yield* home.durable).projections.map((projection) => projection.status)).toEqual([
+        "installed",
+        "installed",
+      ]);
+      expect((yield* home.durable).collections).toHaveLength(1);
+      expect((yield* interaction.prompts)[0].choices).toHaveLength(2);
+    }).pipe(Effect.provide(skitLayer)),
 );

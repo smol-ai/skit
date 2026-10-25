@@ -359,7 +359,14 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           ? result("enablePlan", outcome.value)
           : result("disablePlan", outcome.value)
         : input.enabled
-          ? result("enable", outcome.value)
+          ? // A copy left conflicted means the skill is not where agents look; say so in the status.
+            result(
+              "enable",
+              outcome.value,
+              outcome.value.projections.some((projection) => projection.status === "conflicted")
+                ? 12
+                : undefined,
+            )
           : result("disable", outcome.value),
     );
   }

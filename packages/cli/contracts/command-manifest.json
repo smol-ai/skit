@@ -452,7 +452,7 @@
       "outputSchemas": [
         "skit.doctor.v7",
         "skit.disable.plan.v7",
-        "skit.disable.v7"
+        "skit.disable.v8"
       ],
       "exitCodes": [
         0,
@@ -549,7 +549,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.disable.v7",
+        "skit.disable.v8",
         "skit.disable.plan.v7"
       ],
       "exitCodes": [
@@ -658,7 +658,7 @@
         "capabilities": []
       },
       "outputSchemas": [
-        "skit.enable.v7",
+        "skit.enable.v8",
         "skit.enable.plan.v7"
       ],
       "exitCodes": [

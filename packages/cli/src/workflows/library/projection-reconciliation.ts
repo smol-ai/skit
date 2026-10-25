@@ -24,6 +24,8 @@ export interface LibraryProjectionReconciliationOptions {
   readonly variantsPath: string;
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
   readonly adoption?: ProjectionAdoption;
+  /** Adopt unmanaged copies that already hold exactly the projected bytes. */
+  readonly adoptIdentical?: boolean;
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
   readonly includeRepositoryBindings?: boolean;
@@ -77,6 +79,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
         variantsPath: options.variantsPath,
         restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
         ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
+        ...(options.adoptIdentical ? { adoptIdentical: true } : {}),
       });
       outcomes.push({ target, scope: binding.scope });
     }
