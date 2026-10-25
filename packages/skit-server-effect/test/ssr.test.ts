@@ -129,6 +129,7 @@ describe("Foldkit server rendering", () => {
         username: "",
         suggestedUsername: "",
         setupNeeded: true,
+        userCode: "",
       };
       const initial = init(flags).model;
       const completed = update(
@@ -179,6 +180,27 @@ describe("Foldkit server rendering", () => {
     }),
   );
 
+  it.effect("carries the CLI's code onto the device page and records the decision", () =>
+    Effect.gen(function* () {
+      const flags = yield* flagsForRequest(
+        new Request("https://registry.example/device?user_code=ABCD-EFGH"),
+        (request) =>
+          new URL(request.url).pathname === "/api/onboarding/username"
+            ? Promise.resolve(Response.json({ username: "tim" }))
+            : handler(request),
+      );
+      expect(flags).toMatchObject({ page: "device", userCode: "ABCD-EFGH", username: "tim" });
+
+      const decided = (action: "approve" | "deny") =>
+        update(
+          init(flags).model,
+          Message.ActionFinished({ action, ok: true, message: "", redirect: "" }),
+        ).model.deviceResult;
+      expect(decided("approve")).toBe("approved");
+      expect(decided("deny")).toBe("denied");
+    }),
+  );
+
   it("explains a signup username that is already claimed", () => {
     const flags: Flags = {
       page: "home",
@@ -190,6 +212,7 @@ describe("Foldkit server rendering", () => {
       username: "",
       suggestedUsername: "",
       setupNeeded: false,
+      userCode: "",
     };
     const finished = (message: string) =>
       update(

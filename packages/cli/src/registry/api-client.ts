@@ -21,11 +21,12 @@ export const authenticatedApiMiddleware = (token?: string) =>
     ),
   );
 
-export const sessionApiMiddleware = (cookie: string, origin: string) =>
+/** Authenticate as a temporary session: its cookie, or a device-authorization Bearer token. */
+export const sessionApiMiddleware = (session: Readonly<Record<string, string>>) =>
   Layer.merge(
     requestDecodingClient,
     HttpApiMiddleware.layerClient(PrincipalAuthentication, ({ next, request }) =>
-      next(HttpClientRequest.setHeaders(request, { cookie, origin })),
+      next(HttpClientRequest.setHeaders(request, session)),
     ),
   );
 

@@ -476,7 +476,34 @@ export class InteractiveLoginUnavailable
   readonly code = "INVALID_ARGUMENT" as const;
   readonly remediation = "Run `skit auth login` in a terminal, or set SKIT_TOKEN.";
   get message(): string {
-    return "Interactive login requires a terminal; set SKIT_TOKEN to use an existing credential";
+    return "Login needs a person to sign in; set SKIT_TOKEN to use an existing credential";
+  }
+}
+
+/** The Registry predates browser approval, so only email and password sign-in remain. */
+export class DeviceLoginUnavailable
+  extends Data.TaggedError("DeviceLoginUnavailable")<{ origin: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation = "Run `skit auth login` in a terminal to sign in with email and password.";
+  get message(): string {
+    return `${this.origin} does not offer browser approval for CLI login`;
+  }
+}
+
+export class DeviceLoginEnded
+  extends Data.TaggedError("DeviceLoginEnded")<{ reason: "denied" | "expired" }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Run `skit auth login` again for a new code.";
+  get message(): string {
+    return this.reason === "denied"
+      ? "The login was denied in the browser"
+      : "The login code expired before it was approved";
   }
 }
 

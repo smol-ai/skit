@@ -173,7 +173,7 @@ describe("server deployment configuration", () => {
     ]);
     assert.equal(configuration.assets.binding, "ASSETS");
     assert.equal(configuration.assets.directory, "web/dist/client");
-    assert.deepEqual(configuration.assets.run_worker_first.slice(0, 2), ["/", "/setup"]);
+    assert.deepEqual(configuration.assets.run_worker_first.slice(0, 3), ["/", "/setup", "/device"]);
   });
 
   it("reads targets from Wrangler's versioned structured deployment output", () => {

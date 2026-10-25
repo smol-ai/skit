@@ -55,3 +55,11 @@ export function promptsAllowed(context: PromptContext): boolean {
     automationMarker(context.env) === undefined
   );
 }
+
+/**
+ * Whether a person can act on a request outside this shell, such as approving a login in their
+ * browser. An agent relays it to the person it works for; under CI or `SKIT_NO_INPUT` nobody is
+ * there to act, so a command that would wait on them fails instead.
+ */
+export const personReachable = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  !isSet(env.CI) && !isSet(env.SKIT_NO_INPUT);

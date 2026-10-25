@@ -1,6 +1,16 @@
 import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
-import { Clock, Config, Effect, FileSystem, Option, Redacted, Result, Schema } from "effect";
+import {
+  Clock,
+  Config,
+  Duration,
+  Effect,
+  FileSystem,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { ChildProcessSpawner } from "effect/process";
@@ -10,6 +20,8 @@ import { dirname } from "node:path";
 import { isErrno } from "../platform/errno.js";
 import {
   CredentialsUnusable,
+  DeviceLoginEnded,
+  DeviceLoginUnavailable,
   NoStoredCredentials,
   RegistryAliasNotFound,
   RegistryOriginInvalid,
@@ -335,11 +347,34 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
  * Those cleanups are the existing behaviour carried into the Scope, not new guarantees: a process
  * killed outright can still leave a live token, and the messages say so.
  */
+/** The only device-authorization client the Registry accepts. */
+const CLI_DEVICE_CLIENT_ID = "skit-cli";
+const DeviceCodeResponse = Schema.Struct({
+  device_code: Schema.String,
+  user_code: Schema.String,
+  verification_uri: Schema.String,
+  verification_uri_complete: Schema.optionalKey(Schema.String),
+  interval: Schema.Number,
+});
+const DeviceTokenResponse = Schema.Struct({ access_token: Schema.String });
+const DeviceTokenError = Schema.Struct({ error: Schema.String });
+
+/** Where the user approves a browser login, and the code they confirm there. */
+export interface DeviceApproval {
+  readonly userCode: string;
+  readonly verificationUri: string;
+  /** The verification page with the code filled in. */
+  readonly verificationUriComplete: string;
+}
+
 export const loginEffect = Effect.fn("Auth.login")(
   function* (input: {
     origin: string;
-    email: string;
-    password: string;
+    /** Sign in with these, or leave both out to have the user approve the login in a browser. */
+    email?: string;
+    password?: string;
+    /** Show the user where to approve a browser login; called once, before polling starts. */
+    onDeviceCode?: (approval: DeviceApproval) => Effect.Effect<void>;
     scopes: AuthScope[];
     alias?: string;
     home?: string;
@@ -399,20 +434,86 @@ export const loginEffect = Effect.fn("Auth.login")(
         message: `${context} failed (${response.status}): ${detail}`,
       });
     });
-    const signIn = yield* send(new URL("/api/auth/sign-in/email", origin), {
-      method: "POST",
-      // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than
-      // acting as a security boundary. Browser requests still receive real origin enforcement.
-      headers: { "content-type": "application/json", origin },
-      body: JSON.stringify({ email: input.email, password: input.password }),
+    // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than acting as
+    // a security boundary. Browser requests still receive real origin enforcement.
+    const json = { "content-type": "application/json", origin };
+    /** The temporary session's credential, as request headers. */
+    const session: Readonly<Record<string, string>> = yield* Effect.gen(function* () {
+      if (input.email !== undefined && input.password !== undefined) {
+        const signIn = yield* send(new URL("/api/auth/sign-in/email", origin), {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({ email: input.email, password: input.password }),
+        });
+        if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
+        const cookie = Cookies.toCookieHeader(signIn.cookies);
+        if (!cookie)
+          return yield* new SignInFailed({ message: "Sign in did not establish a session" });
+        return { ...json, cookie };
+      }
+      if (discovery.deviceAuthorization === undefined || discovery.deviceToken === undefined)
+        return yield* new DeviceLoginUnavailable({ origin });
+      const started = yield* send(new URL(discovery.deviceAuthorization, origin), {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ client_id: CLI_DEVICE_CLIENT_ID }),
+      });
+      if (!ok(started)) return yield* rejected(started, "Device authorization");
+      const code = yield* started.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(DeviceCodeResponse)),
+        Effect.mapError(
+          (error) =>
+            new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+        ),
+      );
+      if (input.onDeviceCode)
+        yield* input.onDeviceCode({
+          userCode: code.user_code,
+          verificationUri: code.verification_uri,
+          verificationUriComplete: code.verification_uri_complete ?? code.verification_uri,
+        });
+      // RFC 8628 §3.5: wait the interval between polls, and five seconds longer after slow_down.
+      let interval = code.interval;
+      while (true) {
+        yield* Effect.sleep(Duration.seconds(interval));
+        const polled = yield* send(new URL(discovery.deviceToken, origin), {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: code.device_code,
+            client_id: CLI_DEVICE_CLIENT_ID,
+          }),
+        });
+        if (ok(polled)) {
+          const granted = yield* polled.json.pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenResponse)),
+            Effect.mapError(
+              (error) =>
+                new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+            ),
+          );
+          return { ...json, authorization: `Bearer ${granted.access_token}` };
+        }
+        const pending = yield* polled.json.pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenError)),
+          Effect.map(({ error }) => error),
+          Effect.orElseSucceed(() => undefined),
+        );
+        if (pending === "authorization_pending") continue;
+        if (pending === "slow_down") {
+          interval += 5;
+          continue;
+        }
+        if (pending === "access_denied") return yield* new DeviceLoginEnded({ reason: "denied" });
+        if (pending === "expired_token") return yield* new DeviceLoginEnded({ reason: "expired" });
+        return yield* rejected(polled, "Device authorization");
+      }
     });
-    if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
-    const cookie = Cookies.toCookieHeader(signIn.cookies);
-    if (!cookie) return yield* new SignInFailed({ message: "Sign in did not establish a session" });
     const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
       httpClient: http,
       baseUrl: origin,
-    }).pipe(Effect.provide(sessionApiMiddleware(cookie, origin)));
+    }).pipe(Effect.provide(sessionApiMiddleware(session)));
     const revoke = (credential: StoredCredential) =>
       HttpApiClient.makeWith(ConsumerAuthenticatedApi, { httpClient: http, baseUrl: origin }).pipe(
         Effect.provide(authenticatedApiMiddleware(credential.token)),
@@ -432,7 +533,7 @@ export const loginEffect = Effect.fn("Auth.login")(
     const signOutRequest = () =>
       send(new URL("/api/auth/sign-out", origin), {
         method: "POST",
-        headers: { cookie, origin, "content-type": "application/json" },
+        headers: session,
         body: "{}",
       });
     // The temporary session and an unsaved credential are resources from here on, not steps.

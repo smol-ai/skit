@@ -17,6 +17,7 @@ const senderAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const workerFirstRoutes = [
   "/",
   "/setup",
+  "/device",
   "/api/*",
   "/.well-known/*",
   "/health",

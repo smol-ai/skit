@@ -7,6 +7,7 @@ const silent: RendererShape = {
   failure: () => Effect.void,
   help: () => Effect.void,
   note: () => Effect.void,
+  instruction: () => Effect.void,
   step: () => Effect.void,
   updateStatus: () => Effect.void,
   withStatus: (_message, operation) => operation,

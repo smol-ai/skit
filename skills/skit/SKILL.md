@@ -42,6 +42,9 @@ also allow it for agents as described in SKIT's `docs/agents.md`.
   `--list`.
 - Enable or disable: `skit enable <skill> --json`, `skit disable <skill> --json`. Add `--repo <path>`
   for one repository, `--all` for a whole Collection, and `--dry-run` to preview.
+- Sign in for sync: `skit auth login`. It prints a URL and code on stderr and waits for the user
+  to approve them in their browser. Give the user both, and don't ask for their password. If it fails because
+  the network or Keychain is blocked, ask the user to run it in their own terminal.
 - Inspect: `skit list --json` for the Library, `skit inventory --json` for every copy on the machine
   and its status, `skit doctor --json` for problems (exit code 12 means it found issues).
 

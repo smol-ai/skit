@@ -147,7 +147,7 @@ When you disable a skill, SKIT removes the copy.
 
 SKIT allows you to sync your skills across multiple machines.
 
-Create an account at `https://skit.smol.ai`, and log in using `skit auth login`. It signs in to `https://skit.smol.ai` unless you pass another Registry URL, set `SKIT_SERVER_URL`, or choose a default with `skit registry default <name>`.
+Create an account at `https://skit.smol.ai`, and log in using `skit auth login`, which shows a code to approve in your browser. It signs in to `https://skit.smol.ai` unless you pass another Registry URL, set `SKIT_SERVER_URL`, or choose a default with `skit registry default <name>`.
 
 Alternatively, you can self-host the SKIT server.
 

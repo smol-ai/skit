@@ -6,7 +6,7 @@
         "login"
       ],
       "stability": "stable",
-      "summary": "Reuse saved authentication or sign in and store a CLI credential in the system keychain, or ~/.skit/auth.json without one.",
+      "summary": "Reuse saved authentication or sign in by approving this login in your browser, and store a CLI credential in the system keychain, or ~/.skit/auth.json without one.",
       "effects": {
         "capabilities": [
           "network.write",

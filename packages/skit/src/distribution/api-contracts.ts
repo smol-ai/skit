@@ -48,5 +48,9 @@ export const serverDiscoverySchema = Schema.Struct({
   publish: Schema.optionalKey(Schema.String),
   download: Schema.String,
   scopes: Schema.Array(Schema.String),
+  // RFC 8628 device authorization and token endpoints; absent on servers that only offer password
+  // sign-in.
+  deviceAuthorization: Schema.optionalKey(Schema.String),
+  deviceToken: Schema.optionalKey(Schema.String),
 });
 export type ServerDiscovery = typeof serverDiscoverySchema.Type;

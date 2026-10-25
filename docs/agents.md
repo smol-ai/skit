@@ -52,6 +52,15 @@ could expand it. `skit setup --apply ~/Work …` therefore stays sandboxed. SKIT
 command with absolute paths (`onboarding.applyCommand` in JSON); ask the agent to run it exactly as
 printed.
 
+## Signing in for sync
+
+`skit auth login` never asks an agent for a password. It prints a verification URL and code to
+stderr, even with `--json`, and waits up to ten minutes for the user to approve the code in their
+browser. Codex and Claude Code show running command output to the user, so they can open the URL
+there; the agent should also pass it on. The command needs network access and, on macOS, the
+Keychain, so a sandboxed agent may need the user to run it in their own terminal. Under `CI` or
+`SKIT_NO_INPUT` login fails immediately; automation uses `SKIT_TOKEN` instead.
+
 ## Teaching the agent
 
 The [`skit` skill](../skills/skit/SKILL.md) tells an agent how to operate SKIT: review the plan,
