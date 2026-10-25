@@ -116,7 +116,10 @@ export const updateDiscovery = Effect.fn("MachineSettings.updateDiscovery")(func
     for (const entry of choices.repositories ?? [])
       decisions.set(resolve(entry.path), entry.status);
     return {
-      repositoryDecisionsInitialized: true,
+      // Saving roots alone decides nothing about repositories. Marking decisions initialized here
+      // would make later scans inspect only watched repositories, of which there are none.
+      repositoryDecisionsInitialized:
+        prior.repositoryDecisionsInitialized || (choices.repositories?.length ?? 0) > 0,
       discoveryRoots: [
         ...new Set((choices.discoveryRoots ?? prior.discoveryRoots).map((path) => resolve(path))),
       ].sort(),
