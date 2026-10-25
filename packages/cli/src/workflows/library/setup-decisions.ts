@@ -148,8 +148,12 @@ export const setupReviewCopies = (
 export type SetupReviewCopy = ReturnType<typeof setupReviewCopies>[number];
 
 export interface SetupRecommendation {
-  /** Group keys of every installed skills.sh Collection setup can import. */
-  readonly sources: readonly string[];
+  /** Every installed skills.sh Collection setup can import, with the skills it brings. */
+  readonly sources: readonly {
+    readonly groupKey: string;
+    readonly source: string;
+    readonly names: readonly string[];
+  }[];
   /** One copy per skill: user-owned, global, unambiguous, and outside Codex's own skills. */
   readonly copies: readonly { readonly name: string; readonly sourcePath: string }[];
 }
@@ -165,13 +169,20 @@ export function recommendedSetupSelection(
   candidates: readonly SetupOnboardingCandidate[],
   home: string,
 ): SetupRecommendation {
-  const sources = [
-    ...new Set(
-      candidates.flatMap((candidate) =>
-        candidate.action === "import-observed-collection" ? [candidate.groupKey] : [],
-      ),
-    ),
-  ].sort();
+  const imports = new Map<string, { groupKey: string; source: string; names: string[] }>();
+  for (const candidate of candidates) {
+    if (candidate.action !== "import-observed-collection") continue;
+    const entry = imports.get(candidate.groupKey) ?? {
+      groupKey: candidate.groupKey,
+      source: candidate.source,
+      names: [],
+    };
+    entry.names.push(candidate.name);
+    imports.set(candidate.groupKey, entry);
+  }
+  const sources = [...imports.values()]
+    .map((entry) => ({ ...entry, names: entry.names.sort() }))
+    .sort((left, right) => left.groupKey.localeCompare(right.groupKey));
   const chosenGroups = new Set<string>();
   const copies: { name: string; sourcePath: string }[] = [];
   const reviewable = setupReviewCopies(instances, candidates).sort((left, right) =>
@@ -196,4 +207,26 @@ export function recommendedSetupSelection(
     copies.push({ name: instance.name, sourcePath: instance.path });
   }
   return { sources, copies };
+}
+
+/**
+ * The exact command that applies a recommended plan, for a person or agent to copy. Paths are the
+ * resolved absolute roots, never `~`: agent harnesses match commands against allow rules only when
+ * every word is literal, and Codex treats a word containing `~` or `$` as possibly expanded.
+ */
+export function setupApplyCommandLine(input: {
+  readonly planId: string;
+  readonly repositoryRoots: readonly string[];
+  readonly needsDuplicateDecision: boolean;
+}): string {
+  const quote = (word: string) =>
+    /^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+  return [
+    "skit setup --apply",
+    input.planId,
+    ...input.repositoryRoots.flatMap((root) => ["--work-dir", quote(root)]),
+    ...(input.needsDuplicateDecision
+      ? ["--duplicates", "<retain-only|keep-both|retire-aliases>"]
+      : []),
+  ].join(" ");
 }

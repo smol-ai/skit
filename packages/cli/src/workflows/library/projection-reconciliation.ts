@@ -6,7 +6,6 @@ import {
   withLibraryWriter,
   type DeviceBinding,
   type RepositoryBinding,
-  type Digest,
   type ProjectionTarget,
   type ProjectionAdoption,
 } from "@smolai/skit-core";

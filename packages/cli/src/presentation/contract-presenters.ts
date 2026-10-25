@@ -729,25 +729,19 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): st
 
 /** What `skit setup --apply` would do, and the exact command that does it. */
 function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): string[] {
-  const { planId, candidates, recommended } = data.onboarding;
+  const { candidates, recommended } = data.onboarding;
   if (!recommended.sources.length && !recommended.copies.length) return [];
-  const sources = recommended.sources.map((key) => {
-    const source = candidates.find(
-      (candidate) =>
-        candidate.action === "import-observed-collection" && candidate.groupKey === key,
-    );
-    return source?.action === "import-observed-collection" ? source.source : key;
-  });
   const duplicates = recommended.copies.filter((copy) =>
     candidates.some(
       (candidate) => candidate.paths.includes(copy.sourcePath) && candidate.shadows?.length,
     ),
   );
-  const workDir = data.machineConfig.repositoryRoots[0];
   return [
     "",
     "Recommended plan",
-    ...(sources.length ? [`  Import skills.sh Collections: ${sources.join(", ")}`] : []),
+    ...recommended.sources.map(
+      ({ source, names }) => `  Import skills.sh Collection ${source}: ${names.join(", ")}`,
+    ),
     ...(recommended.copies.length
       ? [`  Add to Library: ${recommended.copies.map((copy) => copy.name).join(", ")}`]
       : []),
@@ -756,8 +750,9 @@ function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): st
           `  Already visible to agents elsewhere: ${duplicates.map((copy) => copy.name).join(", ")} (choose --duplicates retain-only, keep-both or retire-aliases)`,
         ]
       : []),
-    "Apply it without prompts:",
-    `  skit setup --apply ${planId}${workDir === undefined ? "" : ` --work-dir ${workDir}`}${duplicates.length ? " --duplicates <choice>" : ""}`,
+    ...(data.onboarding.applyCommand === undefined
+      ? []
+      : ["Apply it without prompts:", `  ${data.onboarding.applyCommand}`]),
   ];
 }
 
@@ -867,6 +862,12 @@ function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
     }
   }
   lines.push(...renderSetupRecommendation(data));
+  if (data.suggestedRepositoryRoots.length)
+    lines.push(
+      "",
+      `Repositories under ${data.suggestedRepositoryRoots.join(", ")} were not scanned. To include their skills:`,
+      ...data.suggestedRepositoryRoots.map((root) => `  skit setup --work-dir ${root}`),
+    );
   const collections = renderSetupCollections(data);
   if (collections.length) lines.push("", "Skill collections", ...collections);
   if (data.instances.length) {

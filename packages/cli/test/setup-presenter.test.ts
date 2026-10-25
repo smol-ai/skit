@@ -163,6 +163,7 @@ it("separates installed, repository-authored, and loose skills", () => {
         repositoryDecisions: [],
         persisted: false,
       },
+      suggestedRepositoryRoots: [],
       probes: [],
       scan: { complete: true, directoriesExamined: 3, repositorySearchDepth: 1 },
       repositories: [
@@ -378,6 +379,7 @@ it("rolls up collections with more than five skill names", () => {
         repositoryDecisions: [],
         persisted: false,
       },
+      suggestedRepositoryRoots: [],
       probes: [],
       scan: { complete: true, directoriesExamined: 1, repositorySearchDepth: 1 },
       repositories: [
@@ -419,6 +421,7 @@ it("presents authored SKITs without treating their source skills as inferred col
         repositoryDecisions: [],
         persisted: false,
       },
+      suggestedRepositoryRoots: [],
       probes: [],
       scan: { complete: true, directoriesExamined: 1, repositorySearchDepth: 1 },
       repositories: [{ path: "/work/skills", skills: ["council"], status: "undecided" }],

@@ -287,6 +287,8 @@ export const SetupResult = Schema.Struct({
     ),
     persisted: Schema.Boolean,
   }),
+  /** Common folders holding Git repositories, reported when no repository root is configured. */
+  suggestedRepositoryRoots: Schema.Array(Schema.String),
   probes: Schema.Array(SetupProbe),
   scan: Schema.Struct({
     complete: Schema.Boolean,
@@ -301,9 +303,18 @@ export const SetupResult = Schema.Struct({
   onboarding: Schema.Struct({
     planId: Digest,
     candidates: Schema.Array(SetupOnboardingCandidate),
+    /** The command that applies the recommendation, with absolute paths; absent when empty. */
+    applyCommand: Schema.optionalKey(Schema.String),
     /** Exactly what `skit setup --apply <planId>` imports and takes custody of. */
     recommended: Schema.Struct({
-      sources: Schema.Array(Schema.String),
+      sources: Schema.Array(
+        Schema.Struct({
+          /** Identifies the lockfile claim; display `source` and `names` instead. */
+          groupKey: Schema.String,
+          source: Schema.String,
+          names: Schema.Array(Schema.String),
+        }),
+      ),
       copies: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
     }),
   }),

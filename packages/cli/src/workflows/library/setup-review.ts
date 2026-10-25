@@ -269,7 +269,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       return { ...copy, duplicateAction: duplicates, approvedAliases };
     });
     return yield* prepare({
-      sources: recommended.sources,
+      sources: recommended.sources.map((source) => source.groupKey),
       copies: values,
       decisions: yield* Effect.forEach(chosen, decide),
     });

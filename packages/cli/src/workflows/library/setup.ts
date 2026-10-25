@@ -4,10 +4,10 @@ import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/
 import { observeHarnessShadows } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
-import { collectBrokenLinks, SetupDiscovery } from "./setup-discovery.js";
+import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
-import { recommendedSetupSelection } from "./setup-decisions.js";
+import { recommendedSetupSelection, setupApplyCommandLine } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
@@ -89,6 +89,11 @@ const observeSetup = Effect.fn("Library.setup")(
       return matches.length ? { ...candidate, shadows: matches } : candidate;
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
+    const recommended = recommendedSetupSelection(
+      sortedInstances,
+      onboarding,
+      options.inventory.home,
+    );
     const planId = hashParts([
       canonicalJson({
         candidates: onboarding,
@@ -117,6 +122,9 @@ const observeSetup = Effect.fn("Library.setup")(
           .sort((left, right) => left.path.localeCompare(right.path)),
         persisted: options.persistRoots,
       },
+      suggestedRepositoryRoots: discoveryRoots.length
+        ? []
+        : yield* suggestRepositoryRoots(options.inventory.home),
       probes,
       scan: {
         complete: walk.complete && discoveryComplete,
@@ -154,7 +162,21 @@ const observeSetup = Effect.fn("Library.setup")(
       onboarding: {
         planId,
         candidates: onboarding,
-        recommended: recommendedSetupSelection(sortedInstances, onboarding, options.inventory.home),
+        ...(recommended.sources.length || recommended.copies.length
+          ? {
+              applyCommand: setupApplyCommandLine({
+                planId,
+                repositoryRoots: discoveryRoots,
+                needsDuplicateDecision: recommended.copies.some((copy) =>
+                  onboarding.some(
+                    (candidate) =>
+                      candidate.paths.includes(copy.sourcePath) && candidate.shadows?.length,
+                  ),
+                ),
+              }),
+            }
+          : {}),
+        recommended,
       },
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,

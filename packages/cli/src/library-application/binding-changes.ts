@@ -13,7 +13,6 @@ import {
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
-  type Digest,
   type ProjectionAdoption,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem } from "effect";

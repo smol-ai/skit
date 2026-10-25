@@ -56,6 +56,12 @@
       ],
       "additionalProperties": true
     },
+    "suggestedRepositoryRoots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "probes": {
       "type": "array",
       "items": {
@@ -3013,13 +3019,36 @@
             ]
           }
         },
+        "applyCommand": {
+          "type": "string"
+        },
         "recommended": {
           "type": "object",
           "properties": {
             "sources": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "object",
+                "properties": {
+                  "groupKey": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "groupKey",
+                  "source",
+                  "names"
+                ],
+                "additionalProperties": true
               }
             },
             "copies": {
@@ -3690,6 +3719,7 @@
   },
   "required": [
     "machineConfig",
+    "suggestedRepositoryRoots",
     "probes",
     "scan",
     "repositories",

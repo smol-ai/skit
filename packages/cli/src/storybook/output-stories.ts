@@ -301,6 +301,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         repositoryDecisions: [],
         persisted: false,
       },
+      suggestedRepositoryRoots: [],
       probes: [
         { harness: "claude-code", status: "installed", command: "claude" },
         { harness: "codex", status: "missing", command: "codex" },

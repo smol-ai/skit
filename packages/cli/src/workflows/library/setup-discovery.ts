@@ -105,6 +105,49 @@ const entriesOf = Effect.fn("Setup.entries")(function* (directory: string) {
   ).pipe(Effect.map((entries) => entries.filter((entry) => entry !== undefined)));
 });
 
+/** Folders people commonly keep their repositories in, relative to their home. */
+const commonRepositoryFolders = [
+  "Work",
+  "work",
+  "dev",
+  "Developer",
+  "code",
+  "Code",
+  "src",
+  "projects",
+  "Projects",
+  "repos",
+  "git",
+];
+
+/**
+ * Common folders under `home` that directly contain Git repositories. Setup never scans them
+ * unasked; it reports them so whoever runs setup, a person or an agent, can pass `--work-dir`.
+ */
+export const suggestRepositoryRoots = Effect.fn("Setup.suggestRepositoryRoots")(function* (
+  home: string,
+) {
+  const links = yield* LinkStat;
+  const seen = new Set<string>();
+  const suggestions: string[] = [];
+  for (const folder of commonRepositoryFolders) {
+    const path = join(home, folder);
+    // On a case-insensitive volume `Work` and `work` are one folder; report it once.
+    const identity = yield* links.identity.lstat(path).pipe(Effect.orElseSucceed(() => undefined));
+    if (identity?.type !== "Directory" || seen.has(`${identity.dev}:${identity.ino}`)) continue;
+    seen.add(`${identity.dev}:${identity.ino}`);
+    for (const entry of yield* entriesOf(path))
+      if (
+        entry.info.type === "Directory" &&
+        (yield* entriesOf(join(path, entry.name))).some((child) => child.name === ".git")
+      ) {
+        suggestions.push(path);
+        break;
+      }
+  }
+  return suggestions;
+});
+
 const walkRepositoryRoots = Effect.fn("Setup.walkRepositoryRoots")(function* (
   roots: readonly string[],
 ) {
