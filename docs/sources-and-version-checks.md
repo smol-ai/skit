@@ -111,7 +111,7 @@ skills.sh's canonical installed Skill folders normally live at
 contain links or copies. A lock does not by itself establish the location, custody, or provenance
 of every folder with the same name. SKIT setup omits missing locks and records malformed and
 unsupported locks separately; it does not treat them as valid empty locks. See
-[`docs/setup.md`](setup.md) for custody decisions.
+the [README's setup section](../README.md#setup) for custody decisions.
 
 ### The hashes are not interchangeable
 

@@ -41,7 +41,9 @@ also allow it for agents as described in SKIT's `docs/agents.md`.
 - Add a source without enabling it: `skit add <owner/repo | URL | path> --json`. Preview first with
   `--list`.
 - Enable or disable: `skit enable <skill> --json`, `skit disable <skill> --json`. Add `--repo <path>`
-  for one repository, `--all` for a whole Collection, and `--dry-run` to preview.
+  for one repository, `--all` for a whole Collection, and `--dry-run` to preview. If enable exits 12
+  with a copy in `projections` whose status is `conflicted`, a folder SKIT does not manage is already
+  at that path and was left alone; tell the user rather than removing it.
 - Sign in for sync: `skit auth login --json` returns `data.verificationUri` and `data.userCode`.
   Give the user both and ask them to open the URL and enter the code; never ask for their password.
   Then run `data.next`, which waits until they approve and saves the credential. If it fails

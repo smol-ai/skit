@@ -2,7 +2,7 @@
 
 SKIT reports dependency-provided Skills managed by pnpm and leaves them in place. Inventory and setup show the supplying package and version; the audit identifies pnpm as the source. Setup displays these Skills for inspection, with selection disabled. They are excluded from onboarding and removal. Acquisition through their installed paths and retirement of their links are refused.
 
-The structured owner is `pnpm`, with `package`, `version`, and `ledgerPath` evidence. These fields are included in the `skit.setup.v7` and `skit.inventory.v11` output contracts.
+The structured owner is `pnpm`, with `package`, `version`, and `ledgerPath` evidence. These fields are included in the `skit.setup.v8` and `skit.inventory.v11` output contracts.
 
 Recognition uses `linkedSkills` in pnpm's `.modules.yaml`, a live symlink to `skills/<directory>`, and the supplying package's `package.json`. The ledger reader accepts JSON and YAML. A name starting with `pnpm-` alone does not establish management. A recorded path replaced by an ordinary directory is not treated as pnpm-owned. Linked local packages also require an installed dependency link corroborating their package directory. An unrelated user-created alias is not attributed to pnpm merely because it points to the same target.
 

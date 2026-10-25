@@ -52,7 +52,7 @@ skit setup --work-dir ~/Work
 
 When provided, SKIT checks your work directory and its immediate children for Git repositories. In each repository, it finds skills and skills.sh lockfiles, and identifies whether they are committed, untracked, or ignored by Git.
 
-For each discovered repository, you can configure SKIT to track or ignore them in future.
+For each discovered repository, you can configure SKIT to track or ignore them in future. To change that decision later, run `skit repository watch <path>` or `skit repository ignore <path>`.
 
 ### Discovered Skills
 
@@ -96,11 +96,12 @@ Interactive `skit enable`, `skit disable`, `skit list`, and the TUI offer whole-
 
 Alternatively, you can supply these flags:
 
-- `--repo [path]` to enable in a single repo
+- `--repo <path>` to enable in a single repo
+- `--global` to enable for every project without being asked for a scope
 - `--all` to enable a whole collection, including new skills added when you update
 - `--invocation [declared, explicit, implicit, host-policy]` to control whether an agent can invoke the skill automatically
 
-Before enabling a new skill, SKIT checks the same-scope directories readable by each agent. An existing copy blocks enable, including an identical copy reached through a symlink. `skit enable --dry-run` shows the conflict; `--allow-duplicate` explicitly permits it. Existing Bindings can still change invocation policy. `skit doctor` shows duplicate symlink locations and their resolved targets as well as their context utilization.
+Before enabling a new skill, SKIT checks the other same-scope directories read by the agents it writes for, such as `~/.codex/skills`. An existing copy there blocks enable, including an identical copy reached through a symlink, as does your own symlink where SKIT writes its copy. `skit enable --dry-run` shows the conflict; `--allow-duplicate` explicitly permits it, except over a symlink it would replace. A folder already at SKIT's destination with identical contents is adopted; a different one is left in place, reported as conflicted, and enable exits 12. Existing Bindings can still change invocation policy. `skit doctor` shows duplicate symlink locations and their resolved targets as well as their context utilization.
 
 <img width="455" height="498" alt="image" src="https://github.com/user-attachments/assets/bcb5b219-5df4-4250-8ef7-c855923b0ee0" />
 
@@ -141,7 +142,7 @@ Note: OpenCode V1 does not have any support for this feature.
 
 When you enable a skill, SKIT copies the skill from your library to the right places, and adds the right setting for your harness or harnesses.
 
-When you disable a skill, SKIT removes the copy.
+When you disable a skill, SKIT removes the copy it wrote or adopted. A folder SKIT does not manage is left in place.
 
 ## Sync
 
