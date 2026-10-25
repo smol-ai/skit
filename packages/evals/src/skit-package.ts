@@ -13,7 +13,7 @@ export interface SkitPackage {
   readonly executable: string;
   readonly tarballSha256: string;
   readonly gitHead: string;
-  /** Whether the checkout had uncommitted changes, so the build is not exactly `gitHead`. */
+  /** Whether the packages in the build had uncommitted changes, so it is not exactly `gitHead`. */
   readonly gitDirty: boolean;
 }
 
@@ -56,8 +56,10 @@ export function installSkitPackage(): SkitPackage {
     encoding: "utf8",
   }).trim();
   const gitDirty =
-    execFileSync("git", ["status", "--porcelain"], { cwd: cliRoot, encoding: "utf8" }).trim() !==
-    "";
+    execFileSync("git", ["status", "--porcelain", "--", ".", "../skit"], {
+      cwd: cliRoot,
+      encoding: "utf8",
+    }).trim() !== "";
   installed = { executable, tarballSha256, gitHead, gitDirty };
   return installed;
 }
