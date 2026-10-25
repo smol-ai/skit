@@ -406,10 +406,10 @@ export class CredentialLacksScope
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
   get remediation(): string {
-    return `Run \`skit auth login ${this.origin ?? "<origin>"} --scopes ${this.scopes ?? this.scope}\`, then retry.`;
+    return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\`, then retry.`;
   }
   get message(): string {
-    return `The active credential lacks ${this.scope}; run \`skit auth login ${this.origin ?? "<origin>"} --scopes ${this.scopes ?? this.scope}\``;
+    return `The active credential lacks ${this.scope}; run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\``;
   }
 }
 
@@ -440,7 +440,7 @@ export class CredentialsUnusable
   get remediation(): string {
     return this.reason === "unreadable"
       ? `Fix the permissions on ${this.path}, then retry.`
-      : `Move ${this.path} aside, then run \`skit auth login <origin>\` again.`;
+      : `Move ${this.path} aside, then run \`skit auth login\` again.`;
   }
   get message(): string {
     return this.reason === "unreadable"
@@ -456,14 +456,15 @@ export class SignInRejected
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
   get remediation(): string {
+    // The Registry does not say why, so as not to reveal which accounts exist or how they sign in.
     return this.context === "Sign in"
-      ? "Check the email and password, then retry."
-      : "Run `skit auth login <origin>` again.";
+      ? "Check the email and password, then retry. An account created with GitHub sign-in has no password, so it cannot sign in from the CLI yet."
+      : "Run `skit auth login` again.";
   }
   get message(): string {
     return this.context === "Sign in"
       ? "Email or password is incorrect"
-      : `${this.context} was unauthorized; run \`skit auth login <origin>\` again`;
+      : `${this.context} was unauthorized; run \`skit auth login\` again`;
   }
 }
 
@@ -597,12 +598,12 @@ export class DestinationFormInvalid
   get remediation(): string {
     return this.form === "canonical"
       ? "Pass the destination as skit://host/namespace/skit."
-      : "Run `skit auth login <origin>`, or pass a full destination.";
+      : "Run `skit auth login`, or pass a full destination.";
   }
   get message(): string {
     return this.form === "canonical"
       ? "Canonical SKIT destination must be skit://host/namespace/skit"
-      : "A relative author destination requires an active Registry; run `skit auth login <origin>`";
+      : "A relative author destination requires an active Registry; run `skit auth login`";
   }
 }
 
