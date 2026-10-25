@@ -156,7 +156,7 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `# ${report.runId}`,
     "",
     `Prompt: ${report.prompt}`,
-    `Permissions: ${report.allowSkit ? "Codex rule allows `skit setup` and `skit enable`" : "Codex defaults"}${report.withSkill ? " · skit skill installed" : ""}`,
+    `Permissions: ${report.allowSkit ? "Codex rule allows `skit setup`, `skit enable` and `skit auth login`" : "Codex defaults"}${report.withSkill ? " · skit skill installed" : ""}`,
     `Codex: ${report.codex.codexVersion} · exit ${report.codex.exitCode} · ${Math.round(report.codex.durationMs / 1000)}s${report.codex.timedOut ? " · TIMED OUT" : ""}`,
     `skit: ${report.skitGitHead.slice(0, 9)}${report.skitGitDirty ? " + uncommitted changes" : ""} · tarball ${report.skitTarballSha256.slice(0, 12)}`,
     `Usage: ${JSON.stringify(report.codex.usage)}`,
