@@ -13,6 +13,16 @@ export function conditionHeadline(code: string, fallback: string): string {
   return conditionHeadlines[code] ?? fallback;
 }
 
+/** What resolves a condition, where the resolution does not depend on the user's intent alone. */
+const conditionNextSteps: Readonly<Record<string, string>> = {
+  PROJECTION_CONFLICT:
+    "A folder SKIT does not manage is where this skill's copy belongs. `skit enable <skill>` takes custody of it if its content matches; otherwise move it aside and enable again, or `skit disable <skill>` to leave it and drop SKIT's record.",
+};
+
+export function conditionNextStep(code: string): string | undefined {
+  return conditionNextSteps[code];
+}
+
 export function severityHeadline(severity: "info" | "warning" | "error"): string {
   switch (severity) {
     case "info":

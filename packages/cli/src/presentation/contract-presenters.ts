@@ -16,7 +16,7 @@ import { renderCheck } from "./check.js";
 import { renderLibrarySync } from "./library-sync.js";
 import { renderLibraryList } from "./library-list.js";
 import { renderAuditV1Alpha4 } from "./audit.js";
-import { conditionHeadline, severityHeadline } from "./condition-language.js";
+import { conditionHeadline, conditionNextStep, severityHeadline } from "./condition-language.js";
 import { terminalData } from "./terminal-text.js";
 import { createColors } from "picocolors";
 
@@ -239,6 +239,8 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
+    const next = conditionNextStep(issue.code);
+    if (next) findings.push(`      ${color.dim(`Next: ${next}`)}`);
   }
   for (const finding of data.codex.findings) {
     findings.push(
