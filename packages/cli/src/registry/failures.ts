@@ -183,21 +183,6 @@ export class RegistryAliasNotFound
   }
 }
 
-export class DefaultRegistryNotConfigured
-  extends Data.TaggedError("DefaultRegistryNotConfigured")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation =
-    "For the simplest setup, run `skit auth login https://skit.smol.ai` to use our hosted reference server. " +
-    "You can also self-host the server: https://github.com/smol-ai/skit/tree/main/packages/skit-server-effect. " +
-    "Pass your own Registry URL or set a configured default with `skit registry default <name>`.";
-  get message() {
-    return "No default Registry is configured. SKIT leaves the server choice to you, including self-hosting.";
-  }
-}
-
 export class RegistrySelectionConflict
   extends Data.TaggedError("RegistrySelectionConflict")<{
     locator: string;
@@ -402,11 +387,11 @@ export class AuthenticationRequired
   readonly code = "INVALID_ARGUMENT" as const;
   get remediation(): string {
     const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
-    return `Run \`skit auth login ${this.origin ?? "<origin>"}${scopes}\`, then retry.`;
+    return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\`, then retry.`;
   }
   get message(): string {
     const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
-    return `Authentication is required; run \`skit auth login ${this.origin ?? "<origin>"}${scopes}\``;
+    return `Authentication is required; run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\``;
   }
 }
 

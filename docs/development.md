@@ -220,7 +220,7 @@ migrations, R2, and bootstrap state. It is not part of the public onboarding jou
 self-hosting guide distinguishes this infrastructure diagnostic from the portable Library
 synchronization acceptance journey.
 
-For normal CLI operations, use `skit auth login [alias-or-origin]` rather than copying a session cookie. The target may be omitted when a default Registry is configured. The login command creates an expiring, scoped PAT and immediately signs out its temporary browser-style session. The deployment verifier remains session-only because readiness is an operator capability, not a PAT capability.
+For normal CLI operations, use `skit auth login [alias-or-origin]` rather than copying a session cookie. Without a target it uses `SKIT_SERVER_URL`, then the configured default Registry, then `https://skit.smol.ai`. The login command creates an expiring, scoped PAT and immediately signs out its temporary browser-style session. The deployment verifier remains session-only because readiness is an operator capability, not a PAT capability.
 
 For local development:
 

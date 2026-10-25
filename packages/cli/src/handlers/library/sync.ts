@@ -10,7 +10,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
 import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
-import { DefaultRegistryNotConfigured } from "../../registry/failures.js";
+import { officialRegistryOrigin } from "../../registry/accounts.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { createColors } from "picocolors";
 import { result } from "../contracts.js";
@@ -33,12 +33,12 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
     | { readonly skills: readonly string[]; readonly collections: readonly string[] };
 }) {
   const auth = yield* Effect.fromResult(options.authState);
-  if (auth.origin === undefined) return yield* new DefaultRegistryNotConfigured();
   const renderer = yield* Renderer;
   const progress = terminalSyncProgress(renderer);
   return yield* Effect.scoped(
     syncLibraryEffect({
-      origin: auth.origin,
+      // With no Registry configured, sync asks the hosted Registry, which then asks for a login.
+      origin: auth.origin ?? officialRegistryOrigin,
       ...(auth.token === undefined ? {} : { token: auth.token }),
       apply: options.apply,
       adopt: options.adopt,

@@ -1,7 +1,11 @@
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem } from "effect";
-import { RegistryAccounts, type AuthConfig } from "../src/registry/accounts.js";
+import {
+  RegistryAccounts,
+  type AuthConfig,
+  officialRegistryOrigin,
+} from "../src/registry/accounts.js";
 import { resolveAuthEffect, reuseLoginEffect } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
@@ -30,7 +34,9 @@ it.effect("names the different ambient, explicit, login, and logout selection ru
     expect(yield* accounts.select("mirror", "ambient", { durableOrigin: one })).toBe(one);
     expect(yield* accounts.select(undefined, "explicit")).toBeUndefined();
     expect(yield* accounts.select("https://one.example/path", "explicit")).toBe(one);
-    expect(yield* accounts.loginTarget()).toBe(one);
+    // Login follows ambient precedence: the environment, then the default, then the hosted Registry.
+    expect(yield* accounts.loginTarget()).toBe(two);
+    expect(yield* new RegistryAccounts(config).loginTarget()).toBe(one);
     expect(yield* Effect.flip(accounts.select(undefined, "logout"))).toMatchObject({
       _tag: "RegistrySelectionAmbiguous",
       origins: [one, two],
@@ -44,9 +50,10 @@ it.effect("names the different ambient, explicit, login, and logout selection ru
 
     const empty = new RegistryAccounts({ schemaVersion: 1, servers: {} });
     expect(yield* empty.select(undefined, "ambient")).toBeUndefined();
-    expect(yield* Effect.flip(empty.loginTarget())).toMatchObject({
-      _tag: "DefaultRegistryNotConfigured",
-    });
+    expect(yield* empty.loginTarget()).toBe(officialRegistryOrigin);
+    expect(
+      yield* new RegistryAccounts({ schemaVersion: 1, servers: {} }, { origin: two }).loginTarget(),
+    ).toBe(two);
     expect(yield* Effect.flip(accounts.loginTarget("http://remote.example"))).toMatchObject({
       _tag: "InsecureOrigin",
     });
