@@ -7,8 +7,12 @@ import type {
   SetupOnboardingCandidate,
   SetupSkillInstance,
 } from "../workflows/library/setup-contract.js";
-import { setupReviewCopies, type SetupReviewCopy } from "../workflows/library/setup-decisions.js";
-import { isSetupCandidateFromCodex } from "../workflows/library/setup.js";
+import {
+  recommendedSetupSelection,
+  setupReviewCopies,
+  type SetupRecommendation,
+  type SetupReviewCopy,
+} from "../workflows/library/setup-decisions.js";
 
 const agentNames: Record<HarnessName, string> = {
   "claude-code": "Claude",
@@ -72,6 +76,7 @@ const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardi
 /** Show discovered copies that still need attention, including blocked content. */
 export const setupReviewSkillChoices = (
   copies: readonly (SetupReviewCopy & { readonly removeValue?: string })[],
+  recommended: SetupRecommendation,
   home: string,
 ) => {
   const rows = copies
@@ -128,12 +133,10 @@ export const setupReviewSkillChoices = (
           ? `Copies · ${instance.name} · ${instance.git.repository ? compactHomePath(instance.git.repository, home) : "global"} · choose one`
           : sourceGroup(instance, home),
         disabled,
-        selected:
-          !disabled &&
-          differing.length === 0 &&
-          instance.owner.kind === "unknown" &&
-          instance.git.repository === undefined &&
-          !isSetupCandidateFromCodex([instance.path, ...instance.aliases], home),
+        // Guided setup starts from the same selection `skit setup --apply` takes.
+        selected: recommended.copies.some(
+          (copy) => copy.name === instance.name && copy.sourcePath === instance.path,
+        ),
         ...(siblings.length ? { exclusiveGroup: groupKey } : {}),
         ...(differing.length ? { selectExplicitly: true } : {}),
       };
@@ -146,11 +149,6 @@ export const setupReviewSkillChoices = (
         left.instance.name.localeCompare(right.instance.name) ||
         left.instance.path.localeCompare(right.instance.path),
     );
-  const selectedGroups = new Set<string>();
-  for (const { groupKey: key, choice } of rows) {
-    if (choice.selected && selectedGroups.has(key)) choice.selected = false;
-    if (choice.selected) selectedGroups.add(key);
-  }
   return rows;
 };
 
@@ -159,4 +157,9 @@ export const setupDiscoveredSkillChoices = (
   instances: readonly SetupSkillInstance[],
   candidates: readonly SetupOnboardingCandidate[],
   home = homedir(),
-) => setupReviewSkillChoices(setupReviewCopies(instances, candidates), home);
+) =>
+  setupReviewSkillChoices(
+    setupReviewCopies(instances, candidates),
+    recommendedSetupSelection(instances, candidates, home),
+    home,
+  );

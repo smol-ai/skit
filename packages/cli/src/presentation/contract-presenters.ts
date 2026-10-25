@@ -533,7 +533,7 @@ const setupGitStateOrder = [
 ] as const;
 const setupExpandedSkillLimit = 5;
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -638,7 +638,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v7">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v7">["projections"],
+  projections: ContractDataForId<"skit.setup.v8">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -665,7 +665,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -685,7 +685,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v7">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v7">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -727,7 +727,41 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v7">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
+/** What `skit setup --apply` would do, and the exact command that does it. */
+function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): string[] {
+  const { planId, candidates, recommended } = data.onboarding;
+  if (!recommended.sources.length && !recommended.copies.length) return [];
+  const sources = recommended.sources.map((key) => {
+    const source = candidates.find(
+      (candidate) =>
+        candidate.action === "import-observed-collection" && candidate.groupKey === key,
+    );
+    return source?.action === "import-observed-collection" ? source.source : key;
+  });
+  const duplicates = recommended.copies.filter((copy) =>
+    candidates.some(
+      (candidate) => candidate.paths.includes(copy.sourcePath) && candidate.shadows?.length,
+    ),
+  );
+  const workDir = data.machineConfig.repositoryRoots[0];
+  return [
+    "",
+    "Recommended plan",
+    ...(sources.length ? [`  Import skills.sh Collections: ${sources.join(", ")}`] : []),
+    ...(recommended.copies.length
+      ? [`  Add to Library: ${recommended.copies.map((copy) => copy.name).join(", ")}`]
+      : []),
+    ...(duplicates.length
+      ? [
+          `  Already visible to agents elsewhere: ${duplicates.map((copy) => copy.name).join(", ")} (choose --duplicates retain-only, keep-both or retire-aliases)`,
+        ]
+      : []),
+    "Apply it without prompts:",
+    `  skit setup --apply ${planId}${workDir === undefined ? "" : ` --work-dir ${workDir}`}${duplicates.length ? " --duplicates <choice>" : ""}`,
+  ];
+}
+
+function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -787,10 +821,7 @@ function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
     ] as const) {
       const candidates = actions.get(action);
       if (!candidates) continue;
-      const recommended = action !== "blocked";
-      lines.push(
-        `  ${action} · ${candidates.length} skill${candidates.length === 1 ? "" : "s"}${recommended ? " · recommended" : ""}`,
-      );
+      lines.push(`  ${action} · ${candidates.length} skill${candidates.length === 1 ? "" : "s"}`);
       if (candidates.length <= 5)
         for (const candidate of candidates)
           lines.push(
@@ -805,6 +836,7 @@ function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
       }
     }
   }
+  lines.push(...renderSetupRecommendation(data));
   const collections = renderSetupCollections(data);
   if (collections.length) lines.push("", "Skill collections", ...collections);
   if (data.instances.length) {

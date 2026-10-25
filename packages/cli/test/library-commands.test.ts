@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHashEffect, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
-import { presentListCommand, shouldBrowseInteractively } from "../src/handlers/library/list.js";
+import { presentListCommand } from "../src/handlers/library/list.js";
 import { browseLibraryEffect } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
@@ -127,17 +127,6 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     assert.strictEqual(yield* interaction.remaining, 0);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
-
-it("browses only on an attached human terminal", () => {
-  assert.strictEqual(
-    shouldBrowseInteractively({ json: false, stdin: true, stdout: true, stderr: true }),
-    true,
-  );
-  assert.strictEqual(
-    shouldBrowseInteractively({ json: true, stdin: true, stdout: true, stderr: true }),
-    false,
-  );
-});
 
 it.effect("offers only enabled Skills and identifies their Binding location", () =>
   Effect.gen(function* () {

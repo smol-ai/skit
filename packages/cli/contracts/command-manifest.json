@@ -1889,7 +1889,7 @@
         "setup"
       ],
       "stability": "stable",
-      "summary": "Remember this machine's repository roots and explain existing Skill Instances.",
+      "summary": "Find the skills already on this machine and bring them under SKIT: guided in a terminal, or review with --json and apply with --apply.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1913,10 +1913,11 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v7"
+        "skit.setup.v8"
       ],
       "exitCodes": [
         0,
+        1,
         11,
         12,
         64,
@@ -1926,7 +1927,8 @@
       "examples": [
         "skit setup",
         "skit setup --work-dir ~/Work",
-        "skit setup --dry-run --json --work-dir ~/Work"
+        "skit setup --json --work-dir ~/Work",
+        "skit setup --apply sha256:<planId> --work-dir ~/Work"
       ],
       "positionals": [],
       "flags": {
@@ -1939,6 +1941,16 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Observe without updating machine configuration."
+        },
+        "apply": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Apply the recommended plan with this planId (from `skit setup --json`) without prompting."
+        },
+        "duplicates": {
+          "type": "choice",
+          "valueName": "choice",
+          "description": "With --apply, how to handle skills agents already see elsewhere: retain-only keeps them in the Library without enabling, keep-both enables them anyway, retire-aliases replaces redundant symlinks. (choices: retain-only, retire-aliases, keep-both)"
         },
         "json": {
           "type": "boolean",

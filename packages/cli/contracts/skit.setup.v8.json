@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v7",
+  "$id": "skit.setup.v8",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -3012,11 +3012,47 @@
               }
             ]
           }
+        },
+        "recommended": {
+          "type": "object",
+          "properties": {
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "copies": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "sourcePath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sourcePath"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "sources",
+            "copies"
+          ],
+          "additionalProperties": true
         }
       },
       "required": [
         "planId",
-        "candidates"
+        "candidates",
+        "recommended"
       ],
       "additionalProperties": true
     },

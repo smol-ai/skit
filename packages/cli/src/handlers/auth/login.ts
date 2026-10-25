@@ -14,6 +14,7 @@ import { InteractiveLoginUnavailable, ScopesInvalid } from "../../registry/failu
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
+import { promptsAllowed } from "../../presentation/interactivity.js";
 
 const AuthScopes = Schema.Array(
   Schema.Literals(["library:sync", "authoring:write", "publication:write"]),
@@ -106,7 +107,7 @@ export const authLoginCliCommand = Command.make(
             scopes: Option.getOrElse(scopes, () => ["library:sync"]),
             home: selectedHome,
             relogin,
-            interactive: !jsonRequested() && Boolean(process.stdin.isTTY && process.stderr.isTTY),
+            interactive: promptsAllowed({ json: jsonRequested() }),
           });
           yield* renderer.result(result("authLogin", value));
         }).pipe(Effect.provide(terminalPrompterLayer)),

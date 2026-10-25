@@ -6,7 +6,7 @@ import type {
   SetupOnboardingCandidate,
 } from "./setup-contract.js";
 
-import { setupInstanceGroupKey } from "./setup-onboarding.js";
+import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "./setup-onboarding.js";
 
 export const SetupDuplicateAction = Schema.Literals(["retain-only", "retire-aliases", "keep-both"]);
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
@@ -146,3 +146,54 @@ export const setupReviewCopies = (
       };
     });
 export type SetupReviewCopy = ReturnType<typeof setupReviewCopies>[number];
+
+export interface SetupRecommendation {
+  /** Group keys of every installed skills.sh Collection setup can import. */
+  readonly sources: readonly string[];
+  /** One copy per skill: user-owned, global, unambiguous, and outside Codex's own skills. */
+  readonly copies: readonly { readonly name: string; readonly sourcePath: string }[];
+}
+
+/**
+ * What setup recommends from one observation: the selection guided setup starts from and the one
+ * `skit setup --apply` takes. It is a function of the observation alone, so the plan ID that
+ * covers the observation also covers the recommendation. Copies whose content differs from a
+ * sibling are never recommended; choosing between them needs a person.
+ */
+export function recommendedSetupSelection(
+  instances: readonly SetupSkillInstance[],
+  candidates: readonly SetupOnboardingCandidate[],
+  home: string,
+): SetupRecommendation {
+  const sources = [
+    ...new Set(
+      candidates.flatMap((candidate) =>
+        candidate.action === "import-observed-collection" ? [candidate.groupKey] : [],
+      ),
+    ),
+  ].sort();
+  const chosenGroups = new Set<string>();
+  const copies: { name: string; sourcePath: string }[] = [];
+  const reviewable = setupReviewCopies(instances, candidates).sort((left, right) =>
+    left.instance.path.localeCompare(right.instance.path),
+  );
+  for (const { instance, selectable, siblings, groupKey } of reviewable) {
+    const differs = siblings.some(
+      (sibling) =>
+        instance.contentIdentity.observedHash === undefined ||
+        sibling.contentIdentity.observedHash !== instance.contentIdentity.observedHash,
+    );
+    if (
+      !selectable ||
+      differs ||
+      chosenGroups.has(groupKey) ||
+      instance.owner.kind !== "unknown" ||
+      instance.git.repository !== undefined ||
+      isSetupCandidateFromCodex([instance.path, ...instance.aliases], home)
+    )
+      continue;
+    chosenGroups.add(groupKey);
+    copies.push({ name: instance.name, sourcePath: instance.path });
+  }
+  return { sources, copies };
+}

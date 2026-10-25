@@ -14,3 +14,8 @@ delete process.env.SKIT_HOME;
 
 process.env.XDG_STATE_HOME = join(home, ".local", "state");
 process.env.SKIT_NPM_REGISTRY = "http://127.0.0.1:1";
+
+// Whether a command may prompt depends on who drives the shell (see presentation/interactivity.ts).
+// Tests state that themselves, so the suite behaves the same in CI, under an agent, or by hand.
+for (const name of ["SKIT_NO_INPUT", "CODEX_CI", "CODEX_THREAD_ID", "CLAUDECODE", "AI_AGENT", "CI"])
+  delete process.env[name];

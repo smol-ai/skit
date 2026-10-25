@@ -1,3 +1,4 @@
+import { promptsAllowed } from "../../presentation/interactivity.js";
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import type { SkitBindingScope as Scope } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
@@ -78,7 +79,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
           const selectedInvocation = Option.getOrUndefined(input.invocation) as
             | InvocationOption
             | undefined;
-          const interactive = !input.json && Boolean(process.stdin.isTTY && process.stderr.isTTY);
+          const interactive = promptsAllowed({ json: input.json });
 
           yield* presentSetEnabled({
             action,

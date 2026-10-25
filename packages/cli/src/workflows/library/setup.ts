@@ -7,6 +7,7 @@ import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
+import { recommendedSetupSelection } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
@@ -22,7 +23,8 @@ export class SetupPlanStale
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit setup` again and review the current plan.";
+  readonly remediation =
+    "Run `skit setup` again and review the current plan; `skit setup --json` reports its planId.";
   get message() {
     return "The setup plan changed after it was reviewed. Review the current plan before applying.";
   }
@@ -149,7 +151,11 @@ const observeSetup = Effect.fn("Library.setup")(
           `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
         ),
       ),
-      onboarding: { planId, candidates: onboarding },
+      onboarding: {
+        planId,
+        candidates: onboarding,
+        recommended: recommendedSetupSelection(sortedInstances, onboarding, options.inventory.home),
+      },
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,
       brokenLinks: yield* collectBrokenLinks(harnessRoots),

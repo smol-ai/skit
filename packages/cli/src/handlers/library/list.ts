@@ -10,15 +10,9 @@ import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { terminalPrompterLayer } from "../../presentation/prompter.js";
+import { promptsAllowed } from "../../presentation/interactivity.js";
 import { browseLibraryEffect } from "../../presentation/interactive-list.js";
 import { openLibrarySession } from "../../library-application/session.js";
-
-export const shouldBrowseInteractively = (input: {
-  readonly json: boolean;
-  readonly stdin: boolean;
-  readonly stdout: boolean;
-  readonly stderr: boolean;
-}): boolean => !input.json && input.stdin && input.stdout && input.stderr;
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const view = yield* openLibraryView();
@@ -50,12 +44,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
 
 export const listCliCommand = Command.make("list", localFlags, (input) =>
   Effect.gen(function* () {
-    const interactive = shouldBrowseInteractively({
-      json: input.json,
-      stdin: Boolean(process.stdin.isTTY),
-      stdout: Boolean(process.stdout.isTTY),
-      stderr: Boolean(process.stderr.isTTY),
-    });
+    const interactive = promptsAllowed({ json: input.json, needsStdout: true });
     return yield* handleLibraryCommand(
       interactive
         ? Effect.gen(function* () {

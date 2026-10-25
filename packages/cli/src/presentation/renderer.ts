@@ -10,6 +10,7 @@ import {
   renderResultFrame,
 } from "./output-frame.js";
 import { terminalColors, terminalColorEnabled } from "./terminal-style.js";
+import { automationMarker } from "./interactivity.js";
 
 export interface RendererShape {
   /** A command's successful payload: JSON or rendered text, plus any declared exit code. */
@@ -123,7 +124,8 @@ export function consoleRenderer(json: boolean): RendererShape {
     withStatus: (status, operation) => {
       if (json) return operation;
       const timed = typeof status !== "string" && status.persist === "timed";
-      const interactive = Boolean(process.stderr.isTTY);
+      // An agent reads the whole transcript, so spinner frames are noise there even on a terminal.
+      const interactive = Boolean(process.stderr.isTTY) && automationMarker() === undefined;
       if (!interactive && !timed) return operation;
       return Effect.scoped(
         Effect.gen(function* () {

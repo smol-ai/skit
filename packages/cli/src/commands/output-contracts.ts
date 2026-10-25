@@ -131,7 +131,7 @@ export const outputContracts = {
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
-  setup: effectOutput("skit.setup.v7", SetupResult),
+  setup: effectOutput("skit.setup.v8", SetupResult),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",

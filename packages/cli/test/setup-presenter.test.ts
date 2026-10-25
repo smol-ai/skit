@@ -186,7 +186,11 @@ it("separates installed, repository-authored, and loose skills", () => {
           status: "current",
         },
       ],
-      onboarding: { planId: `sha256:${"0".repeat(64)}`, candidates: [] },
+      onboarding: {
+        planId: `sha256:${"0".repeat(64)}`,
+        candidates: [],
+        recommended: { sources: [], copies: [] },
+      },
       locks: [],
       instances: [
         {
@@ -386,7 +390,11 @@ it("rolls up collections with more than five skill names", () => {
       repositoryConfigs: [],
       authoredCollections: [],
       projections: [],
-      onboarding: { planId: `sha256:${"0".repeat(64)}`, candidates: [] },
+      onboarding: {
+        planId: `sha256:${"0".repeat(64)}`,
+        candidates: [],
+        recommended: { sources: [], copies: [] },
+      },
       locks: [],
       instances,
       brokenLinks: [],
@@ -439,7 +447,11 @@ it("presents authored SKITs without treating their source skills as inferred col
           status: "current",
         },
       ],
-      onboarding: { planId: `sha256:${"0".repeat(64)}`, candidates: [] },
+      onboarding: {
+        planId: `sha256:${"0".repeat(64)}`,
+        candidates: [],
+        recommended: { sources: [], copies: [] },
+      },
       locks: [],
       instances: [
         {

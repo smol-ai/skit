@@ -301,6 +301,11 @@ export const SetupResult = Schema.Struct({
   onboarding: Schema.Struct({
     planId: Digest,
     candidates: Schema.Array(SetupOnboardingCandidate),
+    /** Exactly what `skit setup --apply <planId>` imports and takes custody of. */
+    recommended: Schema.Struct({
+      sources: Schema.Array(Schema.String),
+      copies: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
+    }),
   }),
   locks: Schema.Array(SetupSkillsLock),
   instances: Schema.Array(SetupSkillInstance),

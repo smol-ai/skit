@@ -324,6 +324,10 @@ export const outputStories: ReadonlyArray<OutputStory> = [
             sourcePath: "/home/story/.claude/skills/review",
           },
         ],
+        recommended: {
+          sources: [],
+          copies: [{ name: "review", sourcePath: "/home/story/.claude/skills/review" }],
+        },
       },
       locks: [],
       instances: [
