@@ -59,7 +59,7 @@ run the printed apply command unchanged, only choose a `--duplicates` option you
 verify the result. Add it to your Library like any other skill:
 
 ```sh
-skit add https://github.com/smol-ai/skit/tree/main/skills/skit
+skit add smol-ai/skit
 skit enable skit
 ```
 

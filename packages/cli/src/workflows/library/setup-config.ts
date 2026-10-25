@@ -1,4 +1,5 @@
-import { join, matchesGlob, posix, sep } from "node:path";
+import { join } from "node:path";
+import { discoveryPathExcluded } from "@smolai/skit-core";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import type { SetupRepositoryConfig } from "./setup-contract.js";
 
@@ -75,15 +76,5 @@ export const readRepositoryConfig = Effect.fn("Setup.readRepositoryConfig")(func
   } satisfies SetupRepositoryConfig;
 });
 
-export const repositoryPathExcluded = (config: SetupRepositoryConfig | undefined, path: string) => {
-  if (config?.status !== "valid") return false;
-  const relativePath = path.split(sep).join(posix.sep).replace(/^\.\//, "");
-  return config.exclude.some((pattern) => {
-    const directory = pattern.replace(/\/+$/, "");
-    const literalDirectory = !/[*?[\]{}]/.test(directory);
-    return (
-      matchesGlob(relativePath, pattern) ||
-      (literalDirectory && (relativePath === directory || relativePath.startsWith(`${directory}/`)))
-    );
-  });
-};
+export const repositoryPathExcluded = (config: SetupRepositoryConfig | undefined, path: string) =>
+  config?.status === "valid" && discoveryPathExcluded(config.exclude, path);

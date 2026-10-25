@@ -44,6 +44,7 @@ export {
   type ProjectionAdoption,
 } from "./projection/mutation.js";
 export { ensureProjectionRootWritable } from "./projection/writable.js";
+export { discoveryPathExcluded } from "./acquisition/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
 export * from "./artifact/descriptor.js";
 export * from "./artifact/skit.js";

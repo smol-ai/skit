@@ -26,6 +26,7 @@ import { TreeError } from "../shared/tree-error.js";
 import { readSkitDescriptorEffect } from "../artifact/skit.js";
 import { SourceProcess, type SourceProcessFailure } from "../platform/source-process.js";
 import { containedPluginPathEffect, PluginManifestInvalid } from "./plugin-manifests.js";
+import { discoveryPathExcluded, readDiscoveryExclusions } from "./discovery-exclusions.js";
 export { PluginManifestInvalid } from "./plugin-manifests.js";
 import { PluginSkillConflict, selectPluginMembersEffect } from "./plugin-membership.js";
 export { PluginSkillConflict } from "./plugin-membership.js";
@@ -688,12 +689,16 @@ function discoverRootEffect(
         observedSkillPaths: selectedSkills,
       };
     }
+    const exclude = yield* readDiscoveryExclusions(extracted);
     const queue = [extracted];
     const directories: string[] = [];
     const foundSkills: string[] = [];
     let examined = 0;
     while (queue.length) {
       const directory = queue.shift()!;
+      // A source's own fixtures, declared in its `skit.config.json`, are never its skills.
+      if (directory !== extracted && discoveryPathExcluded(exclude, relative(extracted, directory)))
+        continue;
       directories.push(directory);
       examined++;
       if (examined > 5_000)

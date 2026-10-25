@@ -380,3 +380,19 @@ it.effect(
       assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, ["nested/selected"]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+// A repository's own test fixtures can hold descriptors; its skit.config.json says they are not
+// its skills, and discovery must agree with setup about that.
+it.effect("skips paths the source's skit.config.json excludes from discovery", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    yield* f.skill("skills/skit", "skit");
+    yield* f.json("packages/cli/test/fixtures/authored/skit.json", { slug: "fixture" });
+    yield* f.skill("packages/cli/test/fixtures/authored/skills/review");
+    yield* f.json("skit.config.json", {
+      schema: "skit.config.v1",
+      discovery: { exclude: ["packages/cli/test/fixtures/**"], collections: [] },
+    });
+    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, ["skills/skit"]);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
