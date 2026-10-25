@@ -3,6 +3,7 @@ import {
   bindingShadowCheckSkills,
   LinkStat,
   deterministicTreeHashEffect,
+  ensureProjectionRootWritable,
   replaceScopeBinding,
   pruneEmptyBindings,
   lastPublishedLibraryState,
@@ -254,6 +255,11 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     }
     if (remaining.length) return yield* new ProjectionWouldDuplicate({ shadows: remaining });
   }
+  // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
+  // published, so enabling never records intent its copies cannot follow.
+  if (options.enabled)
+    for (const target of yield* activeProjectionTargetsEffect(configuration))
+      yield* ensureProjectionRootWritable(bindingRoot(target, plan.scope, configuration));
   if (plan.changed) {
     let next = current;
     for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);

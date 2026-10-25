@@ -3,10 +3,12 @@ import { Effect } from "effect";
 import {
   LibraryChanged,
   LibraryStore,
+  ensureProjectionRootWritable,
   libraryStateRevision,
   withLibraryWriter,
   type Digest,
 } from "@smolai/skit-core";
+import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
 import type { LocalAdoptionOptions } from "./local-adoption.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type { SetupKnownSourceSelection } from "./setup-contract.js";
@@ -52,6 +54,14 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       "Revalidating the approved setup plan",
       revalidateSetupPlan(approval.setup, approval.planId),
     );
+    // Reconnecting and taking custody project into this device's global roots. Prove those roots
+    // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
+    // read-only) fails the apply whole instead of leaving a Library with no copies behind.
+    if (approval.bindings.length || approval.custody.length)
+      for (const target of yield* activeProjectionTargetsEffect(approval.setup.inventory))
+        yield* ensureProjectionRootWritable(
+          bindingRoot(target, { kind: "global" }, approval.setup.inventory),
+        );
     let current = scan.observed;
     const store = yield* LibraryStore;
     let revision = libraryStateRevision(scan.library);

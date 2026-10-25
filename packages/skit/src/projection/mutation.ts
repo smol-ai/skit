@@ -27,6 +27,7 @@ import {
   NoProjectionRoot,
   OwnershipMarkerDisagrees,
   ProjectionRetireConflict,
+  ProjectionRootNotWritable,
   UnsafeProjectionBackups,
   UnsafeProjectionName,
 } from "../failures.js";
@@ -49,6 +50,7 @@ import {
   pendingProjectionBackupsEffect,
   projectionWorkDirectoryEffect,
 } from "./backups.js";
+import { ensureProjectionRootWritable } from "./writable.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
@@ -261,7 +263,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
   const { installation, skill, target, previous } = request;
   const root = request.root ?? context.rootFor(target);
   if (!root) return yield* Effect.fail(new NoProjectionRoot({ target }));
-  yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
+  yield* ensureProjectionRootWritable(root);
   const destination = join(root, yield* projectionNameEffect(skill.name));
   const projectionId = request.identity.projectionId;
   const prior = previous?.projection_id === projectionId ? previous : undefined;
@@ -557,6 +559,7 @@ export type ProjectionMutationError =
   | AdoptionTargetChanged
   | ProjectionFailure
   | NoProjectionRoot
+  | ProjectionRootNotWritable
   | UnsafeProjectionName
   | OwnershipMarkerDisagrees
   | ProjectionRetireConflict

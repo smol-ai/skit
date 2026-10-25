@@ -4,9 +4,11 @@ import { join } from "node:path";
 import {
   deterministicTreeHashEffect,
   LibraryStore,
+  ProjectionRootNotWritable,
   skillUsageLayer,
   SkillUsage,
 } from "@smolai/skit-core";
+import { withSandboxDenying } from "./helpers/sandbox.js";
 import {
   applyBindingChanges,
   openBindingChangeSelection,
@@ -323,6 +325,20 @@ it.effect("rechecks duplicates created after preview before publishing Binding i
     assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
     assert.strictEqual(yield* f.fs.readFileString(join(nativeCopy, "SKILL.md")), "native copy\n");
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("an unwritable root refuses enablement before publishing Binding intent", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+    const error = yield* f.home
+      .owned(applyBindingChanges(plan))
+      .pipe(withSandboxDenying(join(f.root, "account", ".agents")), Effect.flip);
+    assert.instanceOf(error, ProjectionRootNotWritable);
+    assert.strictEqual(error.root, f.destination);
+    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
