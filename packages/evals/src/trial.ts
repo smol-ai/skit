@@ -1,4 +1,4 @@
-import { runCodexTurn, type CodexSandbox } from "./codex.ts";
+import { runCodexTurn } from "./codex.ts";
 import { baseCaseFixture, type Fixture } from "./fixtures.ts";
 import { buildReport, writeReport, type TrialReport } from "./observe.ts";
 import { createRunRoot } from "./run-root.ts";
@@ -11,10 +11,14 @@ export interface EvalCase {
   readonly fixture: (home: string) => Fixture;
 }
 
-/** Case 0: observe what an agent does with the vague request swyx made, on the simplest machine. */
+/**
+ * Case 0: observe what an agent does with the vague request swyx made, on the simplest machine.
+ * The bare request leaves the agent unable to tell which "skit" is meant, so the prompt names the
+ * command; everything after that is left to the agent.
+ */
 export const baseCase: EvalCase = {
   id: "setup-base",
-  prompt: "set up skit for me",
+  prompt: "set up skit for me. it's installed, run it with `skit`",
   fixture: baseCaseFixture,
 };
 
@@ -25,7 +29,7 @@ export interface Trial {
 
 export async function runTrial(
   evalCase: EvalCase,
-  options: { sandbox: CodexSandbox; timeoutMs: number; model?: string },
+  options: { timeoutMs: number; model?: string },
 ): Promise<Trial> {
   const skit = installSkitPackage();
   const run = createRunRoot(evalCase.id);
@@ -33,7 +37,6 @@ export async function runTrial(
   const fixture = evalCase.fixture(run.home);
   const outcome = await runCodexTurn(run, {
     prompt: evalCase.prompt,
-    sandbox: options.sandbox,
     timeoutMs: options.timeoutMs,
     ...(options.model ? { model: options.model } : {}),
   });

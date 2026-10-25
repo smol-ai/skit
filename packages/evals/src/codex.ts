@@ -12,17 +12,8 @@ import { join } from "node:path";
 import { agentPath } from "./skit-package.ts";
 import type { RunRoot } from "./run-root.ts";
 
-/**
- * `workspace-write` is Codex's default. It keeps `.agents` and `.codex` read-only even inside the
- * writable root, so skit cannot project there; that is what a user running Codex with defaults gets.
- * `danger-full-access` stands in for a user approving every escalation. Only the home is isolated
- * then: absolute paths to the real machine are writable, so choose it deliberately.
- */
-export type CodexSandbox = "workspace-write" | "danger-full-access";
-
 export interface CodexTurn {
   readonly prompt: string;
-  readonly sandbox: CodexSandbox;
   readonly model?: string;
   readonly timeoutMs: number;
 }
@@ -68,7 +59,10 @@ export function codexExecutable(): string {
  * Run one non-interactive Codex turn inside the run root.
  *
  * The agent's working directory and `$HOME` are the run's home, so "set up skit for me" acts on a
- * machine we built, with the sandbox rooted there. The environment is built from scratch rather
+ * machine we built. The sandbox is always `workspace-write` rooted at that home, which is Codex's
+ * default: it also keeps `.agents` and `.codex` read-only inside the writable root, exactly as a
+ * user running Codex with defaults gets. No trial runs unsandboxed, because only `$HOME` is fake and
+ * absolute paths would reach the real machine. The environment is built from scratch rather
  * than inherited, so ambient `SKIT_HOME`, `XDG_*` or `CODEX_HOME` cannot leak into a trial.
  * Stdin is closed, as it would be for any agent-driven shell.
  */
@@ -83,7 +77,7 @@ export async function runCodexTurn(run: RunRoot, turn: CodexTurn): Promise<Codex
     "--ignore-user-config",
     "--ignore-rules",
     "--sandbox",
-    turn.sandbox,
+    "workspace-write",
     "--cd",
     run.home,
     "--add-dir",
