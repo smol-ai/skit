@@ -389,11 +389,16 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             // Equal content is adopted in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
           }
+          // Unasked adoption only takes a folder that is nothing more than the copy: the hash
+          // leaves out `.git`, so a checkout with the same files, and its history, would
+          // otherwise become SKIT's to move aside on disable.
           if (
             markerInspection.kind === "absent" &&
             request.adoptIdentical &&
             observed === desiredHash &&
-            (yield* (yield* LinkStat).lstat(destination)).type === "Directory"
+            (yield* (yield* LinkStat).lstat(destination)).type === "Directory" &&
+            !(yield* exists(join(destination, ".git"))) &&
+            !(yield* exists(join(destination, "skit.remote.json")))
           )
             return yield* commit("marker", "adoption");
           projection.status = "conflicted";

@@ -166,6 +166,26 @@ it.effect("a copy agents already see needs an explicit duplicates decision", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("retiring aliases reports where the symlinks and their receipts were saved", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const f = yield* fixture({ alias: true });
+    const reviewed = yield* f.review;
+
+    const applied = yield* f.run({
+      planId: reviewed.onboarding.planId,
+      duplicates: "retire-aliases",
+    });
+
+    assert.isTrue(Exit.isSuccess(applied));
+    const directories = Exit.isSuccess(applied)
+      ? (applied.value.aliasRecoveryDirectories ?? [])
+      : [];
+    assert.lengthOf(directories, 1);
+    assert.isTrue(yield* fs.exists(directories[0]!));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("identical copies at each target are adopted in place, not left to conflict", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ alias: false, identical: true });

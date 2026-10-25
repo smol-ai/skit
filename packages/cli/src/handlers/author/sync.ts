@@ -111,7 +111,7 @@ export const authorSyncCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.sync],
-    exitCodes: [0, 11, 12, 64, 65, 77],
+    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );

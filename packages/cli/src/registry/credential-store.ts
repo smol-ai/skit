@@ -49,6 +49,10 @@ const run = Effect.fn("CredentialStore.run")(function* (
       );
       return { stdout, code };
     }),
+  ).pipe(
+    // A locked keyring can leave `secret-tool` waiting on an unlock prompt nobody will answer;
+    // past this the store counts as unreachable, as a missing one does.
+    Effect.timeout("10 seconds"),
   );
 });
 

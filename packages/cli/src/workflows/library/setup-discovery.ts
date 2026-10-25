@@ -128,6 +128,7 @@ export const suggestRepositoryRoots = Effect.fn("Setup.suggestRepositoryRoots")(
   home: string,
 ) {
   const links = yield* LinkStat;
+  const fs = yield* FileSystem.FileSystem;
   const seen = new Set<string>();
   const suggestions: string[] = [];
   for (const folder of commonRepositoryFolders) {
@@ -139,7 +140,7 @@ export const suggestRepositoryRoots = Effect.fn("Setup.suggestRepositoryRoots")(
     for (const entry of yield* entriesOf(path))
       if (
         entry.info.type === "Directory" &&
-        (yield* entriesOf(join(path, entry.name))).some((child) => child.name === ".git")
+        (yield* fs.exists(join(path, entry.name, ".git")).pipe(Effect.orElseSucceed(() => false)))
       ) {
         suggestions.push(path);
         break;

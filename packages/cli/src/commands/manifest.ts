@@ -24,7 +24,7 @@ interface TraversableCommand {
   }>;
 }
 
-const sharedErrorExitCodes = [1, 11, 12, 64, 65, 77] as const;
+const sharedErrorExitCodes = [1, 11, 12, 13, 64, 65, 77] as const;
 
 function leaves(
   command: TraversableCommand,

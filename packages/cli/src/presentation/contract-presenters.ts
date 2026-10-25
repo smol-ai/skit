@@ -793,6 +793,18 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): s
       "Left alone",
       ...data.leftAlone.map((skill) => `  ${skill.name} · ${skill.reason}`),
     );
+  if (data.aliasRecoveryDirectories?.length)
+    lines.push(
+      "",
+      "Retired symlinks and their restoration receipts are saved in",
+      ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
+    );
+  if (data.aliasesKept?.length)
+    lines.push(
+      "",
+      "Symlinks kept",
+      ...data.aliasesKept.map((kept) => `  ${kept.name} · ${kept.message}`),
+    );
   return lines.join("\n");
 }
 

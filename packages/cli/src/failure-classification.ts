@@ -11,8 +11,9 @@ export const failureExitCodes = {
   TARGET_COLLISION: 12,
   INVALID_ARGUMENT: 64,
   VALIDATION_FAILED: 65,
-  // EX_NOPERM: the command was valid, but its user must sign in first.
-  AUTHENTICATION_REQUIRED: 77,
+  // Its own status: the command was valid, but its user must sign in first. Not 77, which
+  // `author validate` already returns for a result blocked by policy.
+  AUTHENTICATION_REQUIRED: 13,
   OPERATION_FAILED: 1,
 } as const satisfies Record<FailureCode, number>;
 

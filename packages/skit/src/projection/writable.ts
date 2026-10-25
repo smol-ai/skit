@@ -12,7 +12,7 @@ const isPermissionDenied = (error: PlatformError): boolean =>
   error.reason._tag === "PermissionDenied" ||
   (error.reason._tag === "Unknown" &&
     Predicate.hasProperty(error.reason.cause, "code") &&
-    error.reason.cause.code === "EPERM");
+    (error.reason.cause.code === "EPERM" || error.reason.cause.code === "EROFS"));
 
 /**
  * Prove that SKIT can place copies under a root: create the root and a scratch directory in each

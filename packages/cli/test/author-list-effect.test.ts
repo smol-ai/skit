@@ -73,7 +73,7 @@ it.effect.each([
     authState: authState({ origin: input.origin }),
     response: page(),
     code: "AUTHENTICATION_REQUIRED",
-    exitCode: 77,
+    exitCode: 13,
   },
   {
     label: "defensive invalid resolved origin",
@@ -87,14 +87,14 @@ it.effect.each([
     authState: authState(input),
     response: new Response("null", { status: 401 }),
     code: "AUTHENTICATION_REQUIRED",
-    exitCode: 77,
+    exitCode: 13,
   },
   {
     label: "insufficient scope",
     authState: authState(input),
     response: Response.json({ error: "insufficient_scope" }, { status: 403 }),
     code: "AUTHENTICATION_REQUIRED",
-    exitCode: 77,
+    exitCode: 13,
   },
   {
     label: "unclassified forbidden",

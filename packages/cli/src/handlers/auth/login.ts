@@ -6,6 +6,7 @@ import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
 import {
+  awaitDeviceApprovalEffect,
   clearPendingLogin,
   loginEffect,
   type PendingDeviceLogin,
@@ -26,15 +27,18 @@ import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { personReachable, promptsAllowed } from "../../presentation/interactivity.js";
 
-/** Open `url` in the user's browser where the platform has a standard opener; best effort. */
+/** Open `url` in the user's browser with the platform's standard opener; best effort. */
 const openInBrowser = (url: string) => {
-  const opener =
-    process.platform === "darwin" ? "open" : process.platform === "linux" ? "xdg-open" : undefined;
-  if (opener === undefined) return Effect.void;
+  const [command, ...args] =
+    process.platform === "darwin"
+      ? ["open", url]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", "", url]
+        : ["xdg-open", url];
   return Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const handle = yield* spawner.spawn(
-      ChildProcess.make(opener, [url], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }),
+      ChildProcess.make(command!, args, { stdin: "ignore", stdout: "ignore", stderr: "ignore" }),
     );
     yield* handle.exitCode;
   }).pipe(Effect.scoped, Effect.ignore);
@@ -92,46 +96,60 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
           "Approve this login in your browser",
         );
         yield* renderer.updateStatus("Waiting for approval in the browser");
+        // Polling starts without waiting: an opener such as xdg-open may run the browser in the
+        // foreground and return only when it closes.
         if (options.interactive)
-          yield* openInBrowser(pending.verificationUri).pipe(
-            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          yield* Effect.forkChild(
+            openInBrowser(pending.verificationUri).pipe(
+              Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+            ),
           );
       });
     const login = (
-      method: { email?: string; password?: string; pending?: PendingDeviceLogin } = {},
+      method: { email: string; password: string } | { approvedSessionToken: string },
     ) =>
+      Effect.scoped(
+        loginEffect({
+          origin,
+          ...method,
+          scopes: [...scopes],
+          alias: options.alias,
+          home: options.home,
+        }),
+      );
+    /** Show the code, wait for approval outside the configuration writer, then mint and store. */
+    const deviceLogin = (pending?: PendingDeviceLogin) =>
       renderer.withStatus(
         "Signing in",
-        Effect.scoped(
-          loginEffect({
-            origin,
-            ...method,
-            onDeviceCode: announce,
-            scopes: [...scopes],
-            alias: options.alias,
-            home: options.home,
-          }),
-        ),
+        Effect.gen(function* () {
+          const started =
+            pending ?? (yield* Effect.scoped(startDeviceLoginEffect({ origin, scopes })));
+          yield* announce(started);
+          const approvedSessionToken = yield* Effect.scoped(
+            awaitDeviceApprovalEffect(started, scopes),
+          );
+          return yield* login({ approvedSessionToken });
+        }),
       );
     const promptForPassword = Effect.gen(function* () {
       if (!options.interactive) return yield* new InteractiveLoginUnavailable();
       const prompter = yield* Prompter;
       const email = yield* prompter.text("Email");
       const password = yield* prompter.password("Password");
-      return yield* login({ email, password });
+      return yield* renderer.withStatus("Signing in", login({ email, password }));
     });
     if (!(options.browserApproval ?? options.interactive)) return yield* promptForPassword;
 
     const pending = yield* readPendingLogin(origin, options.home);
     if (pending)
-      return yield* login({ pending }).pipe(
+      return yield* deviceLogin(pending).pipe(
         Effect.tap(() => clearPendingLogin(options.home)),
         Effect.catchTag("DeviceLoginEnded", (ended) =>
           clearPendingLogin(options.home).pipe(Effect.andThen(Effect.fail(ended))),
         ),
       );
     if (options.interactive)
-      return yield* login().pipe(
+      return yield* deviceLogin().pipe(
         Effect.catchTag("DeviceLoginUnavailable", () => promptForPassword),
       );
     // An agent's user sees its command's output only once the command ends, so start the login,

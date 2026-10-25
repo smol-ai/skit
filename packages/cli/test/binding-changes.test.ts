@@ -858,6 +858,26 @@ it.effect("enabling adopts an unmanaged copy that already holds the projected by
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("enabling never adopts a git checkout, even one holding the projected bytes", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const checkout = join(f.destination, "alpha");
+    yield* f.fs.makeDirectory(join(checkout, ".git"), { recursive: true });
+    yield* f.fs.writeFileString(join(checkout, ".git", "HEAD"), "ref: refs/heads/main\n");
+    yield* f.fs.writeFileString(join(checkout, "SKILL.md"), "# alpha\n");
+    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+
+    const [outcome] = yield* f.home.owned(applyBindingChanges(plan));
+
+    assert.deepStrictEqual(
+      outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+      ["conflicted"],
+    );
+    assert.strictEqual((yield* inspectOwnershipMarkerEffect(checkout)).kind, "absent");
+    assert.strictEqual(yield* f.fs.exists(join(checkout, ".git", "HEAD")), true);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("a different copy at the destination is reported, and disabling leaves it in place", () =>
   Effect.gen(function* () {
     const f = yield* fixture;

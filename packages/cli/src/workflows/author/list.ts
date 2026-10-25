@@ -217,7 +217,7 @@ export const authorListCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.authorList],
-    exitCodes: [0, 12, 64],
+    exitCodes: [0, 12, 13, 64],
     interactive: false,
   }),
 );

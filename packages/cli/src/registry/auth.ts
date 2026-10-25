@@ -503,12 +503,15 @@ export const startDeviceLoginEffect = Effect.fn("Auth.startDeviceLogin")(functio
   return yield* requestDeviceCode(yield* openExchange(origin, input.scopes), origin);
 });
 
-/** Poll until the user approves `pending`, returning the approved session's token. */
-const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
-  exchange: Exchange,
+/**
+ * Poll until the user approves `pending`, returning the approved session's token. Runs outside the
+ * configuration writer: waiting on a person must not hold the lock every Library write needs.
+ */
+export const awaitDeviceApprovalEffect = Effect.fn("Auth.awaitDeviceApproval")(function* (
   pending: PendingDeviceLogin,
+  scopes: readonly AuthScope[],
 ) {
-  const { discovery, send, json } = exchange;
+  const { discovery, send, json } = yield* openExchange(pending.origin, scopes);
   if (discovery.deviceToken === undefined)
     return yield* new DeviceLoginUnavailable({ origin: pending.origin });
   const deadline = Date.parse(pending.expiresAt);
@@ -566,13 +569,11 @@ const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
 export const loginEffect = Effect.fn("Auth.login")(
   function* (input: {
     origin: string;
-    /** Sign in with these, or leave both out to have the user approve the login in a browser. */
+    /** Sign in with these. */
     email?: string;
     password?: string;
-    /** A browser login an earlier run started, to wait for instead of starting another. */
-    pending?: PendingDeviceLogin;
-    /** Show the user the code to approve; called once, before polling starts. */
-    onDeviceCode?: (pending: PendingDeviceLogin) => Effect.Effect<void>;
+    /** Or the session a browser login was approved with (see `awaitDeviceApprovalEffect`). */
+    approvedSessionToken?: string;
     scopes: AuthScope[];
     alias?: string;
     home?: string;
@@ -597,10 +598,9 @@ export const loginEffect = Effect.fn("Auth.login")(
           return yield* new SignInFailed({ message: "Sign in did not establish a session" });
         return { ...json, cookie };
       }
-      const pending = input.pending ?? (yield* requestDeviceCode(exchange, origin));
-      if (input.onDeviceCode) yield* input.onDeviceCode(pending);
-      const token = yield* awaitDeviceApproval(exchange, pending);
-      return { ...json, authorization: `Bearer ${token}` };
+      if (input.approvedSessionToken === undefined)
+        return yield* new SignInFailed({ message: "No sign-in method was given" });
+      return { ...json, authorization: `Bearer ${input.approvedSessionToken}` };
     });
     const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
       httpClient: http,

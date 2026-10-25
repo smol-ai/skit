@@ -52,4 +52,4 @@ also allow it for agents as described in SKIT's `docs/agents.md`.
   and its status, `skit doctor --json` for problems (exit code 12 means it found issues).
 
 Errors are JSON on stderr with `error.message` and `error.remediation`; follow the remediation.
-`error.code` `AUTHENTICATION_REQUIRED` (exit 77) means the user must sign in first, as above.
+`error.code` `AUTHENTICATION_REQUIRED` (exit 13) means the user must sign in first, as above.

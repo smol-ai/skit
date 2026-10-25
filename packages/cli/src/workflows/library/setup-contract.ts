@@ -351,5 +351,13 @@ export const SetupApplied = Schema.Struct({
       reason: Schema.String,
     }),
   ),
+  /**
+   * With `--duplicates retire-aliases`: where each retired symlink and its restoration receipt
+   * were saved, and any symlink kept because it could not be retired safely.
+   */
+  aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
+  aliasesKept: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
+  ),
 });
 export type SetupApplied = typeof SetupApplied.Type;

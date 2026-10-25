@@ -1,12 +1,15 @@
 import { join } from "node:path";
-import { Effect, FileSystem } from "effect";
+import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  type PendingDeviceLogin,
+  addRegistryRemoteEffect,
+  awaitDeviceApprovalEffect,
   loginEffect,
   readConfigEffect,
   readPendingLogin,
+  savePendingLogin,
+  startDeviceLoginEffect,
 } from "../src/registry/auth.js";
 import { authLoginCommand } from "../src/handlers/auth/login.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -18,7 +21,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 const origin = "https://skit.example";
 
 /** A Registry offering device authorization that answers each poll from `polls` in turn. */
-function deviceServer(polls: ReadonlyArray<Response>) {
+function deviceServer(polls: ReadonlyArray<Response | Effect.Effect<Response>>) {
   const seen: Array<{ path: string; method: string; authorization?: string; cookie?: string }> = [];
   let poll = 0;
   const handler: TestHttpHandler = (request, url) => {
@@ -49,8 +52,10 @@ function deviceServer(polls: ReadonlyArray<Response>) {
             interval: 0,
           }),
         );
-      case "/api/auth/device/token":
-        return Effect.succeed(polls[poll++]!.clone());
+      case "/api/auth/device/token": {
+        const answer = polls[poll++]!;
+        return Effect.isEffect(answer) ? answer : Effect.succeed(answer.clone());
+      }
       case "/api/tokens":
         return Effect.succeed(
           Response.json(
@@ -74,19 +79,22 @@ function deviceServer(polls: ReadonlyArray<Response>) {
 
 const pending = Response.json({ error: "authorization_pending" }, { status: 400 });
 
+/** The command's composition: start, wait for approval, then mint and store with that session. */
 const deviceLogin = (polls: ReadonlyArray<Response>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-login-" });
     const server = deviceServer(polls);
-    const approvals: PendingDeviceLogin[] = [];
+    const scopes = ["library:sync" as const];
+    const started = yield* Effect.scoped(startDeviceLoginEffect({ origin, scopes })).pipe(
+      Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
+    );
+    const approvals = [started];
     const result = yield* Effect.result(
       Effect.scoped(
-        loginEffect({
-          origin,
-          scopes: ["library:sync"],
-          home,
-          onDeviceCode: (approval) => Effect.sync(() => approvals.push(approval)),
+        Effect.gen(function* () {
+          const approvedSessionToken = yield* awaitDeviceApprovalEffect(started, scopes);
+          return yield* loginEffect({ origin, scopes: [...scopes], home, approvedSessionToken });
         }),
       ).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler)))),
     );
@@ -171,5 +179,51 @@ it.live("an agent's login returns the code at once, and its next login waits for
       1,
     );
     expect(yield* readPendingLogin(origin, home)).toBeUndefined();
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("waiting for approval leaves the configuration writer free for other commands", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-unlocked-" });
+    const polled = yield* Deferred.make<void>();
+    const approve = yield* Deferred.make<void>();
+    const server = deviceServer([
+      Deferred.succeed(polled, undefined).pipe(
+        Effect.andThen(Deferred.await(approve)),
+        Effect.as(Response.json({ access_token: "session-token", token_type: "Bearer" })),
+      ),
+    ]);
+    yield* savePendingLogin(
+      {
+        origin,
+        deviceCode: "device-secret",
+        userCode: "ABCDEFGH",
+        verificationUri: `${origin}/device`,
+        interval: 0,
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      },
+      home,
+    ).pipe(Effect.provide(skitConfigurationLayer(home)));
+    const waiting = yield* Effect.forkChild(
+      Effect.gen(function* () {
+        const interaction = yield* makeScriptedInteraction([]);
+        return yield* authLoginCommand({
+          registry: origin,
+          home,
+          scopes: ["library:sync"],
+          interactive: false,
+          browserApproval: true,
+        }).pipe(Effect.provide(interaction.layer));
+      }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler)))),
+    );
+    yield* Deferred.await(polled);
+
+    // A configuration write succeeds while the login waits on the person.
+    yield* addRegistryRemoteEffect("other", "https://other.example", home).pipe(
+      Effect.provide(skitConfigurationLayer(home)),
+    );
+    yield* Deferred.succeed(approve, undefined);
+    expect(yield* Fiber.join(waiting)).toMatchObject({ origin, alreadyAuthenticated: false });
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

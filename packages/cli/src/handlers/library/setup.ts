@@ -203,7 +203,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (input: 
     input.localCustody,
   );
   const plan = yield* review.prepareRecommended(input.duplicates);
-  if (plan.hasChanges) yield* plan.apply(renderer.withStatus);
+  const applied = plan.hasChanges ? yield* plan.apply(renderer.withStatus) : undefined;
   const { sources, additions, reconnects } = plan.summary;
   const taken = new Set([
     ...sources.flatMap((source) => source.names),
@@ -231,6 +231,10 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (input: 
         paths: candidate.paths,
         reason: candidate.action === "blocked" ? candidate.reason : candidate.action,
       })),
+    ...(applied?.recoveryDirectories.length
+      ? { aliasRecoveryDirectories: applied.recoveryDirectories }
+      : {}),
+    ...(applied?.warnings.length ? { aliasesKept: applied.warnings } : {}),
   } satisfies SetupApplied;
 });
 

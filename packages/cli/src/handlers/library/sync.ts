@@ -188,7 +188,7 @@ export const librarySyncCliCommand = Command.make(
       subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.librarySync],
-    exitCodes: [0, 11, 12, 64, 65, 77],
+    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );

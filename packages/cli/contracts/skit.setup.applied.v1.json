@@ -118,6 +118,31 @@
         ],
         "additionalProperties": true
       }
+    },
+    "aliasRecoveryDirectories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "aliasesKept": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "message"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
