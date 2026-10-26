@@ -12,7 +12,7 @@ import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roo
 import type { LocalAdoptionOptions } from "./local-adoption.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type { SetupKnownSourceSelection } from "./setup-contract.js";
-import type { SetupCopySelection } from "./setup-decisions.js";
+import { isSetupProjectionTarget, type SetupCopySelection } from "./setup-decisions.js";
 import { applySetupExistingBindings } from "./setup-existing-binding.js";
 import { applySetupLocalCustody } from "./setup-local-custody.js";
 import { applySetupObservedCollections } from "./setup-observed-collections.js";
@@ -54,10 +54,23 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       "Revalidating the approved setup plan",
       revalidateSetupPlan(approval.setup, approval.planId),
     );
-    // Reconnecting and taking custody project into this device's global roots. Prove those roots
+    // Only enabled global copies project into this device's roots. Prove those roots
     // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
     // read-only) fails the apply whole instead of leaving a Library with no copies behind.
-    if (approval.bindings.length || approval.custody.length)
+    const projects =
+      approval.bindings.some((copy) => copy.duplicateAction !== "retain-only") ||
+      approval.custody.some(
+        (copy) =>
+          copy.duplicateAction !== "retain-only" &&
+          isSetupProjectionTarget(
+            scan.observed.instances.find((instance) => instance.path === copy.sourcePath),
+          ) &&
+          !scan.observed.onboarding.candidates.some(
+            (candidate) =>
+              candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
+          ),
+      );
+    if (projects)
       for (const target of yield* activeProjectionTargetsEffect(approval.setup.inventory))
         yield* ensureProjectionRootWritable(
           bindingRoot(target, { kind: "global" }, approval.setup.inventory),

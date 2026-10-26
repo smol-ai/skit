@@ -1,7 +1,12 @@
 import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
-import { inspectOwnershipMarkerEffect, skitLayer } from "@smolai/skit-core";
+import {
+  inspectOwnershipMarkerEffect,
+  MachineSettings,
+  ProjectionRootNotWritable,
+  skitLayer,
+} from "@smolai/skit-core";
 import { setupApplyCommand, setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { SetupPlanStale } from "../src/workflows/library/setup.js";
@@ -10,6 +15,7 @@ import type { SetupDuplicateAction } from "../src/workflows/library/setup-decisi
 import { SetupDuplicateDecisionRequired } from "../src/workflows/library/setup-review.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
+import { withSandboxDenying } from "./helpers/sandbox.js";
 
 // `skit setup --apply <planId>`: an agent reviews the plan from `skit setup --json`, then applies
 // exactly that recommendation without prompts. An empty prompt script makes any prompt a defect.
@@ -65,7 +71,11 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const run = (apply: { planId: string; duplicates?: SetupDuplicateAction }) =>
+  const run = (apply: {
+    planId: string;
+    duplicates?: SetupDuplicateAction;
+    workDirFlag?: string;
+  }) =>
     Effect.gen(function* () {
       const interaction = yield* makeScriptedInteraction([]);
       return yield* Effect.exit(
@@ -88,6 +98,7 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
   });
   return {
     home,
+    options,
     run,
     review,
     root,
@@ -104,6 +115,90 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
 
 const failure = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit)) : undefined;
+
+it.effect(
+  "retain-only works without projection write access, while enabling still fails before retention",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const f = yield* fixture({ alias: true });
+      // Leave only the duplicate copy whose approved action is retention without enabling.
+      yield* fs.remove(join(f.root, ".claude", "skills", "beta"), { recursive: true });
+      const reviewed = yield* f.review;
+      const before = yield* captureDisk(f.disk);
+      const denied = withSandboxDenying(join(f.root, ".agents"));
+
+      const refused = yield* f
+        .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
+        .pipe(denied);
+      assert.instanceOf(failure(refused), ProjectionRootNotWritable);
+      assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+
+      const retained = yield* f
+        .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
+        .pipe(denied);
+      assert.isTrue(Exit.isSuccess(retained));
+      const state = yield* f.home.durable;
+      assert.deepStrictEqual(
+        state.skills.map((skill) => skill.name),
+        ["alpha"],
+      );
+      assert.deepStrictEqual(state.projections, []);
+      assert.strictEqual(
+        yield* fs.readLink(join(f.root, "config", "devin", "skills", "alpha")),
+        join(f.root, "Work", "skills", "alpha"),
+      );
+      assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("applying with different discovery roots rejects the plan without saving them", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const f = yield* fixture({ alias: false });
+    const reviewedRoot = join(f.root, "first");
+    const otherRoot = join(f.root, "second");
+    yield* fs.makeDirectory(reviewedRoot);
+    yield* fs.makeDirectory(otherRoot);
+    const interaction = yield* makeScriptedInteraction([]);
+    const reviewed = yield* f.home.owned(
+      setupCommand({
+        options: f.options,
+        workDirFlag: reviewedRoot,
+        interactive: false,
+        dryRun: true,
+      }).pipe(Effect.provide(interaction.layer)),
+    );
+    const before = yield* captureDisk(f.disk);
+
+    const refused = yield* f.run({ planId: reviewed.onboarding.planId, workDirFlag: otherRoot });
+    assert.instanceOf(failure(refused), SetupPlanStale);
+    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+
+    const applied = yield* f.run({ planId: reviewed.onboarding.planId, workDirFlag: reviewedRoot });
+    assert.isTrue(Exit.isSuccess(applied));
+    assert.deepStrictEqual((yield* MachineSettings.read(f.home.home)).discoveryRoots, [
+      reviewedRoot,
+    ]);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "changed repository decisions invalidate a reviewed plan even without skill changes",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ alias: false });
+      const reviewed = yield* f.review;
+      yield* MachineSettings.updateDiscovery(f.home.home, {
+        repositories: [{ path: join(f.root, "repo"), status: "ignored" }],
+      });
+      const before = yield* captureDisk(f.disk);
+
+      const refused = yield* f.run({ planId: reviewed.onboarding.planId });
+      assert.instanceOf(failure(refused), SetupPlanStale);
+      assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
 
 it.effect("applying the reviewed plan ID takes custody of every recommended copy", () =>
   Effect.gen(function* () {

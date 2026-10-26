@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { parseArgs } from "node:util";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
@@ -21,8 +23,17 @@ import { testPlatformLayer } from "./helpers/platform.js";
 const origin = "https://skit.example";
 
 /** A Registry offering device authorization that answers each poll from `polls` in turn. */
-function deviceServer(polls: ReadonlyArray<Response | Effect.Effect<Response>>) {
-  const seen: Array<{ path: string; method: string; authorization?: string; cookie?: string }> = [];
+function deviceServer(
+  polls: ReadonlyArray<Response | Effect.Effect<Response>>,
+  scopes: readonly string[] = ["library:sync"],
+) {
+  const seen: Array<{
+    path: string;
+    method: string;
+    authorization?: string;
+    cookie?: string;
+    body?: string;
+  }> = [];
   let poll = 0;
   const handler: TestHttpHandler = (request, url) => {
     seen.push({
@@ -30,6 +41,10 @@ function deviceServer(polls: ReadonlyArray<Response | Effect.Effect<Response>>) 
       method: request.method,
       authorization: request.headers.authorization,
       cookie: request.headers.cookie,
+      body:
+        request.body._tag === "Uint8Array"
+          ? new TextDecoder().decode(request.body.body)
+          : undefined,
     });
     switch (url.pathname) {
       case "/.well-known/skit":
@@ -37,7 +52,7 @@ function deviceServer(polls: ReadonlyArray<Response | Effect.Effect<Response>>) 
           Response.json({
             schema: "skit.server.v1",
             download: "/api/skits/{owner}/{slug}/releases/{version}/download",
-            scopes: ["library:sync"],
+            scopes,
             deviceAuthorization: "/api/auth/device/code",
             deviceToken: "/api/auth/device/token",
           }),
@@ -63,7 +78,7 @@ function deviceServer(polls: ReadonlyArray<Response | Effect.Effect<Response>>) 
               token: "skit_pat_secret",
               token_id: "pat_one",
               token_prefix: "skit_pat_sec",
-              scopes: ["library:sync"],
+              scopes,
             },
             { status: 201 },
           ),
@@ -166,7 +181,7 @@ it.live("an agent's login returns the code at once, and its next login waits for
       origin,
       userCode: "ABCD-EFGH",
       verificationUri: `${origin}/device`,
-      next: `skit auth login ${origin}`,
+      next: `skit auth login ${origin} --scopes library:sync --home ${home}`,
     });
     expect(server.seen.some((request) => request.path === "/api/auth/device/token")).toBe(false);
     expect((yield* readPendingLogin(origin, home))?.deviceCode).toBe("device-secret");
@@ -180,6 +195,88 @@ it.live("an agent's login returns the code at once, and its next login waits for
     );
     expect(yield* readPendingLogin(origin, home)).toBeUndefined();
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live(
+  "the reported next command preserves scopes, alias, home and relogin through the shell",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-options-" });
+      const home = join(root, "agent's $HOME");
+      const scopes = ["authoring:write", "publication:write"];
+      const server = deviceServer([Response.json({ access_token: "session-token" })], scopes);
+      const interaction = yield* makeScriptedInteraction([]);
+      const run = (options: Parameters<typeof authLoginCommand>[0]) =>
+        authLoginCommand(options).pipe(
+          Effect.provide(interaction.layer),
+          Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
+        );
+      const started = yield* run({
+        registry: origin,
+        home,
+        scopes,
+        alias: "private",
+        relogin: true,
+        interactive: false,
+        browserApproval: true,
+      });
+      expect("next" in started).toBe(true);
+      if (!("next" in started)) return;
+      // Execute only a shell function that prints its arguments, so quoting is checked without
+      // contacting a Registry or starting a real CLI process.
+      const args = execFileSync(
+        "/bin/sh",
+        ["-c", `skit() { printf '%s\\n' "$@"; }\n${started.next}`],
+        { encoding: "utf8" },
+      )
+        .trimEnd()
+        .split("\n");
+      expect(args).toEqual([
+        "auth",
+        "login",
+        origin,
+        "--scopes",
+        scopes.join(","),
+        "--as",
+        "private",
+        "--home",
+        home,
+        "--relogin",
+      ]);
+      const parsed = parseArgs({
+        args: args.slice(2),
+        allowPositionals: true,
+        options: {
+          scopes: { type: "string" },
+          as: { type: "string" },
+          home: { type: "string" },
+          relogin: { type: "boolean" },
+        },
+      });
+      const finished = yield* run({
+        registry: parsed.positionals[0],
+        home: parsed.values.home,
+        scopes: parsed.values.scopes?.split(",") ?? ["library:sync"],
+        alias: parsed.values.as,
+        relogin: parsed.values.relogin,
+        interactive: false,
+        browserApproval: true,
+      });
+      expect(finished).toMatchObject({
+        origin,
+        alias: "private",
+        scopes,
+        alreadyAuthenticated: false,
+      });
+      expect(
+        server.seen.filter((request) => request.path === "/api/auth/device/code"),
+      ).toHaveLength(1);
+      expect(
+        JSON.parse(server.seen.find((request) => request.path === "/api/tokens")?.body ?? "{}"),
+      ).toMatchObject({ scopes });
+      expect(yield* readPendingLogin(origin, home)).toBeUndefined();
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.live("waiting for approval leaves the configuration writer free for other commands", () =>

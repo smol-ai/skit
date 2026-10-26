@@ -119,6 +119,10 @@ const observeSetup = Effect.fn("Library.setup")(
         candidates: onboarding,
         instances: sortedInstances,
         repositoryConfigs,
+        discoveryRoots,
+        repositoryDecisions: [...existingDecisions].sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
         // Consent covers the Library the plan was made against, not only the disk it observed.
         library: libraryStateRevision(library),
       }),

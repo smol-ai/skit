@@ -163,7 +163,23 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       userCode: displayUserCode(started.userCode),
       verificationUri: started.verificationUri,
       expiresAt: started.expiresAt,
-      next: options.registry ? `skit auth login ${options.registry}` : "skit auth login",
+      // The next process has no access to this invocation's options. Preserve the complete
+      // request, including its home, and pin the resolved origin rather than a mutable alias.
+      next: [
+        "skit",
+        "auth",
+        "login",
+        origin,
+        "--scopes",
+        scopes.join(","),
+        ...(options.alias === undefined ? [] : ["--as", options.alias]),
+        ...(options.home === undefined ? [] : ["--home", options.home]),
+        ...(options.relogin ? ["--relogin"] : []),
+      ]
+        .map((word) =>
+          /^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`,
+        )
+        .join(" "),
     };
   },
   Effect.catchTag("PromptCancelled", () => new SelectionCancelled({ subject: "Login" })),
