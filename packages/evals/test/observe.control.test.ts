@@ -1,13 +1,7 @@
 import { cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  applyRecommendedSetup,
-  buildMachine,
-  cases,
-  messyHomeCase,
-  type EvalCase,
-} from "../src/cases.ts";
+import { applyRecommendedSetup, cases, messyHomeCase, type EvalCase } from "../src/cases.ts";
 import { baseCaseFixture } from "../src/fixtures.ts";
 import { observe, preservationFailures } from "../src/observe.ts";
 import { startLocalRegistry, type LocalRegistry } from "../src/registry.ts";
@@ -101,7 +95,7 @@ function judge(
 describe.each(cases)("$id checks", (evalCase) => {
   it("pass the reference solution", async () => {
     const run = controlRun();
-    const fixture = buildMachine(evalCase, run.home);
+    const fixture = evalCase.fixture(run.home);
     const message = await evalCase.reference(
       { home: run.home, registry: registry.origin },
       (...args) => runSkit(run, ...args),
@@ -112,7 +106,7 @@ describe.each(cases)("$id checks", (evalCase) => {
 
   it("fail an agent that does nothing", () => {
     const run = controlRun();
-    const fixture = buildMachine(evalCase, run.home);
+    const fixture = evalCase.fixture(run.home);
 
     expect(judge(evalCase, run, fixture, "Done.")).not.toEqual([]);
   });

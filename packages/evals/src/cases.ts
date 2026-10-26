@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { baseCaseFixture, messyHomeFixture, writeUserFile, type Fixture } from "./fixtures.ts";
+import { join } from "node:path";
+import { baseCaseFixture, messyHomeFixture, type Fixture } from "./fixtures.ts";
 import type { Permissions } from "./codex.ts";
 import type { LibraryObservation, Observation } from "./observe.ts";
 import type { IssuedLogin } from "./registry.ts";
@@ -28,8 +26,6 @@ export type Skit = (...args: string[]) => Promise<string>;
 export interface EvalCase {
   readonly id: string;
   readonly fixture: (home: string) => Fixture;
-  /** Whether the user has SKIT's own `skit` skill installed for their agents. */
-  readonly withSkill: boolean;
   /** What the user lets Codex do beyond its default sandbox: just what the task needs. */
   readonly permissions: Permissions;
   readonly prompt: (context: CaseContext) => string;
@@ -40,25 +36,6 @@ export interface EvalCase {
   readonly reference: (context: CaseContext, skit: Skit) => Promise<string>;
   /** Why the task was not done; empty when it was. */
   readonly verify: (evidence: Evidence) => string[];
-}
-
-/** The `skit` skill as this checkout ships it. */
-const skitSkill = resolve(dirname(fileURLToPath(import.meta.url)), "../../../skills/skit/SKILL.md");
-
-/**
- * Build the case's machine in `home`. With the skill, it is installed where Codex lists skills,
- * `~/.agents/skills`, and is the user's file from then on, so the trial must preserve it too.
- */
-export function buildMachine(evalCase: EvalCase, home: string): Fixture {
-  const fixture = evalCase.fixture(home);
-  if (!evalCase.withSkill) return fixture;
-  return {
-    ...fixture,
-    userFiles: [
-      ...fixture.userFiles,
-      writeUserFile(home, ".agents/skills/skit/SKILL.md", readFileSync(skitSkill, "utf8")),
-    ],
-  };
 }
 
 /**
@@ -115,13 +92,12 @@ function libraryFailures(
 }
 
 const setupRequest =
-  "Set up skit for me. It's installed; run it with `skit`. Go with what it recommends. If my agents can already see a skill some other way, like through a symlink, keep it in the library and leave that as it is. I'm stepping away, so just go ahead.";
+  "Set up skit for me. It's installed; run it with `skit`. Go with what it recommends. I'm stepping away, so just go ahead.";
 
 /** Case 0: setup on a machine that has never run skit, with one skill the user wrote. */
 export const baseCase: EvalCase = {
   id: "setup-base",
   fixture: baseCaseFixture,
-  withSkill: false,
   permissions: { writable: [".agents"], network: false },
   prompt: () => setupRequest,
   reference: async (_context, skit) => {
@@ -146,7 +122,6 @@ export const baseCase: EvalCase = {
 export const messyHomeCase: EvalCase = {
   id: "setup-messy",
   fixture: messyHomeFixture,
-  withSkill: false,
   permissions: { writable: [".agents"], network: false },
   prompt: () => `${setupRequest} Include my repos in ~/Work.`,
   reference: async ({ home }, skit) => {
@@ -181,7 +156,6 @@ function mentionsCode(text: string, code: string): boolean {
 export const loginCase: EvalCase = {
   id: "login",
   fixture: baseCaseFixture,
-  withSkill: false,
   permissions: { writable: [], network: true },
   prompt: ({ registry }) =>
     `Start a skit login so I can sync my skills. It's installed; run it with \`skit\`. My registry is ${registry}. Give me the URL and code; I'll approve it later.`,
@@ -209,19 +183,4 @@ export const loginCase: EvalCase = {
   },
 };
 
-/**
- * Case 1 again, with SKIT's skill installed: whether the guidance we ship gets an agent through the
- * decisions setup-messy leaves to it, such as running the printed apply command unchanged.
- */
-export const messyHomeWithSkillCase: EvalCase = {
-  ...messyHomeCase,
-  id: "setup-messy-with-skill",
-  withSkill: true,
-};
-
-export const cases: readonly EvalCase[] = [
-  baseCase,
-  messyHomeCase,
-  messyHomeWithSkillCase,
-  loginCase,
-];
+export const cases: readonly EvalCase[] = [baseCase, messyHomeCase, loginCase];

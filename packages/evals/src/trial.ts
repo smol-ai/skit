@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { buildMachine, type EvalCase } from "./cases.ts";
+import type { EvalCase } from "./cases.ts";
 import { runCodexSession } from "./codex.ts";
 import { buildReport, writeReport, type TrialReport } from "./observe.ts";
 import { archiveRun } from "./archive.ts";
@@ -21,7 +21,7 @@ export async function runTrial(
   linkTools(run, skit);
   const registry = await startLocalRegistry();
   try {
-    const fixture = buildMachine(evalCase, run.home);
+    const fixture = evalCase.fixture(run.home);
     const prompt = evalCase.prompt({ home: run.home, registry: registry.origin });
     const outcome = await runCodexSession(run, {
       prompt,
@@ -34,7 +34,6 @@ export async function runTrial(
       caseId: evalCase.id,
       prompt,
       permissions: evalCase.permissions,
-      withSkill: evalCase.withSkill,
       outcome,
       fixture,
       verify: (evidence) => evalCase.verify({ ...evidence, issued: registry.issued }),

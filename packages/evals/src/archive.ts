@@ -19,7 +19,6 @@ export interface RunIndexEntry {
   readonly case: string;
   readonly archivedAt: string;
   readonly permissions: Permissions;
-  readonly withSkill: boolean;
   readonly codexVersion: string;
   readonly model: string;
   readonly skitGitHead: string;
@@ -55,7 +54,6 @@ export function archiveRun(run: RunRoot, report: TrialReport): string {
     case: report.case,
     archivedAt: new Date().toISOString(),
     permissions: report.permissions,
-    withSkill: report.withSkill,
     codexVersion: report.codex.codexVersion,
     model: report.codex.model,
     skitGitHead: report.skitGitHead,

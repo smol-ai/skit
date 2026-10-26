@@ -44,8 +44,6 @@ export interface TrialReport {
   readonly prompt: string;
   /** What Codex's sandbox allowed beyond its defaults. */
   readonly permissions: Permissions;
-  /** Whether SKIT's own `skit` skill was installed for the agent. */
-  readonly withSkill: boolean;
   /** Token usage of each turn, in order. */
   readonly codex: Omit<CodexOutcome, "events"> & { readonly usage: readonly unknown[] };
   readonly skitTarballSha256: string;
@@ -147,7 +145,6 @@ export function buildReport(input: {
   caseId: string;
   prompt: string;
   permissions: Permissions;
-  withSkill: boolean;
   outcome: CodexOutcome;
   fixture: Fixture;
   /** The case's own check of whether the task was done. */
@@ -193,7 +190,6 @@ export function buildReport(input: {
     case: input.caseId,
     prompt: input.prompt,
     permissions: input.permissions,
-    withSkill: input.withSkill,
     codex: { ...codex, usage },
     skitTarballSha256: input.skitTarballSha256,
     skitGitHead: input.skitGitHead,
@@ -218,7 +214,7 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `# ${report.runId}`,
     "",
     `Prompt: ${report.prompt}`,
-    `Permissions: workspace-write${report.permissions.writable.map((path) => ` · writes ~/${path}`).join("")}${report.permissions.network ? " · network" : ""}${report.withSkill ? " · skit skill installed" : ""}`,
+    `Permissions: workspace-write${report.permissions.writable.map((path) => ` · writes ~/${path}`).join("")}${report.permissions.network ? " · network" : ""}`,
     `Codex: ${report.codex.codexVersion} · ${report.codex.model} · exit ${report.codex.exitCode} · ${Math.round(report.codex.durationMs / 1000)}s${report.codex.timedOut ? " · TIMED OUT" : ""}`,
     `skit: ${report.skitGitHead.slice(0, 9)}${report.skitGitDirty ? " + uncommitted changes" : ""} · tarball ${report.skitTarballSha256.slice(0, 12)}`,
     `Usage: ${JSON.stringify(report.codex.usage)}`,

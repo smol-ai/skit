@@ -34,7 +34,7 @@ function skillDocument(name: string, description: string, body: string): string 
   return `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`;
 }
 
-export function writeUserFile(home: string, path: string, contents: string): UserFile {
+function writeUserFile(home: string, path: string, contents: string): UserFile {
   const absolute = join(home, path);
   mkdirSync(dirname(absolute), { recursive: true });
   writeFileSync(absolute, contents);
