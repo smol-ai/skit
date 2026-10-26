@@ -925,3 +925,30 @@ it.effect("allow-duplicate refuses to replace the user's link at the destination
     assert.strictEqual(yield* f.fs.readLink(join(f.destination, "alpha")), elsewhere);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+it.effect("enable leaves repository-owned identical copies unmanaged, including worktrees", () =>
+  Effect.gen(function* () {
+    for (const gitEntry of ["directory", "file"] as const) {
+      const f = yield* fixture;
+      const repository = join(f.root, "account");
+      yield* f.fs.makeDirectory(repository, { recursive: true });
+      if (gitEntry === "directory") yield* f.fs.makeDirectory(join(repository, ".git"));
+      else yield* f.fs.writeFileString(join(repository, ".git"), "gitdir: /elsewhere/worktree\n");
+      const skill = join(f.destination, "alpha");
+      yield* f.fs.makeDirectory(skill, { recursive: true });
+      yield* f.fs.writeFileString(join(skill, "SKILL.md"), "# alpha\n");
+      const enable = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+      const [outcome] = yield* f.home.owned(applyBindingChanges(enable));
+      assert.deepStrictEqual(
+        outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+        ["conflicted"],
+      );
+      assert.strictEqual((yield* inspectOwnershipMarkerEffect(skill)).kind, "absent");
+      const disable = yield* f.home.owned(
+        previewBindingChanges([{ ...f.request, enabled: false }], f.home.bindings),
+      );
+      yield* f.home.owned(applyBindingChanges(disable));
+      assert.strictEqual(yield* f.fs.readFileString(join(skill, "SKILL.md")), "# alpha\n");
+    }
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

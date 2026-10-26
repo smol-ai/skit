@@ -81,12 +81,18 @@ importers:
 
   packages/evals:
     devDependencies:
+      '@smolai/skit-core':
+        specifier: workspace:*
+        version: link:../skit
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
+      effect:
+        specifier: 4.0.3
+        version: 4.0.3
       semver:
         specifier: 7.8.5
         version: 7.8.5

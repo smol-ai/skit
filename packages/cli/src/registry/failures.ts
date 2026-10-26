@@ -494,7 +494,7 @@ export class DeviceLoginUnavailable
 }
 
 export class DeviceLoginEnded
-  extends Data.TaggedError("DeviceLoginEnded")<{ reason: "denied" | "expired" }>
+  extends Data.TaggedError("DeviceLoginEnded")<{ reason: "denied" | "expired" | "invalid" }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -503,7 +503,9 @@ export class DeviceLoginEnded
   get message(): string {
     return this.reason === "denied"
       ? "The login was denied in the browser"
-      : "The login code expired before it was approved";
+      : this.reason === "invalid"
+        ? "The login code is invalid or was already used"
+        : "The login code expired before it was approved";
   }
 }
 

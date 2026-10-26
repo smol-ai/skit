@@ -389,12 +389,28 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             // Equal content is adopted in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
           }
+          // A destination inside a checkout is repository-owned even when `.git` is above the
+          // skill directory (including worktrees, whose `.git` is a file).
+          let repositoryOwned = false;
+          if (request.adoptIdentical) {
+            let directory = realDestination;
+            while (true) {
+              if (yield* exists(join(directory, ".git"))) {
+                repositoryOwned = true;
+                break;
+              }
+              const parent = dirname(directory);
+              if (parent === directory) break;
+              directory = parent;
+            }
+          }
           // Unasked adoption only takes a folder that is nothing more than the copy: the hash
           // leaves out `.git`, so a checkout with the same files, and its history, would
           // otherwise become SKIT's to move aside on disable.
           if (
             markerInspection.kind === "absent" &&
             request.adoptIdentical &&
+            !repositoryOwned &&
             observed === desiredHash &&
             (yield* (yield* LinkStat).lstat(destination)).type === "Directory" &&
             !(yield* exists(join(destination, ".git"))) &&

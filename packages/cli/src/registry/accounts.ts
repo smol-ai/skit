@@ -17,6 +17,8 @@ export const StoredCredential = Schema.Struct({
   /** Absent when the token lives in the OS store named by `tokenStorage`. */
   token: Schema.optionalKey(Schema.String),
   tokenStorage: Schema.optionalKey(Schema.Literals(["keychain", "secret-service"])),
+  /** Credential-specific OS-store item; absent for legacy items keyed only by origin. */
+  tokenStorageKey: Schema.optionalKey(Schema.String),
   tokenId: Schema.String,
   tokenPrefix: Schema.String,
   scopes: Schema.Array(Schema.String),

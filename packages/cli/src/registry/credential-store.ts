@@ -21,6 +21,8 @@ export const osTokenStorage = (
 
 /** Store items are keyed by credential file and origin, so separate SKIT homes never collide. */
 const service = (authPath: string) => `skit (${authPath})`;
+const account = (origin: string, key?: string) =>
+  key === undefined ? origin : `${origin} (${key})`;
 
 // `security -i` reads its command from stdin, keeping the token out of the process list. Its
 // tokenizer honours double quotes; refuse anything that would need escaping rather than escape it.
@@ -61,6 +63,7 @@ export const readStoredToken = Effect.fn("CredentialStore.read")(function* (
   storage: TokenStorage,
   authPath: string,
   origin: string,
+  key?: string,
 ) {
   const result = yield* Effect.option(
     storage === "keychain"
@@ -69,10 +72,16 @@ export const readStoredToken = Effect.fn("CredentialStore.read")(function* (
           "-s",
           service(authPath),
           "-a",
-          origin,
+          account(origin, key),
           "-w",
         ])
-      : run("secret-tool", ["lookup", "service", service(authPath), "account", origin]),
+      : run("secret-tool", [
+          "lookup",
+          "service",
+          service(authPath),
+          "account",
+          account(origin, key),
+        ]),
   );
   if (Option.isNone(result) || result.value.code !== 0) return undefined;
   const token = result.value.stdout.replace(/\r?\n$/u, "");
@@ -85,14 +94,15 @@ export const writeStoredToken = Effect.fn("CredentialStore.write")(function* (
   authPath: string,
   origin: string,
   token: string,
+  key?: string,
 ) {
   if (storage === "keychain") {
-    if (![service(authPath), origin, token].every(quotable)) return false;
+    if (![service(authPath), account(origin, key), token].every(quotable)) return false;
     const result = yield* Effect.option(
       run(
         "/usr/bin/security",
         ["-i"],
-        `add-generic-password -U -s "${service(authPath)}" -a "${origin}" -w "${token}"\n`,
+        `add-generic-password -U -s "${service(authPath)}" -a "${account(origin, key)}" -w "${token}"\n`,
       ),
     );
     return Option.isSome(result) && result.value.code === 0;
@@ -106,7 +116,7 @@ export const writeStoredToken = Effect.fn("CredentialStore.write")(function* (
         "service",
         service(authPath),
         "account",
-        origin,
+        account(origin, key),
       ],
       token,
     ),
@@ -119,10 +129,23 @@ export const removeStoredToken = Effect.fn("CredentialStore.remove")(function* (
   storage: TokenStorage,
   authPath: string,
   origin: string,
+  key?: string,
 ) {
   yield* Effect.ignore(
     storage === "keychain"
-      ? run("/usr/bin/security", ["delete-generic-password", "-s", service(authPath), "-a", origin])
-      : run("secret-tool", ["clear", "service", service(authPath), "account", origin]),
+      ? run("/usr/bin/security", [
+          "delete-generic-password",
+          "-s",
+          service(authPath),
+          "-a",
+          account(origin, key),
+        ])
+      : run("secret-tool", [
+          "clear",
+          "service",
+          service(authPath),
+          "account",
+          account(origin, key),
+        ]),
   );
 });
