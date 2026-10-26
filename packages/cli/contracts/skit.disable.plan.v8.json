@@ -1,5 +1,5 @@
 {
-  "$id": "skit.enable.plan.v7",
+  "$id": "skit.disable.plan.v8",
   "type": "object",
   "properties": {
     "subject_id": {
