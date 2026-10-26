@@ -17,16 +17,15 @@ export interface RunIndexEntry {
   readonly runId: string;
   readonly case: string;
   readonly archivedAt: string;
-  readonly allowSkit: boolean;
+  readonly rules: readonly (readonly string[])[];
   readonly withSkill: boolean;
   readonly codexVersion: string;
   readonly skitGitHead: string;
   readonly skitGitDirty: boolean;
   readonly skitTarballSha256: string;
-  readonly turns: number;
   readonly durationMs: number;
   readonly exitCode: number | null;
-  readonly hardFailures: readonly string[];
+  readonly failures: readonly string[];
   readonly librarySkills: number;
   readonly projections: Readonly<Record<string, number>>;
   readonly path: string;
@@ -37,7 +36,7 @@ export interface RunIndexEntry {
  * the agent left it (links kept as links), and Codex's own session transcripts. Then index the run
  * and remove its live root.
  */
-export function archiveRun(run: RunRoot, caseId: string, report: TrialReport): string {
+export function archiveRun(run: RunRoot, report: TrialReport): string {
   const destination = join(archiveDir, "runs", run.id);
   mkdirSync(destination, { recursive: true });
   cpSync(run.evidence, join(destination, "evidence"), { recursive: true });
@@ -51,18 +50,17 @@ export function archiveRun(run: RunRoot, caseId: string, report: TrialReport): s
     projections[projection.status] = (projections[projection.status] ?? 0) + 1;
   const entry: RunIndexEntry = {
     runId: run.id,
-    case: caseId,
+    case: report.case,
     archivedAt: new Date().toISOString(),
-    allowSkit: report.allowSkit,
+    rules: report.rules,
     withSkill: report.withSkill,
     codexVersion: report.codex.codexVersion,
     skitGitHead: report.skitGitHead,
     skitGitDirty: report.skitGitDirty,
     skitTarballSha256: report.skitTarballSha256,
-    turns: report.codex.turns.length,
     durationMs: report.codex.durationMs,
     exitCode: report.codex.exitCode,
-    hardFailures: report.hardFailures,
+    failures: report.failures,
     librarySkills: report.observation.library.skills.length,
     projections,
     path: destination,

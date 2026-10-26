@@ -1,10 +1,13 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { satisfies } from "semver";
 import { runsDir, type RunRoot } from "./run-root.ts";
+
+const execFileAsync = promisify(execFile);
 
 const cliRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../cli");
 
@@ -95,4 +98,25 @@ function supportedNode(): string {
 
 export function agentPath(run: RunRoot): string {
   return [run.bin, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(":");
+}
+
+/**
+ * Run the packaged skit as an agent would on the run's machine, for the control lane's reference
+ * solutions. `AI_AGENT` gives it the same non-interactive path a Codex shell gets, so a login
+ * returns its code at once instead of waiting for a browser. Asynchronous, so a Registry served
+ * from the calling process can answer it.
+ */
+export async function runSkit(run: RunRoot, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("skit", args, {
+    cwd: run.home,
+    env: {
+      HOME: run.home,
+      PATH: agentPath(run),
+      TMPDIR: run.tmp,
+      AI_AGENT: "1",
+      SKIT_NO_UPDATE_CHECK: "1",
+      SKIT_CREDENTIAL_STORE: "file",
+    },
+  });
+  return stdout;
 }

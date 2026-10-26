@@ -1,31 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { baseCase, loginCase, messyHomeCase, runTrial } from "../src/trial.ts";
+import { beforeAll, describe, expect, it } from "vitest";
+import { cases } from "../src/cases.ts";
+import { checkCodexReady } from "../src/codex.ts";
+import { runTrial } from "../src/trial.ts";
 
 const repeat = Number(process.env.SKIT_EVAL_REPEAT ?? "1");
 const model = process.env.SKIT_EVAL_MODEL;
 const only = process.env.SKIT_EVAL_CASE;
-// Model a user who has allowed Codex to run `skit setup`, `skit enable` and `skit auth login` (see
-// skitCommandRules).
-const allowSkit = process.env.SKIT_EVAL_ALLOW_SKIT === "1";
-// Install SKIT's own `skit` skill for the agent, as a user who enabled it would have.
-const withSkill = process.env.SKIT_EVAL_SKILL === "1";
-const cases = [baseCase, messyHomeCase, loginCase].filter(
-  (evalCase) => !only || evalCase.id === only,
-);
 
-// Observation first: the only assertions are the hard failures. Everything else is in each run's
-// evidence/summary.md, which is the point of a case.
-describe.each(cases)("$id", (evalCase) => {
+beforeAll(checkCodexReady);
+
+// Each trial passes only when its case's checks find the task done, from the machine's final
+// state; each run's evidence/summary.md shows why it failed.
+describe.each(cases.filter((evalCase) => !only || evalCase.id === only))("$id", (evalCase) => {
   for (let attempt = 1; attempt <= repeat; attempt++) {
     it(`attempt ${attempt}`, async () => {
       const { report, summaryPath } = await runTrial(evalCase, {
-        allowSkit,
-        withSkill,
         timeoutMs: 600_000,
         ...(model ? { model } : {}),
       });
-      console.info(`summary: ${summaryPath}`);
-      expect(report.hardFailures).toEqual([]);
+      console.info(
+        `${report.failures.length === 0 ? "PASS" : "FAIL"} ${evalCase.id} · ${summaryPath}`,
+      );
+      expect(report.failures).toEqual([]);
     });
   }
 });
