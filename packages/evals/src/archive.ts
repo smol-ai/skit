@@ -1,6 +1,7 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import type { Permissions } from "./codex.ts";
 import type { TrialReport } from "./observe.ts";
 import type { RunRoot } from "./run-root.ts";
 
@@ -17,9 +18,10 @@ export interface RunIndexEntry {
   readonly runId: string;
   readonly case: string;
   readonly archivedAt: string;
-  readonly rules: readonly (readonly string[])[];
+  readonly permissions: Permissions;
   readonly withSkill: boolean;
   readonly codexVersion: string;
+  readonly model: string;
   readonly skitGitHead: string;
   readonly skitGitDirty: boolean;
   readonly skitTarballSha256: string;
@@ -52,9 +54,10 @@ export function archiveRun(run: RunRoot, report: TrialReport): string {
     runId: run.id,
     case: report.case,
     archivedAt: new Date().toISOString(),
-    rules: report.rules,
+    permissions: report.permissions,
     withSkill: report.withSkill,
     codexVersion: report.codex.codexVersion,
+    model: report.codex.model,
     skitGitHead: report.skitGitHead,
     skitGitDirty: report.skitGitDirty,
     skitTarballSha256: report.skitTarballSha256,

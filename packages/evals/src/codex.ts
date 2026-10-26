@@ -7,41 +7,43 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import { agentPath } from "./skit-package.ts";
 import type { RunRoot } from "./run-root.ts";
 
+/**
+ * What the user lets Codex do beyond its default `workspace-write` sandbox, as their sandbox config
+ * would. Granted to the sandbox rather than to command prefixes: Codex matches a prefix rule only
+ * when every shell word is literal, so `skit setup --work-dir ~/Work` would lose a rule that
+ * `skit setup --work-dir /Users/me/Work` keeps.
+ */
+export interface Permissions {
+  /**
+   * Extra writable roots, relative to home. An explicit root lifts Codex's default read-only mask
+   * on that path, which is how `.agents` becomes writable.
+   */
+  readonly writable: readonly string[];
+  readonly network: boolean;
+}
+
 export interface CodexSession {
   readonly prompt: string;
-  /**
-   * Command prefixes the user lets Codex run without asking. Codex command rules with
-   * `decision = "allow"` skip approval and run outside the sandbox, but only when every segment of
-   * the command matches an allow rule; everything else the agent runs stays sandboxed.
-   */
-  readonly rules: readonly (readonly string[])[];
-  readonly model?: string;
+  readonly permissions: Permissions;
+  readonly model: string;
   readonly timeoutMs: number;
 }
 
-/** The rules file a user would put in `~/.codex/rules/` to let Codex run these commands. */
-export function commandRules(rules: readonly (readonly string[])[]): string {
-  return rules
-    .map(
-      (pattern) => `prefix_rule(
-    pattern = ${JSON.stringify(pattern)},
-    decision = "allow",
-    justification = "The user lets Codex run ${pattern.join(" ")}",
-)
-`,
-    )
-    .join("\n");
-}
+/**
+ * The model trials run unless `SKIT_EVAL_MODEL` names another. Pinned because the user config is
+ * ignored, so Codex would otherwise pick its own default, which changes with Codex releases.
+ */
+export const defaultModel = "gpt-6.1-sol";
 
 export interface CodexOutcome {
   readonly codexVersion: string;
+  readonly model: string;
   readonly command: readonly string[];
   readonly exitCode: number | null;
   readonly timedOut: boolean;
@@ -84,10 +86,9 @@ export function codexExecutable(): string {
  *
  * The agent's working directory and `$HOME` are the run's home, so "set up skit for me" acts on a
  * machine we built. The sandbox is always `workspace-write` rooted at that home, which is Codex's
- * default: it also keeps `.agents` and `.codex` read-only inside the writable root, exactly as a
- * user running Codex with defaults gets. Agent-written commands never run unsandboxed, because
- * only `$HOME` is fake and absolute paths would reach the real machine; only commands matching the
- * session's `rules` do, as a user's rules file would allow. The environment is built from scratch
+ * default: it also keeps `.agents` and `.codex` read-only inside the writable root, unless the
+ * session's permissions grant them. Nothing runs unsandboxed, because only `$HOME` is fake and
+ * absolute paths would reach the real machine. The environment is built from scratch
  * rather than inherited, so ambient `SKIT_HOME`, `XDG_*` or `CODEX_HOME` cannot leak into a trial.
  * Stdin is closed, as it would be for any agent-driven shell.
  */
@@ -95,11 +96,9 @@ export async function runCodexSession(run: RunRoot, session: CodexSession): Prom
   const executable = codexExecutable();
   const codexVersion = execFileSync(executable, ["--version"], { encoding: "utf8" }).trim();
   const credentials = seedCredentials(run);
-  // CODEX_HOME is isolated, so its rules directory holds only what this trial writes there.
-  if (session.rules.length > 0) {
-    mkdirSync(join(run.codexHome, "rules"), { recursive: true });
-    writeFileSync(join(run.codexHome, "rules", "skit.rules"), commandRules(session.rules));
-  }
+  const writable = session.permissions.writable.map((path) => join(run.home, path));
+  // A writable root must exist to be granted; a user would grant a folder they already have.
+  for (const path of writable) mkdirSync(path, { recursive: true });
   const options = [
     "--json",
     "--skip-git-repo-check",
@@ -110,9 +109,13 @@ export async function runCodexSession(run: RunRoot, session: CodexSession): Prom
     run.home,
     "--add-dir",
     run.tmp,
+    ...writable.flatMap((path) => ["--add-dir", path]),
+    "-c",
+    `sandbox_workspace_write.network_access=${session.permissions.network}`,
     "-c",
     'approval_policy="never"',
-    ...(session.model ? ["--model", session.model] : []),
+    "--model",
+    session.model,
   ];
   const env: NodeJS.ProcessEnv = {
     HOME: run.home,
@@ -144,6 +147,7 @@ export async function runCodexSession(run: RunRoot, session: CodexSession): Prom
     );
     return {
       codexVersion,
+      model: session.model,
       command: [executable, ...args],
       exitCode,
       timedOut,

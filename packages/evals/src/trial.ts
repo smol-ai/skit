@@ -14,7 +14,7 @@ export interface Trial {
 
 export async function runTrial(
   evalCase: EvalCase,
-  options: { timeoutMs: number; model?: string },
+  options: { timeoutMs: number; model: string },
 ): Promise<Trial> {
   const skit = installSkitPackage();
   const run = createRunRoot(evalCase.id);
@@ -25,15 +25,15 @@ export async function runTrial(
     const prompt = evalCase.prompt({ home: run.home, registry: registry.origin });
     const outcome = await runCodexSession(run, {
       prompt,
-      rules: evalCase.rules,
+      permissions: evalCase.permissions,
       timeoutMs: options.timeoutMs,
-      ...(options.model ? { model: options.model } : {}),
+      model: options.model,
     });
     const report = buildReport({
       run,
       caseId: evalCase.id,
       prompt,
-      rules: evalCase.rules,
+      permissions: evalCase.permissions,
       withSkill: evalCase.withSkill,
       outcome,
       fixture,

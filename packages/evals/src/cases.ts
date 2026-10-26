@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { baseCaseFixture, messyHomeFixture, writeUserFile, type Fixture } from "./fixtures.ts";
+import type { Permissions } from "./codex.ts";
 import type { LibraryObservation, Observation } from "./observe.ts";
 import type { IssuedLogin } from "./registry.ts";
 
@@ -29,8 +30,8 @@ export interface EvalCase {
   readonly fixture: (home: string) => Fixture;
   /** Whether the user has SKIT's own `skit` skill installed for their agents. */
   readonly withSkill: boolean;
-  /** Command prefixes the user lets Codex run outside its sandbox: just what the task needs. */
-  readonly rules: readonly (readonly string[])[];
+  /** What the user lets Codex do beyond its default sandbox: just what the task needs. */
+  readonly permissions: Permissions;
   readonly prompt: (context: CaseContext) => string;
   /**
    * What a correct agent does, run by the control lane without a model to prove `verify` accepts
@@ -121,7 +122,7 @@ export const baseCase: EvalCase = {
   id: "setup-base",
   fixture: baseCaseFixture,
   withSkill: false,
-  rules: [["skit", "setup"]],
+  permissions: { writable: [".agents"], network: false },
   prompt: () => setupRequest,
   reference: async (_context, skit) => {
     await applyRecommendedSetup(skit);
@@ -146,7 +147,7 @@ export const messyHomeCase: EvalCase = {
   id: "setup-messy",
   fixture: messyHomeFixture,
   withSkill: false,
-  rules: [["skit", "setup"]],
+  permissions: { writable: [".agents"], network: false },
   prompt: () => `${setupRequest} Include my repos in ~/Work.`,
   reference: async ({ home }, skit) => {
     await applyRecommendedSetup(skit, { workDir: join(home, "Work") });
@@ -181,7 +182,7 @@ export const loginCase: EvalCase = {
   id: "login",
   fixture: baseCaseFixture,
   withSkill: false,
-  rules: [["skit", "auth", "login"]],
+  permissions: { writable: [], network: true },
   prompt: ({ registry }) =>
     `Start a skit login so I can sync my skills. It's installed; run it with \`skit\`. My registry is ${registry}. Give me the URL and code; I'll approve it later.`,
   reference: async ({ registry }, skit) => {
