@@ -66,7 +66,7 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
       rootFor: () => undefined,
       variantsPath: options.variantsPath,
       originalsPath: store.originalsPath,
-      publish: store.publish,
+      save: store.save,
     },
     (mutation) =>
       Effect.gen(function* () {
@@ -83,7 +83,7 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
           );
           if (outcome.kind === "retired") retired++;
         }
-        // Only a batch that retired every copy removes the Collection. A failed one publishes just
+        // Only a batch that retired every copy removes the Collection. A failed one saves just
         // the copies it moved aside.
         const candidate = mutation.state;
         const acquisitions = candidate.acquisitions.filter(

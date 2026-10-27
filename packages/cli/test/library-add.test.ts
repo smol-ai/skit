@@ -142,8 +142,8 @@ it.effect("reports the retained package when its source disappears after publica
     const added = yield* retainLibrarySourceEffect(source).pipe(
       Effect.provideService(LibraryStore, {
         ...store,
-        publish: (next, base) =>
-          store.publish(next, base).pipe(Effect.andThen(fs.remove(source, { recursive: true }))),
+        save: (next, base) =>
+          store.save(next, base).pipe(Effect.andThen(fs.remove(source, { recursive: true }))),
       }),
     );
     assert.strictEqual(yield* fs.exists(source), false);

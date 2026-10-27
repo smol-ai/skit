@@ -43,9 +43,9 @@ const skillBytes = (name: string, body = `${name} body`) =>
 interface Gates {
   /** Runs once the confirmation prompt has approved the plan. */
   readonly approved?: Effect.Effect<void, unknown>;
-  /** Runs once the first Library state has been published. */
+  /** Runs once the first Library state has been saved. */
   readonly published?: Effect.Effect<void, unknown>;
-  /** Refuses the nth Library state publication. */
+  /** Refuses the nth Library state save. */
   readonly failPublish?: number;
   /** Runs before every rename; a failure refuses that rename. */
   readonly rename?: (from: string, to: string) => Effect.Effect<void, PlatformError>;
@@ -112,15 +112,15 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               LibraryStore,
               Effect.map(LibraryStore, (store) => ({
                 ...store,
-                publish: (next: Parameters<typeof store.publish>[0], base: typeof next) =>
+                save: (next: Parameters<typeof store.save>[0], base: typeof next) =>
                   Effect.gen(function* () {
                     publishes++;
                     if (publishes === gates.failPublish)
                       return yield* new InvalidLibraryState({
                         path: home.statePath,
-                        detail: "Test refusal of a Library publication",
+                        detail: "Test refusal of a Library save",
                       });
-                    yield* store.publish(next, base);
+                    yield* store.save(next, base);
                     if (publishes === 1) yield* Effect.orDie(gates.published ?? Effect.void);
                   }),
               })),
@@ -560,7 +560,7 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
 );
 
 // A receipt is no longer rewritten after moves; an injected second-write failure is unreachable.
-it.effect("removal publishes one immutable receipt before moving files", () =>
+it.effect("removal writes one immutable receipt before moving files", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     let receiptRenames = 0;
@@ -623,9 +623,9 @@ it.effect("a Library change committed after approval fails stale before any effe
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// Every publication must build on the approved revision or on the apply's own previous one, so a
+// Every save must build on the approved revision or on the apply's own previous one, so a
 // Library change between stages is never rebased onto and stops every further effect. The stage
-// whose publication meets the changed base reports it as its own conflict.
+// whose save meets the changed base reports it as its own conflict.
 it.effect("a Library change committed after the first additive stage stops the apply", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });

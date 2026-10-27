@@ -315,8 +315,8 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
 });
 
 /**
- * Keep old references durable until portable state and ancestry can be published together.
- * Publishes only onto `current`, the state sync planned from, and returns the state it published.
+ * Keep old references durable until portable state and ancestry can be saved together.
+ * Saves only onto `current`, the state sync planned from, and returns the state it saved.
  */
 const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProjections")(function* (
   plan: SyncProjectionPlan,
@@ -330,7 +330,7 @@ const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProjections")(
       rootFor: () => undefined,
       variantsPath: store.variantsPath,
       originalsPath: store.originalsPath,
-      publish: store.publish,
+      save: store.save,
     },
     (mutation) =>
       Effect.gen(function* () {
@@ -388,7 +388,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
     return {
       _tag: "Ready" as const,
       issues: plan?.issues ?? [],
-      publishRestored: Effect.fn("Library.sync.publishDeviceTransition")(function* (
+      saveRestored: Effect.fn("Library.sync.saveDeviceTransition")(function* (
         restored: LibraryState,
         ancestry: NonNullable<LibraryState["sync_ancestry"]>,
       ) {
@@ -404,9 +404,9 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
               { ...aligned, projections: [...(plan?.projections ?? [])] },
               restored,
             );
-            // Publish content and its accepted base together, replacing exactly the state retirement
-            // published (or the original baseline when no retirement was required).
-            yield* store.publish({ ...blended, sync_ancestry: ancestry }, retirement.state);
+            // Save content and its accepted base together, replacing exactly the state retirement
+            // saved (or the original baseline when no retirement was required).
+            yield* store.save({ ...blended, sync_ancestry: ancestry }, retirement.state);
             return retirement.retired;
           }),
         );

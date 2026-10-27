@@ -11,9 +11,9 @@ import {
 } from "@smolai/skit-core";
 
 /**
- * The published handles independently created local records adopt: Collections by upstream and
+ * The remote handles independently created local records adopt: Collections by upstream and
  * tracking, their Skills by path, then equivalent Versions by content. Version aliases name the
- * Skill by its published ID, so they apply after the Skill aliases.
+ * Skill by its remote ID, so they apply after the Skill aliases.
  */
 export interface LibraryAliases {
   readonly collections: readonly { readonly from: CollectionId; readonly to: CollectionId }[];
@@ -72,8 +72,8 @@ const aliasSkills = (skills: LibraryManifest["skills"], aliases: LibraryAliases)
 
 /**
  * Only independently added Collections may adopt an existing upstream/tracking identity, and only
- * Skills new to both sides adopt a published Skill at the same path. Equivalent Versions then adopt
- * their published handles. Remote entities are never renamed.
+ * Skills new to both sides adopt a remote Skill at the same path. Equivalent Versions then adopt
+ * their remote handles. Remote entities are never renamed.
  */
 export function alignLibrary(
   local: LibraryManifest,
@@ -91,12 +91,12 @@ export function alignLibrary(
       )
     )
       continue;
-    const published = remote.collections.find(
+    const remoteMatch = remote.collections.find(
       (item) =>
         item.upstream !== undefined && Schema.toEquivalence(Upstream)(upstream, item.upstream),
     );
-    if (published === undefined) continue;
-    collections.push({ from: collection.collection_id, to: published.collection_id });
+    if (remoteMatch === undefined) continue;
+    collections.push({ from: collection.collection_id, to: remoteMatch.collection_id });
   }
   for (const skill of local.skills) {
     if ([...base.skills, ...remote.skills].some((item) => item.skill_id === skill.skill_id))
@@ -114,9 +114,9 @@ export function alignLibrary(
   }
   const versions: LibraryAliases["versions"][number][] = [];
   for (const skill of aliasSkills(local.skills, { collections, skills, versions: [] })) {
-    const published = remote.skills.find((candidate) => candidate.skill_id === skill.skill_id);
+    const remoteMatch = remote.skills.find((candidate) => candidate.skill_id === skill.skill_id);
     for (const version of skill.versions) {
-      const equivalent = published?.versions.find((candidate) => sameContent(version, candidate));
+      const equivalent = remoteMatch?.versions.find((candidate) => sameContent(version, candidate));
       if (equivalent !== undefined && equivalent.skill_version_id !== version.skill_version_id)
         versions.push({ skillId: skill.skill_id, from: version, to: equivalent });
     }
@@ -145,7 +145,7 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
 
 /**
  * Device references move with the records they name, keeping their content. On-disk ownership of a
- * reidentified Skill must be retired before a state carrying these aliases is published.
+ * reidentified Skill must be retired before a state carrying these aliases is saved.
  */
 export function aliasDevice(state: LibraryState, aliases: LibraryAliases): LibraryState {
   return {

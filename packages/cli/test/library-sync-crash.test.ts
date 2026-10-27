@@ -6,7 +6,7 @@ import { type LibraryState } from "@smolai/skit-core";
 import { RegistryUnreachable } from "../src/registry/failures.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
-it.effect("each sync publishes state with the revision it reconciled against", () =>
+it.effect("each sync saves state with the revision it reconciled against", () =>
   Effect.gen(function* () {
     const { a, b, remote } = yield* devices;
     const anchoredAt = (state: typeof a.state) =>
@@ -241,10 +241,10 @@ it.effect("every declared device field survives a push, a merge and a clean sync
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-// Loading and publishing state keep fields this CLI does not declare. Sync rebuilds state through
+// Loading and saving state keep fields this CLI does not declare. Sync rebuilds state through
 // the Library schema and keeps only declared fields, so a field that matters must come with a state
 // version bump. A preview, and a clean sync with nothing to anchor, write nothing and keep it.
-it.effect("sync publishes only declared fields, and writes nothing that would drop others", () =>
+it.effect("sync saves only declared fields, and writes nothing that would drop others", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.retain("first");
@@ -270,7 +270,7 @@ it.effect("sync publishes only declared fields, and writes nothing that would dr
 
 for (const ancestry of ["missing", "stale"] as const)
   it.effect(
-    `a clean sync anchoring ${ancestry} ancestry publishes once, without undeclared fields`,
+    `a clean sync anchoring ${ancestry} ancestry saves once, without undeclared fields`,
     () =>
       Effect.gen(function* () {
         const { a, remote } = yield* devices;
@@ -289,20 +289,20 @@ for (const ancestry of ["missing", "stale"] as const)
             }) as LibraryState,
         );
         const before = yield* a.state;
-        const publishes = a.publishes;
+        const saves = a.saves;
         assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
-        assert.strictEqual(a.publishes, publishes);
+        assert.strictEqual(a.saves, saves);
         assert.deepStrictEqual(yield* a.state, before);
 
         assert.strictEqual((yield* a.sync()).status, "clean");
-        assert.strictEqual(a.publishes, publishes + 1);
+        assert.strictEqual(a.saves, saves + 1);
         const anchored = yield* a.state;
         assert.isFalse(Object.hasOwn(anchored, "extension"));
         assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-it.effect("a projection failure after sync publishes leaves state and ancestry coherent", () =>
+it.effect("a projection failure after sync saves leaves state and ancestry coherent", () =>
   Effect.gen(function* () {
     const { fs, a, b, remote } = yield* devices;
     yield* a.retain("first");

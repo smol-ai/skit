@@ -111,7 +111,7 @@ const hasAdditionalFields = (binding: Binding) =>
   Object.keys(binding).some((key) => !["scope", "entries", "invocation_policies"].includes(key)) ||
   Object.keys(binding.scope).some((key) => !["kind", "root"].includes(key));
 
-/** Compute an inverse without publishing it. Only the operation's changed keys can be reversed. */
+/** Compute an inverse without saving it. Only the operation's changed keys can be reversed. */
 export const reverseSetupIntent = (
   state: LibraryState,
   before: SetupIntent,

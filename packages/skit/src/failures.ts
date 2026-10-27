@@ -602,7 +602,7 @@ export class LibraryBusy
   }
 }
 
-/** The Library moved on since the state a change was planned from; nothing was published. */
+/** The Library moved on since the state a change was planned from; nothing was saved. */
 export class LibraryChanged
   extends Data.TaggedError("LibraryChanged")<{ path: string }>
   implements SkitFailure

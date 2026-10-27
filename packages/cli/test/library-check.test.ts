@@ -30,7 +30,7 @@ it.effect("checks retained custody without treating an observed local copy as an
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
-        publish: () => Effect.void,
+        save: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
@@ -48,7 +48,7 @@ it.effect("checks retained custody without treating an observed local copy as an
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
-        publish: () => Effect.void,
+        save: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
@@ -66,7 +66,7 @@ it.effect("checks retained custody without treating an observed local copy as an
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
-        publish: () => Effect.void,
+        save: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),

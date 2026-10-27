@@ -84,7 +84,7 @@ const SettingsChange = Schema.Struct({
   machineId: Schema.NullOr(MachineId),
 });
 const Change = Schema.Union([LibraryChange, SettingsChange]);
-const Publication = Schema.Struct({
+const SaveConfirmation = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   sequence: Schema.Int,
   digest: Digest,
@@ -243,7 +243,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
   );
-  const published = Effect.fn("SetupOperation.published")(
+  const markSaved = Effect.fn("SetupOperation.markSaved")(
     function* (receipt: { sequence: number; digest: Digest }) {
       yield* writeJsonExclusiveEffect(
         join(changes, `${String(receipt.sequence).padStart(8, "0")}.published.json`),
@@ -281,18 +281,15 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       });
       pendingSettings = { ...receipt, after: changed, machineId: after.machineId };
     }),
-    settingsPublished: Effect.fn("SetupOperation.settingsPublished")(function* () {
+    settingsSaved: Effect.fn("SetupOperation.settingsSaved")(function* () {
       if (pendingSettings) {
-        yield* published(pendingSettings);
+        yield* markSaved(pendingSettings);
         expectedSettings = pendingSettings.after;
         expectedMachineId = pendingSettings.machineId;
         pendingSettings = undefined;
       }
     }),
-    publish: Effect.fn("SetupOperation.publish")(function* (
-      next: LibraryState,
-      base: LibraryState,
-    ) {
+    save: Effect.fn("SetupOperation.save")(function* (next: LibraryState, base: LibraryState) {
       const before = setupIntent(base);
       const after = setupIntent(next);
       const projectionsAfter = structuredClone(next.projections);
@@ -310,8 +307,8 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
             projectionsAfter,
           })
         : undefined;
-      yield* store.publish(next, base);
-      if (receipt) yield* published(receipt);
+      yield* store.save(next, base);
+      if (receipt) yield* markSaved(receipt);
       expectedIntent = after;
       expectedProjections = projectionsAfter;
     }),
@@ -352,7 +349,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
       return { value, digest: hashParts([raw]) };
     });
   const operation = (yield* read("setup.json", Operation)).value;
-  const changes: { change: typeof Change.Type; published: boolean }[] = [];
+  const changes: { change: typeof Change.Type; saved: boolean }[] = [];
   const changesPath = join(directory, "changes");
   if (yield* maybeStat(changesPath)) {
     if ((yield* links.identity.lstat(changesPath)).type !== "Directory")
@@ -361,7 +358,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
     for (const ack of names.filter((name) => /^\d{8}\.published\.json$/.test(name))) {
       if (!names.includes(ack.replace(".published.json", ".json")))
         return yield* new RecoveryInvalid({
-          detail: "Setup publication is missing its change record",
+          detail: "Setup save confirmation is missing its change record",
         });
     }
     for (const name of names.filter((name) => /^\d{8}\.json$/.test(name))) {
@@ -373,16 +370,16 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
       )
         return yield* new RecoveryInvalid({ detail: "Out-of-order setup changes" });
       const ack = join("changes", name.replace(/\.json$/, ".published.json"));
-      let published = false;
+      let saved = false;
       if (yield* maybeStat(join(directory, ack))) {
-        const publication = (yield* read(ack, Publication)).value;
-        if (publication.sequence !== change.sequence || publication.digest !== record.digest)
+        const confirmation = (yield* read(ack, SaveConfirmation)).value;
+        if (confirmation.sequence !== change.sequence || confirmation.digest !== record.digest)
           return yield* new RecoveryInvalid({
-            detail: "Setup publication receipt differs from its change",
+            detail: "Setup save confirmation differs from its change",
           });
-        published = true;
+        saved = true;
       }
-      changes.push({ change, published });
+      changes.push({ change, saved });
     }
   }
   const complete = (yield* maybeStat(join(directory, "complete.json")))
@@ -391,10 +388,10 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
   let intent = operation.before;
   let settings = operation.settings;
   let projections = operation.projections;
-  for (const [index, { change, published }] of changes.entries()) {
-    if (!published && (index !== changes.length - 1 || complete))
+  for (const [index, { change, saved }] of changes.entries()) {
+    if (!saved && (index !== changes.length - 1 || complete))
       return yield* new RecoveryInvalid({
-        detail: "Setup continued past an unconfirmed publication",
+        detail: "Setup continued past an unconfirmed save",
       });
     if (change.kind === "library") {
       if (

@@ -96,7 +96,7 @@ it.effect(
       yield* home.owned(
         writingTo(
           home.home,
-          LibraryStore.use((store) => store.publish(selected, state)),
+          LibraryStore.use((store) => store.save(selected, state)),
         ),
       );
       const view = yield* home.owned(openLibraryView());
@@ -162,7 +162,7 @@ it.effect(
       yield* home.owned(
         writingTo(
           home.home,
-          LibraryStore.use((store) => store.publish(state, selected)),
+          LibraryStore.use((store) => store.save(state, selected)),
         ),
       );
       view.collections.length = 0;

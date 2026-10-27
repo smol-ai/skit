@@ -61,7 +61,7 @@ const fixture = Effect.fn("Test.symlinkFixture")(function* () {
   return { fs, root, source, alias, destination, home, options };
 });
 
-it.effect("enable refuses the extra copy before publishing intent, and dry-run explains why", () =>
+it.effect("enable refuses the extra copy before saving intent, and dry-run explains why", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* initializeLibraryMachine(f.home.home);
@@ -399,7 +399,7 @@ it.effect(
             expect(state.projections.some((projection) => projection.target === "claude")).toBe(
               true,
             );
-            yield* store.publish(
+            yield* store.save(
               {
                 ...state,
                 projections: state.projections.map((projection) =>

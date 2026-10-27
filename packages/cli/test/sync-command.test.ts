@@ -25,7 +25,7 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       LibraryStore.of({
         load: Effect.die("unreachable"),
         inspect: Effect.die("unreachable"),
-        publish: () => Effect.die("unreachable"),
+        save: () => Effect.die("unreachable"),
         home: "/unreachable",
         originalsPath: "/unreachable/originals",
         statePath: "/unreachable/state.json",

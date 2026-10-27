@@ -127,7 +127,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
       rootFor: () => options.root,
       variantsPath: options.variantsPath,
       originalsPath: store.originalsPath,
-      publish: store.publish,
+      save: store.save,
     },
     (mutation) =>
       Effect.gen(function* () {

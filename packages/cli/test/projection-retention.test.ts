@@ -51,7 +51,7 @@ const projectionFixture = Effect.gen(function* () {
   yield* writingTo(
     home,
     LibraryStore.use((store) =>
-      store.publish(
+      store.save(
         {
           ...initial,
           global_bindings: [
@@ -175,7 +175,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
           LibraryStore.use((store) =>
             Effect.gen(function* () {
               const state = yield* store.load;
-              yield* store.publish(
+              yield* store.save(
                 {
                   ...state,
                   collections: state.collections.map((collection) => ({

@@ -106,7 +106,7 @@ it.effect("global enablement changes the device choice without changing account 
         f.home.home,
         LibraryStore.use((store) =>
           Effect.flatMap(store.load, (state) =>
-            store.publish(
+            store.save(
               {
                 ...state,
                 global_bindings: [
@@ -154,7 +154,7 @@ it.effect.each(["follows-collection", "empty"] as const)(
           f.home.home,
           LibraryStore.use((store) =>
             Effect.flatMap(store.load, (state) =>
-              store.publish(
+              store.save(
                 {
                   ...state,
                   global_bindings: [
@@ -226,7 +226,7 @@ it.effect("retrying an already selected device Skill still checks unmanaged copi
         f.home.home,
         LibraryStore.use((store) =>
           Effect.flatMap(store.load, (state) =>
-            store.publish(
+            store.save(
               {
                 ...state,
                 device_skill_selection: {
@@ -301,9 +301,7 @@ it.effect("refuses a plan when the Library changed during interactive selection"
       writingTo(
         f.home.home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) =>
-            store.publish({ ...state, custodyIssues: [] }, state),
-          ),
+          Effect.flatMap(store.load, (state) => store.save({ ...state, custodyIssues: [] }, state)),
         ),
       ),
     );
@@ -325,7 +323,7 @@ it.effect("refuses a plan when the Library changed during interactive selection"
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("rechecks duplicates created after preview before publishing Binding intent", () =>
+it.effect("rechecks duplicates created after preview before saving Binding intent", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const plan = yield* f.home.owned(
@@ -342,7 +340,7 @@ it.effect("rechecks duplicates created after preview before publishing Binding i
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("an unwritable root refuses enablement before publishing Binding intent", () =>
+it.effect("an unwritable root refuses enablement before saving Binding intent", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
@@ -454,9 +452,7 @@ it.effect("a TUI proposal keeps the revision displayed before the proposal was m
       writingTo(
         f.home.home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) =>
-            store.publish({ ...state, custodyIssues: [] }, state),
-          ),
+          Effect.flatMap(store.load, (state) => store.save({ ...state, custodyIssues: [] }, state)),
         ),
       ),
     );
@@ -1029,7 +1025,7 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a refused intent publication remains a refusal and creates no installed copy", () =>
+it.effect("a refused intent save remains a refusal and creates no installed copy", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
@@ -1041,9 +1037,9 @@ it.effect("a refused intent publication remains a refusal and creates no install
             LibraryStore,
             Effect.map(LibraryStore, (store) => ({
               ...store,
-              publish: () =>
+              save: () =>
                 Effect.fail(
-                  new InvalidLibraryState({ path: store.statePath, detail: "Refused publication" }),
+                  new InvalidLibraryState({ path: store.statePath, detail: "Refused save" }),
                 ),
             })),
           ),
@@ -1267,22 +1263,20 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect(
-  "a newly active agent target invalidates the review before any binding is published",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const claude = join(f.home.inventory.home, ".claude", "skills");
-      const configuration = f.home.bindings;
-      const plan = yield* f.home.owned(previewBindingChanges([f.request], configuration));
-      const before = yield* f.home.durable;
-      yield* f.fs.makeDirectory(claude, { recursive: true });
-      const error = yield* Effect.flip(f.home.owned(applyBindingChanges(plan)));
-      assert.strictEqual(error._tag, "Library.SetEnabledStale");
-      assert.deepStrictEqual(yield* f.home.durable, before);
-      assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
-      assert.strictEqual(yield* f.fs.exists(join(claude, "alpha")), false);
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+it.effect("a newly active agent target invalidates the review before any binding is saved", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const claude = join(f.home.inventory.home, ".claude", "skills");
+    const configuration = f.home.bindings;
+    const plan = yield* f.home.owned(previewBindingChanges([f.request], configuration));
+    const before = yield* f.home.durable;
+    yield* f.fs.makeDirectory(claude, { recursive: true });
+    const error = yield* Effect.flip(f.home.owned(applyBindingChanges(plan)));
+    assert.strictEqual(error._tag, "Library.SetEnabledStale");
+    assert.deepStrictEqual(yield* f.home.durable, before);
+    assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+    assert.strictEqual(yield* f.fs.exists(join(claude, "alpha")), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -1306,9 +1300,9 @@ it.effect(
               LibraryStore,
               Effect.map(LibraryStore, (store) => ({
                 ...store,
-                publish: (next, base) =>
+                save: (next, base) =>
                   Effect.gen(function* () {
-                    yield* store.publish(next, base);
+                    yield* store.save(next, base);
                     if (!introduced) {
                       introduced = true;
                       yield* f.fs.makeDirectory(duplicate, { recursive: true });
@@ -1357,9 +1351,9 @@ it.effect(
               LibraryStore,
               Effect.map(LibraryStore, (store) => ({
                 ...store,
-                publish: (next, base) =>
+                save: (next, base) =>
                   Effect.gen(function* () {
-                    yield* store.publish(next, base);
+                    yield* store.save(next, base);
                     if (!changed) {
                       changed = true;
                       // Simulate an external non-cooperating writer after this operation's first commit.

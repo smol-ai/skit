@@ -109,13 +109,11 @@ const observeUndo = Effect.fn("SetupUndo.observe")(function* (
   const confirmedProjectionPaths = new Set(
     saved.complete ? (saved.operation.projectionPaths ?? []) : [],
   );
-  for (const { change, published } of saved.changes) {
+  for (const { change, saved: confirmed } of saved.changes) {
     if (change.kind === "library") {
-      const applied = published || libraryStateRevision(state) === change.afterRevision;
+      const applied = confirmed || libraryStateRevision(state) === change.afterRevision;
       if (!applied && libraryStateRevision(state) !== change.beforeRevision)
-        conflicts.push(
-          "Unconfirmed setup Library publication differs from both recorded revisions",
-        );
+        conflicts.push("Unconfirmed setup Library save differs from both recorded revisions");
       if (applied) {
         expected = change.after;
         projections = change.projectionsAfter;
@@ -133,9 +131,9 @@ const observeUndo = Effect.fn("SetupUndo.observe")(function* (
       }
     } else {
       const current = setupDiscoverySettings(settings);
-      const applied = published || equal(current, change.after);
+      const applied = confirmed || equal(current, change.after);
       if (!applied && !equal(current, change.before))
-        conflicts.push("Unconfirmed setup settings publication differs from both recorded values");
+        conflicts.push("Unconfirmed setup settings save differs from both recorded values");
       if (applied) expectedSettings = change.after;
     }
   }
@@ -270,8 +268,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
             settingsAfter: setupDiscoverySettings(current.restoredSettings),
           } satisfies typeof Attempt.Type);
           yield* current.files!.apply();
-          if (!equal(current.state, current.next))
-            yield* store.publish(current.next, current.state);
+          if (!equal(current.state, current.next)) yield* store.save(current.next, current.state);
           if (current.summary.settingsChanged)
             yield* MachineSettings.restoreDiscovery(
               store.home,

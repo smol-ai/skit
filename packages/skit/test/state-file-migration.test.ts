@@ -14,7 +14,7 @@ import {
 } from "../src/library/entity-ids.js";
 import { currentSkillVersion } from "../src/library/library-contracts.js";
 import { effectiveGlobalBindings, emptyLibraryState } from "../src/library/library-state.js";
-import { inspectLibrary, publishLibrary } from "./helpers/library-store.js";
+import { inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 

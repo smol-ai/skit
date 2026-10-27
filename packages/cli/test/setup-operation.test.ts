@@ -60,42 +60,40 @@ const refuse = (path: string) =>
   );
 
 it.effect(
-  "real setup persists each typed inverse before publication and captures original file custody",
+  "real setup persists each typed inverse before saving and captures original file custody",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const links = yield* LinkStat;
       let settingsChecked = false;
-      let publications = 0;
+      let saves = 0;
       const applied = yield* f.home.owned(
         f.apply.pipe(
           Effect.provideServiceEffect(
             LibraryStore,
             Effect.map(LibraryStore, (store) => ({
               ...store,
-              publish: (next, base) =>
+              save: (next, base) =>
                 Effect.gen(function* () {
                   yield* Effect.gen(function* () {
                     const [id] = yield* listRecoveryOperations(f.home.home);
                     const saved = yield* inspectSetupOperation(f.home.home, id);
                     const last = saved.changes.at(-1);
-                    expect(last?.published).toBe(false);
+                    expect(last?.saved).toBe(false);
                     if (last?.change.kind !== "library")
-                      return yield* Effect.die(
-                        new Error("Missing pre-publication Library inverse"),
-                      );
+                      return yield* Effect.die(new Error("Missing pre-save Library inverse"));
                     expect(last.change.beforeRevision).toBe(libraryStateRevision(base));
                     expect(last.change.afterRevision).toBe(libraryStateRevision(next));
                     expect(libraryStateRevision(yield* store.load)).toBe(
                       libraryStateRevision(base),
                     );
-                    publications++;
+                    saves++;
                   }).pipe(
                     Effect.provideService(FileSystem.FileSystem, f.fs),
                     Effect.provideService(LinkStat, links),
                     Effect.orDie,
                   );
-                  yield* store.publish(next, base);
+                  yield* store.save(next, base);
                 }),
             })),
           ),
@@ -108,7 +106,7 @@ it.effect(
                     const [id] = yield* listRecoveryOperations(f.home.home);
                     const saved = yield* inspectSetupOperation(f.home.home, id);
                     expect(saved.changes[0].change.kind).toBe("settings");
-                    expect(saved.changes[0].published).toBe(false);
+                    expect(saved.changes[0].saved).toBe(false);
                     expect(yield* f.fs.exists(to)).toBe(false);
                     settingsChecked = true;
                   }).pipe(
@@ -123,11 +121,11 @@ it.effect(
         ),
       );
       expect(settingsChecked).toBe(true);
-      expect(publications).toBeGreaterThan(1);
+      expect(saves).toBeGreaterThan(1);
       if (!applied.operationId)
         return yield* Effect.die(new Error("Missing setup operation identity"));
       const saved = yield* inspectSetupOperation(f.home.home, applied.operationId);
-      expect(saved.changes.every((entry) => entry.published)).toBe(true);
+      expect(saved.changes.every((entry) => entry.saved)).toBe(true);
       expect(saved.complete).toBeDefined();
       expect(saved.operation.before.global).toEqual([]);
       expect(saved.operation.files.find((entry) => entry.path === f.source)?.entry?.marker).toBe(
@@ -190,7 +188,7 @@ it.effect(
       const [id] = yield* listRecoveryOperations(f.home.home);
       const saved = yield* inspectSetupOperation(f.home.home, id);
       expect(saved.complete).toBeUndefined();
-      expect(saved.changes.map((entry) => entry.published)).toEqual([true, false]);
+      expect(saved.changes.map((entry) => entry.saved)).toEqual([true, false]);
       const last = saved.changes.at(-1);
       if (last?.change.kind !== "library")
         return yield* Effect.die(new Error("Expected an uncertain Library publication"));
@@ -211,9 +209,9 @@ it.effect("completion never claims a later machine decision as a setup-owned eff
           LibraryStore,
           Effect.map(LibraryStore, (store) => ({
             ...store,
-            publish: (next, base) =>
+            save: (next, base) =>
               Effect.gen(function* () {
-                yield* store.publish(next, base);
+                yield* store.save(next, base);
                 if (!changed) {
                   changed = true;
                   yield* MachineSettings.setRepositoryDecision(
@@ -261,7 +259,7 @@ it.effect(
       expect(exit._tag).toBe("Failure");
       const [id] = yield* listRecoveryOperations(f.home.home);
       const saved = yield* inspectSetupOperation(f.home.home, id);
-      expect(saved.changes.map((entry) => entry.published)).toEqual([false]);
+      expect(saved.changes.map((entry) => entry.saved)).toEqual([false]);
       expect(saved.changes[0].change.kind).toBe("settings");
       expect(saved.complete).toBeUndefined();
       expect((yield* MachineSettings.read(f.home.home)).machineId).toBeUndefined();

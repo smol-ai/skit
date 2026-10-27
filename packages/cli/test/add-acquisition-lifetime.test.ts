@@ -128,7 +128,7 @@ test.each([
       expect(await readdir(temporary)).toEqual([]);
       await settle();
       expect(await readdir(temporary)).toEqual([]);
-      // Neither shape publishes anything; preview must not even create the Library.
+      // Neither shape saves anything; preview must not even create the Library.
       expect(existsSync(join(roots.home, "state.json"))).toBe(false);
       expect(existsSync(join(roots.home, "originals"))).toBe(false);
     } finally {

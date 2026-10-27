@@ -155,7 +155,7 @@ it.effect(
         writingTo(
           home.home,
           LibraryStore.use((store) =>
-            store.publish(
+            store.save(
               {
                 ...state,
                 skills: state.skills.map((skill) => ({
@@ -315,7 +315,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
         writingTo(
           home.home,
           LibraryStore.use((store) =>
-            store.publish(
+            store.save(
               {
                 ...state,
                 global_bindings: [

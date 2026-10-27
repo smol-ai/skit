@@ -155,7 +155,7 @@ it.effect(
           yield* (yield* prepareSetupUndo(f.operationId)).apply();
           const undone = yield* store.load;
           const later = { ...undone, global_bindings: installed.global_bindings };
-          yield* store.publish(later, undone);
+          yield* store.save(later, undone);
           const repeat = yield* prepareSetupUndo(f.operationId);
           expect(repeat.summary.status).toBe("already-undone");
           expect((yield* repeat.apply()).status).toBe("already-undone");
@@ -175,7 +175,7 @@ const refusedPublication = (path: string) =>
     }),
   );
 
-it.effect("an inverse receipt must publish before any copy or intent changes", () =>
+it.effect("an inverse receipt must save before any copy or intent changes", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.home.owned(
@@ -235,7 +235,7 @@ it.effect(
           const interrupted = yield* prepareSetupUndo(f.operationId).pipe(
             Effect.provideService(LibraryStore, {
               ...store,
-              publish: () => refusedPublication(store.statePath),
+              save: () => refusedPublication(store.statePath),
             }),
           );
           const failure = yield* Effect.flip(interrupted.apply());

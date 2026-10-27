@@ -1,7 +1,7 @@
 import { Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { basename, dirname, join } from "node:path";
-export const writeRawAtomicEffect = Effect.fn("Library.publishState")(function* (
+export const writeRawAtomicEffect = Effect.fn("Platform.writeRawAtomic")(function* (
   path: string,
   value: string,
   exclusive = false,
@@ -34,8 +34,8 @@ export function writeJsonAtomicEffect(
   return writeRawAtomicEffect(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-/** Atomically publish a complete identity without replacing an existing file. */
-export const writeJsonExclusiveEffect = Effect.fn("Author.publishIdentity")(function* (
+/** Atomically write a complete identity without replacing an existing file. */
+export const writeJsonExclusiveEffect = Effect.fn("Platform.writeJsonExclusive")(function* (
   path: string,
   value: unknown,
 ) {

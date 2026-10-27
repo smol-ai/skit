@@ -169,7 +169,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
   };
 };
 
-/** Open once; all queries describe this Library revision without publishing or reconciling. */
+/** Open once; all queries describe this Library revision without saving or reconciling. */
 export const openLibraryView = Effect.fn("LibraryView.open")(function* () {
   const store = yield* LibraryStore;
   return libraryView(yield* store.load, store.originalsPath);

@@ -275,7 +275,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     if (!entries.length) return;
     yield* ensureRecoveryOperation(home, dirname(recoveryDirectory));
     yield* fs.makeDirectory(recoveryDirectory, { mode: 0o700 });
-    // Publish once, exclusively, before any move. Filesystem evidence supplies progress.
+    // Write once, exclusively, before any move. Filesystem evidence supplies progress.
     yield* writeJsonExclusiveEffect(join(recoveryDirectory, "receipt.json"), {
       schemaVersion: 2,
       entries,

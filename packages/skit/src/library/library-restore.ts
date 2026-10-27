@@ -321,7 +321,7 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
 });
 
 /**
- * Prepare the exact content a manifest requires, without publishing Library state or rewriting
+ * Prepare the exact content a manifest requires, without saving Library state or rewriting
  * Acquisition provenance. Available snapshots and exact source reconstruction share verification.
  */
 export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function* <

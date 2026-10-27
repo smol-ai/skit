@@ -94,7 +94,7 @@ it.effect("records one event for one action, however many writers it nests", () 
           const store = yield* LibraryStore;
           const state = yield* store.load;
           yield* withLibraryWriter(
-            store.publish(
+            store.save(
               {
                 ...state,
                 global_bindings: [
@@ -162,7 +162,7 @@ it.effect("keeps a committed mutation successful when its history cannot be writ
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.live("records a forked publish under way at release in its action's event", () =>
+it.live("records a forked save under way at release in its action's event", () =>
   Effect.gen(function* () {
     const { inLibrary, retain, history, home } = yield* library;
     yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
@@ -176,13 +176,13 @@ it.live("records a forked publish under way at release in its action's event", (
         Effect.gen(function* () {
           const state = yield* store.load;
           const bound = { ...state, global_bindings: [globalBinding(state)] };
-          yield* store.publish(bound, state);
-          // The forked publish takes its lease now and finishes only after the action's program.
+          yield* store.save(bound, state);
+          // The forked save takes its lease now and finishes only after the action's program.
           const child = yield* withLibraryWriterLock(
             home,
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(resume)),
-              Effect.andThen(store.publish({ ...bound, global_bindings: [] }, bound)),
+              Effect.andThen(store.save({ ...bound, global_bindings: [] }, bound)),
             ),
           ).pipe(Effect.forkDetach);
           yield* Deferred.succeed(forked, child);
@@ -217,13 +217,13 @@ it.live("records a writer that outlives its action as an action of its own", () 
       withLibraryWriter(
         Effect.gen(function* () {
           const state = yield* store.load;
-          yield* store.publish({ ...state, global_bindings: [globalBinding(state)] }, state);
+          yield* store.save({ ...state, global_bindings: [globalBinding(state)] }, state);
           return yield* Deferred.await(resume).pipe(
             Effect.andThen(
               withLibraryWriter(
                 Effect.gen(function* () {
                   const bound = yield* store.load;
-                  yield* store.publish({ ...bound, global_bindings: [] }, bound);
+                  yield* store.save({ ...bound, global_bindings: [] }, bound);
                 }),
               ),
             ),

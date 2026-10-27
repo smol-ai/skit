@@ -131,7 +131,7 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          yield* store.publish(state, state);
+          yield* store.save(state, state);
           yield* Deferred.succeed(ready, undefined);
           yield* Deferred.await(release);
         }),

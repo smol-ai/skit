@@ -94,7 +94,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...beforeStaleChange,
               custodyIssues: beforeStaleChange.custodyIssues ?? [],
@@ -112,7 +112,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (base) => store.publish(beforeStaleChange, base)),
+          Effect.flatMap(store.load, (base) => store.save(beforeStaleChange, base)),
         ),
       ),
     );
@@ -172,7 +172,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...state,
               global_bindings: [
@@ -435,7 +435,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
         },
       ],
     };
-    yield* home.owned(LibraryStore.use((store) => store.publish(state, retained)));
+    yield* home.owned(LibraryStore.use((store) => store.save(state, retained)));
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -543,7 +543,7 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...state,
               global_bindings: [
@@ -612,7 +612,7 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     const current = yield* home.durable;
     const concurrent = { ...current, global_bindings: [] };
     yield* home.owned(
-      withLibraryWriter(LibraryStore.use((store) => store.publish(concurrent, current))),
+      withLibraryWriter(LibraryStore.use((store) => store.save(concurrent, current))),
     );
     yield* Deferred.succeed(resume, undefined);
     const outcome = yield* Fiber.join(command);

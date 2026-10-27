@@ -128,7 +128,7 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const restored = yield* store.load;
-          yield* store.publish(
+          yield* store.save(
             {
               ...restored,
               global_bindings: [
@@ -182,7 +182,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("changed declared source bytes fail before publishing a fresh Library", () =>
+it.effect("changed declared source bytes fail before saving a fresh Library", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const state = yield* f.seed(registrySource);

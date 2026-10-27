@@ -10,7 +10,7 @@ import {
   type ProjectionTarget,
   replaceScopeBinding,
   pruneEmptyBindings,
-  lastPublishedLibraryState,
+  lastSavedLibraryState,
   LibraryStore,
   libraryStateRevision,
   withLibraryWriter,
@@ -347,7 +347,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     if (links.length) return yield* new ProjectionWouldReplaceLink({ links });
   }
   // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
-  // published, so enabling never records intent its copies cannot follow.
+  // saved, so enabling never records intent its copies cannot follow.
   const roots = activeTargets.map((target) => bindingRoot(target, plan.scope, configuration));
   const destinations: { target: ProjectionTarget; path: string }[] = [];
   for (const target of activeTargets)
@@ -363,9 +363,9 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   if (plan.changed) {
     let next = current;
     for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);
-    // Publishing onto `current`, the previewed revision, makes the check above atomic.
+    // Saving onto `current`, the previewed revision, makes the check above atomic.
     yield* store
-      .publish(next, current)
+      .save(next, current)
       .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(stale())));
   }
   // Only typed failures after intent acceptance become incomplete installation outcomes.
@@ -388,19 +388,19 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       const settled = yield* store.load;
       if (
         libraryStateRevision(settled) !==
-        libraryStateRevision((yield* lastPublishedLibraryState) ?? current)
+        libraryStateRevision((yield* lastSavedLibraryState) ?? current)
       )
         return yield* stale();
       if (options.enabled) return settled;
       // Empty Bindings are needed to retire copies; prune only after reconciliation.
       const pruned = pruneEmptyBindings(settled);
-      if (pruned !== settled) yield* store.publish(pruned, settled);
+      if (pruned !== settled) yield* store.save(pruned, settled);
       return pruned;
     }),
   );
   const recorded = Result.isSuccess(reconciled)
     ? reconciled.success
-    : ((yield* lastPublishedLibraryState) ?? current);
+    : ((yield* lastSavedLibraryState) ?? current);
   const projections = recorded.projections.flatMap(({ target, root, path, status, skill_id }) =>
     target !== "legacy" &&
     skillIds.includes(skill_id) &&
@@ -512,16 +512,16 @@ export const applyBindingChanges = Effect.fn("LibraryBindings.apply")(function* 
             return yield* applied.failure;
           }
           outcomes.push(applied.success);
-          expected = (yield* lastPublishedLibraryState) ?? expected;
+          expected = (yield* lastSavedLibraryState) ?? expected;
         }
         return outcomes;
       }).pipe(
         Effect.provideService(LibraryStore, {
           ...store,
-          publish: (next, base) =>
+          save: (next, base) =>
             libraryStateRevision(base) !== revision
               ? Effect.fail(stale())
-              : store.publish(next, base).pipe(
+              : store.save(next, base).pipe(
                   Effect.tap(() =>
                     Effect.sync(() => {
                       revision = libraryStateRevision(next);

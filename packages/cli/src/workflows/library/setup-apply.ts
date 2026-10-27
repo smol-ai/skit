@@ -168,7 +168,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             operation.recordSettings,
           ),
         );
-        yield* operation.settingsPublished();
+        yield* operation.settingsSaved();
         current = {
           ...current,
           machineConfig: {
@@ -264,9 +264,9 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     }).pipe(
       Effect.provideService(LibraryStore, {
         ...store,
-        publish: (next, base) =>
+        save: (next, base) =>
           libraryStateRevision(base) === revision
-            ? Effect.tap(operation.publish(next, base), () =>
+            ? Effect.tap(operation.save(next, base), () =>
                 Effect.sync(() => {
                   revision = libraryStateRevision(next);
                 }),

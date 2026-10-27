@@ -195,7 +195,7 @@ for (const kind of ["observed", "authored"] as const) {
         withLibraryWriter(
           Effect.gen(function* () {
             const base = yield* store.load;
-            yield* store.publish(
+            yield* store.save(
               {
                 ...base,
                 skills: base.skills.map((skill) => ({

@@ -143,7 +143,7 @@ export const emptyLibraryState = (): LibraryState =>
     unmanaged: [],
   });
 
-/** Content identity of a state; a publish is accepted only onto the revision it was planned from. */
+/** Content identity of a state; a save is accepted only onto the revision it was planned from. */
 export const libraryStateRevision = (state: LibraryState): string =>
   createHash("sha256").update(canonicalJson(state)).digest("hex");
 
@@ -165,7 +165,7 @@ export type LibraryInventory = typeof LibraryInventory.Type;
 
 // State schemas validate JSON without transformations. Refining the original value keeps
 // unknown fields at every depth now that Effect no longer offers `preserve` parsing, so loading
-// and publishing state preserve them. A workflow that rebuilds state through `LibraryState`, as
+// and saving state preserve them. A workflow that rebuilds state through `LibraryState`, as
 // sync does, keeps only declared fields: a persisted field that matters needs a version bump.
 export const LibraryStateDocument = Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState)));
 export const decodeLibraryState = Schema.decodeUnknownEffect(LibraryStateDocument);

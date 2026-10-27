@@ -217,7 +217,7 @@ export function replaceScopeBinding(
 /**
  * After reconciliation, discard empty account and repository Bindings. An empty device selection
  * means "enable nothing", so it must survive rather than fall back to the account. Return the
- * original state when nothing needs publishing.
+ * original state when nothing needs saving.
  */
 export function pruneEmptyBindings(state: LibraryState): LibraryState {
   const global_bindings = state.global_bindings.filter((binding) => binding.entries.length > 0);

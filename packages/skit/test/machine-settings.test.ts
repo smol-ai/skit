@@ -218,7 +218,7 @@ it.effect("saving discovery roots alone leaves repository decisions undecided", 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("publishes no settings when pre-publication inverse evidence fails", () =>
+it.effect("saves no settings when pre-save inverse evidence fails", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-evidence-" });

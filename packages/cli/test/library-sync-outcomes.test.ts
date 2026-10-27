@@ -30,7 +30,7 @@ import { devices } from "./helpers/library-sync-devices.js";
 
 type Homes = Effect.Success<typeof devices>;
 
-/** A row stopped before publication may leave orphan originals, and nothing else may change. */
+/** A row stopped before save may leave orphan originals, and nothing else may change. */
 const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (
   before: DiskSnapshot,
   home: string,
@@ -175,7 +175,7 @@ const cases: readonly {
       Effect.gen(function* () {
         yield* a.retain("first");
         const unchanged = yield* captureDisk(a.disk);
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* assertDiskUnchanged(unchanged);
         assert.ok(server.remote);
@@ -212,7 +212,7 @@ const cases: readonly {
         yield* a.sync();
         const unchanged = yield* captureDisk(b.disk);
         const head = server.remote;
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
         yield* onlyOrphanOriginals(unchanged, b.home);
         assert.deepStrictEqual(server.remote, head);
@@ -381,7 +381,7 @@ const cases: readonly {
         yield* b.retain("from-b");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* onlyOrphanOriginals(unchanged, a.home);
         const committed = server.remote!;
@@ -488,14 +488,14 @@ const cases: readonly {
             yield* b.retain("remote-addition");
             yield* b.sync();
           }
-          // A clean sync publishes only to anchor ancestry its state lacks.
+          // A clean sync saves only to anchor ancestry its state lacks.
           else yield* a.edit(({ sync_ancestry: _ancestry, ...state }) => state);
         }
         const blockedRoot = join(device.home, "blocked-root");
         const expectedBytes = (yield* fs.exists(join(device.root, "first", "SKILL.md")))
           ? yield* fs.readFileString(join(device.root, "first", "SKILL.md"))
           : "first\n";
-        inject({ _tag: "ObstructAfterPublish", home: device.home, path: blockedRoot });
+        inject({ _tag: "ObstructAfterSave", home: device.home, path: blockedRoot });
         const first = yield* Effect.exit(
           device.sync({ rootFor: (target) => (target === "agents" ? blockedRoot : undefined) }),
         );
@@ -546,7 +546,7 @@ const cases: readonly {
         const projection = (yield* a.state).projections[0]!;
         yield* fs.writeFileString(join(projection.path, "SKILL.md"), "unretained edit\n");
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
-        inject({ _tag: "ObstructAfterPublish", home: a.home, path: join(a.root, "second") });
+        inject({ _tag: "ObstructAfterSave", home: a.home, path: join(a.root, "second") });
         assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
         const observed = yield* deterministicTreeHashEffect(projection.path);
         const recorded = (yield* a.state).projections.find(
@@ -587,7 +587,7 @@ const cases: readonly {
         // Force M5 to include a local-only record as well as the resolved remote label.
         yield* a.retain("local-only");
         const unchanged = yield* captureDisk(a.disk);
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(
           yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
           InvalidLibraryState,
@@ -615,7 +615,7 @@ for (const scenario of cases)
   );
 
 // The commit order stated once in syncLibraryEffect: snapshots are uploaded, then the head is written
-// on exactly the revision this sync read, and only then is local state published.
+// on exactly the revision this sync read, and only then is local state saved.
 it.effect("oracle: every applying path commits remote before local, on the revision it read", () =>
   Effect.gen(function* () {
     const { a, b, events, server } = yield* devices;
@@ -623,27 +623,19 @@ it.effect("oracle: every applying path commits remote before local, on the revis
       Effect.gen(function* () {
         events.length = 0;
         const exit = yield* Effect.exit(sync);
-        // A failure after the last expected publication must not leave the order looking right.
+        // A failure after the last expected save must not leave the order looking right.
         assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
         return [...events];
       });
     yield* a.retain("first");
-    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "publish a"]);
+    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "save a"]);
     const pushed = server.remote!.revision_id;
-    assert.deepStrictEqual(yield* committed(b.sync()), ["publish b"]);
+    assert.deepStrictEqual(yield* committed(b.sync()), ["save b"]);
     yield* b.retain("second");
-    assert.deepStrictEqual(yield* committed(b.sync()), [
-      "upload",
-      `write on ${pushed}`,
-      "publish b",
-    ]);
+    assert.deepStrictEqual(yield* committed(b.sync()), ["upload", `write on ${pushed}`, "save b"]);
     const merged = server.remote!.revision_id;
     yield* a.retain("third");
-    assert.deepStrictEqual(yield* committed(a.sync()), [
-      "upload",
-      `write on ${merged}`,
-      "publish a",
-    ]);
+    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", `write on ${merged}`, "save a"]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -684,7 +676,7 @@ it.effect("a --take-remote key is refused before collision checks on a push and 
 );
 
 // A head another SKIT wrote in a newer manifest schema is refused before sync plans, uploads, writes
-// or publishes anything. Only loader maintenance may touch the home: the writer lock creates an
+// or saves anything. Only loader maintenance may touch the home: the writer lock creates an
 // absent home, and opening a legacy state.json migrates it and keeps the pre-migration file.
 for (const home of ["current", "legacy", "absent"] as const)
   for (const apply of [false, true])
@@ -712,7 +704,7 @@ for (const home of ["current", "legacy", "absent"] as const)
             );
           const before = yield* captureDisk(a.disk);
           const stored = server.stored;
-          const publishes = a.publishes;
+          const saves = a.saves;
           const writeRequests = server.writeRequests;
           inject({
             _tag: "ServeHead",
@@ -725,7 +717,7 @@ for (const home of ["current", "legacy", "absent"] as const)
           const failure = yield* Effect.flip(a.sync({ apply }));
           assert.instanceOf(failure, LibraryManifestTooNew);
           assert.strictEqual(failure.code, "VALIDATION_FAILED");
-          assert.strictEqual(a.publishes, publishes);
+          assert.strictEqual(a.saves, saves);
           // Snapshot uploads and Library writes are both write requests.
           assert.strictEqual(server.writeRequests, writeRequests);
           assert.deepStrictEqual(server.stored, stored);
@@ -816,13 +808,13 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
     assert.notInclude(progress, "retain");
     assert.isFalse(yield* fs.exists(join(b.home, "originals")));
     assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
-    assert.strictEqual(b.publishes, 0);
+    assert.strictEqual(b.saves, 0);
     assert.deepStrictEqual(server.stored, before);
     assert.strictEqual((yield* b.sync()).status, "pulled");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a prepared device transition cannot publish into another Library home", () =>
+it.effect("a prepared device transition cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.retain("first");
@@ -839,7 +831,7 @@ it.effect("a prepared device transition cannot publish into another Library home
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });
     const failure = yield* Effect.flip(
       transition
-        .publishRestored(state, {
+        .saveRestored(state, {
           origin: "https://registry.test",
           library_id: "library_test",
           revision_id: "revision_test",
@@ -876,7 +868,7 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("sync exposes bounded completed phases in transfer and publication order", () =>
+it.effect("sync exposes bounded completed phases in transfer and save order", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.retain("first");

@@ -137,7 +137,7 @@ it.effect(
             const state = yield* store.load;
             const other = state.skills.find((skill) => skill.name === "other")!;
             const binding = state.global_bindings[0];
-            yield* store.publish(
+            yield* store.save(
               {
                 ...state,
                 global_bindings: [

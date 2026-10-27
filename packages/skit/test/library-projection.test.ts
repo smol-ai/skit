@@ -19,7 +19,7 @@ import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
 import {
   LibraryStore,
-  lastPublishedLibraryState,
+  lastSavedLibraryState,
   libraryStoreLayer,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
@@ -99,7 +99,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish(
+        store.save(
           {
             ...initial,
             global_bindings: [
@@ -161,7 +161,7 @@ it.effect(
       yield* withLibraryWriterLock(
         home,
         Effect.flatMap(LibraryStore, (store) =>
-          store.publish(
+          store.save(
             {
               ...installed,
               global_bindings: [],
@@ -183,7 +183,7 @@ it.effect(
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("publishes nothing when the written Projection does not hash to the retained bytes", () =>
+it.effect("saves nothing when the written Projection does not hash to the retained bytes", () =>
   Effect.gen(function* () {
     const { home, targetRoot, storeLayer } = yield* boundCollection;
     const diverged = Layer.succeed(TreeHasher)({
@@ -225,7 +225,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned projec
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish(
+        store.save(
           {
             ...before,
             skills: before.skills.map((skill) => ({
@@ -258,7 +258,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned projec
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish(
+        store.save(
           {
             ...installed,
             skills: installed.skills.map((skill) => ({
@@ -378,7 +378,7 @@ for (const alias of [false, true])
         yield* withLibraryWriterLock(
           home,
           LibraryStore.use((store) =>
-            store.publish(
+            store.save(
               {
                 ...state,
                 local_bindings: [{ scope: { kind: "repository", root: bindingRoot }, entries }],
@@ -595,7 +595,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     yield* withLibraryWriterLock(
       home,
       Effect.flatMap(LibraryStore, (store) =>
-        store.publish({ ...state, global_bindings: [] }, state),
+        store.save({ ...state, global_bindings: [] }, state),
       ).pipe(Effect.provide(storeLayer)),
     );
     const retired = yield* withLibraryWriterLock(
@@ -663,7 +663,7 @@ const projectionFixture = (second = false, emptyDirectories: readonly string[] =
       withLibraryWriterLock(
         home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) => store.publish(change(state), state)),
+          Effect.flatMap(store.load, (state) => store.save(change(state), state)),
         ).pipe(Effect.provide(storeLayer)),
       );
     const project = (
@@ -1045,21 +1045,21 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
 
 /** The fixture's store, counting every publication a workflow attempts through it. */
 const countingStore = (storeLayer: Layer.Layer<LibraryStore, never, FileSystem.FileSystem>) => {
-  const counter = { publishes: 0 };
+  const counter = { saves: 0 };
   const layer = Layer.effect(
     LibraryStore,
     Effect.map(LibraryStore, (store) => ({
       ...store,
-      publish: (next: LibraryState, base: LibraryState) => {
-        counter.publishes++;
-        return store.publish(next, base);
+      save: (next: LibraryState, base: LibraryState) => {
+        counter.saves++;
+        return store.save(next, base);
       },
     })),
   ).pipe(Layer.provide(storeLayer));
   return { counter, layer };
 };
 
-it.effect("a batch that changes nothing on disk or in state publishes nothing", () =>
+it.effect("a batch that changes nothing on disk or in state saves nothing", () =>
   Effect.gen(function* () {
     const { fs, home, targetRoot, storeLayer, variantsPath, load, project } =
       yield* projectionFixture();
@@ -1073,13 +1073,13 @@ it.effect("a batch that changes nothing on disk or in state publishes nothing", 
         Effect.provide(layer),
       ),
     );
-    assert.strictEqual(counter.publishes, 0);
+    assert.strictEqual(counter.saves, 0);
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
     assert.deepStrictEqual(yield* load, before);
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("an unchanged batch still publishes onto its loaded state before settling a backup", () =>
+it.effect("an unchanged batch still saves onto its loaded state before settling a backup", () =>
   Effect.gen(function* () {
     const { fs, home, targetRoot, storeLayer, variantsPath, load, project } =
       yield* projectionFixture();
@@ -1095,7 +1095,7 @@ it.effect("an unchanged batch still publishes onto its loaded state before settl
       ),
     );
     // The publication proves the state the backup is judged against is still the Library's.
-    assert.strictEqual(counter.publishes, 1);
+    assert.strictEqual(counter.saves, 1);
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
@@ -1119,7 +1119,7 @@ it.effect("a backup is never settled against a state the Library has moved on fr
             rootFor: () => undefined,
             variantsPath,
             originalsPath: store.originalsPath,
-            publish: store.publish,
+            save: store.save,
           },
           (mutation) => mutation.retire(projection, "report", "unexpected conflict"),
         ),
@@ -1143,15 +1143,15 @@ it.effect("the last published state stays the Library's across unchanged and cha
       Effect.gen(function* () {
         const store = yield* LibraryStore;
         // What a caller applying several operations takes as the state the next one plans from.
-        const expected = Effect.map(lastPublishedLibraryState, (published) => published ?? initial);
+        const expected = Effect.map(lastSavedLibraryState, (published) => published ?? initial);
         const current = Effect.gen(function* () {
           assert.deepStrictEqual(yield* expected, yield* store.load);
         });
         // Unchanged, then changed.
         yield* projectAgain;
-        assert.strictEqual(yield* lastPublishedLibraryState, undefined);
+        assert.strictEqual(yield* lastSavedLibraryState, undefined);
         yield* current;
-        yield* store.publish(explicitPolicies(yield* expected), yield* expected);
+        yield* store.save(explicitPolicies(yield* expected), yield* expected);
         yield* projectAgain;
         assert.notDeepEqual(yield* expected, initial);
         yield* current;
@@ -1160,7 +1160,7 @@ it.effect("the last published state stays the Library's across unchanged and cha
         yield* projectAgain;
         assert.deepStrictEqual(yield* expected, changed);
         yield* current;
-        yield* store.publish(unbound(yield* expected), yield* expected);
+        yield* store.save(unbound(yield* expected), yield* expected);
         yield* retireUnboundGlobalProjectionsEffect({ variantsPath, activeTargets: ["agents"] });
         assert.deepStrictEqual((yield* expected).projections, []);
         yield* current;
@@ -1169,7 +1169,7 @@ it.effect("the last published state stays the Library's across unchanged and cha
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("publishes nothing for a replacement whose successor fails verification", () =>
+it.effect("saves nothing for a replacement whose successor fails verification", () =>
   Effect.gen(function* () {
     const { fs, targetRoot, load, edit, project } = yield* projectionFixture();
     const target = join(targetRoot, "review");

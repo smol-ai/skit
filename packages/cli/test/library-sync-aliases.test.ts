@@ -148,7 +148,7 @@ it.effect(
       assert.isTrue(
         (yield* fs.readFileString(join(b.root, "same", "SKILL.md"))).endsWith("same\n"),
       );
-      // Ancestry anchors the head, which names only the published identities.
+      // Ancestry anchors the head, which names only the remote identities.
       const head = server.remote!;
       assert.strictEqual(after.sync_ancestry?.revision_id, head.revision_id);
       assert.deepStrictEqual(

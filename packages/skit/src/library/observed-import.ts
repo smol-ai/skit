@@ -324,7 +324,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     : versionsChanged
       ? ("updated" as const)
       : ("unchanged" as const);
-  yield* store.publish(successor, base);
+  yield* store.save(successor, base);
   return { action, collection, skills, ...receipt };
 });
 
@@ -456,7 +456,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
           }),
       ),
     );
-    yield* store.publish(successor, current.state);
+    yield* store.save(successor, current.state);
     return {
       skillVersionId: version.skill_version_id,
       retainedCopyId,

@@ -63,7 +63,7 @@ const upstream = Effect.gen(function* () {
       yield* withLibraryWriterLock(
         home,
         Effect.flatMap(LibraryStore, (store) =>
-          store.publish(
+          store.save(
             {
               ...state,
               global_bindings: [{ scope: { kind: "global" }, entries }],

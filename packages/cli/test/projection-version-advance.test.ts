@@ -53,7 +53,7 @@ const boundRawReview = Effect.gen(function* () {
   yield* writingTo(
     home,
     LibraryStore.use((store) =>
-      store.publish(
+      store.save(
         {
           ...bound,
           global_bindings: [
@@ -142,7 +142,7 @@ it.effect("heals an untouched Projection already recorded as conflicted", () =>
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        store.publish(
+        store.save(
           {
             ...state,
             projections: state.projections.map((row) => ({
@@ -233,7 +233,7 @@ for (const followedCollection of [false, true])
         yield* writingTo(
           home,
           LibraryStore.use((store) =>
-            store.publish(
+            store.save(
               {
                 ...withOther,
                 global_bindings: withOther.global_bindings.map((binding) => ({

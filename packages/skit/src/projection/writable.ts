@@ -18,7 +18,7 @@ const isPermissionDenied = (error: PlatformError): boolean =>
  * Prove that SKIT can place copies under a root: create the root and a scratch directory in each
  * place materializing writes, the root itself and the work directory where copies are staged and
  * backed up. A refusal becomes `ProjectionRootNotWritable` naming the root. Callers run this before
- * publishing Library state, so a sandboxed or read-only root fails without leaving a half-applied
+ * saving Library state, so a sandboxed or read-only root fails without leaving a half-applied
  * Library behind; materializing runs it again, so every copy write fails the same way.
  */
 export const ensureProjectionRootWritable = Effect.fn("Projection.ensureRootWritable")(

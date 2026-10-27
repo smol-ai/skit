@@ -155,16 +155,16 @@ export const inspectLocalLibraryStateEffect = Effect.fn("Library.inspectState")(
 });
 
 /**
- * Replace `base` with `next`, checking and writing under the writer lock and publish mutex. Fails
+ * Replace `base` with `next`, checking and writing under the writer lock and save mutex. Fails
  * with `LibraryChanged`, writing nothing, when the Library on disk is no longer `base`.
  */
-export const publishLibraryStateEffect = Effect.fn("Library.publishState")(function* (
+export const saveLibraryStateEffect = Effect.fn("Library.saveState")(function* (
   home: string,
   next: LibraryState,
   base: LibraryState,
 ) {
   const path = join(resolve(home), "state.json");
-  // Refuse what the loader would refuse, so a publish can never strand the Library unreadable.
+  // Refuse what the loader would refuse, so a save can never strand the Library unreadable.
   yield* decodeCurrentState(path, next);
   const text = yield* encodeLibraryState(next).pipe(
     Effect.mapError(

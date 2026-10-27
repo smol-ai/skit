@@ -138,7 +138,7 @@ const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(fu
   return { blockers, contentHash: yield* deterministicTreeHashEffect(root) };
 });
 
-/** Plan exact-content Custody transfer without retaining, projecting, or publishing state. */
+/** Plan exact-content Custody transfer without retaining, projecting, or saving state. */
 const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
   selected: readonly LocalAdoptionTarget[],
   nominatedSourcePath?: string,

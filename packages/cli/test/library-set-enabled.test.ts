@@ -159,7 +159,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        store.publish({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
+        store.save({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
       ).pipe(Effect.provide(layer)),
     );
     const stale = yield* applyBindingChanges(previewed).pipe(Effect.provide(layer), Effect.flip);
@@ -167,7 +167,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        Effect.flatMap(store.load, (current) => store.publish(state, current)),
+        Effect.flatMap(store.load, (current) => store.save(state, current)),
       ).pipe(Effect.provide(layer)),
     );
 

@@ -35,7 +35,7 @@ export const projectionWorkDirectoryEffect = Effect.fn("Projection.workDirectory
 
 /**
  * Move an owned copy aside instead of deleting it. It stays `pending` until the Library state that
- * no longer records it is published, so its absence is never read as the user's deletion.
+ * no longer records it is saved, so its absence is never read as the user's deletion.
  */
 export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
   projection: Pick<ManagedProjection, "root" | "path" | "projection_id">,

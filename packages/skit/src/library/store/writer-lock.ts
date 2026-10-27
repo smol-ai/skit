@@ -41,7 +41,7 @@ const endAuthority = (authority: WriterAuthority) =>
 /** Writers in this process queue for a Library; the lock file only has to exclude other ones. */
 const processWriters = new Map<string, Semaphore.Semaphore>();
 /** Every read-compare-write of a Library's state in this process, held or inherited writer alike. */
-const processPublishers = new Map<string, Semaphore.Semaphore>();
+const processSavers = new Map<string, Semaphore.Semaphore>();
 
 const semaphoreFor = (semaphores: Map<string, Semaphore.Semaphore>, root: string) => {
   let semaphore = semaphores.get(root);
@@ -70,7 +70,7 @@ export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(functio
     PlatformError | LibraryBusy
   > {
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
-    // Publish complete ownership atomically, so a contender never reads a half-written owner.
+    // Write complete ownership atomically, so a contender never reads a half-written owner.
     const attempt = yield* Effect.result(
       writeRawAtomicEffect(path, ownership, true).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
@@ -133,12 +133,11 @@ export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(functio
 });
 
 /**
- * Hold the writer lock and this process's publish mutex for one replacement of a Library's state.
+ * Hold the writer lock and this process's save mutex for one replacement of a Library's state.
  * The mutex serializes concurrent fibers that share one inherited writer lock; it is taken inside
- * the lock and never held while acquiring it, so a nested publish cannot deadlock.
+ * the lock and never held while acquiring it, so a nested save cannot deadlock.
  */
 export const withLibraryStateReplacement = <A, E, R>(
   home: string,
   program: Effect.Effect<A, E, R>,
-) =>
-  withLibraryWriterLock(home, semaphoreFor(processPublishers, resolve(home)).withPermit(program));
+) => withLibraryWriterLock(home, semaphoreFor(processSavers, resolve(home)).withPermit(program));

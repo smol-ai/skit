@@ -11,7 +11,7 @@ import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary, publishLibrary } from "./helpers/library-store.js";
+import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "portable-local-test");
 
@@ -70,7 +70,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
       localArchives: [archive],
     });
     const restored = yield* Effect.scoped(prepareRestoreEffect(manifest, plan, { originalsPath }));
-    yield* publishLibrary(secondHome, restored.state);
+    yield* saveLibrary(secondHome, restored.state);
     const second = yield* inspectLibrary(secondHome);
     assert.strictEqual(second.present, true);
     if (!second.present) return;

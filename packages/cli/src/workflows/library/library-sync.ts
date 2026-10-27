@@ -131,7 +131,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           options.deviceSelection === "follow-account"
             ? { mode: "follow-account" as const }
             : yield* selectDeviceSkills(emptyManifest, options.deviceSelection);
-        yield* store.publish(withDeviceSkillSelection(state, selection, options.origin), state);
+        yield* store.save(withDeviceSkillSelection(state, selection, options.origin), state);
       }
       return { status: "clean" as const, changed: false };
     }
@@ -155,7 +155,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     )
       return { status: "adoption_required" as const, revision_id: remote.revision_id };
     const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
-    // State and the base it was reconciled with are always published together, never apart.
+    // State and the base it was reconciled with are always saved together, never apart.
     const ancestryAt = (
       receipt: { library_id: string; revision_id: string },
       reconciled: LibraryManifest,
@@ -228,7 +228,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     const transitionIssues = transition.issues;
 
     if (clean) {
-      // Nothing to transfer, write or retire. Publish only to anchor ancestry this state lacks,
+      // Nothing to transfer, write or retire. Save only to anchor ancestry this state lacks,
       // and only onto the state compared with R.
       if (options.apply) {
         const sync_ancestry = ancestryAt(remote, remoteManifest);
@@ -237,7 +237,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           !sameDeviceSkillSelection(local.state, device)
         )
           yield* store
-            .publish({ ...device, sync_ancestry }, local.state)
+            .save({ ...device, sync_ancestry }, local.state)
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       }
       const projections = options.apply
@@ -284,12 +284,12 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     // The commit order, decided here and nowhere else: (1) retain every copy the result
     // references, (2) upload every snapshot the new head references, (3) write the head by
     // compare-and-swap on the revision this sync read, (4) retire the Projections the plan
-    // removes or reidentifies, (5) publish local state with ancestry naming exactly the written
+    // removes or reidentifies, (5) save local state with ancestry naming exactly the written
     // revision, onto exactly the state this sync planned from, (6) reconcile Projections. Remote
     // commits before local, so an interruption leaves R ahead of B and the next sync re-derives
     // the same result from the old base; local state never names a revision R does not hold.
     const restored = yield* transfer.restore();
-    // A merge or pull rechecks L before the remote write; a push relies on the publish check.
+    // A merge or pull rechecks L before the remote write; a push relies on the save check.
     if (remote !== null) {
       const fresh = yield* store.inspect;
       if (
@@ -307,12 +307,12 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
             { kind: "save-remote" },
             api.write(remote?.revision_id ?? null, desired),
           );
-    // Local state is published only onto exactly what this plan describes. If it moved, the
+    // Local state is saved only onto exactly what this plan describes. If it moved, the
     // device keeps its old ancestry and the next sync merges both changes.
     const retired = yield* observer.around(
       { kind: "save-local" },
       transition
-        .publishRestored(restored.state, ancestryAt(saved, desired))
+        .saveRestored(restored.state, ancestryAt(saved, desired))
         .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged()))),
     );
 

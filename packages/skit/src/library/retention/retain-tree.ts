@@ -44,7 +44,7 @@ export const originalTreeHashEffect = Effect.fn("Retention.originalHash")(functi
   return `sha256:${hash.digest("hex")}` as Digest;
 });
 
-/** Published immutable objects are never rollback-owned, even when this call created them. */
+/** Saved immutable objects are never rollback-owned, even when this call created them. */
 export const retainLocalTreeEffect = Effect.fn("Retention.retainTree")(function* (
   root: string,
   objectsPath: string,

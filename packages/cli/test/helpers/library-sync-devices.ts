@@ -67,19 +67,19 @@ export const devices = Effect.gen(function* () {
   );
   const device = (name: string) => {
     const home = join(workspace, name);
-    let publishes = 0;
+    let saves = 0;
     const layer = Layer.effect(
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
         ...store,
-        publish: Effect.fn("Test.LibraryStore.publish")(function* (
+        save: Effect.fn("Test.LibraryStore.save")(function* (
           state: LibraryState,
           base: LibraryState,
         ) {
-          publishes++;
+          saves++;
           if (
             faults.take(
-              "FailPublish",
+              "FailSave",
               (fault) =>
                 !fault.anchoredOnly ||
                 state.sync_ancestry?.revision_id === server.remote?.revision_id,
@@ -87,11 +87,11 @@ export const devices = Effect.gen(function* () {
           )
             return yield* new InvalidLibraryState({
               path: home,
-              detail: "Test interruption before merged state publication",
+              detail: "Test interruption before merged state save",
             });
-          yield* store.publish(state, base);
-          events.push(`publish ${name}`);
-          const obstruction = faults.take("ObstructAfterPublish", (fault) => fault.home === home);
+          yield* store.save(state, base);
+          events.push(`save ${name}`);
+          const obstruction = faults.take("ObstructAfterSave", (fault) => fault.home === home);
           if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
       })),
@@ -103,9 +103,9 @@ export const devices = Effect.gen(function* () {
       root,
       /** Every root a sync may write: the home, its projections, and their backups. */
       disk: [home, root, join(workspace, ".skit-backups")],
-      /** Local state publications attempted through this home's LibraryStore, refused or not. */
-      get publishes() {
-        return publishes;
+      /** Local state saves attempted through this home's LibraryStore, refused or not. */
+      get saves() {
+        return saves;
       },
       corruptOriginal: Effect.gen(function* () {
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -132,7 +132,7 @@ export const devices = Effect.gen(function* () {
       edit: (change: (state: LibraryState) => LibraryState) =>
         withLibraryWriter(
           Effect.flatMap(LibraryStore, (store) =>
-            Effect.flatMap(store.load, (state) => store.publish(change(state), state)),
+            Effect.flatMap(store.load, (state) => store.save(change(state), state)),
           ),
         ).pipe(Effect.provide(layer)),
       retain: (

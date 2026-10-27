@@ -167,7 +167,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...withLeftover,
               global_bindings: [
@@ -309,13 +309,13 @@ it.effect("refuses a confirmation when the Library changes after its revision ch
 it.effect("refuses an operation that would apply onto a change made after the previous one", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    // Count the publishes of the first operation alone, on an identical Library.
+    // Count the saves of the first operation alone, on an identical Library.
     const measured = yield* twoScopeProposal(1);
     let firstOperationPublishes = 0;
     yield* confirmThrough(measured.home, measured.proposed, (store) => ({
       ...store,
-      publish: (next, base) =>
-        store.publish(next, base).pipe(
+      save: (next, base) =>
+        store.save(next, base).pipe(
           Effect.tap(() =>
             Effect.sync(() => {
               firstOperationPublishes++;
@@ -328,9 +328,9 @@ it.effect("refuses an operation that would apply onto a change made after the pr
     let publishes = 0;
     const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
       ...store,
-      publish: (next, base) =>
+      save: (next, base) =>
         store
-          .publish(next, base)
+          .save(next, base)
           .pipe(
             Effect.andThen(
               ++publishes === firstOperationPublishes

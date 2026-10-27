@@ -138,7 +138,7 @@ it.effect.each(["move", "restore"] as const)(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("interruption after receipt publication moves nothing and permits inspection", () =>
+it.effect("interruption after the receipt is written moves nothing and permits inspection", () =>
   Effect.gen(function* () {
     const f = yield* recoveryFixture();
     const exit = yield* Effect.exit(

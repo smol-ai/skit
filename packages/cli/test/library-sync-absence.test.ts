@@ -24,7 +24,7 @@ const empty: LibraryManifest = currentLibraryManifest({
 
 /**
  * Assert that a sync published no local state, sent the Registry no write request, and left the
- * durable state of both unchanged. The counters see every publication and write request, including
+ * durable state of both unchanged. The counters see every save and write request, including
  * an identical rewrite in place or an idempotent write the Registry answers with its head. The
  * snapshot captures file identity, so it also sees an atomic replacement of identical bytes. Taking
  * the writer lock creates the home when it did not exist yet, as the fault-matrix rows allow; it
@@ -33,10 +33,10 @@ const empty: LibraryManifest = currentLibraryManifest({
 const unwritten = Effect.fn("Test.unwritten")(function* ({ server }: Homes, device: Device) {
   const before = yield* captureDisk(device.disk, { identity: true });
   const stored = server.stored;
-  const publishes = device.publishes;
+  const saves = device.saves;
   const writeRequests = server.writeRequests;
   return Effect.gen(function* () {
-    assert.strictEqual(device.publishes, publishes);
+    assert.strictEqual(device.saves, saves);
     assert.strictEqual(server.writeRequests, writeRequests);
     const changes = yield* diskChanges(before);
     assert.deepStrictEqual(
@@ -69,7 +69,7 @@ const emptyRemote = ({ server }: Homes) =>
     );
   });
 
-/** A state.json that exists and holds an empty Library, as a fresh home publishes one. */
+/** A state.json that exists and holds an empty Library, as a fresh home saves one. */
 const emptyLocal = (device: Device) => device.edit((state) => state);
 
 it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
@@ -151,11 +151,11 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
     const unchanged = yield* unwritten(homes, a);
     assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
     yield* unchanged;
-    const publishes = a.publishes;
+    const saves = a.saves;
     const writeRequests = server.writeRequests;
     assert.strictEqual((yield* a.sync()).status, "clean");
     // Anchoring is one local publication and no Registry write.
-    assert.strictEqual(a.publishes, publishes + 1);
+    assert.strictEqual(a.saves, saves + 1);
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
     assert.strictEqual(server.writes, 1);
@@ -190,7 +190,7 @@ it.effect("an anchored home that matches the remote: a clean preview writes noth
 );
 
 // A clean sync whose ancestry already names the head has nothing to anchor, and reconciliation of
-// Projections that are already current publishes nothing either.
+// Projections that are already current saves nothing either.
 it.effect("an anchored home that matches the remote: an applied clean writes nothing", () =>
   Effect.gen(function* () {
     const homes = yield* devices;

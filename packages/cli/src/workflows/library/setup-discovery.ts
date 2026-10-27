@@ -576,7 +576,7 @@ const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Setting
 export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* <
   E = never,
   R = never,
->(options: SetupOptions, beforePublish?: MachineSettings.BeforePublish<E, R>) {
+>(options: SetupOptions, beforeSave?: MachineSettings.BeforeSave<E, R>) {
   return yield* MachineSettings.updateDiscovery(
     options.libraryHome,
     {
@@ -587,7 +587,7 @@ export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(funct
         ? {}
         : { displayName: options.machineDisplayName }),
     },
-    beforePublish,
+    beforeSave,
   );
 });
 

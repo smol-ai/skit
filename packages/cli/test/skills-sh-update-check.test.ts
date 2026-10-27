@@ -15,7 +15,7 @@ import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
 
-it.effect("checks skills.sh status against real Git history without publishing Library state", () =>
+it.effect("checks skills.sh status against real Git history without saving Library state", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -112,7 +112,7 @@ it.effect("checks skills.sh status against real Git history without publishing L
         })),
       })),
     };
-    const published = yield* Ref.make<LibraryState | undefined>(undefined);
+    const savedState = yield* Ref.make<LibraryState | undefined>(undefined);
     const discoveryClient = HttpClient.make((request) => {
       const digest = `sha256:${createHash("sha256").update(original).digest("hex")}`;
       const body = request.url.endsWith("/.well-known/agent-skills/index.json")
@@ -141,7 +141,7 @@ it.effect("checks skills.sh status against real Git history without publishing L
     const store = {
       load: Effect.succeed(localState),
       inspect: Effect.succeed({ present: true as const, state: localState }),
-      publish: (next: LibraryState) => Ref.set(published, next),
+      save: (next: LibraryState) => Ref.set(savedState, next),
       home: home.home,
       originalsPath: home.originals,
       statePath: home.statePath,
@@ -230,6 +230,6 @@ it.effect("checks skills.sh status against real Git history without publishing L
       reason: "could not reach Git source",
     });
     // Checking only reports: the Library it read is left exactly as it was.
-    expect(yield* Ref.get(published)).toBeUndefined();
+    expect(yield* Ref.get(savedState)).toBeUndefined();
   }).pipe(Effect.provide(skitLayer)),
 );

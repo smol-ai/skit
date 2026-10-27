@@ -402,7 +402,7 @@ it.effect(
       assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
       assert.deepEqual(yield* b.state, before);
       assert.isTrue(yield* fs.exists(join(b.root, "same")));
-      inject({ _tag: "FailPublish", anchoredOnly: true });
+      inject({ _tag: "FailSave", anchoredOnly: true });
       assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
       const interrupted = yield* b.state;
       assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);

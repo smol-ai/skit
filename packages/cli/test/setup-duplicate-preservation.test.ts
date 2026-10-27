@@ -86,9 +86,9 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
           return yield* f.apply.pipe(
             Effect.provideService(LibraryStore, {
               ...store,
-              publish: (next, base) =>
+              save: (next, base) =>
                 Effect.gen(function* () {
-                  yield* store.publish(next, base);
+                  yield* store.save(next, base);
                   if (next.projections.some((projection) => projection.status === "installed"))
                     yield* f.fs.writeFileString(
                       join(f.duplicate, ".git"),
@@ -169,9 +169,9 @@ it.effect(
           return yield* f.apply.pipe(
             Effect.provideService(LibraryStore, {
               ...store,
-              publish: (next, base) =>
+              save: (next, base) =>
                 Effect.gen(function* () {
-                  yield* store.publish(next, base);
+                  yield* store.save(next, base);
                   if (next.projections.some((projection) => projection.status === "installed"))
                     yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
                 }),

@@ -52,7 +52,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
       // Pending copies may be between managed retirement and sync rematerialization. Their
       // absence is not evidence that the user deleted an installed copy.
       if (projection.status === "pending" || projection.status === "suppressed") continue;
-      // Nor is the absence of the very copy SKIT moved aside before it could publish why.
+      // Nor is the absence of the very copy SKIT moved aside before it could save why.
       if (yield* projectionDisplacedEffect(projection)) projection.status = "pending";
       else {
         projection.status = "suppressed";
@@ -233,7 +233,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   const store = yield* LibraryStore;
   const roots = deduplicateInventoryRoots(selectRoots(loaded));
   const state = yield* observeInventory(loaded, roots);
-  yield* store.publish(state, loaded);
+  yield* store.save(state, loaded);
   // A verified installation resolves every older displacement of its Projection. Those backups
   // no longer explain an absence, so they are kept, never discarded.
   for (const projection of state.projections) {

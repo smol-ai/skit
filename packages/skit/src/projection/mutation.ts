@@ -682,15 +682,15 @@ export interface ProjectionMutation<S extends ProjectionState = ProjectionState>
 }
 
 /**
- * Owns one private candidate and publishes it once after all derived filesystem work succeeds.
+ * Owns one private candidate and saves it once after all derived filesystem work succeeds.
  *
- * Nothing is rolled back. A failed batch instead publishes what its verified filesystem work left
+ * Nothing is rolled back. A failed batch instead saves what its verified filesystem work left
  * behind: each copy it wrote and verified as installed, and each it moved aside, leaving nothing in
  * its place, as `pending`, so an absence SKIT caused is never read as a native deletion. A write
- * that fails verification publishes nothing for its Projection. After a publish, pending backups of
+ * that fails verification saves nothing for its Projection. After a save, pending backups of
  * every Projection the batch touched are settled: discarded only when the loaded state proves the
  * retained original reproduces them, otherwise kept. A batch that leaves the state as loaded, wrote
- * nothing and has no backup to settle publishes nothing.
+ * nothing and has no backup to settle saves nothing.
  */
 export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(function* <
   S extends ProjectionState,
@@ -704,8 +704,8 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
   context: NativeProjectionContext & {
     /** Where retained originals live, to prove a backup reproducible before discarding it. */
     readonly originalsPath: string;
-    /** Publish `next` only if the Library is still `base`, the state this mutation loaded. */
-    readonly publish: (next: S, base: S) => Effect.Effect<void, PE, PR>;
+    /** Save `next` only if the Library is still `base`, the state this mutation loaded. */
+    readonly save: (next: S, base: S) => Effect.Effect<void, PE, PR>;
   },
   stage: (mutation: ProjectionMutation<S>) => Effect.Effect<T, SE, SR>,
 ) {
@@ -755,7 +755,7 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
         : result;
     }),
   };
-  const publishOnDisk = Effect.suspend(() => {
+  const saveOnDisk = Effect.suspend(() => {
     if (onDisk.size === 0) return Effect.void;
     const next = structuredClone(loaded);
     for (const projection of onDisk.values()) {
@@ -765,13 +765,13 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
       if (index >= 0) next.projections[index] = projection;
       else next.projections.push(projection);
     }
-    return context.publish(next, loaded);
+    return context.save(next, loaded);
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("Projections changed, but the Library could not record them", cause),
     ),
   );
-  const value = yield* stage(mutation).pipe(Effect.onError(() => publishOnDisk));
+  const value = yield* stage(mutation).pipe(Effect.onError(() => saveOnDisk));
   const pending = yield* Effect.forEach([...touched.values()], (projection) =>
     Effect.map(pendingProjectionBackupsEffect(projection), (backups) =>
       backups.map((backup) => ({ backup, projectionId: projection.projection_id })),
@@ -782,13 +782,13 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
       Effect.as(Effect.logWarning("Projection backups stayed pending", cause), []),
     ),
   );
-  // The publish also proves `loaded` is still the Library's, which settling a backup relies on.
+  // The save also proves `loaded` is still the Library's, which settling a backup relies on.
   if (
     onDisk.size > 0 ||
     pending.length > 0 ||
     libraryStateRevision(candidate) !== libraryStateRevision(loaded)
   )
-    yield* context.publish(candidate, loaded);
+    yield* context.save(candidate, loaded);
   yield* Effect.gen(function* () {
     for (const { backup, projectionId } of pending)
       if (

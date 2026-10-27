@@ -108,7 +108,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         }))
       : initial.skills,
   };
-  yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.publish(before, initial)));
+  yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.save(before, initial)));
   if (projectExisting) {
     yield* home.owned(
       writingTo(
@@ -223,7 +223,7 @@ it.effect(
       const f = yield* fixture(false, true);
       const operation = yield* inspectSetupOperation(f.home.home, f.operationId);
       expect(operation.complete).toBeUndefined();
-      expect(operation.changes.at(-1)?.published).toBe(false);
+      expect(operation.changes.at(-1)?.saved).toBe(false);
       expect(bindingSkillIds(yield* f.home.durable, f.binding)).toHaveLength(2);
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
