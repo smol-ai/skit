@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "../src/platform/layer.js";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeInstalledSkillId,
@@ -118,7 +118,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
     const firstSkill = fixture.skills[0];
     const firstAcquisition = fixture.acquisitions[0];
     const secondCollectionId = makeCollectionId();
-    const secondAcquisitionId = makeAcquisitionId();
+    const secondAcquisitionId = makeImportId();
     const secondCopyId = makeRetainedCopyId();
     fixture.retained_copies.push({
       ...fixture.retained_copies[0],
@@ -190,9 +190,9 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
       betaEdit: makeSkillVersionId(),
       gone1: makeSkillVersionId(),
       dropped1: makeSkillVersionId(),
-      first: makeAcquisitionId(),
-      second: makeAcquisitionId(),
-      edit: makeAcquisitionId(),
+      first: makeImportId(),
+      second: makeImportId(),
+      edit: makeImportId(),
       firstCopy: makeRetainedCopyId(),
       secondCopy: makeRetainedCopyId(),
       editCopy: makeRetainedCopyId(),
@@ -367,7 +367,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
       tracking: { kind: "default" },
     });
 
-    // Migration keeps every Acquisition and Skill, even `dropped`, which upstream deleted and
+    // Migration keeps every import and Skill, even `dropped`, which upstream deleted and
     // nothing uses.
     assert.deepStrictEqual(
       state.acquisitions.map((item) => [item.acquisition_id, item.kind, item.revision]),

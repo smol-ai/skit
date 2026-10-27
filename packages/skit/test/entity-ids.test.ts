@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { fromString, toUUID } from "typeid-js";
 import {
-  AcquisitionId,
+  ImportId,
   CollectionId,
   MachineId,
   OperationId,
@@ -45,7 +45,7 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
   assert.strictEqual(Schema.is(SkillId)(ids.skill), true);
   assert.strictEqual(Schema.is(SkillVersionId)(ids.version), true);
   assert.strictEqual(Schema.is(RetainedCopyId)(ids.retained), true);
-  assert.strictEqual(Schema.is(AcquisitionId)(ids.acquisition), true);
+  assert.strictEqual(Schema.is(ImportId)(ids.acquisition), true);
   assert.strictEqual(Schema.is(InstalledSkillId)(ids.projection), true);
   assert.strictEqual(Schema.is(MachineId)(ids.machine), true);
   assert.strictEqual(Schema.is(OperationId)(ids.operation), true);

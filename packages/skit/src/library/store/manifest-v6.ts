@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
 import {
-  Acquisition,
+  Import,
   BindingEntry,
   Collection,
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
@@ -24,7 +24,7 @@ export const LibraryManifestV6 = Schema.Struct({
   collections: Schema.Array(Collection),
   skills: Schema.Array(Skill),
   retained_copies: Schema.Array(RetainedCopy),
-  acquisitions: Schema.Array(Acquisition),
+  acquisitions: Schema.Array(Import),
   snapshot_digests: Schema.Array(Digest),
   bindings: Schema.Array(BindingV6),
 });

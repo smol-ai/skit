@@ -8,7 +8,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
-import { resolveSkitSource } from "../src/acquisition/sources.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const URL_ARCHIVE = "https://registry.example/source.zip";

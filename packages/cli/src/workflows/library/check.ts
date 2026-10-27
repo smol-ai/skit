@@ -6,12 +6,12 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { inspectLibrarySource } from "../../library-application/source-acquisition.js";
+import { inspectLibrarySource } from "../../library-application/retain-source.js";
 import { checkSkillsShSubject } from "./skills-sh-update-check.js";
 import {
-  latestSubjectAcquisition,
+  latestSourceImport,
   resolveOwningLibrarySubjects,
-  subjectAcquisitionIds,
+  subjectImportIds,
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
 
@@ -37,14 +37,14 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
           display_name: subject.collection.label,
         });
       const skills = subject.skills;
-      const acquisitionIds = subjectAcquisitionIds(state, subject);
+      const acquisitionIds = subjectImportIds(state, subject);
       const copyIds = new Set(
         state.acquisitions
           .filter((acquisition) => acquisitionIds.has(acquisition.acquisition_id))
           .map((acquisition) => acquisition.retained_copy_id),
       );
       const copies = state.retained_copies.filter((copy) => copyIds.has(copy.retained_copy_id));
-      const acquisition = latestSubjectAcquisition(state, subject);
+      const acquisition = latestSourceImport(state, subject);
       const currentCopy =
         acquisition === undefined
           ? undefined

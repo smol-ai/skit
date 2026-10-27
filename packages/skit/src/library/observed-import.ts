@@ -4,7 +4,7 @@ import { deterministicTreeHash, validateSkitDirectory } from "../artifact/skit.j
 import { InvalidLibraryState } from "../failures.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeRetainedCopyId,
   makeSkillId,
@@ -13,11 +13,11 @@ import {
 } from "./entity-ids.js";
 import * as MachineSettings from "./machine-settings.js";
 import {
-  Acquisition,
+  Import,
   type MaterializationProfile,
   type SkillsShLockFileEntry,
   type SkitSource,
-  sourceAcquisitions,
+  sourceImports,
   type SourceRevision,
   SourceIdentity,
   SourceTracking,
@@ -196,7 +196,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         Schema.toEquivalence(SourceIdentity)(candidate.upstream.source_identity, source) &&
         Schema.toEquivalence(SourceTracking)(candidate.upstream.tracking, refreshTracking)) ||
       (candidate.upstream === undefined &&
-        sourceAcquisitions(state, candidate.collection_id).some((acquisition) =>
+        sourceImports(state, candidate.collection_id).some((acquisition) =>
           Schema.toEquivalence(SourceIdentity)(acquisition.source_identity, source),
         )),
   );
@@ -223,8 +223,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     snapshotDigest: request.retainedDigest,
     members: request.facts,
   };
-  const acquisition: Acquisition = {
-    acquisition_id: makeAcquisitionId(),
+  const acquisition: Import = {
+    acquisition_id: makeImportId(),
     collection_id: collectionId,
     kind: "source",
     retained_copy_id: retainedCopyId,
@@ -233,17 +233,17 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     ...(revision === undefined ? {} : { revision }),
     acquired_at: request.retainedAt,
     machine_id: machineId,
-    // The importing machine records the entries, as it records the Acquisition itself.
+    // The importing machine records the entries, as it records the import itself.
     observations: request.observations.map((entry) => ({ ...entry, machine_id: machineId })),
   };
   const skillAt = (path: string) =>
     state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
   // Seeing exactly what was last acquired from this Source changes nothing, so record nothing.
-  const previous = sourceAcquisitions(state, collectionId)[0];
+  const previous = sourceImports(state, collectionId)[0];
   const unchangedSkills = request.facts.map((fact) => skillAt(fact.sourcePath));
   if (
     previous !== undefined &&
-    Schema.toEquivalence(Acquisition)(previous, {
+    Schema.toEquivalence(Import)(previous, {
       ...acquisition,
       acquisition_id: previous.acquisition_id,
       acquired_at: previous.acquired_at,
@@ -255,7 +255,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     (copy) => copy.retained_copy_id === previous?.retained_copy_id,
   );
   const persistedSkills = [];
-  // Acquisition metadata can change without changing the Versions the Library uses.
+  // Import metadata can change without changing the Versions the Library uses.
   let versionsChanged = false;
   for (const fact of request.facts) {
     let skill = skillAt(fact.sourcePath);
@@ -357,7 +357,7 @@ export class InstalledSkillObservationChanged
 /**
  * Retain one explicitly selected managed installed skill as a new Version of its existing Skill.
  *
- * The Acquisition records only the local path and machine that were actually observed. It does
+ * The import records only the local path and machine that were actually observed. It does
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
 export const retainChangedInstalledSkill = Effect.fn("Library.retainChangedInstalledSkill")(
@@ -431,7 +431,7 @@ export const retainChangedInstalledSkill = Effect.fn("Library.retainChangedInsta
         ],
       });
     state.acquisitions.push({
-      acquisition_id: makeAcquisitionId(),
+      acquisition_id: makeImportId(),
       collection_id: skill.collection_id,
       kind: "retained-edit",
       retained_copy_id: retainedCopyId,

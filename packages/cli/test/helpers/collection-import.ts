@@ -6,7 +6,7 @@ import { LibraryStore, libraryStoreLayer, retainedTreePath } from "@smolai/skit-
 import {
   retainLibrarySource,
   previewLibrarySource,
-} from "../../src/library-application/source-acquisition.js";
+} from "../../src/library-application/retain-source.js";
 import { writingTo } from "./library-home.js";
 
 export const gitBlobHash = (bytes: Uint8Array) =>

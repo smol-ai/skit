@@ -420,7 +420,7 @@ export type ResolvedSkitSource = DiscoveredSkills & {
 };
 
 /**
- * A user-facing locator for a Source, recorded as Acquisition history and shown in messages.
+ * A user-facing locator for a Source, recorded in import history and shown in messages.
  * It is never parsed back: structured Sources travel as values.
  */
 export function sourceLocator(source: SkitSource): string {
@@ -796,7 +796,7 @@ const readDiscoveryResponse = Effect.fn("Discovery.readResponse")(function* (
   return yield* readBodyWithin(response, limit, "Discovery response exceeds size limit");
 });
 
-const acquireDiscovery = Effect.fn("Discovery.acquire")(function* (
+const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
   source: Extract<SkitSource, { type: "well-known" }>,
   workspace: string,
 ) {
@@ -1183,7 +1183,7 @@ export function resolveSkitSource(
           revision: { kind: "commit" as const, commit: sourceRevision },
         };
       }
-      if (source.type === "well-known") return yield* acquireDiscovery(source, workspace);
+      if (source.type === "well-known") return yield* fetchDiscovery(source, workspace);
       const registryBaseUrl =
         source.type === "registry" ? (source.authority ?? options.registryBaseUrl) : undefined;
       if (source.type === "registry" && !registryBaseUrl)

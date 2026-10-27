@@ -15,7 +15,7 @@ import {
   projectBinding,
   MachineSettings,
   retainedTreePath,
-  sourceAcquisitions,
+  sourceImports,
   skitLayer,
 } from "@smolai/skit-core";
 import { bindingRoot } from "../src/projection/roots.js";
@@ -320,8 +320,8 @@ it.effect(
         currentSkillVersion(f.before, prior)?.skill_version_id,
       );
       expect(selected.local_version_id).toBeUndefined();
-      const observation = sourceAcquisitions(restored, f.collectionId)[0];
-      const original = sourceAcquisitions(f.before, f.collectionId)[0];
+      const observation = sourceImports(restored, f.collectionId)[0];
+      const original = sourceImports(f.before, f.collectionId)[0];
       expect(observation.retained_copy_id).toBe(original.retained_copy_id);
       expect(observation.observations).toEqual([]);
       const copy = restored.retained_copies.find(
@@ -407,7 +407,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const original = sourceAcquisitions(f.before, f.collectionId)[0];
+      const original = sourceImports(f.before, f.collectionId)[0];
       const copy = f.before.retained_copies.find(
         (item) => item.retained_copy_id === original.retained_copy_id,
       )!;

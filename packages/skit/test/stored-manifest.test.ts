@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
@@ -17,7 +17,7 @@ const skillId = makeSkillId();
 const otherSkillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const otherVersionId = makeSkillVersionId();
-const acquisitionId = makeAcquisitionId();
+const acquisitionId = makeImportId();
 const retainedCopyId = makeRetainedCopyId();
 const machineId = makeMachineId();
 const sourceIdentity = {

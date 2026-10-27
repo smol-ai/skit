@@ -1,7 +1,7 @@
 import { alignLibrary, aliasManifest, aliasDevice } from "./library-alignment.js";
 import {
-  acquisitionIsSourceRestorable,
-  sourceAcquisitions,
+  importCanBeRefetched,
+  sourceImports,
   currentCollectionSkills,
   canonicalJson,
   currentLibraryManifest,
@@ -20,7 +20,7 @@ import {
   type Collection,
   type Skill,
   type RetainedCopy,
-  type Acquisition,
+  type Import,
 } from "@smolai/skit-core";
 import { Data, Effect, Result, Schema } from "effect";
 import { SyncConflictDetail } from "./library-sync-contract.js";
@@ -229,7 +229,7 @@ export function mergeLibraryManifests(
   const collectionConflicts: string[] = [];
   const conflictedCollections = new Set<CollectionId>();
   const unresolvable: string[] = [];
-  // Source selection belongs to the Collection's observed Acquisition graph. A remote choice
+  // Source selection belongs to the Collection's import history. A remote choice
   // must adopt that graph, rather than pinning a Source Version as a retained local edit.
   const importCollections = new Set([
     ...independentCollections,
@@ -259,7 +259,7 @@ export function mergeLibraryManifests(
     });
     if (!membershipDiffers && !selectionDiffers) continue;
     const key = `collection:${id}`;
-    const latest = sourceAcquisitions(remote, id)[0];
+    const latest = sourceImports(remote, id)[0];
     // Selection has an ID tiebreak, but equal observation times do not authorize discarding history.
     // Preserve only strictly older history; any dropped equal-time content must be source-restorable.
     const kept = local.acquisitions.filter(
@@ -274,7 +274,7 @@ export function mergeLibraryManifests(
     );
     const safe =
       !mine.some((skill) => skill.local_version_id !== undefined) &&
-      dropped.every(acquisitionIsSourceRestorable);
+      dropped.every(importCanBeRefetched);
     if (!safe) unresolvable.push(key);
     if (takeRemote.has(key) && safe) {
       const choice = {
@@ -383,7 +383,7 @@ export function mergeLibraryManifests(
     (item) => item.retained_copy_id,
     takeRemote,
   );
-  const acquisitions = mergeRecords<Acquisition>(
+  const acquisitions = mergeRecords<Import>(
     "acquisition",
     base.acquisitions,
     local.acquisitions,
@@ -391,7 +391,7 @@ export function mergeLibraryManifests(
     (item) => item.acquisition_id,
     takeRemote,
   );
-  // A copy may be shared by Collections. Keep it while any surviving Acquisition references it.
+  // A copy may be shared by Collections. Keep it while any surviving import references it.
   const referencedCopies = new Set(acquisitions.values.map((item) => item.retained_copy_id));
   for (const id of referencedCopies) {
     if (trees.values.some((item) => item.retained_copy_id === id)) continue;

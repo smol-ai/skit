@@ -11,7 +11,7 @@ import { MissingRequirement } from "../../workflows/failures.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
-  sourceAcquisitionSubprocesses,
+  sourceFetchSubprocesses,
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
@@ -21,7 +21,7 @@ import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-servi
 import {
   retainLibrarySource,
   previewLibrarySource,
-} from "../../library-application/source-acquisition.js";
+} from "../../library-application/retain-source.js";
 import { rejectDedicatedInstallerSource } from "../../workflows/library/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
@@ -128,7 +128,7 @@ export const addCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
-      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.add, outputContracts.addPreview],
     exitCodes: [0, 11, 12, 64, 65],

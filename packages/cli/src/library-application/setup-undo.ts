@@ -9,7 +9,7 @@ import {
   LibraryStore,
   LinkStat,
   MachineSettings,
-  sourceAcquisitions,
+  sourceImports,
   withLibraryWriter,
   writeJsonExclusive,
   type CollectionId,
@@ -206,7 +206,7 @@ const observeUndo = Effect.fn("SetupUndo.observe")(function* (
         fromSnapshot: state.retained_copies.find(
           (item) =>
             item.retained_copy_id ===
-            sourceAcquisitions(state, restored.collection_id)[0].retained_copy_id,
+            sourceImports(state, restored.collection_id)[0].retained_copy_id,
         )!.digest,
         toSnapshot: state.retained_copies.find(
           (item) => item.retained_copy_id === restored.retained_copy_id,

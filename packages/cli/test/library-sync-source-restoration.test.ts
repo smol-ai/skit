@@ -13,7 +13,7 @@ import {
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { syncLibrary } from "../src/workflows/library/library-sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";

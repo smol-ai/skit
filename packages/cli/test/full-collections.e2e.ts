@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "@smolai/skit-core";
-import { previewLibrarySource } from "../src/library-application/source-acquisition.js";
+import { previewLibrarySource } from "../src/library-application/retain-source.js";
 import { assertCollectionImport } from "./helpers/collection-import.js";
 import manifest from "./fixtures/collections/full-manifest.json" with { type: "json" };
 

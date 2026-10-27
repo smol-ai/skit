@@ -6,7 +6,7 @@ import {
   currentSkillVersion,
   inspectOwnershipMarker,
   observeInventory,
-  makeAcquisitionId,
+  makeImportId,
   retainedTreePath,
   type SkillId,
 } from "@smolai/skit-core";
@@ -629,7 +629,7 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
     const { a, b, remote } = yield* devices;
     yield* a.retain("same");
     yield* b.retain("same");
-    const extraId = makeAcquisitionId();
+    const extraId = makeImportId();
     const originalId = (yield* a.state).acquisitions[0]?.acquisition_id;
     assert.ok(originalId);
     yield* a.edit((state) => ({

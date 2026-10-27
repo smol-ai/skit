@@ -7,7 +7,7 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
-  sourceAcquisitionSubprocesses,
+  sourceFetchSubprocesses,
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
@@ -79,7 +79,7 @@ export const updateCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
-      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [
       outputContracts.update,

@@ -5,7 +5,7 @@ import {
   currentLibraryManifest,
   librarySnapshotDigests,
   LibraryManifest,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
@@ -61,7 +61,7 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       ],
     },
     acquisition: {
-      acquisition_id: makeAcquisitionId(),
+      acquisition_id: makeImportId(),
       collection_id: collectionId,
       kind: "source" as const,
       retained_copy_id: retainedCopyId,

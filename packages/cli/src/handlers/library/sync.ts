@@ -8,7 +8,7 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
-  sourceAcquisitionSubprocesses,
+  sourceFetchSubprocesses,
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
@@ -185,7 +185,7 @@ export const librarySyncCliCommand = Command.make(
         "network.write",
         "process.execute",
       ],
-      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.librarySync],
     exitCodes: [0, 11, 12, 13, 64, 65],

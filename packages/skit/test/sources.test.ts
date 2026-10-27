@@ -14,7 +14,7 @@ import {
   sourceLocatorProfiles,
   sourceInputWithVersion,
   resolveSkitSource,
-} from "../src/acquisition/sources.js";
+} from "../src/sources/resolve.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
 import { prepareObservedCollection } from "../src/library/observed-import.js";

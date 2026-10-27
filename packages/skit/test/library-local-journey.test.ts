@@ -84,7 +84,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
+it.effect("reuses an unchanged Skill Version and keeps every import", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-reuse-" });

@@ -1,7 +1,7 @@
 // Cancelling an acquisition, in a real process.
 //
 // `add-cli-lifetime.test.ts` covers the mutating add either side of its durable commit, over a
-// local directory. Acquisition itself has two other kinds of live work a signal has to reach: a
+// local directory. Fetching itself has two other kinds of live work a signal has to reach: a
 // response body being read from the network, and a child process doing the fetching. This covers
 // both, for `add --list` as well as the mutating add.
 //

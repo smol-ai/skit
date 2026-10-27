@@ -2,7 +2,7 @@ import { Schema, SchemaGetter } from "effect";
 import { resolve } from "node:path";
 import { SkillId } from "../entity-ids.js";
 import {
-  Acquisition,
+  Import,
   BindingEntry,
   bindingSkillIds,
   Collection,
@@ -40,7 +40,7 @@ export const LibraryStateV6 = Schema.Struct({
   collections: Schema.Array(Collection),
   skills: Schema.Array(Skill),
   retained_copies: Schema.Array(RetainedCopy),
-  acquisitions: Schema.Array(Acquisition),
+  acquisitions: Schema.Array(Import),
   global_bindings: Schema.Array(DeviceBindingV6),
   local_bindings: Schema.Array(RepositoryBindingV6),
   projections: Schema.Array(ManagedProjectionV6),

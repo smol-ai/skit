@@ -1,10 +1,10 @@
 import { Clock, Effect } from "effect";
 import {
-  makeAcquisitionId,
+  makeImportId,
   originalTreeHash,
   retainedTreePath,
-  sourceAcquisitions,
-  type Acquisition,
+  sourceImports,
+  type Import,
   type CollectionId,
   type LibraryState,
   type MachineId,
@@ -12,7 +12,7 @@ import {
 import type { SetupIntent } from "./setup-undo-intent.js";
 
 export interface UndoSourceObservation {
-  readonly acquisitionId: Acquisition["acquisition_id"];
+  readonly acquisitionId: Import["acquisition_id"];
   readonly observedAt: string;
 }
 
@@ -26,12 +26,12 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
   observations: Map<CollectionId, UndoSourceObservation>,
 ) {
   const conflicts: string[] = [];
-  const restorations: Acquisition[] = [];
+  const restorations: Import[] = [];
   const evidence: { path: string; hash: string }[] = [];
   for (const prior of before.sources ?? []) {
     const after = expected.sources?.find((item) => item.collectionId === prior.collectionId);
     if (!after || after.retainedCopyId === prior.retainedCopyId) continue;
-    const current = sourceAcquisitions(state, prior.collectionId)[0];
+    const current = sourceImports(state, prior.collectionId)[0];
     if (current?.retained_copy_id === prior.retainedCopyId) continue;
     if (current?.retained_copy_id !== after.retainedCopyId) {
       conflicts.push(`Collection source changed after setup: ${prior.collectionId}`);
@@ -61,7 +61,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
     let observation = observations.get(prior.collectionId);
     if (!observation) {
       observation = {
-        acquisitionId: makeAcquisitionId(),
+        acquisitionId: makeImportId(),
         observedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       };
       observations.set(prior.collectionId, observation);

@@ -3,7 +3,7 @@ import { Effect, Schema, Struct } from "effect";
 import { isAbsolute, resolve } from "node:path";
 import { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
-  Acquisition,
+  Import,
   Binding,
   BindingEntry,
   Collection,
@@ -81,7 +81,7 @@ export const LibraryState = Schema.Struct({
   collections: Schema.mutable(Schema.Array(Collection)),
   skills: Schema.mutable(Schema.Array(Skill)),
   retained_copies: Schema.mutable(Schema.Array(RetainedCopy)),
-  acquisitions: Schema.mutable(Schema.Array(Acquisition)),
+  acquisitions: Schema.mutable(Schema.Array(Import)),
   global_bindings: Schema.mutable(Schema.Array(DeviceBinding)),
   local_bindings: Schema.mutable(Schema.Array(RepositoryBinding)),
   projections: Schema.mutable(Schema.Array(InstalledSkill)),

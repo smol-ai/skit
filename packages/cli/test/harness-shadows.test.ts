@@ -21,7 +21,7 @@ import {
   observeHarnessSkills,
   readableSkillsDirectories,
 } from "../src/projection/harness-shadows.js";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import { setupCommand } from "../src/handlers/library/setup.js";

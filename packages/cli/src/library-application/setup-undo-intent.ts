@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import {
   canonicalJson,
-  AcquisitionId,
+  ImportId,
   CollectionId,
   currentCollectionSkills,
   currentSkillVersion,
@@ -12,9 +12,9 @@ import {
   SkillId,
   SkillVersionId,
   CurrentMachineDocument,
-  sourceAcquisitions,
+  sourceImports,
   type LibraryState,
-  type Acquisition,
+  type Import,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
 
@@ -27,7 +27,7 @@ export const SetupIntent = Schema.Struct({
     Schema.Array(
       Schema.Struct({
         collectionId: CollectionId,
-        acquisitionId: AcquisitionId,
+        acquisitionId: ImportId,
         retainedCopyId: RetainedCopyId,
       }),
     ),
@@ -56,7 +56,7 @@ export const setupIntent = (state: LibraryState): SetupIntent => ({
   device: structuredClone(state.device_skill_selection ?? null),
   sources: state.collections
     .flatMap((collection) => {
-      const selected = sourceAcquisitions(state, collection.collection_id)[0];
+      const selected = sourceImports(state, collection.collection_id)[0];
       return selected
         ? [
             {
@@ -116,7 +116,7 @@ export const reverseSetupIntent = (
   state: LibraryState,
   before: SetupIntent,
   expected: SetupIntent,
-  restoredSources: readonly Acquisition[] = [],
+  restoredSources: readonly Import[] = [],
 ) => {
   const selectedSourceState = restoredSources.length
     ? { ...state, acquisitions: [...state.acquisitions, ...restoredSources] }

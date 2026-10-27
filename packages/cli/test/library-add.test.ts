@@ -15,7 +15,7 @@ import {
 import {
   retainLibrarySource,
   previewLibrarySource,
-} from "../src/library-application/source-acquisition.js";
+} from "../src/library-application/retain-source.js";
 import { planUpdates, updateSubjects } from "../src/library-application/update.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
@@ -441,7 +441,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
     yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
     const repeated = yield* load;
 
-    // The new commit is recorded as its own Acquisition of the same bytes.
+    // The new commit is recorded as its own import of the same bytes.
     assert.strictEqual(recorded.retained_copies.length, 1);
     assert.deepStrictEqual(
       recorded.acquisitions.map((acquisition) => acquisition.revision),

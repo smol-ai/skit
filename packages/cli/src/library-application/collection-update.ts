@@ -7,12 +7,12 @@ import {
 } from "@smolai/skit-core";
 import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
 import type { InventoryRootOptions } from "../projection/roots.js";
-import { retainLibrarySource, inspectLibrarySource } from "./source-acquisition.js";
+import { retainLibrarySource, inspectLibrarySource } from "./retain-source.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
 import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import { LibraryProgress } from "./progress.js";
 import {
-  latestSubjectAcquisition,
+  latestSourceImport,
   type LibrarySubject,
 } from "../workflows/library/subject-resolution.js";
 import { dirname, join, resolve } from "node:path";
@@ -121,7 +121,7 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
 ) {
-  const acquisition = latestSubjectAcquisition(state, subject);
+  const acquisition = latestSourceImport(state, subject);
   const priorTree =
     acquisition === undefined
       ? undefined
@@ -327,8 +327,8 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
           // Inspect persisted evidence rather than claiming that such an update was rolled back.
           if (!sourceRetained) {
             const current = yield* store.load;
-            const previous = latestSubjectAcquisition(state, before);
-            const latest = latestSubjectAcquisition(current, before);
+            const previous = latestSourceImport(state, before);
+            const latest = latestSourceImport(current, before);
             sourceRetained =
               latest !== undefined && latest.acquisition_id !== previous?.acquisition_id;
           }

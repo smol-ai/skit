@@ -11,7 +11,7 @@ import {
   LibraryStore,
   LibraryState,
   libraryStoreLayer,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   MachineSettings,
@@ -1057,7 +1057,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     const versionId = makeRetainedCopyId();
     const skillVersionId = makeSkillVersionId();
     const skillId = makeSkillId();
-    const acquisitionId = makeAcquisitionId();
+    const acquisitionId = makeImportId();
     const machineId = makeMachineId();
     const projectionId = makeInstalledSkillId();
     const orphanedSkill = join(f.codex, "orphaned");
@@ -1333,7 +1333,7 @@ it.effect(
       const missingVersionId = makeSkillVersionId();
       const currentSkillId = makeSkillId();
       const missingSkillId = makeSkillId();
-      const acquisitionId = makeAcquisitionId();
+      const acquisitionId = makeImportId();
       const machineId = makeMachineId();
       const currentProjectionId = makeInstalledSkillId();
       const missingProjectionId = makeInstalledSkillId();
@@ -1556,7 +1556,7 @@ for (const kind of ["source", "retained-edit"] as const) {
         ],
         acquisitions: [
           {
-            acquisition_id: makeAcquisitionId(),
+            acquisition_id: makeImportId(),
             collection_id: collectionId,
             kind,
             retained_copy_id: copyId,

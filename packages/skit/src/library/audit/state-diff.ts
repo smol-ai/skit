@@ -65,8 +65,8 @@ const compare = <T>(before: readonly T[], after: readonly T[], key: (item: T) =>
  * What one Library mutation changed, derived from the state on either side of it.
  *
  * History is a function of the two states, so nothing that mutates the Library has to describe
- * its own effect. Acquisitions and retained copies are deliberately not reported: re-acquiring an
- * unchanged Source records an Acquisition without changing anything a person selected, and a new
+ * its own effect. Imports and retained copies are deliberately not reported: re-fetching an
+ * unchanged Source records an import without changing anything a person selected, and a new
  * retained copy is already visible as the Skill Version it produced.
  */
 export const diffLibraryState = (

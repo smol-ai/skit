@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
 import {
-  AcquisitionId,
+  ImportId,
   CollectionId,
   MachineId,
   RetainedCopyId,
@@ -8,7 +8,7 @@ import {
   SkillVersionId,
 } from "../entity-ids.js";
 import {
-  type Acquisition,
+  type Import,
   type BindingEntry,
   type Collection,
   CollectionRelativePath,
@@ -44,7 +44,7 @@ export const UpstreamV5 = Schema.Struct({
   source_identity: SourceIdentity,
   tracking: SourceTracking,
   selection: AcquisitionSelectionV5,
-  last_acquisition_id: Schema.optionalKey(AcquisitionId),
+  last_acquisition_id: Schema.optionalKey(ImportId),
 });
 export const CollectionV5 = Schema.Struct({
   collection_id: CollectionId,
@@ -60,7 +60,7 @@ export const SkillVersionV5 = Schema.Struct({
   validation_identity_digest: Digest,
   materialization_profile: MaterializationProfile,
   origins: Schema.Array(
-    Schema.Struct({ acquisition_id: AcquisitionId, source_path: CollectionRelativePath }),
+    Schema.Struct({ acquisition_id: ImportId, source_path: CollectionRelativePath }),
   ),
 });
 export const SkillV5 = Schema.Struct({
@@ -74,7 +74,7 @@ export const SkillV5 = Schema.Struct({
 export type SkillV5 = typeof SkillV5.Type;
 
 export const AcquisitionV5 = Schema.Struct({
-  acquisition_id: AcquisitionId,
+  acquisition_id: ImportId,
   retained_copy_id: RetainedCopyId,
   source_identity: SourceIdentity,
   tracking: SourceTracking,
@@ -133,7 +133,7 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
 
   // A Collection's Source is its upstream, or for a local Collection its first Acquisition. Any
   // other Acquisition of that Collection retained a local edit from an installed skill path.
-  const kindOf = new Map<string, Acquisition["kind"]>();
+  const kindOf = new Map<string, Import["kind"]>();
   for (const collection of input.collections) {
     const owned = oldestFirst.filter(
       (acquisition) => collectionOf.get(acquisition.acquisition_id) === collection.collection_id,
@@ -149,7 +149,7 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
       );
   }
 
-  const acquisitions: Acquisition[] = oldestFirst.map((acquisition) => {
+  const acquisitions: Import[] = oldestFirst.map((acquisition) => {
     const git =
       acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git";
     // v5 recorded a Registry Release version only in the input locator.

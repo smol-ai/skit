@@ -9,7 +9,7 @@ import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/sk
 import { retainedTreePath } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { updateSubjects, updateExitCode } from "../src/library-application/update.js";
 import { silentLibraryProgressLayer } from "../src/library-application/progress.js";
 import { rendererTestLayer } from "./helpers/renderer.js";

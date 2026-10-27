@@ -12,7 +12,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { execFileSync } from "node:child_process";
 import { join, sep } from "node:path";
-import { resolveSkitSource } from "../src/acquisition/sources.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const SKILL = `---\nname: Review Notes\ndescription: A skill\n---\n\n# Review Notes\n`;

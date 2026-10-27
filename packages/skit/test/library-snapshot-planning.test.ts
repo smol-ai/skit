@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
@@ -9,9 +9,9 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import {
-  acquisitionIsSourceRestorable,
+  importCanBeRefetched,
   librarySnapshotDigests,
-  type Acquisition,
+  type Import,
   type LibraryManifest,
   type RetainedCopy,
 } from "../src/library/library-contracts.js";
@@ -34,8 +34,8 @@ const copy: RetainedCopy = {
   ],
 };
 const collectionId = makeCollectionId();
-const acquisition = (overrides: Partial<Acquisition>): Acquisition => ({
-  acquisition_id: makeAcquisitionId(),
+const acquisition = (overrides: Partial<Import>): Import => ({
+  acquisition_id: makeImportId(),
   collection_id: collectionId,
   kind: "source",
   retained_copy_id: retainedCopyId,
@@ -55,7 +55,7 @@ const acquisition = (overrides: Partial<Acquisition>): Acquisition => ({
 
 it("omits GitHub bytes pinned to a commit from private snapshot planning", () => {
   const pinned = acquisition({});
-  assert.strictEqual(acquisitionIsSourceRestorable(pinned), true);
+  assert.strictEqual(importCanBeRefetched(pinned), true);
   assert.deepStrictEqual(
     librarySnapshotDigests({ retained_copies: [copy], acquisitions: [pinned] }),
     [],
@@ -84,7 +84,7 @@ it("restores by revision whatever the collection root or input text", () => {
       revision: "1.2.0",
     }),
   ])
-    assert.strictEqual(acquisitionIsSourceRestorable(restorable), true);
+    assert.strictEqual(importCanBeRefetched(restorable), true);
 });
 
 it("keeps unpinned, local, and retained-edit acquisitions snapshot-backed", () => {
@@ -94,8 +94,7 @@ it("keeps unpinned, local, and retained-edit acquisitions snapshot-backed", () =
     input: { value: "/tmp/skill" },
   });
   const edit = acquisition({ kind: "retained-edit" });
-  for (const item of [unpinned, local, edit])
-    assert.strictEqual(acquisitionIsSourceRestorable(item), false);
+  for (const item of [unpinned, local, edit]) assert.strictEqual(importCanBeRefetched(item), false);
   assert.deepStrictEqual(
     librarySnapshotDigests({ retained_copies: [copy], acquisitions: [unpinned] }),
     [digest],
@@ -128,7 +127,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
   const legacyAcquisition = {
-    acquisition_id: makeAcquisitionId(),
+    acquisition_id: makeImportId(),
     retained_copy_id: retainedCopyId,
     source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
     tracking: { kind: "default" },
@@ -186,7 +185,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
   assert.deepStrictEqual(decoded.skills[0]?.versions[0]?.skill_version_id, versionId);
 });
 
-it("rejects a Skill Version that no Acquisition of its Collection backs", () => {
+it("rejects a Skill Version that no import of its Collection backs", () => {
   const versionId = makeSkillVersionId();
   const otherDigest = `sha256:${"c".repeat(64)}`;
   assert.throws(() =>

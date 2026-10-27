@@ -1,6 +1,6 @@
 // Which requests carry the Registry credential, and where it must not follow.
 //
-// Acquisition sends `authorization` only for a Registry source, and only when a token was
+// Fetching sends `authorization` only for a Registry source, and only when a token was
 // selected. A Registry download is also allowed to redirect, and the credential must not travel
 // to whatever origin it lands on — a redirect is attacker-influenceable whenever the Registry is.
 //
@@ -20,7 +20,7 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { resolveSkitSource } from "../src/acquisition/sources.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
 import { createSkitArchive } from "../src/authoring/archive.js";
 import { initSkit } from "../src/authoring/scaffold.js";
 import { skitLayer } from "../src/platform/layer.js";

@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import type { InventoryRootOptions } from "../projection/roots.js";
 import type { UpdateResult } from "../workflows/library/update-contract.js";
 import {
-  latestSubjectAcquisition,
+  latestSourceImport,
   resolveOwningLibrarySubjects,
 } from "../workflows/library/subject-resolution.js";
 import { previewCollectionUpdate, updateCollection } from "./collection-update.js";
@@ -21,7 +21,7 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
   if (query === undefined)
     return matches.filter(
       (subject) =>
-        latestSubjectAcquisition(state, subject) !== undefined &&
+        latestSourceImport(state, subject) !== undefined &&
         subject.kind === "collection" &&
         subject.collection.upstream !== undefined,
     );

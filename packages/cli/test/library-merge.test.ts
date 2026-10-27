@@ -3,8 +3,8 @@ import { Effect, Schema } from "effect";
 import {
   currentCollectionSkills,
   currentSkillVersion,
-  sourceAcquisitions,
-  makeAcquisitionId,
+  sourceImports,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
@@ -31,13 +31,13 @@ const decode = Schema.decodeUnknownEffect(LibraryManifest);
 const skillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const collectionId = makeCollectionId();
-const acquisitionId = makeAcquisitionId();
+const acquisitionId = makeImportId();
 const retainedCopyId = makeRetainedCopyId();
 const machineId = makeMachineId();
 const second = makeSkillVersionId();
 const third = makeSkillVersionId();
-const acquisitionB = makeAcquisitionId();
-const acquisitionC = makeAcquisitionId();
+const acquisitionB = makeImportId();
+const acquisitionC = makeImportId();
 const copyB = makeRetainedCopyId();
 const copyC = makeRetainedCopyId();
 const collection = {
@@ -195,7 +195,7 @@ it.effect(
           ...manifest().acquisitions,
           {
             ...manifest().acquisitions[0],
-            acquisition_id: makeAcquisitionId(),
+            acquisition_id: makeImportId(),
             retained_copy_id: copy,
             acquired_at: "2026-02-01T00:00:00Z",
           },
@@ -271,7 +271,7 @@ it.effect("independent Collection remote choice cannot discard a selected local 
   }).pipe(Effect.scoped),
 );
 
-it.effect("resolves Collection deletion against a new Acquisition as one conflict", () =>
+it.effect("resolves Collection deletion against a new import as one conflict", () =>
   Effect.gen(function* () {
     const base = yield* decode(manifest());
     const removed = yield* decode({
@@ -288,7 +288,7 @@ it.effect("resolves Collection deletion against a new Acquisition as one conflic
         ...manifest().acquisitions,
         {
           ...manifest().acquisitions[0],
-          acquisition_id: makeAcquisitionId(),
+          acquisition_id: makeImportId(),
           acquired_at: "2026-02-01T00:00:00.000Z",
         },
       ],
@@ -431,7 +431,7 @@ it.effect(
         ],
         acquisitions: [
           ...manifest().acquisitions,
-          { ...manifest().acquisitions[0], acquisition_id: makeAcquisitionId() },
+          { ...manifest().acquisitions[0], acquisition_id: makeImportId() },
         ],
       });
       const original = structuredClone(local);
@@ -646,7 +646,7 @@ it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
   }),
 );
 
-// A Collection with two Skills, `alpha` and `beta`, observed by one Source Acquisition.
+// A Collection with two Skills, `alpha` and `beta`, observed by one source import.
 const pairCollection = makeCollectionId();
 const pairCopy = makeRetainedCopyId();
 const pairDigest = `sha256:${"d".repeat(64)}`;
@@ -691,7 +691,7 @@ const pairManifest = (entries: unknown[]) => ({
   ],
   acquisitions: [
     {
-      acquisition_id: makeAcquisitionId(),
+      acquisition_id: makeImportId(),
       collection_id: pairCollection,
       kind: "source" as const,
       retained_copy_id: pairCopy,
@@ -797,7 +797,7 @@ it.effect(
       for (const acquisitions of [ordered, ordered.toReversed()]) {
         const candidate = { ...input, acquisitions };
         const normalized = normalizeLibraryManifest(candidate);
-        assert.deepStrictEqual(sourceAcquisitions(candidate, collectionId), ordered);
+        assert.deepStrictEqual(sourceImports(candidate, collectionId), ordered);
         assert.deepStrictEqual(currentSkillVersion(candidate, candidate.skills[0]!), expected);
         assert.deepStrictEqual(currentSkillVersion(normalized, normalized.skills[0]!), expected);
         assert.deepStrictEqual(currentCollectionSkills(normalized, collectionId), expectedMembers);

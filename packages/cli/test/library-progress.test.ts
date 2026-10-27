@@ -14,7 +14,7 @@ import {
   type LibraryProgressEvent,
 } from "../src/library-application/progress.js";
 import { updateSubjects } from "../src/library-application/update.js";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>

@@ -9,7 +9,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { executeRemove } from "../src/workflows/library/remove.js";
 import { systemError } from "effect/PlatformError";
 import {

@@ -6,13 +6,13 @@ import {
   currentLibraryManifest,
   librarySnapshotDigests,
   LibraryManifest,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
-  type Acquisition,
+  type Import,
   type BindingEntry,
   type Collection,
   type CollectionId,
@@ -36,7 +36,7 @@ interface Side {
   readonly collections: readonly Collection[];
   readonly skills: readonly Skill[];
   readonly retained_copies: readonly RetainedCopy[];
-  readonly acquisitions: readonly Acquisition[];
+  readonly acquisitions: readonly Import[];
   readonly entries: readonly BindingEntry[];
 }
 const none: Side = {
@@ -48,7 +48,7 @@ const none: Side = {
 };
 
 interface Observation {
-  readonly acquisition: Acquisition;
+  readonly acquisition: Import;
   readonly copy: RetainedCopy;
   readonly versions: Readonly<Record<string, SkillVersion>>;
 }
@@ -78,7 +78,7 @@ const fixture = (paths: readonly string[]) => {
     return created;
   };
   const acquire = (
-    kind: Acquisition["kind"],
+    kind: Import["kind"],
     members: Readonly<Record<string, SkillVersion>>,
     at: string,
   ): Omit<Observation, "versions"> => {
@@ -97,7 +97,7 @@ const fixture = (paths: readonly string[]) => {
     return {
       copy,
       acquisition: {
-        acquisition_id: makeAcquisitionId(),
+        acquisition_id: makeImportId(),
         collection_id,
         kind,
         retained_copy_id,
@@ -116,7 +116,7 @@ const fixture = (paths: readonly string[]) => {
   return {
     collection_id,
     skillIds,
-    /** A Source Acquisition of every path; `sources` overrides a path's source bytes. */
+    /** A source import of every path; `sources` overrides a path's source bytes. */
     observe: (
       bytes: Readonly<Record<string, string>>,
       at = "2026-01-01T00:00:00.000Z",
@@ -336,7 +336,7 @@ const families = {
       base: x.held([first]),
       local: none,
       remote: updated,
-      // One Collection choice, not separate Skill and Acquisition keys.
+      // One Collection choice, not separate Skill and import keys.
       conflicts: [`collection:${x.collection_id}`],
       resolved: updated,
       symmetric: true,
@@ -353,7 +353,7 @@ const families = {
       local: x.held([first, mine]),
       remote,
       conflicts: [`skill:${x.skillIds.alpha}`],
-      // Taking the remote Skill keeps both Acquisitions and their bytes.
+      // Taking the remote Skill keeps both imports and their bytes.
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
@@ -414,7 +414,7 @@ const families = {
       local: x.held([mine]),
       remote,
       conflicts: [`collection:${x.collection_id}`],
-      // The strictly older local Acquisition is kept as history; the Skill takes remote Versions.
+      // The strictly older local import is kept as history; the Skill takes remote Versions.
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],

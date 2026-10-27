@@ -20,7 +20,7 @@ import { applySetupLocalCustody } from "../src/workflows/library/setup-local-cus
 import {
   retainLibrarySource,
   inspectLibrarySource,
-} from "../src/library-application/source-acquisition.js";
+} from "../src/library-application/retain-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {

@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { Effect, FileSystem } from "effect";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveSkitSource } from "../src/acquisition/sources.js";
-import { readPluginUnits } from "../src/acquisition/plugin-manifests.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
+import { readPluginUnits } from "../src/sources/plugin-manifests.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const fixture = Effect.gen(function* () {

@@ -3,7 +3,7 @@ import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
 import { checkSubjects } from "../src/workflows/library/check.js";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
 it.effect("checks retained custody without treating an observed local copy as an upstream", () =>

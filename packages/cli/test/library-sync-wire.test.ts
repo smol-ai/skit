@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { acquisitionIsSourceRestorable, librarySnapshotDigests } from "@smolai/skit-core";
+import { importCanBeRefetched, librarySnapshotDigests } from "@smolai/skit-core";
 import { LibraryChangedOnServer } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import {
@@ -66,11 +66,8 @@ it.effect("decodes a literal skit.library.v7 head without loss", () =>
     ]);
     assert.deepStrictEqual(result, head.library);
     assert.ok(result);
-    // The pinned Git Acquisition is restorable from its Source; the retained edit needs a snapshot.
-    assert.deepStrictEqual(result.manifest.acquisitions.map(acquisitionIsSourceRestorable), [
-      true,
-      false,
-    ]);
+    // The pinned Git import is restorable from its Source; the retained edit needs a snapshot.
+    assert.deepStrictEqual(result.manifest.acquisitions.map(importCanBeRefetched), [true, false]);
     assert.deepStrictEqual(librarySnapshotDigests(result.manifest), [archive.digest]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

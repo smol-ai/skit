@@ -8,7 +8,7 @@ import {
   LibraryStore,
   libraryAuditLogLayer,
   libraryStoreLayer,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeInstalledSkillId,
@@ -39,7 +39,7 @@ const collectionId = makeCollectionId();
 const retainedTreeId = makeRetainedCopyId();
 const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
-const acquisitionId = makeAcquisitionId();
+const acquisitionId = makeImportId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
   schemaVersion: 9,

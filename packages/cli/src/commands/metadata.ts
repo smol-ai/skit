@@ -22,7 +22,7 @@ export interface CommandMetadataShape {
 }
 
 /** Git commands Source acquisition runs when it retains or restores a Git or GitHub Source. */
-export const sourceAcquisitionSubprocesses = [
+export const sourceFetchSubprocesses = [
   "git clone --filter=blob:none --no-checkout",
   "git fetch --filter=blob:none",
   "git checkout --detach",

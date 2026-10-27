@@ -7,7 +7,7 @@ import { makeWebHandler } from "../src/http.js";
 import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
 import { expectedMigrations } from "../src/readiness/migrations.generated.js";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
   makeRetainedCopyId,
@@ -882,7 +882,7 @@ describe("Better Auth adapter", () => {
       const skillId = makeSkillId();
       const skillVersionId = makeSkillVersionId();
       const retainedCopyId = makeRetainedCopyId();
-      const acquisitionId = makeAcquisitionId();
+      const acquisitionId = makeImportId();
       const machineId = makeMachineId();
       // A v5 manifest as an older CLI would write it, then the current model of the same Library.
       const portableV5 = {

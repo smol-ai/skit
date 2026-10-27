@@ -50,7 +50,7 @@ import { dirname, join, resolve } from "node:path";
 import {
   retainLibrarySource,
   inspectLibrarySource,
-} from "../../library-application/source-acquisition.js";
+} from "../../library-application/retain-source.js";
 import type { InstalledSkillOptions } from "./installed-skill-options.js";
 
 const LocalAdoptionTarget = Schema.Struct({

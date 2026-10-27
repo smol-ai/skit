@@ -9,7 +9,7 @@ import {
   type ObservedSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import {
   initializeLibraryMachine,
   libraryHome,

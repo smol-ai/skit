@@ -6,7 +6,7 @@ import { LibraryStore, libraryStoreLayer, retainedTreePath, skitLayer } from "@s
 import {
   retainLibrarySource,
   previewLibrarySource,
-} from "../src/library-application/source-acquisition.js";
+} from "../src/library-application/retain-source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
 import { writingTo } from "./helpers/library-home.js";
 import manifest from "./fixtures/source-regressions/humanlayer.json" with { type: "json" };

@@ -21,7 +21,7 @@ content before deciding whether it changed; they do not use a metadata-only upda
 | Agent Skills discovery    | `https://example.com`, `wellknown:https://example.com`, or an explicit index URL | Fetch the index, acquire selected artifacts or legacy listed files, normalize, and compare content. Verify `0.2.0` artifact digests before retaining.                                                                | A `0.2.0` index digest can identify a candidate without downloading the artifact. Legacy checking requires fetching listed files. SKIT currently reacquires content for `check`.                                     |
 
 The syntax catalog and acquisition behavior live in
-[`packages/skit/src/acquisition/sources.ts`](../packages/skit/src/acquisition/sources.ts). The
+[`packages/skit/src/sources/resolve.ts`](../packages/skit/src/sources/resolve.ts). The
 current comparison is in
 [`packages/cli/src/handlers/library/check.ts`](../packages/cli/src/handlers/library/check.ts).
 Bare `owner/repo` is normally GitHub shorthand; when a version is requested and no local path of

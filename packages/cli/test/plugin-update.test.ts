@@ -5,7 +5,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
-import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { planUpdates, updateSubjects } from "../src/library-application/update.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";

@@ -3,7 +3,7 @@ import type { RestoreObserver, RestorePhase } from "./restore-progress.js";
 import type { Digest } from "../contracts.js";
 import { ContentAddressCollision } from "../failures.js";
 import { retainedTreePath } from "./retention/retain-tree.js";
-import { resolveSkitSource } from "../acquisition/sources.js";
+import { resolveSkitSource } from "../sources/resolve.js";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { prepareObservedCollection } from "./observed-import.js";
 import { Data, Effect, FileSystem } from "effect";
@@ -13,8 +13,8 @@ import { captureSnapshotArchive, materializeVerifiedSnapshot } from "./snapshot-
 import { verifySnapshotArchive } from "./snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "./library-state.js";
 import {
-  acquisitionIsSourceRestorable,
-  type Acquisition,
+  importCanBeRefetched,
+  type Import,
   type SkitSource,
   bindingSkillIds,
   currentLibraryManifest,
@@ -63,10 +63,10 @@ export class SourceRestoreInvalid
 }
 
 /**
- * The Source to reacquire an Acquisition's exact bytes from: its recorded identity at its
+ * The Source to refetch an import's exact bytes from: its recorded identity at its
  * revision. Git restores pin the commit separately; a Registry restore names the Release.
  */
-const restorableSource = (acquisition: Acquisition): SkitSource | undefined => {
+const restorableSource = (acquisition: Import): SkitSource | undefined => {
   const identity = acquisition.source_identity;
   const subpath =
     (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
@@ -97,7 +97,7 @@ const restorableSource = (acquisition: Acquisition): SkitSource | undefined => {
   }
 };
 
-const reacquireSourceArchive = Effect.fn("Library.restore.reacquireSource")(function* (
+const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function* (
   manifest: LibraryManifest,
   digest: string,
   options: RestoreOptions,
@@ -105,8 +105,7 @@ const reacquireSourceArchive = Effect.fn("Library.restore.reacquireSource")(func
   const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
   const acquisition = manifest.acquisitions.find(
     (candidate) =>
-      candidate.retained_copy_id === copy?.retained_copy_id &&
-      acquisitionIsSourceRestorable(candidate),
+      candidate.retained_copy_id === copy?.retained_copy_id && importCanBeRefetched(candidate),
   );
   if (copy === undefined || acquisition === undefined)
     return yield* new SourceRestoreInvalid({
@@ -305,7 +304,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
       copy.digest;
     const archive = yield* observer.around(
       { kind: "fetch-source", subject },
-      reacquireSourceArchive(manifest, copy.digest, options),
+      refetchSourceArchive(manifest, copy.digest, options),
     );
     archives.set(archive.digest, archive);
   }
@@ -319,7 +318,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
 
 /**
  * Prepare the exact content a manifest requires, without saving Library state or rewriting
- * Acquisition provenance. Available snapshots and exact source reconstruction share verification.
+ * import history. Available snapshots and exact source reconstruction share verification.
  */
 export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E = never, R = never>(
   manifest: LibraryManifest,

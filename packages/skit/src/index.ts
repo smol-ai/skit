@@ -48,12 +48,12 @@ export {
 export { inspectInstalledSkillBackups } from "./projection/backups.js";
 export { copyLocalTree } from "./platform/copy-tree.js";
 export { ensureSkillsDirectoryWritable } from "./projection/writable.js";
-export { discoveryPathExcluded } from "./acquisition/discovery-exclusions.js";
+export { discoveryPathExcluded } from "./sources/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
 export * from "./artifact/descriptor.js";
 export * from "./artifact/skit.js";
 export * from "./artifact/tree-hasher.js";
-export * from "./acquisition/sources.js";
+export * from "./sources/resolve.js";
 export * from "./shared/three-way-merge.js";
 export * from "./platform/tree-requirements.js";
 export * from "./shared/tree-error.js";

@@ -164,7 +164,7 @@ it.effect(
         assert.notInclude(text, retired);
       yield* assertIntact(homes, b, retained);
 
-      // A gains B's Acquisition without another write, then both homes are clean.
+      // A gains B's import without another write, then both homes are clean.
       assert.strictEqual(server.writes, 2);
       assert.strictEqual((yield* a.sync()).status, "merged");
       assert.strictEqual((yield* a.state).acquisitions.length, 2);
@@ -294,7 +294,7 @@ it.effect(
         [v1, remoteV2].sort(),
       );
       assert.notInclude(yield* stateBytes(fs, b), localV2);
-      // The rejected Version's Acquisition and bytes stay retained.
+      // The rejected Version's import and bytes stay retained.
       assert.deepStrictEqual(
         ids(after.acquisitions, (item) => item.acquisition_id),
         [...new Set([...localAcquisitions, ...remoteAcquisitions])].sort(),
@@ -381,7 +381,7 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
       ids((yield* a.state).skills[0]!.versions, (item) => item.skill_version_id),
     );
     assert.notInclude(yield* stateBytes(fs, b), bEdit);
-    // The source Acquisition and both devices' retained edits.
+    // The source import and both devices' retained edits.
     assert.strictEqual(after.acquisitions.length, 3);
     assert.strictEqual(
       after.acquisitions.filter((item) => item.kind === "retained-edit").length,
@@ -438,7 +438,7 @@ it.effect(
         const stopped = yield* b.sync({ adopt: true, apply });
         assert.strictEqual(stopped.status, "conflicted");
         if (stopped.status === "conflicted") {
-          // The Skill and Acquisition differences belong to the one Collection choice.
+          // The Skill and import differences belong to the one Collection choice.
           assert.deepStrictEqual(stopped.conflicts, [key]);
           assert.strictEqual(stopped.conflict_details?.[0]?.resolution, "take-remote");
         }
@@ -461,7 +461,7 @@ it.effect(
         currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
         publishedSkill.versions[0]!.skill_version_id,
       );
-      // B's strictly older Acquisition stays as history, with its bytes.
+      // B's strictly older import stays as history, with its bytes.
       assert.deepStrictEqual(
         ids(after.acquisitions, (item) => item.acquisition_id),
         [
@@ -478,7 +478,7 @@ it.effect(
 );
 
 it.effect(
-  "a divergent import whose local Acquisition is not strictly older cannot be taken remotely",
+  "a divergent import whose local import is not strictly older cannot be taken remotely",
   () =>
     Effect.gen(function* () {
       const homes = yield* devices;
@@ -494,7 +494,7 @@ it.effect(
       assert.strictEqual(stopped.status, "conflicted");
       if (stopped.status === "conflicted") {
         assert.deepStrictEqual(stopped.conflicts, [key]);
-        // Equal timestamps do not establish precedence, and the local Acquisition is unpinned.
+        // Equal timestamps do not establish precedence, and the local import is unpinned.
         assert.strictEqual(stopped.conflict_details?.[0]?.resolution, "local");
       }
       for (const apply of [false, true])

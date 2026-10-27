@@ -14,7 +14,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
-import { parseSkitSource, resolveSkitSource } from "../src/acquisition/sources.js";
+import { parseSkitSource, resolveSkitSource } from "../src/sources/resolve.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const outcome = (exit: Exit.Exit<unknown, unknown>): string => {
