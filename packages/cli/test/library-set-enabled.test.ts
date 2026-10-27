@@ -8,7 +8,7 @@ import {
   libraryStoreLayer,
   makeCollectionId,
   makeSkillId,
-  type ObservedSkill,
+  type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryBindings, previewTestBindings } from "./helpers/binding-changes.js";
@@ -221,7 +221,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     const home = roots.home;
     const observed = join(workspace, "observed");
     yield* initializeLibraryMachine(home);
-    const skills: ObservedSkill[] = [];
+    const skills: ImportRequestSkill[] = [];
     for (const name of ["review", "test", "docs"]) {
       const path = join(observed, name);
       yield* fs.makeDirectory(path, { recursive: true });
@@ -233,7 +233,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
         observedHash: yield* deterministicTreeHash(path),
       });
     }
-    const retain = (members: readonly ObservedSkill[], retainedAt: string) =>
+    const retain = (members: readonly ImportRequestSkill[], retainedAt: string) =>
       Effect.scoped(
         writingTo(
           home,

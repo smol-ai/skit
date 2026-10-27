@@ -15,7 +15,7 @@ export type SyncPhase =
     }
   | { readonly kind: "verify-copies" | "upload"; readonly total: number };
 
-export interface SyncObserver {
+export interface SyncProgress {
   readonly around: <A, E, R>(
     phase: SyncPhase,
     operation: Effect.Effect<A, E, R>,
@@ -27,7 +27,7 @@ export interface SyncObserver {
   }) => Effect.Effect<void>;
 }
 
-export const silentSyncObserver: SyncObserver = {
+export const silentSyncProgress: SyncProgress = {
   around: (_phase, operation) => operation,
   tick: () => Effect.void,
 };

@@ -1,12 +1,12 @@
 import { Data, Effect, Schema } from "effect";
-import { retainObservedCollection, LibraryStore, sourceLocator } from "@smolai/skit-core";
+import { importCollection, LibraryStore, sourceLocator } from "@smolai/skit-core";
 import { type SetupOptions } from "./setup.js";
 import { SetupKnownSourceSelection, type SetupResult } from "./setup-contract.js";
 import { prepareSkillsShImportEvidence } from "./skills-sh-lock-source.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class SetupObservedCollectionInvalid
-  extends Data.TaggedError("SetupObservedCollectionInvalid")<{
+export class SetupImportInvalid
+  extends Data.TaggedError("SetupImportInvalid")<{
     name: string;
     reason:
       | "duplicate-selection"
@@ -29,13 +29,13 @@ export class SetupObservedCollectionInvalid
   }
 }
 
-export interface SetupObservedCollectionOptions {
+export interface SetupImportOptions {
   readonly setup: SetupOptions;
 }
 
 /** Retain selected installed bytes from one freshly revalidated observation. */
-export const applySetupObservedCollections = Effect.fn("Setup.applyObservedCollections")(function* (
-  options: SetupObservedCollectionOptions,
+export const importSetupCollections = Effect.fn("Setup.applyObservedCollections")(function* (
+  options: SetupImportOptions,
   current: SetupResult,
   untrustedSelections: readonly unknown[],
 ) {
@@ -44,7 +44,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
   );
   const machineId = current.machineConfig.machineId;
   if (!machineId)
-    return yield* new SetupObservedCollectionInvalid({
+    return yield* new SetupImportInvalid({
       name: "machine",
       reason: "machine-identity-missing",
     });
@@ -61,7 +61,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
   for (const selection of selections) {
     const key = `${selection.groupKey}\0${selection.name}\0${[...selection.paths].sort().join("\0")}`;
     if (selected.has(key))
-      return yield* new SetupObservedCollectionInvalid({
+      return yield* new SetupImportInvalid({
         name: selection.name,
         reason: "duplicate-selection",
       });
@@ -80,7 +80,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
         selection.paths.every((path) => item.paths.includes(path)),
     );
     if (!candidate)
-      return yield* new SetupObservedCollectionInvalid({
+      return yield* new SetupImportInvalid({
         name: selection.name,
         reason: "candidate-not-found",
       });
@@ -105,12 +105,12 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
       observedAt,
     ).pipe(
       Effect.catchTag("SkillsShImportEvidenceInvalid", ({ name, reason }) =>
-        Effect.fail(new SetupObservedCollectionInvalid({ name, reason })),
+        Effect.fail(new SetupImportInvalid({ name, reason })),
       ),
     );
     retained.push(
       yield* Effect.scoped(
-        retainObservedCollection({
+        importCollection({
           input: sourceLocator(evidence.source),
           source: evidence.source,
           retainedAt: observedAt,
@@ -122,7 +122,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
   }
   const persisted = yield* (yield* LibraryStore).inspect;
   if (!persisted.present)
-    return yield* new SetupObservedCollectionInvalid({
+    return yield* new SetupImportInvalid({
       name: "Library",
       reason: "retention-missing",
     });
@@ -134,7 +134,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
           !persisted.state.skills.some((candidate) => candidate.skill_id === skill.skill_id),
       )
     )
-      return yield* new SetupObservedCollectionInvalid({
+      return yield* new SetupImportInvalid({
         name: result.collection?.collection_id ?? result.skills[0]?.skill_id ?? "Library",
         reason: "retention-missing",
       });

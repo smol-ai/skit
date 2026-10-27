@@ -12,8 +12,8 @@ import {
 import { sourceIdentityLabel } from "../../library-application/skill-metadata.js";
 import { custodyAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "./skills-sh-lock-source.js";
-import { classifyObservedOwner } from "./setup-onboarding.js";
-import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
+import { classifyOwner } from "./setup-onboarding.js";
+import { makePnpmSkillCheck, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
 import { probeHarnesses } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
@@ -66,14 +66,14 @@ const indexSetupLibrary = (
   return { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath };
 };
 
-const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
+const scanSetupInstances = Effect.fn("Setup.observeInstances")(function* (
   evidence: SetupEvidence,
   indexes: ReturnType<typeof indexSetupLibrary>,
   home: string,
 ) {
   const { hits, harnessRoots, observedLibrary, library, locks } = evidence;
   const { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath } = indexes;
-  const observePnpm = yield* makePnpmSkillObserver();
+  const observePnpm = yield* makePnpmSkillCheck();
   const grouped = new Map<string, SetupEvidence["hits"]>();
   const pnpmByPath = new Map<string, Effect.Success<ReturnType<typeof pnpmSkillOwner>>>();
   for (const hit of hits) {
@@ -160,7 +160,7 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
       locks,
       roots.some((root) => root.scope === "global"),
     );
-    const observedOwner = classifyObservedOwner({
+    const observedOwner = classifyOwner({
       canonicalPath: hit.realPath,
       home,
       harnesses,
@@ -198,7 +198,7 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
   return { instances, onboardingInstances };
 });
 
-const observeSetupInstalledSkills = Effect.fn("Setup.observeInstalledSkills")(function* (
+const scanSetupInstalledSkills = Effect.fn("Setup.observeInstalledSkills")(function* (
   observedLibrary: SetupEvidence["observedLibrary"],
   indexes: ReturnType<typeof indexSetupLibrary>,
 ) {
@@ -226,18 +226,18 @@ const observeSetupInstalledSkills = Effect.fn("Setup.observeInstalledSkills")(fu
   return projections;
 });
 
-export const observeSetupCopies = Effect.fn("Setup.observeCopies")(function* (
+export const scanSetupCopies = Effect.fn("Setup.observeCopies")(function* (
   evidence: SetupEvidence,
   home: string,
   probePath?: string,
 ) {
   const indexes = indexSetupLibrary(evidence.library, evidence.authoredCollections);
-  const { instances, onboardingInstances } = yield* observeSetupInstances(evidence, indexes, home);
+  const { instances, onboardingInstances } = yield* scanSetupInstances(evidence, indexes, home);
   const probes = (yield* probeHarnesses(undefined, { path: probePath })).map((probe) => ({
     harness: probe.harnessId,
     status: probe.status,
     command: probe.command,
   }));
-  const projections = yield* observeSetupInstalledSkills(evidence.observedLibrary, indexes);
+  const projections = yield* scanSetupInstalledSkills(evidence.observedLibrary, indexes);
   return { instances, onboardingInstances, probes, projections };
 });

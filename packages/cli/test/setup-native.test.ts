@@ -23,7 +23,7 @@ import {
 } from "@smolai/skit-core";
 import {
   classifySetupOnboarding,
-  classifyObservedOwner,
+  classifyOwner,
   computeSkillsLockCompatibleHash,
   revalidateSetupPlan,
   runSetup,
@@ -961,14 +961,14 @@ it.effect(
     Effect.sync(() => {
       const home = "/home/test";
       expect(
-        classifyObservedOwner({
+        classifyOwner({
           canonicalPath: "/home/test/.codex/skills/.system/chronicle",
           home,
           harnesses: ["codex"],
         }),
       ).toEqual({ kind: "harness", harness: "codex", source: "Codex system", bundled: true });
       expect(
-        classifyObservedOwner({
+        classifyOwner({
           canonicalPath:
             "/home/test/.codex/plugins/cache/openai-bundled/example/1.0.0/skills/review",
           home,
@@ -976,7 +976,7 @@ it.effect(
         }),
       ).toEqual({ kind: "harness", harness: "codex", source: "Codex bundled", bundled: true });
       expect(
-        classifyObservedOwner({
+        classifyOwner({
           canonicalPath:
             "/home/test/.codex/plugins/cache/openai-curated-remote/example/1.0.0/skills/review",
           home,
@@ -984,7 +984,7 @@ it.effect(
         }),
       ).toEqual({ kind: "harness", harness: "codex", source: "Codex curated", bundled: false });
       expect(
-        classifyObservedOwner({
+        classifyOwner({
           canonicalPath: "/home/test/.codex/skills/user-installed",
           home,
           harnesses: ["codex"],

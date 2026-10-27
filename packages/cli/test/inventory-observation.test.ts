@@ -10,7 +10,7 @@ import {
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-  observeInventory,
+  scanInventory,
 } from "@smolai/skit-core";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
 
@@ -35,7 +35,7 @@ it.effect(
       yield* fs.symlink("../missing", broken);
       const store = yield* LibraryStore;
       const before = yield* store.load;
-      const observed = yield* observeInventory(before, [
+      const observed = yield* scanInventory(before, [
         { harness: "codex", root },
         { harness: "claude-code", root: claude },
         { harness: "opencode", root: denied },
@@ -107,7 +107,7 @@ it.effect.each([true, false])(
       const path = join(root, "review");
       yield* fs.symlink(target, path);
       const state = yield* (yield* LibraryStore).load;
-      const observed = yield* observeInventory(state, [{ harness: "codex", root }]);
+      const observed = yield* scanInventory(state, [{ harness: "codex", root }]);
       expect(observed.unmanaged).toEqual([]);
       expect(observed.custodyIssues).toMatchObject([
         { path, code: valid ? "ORPHANED_PROJECTION_CLAIM" : "INVALID_OWNERSHIP_MARKER" },
@@ -131,10 +131,10 @@ it.effect(
         code: "UNREADABLE_PATH" as const,
       };
       state.scanIssues = [outside, { path: root, harness: "codex", code: "UNREADABLE_PATH" }];
-      const observed = yield* observeInventory(state, [{ root, harness: "codex" }]);
+      const observed = yield* scanInventory(state, [{ root, harness: "codex" }]);
       expect(observed.scanIssues).toEqual([outside]);
       expect(
-        (yield* observeInventory({ ...state, scanIssues: [state.scanIssues[1]] }, [
+        (yield* scanInventory({ ...state, scanIssues: [state.scanIssues[1]] }, [
           { root, harness: "codex" },
         ])).scanIssues,
       ).toBeUndefined();

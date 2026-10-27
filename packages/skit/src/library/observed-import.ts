@@ -38,8 +38,8 @@ import {
 import type { Digest } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class ObservedImportInvalid
-  extends Data.TaggedError("Library.ObservedImportInvalid")<{
+export class ImportRequestInvalid
+  extends Data.TaggedError("Library.ImportRequestInvalid")<{
     reason: string;
   }>
   implements SkitFailure
@@ -53,13 +53,13 @@ export class ObservedImportInvalid
   }
 }
 
-export interface ObservedSkill {
+export interface ImportRequestSkill {
   readonly name: string;
   readonly sourcePath: string;
   readonly relativePath: string;
   readonly observedHash: Digest;
 }
-export interface ObservedImport {
+export interface ImportRequest {
   readonly machineId?: MachineId;
   readonly input: string;
   readonly source: SkitSource;
@@ -67,7 +67,7 @@ export interface ObservedImport {
   /** Exactly what the bytes came from, where the Source protocol names it. */
   readonly revision?: SourceRevision;
   readonly retainedAt: string;
-  readonly skills: readonly ObservedSkill[];
+  readonly skills: readonly ImportRequestSkill[];
   readonly observations: readonly SkillsShLockFileEntry[];
 }
 
@@ -88,20 +88,20 @@ export interface RetainedSkillFact {
   readonly materializationProfile: MaterializationProfile;
 }
 
-export const prepareObservedCollection = Effect.fn("Library.prepareObservedCollection")(function* (
-  skills: ObservedImport["skills"],
+export const prepareImport = Effect.fn("Library.prepareObservedCollection")(function* (
+  skills: ImportRequest["skills"],
 ) {
-  const seen: ObservedSkill[] = [];
+  const seen: ImportRequestSkill[] = [];
   if (skills.length === 0)
-    return yield* new ObservedImportInvalid({ reason: "empty observed Collection" });
+    return yield* new ImportRequestInvalid({ reason: "empty observed Collection" });
   for (const skill of skills) {
     if (!safeRelative(skill.relativePath))
-      return yield* new ObservedImportInvalid({
+      return yield* new ImportRequestInvalid({
         reason: `unsafe Skill path ${JSON.stringify(skill.relativePath)} for ${JSON.stringify(skill.name)}`,
       });
     const duplicate = seen.find((previous) => previous.name === skill.name);
     if (duplicate)
-      return yield* new ObservedImportInvalid({
+      return yield* new ImportRequestInvalid({
         reason: `duplicate Skill name ${JSON.stringify(skill.name)} at ${JSON.stringify(duplicate.relativePath)} and ${JSON.stringify(skill.relativePath)}`,
       });
     const overlap = seen.find(
@@ -113,7 +113,7 @@ export const prepareObservedCollection = Effect.fn("Library.prepareObservedColle
         skill.relativePath.startsWith(`${path}/`),
     );
     if (overlap)
-      return yield* new ObservedImportInvalid({
+      return yield* new ImportRequestInvalid({
         reason: `overlapping Skill paths ${JSON.stringify(overlap.relativePath)} (${JSON.stringify(overlap.name)}) and ${JSON.stringify(skill.relativePath)} (${JSON.stringify(skill.name)})`,
       });
     seen.push(skill);
@@ -137,7 +137,7 @@ export const prepareObservedCollection = Effect.fn("Library.prepareObservedColle
       true,
     );
     if ((yield* deterministicTreeHash(path)) !== skill.observedHash)
-      return yield* new ObservedImportInvalid({
+      return yield* new ImportRequestInvalid({
         reason: `observed Skill ${skill.name} changed`,
       });
     facts.push({
@@ -156,7 +156,7 @@ export const prepareObservedCollection = Effect.fn("Library.prepareObservedColle
 
 const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
-interface PersistPreparedRequest extends ObservedImport {
+interface PersistPreparedRequest extends ImportRequest {
   readonly retainedDigest: Digest;
   readonly facts: readonly RetainedSkillFact[];
   readonly sourceIdentity?: SourceIdentity;
@@ -303,7 +303,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
       (error) =>
-        new ObservedImportInvalid({
+        new ImportRequestInvalid({
           reason: `observed Collection failed validation: ${String(error)}`,
         }),
     ),
@@ -311,7 +311,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   yield* libraryManifestFromLocalState(successor).pipe(
     Effect.mapError(
       (error) =>
-        new ObservedImportInvalid({
+        new ImportRequestInvalid({
           reason: `observed Collection would violate the portable manifest: ${formatManifestIssue(error)}`,
         }),
     ),
@@ -329,11 +329,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 });
 
 /** Retain observed bytes and return their receipt while the caller holds Library write authority. */
-export const retainObservedCollection = Effect.fn("Library.retainObservedCollection")(function* (
-  request: ObservedImport,
+export const importCollection = Effect.fn("Library.retainObservedCollection")(function* (
+  request: ImportRequest,
 ) {
   const store = yield* LibraryStore;
-  const prepared = yield* prepareObservedCollection(request.skills);
+  const prepared = yield* prepareImport(request.skills);
   yield* retainLocalTree(prepared.staged, store.originalsPath, prepared.digest, true);
   return yield* persistPrepared({
     ...request,
@@ -342,8 +342,8 @@ export const retainObservedCollection = Effect.fn("Library.retainObservedCollect
   });
 });
 
-export class InstalledSkillObservationChanged
-  extends Data.TaggedError("Library.InstalledSkillObservationChanged")<{ path: string }>
+export class InstalledSkillChanged
+  extends Data.TaggedError("Library.InstalledSkillChanged")<{ path: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -386,9 +386,9 @@ export const retainChangedInstalledSkill = Effect.fn("Library.retainChangedInsta
       projection.skill_id !== skill.skill_id ||
       projection.path !== request.path
     )
-      return yield* new InstalledSkillObservationChanged({ path: request.path });
+      return yield* new InstalledSkillChanged({ path: request.path });
 
-    const prepared = yield* prepareObservedCollection([
+    const prepared = yield* prepareImport([
       {
         name: "projection-observation",
         sourcePath: request.path,
@@ -396,8 +396,8 @@ export const retainChangedInstalledSkill = Effect.fn("Library.retainChangedInsta
         observedHash: request.observedHash,
       },
     ]).pipe(
-      Effect.catchTag("Library.ObservedImportInvalid", () =>
-        Effect.fail(new InstalledSkillObservationChanged({ path: request.path })),
+      Effect.catchTag("Library.ImportRequestInvalid", () =>
+        Effect.fail(new InstalledSkillChanged({ path: request.path })),
       ),
     );
     yield* retainLocalTree(prepared.staged, store.originalsPath, prepared.digest, true);
@@ -485,7 +485,7 @@ export const retainAuthoredCollectionUnderLock = Effect.fn(
     assessmentContext: "retain",
   });
   if (validated.diagnostics.some((item) => item.severity === "error"))
-    return yield* new ObservedImportInvalid({
+    return yield* new ImportRequestInvalid({
       reason: "authored Descriptor or Skill content is invalid",
     });
   const store = yield* LibraryStore;
@@ -501,7 +501,7 @@ export const retainAuthoredCollectionUnderLock = Effect.fn(
   for (const member of validated.descriptor.skills) {
     const identity = validationByName.get(member.name);
     if (identity === undefined)
-      return yield* new ObservedImportInvalid({
+      return yield* new ImportRequestInvalid({
         reason: `authored Skill ${member.name} has no validation identity`,
       });
     facts.push({

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import {
   bindingSkillIds,
-  bindingShadowCheckSkills,
+  skillsToCheckForDuplicates,
   LinkStat,
   deterministicTreeHash,
   ensureSkillsDirectoryWritable,
@@ -27,11 +27,11 @@ import {
 } from "../projection/roots.js";
 import {
   isEntryLink,
-  observeHarnessShadows,
+  findDuplicates,
   InstalledSkillWouldDuplicate,
   InstalledSkillWouldReplaceLink,
-  type ShadowObservationError,
-} from "../projection/harness-shadows.js";
+  type DuplicateScanError,
+} from "../projection/duplicates.js";
 import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import {
   calculateBindingChange,
@@ -52,7 +52,7 @@ export interface BindingChangeRequest extends BindingSelection {
   readonly preserveUnselectedProjections?: boolean;
   readonly allowDuplicate?: boolean;
   /** Setup consent applies only to these exact symlinks, until installing succeeds. */
-  readonly allowedShadowAliases?: readonly {
+  readonly allowedDuplicateLinks?: readonly {
     readonly path: string;
     readonly canonicalPath: string;
     readonly dev: number;
@@ -141,15 +141,15 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
 ) {
   const { plan, skillIds, newlyEnabledSkills } = yield* calculateBindingChange(state, options);
   const { scope, bindings, changed } = plan;
-  const warnings: ShadowObservationError[] = [];
-  const namesToCheck = bindingShadowCheckSkills(
+  const warnings: DuplicateScanError[] = [];
+  const namesToCheck = skillsToCheckForDuplicates(
     state,
     scope,
     options.enabled ? plan.skills : [],
     newlyEnabledSkills,
   );
   const shadows = namesToCheck.length
-    ? yield* observeHarnessShadows(configuration, scope, namesToCheck, warnings)
+    ? yield* findDuplicates(configuration, scope, namesToCheck, warnings)
     : [];
   // Apply settles these only once it has staged SKIT's copy to compare; a preview can say they
   // are there. A link at a destination is a shadow, reported above.
@@ -298,15 +298,15 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   if (libraryStateRevision(current) !== expectedRevision) return yield* stale();
   const calculated = yield* calculateBindingChange(current, options);
   const { plan, skillIds, newlyEnabledSkills } = calculated;
-  const warnings: ShadowObservationError[] = [];
-  const namesToCheck = bindingShadowCheckSkills(
+  const warnings: DuplicateScanError[] = [];
+  const namesToCheck = skillsToCheckForDuplicates(
     current,
     plan.scope,
     options.enabled ? plan.skills : [],
     newlyEnabledSkills,
   );
   const shadows = namesToCheck.length
-    ? yield* observeHarnessShadows(configuration, plan.scope, namesToCheck, warnings)
+    ? yield* findDuplicates(configuration, plan.scope, namesToCheck, warnings)
     : [];
   if (options.enabled && !options.allowDuplicate) {
     const links = yield* LinkStat;
@@ -315,7 +315,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     for (const shadow of shadows) {
       const aliases = [];
       for (const alias of shadow.aliases) {
-        const approved = options.allowedShadowAliases?.find(
+        const approved = options.allowedDuplicateLinks?.find(
           (item) => item.path === alias.path && item.canonicalPath === shadow.canonicalPath,
         );
         if (approved) {

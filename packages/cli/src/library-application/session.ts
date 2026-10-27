@@ -1,4 +1,4 @@
-import { InstalledSkillWouldDuplicate } from "../projection/harness-shadows.js";
+import { InstalledSkillWouldDuplicate } from "../projection/duplicates.js";
 import type { SkillMetadata } from "./skill-metadata.js";
 import {
   retainedTreePath,

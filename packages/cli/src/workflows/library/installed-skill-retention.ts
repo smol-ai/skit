@@ -7,7 +7,7 @@ import {
   bindingSkillIds,
   effectiveGlobalBindings,
   currentSkillVersion,
-  prepareObservedCollection,
+  prepareImport,
   projectBinding,
   retainChangedInstalledSkill,
   retainedTreePath,
@@ -97,7 +97,7 @@ const matchingInstalledSkill = Effect.fn("Library.InstalledSkillRetention.matchI
   },
 );
 
-const observeInstalledSkillRetention = Effect.fn("Library.planInstalledSkillRetention")(function* (
+const planInstalledSkillRetention = Effect.fn("Library.planInstalledSkillRetention")(function* (
   state: LibraryState,
   query: string,
   selector: string,
@@ -118,7 +118,7 @@ const observeInstalledSkillRetention = Effect.fn("Library.planInstalledSkillRete
       message: `${selected.path} has not changed from its retained Version`,
     });
   const prepared = yield* Effect.scoped(
-    prepareObservedCollection([
+    prepareImport([
       {
         name: skill.name,
         sourcePath: selected.path,
@@ -173,7 +173,7 @@ export const prepareInstalledSkillRetention = Effect.fn("Library.prepareInstalle
   function* (query: string, selector: string) {
     const store = yield* LibraryStore;
     const initial = yield* store.load;
-    const preview = yield* observeInstalledSkillRetention(initial, query, selector);
+    const preview = yield* planInstalledSkillRetention(initial, query, selector);
     return {
       preview: structuredClone(preview),
       apply: () => applyPreparedInstalledSkillRetention(store.home, preview, query, selector),
@@ -195,7 +195,7 @@ const applyPreparedInstalledSkillRetention = Effect.fn("Library.applyInstalledSk
           return yield* new InstalledSkillRetentionStale({
             message: "Library state changed after the retention was previewed",
           });
-        const revalidated = yield* observeInstalledSkillRetention(current, query, selector);
+        const revalidated = yield* planInstalledSkillRetention(current, query, selector);
         if (canonicalJson(revalidated) !== canonicalJson(preview))
           return yield* new InstalledSkillRetentionStale({
             message: "The installed skill's bytes changed after the retention was previewed",

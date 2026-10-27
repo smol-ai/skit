@@ -383,7 +383,7 @@ export const versionBacking = (library: LibraryEntities, skill: Skill, version: 
  * whose bytes this Skill holds no Version for (for example after a merge kept another device's
  * Versions) is skipped rather than leaving the Skill without one.
  */
-const lastObservedVersion = (library: LibraryEntities, skill: Skill) => {
+const lastImportedVersion = (library: LibraryEntities, skill: Skill) => {
   for (const acquisition of sourceImports(library, skill.collection_id)) {
     const member = library.retained_copies
       .find((copy) => copy.retained_copy_id === acquisition.retained_copy_id)
@@ -405,7 +405,7 @@ export const currentSkillVersion = (
   skill: Skill,
 ): SkillVersion | undefined =>
   skill.local_version_id === undefined
-    ? lastObservedVersion(library, skill)
+    ? lastImportedVersion(library, skill)
     : skill.versions.find((version) => version.skill_version_id === skill.local_version_id);
 
 /** The Skill IDs a Binding enables, expanding whole-Collection entries to their current Skills. */

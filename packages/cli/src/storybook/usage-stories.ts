@@ -8,7 +8,7 @@ export const emptyUsageStory: UsageReport = {
   incomplete: false,
   durationMs: 0,
 };
-export const observedUsageStory: UsageReport = {
+export const usageStory: UsageReport = {
   ...emptyUsageStory,
   rows: [
     {

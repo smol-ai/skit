@@ -1,10 +1,10 @@
 import { configurationForHome } from "../../configuration/skit-configuration.js";
 import {
   SkillAlias,
-  type HarnessShadow,
-  observeHarnessSkills,
+  type DuplicateCopy,
+  scanSkillsDirectory,
   readableSkillsDirectories,
-} from "../../projection/harness-shadows.js";
+} from "../../projection/duplicates.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
@@ -51,7 +51,7 @@ export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
 export function codexSkillAliases(
   canonicalDocument: string,
   reportedDocument: string,
-  index: readonly HarnessShadow[],
+  index: readonly DuplicateCopy[],
 ): readonly SkillAlias[] {
   return (
     index.find((instance) => instance.canonicalPath === dirname(canonicalDocument))?.aliases ?? [
@@ -168,7 +168,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
         configHome: paths.configHome,
         overrides: {},
       })));
-    const aliasIndex = yield* observeHarnessSkills(
+    const aliasIndex = yield* scanSkillsDirectory(
       [
         ...readableSkillsDirectories(roots, { kind: "global" }, ["codex"]),
         ...readableSkillsDirectories(roots, { kind: "repository", root: cwd }, ["codex"]),

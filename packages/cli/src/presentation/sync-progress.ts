@@ -1,5 +1,5 @@
-import type { RestoreObserver, RestorePhase } from "@smolai/skit-core";
-import type { SyncObserver, SyncPhase } from "../workflows/library/library-sync-progress.js";
+import type { RestoreProgress, RestorePhase } from "@smolai/skit-core";
+import type { SyncProgress, SyncPhase } from "../workflows/library/library-sync-progress.js";
 import type { RendererShape } from "./renderer.js";
 
 const copies = (count: number, qualifier = "Skill") =>
@@ -64,8 +64,8 @@ const restoreStatus = (phase: RestorePhase) => {
 export const terminalSyncProgress = (
   renderer: Pick<RendererShape, "withStatus" | "updateStatus">,
 ): {
-  readonly sync: SyncObserver;
-  readonly restore: RestoreObserver;
+  readonly sync: SyncProgress;
+  readonly restore: RestoreProgress;
 } => ({
   sync: {
     around: (phase, operation) =>

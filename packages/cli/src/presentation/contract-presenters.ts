@@ -253,7 +253,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
       `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
       `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
       ...finding.instances.flatMap((instance) => {
-        const locations: readonly import("../projection/harness-shadows.js").SkillAlias[] = instance
+        const locations: readonly import("../projection/duplicates.js").SkillAlias[] = instance
           .aliases?.length
           ? instance.aliases
           : [{ path: instance.path, via: "unknown-root" }];

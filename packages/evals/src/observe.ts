@@ -7,7 +7,7 @@ import {
   versionBacking,
   retainedTreePath,
   originalTreeHash,
-  observeInventory,
+  scanInventory,
   skitLayer,
 } from "@smolai/skit-core";
 import type { CodexOutcome, Permissions } from "./codex.ts";
@@ -138,7 +138,7 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
     Effect.gen(function* () {
       // Observe a private snapshot: this verifies installed-skill bytes and markers without repairing
       // anything or publishing refreshed statuses to the machine being judged.
-      const observed = yield* observeInventory(decoded.success, []);
+      const observed = yield* scanInventory(decoded.success, []);
       const problems: string[] = [];
       for (const skill of observed.skills) {
         const version = currentSkillVersion(observed, skill);

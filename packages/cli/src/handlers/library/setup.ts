@@ -29,7 +29,7 @@ import type { LocalAdoptionOptions } from "../../workflows/library/local-adoptio
 import { result } from "../contracts.js";
 import {
   setupDiscoveryOutput,
-  setupObserveAction,
+  setupScanAction,
   setupRecoveryListAction,
   setupResultActions,
   setupReviewAction,
@@ -475,7 +475,7 @@ export const setupCliCommand = Command.make(
                   planId: opened.planId,
                   copies,
                   actions: [
-                    setupObserveAction(context),
+                    setupScanAction(context),
                     ...discovery.choices
                       .filter(
                         (item) =>
@@ -501,7 +501,7 @@ export const setupCliCommand = Command.make(
                   canApply: prepared.plan.canApply,
                   summary: setupReviewSummary(prepared.plan.summary),
                   actions: [
-                    setupObserveAction(context),
+                    setupScanAction(context),
                     setupReviewAction(context, prepared.planId, choice),
                     ...setupDiscoveryOutput(prepared.observed, prepared.review, context)
                       .choices.filter(
@@ -555,7 +555,7 @@ export const setupCliCommand = Command.make(
                   code: failed.code,
                   message: failed.message,
                   remediation: failed.remediation,
-                  actions: [setupObserveAction(context), setupRecoveryListAction(selectedHome)],
+                  actions: [setupScanAction(context), setupRecoveryListAction(selectedHome)],
                 },
                 failed.exitCode,
               ),

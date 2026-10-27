@@ -7,7 +7,7 @@ import {
   libraryManifestFromLocalState,
   type LibraryManifest,
   type InstallDestination,
-  type RestoreObserver,
+  type RestoreProgress,
   deviceInstallationIntent,
   prepareDeviceInstallation,
   withDeviceSkillSelection,
@@ -16,7 +16,7 @@ import {
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-inspection.js";
 import { prepareSyncTransfer } from "./library-sync-snapshots.js";
-import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
+import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
 import { librarySyncApi } from "./library-sync-api.js";
 import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
 import { updateInstalledSkills } from "./update-installed-skills.js";
@@ -30,7 +30,7 @@ import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { selectDeviceSkills } from "./device-selection.js";
 import { OptionCombinationInvalid } from "../failures.js";
-import { observeHarnessShadows } from "../../projection/harness-shadows.js";
+import { findDuplicates } from "../../projection/duplicates.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 
 const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({
@@ -90,10 +90,10 @@ export const syncLibrary = Effect.fn("Library.sync")(
       rootFor: (target: InstallDestination) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
-    observer?: SyncObserver;
-    restoreObserver?: RestoreObserver;
+    observer?: SyncProgress;
+    restoreObserver?: RestoreProgress;
   }) {
-    const observer = options.observer ?? silentSyncObserver;
+    const observer = options.observer ?? silentSyncProgress;
 
     const store = yield* LibraryStore;
     const projectionOptions = {
@@ -367,7 +367,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
             .map((skill) => skill.name);
           if (names.length) {
             const observed = yield* Effect.result(
-              observeHarnessShadows(options.inventory, { kind: "global" }, names),
+              findDuplicates(options.inventory, { kind: "global" }, names),
             );
             if (Result.isFailure(observed))
               issues.push(

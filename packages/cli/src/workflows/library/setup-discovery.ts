@@ -5,7 +5,7 @@ import {
   LibraryStore,
   harnessProfile,
   inspectOwnershipMarker,
-  observeInventory,
+  scanInventory,
   parseSkillFrontmatter,
   pathIsWithin,
   readSkitDescriptor,
@@ -19,7 +19,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { readSkillsLock } from "./skills-sh-lock-source.js";
-import { readableSkillsDirectories } from "../../projection/harness-shadows.js";
+import { readableSkillsDirectories } from "../../projection/duplicates.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
@@ -609,7 +609,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
   const store = yield* LibraryStore;
   const library = yield* store.load;
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);
-  const observedLibrary = yield* observeInventory(
+  const observedLibrary = yield* scanInventory(
     library,
     harnessRoots.map(({ harness, root }) => ({ harness, root })),
   );

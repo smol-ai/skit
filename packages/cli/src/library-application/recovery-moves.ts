@@ -338,7 +338,7 @@ export const recoveryOperationPath = Effect.fn("Recovery.operationPath")(functio
   return directory;
 });
 
-const observeRecovery = Effect.fn("Recovery.observe")(function* (
+const readRecoveryOperation = Effect.fn("Recovery.observe")(function* (
   home: string,
   operationId: string,
 ) {
@@ -507,7 +507,7 @@ export const inspectRecoveryOperation = Effect.fn("Recovery.inspect")(function* 
   home: string,
   operationId: string,
 ) {
-  return (yield* observeRecovery(home, operationId)).inspection;
+  return (yield* readRecoveryOperation(home, operationId)).inspection;
 });
 
 export const listRecoveryOperations = Effect.fn("Recovery.list")(function* (home: string) {
@@ -523,23 +523,23 @@ export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(funct
   home: string,
   operationId: string,
 ) {
-  const observed = yield* observeRecovery(home, operationId);
+  const observed = yield* readRecoveryOperation(home, operationId);
   const approvedId = observed.inspection.planId;
   return {
     summary: structuredClone(observed.inspection),
     apply: () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        let current = yield* observeRecovery(home, operationId);
+        let current = yield* readRecoveryOperation(home, operationId);
         if (current.inspection.planId !== approvedId) return yield* new PlanIsStale();
         for (const [index, fact] of observed.inspection.entries.entries()) {
           if (fact.status !== "saved") continue;
           // Recheck the whole observed operation after each move. Never refresh consent for a changed entry.
-          const refreshed = yield* observeRecovery(home, operationId);
+          const refreshed = yield* readRecoveryOperation(home, operationId);
           if (refreshed.inspection.planId !== current.inspection.planId)
             return yield* new PlanIsStale();
           yield* fs.rename(fact.recoveryPath, fact.path);
-          const after = yield* observeRecovery(home, operationId);
+          const after = yield* readRecoveryOperation(home, operationId);
           if (
             JSON.stringify(after.receipts) !== JSON.stringify(current.receipts) ||
             after.witnesses.length !== current.witnesses.length ||

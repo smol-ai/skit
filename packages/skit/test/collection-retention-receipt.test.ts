@@ -6,7 +6,7 @@ import { currentCollectionSkills, currentSkillVersion } from "../src/library/lib
 import { makeMachineId } from "../src/library/entity-ids.js";
 import {
   retainAuthoredCollectionUnderLock,
-  retainObservedCollection,
+  importCollection,
 } from "../src/library/observed-import.js";
 import { originalTreeHash, retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
@@ -51,7 +51,7 @@ for (const kind of ["observed", "authored"] as const) {
             withLibraryWriter(
               kind === "authored"
                 ? retainAuthoredCollectionUnderLock({ ...request, root: path })
-                : retainObservedCollection({
+                : importCollection({
                     ...request,
                     skills: [
                       {
@@ -152,7 +152,7 @@ for (const kind of ["observed", "authored"] as const) {
           withLibraryWriter(
             kind === "authored"
               ? retainAuthoredCollectionUnderLock({ ...request, root: source })
-              : retainObservedCollection({
+              : importCollection({
                   ...request,
                   skills: [
                     {
@@ -260,7 +260,7 @@ for (const kind of ["observed", "authored"] as const) {
             withLibraryWriter(
               kind === "authored"
                 ? retainAuthoredCollectionUnderLock({ ...request, root: source })
-                : retainObservedCollection({
+                : importCollection({
                     ...request,
                     observations: [],
                     skills: yield* Effect.forEach(names, (name) =>

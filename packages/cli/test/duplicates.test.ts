@@ -9,7 +9,7 @@ import {
 } from "../src/workflows/library/local-adoption.js";
 import { applySetupExistingBindings } from "../src/workflows/library/setup-existing-binding.js";
 import { copyConflict } from "../src/workflows/library/setup-decisions.js";
-import type { ShadowObservationError } from "../src/projection/harness-shadows.js";
+import type { DuplicateScanError } from "../src/projection/duplicates.js";
 import { codexSkillAliases } from "../src/workflows/library/doctor-codex.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -17,10 +17,10 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { LibraryStore } from "@smolai/skit-core";
 import {
-  observeHarnessShadows,
-  observeHarnessSkills,
+  findDuplicates,
+  scanSkillsDirectory,
   readableSkillsDirectories,
-} from "../src/projection/harness-shadows.js";
+} from "../src/projection/duplicates.js";
 import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
@@ -179,14 +179,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const index = yield* observeHarnessSkills(
+      const index = yield* scanSkillsDirectory(
         readableSkillsDirectories(f.home.inventory, { kind: "global" }),
       );
       expect(
         codexSkillAliases(join(f.source, "SKILL.md"), join(f.source, "SKILL.md"), index),
       ).toEqual([expect.objectContaining({ path: f.alias, linkTarget: f.source, via: "symlink" })]);
       expect(
-        yield* observeHarnessShadows(
+        yield* findDuplicates(
           f.home.inventory,
           { kind: "repository", root: join(f.root, "repo") },
           ["review"],
@@ -194,7 +194,7 @@ it.effect(
       ).toEqual([]);
       yield* f.fs.remove(join(f.root, ".codex", "skills"), { recursive: true });
       yield* f.fs.symlink(join(f.root, "Work", "skills"), join(f.root, ".codex", "skills"));
-      const rooted = yield* observeHarnessShadows(f.home.inventory, { kind: "global" }, ["review"]);
+      const rooted = yield* findDuplicates(f.home.inventory, { kind: "global" }, ["review"]);
       expect(rooted[0].aliases[0]).toMatchObject({
         path: f.alias,
         via: "symlink",
@@ -293,8 +293,8 @@ it.effect("unreadable unrelated entries warn without dropping readable aliases",
             )
           : f.fs.readFileString(path, ...args),
     });
-    const errors: ShadowObservationError[] = [];
-    const shadows = yield* observeHarnessShadows(
+    const errors: DuplicateScanError[] = [];
+    const shadows = yield* findDuplicates(
       f.home.inventory,
       { kind: "global" },
       ["review"],
@@ -303,7 +303,7 @@ it.effect("unreadable unrelated entries warn without dropping readable aliases",
     expect(shadows[0].aliases[0].path).toBe(f.alias);
     expect(errors).toEqual([expect.objectContaining({ path: unrelated })]);
     const blocked = yield* Effect.result(
-      observeHarnessShadows(f.home.inventory, { kind: "global" }, ["unrelated"]).pipe(
+      findDuplicates(f.home.inventory, { kind: "global" }, ["unrelated"]).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       ),
     );
@@ -320,9 +320,7 @@ it.effect("does not traverse a repository linked into a skills directory", () =>
     yield* f.fs.makeDirectory(nested, { recursive: true });
     yield* f.fs.copyFile(join(f.source, "SKILL.md"), join(nested, "SKILL.md"));
     yield* f.fs.symlink(repository, join(f.root, ".codex", "skills", "repository"));
-    expect(yield* observeHarnessShadows(f.home.inventory, { kind: "global" }, ["review"])).toEqual(
-      [],
-    );
+    expect(yield* findDuplicates(f.home.inventory, { kind: "global" }, ["review"])).toEqual([]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -414,7 +412,7 @@ it.effect(
               },
               state,
             );
-            const shadows = yield* observeHarnessShadows(
+            const shadows = yield* findDuplicates(
               { ...f.home.inventory, home: aliasHome },
               { kind: "global" },
               ["review"],

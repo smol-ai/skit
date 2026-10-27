@@ -1,4 +1,4 @@
-import { HarnessShadow } from "../../projection/harness-shadows.js";
+import { DuplicateCopy } from "../../projection/duplicates.js";
 import {
   CollectionId,
   Digest,
@@ -244,7 +244,7 @@ export const SetupReconciliationOutcome = Schema.Struct({
 export type SetupReconciliationOutcome = typeof SetupReconciliationOutcome.Type;
 
 const SetupOnboardingBase = {
-  shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
   destinationLinks: Schema.optionalKey(Schema.Array(Schema.String)),
   name: Schema.String,

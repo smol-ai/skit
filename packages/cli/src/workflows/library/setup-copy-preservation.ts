@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { deterministicTreeHash, LinkStat } from "@smolai/skit-core";
-import type { HarnessShadow } from "../../projection/harness-shadows.js";
+import type { DuplicateCopy } from "../../projection/duplicates.js";
 import { checkSetupGlobalContent } from "../../library-application/setup-content-custody.js";
 import { PlanIsStale } from "../../library/failures.js";
 import { SetupApprovedCopy } from "./setup-decisions.js";
@@ -9,7 +9,7 @@ import { SetupApprovedCopy } from "./setup-decisions.js";
 /** Only direct, equal global copies approved by review can enter automatic preservation. */
 export const captureSetupCopies = Effect.fn("Setup.captureCopies")(function* (
   sourcePath: string,
-  shadows: readonly HarnessShadow[],
+  shadows: readonly DuplicateCopy[],
   approved?: readonly SetupApprovedCopy[],
 ) {
   const fs = yield* FileSystem.FileSystem;

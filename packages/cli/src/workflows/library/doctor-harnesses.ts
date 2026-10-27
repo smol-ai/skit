@@ -1,9 +1,9 @@
 import {
-  HarnessShadow,
-  observeHarnessSkills,
+  DuplicateCopy,
+  scanSkillsDirectory,
   readableSkillsDirectories,
-  type ShadowObservationError,
-} from "../../projection/harness-shadows.js";
+  type DuplicateScanError,
+} from "../../projection/duplicates.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
@@ -57,7 +57,7 @@ export const HarnessDoctorCheck = Schema.Struct({
   coverage: Schema.Literals(["callable-commands", "resolved-skills", "native-skills"]),
   limitations: Schema.Array(Schema.String),
   skills: Schema.Array(HarnessDoctorSkill),
-  locations: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  locations: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   warnings: Schema.Array(Schema.String),
 });
 export type HarnessDoctorCheck = typeof HarnessDoctorCheck.Type;
@@ -478,8 +478,8 @@ export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")
     },
     { concurrency: 3 },
   );
-  const aliasErrors: ShadowObservationError[] = [];
-  const locations = yield* observeHarnessSkills(
+  const aliasErrors: DuplicateScanError[] = [];
+  const locations = yield* scanSkillsDirectory(
     [
       ...readableSkillsDirectories(options, { kind: "global" }),
       ...readableSkillsDirectories(options, { kind: "repository", root: cwd }),

@@ -17,14 +17,14 @@ import {
   type InstalledSkill,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { inspectSetupOperation, observeSetupFile } from "./setup-operation.js";
+import { inspectSetupOperation, captureSetupFile } from "./setup-operation.js";
 import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "./recovery-moves.js";
 import { checkSetupGlobalContent } from "./setup-content-custody.js";
 import { recoveryFingerprint, RecoveryInvalid } from "./recovery-evidence.js";
 
 type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["operation"];
 type File = Operation["files"][number];
-type Observed = Effect.Success<ReturnType<typeof observeSetupFile>>;
+type CapturedFile = Effect.Success<ReturnType<typeof captureSetupFile>>;
 
 /** Observation timestamps are evidence, not a change to desired installed-skill custody. */
 export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
@@ -121,7 +121,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     inspectRecoveryOperation(store.home, id),
   );
   const conflicts: string[] = [];
-  const observations: Observed[] = [];
+  const observations: CapturedFile[] = [];
   const actions: {
     path: string;
     kind: "release-custody" | "restore" | "remove-created";
@@ -141,7 +141,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     const after = expected.find((item) => resolve(item.path) === file.path);
     const current = state.projections.find((item) => resolve(item.path) === file.path);
     const saved = recovery.entries.filter((entry) => entry.path === file.path);
-    const observed = yield* observeSetupFile(file.path);
+    const observed = yield* captureSetupFile(file.path);
     observations.push(observed);
     const changedProjection = !equal(installedSkillChoice(prior), installedSkillChoice(after));
     const possibleClaim =
@@ -264,7 +264,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     // File recovery calls an occupied destination a conflict. Full undo can first
     // preserve its owned successor, so validate the saved original independently.
     for (const entry of saved) {
-      const evidence = yield* observeSetupFile(entry.recoveryPath);
+      const evidence = yield* captureSetupFile(entry.recoveryPath);
       if (
         evidence.entry?.hash === file.entry.hash &&
         evidence.entry.dev === file.entry.dev &&
@@ -275,7 +275,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     for (const projection of [prior, after]) {
       if (source !== undefined || projection === undefined) continue;
       for (const path of yield* inspectInstalledSkillBackups(projection)) {
-        const evidence = yield* observeSetupFile(path);
+        const evidence = yield* captureSetupFile(path);
         if (
           evidence.entry?.hash === file.entry.hash &&
           evidence.entry.dev === file.entry.dev &&
@@ -293,7 +293,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
           const root = retainedTreePath(store.originalsPath, backing.copy.digest);
           const path =
             backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-          const evidence = yield* Effect.result(observeSetupFile(path));
+          const evidence = yield* Effect.result(captureSetupFile(path));
           if (
             evidence._tag === "Success" &&
             evidence.success.entry?.unstampedHash === file.entry.unstampedHash
@@ -327,7 +327,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       conflicts.push(`Original bytes unavailable: ${file.path}`);
       continue;
     }
-    const original = (yield* observeSetupFile(source)).entry;
+    const original = (yield* captureSetupFile(source)).entry;
     const transfer =
       original?.dev === file.entry.dev && original?.ino === file.entry.ino ? "move" : "copy";
     if (
@@ -343,7 +343,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const preservation = yield* prepareOwnedRecoveryMoves(moves, preservationDirectory);
   const sourceEvidence = yield* Effect.forEach(
     actions.filter((action) => action.source !== undefined),
-    (action) => observeSetupFile(action.source!),
+    (action) => captureSetupFile(action.source!),
   );
   return {
     conflicts,
@@ -384,16 +384,16 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
             yield* checkAnchor(file);
             if (action.kind === "release-custody") {
               const before = observations.find((item) => item.path === file.path)!;
-              if (!equal(yield* observeSetupFile(file.path), before))
+              if (!equal(yield* captureSetupFile(file.path), before))
                 return yield* new PlanIsStale();
               yield* restoreMarker(file.path, file.entry!);
             } else if (action.kind === "restore") {
-              if ((yield* observeSetupFile(file.path)).entry !== null)
+              if ((yield* captureSetupFile(file.path)).entry !== null)
                 return yield* new PlanIsStale();
               if (
                 action.transfer === "move" &&
                 !equal(
-                  yield* observeSetupFile(action.source!),
+                  yield* captureSetupFile(action.source!),
                   sourceEvidence.find((entry) => entry.path === action.source),
                 )
               )
@@ -405,7 +405,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
                 )
                 .pipe(Effect.uninterruptible);
             }
-            const actual = (yield* observeSetupFile(file.path)).entry;
+            const actual = (yield* captureSetupFile(file.path)).entry;
             if (file.entry === null ? actual !== null : actual?.hash !== file.entry.hash)
               return yield* new RecoveryInvalid({
                 detail: `Original restoration incomplete: ${file.path}`,

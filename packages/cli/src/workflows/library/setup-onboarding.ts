@@ -17,7 +17,7 @@ import type { SetupLockMatch } from "./setup-contract.js";
 import { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
 import type { SetupOnboardingCandidate, SetupSkillInstance } from "./setup-contract.js";
 
-export const classifyObservedOwner = (input: {
+export const classifyOwner = (input: {
   readonly canonicalPath: string;
   readonly home: string;
   readonly harnesses: readonly Harness[];

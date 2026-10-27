@@ -19,7 +19,7 @@ import { ensureRecoveryOperation, recoveryOperationDirectory } from "./recovery-
 import { RecoveryInvalid } from "./recovery-evidence.js";
 import { inspectSetupOperation } from "./setup-operation.js";
 import { prepareSetupUndoFiles, installedSkillChoice } from "./setup-undo-files.js";
-import { prepareSetupSourceUndo, type UndoSourceObservation } from "./setup-undo-sources.js";
+import { prepareSetupSourceUndo, type UndoSourceImport } from "./setup-undo-sources.js";
 import {
   reverseSetupDiscovery,
   reverseSetupIntent,
@@ -41,10 +41,10 @@ const Attempt = Schema.Struct({
 const Done = Schema.Struct({ schemaVersion: Schema.Literal(1), planId: Digest });
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
-const observeUndo = Effect.fn("SetupUndo.observe")(function* (
+const readUndo = Effect.fn("SetupUndo.observe")(function* (
   operationId: string,
   preservationDirectory: string,
-  sourceObservations: Map<CollectionId, UndoSourceObservation>,
+  sourceObservations: Map<CollectionId, UndoSourceImport>,
 ) {
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
@@ -230,18 +230,14 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const preservationDirectory = recoveryOperationDirectory(store.home);
-  const sourceObservations = new Map<CollectionId, UndoSourceObservation>();
-  const observed = yield* observeUndo(operationId, preservationDirectory, sourceObservations);
+  const sourceObservations = new Map<CollectionId, UndoSourceImport>();
+  const observed = yield* readUndo(operationId, preservationDirectory, sourceObservations);
   return {
     summary: observed.summary,
     apply: () =>
       withLibraryWriter(
         Effect.gen(function* () {
-          const current = yield* observeUndo(
-            operationId,
-            preservationDirectory,
-            sourceObservations,
-          );
+          const current = yield* readUndo(operationId, preservationDirectory, sourceObservations);
           if (current.summary.planId !== observed.summary.planId) return yield* new PlanIsStale();
           if (current.summary.status === "already-undone") return current.summary;
           if (current.summary.conflicts.length)

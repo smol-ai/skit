@@ -4,7 +4,7 @@ import {
   evaluateSkillFrontmatter,
   harnessDrivers,
   HarnessName,
-  observationPathIdentity,
+  physicalPath,
   resolveSkillsDirectory,
   type HarnessProfile,
   type SkillsDirectory,
@@ -14,8 +14,8 @@ import {
 import { Effect } from "effect";
 import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
-import { makePnpmSkillObserver } from "../projection/pnpm-skills.js";
-import type { AuditFinding, AuditObservation } from "./types.js";
+import { makePnpmSkillCheck } from "../projection/pnpm-skills.js";
+import type { AuditFinding, AuditEntry } from "./types.js";
 
 function frontmatterProblem(
   issue: ReturnType<typeof evaluateSkillFrontmatter>["issues"][number],
@@ -39,7 +39,7 @@ function frontmatterProblem(
 
 export interface SkillAuditResult {
   profiles: HarnessProfile[];
-  observations: AuditObservation[];
+  observations: AuditEntry[];
   findings: AuditFinding[];
 }
 
@@ -50,12 +50,12 @@ export interface SkillCandidate {
   harnesses: readonly HarnessName[];
   role: SkillsDirectoryRole;
   scope: "user" | "project";
-  provenance?: AuditObservation["provenance"];
+  provenance?: AuditEntry["provenance"];
 }
 
 export interface InspectSkillInput extends SkillCandidate {
   aliases: string[];
-  provenance: AuditObservation["provenance"];
+  provenance: AuditEntry["provenance"];
 }
 
 export const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: InspectSkillInput) {
@@ -117,7 +117,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
     for (const root of profile.roots.filter((candidate) => candidate.readable)) {
       const path = resolveSkillsDirectory(root as SkillsDirectory, context);
       const scope = root.scope === "global" ? "user" : "project";
-      const key = `${scope}\0${(yield* observationPathIdentity(path)).comparisonKey}`;
+      const key = `${scope}\0${(yield* physicalPath(path)).key}`;
       const entry = roots.get(key) ?? { harnesses: new Set(), roles: new Set(), scope, path };
       if (root.role === "native" && !entry.roles.has("native")) entry.path = path;
       entry.harnesses.add(profile.id);
@@ -153,9 +153,9 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
     aliases.set(skill.canonicalPath, [...(aliases.get(skill.canonicalPath) ?? []), skill.path]);
   }
 
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
-  const observePnpm = yield* makePnpmSkillObserver();
+  const observePnpm = yield* makePnpmSkillCheck();
   for (const skill of candidates) {
     const baseName = basename(dirname(skill.path));
     const occurrences = lockTargets.get(baseName)?.size ?? 1;

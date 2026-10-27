@@ -3,7 +3,7 @@ import { Deferred, Effect, Fiber, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/observed-import.js";
 import {
   LibraryStore,
   libraryStoreLayer,
@@ -25,7 +25,7 @@ const library = Effect.gen(function* () {
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
   yield* inLibrary(
     Effect.scoped(
-      retainObservedCollection({
+      importCollection({
         machineId,
         source: { type: "local", path: source },
         input: source,

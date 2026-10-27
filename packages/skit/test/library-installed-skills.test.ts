@@ -11,10 +11,7 @@ import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { projectBinding } from "../src/library/installation/project-binding.js";
 import { removeCollection } from "../src/library/installation/remove.js";
 import { retireUnboundGlobalInstalledSkills } from "../src/library/installation/retire-unbound.js";
-import {
-  retainChangedInstalledSkill,
-  retainObservedCollection,
-} from "../src/library/observed-import.js";
+import { retainChangedInstalledSkill, importCollection } from "../src/library/observed-import.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
 import {
@@ -60,7 +57,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
     const retained = yield* Effect.scoped(
       withLibraryWriterLock(
         home,
-        retainObservedCollection({
+        importCollection({
           machineId,
           source: { type: "local", path: source },
           input: source,

@@ -17,7 +17,7 @@ import {
 } from "../src/sources/resolve.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
-import { prepareObservedCollection } from "../src/library/observed-import.js";
+import { prepareImport } from "../src/library/observed-import.js";
 
 const git = (cwd: string, ...args: string[]) =>
   Effect.sync(() => execFileSync("git", args, { cwd, encoding: "utf8" }).trim());
@@ -114,7 +114,7 @@ describe("source contracts", () => {
           const observed = yield* resolve(source);
           expect(observed.observedSkillPaths).toEqual([selected.path]);
           const sourcePath = join(observed.originalRoot, selected.path);
-          const prepared = yield* prepareObservedCollection([
+          const prepared = yield* prepareImport([
             {
               name: "review",
               sourcePath,

@@ -11,7 +11,7 @@ import {
   makeMachineId,
   projectBinding,
   removeCollection,
-  retainObservedCollection,
+  importCollection,
   withLibraryWriter,
   LibraryState,
   type InstallDestination,
@@ -146,7 +146,7 @@ export const devices = Effect.gen(function* () {
             join(sourcePath, "SKILL.md"),
             options.bytes ?? `${repository}\n`,
           );
-          return yield* retainObservedCollection({
+          return yield* importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
@@ -178,7 +178,7 @@ export const devices = Effect.gen(function* () {
               };
             }),
           );
-          return yield* retainObservedCollection({
+          return yield* importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,

@@ -23,7 +23,7 @@ import type {
 import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
 import { applySetupExistingBindings } from "./setup-existing-binding.js";
 import { applySetupLocalCustody } from "./setup-local-custody.js";
-import { applySetupObservedCollections } from "./setup-observed-collections.js";
+import { importSetupCollections } from "./setup-observed-collections.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
 import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import {
@@ -183,7 +183,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const collections = new Set(approval.imports.map((selection) => selection.groupKey)).size;
         yield* options.withStatus(
           `Importing ${collections} installed Collection${collections === 1 ? "" : "s"} (${approval.imports.length} Skill${approval.imports.length === 1 ? "" : "s"})`,
-          applySetupObservedCollections({ setup: approval.setup }, current, approval.imports),
+          importSetupCollections({ setup: approval.setup }, current, approval.imports),
         );
       }
       if (approval.bindings.length) {

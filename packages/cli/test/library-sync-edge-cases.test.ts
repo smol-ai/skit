@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   currentSkillVersion,
   inspectOwnershipMarker,
-  observeInventory,
+  scanInventory,
   makeImportId,
   retainedTreePath,
   type SkillId,
@@ -410,7 +410,7 @@ it.effect(
       assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);
       assert.equal(interrupted.projections[0]?.status, "pending");
       assert.isFalse(yield* fs.exists(join(b.root, "same")));
-      const observed = yield* observeInventory(interrupted, []);
+      const observed = yield* scanInventory(interrupted, []);
       assert.equal(observed.projections[0]?.status, "pending");
       yield* b.edit(() => observed);
       assert.equal((yield* b.sync({ adopt: true })).status, "merged");
@@ -503,7 +503,7 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     yield* b.edit((state) => ({ ...state, global_bindings: [enable([local.skill_id])] }));
     yield* b.project();
     yield* fs.remove(join(b.root, "same"), { recursive: true });
-    const deleted = yield* observeInventory(yield* b.state, []);
+    const deleted = yield* scanInventory(yield* b.state, []);
     yield* b.edit(() => deleted);
     yield* a.sync();
     assert.equal((yield* b.sync({ adopt: true })).status, "merged");

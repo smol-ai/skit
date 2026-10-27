@@ -14,7 +14,7 @@ export interface RestoreTick {
 }
 
 /** Restore facts only. Front ends own wording, elapsed time, and delivery. */
-export interface RestoreObserver {
+export interface RestoreProgress {
   readonly around: <A, E, R>(
     phase: RestorePhase,
     operation: Effect.Effect<A, E, R>,

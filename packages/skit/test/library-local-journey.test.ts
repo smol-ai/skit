@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/observed-import.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { planRetainedContent } from "../src/library/retained-content-plan.js";
 import { prepareRestore } from "../src/library/library-restore.js";
@@ -29,7 +29,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     const retained = yield* Effect.scoped(
       withLibraryWriterLock(
         firstHome,
-        retainObservedCollection({
+        importCollection({
           machineId,
           source: { type: "local", path: installed },
           input: installed,
@@ -99,7 +99,7 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
       return yield* Effect.scoped(
         withLibraryWriterLock(
           home,
-          retainObservedCollection({
+          importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",

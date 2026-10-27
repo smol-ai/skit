@@ -34,7 +34,7 @@ import {
   suggestDoctorCleanup,
   openDoctorCleanupSelection,
 } from "../src/library-application/doctor-cleanup.js";
-import { observedUsageStory } from "../src/storybook/usage-stories.js";
+import { usageStory } from "../src/storybook/usage-stories.js";
 import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { skitCommand } from "../src/commands/tree.js";
@@ -531,10 +531,10 @@ const cleanupFixture = Effect.gen(function* () {
     ],
   };
   const usage: UsageReport = {
-    ...observedUsageStory,
+    ...usageStory,
     rows: [],
     incomplete: false,
-    coverage: observedUsageStory.coverage.map((c) => ({ ...c, unsupported: 0 })),
+    coverage: usageStory.coverage.map((c) => ({ ...c, unsupported: 0 })),
   };
   return { ...f, budget, usage, state: yield* f.home.durable };
 });
@@ -554,7 +554,7 @@ it.effect(
         ],
       );
       // A name-only observation in another harness protects the skill across all projects.
-      const used = { ...f.usage, rows: [{ ...observedUsageStory.rows[1]!, name: "alpha" }] };
+      const used = { ...f.usage, rows: [{ ...usageStory.rows[1]!, name: "alpha" }] };
       assert.deepStrictEqual(
         suggest(used).map((c) => c.name),
         ["beta"],
@@ -564,7 +564,7 @@ it.effect(
         ...f.usage,
         rows: [
           {
-            ...observedUsageStory.rows[0]!,
+            ...usageStory.rows[0]!,
             name: "old-name",
             skillId: f.state.skills.find((s) => s.name === "alpha")!.skill_id,
             uses: 0,

@@ -124,7 +124,7 @@ const selectionArgv = (input: SetupCommandSelection) => [
     : []),
   ...(input.duplicates === undefined ? [] : ["--duplicates", input.duplicates]),
 ];
-export const setupObserveAction = (context: SetupActionContext): CommandAction => ({
+export const setupScanAction = (context: SetupActionContext): CommandAction => ({
   rel: "observe",
   argv: ["skit", "setup", ...contextArgv(context)],
   effect: "read",
@@ -167,7 +167,7 @@ export const setupResultActions = (
   context: SetupActionContext,
   applied: SetupApplied,
 ): CommandAction[] => [
-  setupObserveAction(context),
+  setupScanAction(context),
   setupRecoveryListAction(context.home),
   ...(applied.operationId
     ? [
@@ -213,7 +213,7 @@ export const setupDiscoveryOutput = (
   return {
     ...observed,
     actions: [
-      setupObserveAction(context),
+      setupScanAction(context),
       ...(observed.operationId
         ? [
             {
@@ -235,7 +235,7 @@ export const setupDiscoveryOutput = (
       ...variants(undefined, review.recommendedChoices),
       setupRecoveryListAction(context.home),
       ...observed.suggestedRepositoryRoots.map((workDir) =>
-        setupObserveAction({ ...context, workDir }),
+        setupScanAction({ ...context, workDir }),
       ),
     ],
     choices: [

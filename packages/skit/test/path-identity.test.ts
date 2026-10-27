@@ -6,7 +6,7 @@ import { Effect, FileSystem } from "effect";
 import {
   artifactUsesSymlink,
   groupInstallDestinationCandidates,
-  observationPathIdentity,
+  physicalPath,
   pathIsWithin,
   installDestinationPathIdentity,
 } from "../src/platform/path-identity.js";
@@ -35,10 +35,10 @@ it.effect("one observation pass identifies symlink aliases as one physical path"
     yield* makeDirectory(target);
     yield* symlink(target, alias);
 
-    const direct = yield* observationPathIdentity(target);
-    const linked = yield* observationPathIdentity(alias);
-    expect(linked.canonicalPath).toBe(direct.canonicalPath);
-    expect(linked.comparisonKey).toBe(direct.comparisonKey);
+    const direct = yield* physicalPath(target);
+    const linked = yield* physicalPath(alias);
+    expect(linked.realPath).toBe(direct.realPath);
+    expect(linked.key).toBe(direct.key);
     expect(yield* artifactUsesSymlink(join(alias, "SKILL.md"))).toBe(true);
     expect(yield* artifactUsesSymlink(join(target, "SKILL.md"))).toBe(false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -65,15 +65,11 @@ it.effect("canonical paths remain openable for decomposed on-disk names", () =>
     const composed = join(root, "Caf\u00e9");
     yield* makeDirectory(decomposed);
 
-    const observed = yield* observationPathIdentity(decomposed);
-    expect((yield* stat(observed.canonicalPath)).type).toBe("Directory");
-    expect(observed.comparisonKey).toMatch(/^device:/);
-    if (yield* exists(composed))
-      expect((yield* observationPathIdentity(composed)).comparisonKey).toBe(observed.comparisonKey);
-    else
-      expect((yield* observationPathIdentity(composed)).comparisonKey).not.toBe(
-        observed.comparisonKey,
-      );
+    const observed = yield* physicalPath(decomposed);
+    expect((yield* stat(observed.realPath)).type).toBe("Directory");
+    expect(observed.key).toMatch(/^device:/);
+    if (yield* exists(composed)) expect((yield* physicalPath(composed)).key).toBe(observed.key);
+    else expect((yield* physicalPath(composed)).key).not.toBe(observed.key);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -83,10 +79,8 @@ it.effect(
     Effect.gen(function* () {
       const decomposed = join(tmpdir(), "Missing-Cafe\u0301");
       const composed = join(tmpdir(), "Missing-Caf\u00e9");
-      expect((yield* observationPathIdentity(decomposed)).canonicalPath).toBe(resolve(decomposed));
-      expect((yield* observationPathIdentity(decomposed)).comparisonKey).toBe(
-        (yield* observationPathIdentity(composed)).comparisonKey,
-      );
+      expect((yield* physicalPath(decomposed)).realPath).toBe(resolve(decomposed));
+      expect((yield* physicalPath(decomposed)).key).toBe((yield* physicalPath(composed)).key);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

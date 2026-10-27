@@ -4,10 +4,10 @@ import {
   type InventoryRootOptions,
 } from "../../projection/roots.js";
 import {
-  observeHarnessShadows,
+  findDuplicates,
   readableSkillsDirectories,
-  type HarnessShadow,
-} from "../../projection/harness-shadows.js";
+  type DuplicateCopy,
+} from "../../projection/duplicates.js";
 import {
   applyBindingChanges,
   previewBindingChanges,
@@ -19,7 +19,7 @@ import { prepareRecoveryMoves } from "../../library-application/recovery-moves.j
 import { resolveLibrarySubject } from "./subject-resolution.js";
 import { leavePnpmSkill } from "../../projection/pnpm-skills.js";
 import {
-  retirableShadowAliases,
+  retirableDuplicateLinks,
   SetupApprovedAlias,
   type SetupCopySelection,
   type SetupCopyConflict,
@@ -448,7 +448,7 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
     operationDirectory?: string,
   ) {
     if (selection.duplicateAction === "preserve-duplicates") {
-      const shadows = yield* observeHarnessShadows(roots, { kind: "global" }, [selection.name]);
+      const shadows = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
       const copies = yield* captureSetupCopies(
         selection.sourcePath,
         shadows,
@@ -479,7 +479,7 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
     }
     if (selection.duplicateAction !== "retire-aliases") return undefined;
     const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
-    const shadows = yield* observeHarnessShadows(roots, { kind: "global" }, [selection.name]);
+    const shadows = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
     // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
     // root's backups; moving it afterwards would find the new copy there instead.
     const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
@@ -517,7 +517,7 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
           selection.duplicateAction === "preserve-duplicates",
         ...(retirement
           ? {
-              allowedShadowAliases: retirement.aliases.map((entry) => ({
+              allowedDuplicateLinks: retirement.aliases.map((entry) => ({
                 ...entry,
                 canonicalPath: selection.sourcePath,
               })),
@@ -567,10 +567,10 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
 export const captureLocalAdoptionAliases = Effect.fn("LocalAdoption.captureAliasApproval")(
   function* (
     sourcePath: string,
-    shadows: readonly HarnessShadow[],
+    shadows: readonly DuplicateCopy[],
     approved?: readonly SetupApprovedAlias[],
   ) {
-    const paths = retirableShadowAliases(sourcePath, shadows);
+    const paths = retirableDuplicateLinks(sourcePath, shadows);
     if (!paths.length) return yield* new PlanIsStale();
     const links = yield* LinkStat;
     const fs = yield* FileSystem.FileSystem;
@@ -611,7 +611,7 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
   libraryHome: string,
   name: string,
   sourcePath: string,
-  shadows: readonly HarnessShadow[],
+  shadows: readonly DuplicateCopy[],
   approvedAliases: readonly SetupApprovedAlias[] | undefined,
   destinations: readonly string[],
   operationDirectory?: string,

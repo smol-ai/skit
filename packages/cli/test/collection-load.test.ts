@@ -6,7 +6,7 @@ import {
   LibraryStore,
   libraryStoreLayer,
   retainedTreePath,
-  type ObservedSkill,
+  type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
 import { retainLibrarySource } from "../src/library-application/retain-source.js";
@@ -51,7 +51,7 @@ effectIt.effect(
       const home = yield* libraryHome({ home: join(root, "home") });
       yield* initializeLibraryMachine(home.home);
       const source = join(root, "source");
-      const members: ObservedSkill[] = [];
+      const members: ImportRequestSkill[] = [];
       for (const name of ["keep", "removed"]) {
         const path = join(source, name);
         yield* fs.makeDirectory(path, { recursive: true });

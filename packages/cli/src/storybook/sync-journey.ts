@@ -9,7 +9,7 @@ import {
   libraryStoreLayer,
   makeMachineId,
   retainedTreePath,
-  retainObservedCollection,
+  importCollection,
   skitLayer,
   withLibraryWriter,
 } from "@smolai/skit-core";
@@ -40,7 +40,7 @@ export const syncJourney = (failDownload: boolean) =>
             join(sourcePath, "SKILL.md"),
             `# ${name}\nFixture Skill for sync preview.\n`,
           );
-          yield* retainObservedCollection({
+          yield* importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: name },
             input: sourcePath,

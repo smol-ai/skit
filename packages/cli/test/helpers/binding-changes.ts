@@ -13,7 +13,7 @@ interface BindingOptions {
   readonly all: boolean;
   readonly selectedSkills?: readonly string[];
   readonly allowDuplicate?: boolean;
-  readonly allowedShadowAliases?: BindingChangeRequest["allowedShadowAliases"];
+  readonly allowedShadowAliases?: BindingChangeRequest["allowedDuplicateLinks"];
   readonly adoption?: BindingChangeRequest["adoption"];
   readonly roots: InventoryRootOptions;
   readonly variantsPath: string;
@@ -32,7 +32,7 @@ export const previewTestBindings = (options: BindingOptions) => {
     all: options.all,
     selectedSkills: options.selectedSkills,
     allowDuplicate: options.allowDuplicate,
-    allowedShadowAliases: options.allowedShadowAliases,
+    allowedDuplicateLinks: options.allowedShadowAliases,
     adoption: options.adoption,
     scope: options.invocation.scope,
     enabled: options.invocation.enabled,

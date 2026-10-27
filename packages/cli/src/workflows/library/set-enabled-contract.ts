@@ -5,7 +5,7 @@ import {
   RepositoryBinding,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { HarnessShadow, ShadowObservationError } from "../../projection/harness-shadows.js";
+import { DuplicateCopy, DuplicateScanError } from "../../projection/duplicates.js";
 
 // The published output contract constrains every map value. Use string keys for this
 // wire view: Effect 4's JSON Schema exporter otherwise opens records whose custom
@@ -27,7 +27,7 @@ export const SetEnabledPlan = Schema.Struct({
   changed: Schema.Boolean,
   /** An unchanged Binding whose copies are missing, edited, or left behind and will be repaired. */
   repair: Schema.optionalKey(Schema.Boolean),
-  shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /**
    * Folders SKIT does not manage, already at destinations it would write. Enable adopts one only
    * when it holds exactly SKIT's copy; otherwise it leaves it in place, reports it `conflicted`,
@@ -36,7 +36,7 @@ export const SetEnabledPlan = Schema.Struct({
   unmanaged_destinations: Schema.optionalKey(
     Schema.Array(Schema.Struct({ target: InstallDestination, path: Schema.String })),
   ),
-  warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
+  warnings: Schema.optionalKey(Schema.Array(DuplicateScanError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
 });
 export type SetEnabledPlan = typeof SetEnabledPlan.Type;

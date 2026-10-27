@@ -12,7 +12,7 @@ import {
   type RestorePhase,
   type RestoreTick,
   retainedTreePath,
-  retainObservedCollection,
+  importCollection,
   SourceProcess,
   withLibraryWriterLock,
   type SnapshotArchive,
@@ -39,7 +39,7 @@ const fixture = Effect.gen(function* () {
   const source = yield* Effect.scoped(
     withLibraryWriterLock(
       home,
-      retainObservedCollection({
+      importCollection({
         machineId,
         source: { type: "registry", namespace: "tim", slug: "tools", version: "1.2.3" },
         // Reconstruction must use the identity and recorded release, never this input.
@@ -61,7 +61,7 @@ const fixture = Effect.gen(function* () {
   const privateCopy = yield* Effect.scoped(
     withLibraryWriterLock(
       home,
-      retainObservedCollection({
+      importCollection({
         machineId,
         source: { type: "local", path: privatePath },
         input: privatePath,

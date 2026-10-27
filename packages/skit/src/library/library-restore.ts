@@ -1,11 +1,11 @@
 import type { RetainedContentPlan } from "./retained-content-plan.js";
-import type { RestoreObserver, RestorePhase } from "./restore-progress.js";
+import type { RestoreProgress, RestorePhase } from "./restore-progress.js";
 import type { Digest } from "../contracts.js";
 import { ContentAddressCollision } from "../failures.js";
 import { retainedTreePath } from "./retention/retain-tree.js";
 import { resolveSkitSource } from "../sources/resolve.js";
 import { deterministicTreeHash } from "../artifact/skit.js";
-import { prepareObservedCollection } from "./observed-import.js";
+import { prepareImport } from "./observed-import.js";
 import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { originalTreeHash, retainLocalTree } from "./retention/retain-tree.js";
@@ -42,7 +42,7 @@ export interface RestoreOptions {
   readonly originalsPath: string;
   readonly registryBaseUrl?: string;
   readonly registryToken?: string;
-  readonly observer?: RestoreObserver;
+  readonly observer?: RestoreProgress;
 }
 
 /** Preserve the existing diagnostic tag as source restoration moves behind the core boundary. */
@@ -150,7 +150,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
           });
         return yield* captureSnapshotArchive(resolved.root);
       }
-      const prepared = yield* prepareObservedCollection(
+      const prepared = yield* prepareImport(
         yield* Effect.forEach(copy.members, (member) =>
           Effect.gen(function* () {
             const sourcePath =
@@ -177,7 +177,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   return archive;
 });
 
-const silentObserver: RestoreObserver = {
+const silentRestoreProgress: RestoreProgress = {
   around: (_phase, operation) => operation,
   tick: () => Effect.void,
 };
@@ -231,7 +231,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
 ) {
   const invalid = invalidPlan(manifest, plan, options.download !== undefined);
   if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
-  const observer = options.observer ?? silentObserver;
+  const observer = options.observer ?? silentRestoreProgress;
   const archives = new Map(plan.localArchives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
   const existingPaths = new Map<string, string>();
@@ -327,7 +327,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
     readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
   },
 ) {
-  const observer = options.observer ?? silentObserver;
+  const observer = options.observer ?? silentRestoreProgress;
   const { archives, existingPaths } = yield* completeRestoreArchives(manifest, plan, options);
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;

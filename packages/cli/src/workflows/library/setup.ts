@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
 import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
-import { isEntryLink, observeHarnessShadows } from "../../projection/harness-shadows.js";
+import { isEntryLink, findDuplicates } from "../../projection/duplicates.js";
 import {
   activeInstallDestinationsEffect,
   bindingRoot,
@@ -10,9 +10,9 @@ import {
 } from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
-import { observeSetupCopies } from "./setup-observation.js";
+import { scanSetupCopies } from "./setup-observation.js";
 import {
-  observeSetupReconciliation,
+  checkSetupReconciliation,
   setupReconciliationChanges,
   unresolvedSetupReconciliation,
 } from "./setup-reconciliation.js";
@@ -29,7 +29,7 @@ export {
   saveSetupMachineConfig,
   SetupDiscovery,
 } from "./setup-discovery.js";
-export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
+export { classifyOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
 export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
 export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
@@ -66,7 +66,7 @@ export interface SetupOptions {
 }
 
 /** One full setup scan, and the Library state its plan was made against. */
-const observeSetup = Effect.fn("Library.setup")(
+const scanForSetup = Effect.fn("Library.setup")(
   function* (options: SetupOptions) {
     const evidence = yield* (yield* SetupDiscovery).collect(options);
     const {
@@ -82,7 +82,7 @@ const observeSetup = Effect.fn("Library.setup")(
       discoveryComplete,
       locks,
     } = evidence;
-    const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
+    const { instances, onboardingInstances, probes, projections } = yield* scanSetupCopies(
       evidence,
       options.inventory.home,
       options.probePath,
@@ -102,7 +102,7 @@ const observeSetup = Effect.fn("Library.setup")(
       )
       .map((candidate) => candidate.name);
     const shadows = globalNames.length
-      ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
+      ? yield* findDuplicates(options.inventory, { kind: "global" }, globalNames)
       : [];
     const targets = shadows.length ? yield* activeInstallDestinationsEffect(options.inventory) : [];
     const onboarding = candidates.map((candidate) => {
@@ -123,7 +123,7 @@ const observeSetup = Effect.fn("Library.setup")(
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-    const reconciliation = yield* observeSetupReconciliation(
+    const reconciliation = yield* checkSetupReconciliation(
       library,
       options.inventory,
       sortedInstances,
@@ -241,14 +241,14 @@ const observeSetup = Effect.fn("Library.setup")(
 );
 
 export const runSetup = (options: SetupOptions) =>
-  Effect.map(observeSetup(options), (scan) => scan.observed);
+  Effect.map(scanForSetup(options), (scan) => scan.observed);
 
 /** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,
   approvedPlanId: typeof Digest.Type,
 ) {
-  const current = yield* observeSetup({ ...options, persistRoots: false });
+  const current = yield* scanForSetup({ ...options, persistRoots: false });
   if (current.observed.onboarding.planId !== approvedPlanId)
     return yield* Effect.fail(
       new SetupPlanStale({ approvedPlanId, currentPlanId: current.observed.onboarding.planId }),

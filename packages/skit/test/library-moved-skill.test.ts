@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/observed-import.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -28,8 +28,8 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
           observedHash: yield* deterministicTreeHash(path),
         };
       });
-    const retain = (skills: Parameters<typeof retainObservedCollection>[0]["skills"]) =>
-      retainObservedCollection({
+    const retain = (skills: Parameters<typeof importCollection>[0]["skills"]) =>
+      importCollection({
         machineId,
         source: { type: "local", path: source },
         input: source,

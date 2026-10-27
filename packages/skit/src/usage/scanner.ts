@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../harnesses/drivers.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { correlateInvocations, type InvocationObservation } from "./invocations.js";
+import { correlateInvocations, type Invocation } from "./invocations.js";
 import { extractUsage, object, type UsageEvent } from "./events.js";
 import {
   InvalidUsageOptions,
@@ -25,7 +25,7 @@ interface SourceFile {
   modified: number;
   coverage: Coverage;
 }
-interface Observation {
+interface TranscriptEvent {
   event: UsageEvent;
   timestamp: string;
   cwd?: string;
@@ -171,7 +171,7 @@ export const skillUsageLayer = Layer.effect(
         for (const name of names.sort()) yield* walk(join(dir, name), c);
       });
       for (const c of coverage) yield* walk(c.root, c, true);
-      const observations: Observation[] = [];
+      const observations: TranscriptEvent[] = [];
       let completed = 0;
       for (const file of files) {
         const c = file.coverage;
@@ -371,7 +371,7 @@ export const skillUsageLayer = Layer.effect(
       >();
       const rows = new Map<string, Mutable<UsageRow>>();
       const seen = new Set<string>();
-      const invocationObservations: InvocationObservation[] = [];
+      const invocationObservations: Invocation[] = [];
       for (const observation of observations) {
         const { event, cwd, timestamp, coverage: c } = observation;
         const rawPath = event.path;

@@ -11,7 +11,7 @@ import { setupCommand } from "../src/handlers/library/setup.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { observeSetupFile } from "../src/library-application/setup-operation.js";
+import { captureSetupFile } from "../src/library-application/setup-operation.js";
 import {
   inspectRecoveryOperation,
   listRecoveryOperations,
@@ -618,12 +618,12 @@ it.effect("metadata-only alignment keeps the directory and excluded user content
     yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), document("Incoming retained update"));
     yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "Keep this control entry");
     yield* f.fs.makeDirectory(join(f.copy, "empty"));
-    const before = yield* observeSetupFile(f.copy);
+    const before = yield* captureSetupFile(f.copy);
     const fact = (yield* f.observe).reconciliation!.find((item) => item.path === f.copy)!;
     expect(fact.status).toBe("unchanged");
     expect(fact.metadataChanged).toBe(true);
     yield* f.apply;
-    const after = yield* observeSetupFile(f.copy);
+    const after = yield* captureSetupFile(f.copy);
     expect(after.entry?.ino).toBe(before.entry?.ino);
     expect(after.entry?.unstampedHash).toBe(before.entry?.unstampedHash);
     expect(after.entry?.marker).not.toBe(before.entry?.marker);

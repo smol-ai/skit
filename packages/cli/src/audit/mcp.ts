@@ -6,10 +6,10 @@ import {
   type HarnessName,
   type JsonObject,
 } from "@smolai/skit-core";
-import type { AuditObservation } from "./types.js";
+import type { AuditEntry } from "./types.js";
 
 export function addMcp(
-  observations: AuditObservation[],
+  observations: AuditEntry[],
   configPath: string,
   harness: HarnessName,
   scope: "user" | "project" | "legacy",

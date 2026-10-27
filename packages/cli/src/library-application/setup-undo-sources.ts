@@ -11,7 +11,7 @@ import {
 } from "@smolai/skit-core";
 import type { SetupIntent } from "./setup-undo-intent.js";
 
-export interface UndoSourceObservation {
+export interface UndoSourceImport {
   readonly acquisitionId: Import["acquisition_id"];
   readonly observedAt: string;
 }
@@ -23,7 +23,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
   expected: SetupIntent,
   originalsPath: string,
   machineId: MachineId | undefined,
-  observations: Map<CollectionId, UndoSourceObservation>,
+  observations: Map<CollectionId, UndoSourceImport>,
 ) {
   const conflicts: string[] = [];
   const restorations: Import[] = [];

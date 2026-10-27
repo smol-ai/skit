@@ -8,10 +8,10 @@ import {
   parseSkillFrontmatter,
   parseSkitSource,
   sourceLocator,
-  prepareObservedCollection,
+  prepareImport,
   resolveSkitSource,
   retainAuthoredCollectionUnderLock,
-  retainObservedCollection,
+  importCollection,
   type SkitSource,
   type ResolvedSkitSource,
 } from "@smolai/skit-core";
@@ -57,7 +57,7 @@ const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(fun
 });
 
 /** Describe plain source members once, before retention verifies and stages those observations. */
-const observeSourceSkills = Effect.fn("Library.observeSourceSkills")(function* (
+const describeSourceSkills = Effect.fn("Library.observeSourceSkills")(function* (
   resolved: Extract<ResolvedSkitSource, { descriptorKind: "observed" }>,
   sourceLabel: string,
 ) {
@@ -141,9 +141,9 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
           })),
         };
       }
-      const skills = yield* observeSourceSkills(resolved, sourceLocator(parsed));
+      const skills = yield* describeSourceSkills(resolved, sourceLocator(parsed));
       const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
-      const prepared = yield* prepareObservedCollection(skills);
+      const prepared = yield* prepareImport(skills);
       return {
         kind: "plain" as const,
         ...diagnostics,
@@ -208,9 +208,9 @@ export const retainLibrarySource = Effect.fn("Library.addSource")(function* (
         const retained =
           resolved.descriptorKind === "declared"
             ? yield* retainAuthoredCollectionUnderLock({ ...request, root: resolved.root })
-            : yield* retainObservedCollection({
+            : yield* importCollection({
                 ...request,
-                skills: yield* observeSourceSkills(resolved, historicalInput),
+                skills: yield* describeSourceSkills(resolved, historicalInput),
                 observations: [],
               });
         return {

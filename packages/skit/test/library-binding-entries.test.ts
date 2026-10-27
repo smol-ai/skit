@@ -6,7 +6,7 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { projectBinding } from "../src/library/installation/project-binding.js";
 import { removeCollection } from "../src/library/installation/remove.js";
 import type { BindingEntry } from "../src/library/library-contracts.js";
-import { retainObservedCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/observed-import.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -44,7 +44,7 @@ const upstream = Effect.gen(function* () {
       return yield* Effect.scoped(
         withLibraryWriterLock(
           home,
-          retainObservedCollection({
+          importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",

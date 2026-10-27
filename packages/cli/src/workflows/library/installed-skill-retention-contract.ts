@@ -7,7 +7,7 @@ import {
 } from "@smolai/skit-core";
 import { Schema } from "effect";
 
-const InstalledSkillRetentionObservation = Schema.Struct({
+const InstalledSkillRetentionCopy = Schema.Struct({
   projection_id: InstalledSkillId,
   target: RecordedInstallDestination,
   path: Schema.String,
@@ -25,7 +25,7 @@ export const InstalledSkillRetentionPlan = Schema.Struct({
   snapshot_digest: Digest,
   retained_path: Schema.String,
   retention_required: Schema.Boolean,
-  projections: Schema.Array(InstalledSkillRetentionObservation),
+  projections: Schema.Array(InstalledSkillRetentionCopy),
 });
 export type InstalledSkillRetentionPlan = typeof InstalledSkillRetentionPlan.Type;
 

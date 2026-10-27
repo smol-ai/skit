@@ -17,7 +17,7 @@ import {
   type SkitFailure,
   type LibraryState,
 } from "@smolai/skit-core";
-import { observeSetupFile } from "../../library-application/setup-operation.js";
+import { captureSetupFile } from "../../library-application/setup-operation.js";
 import {
   activeInstallDestinationsEffect,
   bindingRoot,
@@ -88,7 +88,7 @@ export const setupReconciliationOutcomes = (
   }));
 
 /** Compare the same byte owner used for writes with corroborated last-written custody. */
-export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation")(function* (
+export const checkSetupReconciliation = Effect.fn("Setup.observeReconciliation")(function* (
   state: LibraryState,
   roots: InventoryRootOptions,
   instances: readonly SetupSkillInstance[],
@@ -121,7 +121,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       ...(version ? { desiredVersionId: version.skill_version_id } : {}),
       metadataChanged: false,
     };
-    const observed = yield* Effect.result(observeSetupFile(resolve(projection.path)));
+    const observed = yield* Effect.result(captureSetupFile(resolve(projection.path)));
     if (observed._tag === "Failure") {
       facts.push({
         ...base,
@@ -227,7 +227,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       continue;
     }
     const current = yield* deterministicTreeHash(projection.path);
-    const after = yield* observeSetupFile(resolve(projection.path));
+    const after = yield* captureSetupFile(resolve(projection.path));
     if (canonicalJson(before) !== canonicalJson(after)) {
       facts.push(protect("The copy changed during observation"));
       continue;
@@ -298,7 +298,7 @@ export const applyRoutineSetupReconciliation = Effect.fn("Setup.applyRoutineReco
         projection.status === "installed"
       )
         continue;
-      const evidence = hashParts([canonicalJson(yield* observeSetupFile(resolve(fact.path)))]);
+      const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
       if (evidence !== fact.evidence || current !== fact.currentHash)
         return yield* new PlanIsStale();
       yield* projectBinding({

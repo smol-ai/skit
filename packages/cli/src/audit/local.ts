@@ -11,14 +11,14 @@ import {
   libraryStoreLayer,
   inspectOwnershipMarker,
   objectAt,
-  observationPathIdentity,
+  physicalPath,
 } from "@smolai/skit-core";
 import { auditClaude } from "./claude.js";
 import { auditCodex } from "./codex.js";
 import { pathExists, readJson as json } from "./io.js";
 import { runAuditProbes, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
-import type { AuditFinding, AuditObservation } from "./types.js";
+import type { AuditFinding, AuditEntry } from "./types.js";
 import { normalizeAuditReport } from "./normalize.js";
 
 /** Harnesses that read Agent Skills but that SKIT does not yet audit or drive. */
@@ -58,7 +58,7 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
 
 const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
   library: ResolvedSkitConfiguration,
-  observations: readonly AuditObservation[],
+  observations: readonly AuditEntry[],
 ) {
   const ledger = yield* inspectLibraryLedger(library);
   const inspected = new Set<string>();
@@ -78,9 +78,9 @@ const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
   for (const observation of observations) {
     if (observation.kind !== "skill" || !observation.path) continue;
     const directory = dirname(observation.path);
-    const identity = yield* observationPathIdentity(directory);
-    if (inspected.has(identity.comparisonKey)) continue;
-    inspected.add(identity.comparisonKey);
+    const identity = yield* physicalPath(directory);
+    if (inspected.has(identity.key)) continue;
+    inspected.add(identity.key);
     const markerPath = join(directory, ".skit-ownership.json");
     // An unreadable marker is no evidence either way, like an absent one.
     const inspection = yield* inspectOwnershipMarker(directory).pipe(
@@ -152,7 +152,7 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
   const paths = yield* configurationForHome();
   const home = resolve(options.home ?? paths.userHome);
   const cwd = resolve(options.cwd ?? process.cwd());
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
   const stateHome = options.stateHome ?? paths.xdgStateHome;
   let lockPath: string | undefined;

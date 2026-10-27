@@ -12,7 +12,7 @@ import {
   scopeBinding,
 } from "@smolai/skit-core";
 import type { SetupReconciliationFact, SetupVersionChoice } from "./setup-contract.js";
-import { observeSetupFile } from "../../library-application/setup-operation.js";
+import { captureSetupFile } from "../../library-application/setup-operation.js";
 import { prepareOwnedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { checkSetupGlobalContent } from "../../library-application/setup-content-custody.js";
 import { PlanIsStale } from "../../library/failures.js";
@@ -69,7 +69,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       !skill ||
       projection.path !== fact.path ||
       currentSkillVersion(state, skill)?.skill_version_id !== fact.desiredVersionId ||
-      hashParts([canonicalJson(yield* observeSetupFile(resolve(fact.path)))]) !== fact.evidence
+      hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]) !== fact.evidence
     )
       return yield* new PlanIsStale();
     yield* checkSetupGlobalContent(fact.path);
@@ -123,7 +123,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   );
   // Retention/rendering must not silently renew filesystem consent.
   for (const fact of live)
-    if (hashParts([canonicalJson(yield* observeSetupFile(resolve(fact.path)))]) !== fact.evidence)
+    if (hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]) !== fact.evidence)
       return yield* new PlanIsStale();
   yield* preservation.apply();
   for (const fact of live) {

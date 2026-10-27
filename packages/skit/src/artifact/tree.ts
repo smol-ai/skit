@@ -20,20 +20,18 @@ export const TreeEntry = Schema.Union([
 ]);
 export type TreeEntry = typeof TreeEntry.Type;
 
-export const TreeExcludedObservation = Schema.Struct({
+export const ExcludedTreeEntry = Schema.Struct({
   path: Schema.String,
   kind: Schema.Literals(["directory", "file", "symlink"]),
   bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   opaque: Schema.Boolean,
   reason: Schema.Literals(["gitignored", "normalized-control-exclusion"]),
 });
-export interface TreeExcludedObservation extends Schema.Schema.Type<
-  typeof TreeExcludedObservation
-> {}
+export interface ExcludedTreeEntry extends Schema.Schema.Type<typeof ExcludedTreeEntry> {}
 
 export const NormalizedTreeInspection = Schema.Struct({
   entries: Schema.Array(TreeEntry),
-  excluded: Schema.Array(TreeExcludedObservation),
+  excluded: Schema.Array(ExcludedTreeEntry),
 });
 export interface NormalizedTreeInspection extends Schema.Schema.Type<
   typeof NormalizedTreeInspection
@@ -203,11 +201,11 @@ function walkTreeInternal(
     }
 
     const entries: TreeEntry[] = [];
-    const excluded: TreeExcludedObservation[] = [];
+    const excluded: ExcludedTreeEntry[] = [];
     const recordExcluded = (
       absolute: string,
       entryPath: string,
-      reason: TreeExcludedObservation["reason"],
+      reason: ExcludedTreeEntry["reason"],
     ): Effect.Effect<void, PlatformError, never> =>
       Effect.gen(function* () {
         const info = yield* links.lstat(absolute);

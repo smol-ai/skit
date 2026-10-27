@@ -52,7 +52,7 @@ const documentAt = Effect.fn("PnpmSkills.document")(function* (
 /** Corroborate pnpm's ledger with a live link into an installed package's skills directory.
  * A prefix alone, stale ledger entry, or ordinary copy never establishes pnpm management.
  */
-const observePnpmSkill = Effect.fn("PnpmSkills.observe")(function* (
+const checkPnpmSkill = Effect.fn("PnpmSkills.observe")(function* (
   directory: string,
   readDocument: (path: string) => Effect.Effect<PnpmDocument>,
 ) {
@@ -129,22 +129,22 @@ const observePnpmSkill = Effect.fn("PnpmSkills.observe")(function* (
   return undefined;
 });
 
-export type PnpmSkillObserver = (directory: string) => ReturnType<typeof observePnpmSkill>;
+export type PnpmSkillCheck = (directory: string) => ReturnType<typeof checkPnpmSkill>;
 
 /** One cache per read-only scan. Never share this observer across review and apply. */
-export const makePnpmSkillObserver = Effect.fn("PnpmSkills.makeObserver")(function* () {
+export const makePnpmSkillCheck = Effect.fn("PnpmSkills.makeObserver")(function* () {
   const documents = yield* Cache.makeWith(documentAt, {
     capacity: 512,
     timeToLive: (exit) =>
       Exit.isSuccess(exit) && exit.value._tag !== "Unreadable" ? Duration.infinity : Duration.zero,
   });
   const readDocument = (path: string) => Cache.get(documents, resolve(path));
-  return (directory: string) => observePnpmSkill(directory, readDocument);
+  return (directory: string) => checkPnpmSkill(directory, readDocument);
 });
 
 /** Standalone and mutation-time checks always start with fresh evidence. */
 export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory: string) {
-  const observe = yield* makePnpmSkillObserver();
+  const observe = yield* makePnpmSkillCheck();
   return yield* observe(directory);
 });
 

@@ -26,7 +26,7 @@ import {
   type SkillsDirectoryOverrides,
   type LibraryState,
   makeMachineId,
-  retainObservedCollection,
+  importCollection,
   withLibraryWriter,
 } from "@smolai/skit-core";
 import type { InstalledSkillOptions } from "../../src/workflows/library/installed-skill-options.js";
@@ -214,8 +214,8 @@ export { deterministicTreeHash };
 
 /** Retain observed bytes into the Library at `home`, through the store production consumes. */
 export const retainObservedIn =
-  (home: string) => (request: Parameters<typeof retainObservedCollection>[0]) =>
-    retainObservedCollection(request).pipe(Effect.provide(libraryStoreLayer({ home })));
+  (home: string) => (request: Parameters<typeof importCollection>[0]) =>
+    importCollection(request).pipe(Effect.provide(libraryStoreLayer({ home })));
 
 /** Mutate the Library at `home` the way a front end does: under the recording writer lock. */
 export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>

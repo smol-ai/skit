@@ -1,12 +1,12 @@
 import { captureSnapshotArchive, retainedTreePath, type SnapshotArchive } from "@smolai/skit-core";
 import { Effect } from "effect";
-import type { SyncObserver, SyncPhase } from "./library-sync-progress.js";
+import type { SyncProgress, SyncPhase } from "./library-sync-progress.js";
 
 /** Diagnose changed local bytes before reading remote state. Transfer planning lives in core. */
 export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(function* (
   copies: readonly { readonly digest: string }[],
   originalsPath: string,
-  observer: SyncObserver,
+  observer: SyncProgress,
 ) {
   const phase: SyncPhase = { kind: "verify-copies", total: copies.length };
   return yield* observer.around(

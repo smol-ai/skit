@@ -16,7 +16,7 @@ import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts } from "../src/presentation/setup-steps.js";
 import { runSetup } from "../src/workflows/library/setup.js";
-import { applySetupObservedCollections } from "../src/workflows/library/setup-observed-collections.js";
+import { importSetupCollections } from "../src/workflows/library/setup-observed-collections.js";
 import {
   SetupLockMatch,
   type SetupOnboardingCandidate,
@@ -236,7 +236,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
         home.owned(
           writingTo(
             home.home,
-            applySetupObservedCollections({ setup }, preview, [
+            importSetupCollections({ setup }, preview, [
               { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
             ]),
           ),
@@ -254,7 +254,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const adopted = yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections({ setup }, preview, [
+        importSetupCollections({ setup }, preview, [
           { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
         ]),
       ).pipe(Effect.provideService(LibraryActor, "setup")),
@@ -474,7 +474,7 @@ it.effect("adopts a selected member from a two-Skill GitHub lock collection", ()
     const adopted = yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections({ setup }, preview, [
+        importSetupCollections({ setup }, preview, [
           { name: selected.name, paths: selected.paths, groupKey: selected.groupKey },
         ]),
       ),

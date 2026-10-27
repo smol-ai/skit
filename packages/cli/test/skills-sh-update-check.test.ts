@@ -7,7 +7,7 @@ import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { runSetup } from "../src/workflows/library/setup.js";
-import { applySetupObservedCollections } from "../src/workflows/library/setup-observed-collections.js";
+import { importSetupCollections } from "../src/workflows/library/setup-observed-collections.js";
 import { checkSkillsShSubject } from "../src/workflows/library/skills-sh-update-check.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
@@ -76,7 +76,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     yield* home.owned(
       writingTo(
         home.home,
-        applySetupObservedCollections({ setup }, preview, [
+        importSetupCollections({ setup }, preview, [
           { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
         ]),
       ),

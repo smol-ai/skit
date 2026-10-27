@@ -32,14 +32,14 @@ export const SkillAlias = Schema.Struct({
 export const isEntryLink = (alias: SkillAlias): boolean =>
   alias.via === "symlink" && alias.linkPath === alias.path;
 export type SkillAlias = typeof SkillAlias.Type;
-export const HarnessShadow = Schema.Struct({
+export const DuplicateCopy = Schema.Struct({
   name: Schema.String,
   harness: Schema.String,
   canonicalPath: Schema.String,
   aliases: Schema.Array(SkillAlias),
   documentDigest: Schema.String,
 });
-export type HarnessShadow = typeof HarnessShadow.Type;
+export type DuplicateCopy = typeof DuplicateCopy.Type;
 /** Each Harness's readable skills directories for a scope; a global override stands in for its own. */
 export function readableSkillsDirectories(
   options: InventoryRootOptions,
@@ -71,7 +71,7 @@ export function readableSkillsDirectories(
 }
 
 /** Preserve the listing path even when a parent/root itself is a symlink. */
-export const observeSkillAlias = Effect.fn("Projection.observeAlias")(function* (path: string) {
+export const readSkillSymlink = Effect.fn("Projection.observeAlias")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   for (let component = resolve(path); ; component = dirname(component)) {
@@ -88,22 +88,22 @@ export const observeSkillAlias = Effect.fn("Projection.observeAlias")(function* 
   return { path: resolve(path), via: "directory" as const };
 });
 
-export const ShadowObservationError = Schema.Struct({
+export const DuplicateScanError = Schema.Struct({
   path: Schema.String,
   message: Schema.String,
 });
-export type ShadowObservationError = typeof ShadowObservationError.Type;
+export type DuplicateScanError = typeof DuplicateScanError.Type;
 
 /** Observe direct skill children only; unrelated unreadable entries never discard the index. */
-export const observeHarnessSkills = Effect.fn("Projection.observeHarnessSkills")(function* (
+export const scanSkillsDirectory = Effect.fn("Projection.observeHarnessSkills")(function* (
   roots: readonly { readonly harness: HarnessName; readonly root: string }[],
   options: {
     readonly blockingNames?: readonly string[];
-    readonly errors?: ShadowObservationError[];
+    readonly errors?: DuplicateScanError[];
   } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const instances = new Map<string, HarnessShadow>();
+  const instances = new Map<string, DuplicateCopy>();
   for (const { harness, root } of roots) {
     const names = yield* fs.readDirectory(root).pipe(
       Effect.catchTag("PlatformError", (error) => {
@@ -118,7 +118,7 @@ export const observeHarnessSkills = Effect.fn("Projection.observeHarnessSkills")
         message: "Skills directory exceeds the 4096-entry observation limit",
       };
       options.errors?.push(error);
-      if (options.blockingNames?.length) return yield* new ShadowObservationIncomplete(error);
+      if (options.blockingNames?.length) return yield* new DuplicateScanIncomplete(error);
       continue;
     }
     for (const entry of names.sort()) {
@@ -131,7 +131,7 @@ export const observeHarnessSkills = Effect.fn("Projection.observeHarnessSkills")
         const text = yield* fs.readFileString(document);
         const fields = parseSkillFrontmatter(text);
         const name = typeof fields?.name === "string" && fields.name ? fields.name : entry;
-        const alias = yield* observeSkillAlias(path);
+        const alias = yield* readSkillSymlink(path);
         const canonicalPath = yield* fs.realPath(path);
         const key = `${harness}\0${canonicalPath}`;
         const prior = instances.get(key);
@@ -156,8 +156,8 @@ export const observeHarnessSkills = Effect.fn("Projection.observeHarnessSkills")
   );
 });
 
-export class ShadowObservationIncomplete
-  extends Data.TaggedError("ShadowObservationIncomplete")<{
+export class DuplicateScanIncomplete
+  extends Data.TaggedError("DuplicateScanIncomplete")<{
     path: string;
     message: string;
   }>
@@ -169,11 +169,11 @@ export class ShadowObservationIncomplete
 }
 
 /** Exclude the destinations we will reconcile together; other same-scope copies are shadows. */
-export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(function* (
+export const findDuplicates = Effect.fn("Projection.observeShadows")(function* (
   options: InventoryRootOptions,
   scope: SkitBindingScope,
   names: readonly string[],
-  errors?: ShadowObservationError[],
+  errors?: DuplicateScanError[],
 ) {
   const fs = yield* FileSystem.FileSystem;
   const targets = yield* activeInstallDestinationsEffect(options);
@@ -206,7 +206,7 @@ export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(func
       )
       .map(({ harness }) => harness),
   );
-  const instances = yield* observeHarnessSkills(
+  const instances = yield* scanSkillsDirectory(
     roots.filter(({ harness }) => readers.has(harness)),
     { blockingNames: names, errors },
   );
@@ -246,7 +246,7 @@ export class InstalledSkillWouldReplaceLink
 
 export class InstalledSkillWouldDuplicate
   extends Data.TaggedError("InstalledSkillWouldDuplicate")<{
-    shadows: readonly HarnessShadow[];
+    shadows: readonly DuplicateCopy[];
   }>
   implements SkitFailure
 {

@@ -3,11 +3,11 @@ import {
   prepareRestore,
   type LibraryManifest,
   type SnapshotArchive,
-  type RestoreObserver,
+  type RestoreProgress,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import type { librarySyncApi } from "./library-sync-api.js";
-import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
+import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
 
 type SnapshotApi = Pick<Effect.Success<ReturnType<typeof librarySyncApi>>, "download" | "upload">;
 type RemoteSnapshots = { readonly library_id: string; readonly manifest: LibraryManifest } | null;
@@ -22,11 +22,11 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
     readonly originalsPath: string;
     readonly origin: string;
     readonly token?: string;
-    readonly observer?: SyncObserver;
-    readonly restoreObserver?: RestoreObserver;
+    readonly observer?: SyncProgress;
+    readonly restoreObserver?: RestoreProgress;
   },
 ) {
-  const observer = options.observer ?? silentSyncObserver;
+  const observer = options.observer ?? silentSyncProgress;
   const content = yield* planRetainedContent(desired, {
     originalsPath: options.originalsPath,
     localArchives: archives,

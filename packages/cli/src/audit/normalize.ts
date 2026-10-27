@@ -1,15 +1,15 @@
 import type { HarnessName } from "@smolai/skit-core";
-import type { AuditObservation, AuditReport } from "./types.js";
+import type { AuditEntry, AuditReport } from "./types.js";
 import type { AuditEntryV1Alpha4, AuditReportV1Alpha4 } from "./schema.js";
 
 type IndexedEntry = AuditEntryV1Alpha4 & {
-  sourceKind: AuditObservation["kind"];
+  sourceKind: AuditEntry["kind"];
   sourceName: string;
   sourceLocation: string | null;
   sourceCanonicalLocation?: string;
 };
 
-function auditEntryBase(observation: AuditObservation, id: string) {
+function auditEntryBase(observation: AuditEntry, id: string) {
   return {
     id,
     name: observation.name,
@@ -68,7 +68,7 @@ export function normalizeAuditReport(report: AuditReport): AuditReportV1Alpha4 {
     };
   });
 
-  const entriesFor = (kind: AuditObservation["kind"]): AuditEntryV1Alpha4[] =>
+  const entriesFor = (kind: AuditEntry["kind"]): AuditEntryV1Alpha4[] =>
     indexed
       .filter((capability) => capability.sourceKind === kind)
       .map(

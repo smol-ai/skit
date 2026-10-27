@@ -70,7 +70,7 @@ export const sameDeviceSkillSelection = (left: LibraryState, right: LibraryState
   canonicalJson(right.device_skill_selection ?? null);
 
 /** Explicit device enablement verifies every requested Skill, including unchanged intent. */
-export function bindingShadowCheckSkills(
+export function skillsToCheckForDuplicates(
   state: LibraryState,
   scope: SkitBindingScope,
   requested: readonly string[],

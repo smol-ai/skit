@@ -6,7 +6,7 @@ import {
   LibraryStore,
   LinkStat,
   makeMachineId,
-  retainObservedCollection,
+  importCollection,
   withLibraryWriter,
 } from "@smolai/skit-core";
 import {
@@ -51,7 +51,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         yield* fs.writeFileString(join(source, skill, "SKILL.md"), `${skill}\n`);
       }
       return yield* withLibraryWriter(
-        retainObservedCollection({
+        importCollection({
           source: { type: "local", path: source },
           input: source,
           retainedAt: "2026-10-14T00:00:00.000Z",

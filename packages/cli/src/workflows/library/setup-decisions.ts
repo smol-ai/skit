@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Digest, hashParts } from "@smolai/skit-core";
-import type { HarnessShadow } from "../../projection/harness-shadows.js";
+import type { DuplicateCopy } from "../../projection/duplicates.js";
 import type {
   SetupResult,
   SetupSkillInstance,
@@ -36,7 +36,7 @@ export const SetupApprovedCopy = Schema.Struct({
 export interface SetupApprovedCopy extends Schema.Schema.Type<typeof SetupApprovedCopy> {}
 
 /** Every relevant alias must be an individual link to the selected canonical source. */
-export function retirableShadowAliases(sourcePath: string, shadows: readonly HarnessShadow[]) {
+export function retirableDuplicateLinks(sourcePath: string, shadows: readonly DuplicateCopy[]) {
   if (
     !shadows.length ||
     shadows.some(
@@ -55,7 +55,7 @@ export type SetupCopyConflict =
   | { readonly kind: "none" }
   | {
       readonly kind: "retirable" | "preservable" | "preserve-copies";
-      readonly shadows: readonly HarnessShadow[];
+      readonly shadows: readonly DuplicateCopy[];
       readonly aliases: readonly string[];
       /**
        * A link sits where SKIT writes this skill's copy. Enabling replaces it, so the copies cannot
@@ -88,7 +88,7 @@ export function copyConflict(
     candidate?.action === "repository-owned"
   )
     return { kind: "none" };
-  const aliases = retirableShadowAliases(selection.sourcePath, shadows);
+  const aliases = retirableDuplicateLinks(selection.sourcePath, shadows);
   const selectedHash = instance?.contentIdentity.observedHash;
   const preservable =
     selectedHash !== undefined &&

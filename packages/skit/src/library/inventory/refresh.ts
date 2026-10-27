@@ -4,7 +4,7 @@ import type { HarnessName } from "../../contracts.js";
 import type { LibraryState } from "../library-state.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { deterministicTreeHash } from "../../artifact/skit.js";
-import { observationPathIdentity, pathIsWithin } from "../../platform/path-identity.js";
+import { physicalPath, pathIsWithin } from "../../platform/path-identity.js";
 import {
   expectedInstalledSkillHashResult,
   installedSkillDisplaced,
@@ -33,7 +33,7 @@ export function deduplicateInventoryRoots(
   ];
 }
 /** Observe a private snapshot without persistence or recovery capabilities. */
-export const observeInventory = Effect.fn("Library.observeInventory")(function* (
+export const scanInventory = Effect.fn("Library.observeInventory")(function* (
   loaded: LibraryState,
   scanRoots: readonly InventoryScanRoot[],
 ) {
@@ -72,10 +72,10 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
   }
   const managed = new Set<string>();
   for (const projection of state.projections)
-    managed.add((yield* observationPathIdentity(projection.path)).comparisonKey);
+    managed.add((yield* physicalPath(projection.path)).key);
   const priorUnmanaged = new Map<string, LibraryState["unmanaged"][number]>();
   for (const item of state.unmanaged)
-    priorUnmanaged.set((yield* observationPathIdentity(item.path)).comparisonKey, item);
+    priorUnmanaged.set((yield* physicalPath(item.path)).key, item);
   state.unmanaged = state.unmanaged.filter(
     (item) =>
       typeof item.path !== "string" || !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
@@ -164,18 +164,18 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
         );
         if (!skill && (!directory || (yield* inspectOwnershipMarker(path)).kind === "absent"))
           continue;
-        const identity = yield* observationPathIdentity(path);
-        if (managed.has(identity.comparisonKey)) continue;
-        const observed = observedPaths.get(identity.comparisonKey) ?? {
+        const identity = yield* physicalPath(path);
+        if (managed.has(identity.key)) continue;
+        const observed = observedPaths.get(identity.key) ?? {
           path,
           harness,
           paths: new Set<string>(),
-          canonicalPath: identity.canonicalPath,
+          canonicalPath: identity.realPath,
           harnesses: new Set<HarnessName>(),
         };
         observed.harnesses.add(harness);
         observed.paths.add(path);
-        observedPaths.set(identity.comparisonKey, observed);
+        observedPaths.set(identity.key, observed);
       }
     }
   for (const observed of observedPaths.values()) {
@@ -208,9 +208,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
         detail: "Ownership marker is not independently authenticated and cannot authorize removal",
       });
     } else {
-      const prior = priorUnmanaged.get(
-        (yield* observationPathIdentity(observed.path)).comparisonKey,
-      );
+      const prior = priorUnmanaged.get((yield* physicalPath(observed.path)).key);
       state.unmanaged.push({
         harness: observed.harness,
         harnesses,
@@ -232,7 +230,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
 ) {
   const store = yield* LibraryStore;
   const roots = deduplicateInventoryRoots(selectRoots(loaded));
-  const state = yield* observeInventory(loaded, roots);
+  const state = yield* scanInventory(loaded, roots);
   yield* store.save(state, loaded);
   // A verified installation resolves every older displacement of its installed skill. Those backups
   // no longer explain an absence, so they are kept, never discarded.

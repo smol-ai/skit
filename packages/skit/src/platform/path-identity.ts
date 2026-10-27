@@ -3,14 +3,14 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import type { PlatformError } from "effect/PlatformError";
 import { LinkStat, type PathStats } from "./link-stat.js";
 
-export interface ObservationPathIdentity {
+export interface PhysicalPath {
   /** Resolved, displayable path for this observation pass. Not a durable target identifier. */
-  canonicalPath: string;
+  realPath: string;
   /** Equality key valid only within the current filesystem observation pass. */
-  comparisonKey: string;
+  key: string;
 }
 
-export interface InstallDestinationPathIdentity {
+export interface InstallDestinationPath {
   /** Absolute configured or routed path retained for collision diagnostics. */
   declaredPath: string;
   /** Byte-faithful physical path. Absent until the complete target resolves. */
@@ -21,7 +21,7 @@ export interface InstallDestinationPathIdentity {
 
 export interface InstallDestinationCandidateGroup {
   comparisonKey: string;
-  candidates: InstallDestinationPathIdentity[];
+  candidates: InstallDestinationPath[];
   /** A lone unresolved candidate may materialize normally; only competing declarations block. */
   ambiguous: boolean;
 }
@@ -39,18 +39,16 @@ export function pathIsWithin(root: string, path: string): boolean {
  * atomic replacement, and a symlink may later be retargeted. Durable declared-path and relocation
  * semantics belong to the install destination model rather than this observation helper.
  */
-export function observationPathIdentity(
-  path: string,
-): Effect.Effect<ObservationPathIdentity, never, LinkStat> {
+export function physicalPath(path: string): Effect.Effect<PhysicalPath, never, LinkStat> {
   return Effect.gen(function* () {
     const probe = yield* LinkStat;
-    const canonicalPath = yield* probe
+    const realPath = yield* probe
       .realPathNative(path)
       .pipe(Effect.orElseSucceed(() => resolve(path)));
-    const info = yield* Effect.option(probe.identity.stat(canonicalPath));
+    const info = yield* Effect.option(probe.identity.stat(realPath));
     return info._tag === "Some"
-      ? { canonicalPath, comparisonKey: `device:${info.value.dev}:inode:${info.value.ino}` }
-      : { canonicalPath, comparisonKey: `path:${canonicalPath.normalize("NFC")}` };
+      ? { realPath, key: `device:${info.value.dev}:inode:${info.value.ino}` }
+      : { realPath, key: `path:${realPath.normalize("NFC")}` };
   });
 }
 
@@ -114,7 +112,7 @@ function nearestExistingAncestor(
  */
 export function installDestinationPathIdentity(
   path: string,
-): Effect.Effect<InstallDestinationPathIdentity, PlatformError, LinkStat> {
+): Effect.Effect<InstallDestinationPath, PlatformError, LinkStat> {
   return Effect.gen(function* () {
     const probe = yield* LinkStat;
     const declaredPath = resolve(path);
@@ -146,7 +144,7 @@ export function groupInstallDestinationCandidates(
   paths: readonly string[],
 ): Effect.Effect<InstallDestinationCandidateGroup[], PlatformError, LinkStat> {
   return Effect.gen(function* () {
-    const groups = new Map<string, InstallDestinationPathIdentity[]>();
+    const groups = new Map<string, InstallDestinationPath[]>();
     for (const path of paths) {
       const candidate = yield* installDestinationPathIdentity(path);
       const group = groups.get(candidate.comparisonKey) ?? [];

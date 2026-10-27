@@ -7,7 +7,7 @@ import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { skitLayer } from "@smolai/skit-core";
 import {
-  makePnpmSkillObserver,
+  makePnpmSkillCheck,
   pnpmSkillOwner,
   leavePnpmSkill,
 } from "../src/projection/pnpm-skills.js";
@@ -65,7 +65,7 @@ it.effect("shares document reads within a scan and starts fresh for mutation che
         }),
     });
     yield* Effect.gen(function* () {
-      const observe = yield* makePnpmSkillObserver();
+      const observe = yield* makePnpmSkillCheck();
       expect((yield* observe(f.alias))?.kind).toBe("pnpm");
       expect((yield* observe(f.skill))?.kind).toBe("pnpm");
       expect((yield* observe(f.alias))?.kind).toBe("pnpm");
@@ -75,13 +75,13 @@ it.effect("shares document reads within a scan and starts fresh for mutation che
 
       const ledger = yield* f.fs.readFileString(f.ledgerPath);
       yield* f.fs.writeFileString(f.ledgerPath, "{}");
-      const negativeScan = yield* makePnpmSkillObserver();
+      const negativeScan = yield* makePnpmSkillCheck();
       expect(yield* negativeScan(f.alias)).toBeUndefined();
       yield* f.fs.writeFileString(f.ledgerPath, ledger);
       const mutation = yield* Effect.result(leavePnpmSkill(f.alias));
       expect(mutation._tag).toBe("Failure");
       if (mutation._tag === "Failure") expect(mutation.failure._tag).toBe("PnpmSkillManaged");
-      const refreshed = yield* makePnpmSkillObserver();
+      const refreshed = yield* makePnpmSkillCheck();
       expect((yield* refreshed(f.alias))?.kind).toBe("pnpm");
     }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
   }).pipe(Effect.provide(skitLayer)),
@@ -111,7 +111,7 @@ it.effect("reports unreadable evidence, retries it, and keeps missing-file probe
         }),
     });
     yield* Effect.gen(function* () {
-      const observe = yield* makePnpmSkillObserver();
+      const observe = yield* makePnpmSkillCheck();
       expect(yield* observe(f.alias)).toBeUndefined();
       expect((yield* observe(f.alias))?.kind).toBe("pnpm");
     }).pipe(
