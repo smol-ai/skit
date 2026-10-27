@@ -64,7 +64,7 @@ export const blobStorageEffectFrom = <A>(
     catch: (cause) => new BlobStorageError({ operation, cause }),
   });
 
-export const r2BodyEffect = <A>(operation: string, run: () => Promise<A>) =>
+export const r2Body = <A>(operation: string, run: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Wrangler's generated R2 body is Promise-only; this platform module owns that SDK boundary.
   Effect.tryPromise({
     try: run,
@@ -72,14 +72,14 @@ export const r2BodyEffect = <A>(operation: string, run: () => Promise<A>) =>
   });
 
 /** Owns the Promise boundary exposed by Cloudflare's R2 binding. */
-export const blobStorageEffect = <A>(
+export const blobStorage = <A>(
   operation: string,
   run: (blobs: R2Bucket) => Promise<A>,
 ): Effect.Effect<A, BlobStorageError, Bindings> =>
   Effect.flatMap(Bindings, ({ blobs }) => blobStorageEffectFrom(blobs, operation, run));
 
 /** Owns the Promise boundary exposed by Cloudflare's rate-limit binding. */
-export const rateLimitEffect = (rateLimiter: RateLimit, key: string) =>
+export const rateLimit = (rateLimiter: RateLimit, key: string) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Wrangler's generated RateLimit binding is Promise-only; this platform module owns that SDK boundary.
   Effect.tryPromise({
     try: () => rateLimiter.limit({ key }),

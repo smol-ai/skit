@@ -9,7 +9,7 @@ import { skitLayer } from "@smolai/skit-core";
 import {
   makePnpmSkillObserver,
   pnpmSkillOwner,
-  leavePnpmSkillEffect,
+  leavePnpmSkill,
 } from "../src/projection/pnpm-skills.js";
 import { fileProvenance } from "../src/audit/provenance.js";
 import { runSetup } from "../src/workflows/library/setup.js";
@@ -18,8 +18,8 @@ import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js
 import { setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
 import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
 import {
-  retainLibrarySourceEffect,
-  inspectLibrarySourceEffect,
+  retainLibrarySource,
+  inspectLibrarySource,
 } from "../src/library-application/source-acquisition.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -78,7 +78,7 @@ it.effect("shares document reads within a scan and starts fresh for mutation che
       const negativeScan = yield* makePnpmSkillObserver();
       expect(yield* negativeScan(f.alias)).toBeUndefined();
       yield* f.fs.writeFileString(f.ledgerPath, ledger);
-      const mutation = yield* Effect.result(leavePnpmSkillEffect(f.alias));
+      const mutation = yield* Effect.result(leavePnpmSkill(f.alias));
       expect(mutation._tag).toBe("Failure");
       if (mutation._tag === "Failure") expect(mutation.failure._tag).toBe("PnpmSkillManaged");
       const refreshed = yield* makePnpmSkillObserver();
@@ -174,7 +174,7 @@ for (const yaml of [false, true]) {
         source: "pnpm · @acme/demo@1.0.0",
         evidence: f.ledgerPath,
       });
-      expect((yield* Effect.result(leavePnpmSkillEffect(f.alias)))._tag).toBe("Failure");
+      expect((yield* Effect.result(leavePnpmSkill(f.alias)))._tag).toBe("Failure");
     }).pipe(Effect.provide(skitLayer)),
   );
 }
@@ -241,8 +241,8 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
         );
       for (const input of [f.pkg, join(f.pkg, "skills")]) {
         const results = yield* Effect.all([
-          Effect.result(home.owned(inspectLibrarySourceEffect(input))),
-          Effect.result(home.owned(writingTo(home.home, retainLibrarySourceEffect(input)))),
+          Effect.result(home.owned(inspectLibrarySource(input))),
+          Effect.result(home.owned(writingTo(home.home, retainLibrarySource(input)))),
         ]);
         for (const result of results) {
           expect(result._tag).toBe("Failure");
@@ -307,7 +307,7 @@ it.effect("keeps an authored workspace source distinct from pnpm's recorded alia
     expect(installed?.owner.kind).toBe("pnpm");
     expect(observed.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
     expect((yield* setupRemovablePaths(options, observed)).has(f.alias)).toBe(false);
-    const retained = yield* home.owned(writingTo(home.home, retainLibrarySourceEffect(skill)));
+    const retained = yield* home.owned(writingTo(home.home, retainLibrarySource(skill)));
     expect(retained.skills.map((item) => item.name)).toEqual(["demo-guide"]);
     expect(yield* f.fs.readLink(f.alias)).toBe(skill);
   }).pipe(Effect.provide(skitLayer)),
@@ -380,7 +380,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     expect(row?.choice.disabled).toBe(true);
     expect(row?.details).toContain("Managed by pnpm · left in place");
     expect((yield* setupRemovablePaths(options, observed)).has(f.skill)).toBe(false);
-    const add = yield* Effect.result(home.owned(retainLibrarySourceEffect(f.alias)));
+    const add = yield* Effect.result(home.owned(retainLibrarySource(f.alias)));
     expect(add._tag).toBe("Failure");
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
     const takeover = yield* Effect.result(

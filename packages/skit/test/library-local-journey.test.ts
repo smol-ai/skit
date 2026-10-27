@@ -1,14 +1,14 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
-import { libraryManifestFromLocalStateEffect } from "../src/library/library-state.js";
-import { planRetainedContentEffect } from "../src/library/retained-content-plan.js";
-import { prepareRestoreEffect } from "../src/library/library-restore.js";
+import { retainObservedCollection } from "../src/library/observed-import.js";
+import { libraryManifestFromLocalState } from "../src/library/library-state.js";
+import { planRetainedContent } from "../src/library/retained-content-plan.js";
+import { prepareRestore } from "../src/library/library-restore.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
-import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
+import { captureSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
@@ -29,7 +29,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     const retained = yield* Effect.scoped(
       withLibraryWriterLock(
         firstHome,
-        retainObservedCollectionEffect({
+        retainObservedCollection({
           machineId,
           source: { type: "local", path: installed },
           input: installed,
@@ -39,7 +39,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
               name: "review",
               sourcePath: installed,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(installed),
+              observedHash: yield* deterministicTreeHash(installed),
             },
           ],
           observations: [],
@@ -61,15 +61,15 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
       "retained too\n",
     );
 
-    const manifest = yield* libraryManifestFromLocalStateEffect(saved.state);
+    const manifest = yield* libraryManifestFromLocalState(saved.state);
     assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
-    const archive = yield* captureSnapshotArchiveEffect(firstOriginal);
+    const archive = yield* captureSnapshotArchive(firstOriginal);
     const originalsPath = join(secondHome, "originals");
-    const plan = yield* planRetainedContentEffect(manifest, {
+    const plan = yield* planRetainedContent(manifest, {
       originalsPath,
       localArchives: [archive],
     });
-    const restored = yield* Effect.scoped(prepareRestoreEffect(manifest, plan, { originalsPath }));
+    const restored = yield* Effect.scoped(prepareRestore(manifest, plan, { originalsPath }));
     yield* saveLibrary(secondHome, restored.state);
     const second = yield* inspectLibrary(secondHome);
     assert.strictEqual(second.present, true);
@@ -99,7 +99,7 @@ it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
       return yield* Effect.scoped(
         withLibraryWriterLock(
           home,
-          retainObservedCollectionEffect({
+          retainObservedCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
@@ -109,13 +109,13 @@ it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
                 name: "review",
                 sourcePath: review,
                 relativePath: "review",
-                observedHash: yield* deterministicTreeHashEffect(review),
+                observedHash: yield* deterministicTreeHash(review),
               },
               {
                 name: "stable",
                 sourcePath: stable,
                 relativePath: "stable",
-                observedHash: yield* deterministicTreeHashEffect(stable),
+                observedHash: yield* deterministicTreeHash(stable),
               },
             ],
             observations: [],

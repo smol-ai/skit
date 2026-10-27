@@ -4,7 +4,7 @@ import {
   canonicalJson,
   currentLibraryManifest,
   LibraryStore,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
   type LibraryManifest,
   type InstallDestination,
   type RestoreObserver,
@@ -15,16 +15,16 @@ import {
   bindingSkillIds,
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-inspection.js";
-import { prepareSyncTransferEffect } from "./library-sync-snapshots.js";
+import { prepareSyncTransfer } from "./library-sync-snapshots.js";
 import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
-import { librarySyncApiEffect } from "./library-sync-api.js";
+import { librarySyncApi } from "./library-sync-api.js";
 import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
 import { updateInstalledSkills } from "./update-installed-skills.js";
 import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
 import {
   prepareSyncDeviceTransition,
-  resolveSyncInstalledSkillCollisionsEffect,
+  resolveSyncInstalledSkillCollisions,
 } from "./library-sync-installed-skills.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -74,7 +74,7 @@ export class SyncLocalChanged
  * is a merge whose result is both sides. Absent and empty stay distinct: only two existing
  * Libraries can be clean or need adoption, and only an absent R is created by the write.
  */
-export const syncLibraryEffect = Effect.fn("Library.sync")(
+export const syncLibrary = Effect.fn("Library.sync")(
   function* (options: {
     origin: string;
     token?: string;
@@ -101,10 +101,10 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       variantsPath: store.variantsPath,
       ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
     };
-    const api = yield* librarySyncApiEffect({ origin: options.origin, token: options.token });
+    const api = yield* librarySyncApi({ origin: options.origin, token: options.token });
     const local = yield* observer.around({ kind: "inspect-local" }, store.inspect);
     const manifest = local.present
-      ? yield* libraryManifestFromLocalStateEffect(local.state)
+      ? yield* libraryManifestFromLocalState(local.state)
       : emptyManifest;
     const inventory = yield* inspectSyncSnapshots(
       local.present ? local.state.retained_copies : [],
@@ -202,7 +202,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     );
     const collision = yield* observer.around(
       { kind: "check-destinations" },
-      resolveSyncInstalledSkillCollisionsEffect(
+      resolveSyncInstalledSkillCollisions(
         installation.manifest,
         options.projection?.rootFor,
         options.keepEnabled,
@@ -259,7 +259,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
 
     // Equivalent handle alignment alone is not a Collection content or evidence change.
     const plan = planLibrarySync(merge.alignedLocal, remoteManifest, desired);
-    const transfer = yield* prepareSyncTransferEffect(inventory.archives, desired, remote, api, {
+    const transfer = yield* prepareSyncTransfer(inventory.archives, desired, remote, api, {
       ...options,
       originalsPath: store.originalsPath,
     });
@@ -297,7 +297,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       const fresh = yield* store.inspect;
       if (
         fresh.present !== local.present ||
-        (fresh.present && !same(yield* libraryManifestFromLocalStateEffect(fresh.state), manifest))
+        (fresh.present && !same(yield* libraryManifestFromLocalState(fresh.state), manifest))
       )
         return yield* new SyncLocalChanged();
     }

@@ -4,12 +4,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import {
-  inspectOwnershipMarkerEffect,
-  libraryManifestFromLocalStateEffect,
+  inspectOwnershipMarker,
+  libraryManifestFromLocalState,
   retainedTreePath,
   skitLayer,
 } from "@smolai/skit-core";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupStepTitles } from "../src/presentation/setup-steps.js";
@@ -102,12 +102,12 @@ it.effect("adds selected skills and takes custody only of eligible global copies
       expect.arrayContaining([managedText, skillDocument("repo-only", "Repository skill")]),
     );
     expect(yield* fs.readFileString(join(managedSkill, "SKILL.md"))).toBe(managedText);
-    expect((yield* inspectOwnershipMarkerEffect(managedSkill)).kind).toBe("valid");
-    expect((yield* inspectOwnershipMarkerEffect(repositorySkill)).kind).toBe("absent");
+    expect((yield* inspectOwnershipMarker(managedSkill)).kind).toBe("valid");
+    expect((yield* inspectOwnershipMarker(repositorySkill)).kind).toBe("absent");
     expect(yield* fs.readFileString(join(repositorySkill, "SKILL.md"))).toBe(
       skillDocument("repo-only", "Repository skill"),
     );
-    expect((yield* libraryManifestFromLocalStateEffect(state)).snapshot_digests).toEqual(
+    expect((yield* libraryManifestFromLocalState(state)).snapshot_digests).toEqual(
       state.retained_copies.map((copy) => copy.digest).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -179,8 +179,8 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
         { document: reviewDocument, entries: [".DS_Store", "SKILL.md"] },
       ]),
     );
-    expect((yield* inspectOwnershipMarkerEffect(emptyDirectorySkill)).kind).toBe("valid");
-    expect((yield* inspectOwnershipMarkerEffect(finderMetadataSkill)).kind).toBe("valid");
+    expect((yield* inspectOwnershipMarker(emptyDirectorySkill)).kind).toBe("valid");
+    expect((yield* inspectOwnershipMarker(finderMetadataSkill)).kind).toBe("valid");
     expect(yield* fs.readFileString(join(emptyDirectorySkill, "SKILL.md"))).toBe(readmeDocument);
     expect(yield* fs.readFileString(join(finderMetadataSkill, "SKILL.md"))).toBe(reviewDocument);
     expect(yield* fs.readDirectory(join(emptyDirectorySkill, "references"))).toEqual([]);
@@ -188,7 +188,7 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
       "Finder metadata",
     );
     expect(yield* fs.readFileString(join(authoredSkill, "SKILL.md"))).toBe(readmeDocument);
-    expect((yield* inspectOwnershipMarkerEffect(authoredSkill)).kind).toBe("absent");
+    expect((yield* inspectOwnershipMarker(authoredSkill)).kind).toBe("absent");
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -254,14 +254,14 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
     )?.preview;
     expect(yield* codexPreview!()).toContain("Codex contents");
     expect((yield* home.durable).skills.map((skill) => skill.name)).toEqual([names[0]]);
-    expect((yield* inspectOwnershipMarkerEffect(chosenPath)).kind).toBe("valid");
+    expect((yield* inspectOwnershipMarker(chosenPath)).kind).toBe("valid");
     for (const name of names) {
       expect(yield* fs.readFileString(join(codex, name, "SKILL.md"))).toBe(
         skillDocument(name, "Codex contents"),
       );
-      expect((yield* inspectOwnershipMarkerEffect(join(codex, name))).kind).toBe("absent");
+      expect((yield* inspectOwnershipMarker(join(codex, name))).kind).toBe("absent");
       if (name !== names[0])
-        expect((yield* inspectOwnershipMarkerEffect(join(claude, name))).kind).toBe("absent");
+        expect((yield* inspectOwnershipMarker(join(claude, name))).kind).toBe("absent");
     }
     expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(
       skillDocument("shared", "Shared source"),
@@ -296,7 +296,7 @@ it.effect(
         writingTo(
           home.home,
           Effect.gen(function* () {
-            yield* retainLibrarySourceEffect(source);
+            yield* retainLibrarySource(source);
             yield* setupCommand({
               options: {
                 libraryHome: home.home,
@@ -311,10 +311,10 @@ it.effect(
           }),
         ),
       );
-      expect((yield* inspectOwnershipMarkerEffect(join(claude, "review"))).kind).toBe("valid");
+      expect((yield* inspectOwnershipMarker(join(claude, "review"))).kind).toBe("valid");
       // The Codex root is SKIT's shared destination and already holds the bytes SKIT would install, so
       // enabling takes custody of that copy in place rather than recording a conflict with it.
-      expect((yield* inspectOwnershipMarkerEffect(join(codex, "review"))).kind).toBe("valid");
+      expect((yield* inspectOwnershipMarker(join(codex, "review"))).kind).toBe("valid");
       expect((yield* home.durable).projections.map((projection) => projection.status)).toEqual([
         "installed",
         "installed",

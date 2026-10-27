@@ -10,8 +10,8 @@ import { skitLayer } from "@smolai/skit-core";
 import { Deferred, Effect, Fiber, FileSystem, Schedule } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { runAuditProbesEffect } from "../src/audit/probes.js";
-import { probeHarnessEffect } from "../src/harness/probe.js";
+import { runAuditProbes } from "../src/audit/probes.js";
+import { probeHarness } from "../src/harness/probe.js";
 import { captureBounded } from "../src/harness/probe-process.js";
 import { scratch } from "./helpers/library-home.js";
 
@@ -59,7 +59,7 @@ it.live("an interrupted harness probe kills the version subprocess", () =>
     const gated = yield* Deferred.make<void>();
 
     const fiber = yield* Effect.forkScoped(
-      probeHarnessEffect("codex", { path: directory }).pipe(
+      probeHarness("codex", { path: directory }).pipe(
         Effect.onExit(() => Deferred.succeed(gated, undefined)),
       ),
     );
@@ -78,7 +78,7 @@ it.live("an interrupted harness probe kills the version subprocess", () =>
 
 it.effect("an audit probe refuses an invocation the command never declared", () =>
   Effect.gen(function* () {
-    const results = yield* runAuditProbesEffect({ probes: ["claude"], allowedSubprocesses: [] });
+    const results = yield* runAuditProbes({ probes: ["claude"], allowedSubprocesses: [] });
 
     // The allowlist is checked before spawning, so an undeclared probe never runs.
     expect(results).toEqual([
@@ -93,7 +93,7 @@ it.effect("an audit probe refuses an invocation the command never declared", () 
 
 it.effect("an audit probe reports an unsupported harness without spawning", () =>
   Effect.gen(function* () {
-    const results = yield* runAuditProbesEffect({ probes: ["opencode"], allowedSubprocesses: [] });
+    const results = yield* runAuditProbes({ probes: ["opencode"], allowedSubprocesses: [] });
 
     expect(results).toEqual([
       { harness: "opencode", status: "failed", reason: "unsupported probe" },
@@ -106,7 +106,7 @@ it.effect("a harness probe fails an executable whose output exceeds its budget",
     // 2 MiB, comfortably over the harness probe's 1,000,000-byte budget.
     const { directory } = yield* executable("codex", "head -c 2097152 /dev/zero | tr '\\0' 'x'\n");
 
-    const probe = yield* probeHarnessEffect("codex", { path: directory });
+    const probe = yield* probeHarness("codex", { path: directory });
 
     // spawnSync bounded this with maxBuffer; the budget is now counted while the pipe drains, and
     // the Scope kills the child rather than letting it keep writing.
@@ -141,7 +141,7 @@ it.effect("an audit probe counts installed plugins and MCP servers from real out
     );
     const results = yield* onPath(
       directory,
-      runAuditProbesEffect({
+      runAuditProbes({
         probes: ["codex"],
         allowedSubprocesses: ["codex plugin list --json", "codex mcp list --json"],
       }),
@@ -160,7 +160,7 @@ it.effect("an audit probe reports malformed output as a failed probe, not a defe
     const { directory } = yield* executable("codex", "printf '%s' 'not json'\n");
     const results = yield* onPath(
       directory,
-      runAuditProbesEffect({
+      runAuditProbes({
         probes: ["codex"],
         allowedSubprocesses: ["codex plugin list --json", "codex mcp list --json"],
       }),
@@ -187,7 +187,7 @@ it.effect("a noisy child's stderr is drained, so stdout is still read to complet
     );
     const results = yield* onPath(
       directory,
-      runAuditProbesEffect({
+      runAuditProbes({
         probes: ["codex"],
         allowedSubprocesses: ["codex plugin list --json", "codex mcp list --json"],
       }),

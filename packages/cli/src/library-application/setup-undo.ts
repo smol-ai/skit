@@ -11,7 +11,7 @@ import {
   MachineSettings,
   sourceAcquisitions,
   withLibraryWriter,
-  writeJsonExclusiveEffect,
+  writeJsonExclusive,
   type CollectionId,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
@@ -258,7 +258,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           if ((yield* links.identity.lstat(current.undoDirectory)).type !== "Directory")
             return yield* new RecoveryInvalid({ detail: "Redirected undo directory" });
           const id = randomUUID();
-          yield* writeJsonExclusiveEffect(join(current.undoDirectory, `${id}.json`), {
+          yield* writeJsonExclusive(join(current.undoDirectory, `${id}.json`), {
             schemaVersion: 1,
             planId: current.summary.planId,
             preservationId: basename(preservationDirectory),
@@ -285,7 +285,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
             return yield* new RecoveryInvalid({
               detail: "Undo publications did not reach the reviewed final state",
             });
-          yield* writeJsonExclusiveEffect(join(current.undoDirectory, `${id}.done.json`), {
+          yield* writeJsonExclusive(join(current.undoDirectory, `${id}.done.json`), {
             schemaVersion: 1,
             planId: current.summary.planId,
           } satisfies typeof Done.Type);

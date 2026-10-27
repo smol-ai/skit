@@ -7,7 +7,7 @@ import { it } from "@effect/vitest";
 import { HttpClientError } from "effect/http";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
-import { publishEffect } from "../src/workflows/author/publish.js";
+import { publish } from "../src/workflows/author/publish.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /** A scoped authored Skit with a Registry binding, built on the platform FileSystem. */
@@ -110,7 +110,7 @@ it.effect.each([
     };
     const operation = Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      return yield* publishEffect(root, "1.0.0", undefined).pipe(
+      return yield* publish(root, "1.0.0", undefined).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
@@ -181,7 +181,7 @@ it.effect.each([
       pathOrDescriptor: root,
     });
     const exit = yield* Effect.gen(function* () {
-      return yield* publishEffect(root, "1.0.0", undefined).pipe(
+      return yield* publish(root, "1.0.0", undefined).pipe(
         Effect.provide(
           registryHttpLayer(
             testHttpClientLayer((request) => {

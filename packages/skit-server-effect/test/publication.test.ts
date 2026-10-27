@@ -5,7 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
 import { sha256Digest } from "@smolai/skit-core/universal/consumer";
-import { Bindings, blobStorageEffect, databaseLayer } from "../src/platform/cloudflare.js";
+import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
 import { Publication, layer as publicationLayer } from "../src/publication/service.js";
 
 const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
@@ -107,7 +107,7 @@ describe("Publication", () => {
       expect(stored).toBeDefined();
       if (stored !== undefined)
         expect(
-          yield* blobStorageEffect("find published archive", (bucket) =>
+          yield* blobStorage("find published archive", (bucket) =>
             bucket.head(stored.archive_object_key),
           ),
         ).not.toBeNull();

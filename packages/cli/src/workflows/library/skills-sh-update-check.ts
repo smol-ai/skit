@@ -40,7 +40,7 @@ const sourceUrl = (
   return observations.find((observation) => observation.source_url)?.source_url;
 };
 
-export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(function* (
+export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function* (
   subject: LibrarySubject,
   acquisition: LibraryState["acquisitions"][number] | undefined,
   retainedCopy: LibraryState["retained_copies"][number] | undefined,

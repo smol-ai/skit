@@ -8,7 +8,7 @@ import { Effect, FileSystem } from "effect";
 import {
   isJsonObject,
   LinkStat,
-  observationPathIdentityEffect,
+  observationPathIdentity,
   type JsonObject,
 } from "@smolai/skit-core";
 
@@ -48,7 +48,7 @@ export const walk = Effect.fn("Audit.walk")(function* (
     directory: string,
   ): Effect.gen.Return<void, never, FileSystem.FileSystem | LinkStat> {
     if ((yield* classify(directory)).link._tag === "None") return;
-    const canonicalKey = (yield* observationPathIdentityEffect(directory)).comparisonKey;
+    const canonicalKey = (yield* observationPathIdentity(directory)).comparisonKey;
     if (visited.has(canonicalKey)) return;
     visited.add(canonicalKey);
     const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => null));
@@ -72,7 +72,7 @@ export const walk = Effect.fn("Audit.walk")(function* (
 });
 
 export const canonical = Effect.fn("Audit.canonical")(function* (path: string) {
-  return (yield* observationPathIdentityEffect(path)).canonicalPath;
+  return (yield* observationPathIdentity(path)).canonicalPath;
 });
 
 /** Whether the path itself exists. Broken symlinks count as existing audit evidence. */

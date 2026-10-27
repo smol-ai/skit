@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { inspectLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { inspectLibrarySource } from "../src/library-application/source-acquisition.js";
 import { RegistryAccounts, officialRegistryOrigin } from "../src/registry/accounts.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -21,7 +21,7 @@ it.effect("resolves skit: shorthand against the hosted Registry when none is con
         }),
     });
 
-    yield* Effect.exit(home.owned(inspectLibrarySourceEffect("skit:alice/tools@1.0.0")));
+    yield* Effect.exit(home.owned(inspectLibrarySource("skit:alice/tools@1.0.0")));
 
     assert.deepStrictEqual(requested, [
       `${officialRegistryOrigin}/api/skits/alice/tools/releases/1.0.0/download`,

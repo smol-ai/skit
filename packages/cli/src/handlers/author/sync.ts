@@ -5,17 +5,17 @@ import {
 import { Effect, Option, Result } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import type { ResolvedAuth } from "../../registry/auth.js";
-import { resolveAuthForOriginEffect } from "../../registry/auth.js";
+import { resolveAuthForOrigin } from "../../registry/auth.js";
 import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   parseAuthorDestinationEffect,
-  readAuthorRemoteEffect,
-  syncDraftEffect,
+  readAuthorRemote,
+  syncDraft,
   type AuthorVisibility,
 } from "../../workflows/author/sync.js";
 import { handleRegistryCommand } from "../../application.js";
-import { resolveAuthEffect } from "../../registry/auth.js";
+import { resolveAuth } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -29,15 +29,15 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   readonly visibility?: AuthorVisibility;
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
 }) {
-  const storedRemote = yield* readAuthorRemoteEffect(options.root ?? ".");
+  const storedRemote = yield* readAuthorRemote(options.root ?? ".");
   let credentials = storedRemote
-    ? yield* resolveAuthForOriginEffect(storedRemote.origin, options.home)
+    ? yield* resolveAuthForOrigin(storedRemote.origin, options.home)
     : undefined;
   if (options.to) {
     const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(options.to);
     const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
     const destination = yield* parseAuthorDestinationEffect(options.to, startup?.origin);
-    credentials = yield* resolveAuthForOriginEffect(destination.origin, options.home);
+    credentials = yield* resolveAuthForOrigin(destination.origin, options.home);
     if (!credentials.token)
       return yield* new AuthenticationRequired({
         origin: destination.origin,
@@ -54,7 +54,7 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   return yield* renderer.withStatus(
     "Synchronizing draft",
     Effect.scoped(
-      syncDraftEffect(options.root ?? ".", {
+      syncDraft(options.root ?? ".", {
         apply: options.apply,
         home: options.home,
         baseUrl: credentials.origin,
@@ -88,7 +88,7 @@ export const authorSyncCliCommand = Command.make(
       return yield* handleRegistryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
+          const authState = yield* resolveAuth(selectedHome).pipe(Effect.result);
           const value = yield* authorSyncCommand({
             root: Option.getOrUndefined(path),
             apply,

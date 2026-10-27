@@ -6,7 +6,7 @@ import {
   currentSkillVersion,
   versionBacking,
   retainedTreePath,
-  originalTreeHashEffect,
+  originalTreeHash,
   observeInventory,
   skitLayer,
 } from "@smolai/skit-core";
@@ -149,7 +149,7 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
         }
         const root = retainedTreePath(join(home, ".skit", "originals"), backing.copy.digest);
         const path = join(root, backing.member.source_path);
-        const hash = yield* originalTreeHashEffect(path).pipe(Effect.option);
+        const hash = yield* originalTreeHash(path).pipe(Effect.option);
         if (hash._tag === "None" || hash.value !== version.source_digest)
           problems.push(`retained content missing or changed: ${skill.name}`);
         const originals = fixture.userFiles.filter((file) =>

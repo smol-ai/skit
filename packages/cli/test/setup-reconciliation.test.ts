@@ -4,12 +4,7 @@ import { Clock, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  LibraryStore,
-  libraryStateRevision,
-  projectBindingEffect,
-  skitLayer,
-} from "@smolai/skit-core";
+import { LibraryStore, libraryStateRevision, projectBinding, skitLayer } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
@@ -25,7 +20,7 @@ import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryHome,
   retainObservedIn,
   scratch,
@@ -83,7 +78,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
             name: "review",
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(source),
+            observedHash: yield* deterministicTreeHash(source),
           },
         ],
       }),
@@ -124,7 +119,7 @@ it.effect(
               name: "other",
               sourcePath: otherSource,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(otherSource),
+              observedHash: yield* deterministicTreeHash(otherSource),
             },
           ],
         }),
@@ -149,7 +144,7 @@ it.effect(
               },
               state,
             );
-            yield* projectBindingEffect({
+            yield* projectBinding({
               target: "agents",
               root: f.agents,
               variantsPath: store.variantsPath,
@@ -308,7 +303,7 @@ it.effect(
       const marker = JSON.parse(yield* f.fs.readFileString(markerPath));
       yield* f.fs.writeFileString(
         markerPath,
-        JSON.stringify({ ...marker, expected_digest: yield* deterministicTreeHashEffect(f.copy) }),
+        JSON.stringify({ ...marker, expected_digest: yield* deterministicTreeHash(f.copy) }),
       );
       const newCopy = join(f.agents, "another");
       yield* f.fs.makeDirectory(newCopy);
@@ -388,7 +383,7 @@ for (const scenario of [
             "equal-current-desired": "unchanged",
           }[scenario],
         );
-        expect(fact?.currentHash).toBe(yield* deterministicTreeHashEffect(f.copy));
+        expect(fact?.currentHash).toBe(yield* deterministicTreeHash(f.copy));
         expect(fact?.metadataChanged).toBe(scenario === "equal-current-desired");
         expect(libraryStateRevision(yield* f.home.durable)).toBe(libraryStateRevision(before));
         expect(yield* f.fs.readFileString(join(f.home.home, "state.json"))).toBe(stateBytes);

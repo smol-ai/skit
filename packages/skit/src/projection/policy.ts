@@ -1,7 +1,7 @@
 import type { InvocationPolicy, InstallDestination } from "../contracts.js";
 import { Effect, FileSystem } from "effect";
 import {
-  applyHarnessInvocationPolicyEffect,
+  applyHarnessInvocationPolicy,
   type HarnessInvocationWriteFailure,
 } from "../harnesses/projection.js";
 import { installDestinationHarnesses } from "../harnesses/install-destinations.js";
@@ -21,7 +21,7 @@ export function overrideInvocationIntent(policy: InvocationPolicy): InvocationIn
  * its declaration, so this rewrites nothing for a conforming Skill; an undeclared Skill keeps the
  * native metadata its author shipped, which is the Agent Skills compatibility path.
  */
-export function applyInvocationPolicyEffect(
+export function applyInvocationPolicy(
   directory: string,
   target: InstallDestination,
   declaredPolicy: InvocationPolicy | undefined,
@@ -39,7 +39,7 @@ export function applyInvocationPolicyEffect(
       : installDestinationHarnesses[target];
   return Effect.forEach(
     adapters,
-    (harness) => applyHarnessInvocationPolicyEffect(directory, harness, policy),
+    (harness) => applyHarnessInvocationPolicy(directory, harness, policy),
     { discard: true },
   );
 }

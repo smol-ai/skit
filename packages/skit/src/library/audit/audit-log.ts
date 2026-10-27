@@ -71,7 +71,7 @@ export class LibraryAuditLog extends Context.Service<LibraryAuditLog, LibraryAud
 ) {}
 
 /** Append one event to a Library's history. The log and the store's own journal share this. */
-export const appendLibraryAuditEffect = Effect.fn("LibraryAudit.append")(function* (
+export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
   home: string,
   draft: LibraryAuditDraft,
 ) {
@@ -95,7 +95,7 @@ export function libraryAuditLogLayer(options: { readonly home: string }) {
       const fs = yield* FileSystem.FileSystem;
       const path = join(options.home, "audit.jsonl");
       const append = (draft: LibraryAuditDraft) =>
-        appendLibraryAuditEffect(options.home, draft).pipe(
+        appendLibraryAudit(options.home, draft).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
         );
       const list = Effect.fn("LibraryAudit.list")(function* () {

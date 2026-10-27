@@ -49,7 +49,7 @@ export function targetCollisionMessage(collisions: readonly TargetCollision[]): 
 
 /** Fail before any filesystem or ledger mutation when distinct Bindings share a destination. */
 /** Native route resolution retains fail-closed ancestor walking. */
-export const physicalDestinationEffect = Effect.fn("Projection.physicalDestination")(function* (
+export const physicalDestination = Effect.fn("Projection.physicalDestination")(function* (
   path: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -70,25 +70,25 @@ export const physicalDestinationEffect = Effect.fn("Projection.physicalDestinati
     current = parent;
   }
 });
-export const detectTargetCollisionsEffect = Effect.fn("Projection.detectTargetCollisions")(
-  function* (routes: readonly DeclaredRoute[]) {
-    const byDestination = new Map<string, Map<string, DeclaredRoute>>();
-    for (const route of routes) {
-      const destination = yield* physicalDestinationEffect(route.route);
-      const group = byDestination.get(destination) ?? new Map<string, DeclaredRoute>();
-      group.set(routeKey(route), route);
-      byDestination.set(destination, group);
-    }
-    const collisions = [...byDestination]
-      .filter(([, group]) => group.size > 1)
-      .map(([destination, group]) => ({ destination, routes: [...group.values()] }));
-    return collisions;
-  },
-);
-export const assertNoTargetCollisionsEffect = Effect.fn("Projection.assertNoTargetCollisions")(
-  function* (routes: readonly DeclaredRoute[]) {
-    const collisions = yield* detectTargetCollisionsEffect(routes);
-    if (collisions.length)
-      return yield* new RoutesCollide({ detail: targetCollisionMessage(collisions) });
-  },
-);
+export const detectTargetCollisions = Effect.fn("Projection.detectTargetCollisions")(function* (
+  routes: readonly DeclaredRoute[],
+) {
+  const byDestination = new Map<string, Map<string, DeclaredRoute>>();
+  for (const route of routes) {
+    const destination = yield* physicalDestination(route.route);
+    const group = byDestination.get(destination) ?? new Map<string, DeclaredRoute>();
+    group.set(routeKey(route), route);
+    byDestination.set(destination, group);
+  }
+  const collisions = [...byDestination]
+    .filter(([, group]) => group.size > 1)
+    .map(([destination, group]) => ({ destination, routes: [...group.values()] }));
+  return collisions;
+});
+export const assertNoTargetCollisions = Effect.fn("Projection.assertNoTargetCollisions")(function* (
+  routes: readonly DeclaredRoute[],
+) {
+  const collisions = yield* detectTargetCollisions(routes);
+  if (collisions.length)
+    return yield* new RoutesCollide({ detail: targetCollisionMessage(collisions) });
+});

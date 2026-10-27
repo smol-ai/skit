@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { writeJsonAtomicEffect } from "../platform/atomic-write.js";
+import { writeJsonAtomic } from "../platform/atomic-write.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "../failures.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
@@ -99,7 +99,7 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
           structuredClone(prior),
           structuredClone(settingsAt(prior.path, document)),
         );
-      yield* writeJsonAtomicEffect(prior.path, document);
+      yield* writeJsonAtomic(prior.path, document);
       return settingsAt(prior.path, document);
     }),
   );

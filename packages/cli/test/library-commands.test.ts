@@ -3,9 +3,9 @@ import { SetEnabledStale } from "../src/library-application/binding-changes.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
+import { deterministicTreeHash, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import { presentListCommand } from "../src/handlers/library/list.js";
-import { browseLibraryEffect } from "../src/presentation/interactive-list.js";
+import { browseLibrary } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
 import { ListResult } from "../src/workflows/library/list-contract.js";
@@ -51,7 +51,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
               name: "review",
               sourcePath: installed,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(installed),
+              observedHash: yield* deterministicTreeHash(installed),
             },
           ],
           observations: [],
@@ -119,7 +119,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
 
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.bindings).pipe(
         Effect.provide(interaction.layer),
       ),
     );
@@ -152,13 +152,13 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(review),
+              observedHash: yield* deterministicTreeHash(review),
             },
             {
               name: "effect",
               sourcePath: effect,
               relativePath: "effect",
-              observedHash: yield* deterministicTreeHashEffect(effect),
+              observedHash: yield* deterministicTreeHash(effect),
             },
           ],
           observations: [],
@@ -260,7 +260,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), {
+      browseLibrary(yield* home.owned(openLibrarySession()), {
         ...home.bindings,
         ...configuration.inventory,
       }).pipe(Effect.provide(unchangedBrowse.layer)),
@@ -291,7 +291,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.bindings).pipe(
         Effect.provide(browseCancel.layer),
       ),
     );
@@ -304,7 +304,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.bindings).pipe(
         Effect.provide(browseDisable.layer),
       ),
     );
@@ -393,7 +393,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
               name: "show-me",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(source),
+              observedHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],
@@ -415,7 +415,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
               name: "effect",
               sourcePath: other,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(other),
+              observedHash: yield* deterministicTreeHash(other),
             },
           ],
           observations: [],
@@ -523,13 +523,13 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(review),
+              observedHash: yield* deterministicTreeHash(review),
             },
             {
               name: "effect",
               sourcePath: effect,
               relativePath: "effect",
-              observedHash: yield* deterministicTreeHashEffect(effect),
+              observedHash: yield* deterministicTreeHash(effect),
             },
           ],
           observations: [],

@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { Digest } from "../vocabulary.js";
 import {
   apiSemverPattern,
-  parseContractEffect,
+  parseContract,
   parseWireDescriptor,
   semver,
   SKIT_API_CONTRACT_VERSION,
@@ -16,7 +16,7 @@ import {
 
 /** Consumer-facing Registry contracts: Distribution reads and Server discovery. */
 export {
-  parseContractEffect,
+  parseContract,
   parseWireDescriptor,
   semver,
   SKIT_API_CONTRACT_VERSION,

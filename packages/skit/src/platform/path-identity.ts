@@ -39,7 +39,7 @@ export function pathIsWithin(root: string, path: string): boolean {
  * atomic replacement, and a symlink may later be retargeted. Durable declared-path and relocation
  * semantics belong to the install destination model rather than this observation helper.
  */
-export function observationPathIdentityEffect(
+export function observationPathIdentity(
   path: string,
 ): Effect.Effect<ObservationPathIdentity, never, LinkStat> {
   return Effect.gen(function* () {
@@ -112,7 +112,7 @@ function nearestExistingAncestor(
  * filesystem proves an alternate spelling resolves to that same ancestor. The comparison key is
  * evidence for pre-mutation collision detection, not a persisted identity.
  */
-export function installDestinationPathIdentityEffect(
+export function installDestinationPathIdentity(
   path: string,
 ): Effect.Effect<InstallDestinationPathIdentity, PlatformError, LinkStat> {
   return Effect.gen(function* () {
@@ -142,13 +142,13 @@ export function installDestinationPathIdentityEffect(
 }
 
 /** Group possible aliases without treating a single new target as ambiguous. */
-export function groupInstallDestinationCandidatesEffect(
+export function groupInstallDestinationCandidates(
   paths: readonly string[],
 ): Effect.Effect<InstallDestinationCandidateGroup[], PlatformError, LinkStat> {
   return Effect.gen(function* () {
     const groups = new Map<string, InstallDestinationPathIdentity[]>();
     for (const path of paths) {
-      const candidate = yield* installDestinationPathIdentityEffect(path);
+      const candidate = yield* installDestinationPathIdentity(path);
       const group = groups.get(candidate.comparisonKey) ?? [];
       group.push(candidate);
       groups.set(candidate.comparisonKey, group);
@@ -164,7 +164,7 @@ export function groupInstallDestinationCandidatesEffect(
 }
 
 /** Report a symlinked artifact or immediate containing directory from filesystem evidence. */
-export function artifactUsesSymlinkEffect(path: string): Effect.Effect<boolean, never, LinkStat> {
+export function artifactUsesSymlink(path: string): Effect.Effect<boolean, never, LinkStat> {
   return Effect.gen(function* () {
     const probe = yield* LinkStat;
     for (const candidate of [resolve(path), dirname(resolve(path))]) {

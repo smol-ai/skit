@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { Bindings, blobStorageEffect, databaseLayer } from "../src/platform/cloudflare.js";
+import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
 import { SkitDeletion, layer as skitDeletionLayer } from "../src/skit-delete/service.js";
 
 const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
@@ -58,7 +58,7 @@ describe("private SKIT deletion", () => {
           sql.unsafe("INSERT INTO resource_grants VALUES ('grant_skit', 'skit', 'tim/tools')"),
         ]),
       );
-      yield* blobStorageEffect("insert deletion archive", (bucket) =>
+      yield* blobStorage("insert deletion archive", (bucket) =>
         bucket.put("releases/one.zip", "private archive"),
       );
 
@@ -90,9 +90,7 @@ describe("private SKIT deletion", () => {
         expect(rows[0]).toEqual({ count: 0 });
       }
       expect(
-        yield* blobStorageEffect("check deleted archive", (bucket) =>
-          bucket.head("releases/one.zip"),
-        ),
+        yield* blobStorage("check deleted archive", (bucket) => bucket.head("releases/one.zip")),
       ).toBeNull();
       expect(yield* deletion.delete("tim", "tools")).toMatchObject({
         status: "absent",

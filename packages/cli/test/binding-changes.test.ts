@@ -3,8 +3,8 @@ import { systemError } from "effect/PlatformError";
 import { Cause, Clock, ConfigProvider, Effect, Exit, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
-  inspectOwnershipMarkerEffect,
+  deterministicTreeHash,
+  inspectOwnershipMarker,
   LibraryStore,
   libraryStateRevision,
   bindingSkillIds,
@@ -71,7 +71,7 @@ const fixture = Effect.gen(function* () {
         name,
         sourcePath: path,
         relativePath: name,
-        observedHash: yield* deterministicTreeHashEffect(path),
+        observedHash: yield* deterministicTreeHash(path),
       };
     }),
   );
@@ -795,7 +795,7 @@ it.effect(
                 name: "gamma",
                 sourcePath: source,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(source),
+                observedHash: yield* deterministicTreeHash(source),
               },
             ],
           }),
@@ -860,10 +860,7 @@ it.effect("enabling adopts an unmanaged copy that already holds the bytes SKIT w
       outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
       ["installed"],
     );
-    assert.strictEqual(
-      (yield* inspectOwnershipMarkerEffect(join(f.destination, "alpha"))).kind,
-      "valid",
-    );
+    assert.strictEqual((yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind, "valid");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -885,7 +882,7 @@ it.effect(
         failure.results[0]?.projections.map((p) => p.status),
         ["conflicted"],
       );
-      assert.strictEqual((yield* inspectOwnershipMarkerEffect(checkout)).kind, "absent");
+      assert.strictEqual((yield* inspectOwnershipMarker(checkout)).kind, "absent");
       assert.strictEqual(yield* f.fs.exists(join(checkout, ".git", "HEAD")), true);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -957,7 +954,7 @@ it.effect("enable leaves repository-owned identical copies unmanaged, including 
         failure.results[0]?.projections.map((p) => p.status),
         ["conflicted"],
       );
-      assert.strictEqual((yield* inspectOwnershipMarkerEffect(skill)).kind, "absent");
+      assert.strictEqual((yield* inspectOwnershipMarker(skill)).kind, "absent");
       const disable = yield* f.home.owned(
         previewBindingChanges([{ ...f.request, enabled: false }], f.home.bindings),
       );
@@ -1078,7 +1075,7 @@ it.effect(
       assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
       assert.strictEqual(yield* f.fs.readFileString(path), "Independent user edits\n");
       assert.strictEqual(
-        (yield* inspectOwnershipMarkerEffect(join(f.destination, "alpha"))).kind,
+        (yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind,
         "valid",
       );
       yield* f.fs.writeFileString(path, "# alpha\n");

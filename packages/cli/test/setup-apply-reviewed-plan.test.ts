@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
 import {
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   MachineSettings,
   SkillsDirectoryNotWritable,
   skitLayer,
@@ -306,10 +306,7 @@ it.effect("identical copies at each target are adopted in place, not left to con
       ["installed", "installed"],
     );
     for (const skills of [join(f.root, ".claude", "skills"), join(f.root, ".agents", "skills")])
-      assert.strictEqual(
-        (yield* inspectOwnershipMarkerEffect(join(skills, "gamma"))).kind,
-        "valid",
-      );
+      assert.strictEqual((yield* inspectOwnershipMarker(join(skills, "gamma"))).kind, "valid");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -335,7 +332,7 @@ it.effect(
       const retiredPlan = (yield* retired.review).onboarding.planId;
       const replaced = yield* retired.run({ planId: retiredPlan });
       assert.isTrue(Exit.isSuccess(replaced));
-      assert.strictEqual((yield* inspectOwnershipMarkerEffect(link(retired))).kind, "valid");
+      assert.strictEqual((yield* inspectOwnershipMarker(link(retired))).kind, "valid");
       const backups = join(retired.root, ".claude", ".skit-backups");
       const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
       assert.lengthOf(saved, 1);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
-import { parseAuthorDestination, syncDraftEffect } from "../src/workflows/author/sync.js";
+import { parseAuthorDestination, syncDraft } from "../src/workflows/author/sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
@@ -17,13 +17,13 @@ import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
  * (`Context.ts:1585`), so it captures whichever `globalThis.fetch` existed at first use. The
  * transport is provided as a Layer to the program instead.
  */
-const syncDraft = (
+const runSyncDraft = (
   root: string,
-  options: Parameters<typeof syncDraftEffect>[1],
+  options: Parameters<typeof syncDraft>[1],
   transport: TestHttpHandler,
 ) =>
   Effect.scoped(
-    syncDraftEffect(root, options).pipe(
+    syncDraft(root, options).pipe(
       Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
     ),
   );
@@ -119,7 +119,7 @@ it.effect("first sync previews then records one remote home without publishing i
       });
 
     expect(
-      yield* syncDraft(
+      yield* runSyncDraft(
         root,
         {
           apply: false,
@@ -139,7 +139,7 @@ it.effect("first sync previews then records one remote home without publishing i
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
 
     expect(
-      yield* syncDraft(
+      yield* runSyncDraft(
         root,
         {
           apply: true,
@@ -189,7 +189,7 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
 
       expect(
         yield* failure(
-          syncDraft(
+          runSyncDraft(
             root,
             {
               apply: true,
@@ -207,7 +207,7 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        syncDraft(
+        runSyncDraft(
           root,
           {
             apply: true,
@@ -323,7 +323,7 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
       });
 
     expect(
-      yield* syncDraft(
+      yield* runSyncDraft(
         root,
         {
           apply: true,
@@ -340,7 +340,11 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
       "---\nname: review\ndescription: Review code.\n---\n# Locally edited review\n",
     );
     expect(
-      yield* syncDraft(root, { apply: true, home, baseUrl: "https://registry.example" }, transport),
+      yield* runSyncDraft(
+        root,
+        { apply: true, home, baseUrl: "https://registry.example" },
+        transport,
+      ),
     ).toMatchObject({ status: "merged" });
     expect(updateBody?.descriptor).toMatchObject({ id: "test/tools", slug: "tools" });
     expect(yield* readText(join(root, "README.md"))).toBe("# Human-owned tools documentation\n");
@@ -366,7 +370,7 @@ it.effect("an interrupted sync aborts its in-flight Draft request and writes not
       );
 
     const fiber = yield* Effect.forkScoped(
-      syncDraft(
+      runSyncDraft(
         root,
         {
           apply: true,

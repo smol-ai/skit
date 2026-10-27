@@ -18,7 +18,7 @@ import {
   assessInvocationConformance,
   describeInvocationConformanceIssue,
 } from "../invocation/conformance.js";
-import { walkTreeEffect, type TreeEntry } from "./tree.js";
+import { walkTree, type TreeEntry } from "./tree.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import {
@@ -35,7 +35,7 @@ import {
   type SharedTargetCollision,
 } from "../failures.js";
 
-export function readSkitDescriptorEffect(
+export function readSkitDescriptor(
   root: string,
 ): Effect.Effect<SkitDescriptor, DescriptorFailure | PlatformError, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -54,10 +54,10 @@ export function readSkitDescriptorEffect(
   });
 }
 
-export function deterministicTreeHashEffect(
+export function deterministicTreeHash(
   root: string,
 ): Effect.Effect<Digest, TreeError | PlatformError, TreeRequirements> {
-  return walkTreeEffect(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
+  return walkTree(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
 }
 
 export function hashNormalizedEntries(entries: readonly TreeEntry[]): Digest {
@@ -111,10 +111,10 @@ const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
 };
 
-export function inventorySkitFilesEffect(
+export function inventorySkitFiles(
   root: string,
 ): Effect.Effect<SkitFileRecord[], TreeError | PlatformError, TreeRequirements> {
-  return walkTreeEffect(root, "normalized", { respectGitIgnore: true }).pipe(
+  return walkTree(root, "normalized", { respectGitIgnore: true }).pipe(
     Effect.map(inventoryEntries),
   );
 }
@@ -135,7 +135,7 @@ function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
   });
 }
 
-export function validateSkitDirectoryEffect(
+export function validateSkitDirectory(
   root: string,
   release = "draft",
   options:
@@ -159,8 +159,8 @@ export function validateSkitDirectoryEffect(
 > {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const descriptor = yield* readSkitDescriptorEffect(root);
-    const tree = yield* walkTreeEffect(root, "normalized", {
+    const descriptor = yield* readSkitDescriptor(root);
+    const tree = yield* walkTree(root, "normalized", {
       respectGitIgnore:
         options.assessmentContext === "author" || options.assessmentContext === "publish",
     });

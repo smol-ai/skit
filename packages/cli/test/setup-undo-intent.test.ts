@@ -17,7 +17,7 @@ import {
   setupIntent,
 } from "../src/library-application/setup-undo-intent.js";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryHome,
   retainObservedIn,
   scratch,
@@ -46,7 +46,7 @@ const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
             name,
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(source),
+            observedHash: yield* deterministicTreeHash(source),
           },
         ],
         observations: [],
@@ -94,7 +94,7 @@ it.effect(
           name,
           sourcePath: path,
           relativePath: name,
-          observedHash: yield* deterministicTreeHashEffect(path),
+          observedHash: yield* deterministicTreeHash(path),
         });
       }
       const retain = (selected: typeof skills, date: string) =>
@@ -234,7 +234,7 @@ it.effect(
               name: "chosen",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(source),
+              observedHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],
@@ -267,7 +267,7 @@ it.effect(
               name: "chosen",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(source),
+              observedHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],

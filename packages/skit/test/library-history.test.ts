@@ -1,11 +1,11 @@
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { LibraryAuditLog, libraryAuditLogLayer } from "../src/library/audit/audit-log.js";
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
+import { retainObservedCollection } from "../src/library/observed-import.js";
 import {
   LibraryActor,
   LibraryStore,
@@ -58,7 +58,7 @@ const library = Effect.gen(function* () {
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
   const inLibrary = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
-  const retain = retainObservedCollectionEffect({
+  const retain = retainObservedCollection({
     machineId,
     source: { type: "local", path: source },
     input: source,
@@ -68,7 +68,7 @@ const library = Effect.gen(function* () {
         name: "review",
         sourcePath: source,
         relativePath: ".",
-        observedHash: yield* deterministicTreeHashEffect(source),
+        observedHash: yield* deterministicTreeHash(source),
       },
     ],
     observations: [],

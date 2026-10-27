@@ -85,7 +85,7 @@ export class LibraryApiInvalidRequest
 }
 
 /** All private Library requests use one generated client in the caller's scope. */
-export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function* (options: {
+export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (options: {
   origin: string;
   token?: string;
 }) {

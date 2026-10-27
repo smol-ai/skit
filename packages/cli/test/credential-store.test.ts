@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
-import { addRegistryRemoteEffect, loginEffect, readConfigEffect } from "../src/registry/auth.js";
+import { addRegistryRemote, loginEffect, readConfig } from "../src/registry/auth.js";
 import {
   readStoredToken,
   removeStoredToken,
@@ -114,7 +114,7 @@ it.effect("the next write moves a token from auth.json into the OS store", () =>
         }),
       );
 
-      yield* addRegistryRemoteEffect("other", "https://other.example.test", home).pipe(
+      yield* addRegistryRemote("other", "https://other.example.test", home).pipe(
         Effect.provide(skitConfigurationLayer(home)),
       );
 
@@ -126,9 +126,7 @@ it.effect("the next write moves a token from auth.json into the OS store", () =>
         tokenStorageKey: "token-1",
       });
       assert.lengthOf(yield* fs.readDirectory(store), 1);
-      const config = yield* readConfigEffect(home).pipe(
-        Effect.provide(skitConfigurationLayer(home)),
-      );
+      const config = yield* readConfig(home).pipe(Effect.provide(skitConfigurationLayer(home)));
       assert.strictEqual(config.servers[origin]?.token, "skit_pat_inline");
     }),
   ).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -207,9 +205,7 @@ it.effect("failed credential publication preserves the previous OS-store credent
           ),
         );
         assert.strictEqual(result._tag, "Failure");
-        const config = yield* readConfigEffect(home).pipe(
-          Effect.provide(skitConfigurationLayer(home)),
-        );
+        const config = yield* readConfig(home).pipe(Effect.provide(skitConfigurationLayer(home)));
         assert.strictEqual(config.servers[origin]?.token, "old-token");
         assert.strictEqual(config.servers[origin]?.tokenId, "old-id");
         assert.deepStrictEqual(revoked, ["/api/tokens/new-id"]);
@@ -243,12 +239,10 @@ it.effect("a successful write migrates a legacy OS-store item after publishing i
           },
         }),
       );
-      yield* addRegistryRemoteEffect("other", "https://other.example.test", home).pipe(
+      yield* addRegistryRemote("other", "https://other.example.test", home).pipe(
         Effect.provide(skitConfigurationLayer(home)),
       );
-      const config = yield* readConfigEffect(home).pipe(
-        Effect.provide(skitConfigurationLayer(home)),
-      );
+      const config = yield* readConfig(home).pipe(Effect.provide(skitConfigurationLayer(home)));
       assert.strictEqual(config.servers[origin]?.token, "legacy-token");
       assert.strictEqual(config.servers[origin]?.tokenStorageKey, "legacy-id");
       assert.isUndefined(yield* readStoredToken("secret-service", path, origin));

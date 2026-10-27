@@ -154,7 +154,7 @@ function gitIncludedPaths(
 }
 
 /** Normalized trees are publishable content; verbatim trees preserve lossless source details. */
-export function walkTreeEffect(
+export function walkTree(
   root: string,
   policy: TreePolicy,
   options: { respectGitIgnore?: boolean } = {},
@@ -169,7 +169,7 @@ export function walkTreeEffect(
 }
 
 /** Inspect publish-shaped membership while retaining diagnostic evidence about omitted content. */
-export function inspectNormalizedTreeEffect(
+export function inspectNormalizedTree(
   root: string,
   options: { respectGitIgnore?: boolean } = {},
 ): Effect.Effect<NormalizedTreeInspection, TreeError | PlatformError, TreeRequirements> {

@@ -21,14 +21,14 @@ import {
   UnsafeSourceUrl,
 } from "../failures.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { copyLocalTreeEffect } from "../platform/copy-tree.js";
+import { copyLocalTree } from "../platform/copy-tree.js";
 import { TreeError } from "../shared/tree-error.js";
-import { readSkitDescriptorEffect } from "../artifact/skit.js";
+import { readSkitDescriptor } from "../artifact/skit.js";
 import { SourceProcess, type SourceProcessFailure } from "../platform/source-process.js";
-import { containedPluginPathEffect, PluginManifestInvalid } from "./plugin-manifests.js";
+import { containedPluginPath, PluginManifestInvalid } from "./plugin-manifests.js";
 import { discoveryPathExcluded, readDiscoveryExclusions } from "./discovery-exclusions.js";
 export { PluginManifestInvalid } from "./plugin-manifests.js";
-import { PluginSkillConflict, selectPluginMembersEffect } from "./plugin-membership.js";
+import { PluginSkillConflict, selectPluginMembers } from "./plugin-membership.js";
 export { PluginSkillConflict } from "./plugin-membership.js";
 export { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
@@ -66,7 +66,7 @@ function wellKnownSource(value: string): SkitSource | undefined {
 }
 
 /** A version flag promotes ambiguous shorthand only after an existing local path gets priority. */
-export const sourceInputWithVersionEffect = Effect.fn("Source.inputWithVersion")(function* (
+export const sourceInputWithVersion = Effect.fn("Source.inputWithVersion")(function* (
   input: string,
   version?: string,
   cwd = process.cwd(),
@@ -310,7 +310,7 @@ export type ParseSourceFailure =
   | InsecureSourceUrl
   | UnsafeGitSubpath;
 
-export function parseSkitSourceEffect(
+export function parseSkitSource(
   input: string,
   cwd = process.cwd(),
 ): Effect.Effect<SkitSource, ParseSourceFailure, LinkStat> {
@@ -341,7 +341,7 @@ export function parseSkitSourceEffect(
  * that had already lost its type. Every rejection is now a `yield*` on that channel, so anything
  * still throwing in here is a defect and stays one.
  *
- * Local paths are classified without touching the filesystem; `parseSkitSourceEffect` probes and
+ * Local paths are classified without touching the filesystem; `parseSkitSource` probes and
  * raises `SourceNotFound`.
  */
 function classifySource(input: string, cwd: string): Effect.Effect<SkitSource, ParseSourceFailure> {
@@ -565,7 +565,7 @@ export function assertArchivePaths(
   });
 }
 
-export function auditExtractedSourceEffect(
+export function auditExtractedSource(
   root: string,
 ): Effect.Effect<void, SourcePolicyViolation | PlatformError, FileSystem.FileSystem | LinkStat> {
   return Effect.gen(function* () {
@@ -616,7 +616,7 @@ function commandOutputEffect(
   });
 }
 
-const lockedSkillDirectoryEffect = Effect.fn("Source.lockedSkillDirectory")(function* (
+const lockedSkillDirectory = Effect.fn("Source.lockedSkillDirectory")(function* (
   root: string,
   path: string,
 ) {
@@ -634,7 +634,7 @@ const lockedSkillDirectoryEffect = Effect.fn("Source.lockedSkillDirectory")(func
 });
 
 /** Resolve selected Git content before discovery, without following it outside the checkout. */
-const checkoutPathEffect = Effect.fn("Source.checkoutPath")(function* (
+const checkoutPath = Effect.fn("Source.checkoutPath")(function* (
   checkoutRoot: string,
   selectedPath: string,
 ) {
@@ -648,7 +648,7 @@ const checkoutPathEffect = Effect.fn("Source.checkoutPath")(function* (
   return real;
 });
 
-function discoverRootEffect(
+function discoverRoot(
   extracted: string,
   agentSkillPaths?: readonly string[],
   selectedDirectories?: ReadonlyMap<string, string>,
@@ -672,14 +672,14 @@ function discoverRootEffect(
     if (agentSkillPaths?.length) {
       const selectedSkills: string[] = [];
       for (const path of [...new Set(agentSkillPaths)].sort()) {
-        const requestedDirectory = yield* lockedSkillDirectoryEffect(extracted, path);
+        const requestedDirectory = yield* lockedSkillDirectory(extracted, path);
         const skillDirectory = selectedDirectories?.get(path) ?? requestedDirectory;
         const info = yield* Effect.option(probe.identity.stat(join(skillDirectory, "SKILL.md")));
         if (info._tag === "None" || info.value.type !== "File")
           return yield* invalidSource(
             `Locked Skill path is missing from the acquired Source: ${path}`,
           );
-        yield* containedPluginPathEffect(containmentRoot, skillDirectory, "SKILL.md");
+        yield* containedPluginPath(containmentRoot, skillDirectory, "SKILL.md");
         selectedSkills.push(relative(extracted, requestedDirectory) || ".");
       }
       if (!selectedSkills.length)
@@ -704,18 +704,18 @@ function discoverRootEffect(
       if (examined > 5_000)
         return yield* sourceLimitExceeded("Source discovery exceeded directory limit");
       if (yield* fs.exists(join(directory, "skit.json"))) {
-        yield* containedPluginPathEffect(containmentRoot, directory, "skit.json");
-        yield* readSkitDescriptorEffect(directory);
+        yield* containedPluginPath(containmentRoot, directory, "skit.json");
+        yield* readSkitDescriptor(directory);
         return { root: directory, descriptorKind: "declared" as const };
       }
       if (yield* fs.exists(join(directory, "README.md"))) {
-        yield* containedPluginPathEffect(containmentRoot, directory, "README.md");
+        yield* containedPluginPath(containmentRoot, directory, "README.md");
         const text = yield* fs.readFileString(join(directory, "README.md"));
         if (/^---\r?\n[\s\S]*?^skit:\s*1\s*$/m.test(text))
           return { root: directory, descriptorKind: "declared" as const };
       }
       if (yield* fs.exists(join(directory, "SKILL.md"))) {
-        yield* containedPluginPathEffect(containmentRoot, directory, "SKILL.md");
+        yield* containedPluginPath(containmentRoot, directory, "SKILL.md");
         foundSkills.push(directory);
         continue;
       }
@@ -726,7 +726,7 @@ function discoverRootEffect(
         if (info.type === "Directory") queue.push(join(directory, name));
       }
     }
-    const selection = yield* selectPluginMembersEffect(
+    const selection = yield* selectPluginMembers(
       extracted,
       directories,
       foundSkills,
@@ -796,7 +796,7 @@ const readDiscoveryResponse = Effect.fn("Discovery.readResponse")(function* (
   return yield* readBodyWithin(response, limit, "Discovery response exceeds size limit");
 });
 
-const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
+const acquireDiscovery = Effect.fn("Discovery.acquire")(function* (
   source: Extract<SkitSource, { type: "well-known" }>,
   workspace: string,
 ) {
@@ -933,12 +933,12 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
             "--no-same-permissions",
           ]);
         }
-        yield* auditExtractedSourceEffect(extracted);
+        yield* auditExtractedSource(extracted);
         if (!(yield* fs.exists(join(extracted, "SKILL.md"))))
           return yield* invalidSource(`Discovery archive missing root SKILL.md for ${entry.name}`);
         for (const name of yield* fs.readDirectory(extracted))
-          yield* copyLocalTreeEffect(join(extracted, name), join(directory, name), undefined, true);
-        yield* auditExtractedSourceEffect(originalRoot);
+          yield* copyLocalTree(join(extracted, name), join(directory, name), undefined, true);
+        yield* auditExtractedSource(originalRoot);
       }
     } else {
       const legacy = item.entry;
@@ -975,7 +975,7 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
       }
     }
   }
-  yield* auditExtractedSourceEffect(originalRoot);
+  yield* auditExtractedSource(originalRoot);
   return {
     source,
     descriptorKind: "observed" as const,
@@ -986,7 +986,7 @@ const acquireDiscoveryEffect = Effect.fn("Discovery.acquire")(function* (
   };
 });
 
-export function resolveSkitSourceEffect(
+export function resolveSkitSource(
   input: string | SkitSource,
   options: {
     cwd?: string;
@@ -1019,8 +1019,7 @@ export function resolveSkitSourceEffect(
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const probe = yield* LinkStat;
-    const source =
-      typeof input === "string" ? yield* parseSkitSourceEffect(input, options.cwd) : input;
+    const source = typeof input === "string" ? yield* parseSkitSource(input, options.cwd) : input;
     const gitSource = source.type === "git" || source.type === "github";
     if (options.git && !gitSource)
       return yield* invalidSource("Git revision requires a Git locator");
@@ -1045,7 +1044,7 @@ export function resolveSkitSourceEffect(
           (yield* probe.identity.lstat(selectedStart)).type === "SymbolicLink"
             ? yield* fs.realPath(selectedStart)
             : selectedStart;
-        const discovered = yield* discoverRootEffect(
+        const discovered = yield* discoverRoot(
           start,
           undefined,
           undefined,
@@ -1129,7 +1128,7 @@ export function resolveSkitSourceEffect(
             `Git returned ${sourceRevision} instead of pinned commit ${options.git.commit}`,
           );
         const checkoutRoot = yield* fs.realPath(checkout);
-        const root = yield* checkoutPathEffect(
+        const root = yield* checkoutPath(
           checkoutRoot,
           subpath ? join(checkoutRoot, ...subpath.split("/")) : checkoutRoot,
         ).pipe(
@@ -1146,15 +1145,15 @@ export function resolveSkitSourceEffect(
         const selectedPaths = skillPaths.length ? skillPaths : undefined;
         const selectedDirectories = new Map<string, string>();
         for (const path of [...new Set(selectedPaths)].sort()) {
-          const requested = yield* lockedSkillDirectoryEffect(root, path);
-          const directory = yield* checkoutPathEffect(checkoutRoot, requested).pipe(
+          const requested = yield* lockedSkillDirectory(root, path);
+          const directory = yield* checkoutPath(checkoutRoot, requested).pipe(
             Effect.catchTag("PlatformError", (error) =>
               error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
             ),
           );
           if (directory !== undefined) selectedDirectories.set(path, directory);
         }
-        const discovered = yield* discoverRootEffect(
+        const discovered = yield* discoverRoot(
           root,
           selectedPaths,
           selectedDirectories,
@@ -1174,7 +1173,7 @@ export function resolveSkitSourceEffect(
               );
             const destination = join(originalRoot, dirname(path));
             yield* fs.makeDirectory(dirname(destination), { recursive: true });
-            yield* copyLocalTreeEffect(selectedDirectory, destination, undefined, true);
+            yield* copyLocalTree(selectedDirectory, destination, undefined, true);
           }
         }
         return {
@@ -1184,7 +1183,7 @@ export function resolveSkitSourceEffect(
           revision: { kind: "commit" as const, commit: sourceRevision },
         };
       }
-      if (source.type === "well-known") return yield* acquireDiscoveryEffect(source, workspace);
+      if (source.type === "well-known") return yield* acquireDiscovery(source, workspace);
       const registryBaseUrl =
         source.type === "registry" ? (source.authority ?? options.registryBaseUrl) : undefined;
       if (source.type === "registry" && !registryBaseUrl)
@@ -1315,8 +1314,8 @@ export function resolveSkitSourceEffect(
           "--no-same-permissions",
         ]);
       }
-      yield* auditExtractedSourceEffect(extracted);
-      const discovered = yield* discoverRootEffect(
+      yield* auditExtractedSource(extracted);
+      const discovered = yield* discoverRoot(
         extracted,
         undefined,
         undefined,
@@ -1363,7 +1362,7 @@ export function resolveSkitSourceEffect(
         for (const path of resolved.observedSkillPaths) {
           const destination = join(originalRoot, path);
           yield* fs.makeDirectory(dirname(destination), { recursive: true });
-          yield* copyLocalTreeEffect(
+          yield* copyLocalTree(
             targets.get(path) ?? join(resolved.originalRoot, path),
             destination,
             undefined,
@@ -1379,7 +1378,7 @@ export function resolveSkitSourceEffect(
 
 /** Resolve the default remote commit without acquiring a worktree. Explicit refs retain the
  * full fetch path because tags and arbitrary object IDs need Git's exact revision semantics. */
-export const resolveUnpinnedGitHeadEffect = Effect.fn("Source.resolveGitHead")(function* (
+export const resolveUnpinnedGitHead = Effect.fn("Source.resolveGitHead")(function* (
   source: SkitSource,
 ) {
   if (source.type !== "git" && source.type !== "github") return undefined;

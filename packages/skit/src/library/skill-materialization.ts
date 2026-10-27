@@ -1,7 +1,7 @@
 import { Data, Effect, FileSystem } from "effect";
 import { dirname, join, relative, resolve } from "node:path";
-import { deterministicTreeHashEffect } from "../artifact/skit.js";
-import { copyLocalTreeEffect } from "../platform/copy-tree.js";
+import { deterministicTreeHash } from "../artifact/skit.js";
+import { copyLocalTree } from "../platform/copy-tree.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class SkillMaterializationInvalid
@@ -17,7 +17,7 @@ export class SkillMaterializationInvalid
 }
 
 /** Build the self-contained Skill artifact whose digest defines a Skill Version. */
-export const materializedSkillDigestEffect = Effect.fn("Library.materializedSkillDigest")(
+export const materializedSkillDigest = Effect.fn("Library.materializedSkillDigest")(
   function* (input: {
     retainedRoot: string;
     sourcePath: string;
@@ -28,7 +28,7 @@ export const materializedSkillDigestEffect = Effect.fn("Library.materializedSkil
     const artifact = join(workspace, "artifact");
     const source =
       input.sourcePath === "." ? input.retainedRoot : join(input.retainedRoot, input.sourcePath);
-    yield* copyLocalTreeEffect(source, artifact, undefined, false);
+    yield* copyLocalTree(source, artifact, undefined, false);
     for (const mapping of input.shared ?? []) {
       const target = resolve(artifact, mapping.to);
       if (relative(artifact, target).startsWith(".."))
@@ -36,8 +36,8 @@ export const materializedSkillDigestEffect = Effect.fn("Library.materializedSkil
           detail: `Shared mapping target escaped Skill: ${mapping.to}`,
         });
       yield* fs.makeDirectory(dirname(target), { recursive: true, mode: 0o700 });
-      yield* copyLocalTreeEffect(join(input.retainedRoot, mapping.from), target, undefined, false);
+      yield* copyLocalTree(join(input.retainedRoot, mapping.from), target, undefined, false);
     }
-    return yield* deterministicTreeHashEffect(artifact);
+    return yield* deterministicTreeHash(artifact);
   },
 );

@@ -7,7 +7,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { executeRemoveEffect } from "../../workflows/library/remove.js";
+import { executeRemove } from "../../workflows/library/remove.js";
 import { result } from "../contracts.js";
 
 const subject = Argument.String("skit-or-skill");
@@ -27,7 +27,7 @@ export const removeCliCommand = Command.make(
         const state = yield* store.load;
         const outcome = yield* renderer.withStatus(
           input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
-          executeRemoveEffect(state, {
+          executeRemove(state, {
             query: input.subject,
             dryRun: input.dryRun,
           }),

@@ -7,20 +7,20 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import {
   currentSkillVersion,
   LibraryStore,
-  libraryManifestFromLocalStateEffect,
-  deterministicTreeHashEffect,
+  libraryManifestFromLocalState,
+  deterministicTreeHash,
   libraryStoreLayer,
   retainedTreePath,
 } from "@smolai/skit-core";
 import {
-  retainLibrarySourceEffect,
-  previewLibrarySourceEffect,
+  retainLibrarySource,
+  previewLibrarySource,
 } from "../src/library-application/source-acquisition.js";
-import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
-import { checkSubjectsEffect } from "../src/workflows/library/check.js";
+import { planUpdates, updateSubjects } from "../src/library-application/update.js";
+import { checkSubjects } from "../src/workflows/library/check.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
-import { executeRemoveEffect } from "../src/workflows/library/remove.js";
+import { executeRemove } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
 import {
   archiveBytes,
@@ -42,13 +42,13 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     yield* initializeLibraryMachine(home);
     const bytes = "---\nname: review\ndescription: Review carefully\n---\n\nDo the review.\n";
     yield* fs.writeFileString(join(source, "SKILL.md"), bytes);
-    assert.deepStrictEqual(yield* previewLibrarySourceEffect(source), {
+    assert.deepStrictEqual(yield* previewLibrarySource(source), {
       kind: "plain",
       skills: [{ name: "review", verbatim_path: "." }],
     });
     assert.strictEqual(yield* fs.exists(join(home, "state.json")), false);
 
-    const added = yield* retainLibrarySourceEffect(source).pipe(
+    const added = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -66,7 +66,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(state.collections[0]?.upstream, undefined);
 
     yield* fs.writeFileString(join(source, "SKILL.md"), `${bytes}\nSecond snapshot.\n`);
-    const addedAgain = yield* retainLibrarySourceEffect(source).pipe(
+    const addedAgain = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const refreshed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -76,7 +76,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(refreshed.collections.length, 1);
     assert.strictEqual(refreshed.acquisitions.length, 2);
     assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
-    const failure = yield* planUpdatesEffect(added.collection_id).pipe(
+    const failure = yield* planUpdates(added.collection_id).pipe(
       Effect.provide(libraryStoreLayer({ home })),
       Effect.flip,
     );
@@ -102,7 +102,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
         `---\nname: ${name}\ndescription: ${name}\n---\n`,
       );
     }
-    const added = yield* retainLibrarySourceEffect(source).pipe(
+    const added = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -139,7 +139,7 @@ it.effect("reports the retained package when its source disappears after publica
     const store = yield* Effect.service(LibraryStore).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
-    const added = yield* retainLibrarySourceEffect(source).pipe(
+    const added = yield* retainLibrarySource(source).pipe(
       Effect.provideService(LibraryStore, {
         ...store,
         save: (next, base) =>
@@ -177,12 +177,12 @@ it.effect("retains the exact bytes of a direct SKILL.md URL", () =>
     );
     const source = "https://github.com/acme/skills/blob/main/skills/review/SKILL.md";
     assert.deepStrictEqual(
-      yield* previewLibrarySourceEffect(source).pipe(
+      yield* previewLibrarySource(source).pipe(
         Effect.provideService(HttpClient.HttpClient, client),
       ),
       { kind: "plain", skills: [{ name: "review", verbatim_path: "." }] },
     );
-    const added = yield* retainLibrarySourceEffect(source).pipe(
+    const added = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
@@ -245,7 +245,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provideService(HttpClient.HttpClient, client),
       );
-    const added = yield* run(retainLibrarySourceEffect(source));
+    const added = yield* run(retainLibrarySource(source));
     const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
@@ -273,20 +273,20 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     ]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
-      (yield* run(checkSubjectsEffect(enabled, skill.skill_id)))[0]?.source_status,
+      (yield* run(checkSubjects(enabled, skill.skill_id)))[0]?.source_status,
       "current",
     );
     artifact = updated;
-    assert.strictEqual((yield* run(planUpdatesEffect(skill.skill_id)))[0]?.changed, true);
+    assert.strictEqual((yield* run(planUpdates(skill.skill_id)))[0]?.changed, true);
     const result = yield* run(
-      updateSubjectsEffect(options, skill.skill_id).pipe(Effect.provide(rendererTestLayer())),
+      updateSubjects(options, skill.skill_id).pipe(Effect.provide(rendererTestLayer())),
     );
     assert.isTrue(result[0] !== undefined && !("status" in result[0]) && result[0].changed);
     const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
-    const desired = yield* libraryManifestFromLocalStateEffect(after);
+    const desired = yield* libraryManifestFromLocalState(after);
     const empty = {
       ...desired,
       collections: [],
@@ -304,7 +304,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       home,
       run(
         // The Collection's only Skill can be removed, taking its Collection with it.
-        executeRemoveEffect(disabled, {
+        executeRemove(disabled, {
           query: skill.skill_id,
           dryRun: false,
         }),
@@ -328,14 +328,14 @@ it.effect("re-adding a changed local source adds a Skill Version and uses it", (
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nfirst\n",
     );
-    const added = yield* retainLibrarySourceEffect(source).pipe(
+    const added = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     yield* fs.writeFileString(
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
     );
-    const addedAgain = yield* writingTo(home, retainLibrarySourceEffect(source));
+    const addedAgain = yield* writingTo(home, retainLibrarySource(source));
     assert.strictEqual(added.action, "added");
     assert.strictEqual(addedAgain.action, "updated");
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -363,16 +363,14 @@ it.effect("repeated identical local re-adds record nothing new", () =>
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\ncurrent\n",
     );
-    const added = yield* retainLibrarySourceEffect(source).pipe(
+    const added = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     yield* fs.writeFileString(
       join(source, ".skit-ownership.json"),
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
-    const reAdd = retainLibrarySourceEffect(source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const reAdd = retainLibrarySource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
     const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -418,7 +416,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       join(skill, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nunchanged\n",
     );
-    const observedHash = yield* deterministicTreeHashEffect(skill);
+    const observedHash = yield* deterministicTreeHash(skill);
     const retainAt = (commit: string, retainedAt: string) =>
       Effect.scoped(
         writingTo(
@@ -471,7 +469,7 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
         ),
       ),
     );
-    yield* retainLibrarySourceEffect(
+    yield* retainLibrarySource(
       { type: "registry", namespace: "alice", slug: "tools" },
       "1.2.3",
     ).pipe(
@@ -492,9 +490,6 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       ["1.2.3"],
     );
     // A Release the Registry can serve again needs no snapshot of its own.
-    assert.deepStrictEqual(
-      (yield* libraryManifestFromLocalStateEffect(state)).snapshot_digests,
-      [],
-    );
+    assert.deepStrictEqual((yield* libraryManifestFromLocalState(state)).snapshot_digests, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

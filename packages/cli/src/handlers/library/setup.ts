@@ -39,7 +39,7 @@ import {
 import { LibraryStore } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { SetupDuplicateAction } from "../../workflows/library/setup-decisions.js";
-import { checkSubjectsEffect } from "../../workflows/library/check.js";
+import { checkSubjects } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupReviewSkillChoices } from "../../presentation/setup-skills.js";
 
@@ -275,7 +275,7 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const checks = yield* renderer.withStatus(
     "Checking retained skills.sh Sources",
     Effect.flatMap(
-      Effect.forEach(collectionIds, (collectionId) => checkSubjectsEffect(state, collectionId)),
+      Effect.forEach(collectionIds, (collectionId) => checkSubjects(state, collectionId)),
       (results) => Effect.succeed(results.flat()),
     ),
   );

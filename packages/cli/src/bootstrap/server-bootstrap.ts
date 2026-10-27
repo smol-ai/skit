@@ -311,7 +311,7 @@ const WranglerConfig = Schema.Struct({
 });
 const decodeWranglerConfig = Schema.decodeUnknownEffect(WranglerConfig);
 
-export const originFromWranglerConfigEffect = Effect.fn("Bootstrap.origin")(function* (
+export const originFromWranglerConfig = Effect.fn("Bootstrap.origin")(function* (
   configPath: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -366,7 +366,7 @@ const waitForBootstrapStatus = Effect.fn("Bootstrap.waitForStatus")(function* (
   );
 });
 
-export const bootstrapServerEffect = Effect.fn("Bootstrap.server")(function* (
+export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
   options: {
     readonly configPath?: string;
     readonly origin?: string;
@@ -377,7 +377,7 @@ export const bootstrapServerEffect = Effect.fn("Bootstrap.server")(function* (
 ) {
   const operations = yield* BootstrapOperations;
   const configPath = resolve(options.configPath ?? "wrangler.jsonc");
-  const configuredOrigin = options.origin ?? (yield* originFromWranglerConfigEffect(configPath));
+  const configuredOrigin = options.origin ?? (yield* originFromWranglerConfig(configPath));
   const origin = yield* parseOrigin(configuredOrigin);
   const secret = yield* operations.createSecret;
   const setupUrl = new URL(`/setup#token=${encodeURIComponent(secret)}`, origin);
@@ -448,7 +448,7 @@ export const serverBootstrapCliCommand = Command.make(
     handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const value = yield* bootstrapServerEffect({
+        const value = yield* bootstrapServer({
           configPath: Option.getOrUndefined(config),
           origin: Option.getOrUndefined(url),
         });

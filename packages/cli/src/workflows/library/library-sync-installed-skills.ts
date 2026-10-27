@@ -8,16 +8,16 @@ import {
   SkillId,
   LibraryStore,
   LibraryChanged,
-  blendRestoredStateEffect,
+  blendRestoredState,
   withLibraryWriter,
   bindingSkillIds,
   currentSkillVersion,
   mergeGlobalBindings,
-  installedSkillCustodyEffect,
-  installedSkillNameEffect,
-  installDestinationPathIdentityEffect,
+  installedSkillCustody,
+  installedSkillName,
+  installDestinationPathIdentity,
   repositorySelectsInstalledSkill,
-  withInstalledSkillMutationEffect,
+  withInstalledSkillMutation,
   type InstallDestination,
   type BindingEntry,
 } from "@smolai/skit-core";
@@ -33,7 +33,7 @@ const Candidate = Schema.Struct({
 });
 
 /** Compare destinations using filesystem evidence, including symlink and case aliases. */
-export const resolveSyncInstalledSkillCollisionsEffect = Effect.fn(
+export const resolveSyncInstalledSkillCollisions = Effect.fn(
   "Library.sync.installedSkillCollisions",
 )(function* (
   manifest: LibraryManifest,
@@ -49,8 +49,8 @@ export const resolveSyncInstalledSkillCollisionsEffect = Effect.fn(
     const root = rootFor?.(target);
     if (root === undefined) continue;
     for (const skill of manifest.skills.filter((item) => enabled.has(item.skill_id))) {
-      const path = join(root, yield* installedSkillNameEffect(skill.name));
-      const identity = yield* installDestinationPathIdentityEffect(path);
+      const path = join(root, yield* installedSkillName(skill.name));
+      const identity = yield* installDestinationPathIdentity(path);
       const group = groups.get(identity.comparisonKey) ?? [];
       group.push({ path, skill_id: skill.skill_id, target, global: true });
       groups.set(identity.comparisonKey, group);
@@ -63,8 +63,8 @@ export const resolveSyncInstalledSkillCollisionsEffect = Effect.fn(
         if (root === undefined) continue;
         const ids = new Set(bindingSkillIds(manifest, binding));
         for (const skill of manifest.skills.filter((item) => ids.has(item.skill_id))) {
-          const path = join(root, yield* installedSkillNameEffect(skill.name));
-          const identity = yield* installDestinationPathIdentityEffect(path);
+          const path = join(root, yield* installedSkillName(skill.name));
+          const identity = yield* installDestinationPathIdentity(path);
           const group = groups.get(identity.comparisonKey) ?? [];
           group.push({ path, skill_id: skill.skill_id, target, global: false });
           groups.set(identity.comparisonKey, group);
@@ -145,7 +145,7 @@ const SyncInstalledSkillPlan = Schema.Struct({
 type SyncInstalledSkillPlan = typeof SyncInstalledSkillPlan.Type;
 
 /** Preview every affected copy, including repository custody, before any remote write. */
-const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkills")(function* (
+const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(function* (
   current: LibraryState,
   aligned: LibraryState,
   manifest: LibraryManifest,
@@ -218,8 +218,8 @@ const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkill
       global && !repository && activeTarget !== undefined ? rootFor?.(activeTarget) : undefined;
     const relocating =
       root !== undefined &&
-      (yield* installDestinationPathIdentityEffect(root)).comparisonKey !==
-        (yield* installDestinationPathIdentityEffect(projection.root)).comparisonKey;
+      (yield* installDestinationPathIdentity(root)).comparisonKey !==
+        (yield* installDestinationPathIdentity(projection.root)).comparisonKey;
     const changing =
       removing ||
       reidentifying ||
@@ -227,7 +227,7 @@ const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkill
       relocating ||
       (selected !== undefined && selected.skill_version_id !== projection.skill_version_id);
     if (changing) {
-      const custody = yield* installedSkillCustodyEffect(original);
+      const custody = yield* installedSkillCustody(original);
       if (custody.kind === "conflicted") {
         if (
           deferDeviceConflicts &&
@@ -322,13 +322,13 @@ const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkill
  * Keep old references durable until portable state and ancestry can be saved together.
  * Saves only onto `current`, the state sync planned from, and returns the state it saved.
  */
-const retireSyncInstalledSkillsEffect = Effect.fn("Library.sync.retireInstalledSkills")(function* (
+const retireSyncInstalledSkills = Effect.fn("Library.sync.retireInstalledSkills")(function* (
   plan: SyncInstalledSkillPlan,
   current: LibraryState,
 ) {
   const store = yield* LibraryStore;
   if (plan.retire.length === 0) return { retired: 0, state: current };
-  const result = yield* withInstalledSkillMutationEffect(
+  const result = yield* withInstalledSkillMutation(
     current,
     {
       rootFor: () => undefined,
@@ -380,7 +380,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
     const plan =
       current === undefined
         ? undefined
-        : yield* planSyncInstalledSkillsEffect(
+        : yield* planSyncInstalledSkills(
             current,
             aligned,
             options.manifest,
@@ -403,8 +403,8 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
             const retirement =
               plan === undefined
                 ? { retired: 0, state: baseline }
-                : yield* retireSyncInstalledSkillsEffect(plan, baseline);
-            const blended = yield* blendRestoredStateEffect(
+                : yield* retireSyncInstalledSkills(plan, baseline);
+            const blended = yield* blendRestoredState(
               { ...aligned, projections: [...(plan?.projections ?? [])] },
               restored,
             );

@@ -17,7 +17,7 @@ import { PlanIsStale } from "../../library/failures.js";
 import { captureSetupCopies } from "./setup-copy-preservation.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
-import { leavePnpmSkillEffect } from "../../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../../projection/pnpm-skills.js";
 import {
   retirableShadowAliases,
   SetupApprovedAlias,
@@ -26,12 +26,12 @@ import {
 } from "./setup-decisions.js";
 import {
   canonicalJson,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   Digest as DigestSchema,
   HarnessName,
-  inspectNormalizedTreeEffect,
-  inspectOwnershipMarkerEffect,
-  installedSkillCustodyEffect,
+  inspectNormalizedTree,
+  inspectOwnershipMarker,
+  installedSkillCustody,
   LibraryStore,
   LinkStat,
   hasHarnessProfile,
@@ -42,14 +42,14 @@ import {
   FailureTypeId,
   type SkitFailure,
   SkitBindingScope,
-  walkTreeEffect,
+  walkTree,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import {
-  retainLibrarySourceEffect,
-  inspectLibrarySourceEffect,
+  retainLibrarySource,
+  inspectLibrarySource,
 } from "../../library-application/source-acquisition.js";
 import type { InstalledSkillOptions } from "./installed-skill-options.js";
 
@@ -117,8 +117,8 @@ export interface LocalAdoptionOptions {
 const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(function* (
   root: string,
 ) {
-  const normalized = yield* inspectNormalizedTreeEffect(root);
-  const verbatim = yield* walkTreeEffect(root, "verbatim");
+  const normalized = yield* inspectNormalizedTree(root);
+  const verbatim = yield* walkTree(root, "verbatim");
   const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = normalized.excluded
     .filter(
       (entry) =>
@@ -135,7 +135,7 @@ const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(fu
       blockers.push({ path: join(root, entry.path), reason: "would-normalize-path" });
   }
 
-  return { blockers, contentHash: yield* deterministicTreeHashEffect(root) };
+  return { blockers, contentHash: yield* deterministicTreeHash(root) };
 });
 
 /** Plan exact-content Custody transfer without retaining, projecting, or saving state. */
@@ -160,10 +160,10 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
     resolve(left.path).localeCompare(resolve(right.path)),
   );
   const sourcePath = resolve(nominatedSourcePath ?? selected[0]!.path);
-  const preview = yield* inspectLibrarySourceEffect(sourcePath);
+  const preview = yield* inspectLibrarySource(sourcePath);
   const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = [];
   const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
-  const sourceContentHash = yield* deterministicTreeHashEffect(sourcePath);
+  const sourceContentHash = yield* deterministicTreeHash(sourcePath);
   const existingAcquisitionIds = new Set(
     state.acquisitions
       .filter(
@@ -214,7 +214,7 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
       blockers.push({ path, reason: "content-mismatch" });
       blocked = true;
     }
-    const marker = yield* inspectOwnershipMarkerEffect(path);
+    const marker = yield* inspectOwnershipMarker(path);
     const alreadyManaged =
       marker.kind === "valid" &&
       skill.skillId !== undefined &&
@@ -381,14 +381,14 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
       if (
         observedHash === undefined ||
         (request.kind === "retain" &&
-          (yield* deterministicTreeHashEffect(selection.sourcePath)) !== observedHash)
+          (yield* deterministicTreeHash(selection.sourcePath)) !== observedHash)
       )
         return yield* new PlanIsStale();
       const retirement = binding
         ? yield* prepareDuplicatePreservation(bindings, selection, operationDirectory)
         : undefined;
       if (request.kind === "retain" && !binding) {
-        const retained = yield* retainLibrarySourceEffect(selection.sourcePath);
+        const retained = yield* retainLibrarySource(selection.sourcePath);
         if (retained.collection_id === undefined)
           return yield* new LocalAdoptionInvalid({
             name: selection.name,
@@ -398,8 +398,7 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
       }
       const equalPaths = request.kind === "retain" ? (request.equalCopies ?? []) : [];
       for (const path of equalPaths)
-        if ((yield* deterministicTreeHashEffect(path)) !== observedHash)
-          return yield* new PlanIsStale();
+        if ((yield* deterministicTreeHash(path)) !== observedHash) return yield* new PlanIsStale();
       const adoption = { path: selection.sourcePath, equalPaths, observedHash };
       let subjectId: string;
       if (request.kind === "existing") subjectId = request.subjectId;
@@ -426,7 +425,7 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
         const refreshed = yield* planLocalAdoption(plan.targets, plan.sourcePath);
         if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(plan))
           return yield* new PlanIsStale();
-        const retained = yield* retainLibrarySourceEffect(plan.sourcePath);
+        const retained = yield* retainLibrarySource(plan.sourcePath);
         if (retained.collection_id === undefined)
           return yield* new LocalAdoptionInvalid({
             name: selection.name,
@@ -577,7 +576,7 @@ export const captureLocalAdoptionAliases = Effect.fn("LocalAdoption.captureAlias
     const fs = yield* FileSystem.FileSystem;
     const aliases = yield* Effect.forEach(paths, (path) =>
       Effect.gen(function* () {
-        yield* leavePnpmSkillEffect(path);
+        yield* leavePnpmSkill(path);
         const info = yield* links.identity.lstat(path);
         if (info.type !== "SymbolicLink") return yield* new PlanIsStale();
         const canonicalPath = yield* fs.realPath(path);
@@ -673,7 +672,7 @@ const preserveAfterInstalledSkill = Effect.fn("LocalAdoption.preserveCopiesAfter
           message: `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
         };
       const projection = candidates.find((candidate) => candidate.path === path);
-      const custody = projection ? yield* installedSkillCustodyEffect(projection) : undefined;
+      const custody = projection ? yield* installedSkillCustody(projection) : undefined;
       if (
         !projection ||
         custody?.kind !== "intact" ||

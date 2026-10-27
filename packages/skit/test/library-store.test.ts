@@ -1,9 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Result } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
+import { retainObservedCollection } from "../src/library/observed-import.js";
 import {
   LibraryStore,
   libraryStoreLayer,
@@ -25,7 +25,7 @@ const library = Effect.gen(function* () {
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
   yield* inLibrary(
     Effect.scoped(
-      retainObservedCollectionEffect({
+      retainObservedCollection({
         machineId,
         source: { type: "local", path: source },
         input: source,
@@ -35,7 +35,7 @@ const library = Effect.gen(function* () {
             name: "review",
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(source),
+            observedHash: yield* deterministicTreeHash(source),
           },
         ],
         observations: [],

@@ -5,11 +5,11 @@ import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../fai
 import type { LibraryState } from "../library-state.js";
 import {
   emptyLibraryStateEffect,
-  inspectLocalLibraryStateEffect,
-  saveLibraryStateEffect,
+  inspectLocalLibraryState,
+  saveLibraryState,
   type InspectedLibraryState,
 } from "./state-file.js";
-import { appendLibraryAuditEffect, type LibraryAuditChange } from "../audit/audit-log.js";
+import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
 import { withLibraryWriterLock } from "./writer-lock.js";
 
@@ -62,7 +62,7 @@ export function libraryStoreLayer(options: { home: string }) {
       const fs = yield* FileSystem.FileSystem;
       const home = resolve(options.home);
       const path = join(home, "state.json");
-      const inspect = inspectLocalLibraryStateEffect(home).pipe(
+      const inspect = inspectLocalLibraryState(home).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       );
       const load = Effect.flatMap(inspect, (inspected) =>
@@ -72,7 +72,7 @@ export function libraryStoreLayer(options: { home: string }) {
         next: LibraryState,
         base: LibraryState,
       ) {
-        yield* saveLibraryStateEffect(home, next, base).pipe(
+        yield* saveLibraryState(home, next, base).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
         );
         const changes = diffLibraryState(base, next);
@@ -104,7 +104,7 @@ const recordLibraryHistory = Effect.fn("LibraryStore.recordHistory")(function* (
   changes: readonly LibraryAuditChange[],
 ) {
   const workflow = yield* LibraryActor;
-  yield* appendLibraryAuditEffect(home, {
+  yield* appendLibraryAudit(home, {
     schemaVersion: 1,
     occurredAt: DateTime.formatIso(yield* DateTime.now),
     type: classifyLibraryAuditEvent(workflow, changes),

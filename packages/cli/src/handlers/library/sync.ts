@@ -12,7 +12,7 @@ import {
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
-import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
+import { syncLibrary } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
 import { officialRegistryOrigin } from "../../registry/accounts.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -40,7 +40,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   const renderer = yield* Renderer;
   const progress = terminalSyncProgress(renderer);
   return yield* Effect.scoped(
-    syncLibraryEffect({
+    syncLibrary({
       // With no Registry configured, sync asks the hosted Registry, which then asks for a login.
       origin: auth.origin ?? officialRegistryOrigin,
       ...(auth.token === undefined ? {} : { token: auth.token }),

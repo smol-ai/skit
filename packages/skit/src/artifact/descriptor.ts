@@ -137,7 +137,7 @@ const malformed = (format: "json" | "yaml", detail: string) =>
 
 const JsonDocument = Schema.fromJsonString(Schema.Unknown);
 
-const normalizeSkillsEffect = Effect.fn("Descriptor.normalizeSkills")(function* (
+const normalizeSkills = Effect.fn("Descriptor.normalizeSkills")(function* (
   skills: readonly ParsedSkill[],
 ) {
   for (const skill of skills) {
@@ -148,7 +148,7 @@ const normalizeSkillsEffect = Effect.fn("Descriptor.normalizeSkills")(function* 
   return skills.map(normalizeContainedSkill);
 });
 
-const validateDescriptorEffect = Effect.fn("Descriptor.validate")(function* (
+const validateDescriptor = Effect.fn("Descriptor.validate")(function* (
   input: unknown,
   format: "json" | "yaml",
 ) {
@@ -156,7 +156,7 @@ const validateDescriptorEffect = Effect.fn("Descriptor.validate")(function* (
     onExcessProperty: "error",
     errors: "all",
   })(input).pipe(Effect.mapError((error) => malformed(format, error.message)));
-  const skills = yield* normalizeSkillsEffect(parsed.skills);
+  const skills = yield* normalizeSkills(parsed.skills);
   const descriptor: SkitDescriptor = { ...parsed, skills };
   if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
     return yield* new DuplicateSkillNames();
@@ -182,7 +182,7 @@ export const parseSkitReadmeEffect = Effect.fn("Descriptor.parseReadme")(functio
       delete descriptor.id;
     }
   }
-  return yield* validateDescriptorEffect(input, "yaml");
+  return yield* validateDescriptor(input, "yaml");
 });
 
 export const parseSkitConfigEffect = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
@@ -193,7 +193,7 @@ export const parseSkitConfigEffect = Effect.fn("Descriptor.parseConfig")(functio
     onExcessProperty: "error",
     errors: "all",
   })(input).pipe(Effect.mapError((error) => malformed("json", error.message)));
-  return yield* validateDescriptorEffect(
+  return yield* validateDescriptor(
     {
       skit: 1,
       slug: parsed.slug,

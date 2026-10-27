@@ -4,7 +4,7 @@ import { Effect, Exit } from "effect";
 import { join } from "node:path";
 import {
   currentSkillVersion,
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   observeInventory,
   makeAcquisitionId,
   retainedTreePath,
@@ -167,7 +167,7 @@ it.effect(
       assert.equal(after.acquisitions.length, 2);
       assert.equal(after.projections[0]?.projection_id, before.projections[0]?.projection_id);
       assert.ok(after.global_bindings[0]?.invocation_policies?.[publishedSkill.skill_id]);
-      const marker = yield* inspectOwnershipMarkerEffect(join(b.root, "same"));
+      const marker = yield* inspectOwnershipMarker(join(b.root, "same"));
       assert.equal(marker.kind, "valid");
       if (marker.kind === "valid") assert.equal(marker.marker.skill_id, publishedSkill.skill_id);
       yield* fs.remove(join(b.root, "same"), { recursive: true });

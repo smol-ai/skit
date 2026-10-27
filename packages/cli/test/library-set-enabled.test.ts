@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
   makeCollectionId,
@@ -14,9 +14,9 @@ import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryBindings, previewTestBindings } from "./helpers/binding-changes.js";
 import { calculateBindingChange } from "../src/workflows/library/binding-selection.js";
 import { applyBindingChanges } from "../src/library-application/binding-changes.js";
-import { planRemoveEffect } from "../src/workflows/library/remove.js";
-import { planUpdatesEffect } from "../src/library-application/update.js";
-import { checkSubjectsEffect } from "../src/workflows/library/check.js";
+import { planRemove } from "../src/workflows/library/remove.js";
+import { planUpdates } from "../src/library-application/update.js";
+import { checkSubjects } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 
@@ -45,13 +45,13 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(review),
+              observedHash: yield* deterministicTreeHash(review),
             },
             {
               name: "test",
               sourcePath: test,
               relativePath: "test",
-              observedHash: yield* deterministicTreeHashEffect(test),
+              observedHash: yield* deterministicTreeHash(test),
             },
           ],
           observations: [],
@@ -92,7 +92,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       ["skill"],
     );
     assert.strictEqual(
-      (yield* planRemoveEffect(state, member.skill_id).pipe(Effect.flip))._tag,
+      (yield* planRemove(state, member.skill_id).pipe(Effect.flip))._tag,
       "Library.SkillRemovalRequiresCollection",
     );
     const sameNamed = {
@@ -103,7 +103,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       matchingLibrarySubjects(sameNamed, "review").map((subject) => subject.kind),
       ["collection"],
     );
-    assert.strictEqual((yield* planRemoveEffect(sameNamed, "review")).subject_kind, "collection");
+    assert.strictEqual((yield* planRemove(sameNamed, "review")).subject_kind, "collection");
     const secondCollectionId = makeCollectionId();
     const ambiguous = {
       ...sameNamed,
@@ -119,19 +119,18 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
     const previewStore = yield* LibraryStore.pipe(Effect.provide(layer));
     assert.strictEqual(
-      (yield* planRemoveEffect(ambiguous, "review").pipe(Effect.flip))._tag,
+      (yield* planRemove(ambiguous, "review").pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* planUpdatesEffect("review").pipe(
+      (yield* planUpdates("review").pipe(
         Effect.provideService(LibraryStore, { ...previewStore, load: Effect.succeed(ambiguous) }),
         Effect.flip,
       ))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* checkSubjectsEffect(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))
-        ._tag,
+      (yield* checkSubjects(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
@@ -231,7 +230,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
         name,
         sourcePath: path,
         relativePath: name,
-        observedHash: yield* deterministicTreeHashEffect(path),
+        observedHash: yield* deterministicTreeHash(path),
       });
     }
     const retain = (members: readonly ObservedSkill[], retainedAt: string) =>

@@ -50,7 +50,7 @@ const securitySkill = Effect.fn("Library.securitySkill")(function* (
   return match;
 });
 
-export const securityReviewFromStateEffect = Effect.fn("Library.securityReviewSnapshot")(function* (
+export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot")(function* (
   state: LibraryState,
   query: string,
 ) {
@@ -98,52 +98,52 @@ export const securityReviewFromStateEffect = Effect.fn("Library.securityReviewSn
   } satisfies SkillSecurityReview;
 });
 
-export const acceptSecurityFindingFromStateEffect = Effect.fn(
-  "Library.acceptSecurityFindingSnapshot",
-)(function* (
-  state: LibraryState,
-  query: string,
-  input: {
-    readonly fingerprint: Digest;
-    readonly principal: string;
-    readonly rationale: string;
-    readonly expiresAt?: string;
+export const acceptSecurityFindingFromState = Effect.fn("Library.acceptSecurityFindingSnapshot")(
+  function* (
+    state: LibraryState,
+    query: string,
+    input: {
+      readonly fingerprint: Digest;
+      readonly principal: string;
+      readonly rationale: string;
+      readonly expiresAt?: string;
+    },
+  ) {
+    const acceptedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
+    if (!input.principal.trim() || !input.rationale.trim())
+      return yield* new AcceptanceIncomplete({ reason: "missing" });
+    let expiresAt: string | undefined;
+    if (input.expiresAt) {
+      const parsed = Date.parse(input.expiresAt);
+      if (
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+          input.expiresAt,
+        ) ||
+        !Number.isFinite(parsed)
+      )
+        return yield* new AcceptanceIncomplete({ reason: "invalid-expiry" });
+      if (parsed <= Date.parse(acceptedAt))
+        return yield* new AcceptanceIncomplete({ reason: "expiry-in-past" });
+      expiresAt = new Date(parsed).toISOString();
+    }
+    const review = yield* securityReviewFromState(state, query);
+    if (!review.audit.findings.some((finding) => finding.fingerprint === input.fingerprint))
+      return yield* new SecurityFindingAbsent({ fingerprint: input.fingerprint });
+    const acceptance: SkillAssessmentAcceptance = {
+      fingerprint: input.fingerprint,
+      artifactContentDigest: review.artifactContentDigest,
+      skill_version_id: review.skill_version_id,
+      context: "project",
+      principal: input.principal.trim(),
+      rationale: input.rationale.trim(),
+      acceptedAt,
+      ...(expiresAt ? { expiresAt } : {}),
+    };
+    const next = {
+      ...state,
+      assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
+    };
+    yield* (yield* LibraryStore).save(next, state);
+    return yield* securityReviewFromState(next, review.skill_version_id);
   },
-) {
-  const acceptedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-  if (!input.principal.trim() || !input.rationale.trim())
-    return yield* new AcceptanceIncomplete({ reason: "missing" });
-  let expiresAt: string | undefined;
-  if (input.expiresAt) {
-    const parsed = Date.parse(input.expiresAt);
-    if (
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
-        input.expiresAt,
-      ) ||
-      !Number.isFinite(parsed)
-    )
-      return yield* new AcceptanceIncomplete({ reason: "invalid-expiry" });
-    if (parsed <= Date.parse(acceptedAt))
-      return yield* new AcceptanceIncomplete({ reason: "expiry-in-past" });
-    expiresAt = new Date(parsed).toISOString();
-  }
-  const review = yield* securityReviewFromStateEffect(state, query);
-  if (!review.audit.findings.some((finding) => finding.fingerprint === input.fingerprint))
-    return yield* new SecurityFindingAbsent({ fingerprint: input.fingerprint });
-  const acceptance: SkillAssessmentAcceptance = {
-    fingerprint: input.fingerprint,
-    artifactContentDigest: review.artifactContentDigest,
-    skill_version_id: review.skill_version_id,
-    context: "project",
-    principal: input.principal.trim(),
-    rationale: input.rationale.trim(),
-    acceptedAt,
-    ...(expiresAt ? { expiresAt } : {}),
-  };
-  const next = {
-    ...state,
-    assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
-  };
-  yield* (yield* LibraryStore).save(next, state);
-  return yield* securityReviewFromStateEffect(next, review.skill_version_id);
-});
+);

@@ -7,13 +7,13 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { ensureAuthorWorkspaceRegisteredEffect } from "../../library/author-workspace.js";
+import { ensureAuthorWorkspaceRegistered } from "../../library/author-workspace.js";
 
 export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   input: string,
   register: boolean,
 ) {
-  const result = yield* ensureAuthorWorkspaceRegisteredEffect(input, { register, scaffold: true });
+  const result = yield* ensureAuthorWorkspaceRegistered(input, { register, scaffold: true });
   const initialized = yield* Effect.fromNullishOr(result.initialized).pipe(Effect.orDie);
   return { initialized, entry: result.entry };
 });

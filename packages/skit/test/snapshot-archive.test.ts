@@ -2,11 +2,11 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import {
-  captureSnapshotArchiveEffect,
-  materializeVerifiedSnapshotEffect,
-  verifySnapshotArchiveEffect,
+  captureSnapshotArchive,
+  materializeVerifiedSnapshot,
+  verifySnapshotArchive,
 } from "../src/library/snapshot-archive.js";
-import { originalTreeHashEffect } from "../src/library/retention/retain-tree.js";
+import { originalTreeHash } from "../src/library/retention/retain-tree.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("verifies real retained bytes and rejects a changed archive", () =>
@@ -21,19 +21,19 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
       mode: 0o755,
     });
     yield* fs.symlink("SKILL.md", join(root, "skills", "review", "alias.md"));
-    const archive = yield* captureSnapshotArchiveEffect(root);
-    assert.strictEqual(archive.digest, yield* originalTreeHashEffect(root));
+    const archive = yield* captureSnapshotArchive(root);
+    assert.strictEqual(archive.digest, yield* originalTreeHash(root));
     assert.strictEqual(
       archive.entries.some((entry) => entry.path.startsWith(".git")),
       false,
     );
-    const verified = yield* verifySnapshotArchiveEffect(archive);
+    const verified = yield* verifySnapshotArchive(archive);
     assert.deepStrictEqual(
       verified.files.get("skills/review/SKILL.md"),
       Uint8Array.from([0, 1, 255]),
     );
-    const restored = yield* materializeVerifiedSnapshotEffect(verified);
-    assert.strictEqual(yield* originalTreeHashEffect(restored), archive.digest);
+    const restored = yield* materializeVerifiedSnapshot(verified);
+    assert.strictEqual(yield* originalTreeHash(restored), archive.digest);
     assert.deepStrictEqual(
       yield* fs.readFile(join(restored, "skills", "review", "SKILL.md")),
       Uint8Array.from([0, 1, 255]),
@@ -46,7 +46,7 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
           : entry,
       ),
     };
-    const corruption = yield* verifySnapshotArchiveEffect(changed).pipe(Effect.result);
+    const corruption = yield* verifySnapshotArchive(changed).pipe(Effect.result);
     assert.strictEqual(Result.isFailure(corruption), true);
     const unsafe = {
       ...archive,
@@ -55,7 +55,7 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
         { kind: "file", path: "../escape", mode: 0o644, content_base64: "YQ==" },
       ],
     };
-    const traversal = yield* verifySnapshotArchiveEffect(unsafe).pipe(Effect.result);
+    const traversal = yield* verifySnapshotArchive(unsafe).pipe(Effect.result);
     assert.strictEqual(Result.isFailure(traversal), true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

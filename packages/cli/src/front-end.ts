@@ -8,14 +8,14 @@ export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 
 export { detectInstalledHarnessesEffect } from "./harness/catalog.js";
 export { errorMessage } from "./failure-classification.js";
-export { auditLocalCapabilitiesV1Alpha4Effect } from "./audit/local.js";
+export { auditLocalCapabilitiesV1Alpha4 } from "./audit/local.js";
 export type {
   AuditEntryV1Alpha4,
   AuditReportV1Alpha4,
   AuditMcpServerV1Alpha4,
   AuditSkillV1Alpha4,
 } from "./audit/schema.js";
-export { probeHarnessEffect, type HarnessProbeResult } from "./harness/probe.js";
+export { probeHarness, type HarnessProbeResult } from "./harness/probe.js";
 export * from "./library-application/index.js";
 
 export {

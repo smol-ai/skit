@@ -1,13 +1,13 @@
 import { Effect } from "effect";
 import { assert, it } from "@effect/vitest";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { librarySyncApiEffect } from "../src/workflows/library/library-sync-api.js";
+import { librarySyncApi } from "../src/workflows/library/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 
 it.effect("retains an undeclared response status without inventing an error code", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const api = yield* librarySyncApiEffect({
+      const api = yield* librarySyncApi({
         origin: "https://registry.test",
         token: "test-token",
       });
@@ -31,7 +31,7 @@ it.effect("retains an undeclared response status without inventing an error code
 it.effect("rejects an undecodable remote Library instead of returning it", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const api = yield* librarySyncApiEffect({
+      const api = yield* librarySyncApi({
         origin: "https://registry.test",
         token: "test-token",
       });

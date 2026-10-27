@@ -2,17 +2,17 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
 import {
   canonicalJson,
-  copyLocalTreeEffect,
+  copyLocalTree,
   effectiveGlobalBindings,
-  inspectOwnershipMarkerEffect,
-  inspectInstalledSkillBackupsEffect,
+  inspectOwnershipMarker,
+  inspectInstalledSkillBackups,
   LibraryStore,
   LinkStat,
   pathIsWithin,
-  prepareInstalledSkillRebuildEffect,
+  prepareInstalledSkillRebuild,
   retainedTreePath,
   versionBacking,
-  writeRawAtomicEffect,
+  writeRawAtomic,
   type LibraryState,
   type InstalledSkill,
 } from "@smolai/skit-core";
@@ -97,7 +97,7 @@ const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
       return yield* new RecoveryInvalid({
         detail: `Original marker metadata unavailable at ${path}`,
       });
-    yield* writeRawAtomicEffect(marker, entry.marker, false, entry.markerMode & 0o7777);
+    yield* writeRawAtomic(marker, entry.marker, false, entry.markerMode & 0o7777);
     yield* fs.chmod(marker, entry.markerMode & 0o7777);
   }
 });
@@ -131,7 +131,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const moves: { name: string; projection: InstalledSkill }[] = [];
   const rebuilds = new Map<
     string,
-    Effect.Success<ReturnType<typeof prepareInstalledSkillRebuildEffect>>
+    Effect.Success<ReturnType<typeof prepareInstalledSkillRebuild>>
   >();
   const affected = new Set<string>();
   const physicalPaths: string[] = [];
@@ -208,9 +208,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     )
       continue;
     const marker =
-      observed.entry?.markerType === "File"
-        ? yield* inspectOwnershipMarkerEffect(file.path)
-        : undefined;
+      observed.entry?.markerType === "File" ? yield* inspectOwnershipMarker(file.path) : undefined;
     const owned =
       current &&
       after &&
@@ -276,7 +274,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     }
     for (const projection of [prior, after]) {
       if (source !== undefined || projection === undefined) continue;
-      for (const path of yield* inspectInstalledSkillBackupsEffect(projection)) {
+      for (const path of yield* inspectInstalledSkillBackups(projection)) {
         const evidence = yield* observeSetupFile(path);
         if (
           evidence.entry?.hash === file.entry.hash &&
@@ -307,7 +305,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       const policy =
         effectiveGlobalBindings(restoredState)[0]?.invocation_policies?.[prior.skill_id];
       const rebuilt = yield* Effect.result(
-        prepareInstalledSkillRebuildEffect(
+        prepareInstalledSkillRebuild(
           restoredState,
           store.originalsPath,
           prior,
@@ -371,7 +369,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
             });
             const path = join(directory, basename(file.path));
             if (action.transfer === "rebuild") yield* rebuilds.get(file.path)!.build(path);
-            else yield* copyLocalTreeEffect(action.source, path, undefined, true);
+            else yield* copyLocalTree(action.source, path, undefined, true);
             if (file.entry.type === "Directory") yield* restoreMarker(path, file.entry);
             if ((yield* recoveryFingerprint(path)) !== file.entry.hash)
               return yield* new RecoveryInvalid({

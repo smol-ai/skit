@@ -3,10 +3,10 @@ import {
   bindingSkillIds,
   bindingShadowCheckSkills,
   LinkStat,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   ensureSkillsDirectoryWritable,
-  inspectOwnershipMarkerEffect,
-  installedSkillNameEffect,
+  inspectOwnershipMarker,
+  installedSkillName,
   type InstallDestination,
   replaceScopeBinding,
   pruneEmptyBindings,
@@ -161,10 +161,10 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
       for (const skillId of skillIds) {
         const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
         if (skill === undefined) continue;
-        const path = join(root, yield* installedSkillNameEffect(skill.name));
+        const path = join(root, yield* installedSkillName(skill.name));
         if (!(yield* fs.exists(path))) continue;
         if (Option.isSome(yield* Effect.option(fs.readLink(path)))) continue;
-        if ((yield* inspectOwnershipMarkerEffect(path)).kind === "valid") continue;
+        if ((yield* inspectOwnershipMarker(path)).kind === "valid") continue;
         unmanaged.push({ target, path });
       }
     }
@@ -186,7 +186,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
             projection === undefined ||
             projection.status !== "installed" ||
             !(yield* fs.exists(projection.path)) ||
-            (yield* deterministicTreeHashEffect(projection.path)) !== projection.expected_digest;
+            (yield* deterministicTreeHash(projection.path)) !== projection.expected_digest;
         }
       else if (bindings.length)
         for (const projection of projections)
@@ -354,10 +354,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     for (const name of plan.skills)
       destinations.push({
         target,
-        path: join(
-          bindingRoot(target, plan.scope, configuration),
-          yield* installedSkillNameEffect(name),
-        ),
+        path: join(bindingRoot(target, plan.scope, configuration), yield* installedSkillName(name)),
       });
   if (options.enabled) for (const root of roots) yield* ensureSkillsDirectoryWritable(root);
   if (plan.changed) {

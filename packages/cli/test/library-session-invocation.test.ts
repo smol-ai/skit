@@ -3,12 +3,12 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   HarnessName,
   LibraryStore,
   retainedTreePath,
   resolveDeclaredInvocation,
-  retainAuthoredCollectionUnderLockEffect,
+  retainAuthoredCollectionUnderLock,
   skitLayer,
 } from "@smolai/skit-core";
 import {
@@ -66,7 +66,7 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
                 name: "review",
                 sourcePath: source,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(source),
+                observedHash: yield* deterministicTreeHash(source),
               },
             ],
             observations: [],
@@ -203,7 +203,7 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLockEffect({
+          retainAuthoredCollectionUnderLock({
             root: source,
             source: { type: "local", path: source },
             input: source,
@@ -257,7 +257,7 @@ Tools
     yield* home.owned(
       writingTo(
         home.home,
-        retainAuthoredCollectionUnderLockEffect({
+        retainAuthoredCollectionUnderLock({
           root: source,
           source: { type: "local", path: source },
           input: source,
@@ -303,7 +303,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
                 name: "healthy",
                 sourcePath: healthy,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(healthy),
+                observedHash: yield* deterministicTreeHash(healthy),
               },
             ],
             observations: [],
@@ -393,7 +393,7 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLockEffect({
+          retainAuthoredCollectionUnderLock({
             root: source,
             source: { type: "local", path: source },
             input: source,

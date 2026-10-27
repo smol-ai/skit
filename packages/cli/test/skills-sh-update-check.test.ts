@@ -8,9 +8,9 @@ import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { applySetupObservedCollections } from "../src/workflows/library/setup-observed-collections.js";
-import { checkSkillsShSubjectEffect } from "../src/workflows/library/skills-sh-update-check.js";
+import { checkSkillsShSubject } from "../src/workflows/library/skills-sh-update-check.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { checkSubjectsEffect } from "../src/workflows/library/check.js";
+import { checkSubjects } from "../src/workflows/library/check.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
@@ -147,7 +147,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       statePath: home.statePath,
       variantsPath: home.variantsPath,
     };
-    const checked = yield* checkSubjectsEffect(localState, member.skill_id).pipe(
+    const checked = yield* checkSubjects(localState, member.skill_id).pipe(
       Effect.provideService(LibraryStore, store),
       Effect.provideService(HttpClient.HttpClient, discoveryClient),
     );
@@ -167,7 +167,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     const retainedCopy = localState.retained_copies[0]!;
     type Observation = LibraryState["acquisitions"][number]["observations"][number];
     const checkObservation = (change: Partial<Observation> = {}) =>
-      checkSkillsShSubjectEffect(
+      checkSkillsShSubject(
         subject,
         {
           ...acquisition,

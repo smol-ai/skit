@@ -9,14 +9,14 @@ import { dirname, join, resolve } from "node:path";
 import {
   LibraryStore,
   libraryStoreLayer,
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   objectAt,
-  observationPathIdentityEffect,
+  observationPathIdentity,
 } from "@smolai/skit-core";
 import { auditClaude } from "./claude.js";
 import { auditCodex } from "./codex.js";
 import { pathExists, readJson as json } from "./io.js";
-import { runAuditProbesEffect, type ProbeResult } from "./probes.js";
+import { runAuditProbes, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
 import type { AuditFinding, AuditObservation } from "./types.js";
 import { normalizeAuditReport } from "./normalize.js";
@@ -78,12 +78,12 @@ const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
   for (const observation of observations) {
     if (observation.kind !== "skill" || !observation.path) continue;
     const directory = dirname(observation.path);
-    const identity = yield* observationPathIdentityEffect(directory);
+    const identity = yield* observationPathIdentity(directory);
     if (inspected.has(identity.comparisonKey)) continue;
     inspected.add(identity.comparisonKey);
     const markerPath = join(directory, ".skit-ownership.json");
     // An unreadable marker is no evidence either way, like an absent one.
-    const inspection = yield* inspectOwnershipMarkerEffect(directory).pipe(
+    const inspection = yield* inspectOwnershipMarker(directory).pipe(
       Effect.orElseSucceed(() => ({ kind: "absent" }) as const),
     );
     if (inspection.kind === "invalid") {
@@ -145,7 +145,7 @@ const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
  * fiber rather than re-entering a runtime per path. `suppliedProbes` carries subprocess results the caller already ran, so nothing spawns from
  * inside the observation.
  */
-export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(function* (
+export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* (
   options: AuditOptions = {},
   suppliedProbes?: readonly ProbeResult[],
 ) {
@@ -249,9 +249,9 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
  * The filesystem reads stay synchronous on purpose: `audit/io.ts` is the audit's one read
  * chokepoint and the same code serves the synchronous consumer above.
  */
-export const auditLocalCapabilitiesV1Alpha4Effect = Effect.fn("Audit.local")(function* (
+export const auditLocalCapabilitiesV1Alpha4 = Effect.fn("Audit.local")(function* (
   options: AuditOptions = {},
 ) {
-  const probes = yield* runAuditProbesEffect(options);
-  return normalizeAuditReport(yield* auditLocalCapabilitiesEffect(options, probes));
+  const probes = yield* runAuditProbes(options);
+  return normalizeAuditReport(yield* auditLocalCapabilities(options, probes));
 });

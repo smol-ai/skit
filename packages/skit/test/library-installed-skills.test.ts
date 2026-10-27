@@ -3,17 +3,17 @@ import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
-import { projectBindingEffect } from "../src/library/installation/project-binding.js";
-import { removeCollectionEffect } from "../src/library/installation/remove.js";
-import { retireUnboundGlobalInstalledSkillsEffect } from "../src/library/installation/retire-unbound.js";
+import { projectBinding } from "../src/library/installation/project-binding.js";
+import { removeCollection } from "../src/library/installation/remove.js";
+import { retireUnboundGlobalInstalledSkills } from "../src/library/installation/retire-unbound.js";
 import {
-  retainChangedInstalledSkillEffect,
-  retainObservedCollectionEffect,
+  retainChangedInstalledSkill,
+  retainObservedCollection,
 } from "../src/library/observed-import.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
@@ -27,14 +27,11 @@ import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
 import {
-  backUpInstalledSkillEffect,
-  losslessTreeEffect,
+  backUpInstalledSkill,
+  losslessTree,
   installedSkillWorkDirectory,
 } from "../src/projection/backups.js";
-import {
-  inspectOwnershipMarkerEffect,
-  withInstalledSkillMutationEffect,
-} from "../src/projection/mutation.js";
+import { inspectOwnershipMarker, withInstalledSkillMutation } from "../src/projection/mutation.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -63,7 +60,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
     const retained = yield* Effect.scoped(
       withLibraryWriterLock(
         home,
-        retainObservedCollectionEffect({
+        retainObservedCollection({
           machineId,
           source: { type: "local", path: source },
           input: source,
@@ -73,7 +70,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
               name: "review",
               sourcePath: firstSource,
               relativePath: second ? "review" : ".",
-              observedHash: yield* deterministicTreeHashEffect(firstSource),
+              observedHash: yield* deterministicTreeHash(firstSource),
             },
             ...(second
               ? [
@@ -81,7 +78,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
                     name: "second",
                     sourcePath: secondSource,
                     relativePath: "second",
-                    observedHash: yield* deterministicTreeHashEffect(secondSource),
+                    observedHash: yield* deterministicTreeHash(secondSource),
                   },
                 ]
               : []),
@@ -131,7 +128,7 @@ it.effect(
       const target = join(targetRoot, "review");
       yield* fs.makeDirectory(target);
       yield* fs.writeFileString(join(target, "SKILL.md"), "foreign\n");
-      const project = projectBindingEffect({
+      const project = projectBinding({
         target: "agents",
         root: targetRoot,
         variantsPath: join(home, "variants"),
@@ -154,7 +151,7 @@ it.effect(
         Effect.provide(storeLayer),
       );
       assert.strictEqual(installed.projections[0]?.status, "installed");
-      const markerV2 = yield* inspectOwnershipMarkerEffect(target);
+      const markerV2 = yield* inspectOwnershipMarker(target);
       assert.strictEqual(markerV2.kind, "valid");
       if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 4);
 
@@ -170,7 +167,7 @@ it.effect(
           ),
         ).pipe(Effect.provide(storeLayer)),
       );
-      const retire = retireUnboundGlobalInstalledSkillsEffect({
+      const retire = retireUnboundGlobalInstalledSkills({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents", "claude"],
       }).pipe(Effect.provide(storeLayer));
@@ -193,7 +190,7 @@ it.effect(
       });
       const projected = yield* withLibraryWriterLock(
         home,
-        projectBindingEffect({
+        projectBinding({
           target: "agents",
           root: targetRoot,
           variantsPath: join(home, "variants"),
@@ -213,7 +210,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
   Effect.gen(function* () {
     const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
     const target = join(targetRoot, "review");
-    const project = projectBindingEffect({
+    const project = projectBinding({
       target: "agents",
       root: targetRoot,
       variantsPath: join(home, "variants"),
@@ -222,7 +219,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
     const before = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(storeLayer),
     );
-    const hash = yield* deterministicTreeHashEffect(target);
+    const hash = yield* deterministicTreeHash(target);
     const newId = makeSkillVersionId();
     yield* withLibraryWriterLock(
       home,
@@ -244,13 +241,13 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
       ).pipe(Effect.provide(storeLayer)),
     );
     yield* withLibraryWriterLock(home, project);
-    const marker = yield* inspectOwnershipMarkerEffect(target);
+    const marker = yield* inspectOwnershipMarker(target);
     assert.strictEqual(marker.kind, "valid");
     if (marker.kind === "valid") {
       assert.strictEqual(marker.marker.skill_version_id, newId);
       assert.strictEqual(marker.marker.projection_id, before.projections[0]?.projection_id);
     }
-    assert.strictEqual(yield* deterministicTreeHashEffect(target), hash);
+    assert.strictEqual(yield* deterministicTreeHash(target), hash);
     assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "raw Skill bytes\n");
     // User edits still block metadata refresh and materialization.
     const editedId = makeSkillVersionId();
@@ -281,7 +278,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
     );
     yield* fs.writeFileString(join(target, "SKILL.md"), "user edited bytes\n");
     yield* withLibraryWriterLock(home, project);
-    const editedMarker = yield* inspectOwnershipMarkerEffect(target);
+    const editedMarker = yield* inspectOwnershipMarker(target);
     assert.strictEqual(editedMarker.kind, "valid");
     if (editedMarker.kind === "valid")
       assert.strictEqual(editedMarker.marker.skill_version_id, newId);
@@ -300,7 +297,7 @@ it.effect("retires intact former roots when a globally bound Skill moves to a ne
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
+        projectBinding({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -331,7 +328,7 @@ for (const changed of ["bytes", "ownership"] as const)
         const project = (root: string) =>
           withLibraryWriterLock(
             home,
-            projectBindingEffect({
+            projectBinding({
               target: "agents",
               root,
               variantsPath: join(home, "variants"),
@@ -398,7 +395,7 @@ for (const alias of [false, true])
         ) =>
           withLibraryWriterLock(
             home,
-            projectBindingEffect({
+            projectBinding({
               target,
               root,
               scope,
@@ -436,7 +433,7 @@ it.effect(
       const project = (root: string) =>
         withLibraryWriterLock(
           home,
-          projectBindingEffect({
+          projectBinding({
             target: "agents",
             root,
             variantsPath: join(home, "variants"),
@@ -472,7 +469,7 @@ it.effect("treats symlink aliases of the same root as one target without retirin
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
+        projectBinding({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -496,7 +493,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
+        projectBinding({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -554,13 +551,13 @@ it.effect("retires a bound Skill's copies at a target that is no longer active",
     ] as const)
       yield* withLibraryWriterLock(
         home,
-        projectBindingEffect({ target, root, variantsPath: join(home, "variants") }).pipe(
+        projectBinding({ target, root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
     const retired = yield* withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkillsEffect({
+      retireUnboundGlobalInstalledSkills({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
       }).pipe(Effect.provide(storeLayer)),
@@ -588,7 +585,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     ] as const)
       yield* withLibraryWriterLock(
         home,
-        projectBindingEffect({ target, root, variantsPath: join(home, "variants") }).pipe(
+        projectBinding({ target, root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -604,7 +601,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     );
     const retired = yield* withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkillsEffect({
+      retireUnboundGlobalInstalledSkills({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
         inactiveOnly: true,
@@ -622,7 +619,7 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
     const claudeRoot = join(home, "claude", "skills");
     yield* withLibraryWriterLock(
       home,
-      projectBindingEffect({
+      projectBinding({
         target: "claude",
         root: claudeRoot,
         variantsPath: join(home, "variants"),
@@ -632,7 +629,7 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
     yield* fs.writeFileString(edited, "my edit\n");
     const retire = withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkillsEffect({
+      retireUnboundGlobalInstalledSkills({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
         inactiveOnly: true,
@@ -671,19 +668,19 @@ const projectionFixture = (second = false, emptyDirectories: readonly string[] =
         ).pipe(Effect.provide(storeLayer)),
       );
     const project = (
-      options: Omit<Parameters<typeof projectBindingEffect>[0], "target" | "variantsPath"> = {
+      options: Omit<Parameters<typeof projectBinding>[0], "target" | "variantsPath"> = {
         root: targetRoot,
       },
     ) =>
       withLibraryWriterLock(
         home,
-        projectBindingEffect({ target: "agents", variantsPath, ...options }).pipe(
+        projectBinding({ target: "agents", variantsPath, ...options }).pipe(
           Effect.provide(storeLayer),
         ),
       );
     const retire = withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkillsEffect({ variantsPath, activeTargets: ["agents"] }).pipe(
+      retireUnboundGlobalInstalledSkills({ variantsPath, activeTargets: ["agents"] }).pipe(
         Effect.asVoid,
         Effect.provide(storeLayer),
       ),
@@ -691,7 +688,7 @@ const projectionFixture = (second = false, emptyDirectories: readonly string[] =
     const remove = (state: LibraryState) =>
       withLibraryWriterLock(
         home,
-        removeCollectionEffect(state, {
+        removeCollection(state, {
           collectionId: state.collections[0]!.collection_id,
           variantsPath,
         }).pipe(Effect.asVoid, Effect.provide(storeLayer)),
@@ -737,7 +734,7 @@ const divergingOn = (path: string, nth: number) => {
     hash: (candidate) =>
       candidate === path && ++calls === nth
         ? Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`))
-        : deterministicTreeHashEffect(candidate),
+        : deterministicTreeHash(candidate),
   });
 };
 
@@ -751,14 +748,14 @@ it.effect("adopts equal content in place, keeping its excluded entries and empty
     yield* fs.writeFileString(join(target, "SKILL.md"), "raw Skill bytes\n");
     yield* project({
       root: targetRoot,
-      adoption: { path: target, observedHash: yield* deterministicTreeHashEffect(target) },
+      adoption: { path: target, observedHash: yield* deterministicTreeHash(target) },
     });
     assert.strictEqual(
       yield* fs.readFileString(join(target, ".git", "HEAD")),
       "ref: refs/heads/main\n",
     );
     assert.strictEqual((yield* fs.stat(join(target, "notes"))).type, "Directory");
-    assert.strictEqual((yield* inspectOwnershipMarkerEffect(target)).kind, "valid");
+    assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
     assert.strictEqual((yield* load).projections[0]?.status, "installed");
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
@@ -771,7 +768,7 @@ it.effect(
       const { fs, targetRoot, load, edit, project } = yield* projectionFixture();
       const target = join(targetRoot, "review");
       yield* project();
-      const original = yield* deterministicTreeHashEffect(target);
+      const original = yield* deterministicTreeHash(target);
       yield* edit(explicitPolicies);
 
       const failed = yield* project().pipe(
@@ -798,11 +795,11 @@ it.effect(
         backups.map((backup) => backup.disposition),
         ["pending"],
       );
-      assert.strictEqual(yield* deterministicTreeHashEffect(backups[0]!.path), original);
+      assert.strictEqual(yield* deterministicTreeHash(backups[0]!.path), original);
       assert.strictEqual((yield* load).projections[0]?.status, "pending");
 
       yield* project();
-      assert.notStrictEqual(yield* deterministicTreeHashEffect(target), original);
+      assert.notStrictEqual(yield* deterministicTreeHash(target), original);
       assert.strictEqual((yield* load).projections[0]?.status, "installed");
       // The retained original and the recorded declared policy restage the original exactly.
       assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
@@ -909,11 +906,11 @@ for (const original of ["intact", "missing", "corrupt"] as const)
             yield* fs.writeFileString(join(target, "SKILL.md"), bytes);
             const second = yield* withLibraryWriterLock(
               home,
-              retainChangedInstalledSkillEffect({
+              retainChangedInstalledSkill({
                 skillId: first.skill_id,
                 projectionId: first.projection_id,
                 path: target,
-                observedHash: yield* deterministicTreeHashEffect(target),
+                observedHash: yield* deterministicTreeHash(target),
                 retainedAt: "2026-09-17T00:00:00.000Z",
               }).pipe(Effect.provide(storeLayer)),
             );
@@ -997,7 +994,7 @@ it.effect(
       const projection = (yield* load).projections[0];
       assert.ok(projection);
       // A process killed after moving the copy aside, before publishing what it meant to do.
-      yield* backUpInstalledSkillEffect(projection, "replace");
+      yield* backUpInstalledSkill(projection, "replace");
       yield* refresh;
       assert.strictEqual((yield* load).projections[0]?.status, "pending");
       yield* project();
@@ -1021,7 +1018,7 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       assert.ok(projection);
       if (stale === "observed-successor") {
         // Killed after installing a successor but before publishing it; inventory then verifies it.
-        const backup = yield* backUpInstalledSkillEffect(projection, "replace");
+        const backup = yield* backUpInstalledSkill(projection, "replace");
         yield* fs.copy(backup, projection.path);
         yield* refresh;
       } else {
@@ -1073,7 +1070,7 @@ it.effect("a batch that changes nothing on disk or in state saves nothing", () =
     const { counter, layer } = countingStore(storeLayer);
     yield* withLibraryWriterLock(
       home,
-      projectBindingEffect({ target: "agents", variantsPath, root: targetRoot }).pipe(
+      projectBinding({ target: "agents", variantsPath, root: targetRoot }).pipe(
         Effect.provide(layer),
       ),
     );
@@ -1090,11 +1087,11 @@ it.effect("an unchanged batch still saves onto its loaded state before settling 
     yield* project();
     const projection = (yield* load).projections[0]!;
     // Killed after moving the intact copy aside and restoring it, before publishing anything.
-    yield* fs.copy(yield* backUpInstalledSkillEffect(projection, "replace"), projection.path);
+    yield* fs.copy(yield* backUpInstalledSkill(projection, "replace"), projection.path);
     const { counter, layer } = countingStore(storeLayer);
     yield* withLibraryWriterLock(
       home,
-      projectBindingEffect({ target: "agents", variantsPath, root: targetRoot }).pipe(
+      projectBinding({ target: "agents", variantsPath, root: targetRoot }).pipe(
         Effect.provide(layer),
       ),
     );
@@ -1112,12 +1109,12 @@ it.effect("a backup is never settled against a state the Library has moved on fr
     const loaded = yield* load;
     const projection = loaded.projections[0]!;
     // A reproducible copy moved aside, then a writer without the lock changes the Library.
-    yield* backUpInstalledSkillEffect(projection, "replace");
+    yield* backUpInstalledSkill(projection, "replace");
     yield* edit(explicitPolicies);
     const failed = yield* withLibraryWriterLock(
       home,
       LibraryStore.use((store) =>
-        withInstalledSkillMutationEffect(
+        withInstalledSkillMutation(
           loaded,
           {
             rootFor: () => undefined,
@@ -1142,7 +1139,7 @@ it.effect("the last published state stays the Library's across unchanged and cha
     const { targetRoot, storeLayer, variantsPath, load, project } = yield* projectionFixture();
     yield* project();
     const initial = yield* load;
-    const projectAgain = projectBindingEffect({ target: "agents", variantsPath, root: targetRoot });
+    const projectAgain = projectBinding({ target: "agents", variantsPath, root: targetRoot });
     yield* withLibraryWriter(
       Effect.gen(function* () {
         const store = yield* LibraryStore;
@@ -1165,7 +1162,7 @@ it.effect("the last published state stays the Library's across unchanged and cha
         assert.deepStrictEqual(yield* expected, changed);
         yield* current;
         yield* store.save(unbound(yield* expected), yield* expected);
-        yield* retireUnboundGlobalInstalledSkillsEffect({
+        yield* retireUnboundGlobalInstalledSkills({
           variantsPath,
           activeTargets: ["agents"],
         });
@@ -1243,7 +1240,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
         }));
         yield* project();
       } else {
-        const marker = yield* inspectOwnershipMarkerEffect(target);
+        const marker = yield* inspectOwnershipMarker(target);
         assert.strictEqual(marker.kind, "valid");
         if (marker.kind === "valid")
           yield* project({
@@ -1252,7 +1249,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
               [
                 installed.projection_id,
                 {
-                  observedHash: yield* deterministicTreeHashEffect(target),
+                  observedHash: yield* deterministicTreeHash(target),
                   marker: marker.marker,
                 },
               ],
@@ -1264,7 +1261,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
         externalMarker,
       );
       assert.strictEqual((yield* fs.readLink(target).pipe(Effect.result))._tag, "Failure");
-      assert.strictEqual((yield* inspectOwnershipMarkerEffect(target)).kind, "valid");
+      assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
       assert.strictEqual((yield* load).projections[0]?.status, "installed");
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
   );
@@ -1347,7 +1344,7 @@ for (const location of ["beside", "inside"] as const)
             yield* fs.makeDirectory(entry);
             yield* fs.writeFileString(join(entry, "SKILL.md"), "unrelated bytes\n");
           }
-          const before = yield* losslessTreeEffect(outside);
+          const before = yield* losslessTree(outside);
           yield* fs.symlink(
             outside,
             join(location === "beside" ? dirname(targetRoot) : targetRoot, ".skit-backups"),
@@ -1357,7 +1354,7 @@ for (const location of ["beside", "inside"] as const)
           yield* project();
 
           assert.ok(before);
-          assert.strictEqual(yield* losslessTreeEffect(outside), before);
+          assert.strictEqual(yield* losslessTree(outside), before);
         }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
     );
 

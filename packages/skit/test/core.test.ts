@@ -1,23 +1,23 @@
 import { Cause, Deferred, Effect, Fiber, FileSystem, Layer, Result, Stream } from "effect";
 import { it } from "@effect/vitest";
 import { ChildProcessSpawner } from "effect/process";
-import { skitLayer, sourceProcessLayer, validateSkitDirectoryEffect } from "../src/index.js";
+import { skitLayer, sourceProcessLayer, validateSkitDirectory } from "../src/index.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   hashProjectedSkillFiles,
   LinkStat,
   parseSkitConfig,
   parseSkitReadme,
-  inspectNormalizedTreeEffect,
-  walkTreeEffect,
+  inspectNormalizedTree,
+  walkTree,
 } from "../src/index.js";
 import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 
-const validSkitEffect = Effect.gen(function* () {
+const validSkit = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-core-" });
   yield* copySkitFixtureEffect("authored", root);
@@ -27,7 +27,7 @@ const validSkitEffect = Effect.gen(function* () {
 /** Git is exercised through its CLI; the call is synchronous and stays out of the platform seam. */
 const git = (...args: string[]) => Effect.sync(() => void execFileSync("git", args));
 const author = (root: string) =>
-  validateSkitDirectoryEffect(root, "draft", { assessmentContext: "author" });
+  validateSkitDirectory(root, "draft", { assessmentContext: "author" });
 const authorFailure = (root: string) => Effect.flip(author(root));
 
 test("pins depth-first code-unit ordering for Skill Artifact digests", () => {
@@ -49,7 +49,7 @@ test("pins depth-first code-unit ordering for Skill Artifact digests", () => {
 it.effect("validates independent valid and invalid descriptors", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const valid = yield* validSkitEffect;
+    const valid = yield* validSkit;
     expect((yield* author(valid)).diagnostics).not.toContainEqual(
       expect.objectContaining({ severity: "error" }),
     );
@@ -140,7 +140,7 @@ test("omits an empty capability claim from the canonical descriptor", () => {
 it.effect("preserves structured Skill assessment separately from validation diagnostics", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.writeFileString(
       join(root, "skills", "review", "SKILL.md"),
       '---\nname: review\ndescription: Review.\n---\n\nCall spawn("sh").\n',
@@ -178,12 +178,12 @@ it.effect("tree hashes independently reflect bytes and executable mode", () =>
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-hash-" });
     const file = join(root, "tool");
     yield* fs.writeFile(file, Uint8Array.from([0, 1, 255]));
-    const original = yield* deterministicTreeHashEffect(root);
+    const original = yield* deterministicTreeHash(root);
     yield* fs.writeFile(file, Uint8Array.from([0, 1, 254]));
-    expect(yield* deterministicTreeHashEffect(root)).not.toBe(original);
+    expect(yield* deterministicTreeHash(root)).not.toBe(original);
     yield* fs.writeFile(file, Uint8Array.from([0, 1, 255]));
     yield* fs.chmod(file, 0o755);
-    expect(yield* deterministicTreeHashEffect(root)).not.toBe(original);
+    expect(yield* deterministicTreeHash(root)).not.toBe(original);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -193,15 +193,15 @@ it.effect("verbatim walking preserves filename normalization", () =>
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-verbatim-unicode-" });
     const decomposed = `cafe\u0301.md`;
     yield* fs.writeFileString(join(root, decomposed), "same\n");
-    expect((yield* walkTreeEffect(root, "verbatim"))[0]?.path).toBe(decomposed);
-    expect((yield* walkTreeEffect(root, "normalized"))[0]?.path).toBe(decomposed.normalize("NFC"));
+    expect((yield* walkTree(root, "verbatim"))[0]?.path).toBe(decomposed);
+    expect((yield* walkTree(root, "normalized"))[0]?.path).toBe(decomposed.normalize("NFC"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("normalized SKIT content excludes repository author-home metadata", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.makeDirectory(join(root, "fixtures"));
     yield* fs.writeFileString(
       join(root, "skit.remote.json"),
@@ -212,12 +212,12 @@ it.effect("normalized SKIT content excludes repository author-home metadata", ()
     yield* fs.writeFileString(join(root, ".skit", "workspace.json"), '{"device":"local"}\n');
     yield* fs.makeDirectory(join(root, "fixtures", ".skit"));
     yield* fs.writeFileString(join(root, "fixtures", ".skit", "nested.txt"), "artifact content\n");
-    const normalizedPaths = (yield* walkTreeEffect(root, "normalized")).map((entry) => entry.path);
+    const normalizedPaths = (yield* walkTree(root, "normalized")).map((entry) => entry.path);
     expect(normalizedPaths).not.toContain("skit.remote.json");
     expect(normalizedPaths).not.toContain(".skit/workspace.json");
     expect(normalizedPaths).toContain("fixtures/skit.remote.json");
     expect(normalizedPaths).toContain("fixtures/.skit/nested.txt");
-    expect((yield* walkTreeEffect(root, "verbatim")).map((entry) => entry.path)).toContain(
+    expect((yield* walkTree(root, "verbatim")).map((entry) => entry.path)).toContain(
       "skit.remote.json",
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -226,7 +226,7 @@ it.effect("normalized SKIT content excludes repository author-home metadata", ()
 it.effect("Author content follows Git's effective ignore decision", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* git("init", "--quiet", root);
     const globalExcludes = join(root, ".git", "global-excludes");
     yield* fs.writeFileString(
@@ -279,7 +279,7 @@ it.effect("Author content follows Git's effective ignore decision", () =>
 it.effect("Author content remains available outside a Git worktree", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.writeFileString(join(root, ".gitignore"), "local.txt\n");
     yield* fs.writeFileString(join(root, "local.txt"), "included without Git\n");
 
@@ -292,7 +292,7 @@ it.effect("Author content remains available outside a Git worktree", () =>
 it.effect("normalized tree inspection reports ignored and control exclusions", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* git("init", "--quiet", root);
     yield* fs.writeFileString(join(root, ".gitignore"), "ignored/\n");
     yield* fs.makeDirectory(join(root, "ignored", "nested"), { recursive: true });
@@ -300,7 +300,7 @@ it.effect("normalized tree inspection reports ignored and control exclusions", (
     yield* fs.writeFileString(join(root, "ignored", "nested", "asset.txt"), "asset\n");
     yield* fs.writeFileString(join(root, ".DS_Store"), "control\n");
 
-    const inspection = yield* inspectNormalizedTreeEffect(root, { respectGitIgnore: true });
+    const inspection = yield* inspectNormalizedTree(root, { respectGitIgnore: true });
 
     expect(inspection.entries.map((entry) => entry.path)).not.toEqual(
       expect.arrayContaining(["ignored/secret.txt", ".DS_Store"]),
@@ -322,7 +322,7 @@ it.effect("normalized tree inspection reports ignored and control exclusions", (
       ]),
     );
     const links = yield* LinkStat;
-    yield* walkTreeEffect(root, "normalized", { respectGitIgnore: true }).pipe(
+    yield* walkTree(root, "normalized", { respectGitIgnore: true }).pipe(
       Effect.provideService(LinkStat, {
         ...links,
         lstat: (path) =>
@@ -337,10 +337,10 @@ it.effect("normalized tree inspection reports ignored and control exclusions", (
 it.effect("Author content fails closed when a detected Git worktree cannot be queried", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.makeDirectory(join(root, ".git"));
 
-    const result = yield* walkTreeEffect(root, "normalized", {
+    const result = yield* walkTree(root, "normalized", {
       respectGitIgnore: true,
     }).pipe(Effect.result);
     expect(result).toMatchObject({ failure: { _tag: "TreeError" } });
@@ -372,7 +372,7 @@ it.effect("Author content rejects a SKIT root ignored by an enclosing worktree",
 it.effect("Author content rejects embedded Git repositories explicitly", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* git("init", "--quiet", root);
     const embedded = join(root, "vendored");
     yield* git("init", "--quiet", embedded);
@@ -407,7 +407,7 @@ it.effect("Author content rejects registered Git submodules explicitly", () =>
       "-m",
       "fixture",
     );
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* git("init", "--quiet", root);
     yield* git(
       "-C",
@@ -432,7 +432,7 @@ it.effect("Author content rejects registered Git submodules explicitly", () =>
 it.effect("Author content rejects a worktree whose files are all ignored", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* git("init", "--quiet", root);
     yield* fs.writeFileString(join(root, ".gitignore"), "*\n");
 
@@ -476,7 +476,7 @@ it.effect.each([
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-parser-" });
     yield* fs.writeFileString(join(root, file), body);
     const failure = yield* Effect.flip(
-      validateSkitDirectoryEffect(root, "draft", { assessmentContext: "author" }),
+      validateSkitDirectory(root, "draft", { assessmentContext: "author" }),
     );
     expect(failure).toMatchObject(expected);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -487,7 +487,7 @@ it.effect.each(["author", "publish"] as const)(
   (assessmentContext) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const root = yield* validSkitEffect;
+      const root = yield* validSkit;
       yield* fs.makeDirectory(join(root, ".git"));
       const ready = yield* Deferred.make<void>();
       let finalized = false;
@@ -513,7 +513,7 @@ it.effect.each(["author", "publish"] as const)(
               };
             }),
         };
-        return yield* validateSkitDirectoryEffect(root, "draft", { assessmentContext }).pipe(
+        return yield* validateSkitDirectory(root, "draft", { assessmentContext }).pipe(
           Effect.provide(
             Layer.fresh(
               sourceProcessLayer.pipe(
@@ -536,7 +536,7 @@ it.effect.each(["author", "publish"] as const)(
 it.effect("malformed invocation metadata is a named validation failure", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.writeFileString(
       join(root, "skit.json"),
       JSON.stringify({
@@ -546,9 +546,7 @@ it.effect("malformed invocation metadata is a named validation failure", () =>
     );
     yield* fs.writeFileString(join(root, "skills/review/SKILL.md"), "---\nname: [\n---\n");
     expect(
-      yield* Effect.flip(
-        validateSkitDirectoryEffect(root, "draft", { assessmentContext: "author" }),
-      ),
+      yield* Effect.flip(validateSkitDirectory(root, "draft", { assessmentContext: "author" })),
     ).toMatchObject({ _tag: "HarnessMetadataInvalid" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -556,7 +554,7 @@ it.effect("malformed invocation metadata is a named validation failure", () =>
 it.effect("projected content collisions enter the validation error channel", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.writeFileString(
       join(root, "skit.json"),
       JSON.stringify({
@@ -571,9 +569,7 @@ it.effect("projected content collisions enter the validation error channel", () 
       }),
     );
     expect(
-      yield* Effect.flip(
-        validateSkitDirectoryEffect(root, "draft", { assessmentContext: "author" }),
-      ),
+      yield* Effect.flip(validateSkitDirectory(root, "draft", { assessmentContext: "author" })),
     ).toMatchObject({ _tag: "SharedTargetCollision" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -581,7 +577,7 @@ it.effect("projected content collisions enter the validation error channel", () 
 it.effect("unexpected validation adapter exceptions remain defects", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* validSkitEffect;
+    const root = yield* validSkit;
     yield* fs.writeFileString(
       join(root, "skit.json"),
       JSON.stringify({

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { LibraryBusy } from "../../failures.js";
-import { writeRawAtomicEffect } from "../../platform/atomic-write.js";
+import { writeRawAtomic } from "../../platform/atomic-write.js";
 
 /**
  * Authority over a held writer lock: the owner's, or a lease of it. Forked fibers inherit it, so
@@ -72,9 +72,7 @@ export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(functio
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
     // Write complete ownership atomically, so a contender never reads a half-written owner.
     const attempt = yield* Effect.result(
-      writeRawAtomicEffect(path, ownership, true).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-      ),
+      writeRawAtomic(path, ownership, true).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
     );
     if (attempt._tag === "Success") return;
     if (attempt.failure.reason._tag !== "AlreadyExists") return yield* attempt.failure;

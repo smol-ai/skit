@@ -4,11 +4,11 @@ import { it } from "@effect/vitest";
 import { expect, test } from "vitest";
 import { Effect, FileSystem } from "effect";
 import {
-  artifactUsesSymlinkEffect,
-  groupInstallDestinationCandidatesEffect,
-  observationPathIdentityEffect,
+  artifactUsesSymlink,
+  groupInstallDestinationCandidates,
+  observationPathIdentity,
   pathIsWithin,
-  installDestinationPathIdentityEffect,
+  installDestinationPathIdentity,
 } from "../src/platform/path-identity.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -35,12 +35,12 @@ it.effect("one observation pass identifies symlink aliases as one physical path"
     yield* makeDirectory(target);
     yield* symlink(target, alias);
 
-    const direct = yield* observationPathIdentityEffect(target);
-    const linked = yield* observationPathIdentityEffect(alias);
+    const direct = yield* observationPathIdentity(target);
+    const linked = yield* observationPathIdentity(alias);
     expect(linked.canonicalPath).toBe(direct.canonicalPath);
     expect(linked.comparisonKey).toBe(direct.comparisonKey);
-    expect(yield* artifactUsesSymlinkEffect(join(alias, "SKILL.md"))).toBe(true);
-    expect(yield* artifactUsesSymlinkEffect(join(target, "SKILL.md"))).toBe(false);
+    expect(yield* artifactUsesSymlink(join(alias, "SKILL.md"))).toBe(true);
+    expect(yield* artifactUsesSymlink(join(target, "SKILL.md"))).toBe(false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -53,8 +53,8 @@ it.effect("symlink provenance detects an artifact symlink inside a real Skill di
     yield* makeDirectory(skill);
     yield* symlink(source, artifact);
 
-    expect(yield* artifactUsesSymlinkEffect(artifact)).toBe(true);
-    expect(yield* artifactUsesSymlinkEffect(source)).toBe(false);
+    expect(yield* artifactUsesSymlink(artifact)).toBe(true);
+    expect(yield* artifactUsesSymlink(source)).toBe(false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -65,15 +65,13 @@ it.effect("canonical paths remain openable for decomposed on-disk names", () =>
     const composed = join(root, "Caf\u00e9");
     yield* makeDirectory(decomposed);
 
-    const observed = yield* observationPathIdentityEffect(decomposed);
+    const observed = yield* observationPathIdentity(decomposed);
     expect((yield* stat(observed.canonicalPath)).type).toBe("Directory");
     expect(observed.comparisonKey).toMatch(/^device:/);
     if (yield* exists(composed))
-      expect((yield* observationPathIdentityEffect(composed)).comparisonKey).toBe(
-        observed.comparisonKey,
-      );
+      expect((yield* observationPathIdentity(composed)).comparisonKey).toBe(observed.comparisonKey);
     else
-      expect((yield* observationPathIdentityEffect(composed)).comparisonKey).not.toBe(
+      expect((yield* observationPathIdentity(composed)).comparisonKey).not.toBe(
         observed.comparisonKey,
       );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -85,11 +83,9 @@ it.effect(
     Effect.gen(function* () {
       const decomposed = join(tmpdir(), "Missing-Cafe\u0301");
       const composed = join(tmpdir(), "Missing-Caf\u00e9");
-      expect((yield* observationPathIdentityEffect(decomposed)).canonicalPath).toBe(
-        resolve(decomposed),
-      );
-      expect((yield* observationPathIdentityEffect(decomposed)).comparisonKey).toBe(
-        (yield* observationPathIdentityEffect(composed)).comparisonKey,
+      expect((yield* observationPathIdentity(decomposed)).canonicalPath).toBe(resolve(decomposed));
+      expect((yield* observationPathIdentity(decomposed)).comparisonKey).toBe(
+        (yield* observationPathIdentity(composed)).comparisonKey,
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -99,7 +95,7 @@ it.effect("a lone unresolved target has declared identity and may materialize", 
     const root = yield* temporaryDirectory("skit-target-unresolved-");
     const target = join(root, "future", "skills");
 
-    const [group] = yield* groupInstallDestinationCandidatesEffect([target]);
+    const [group] = yield* groupInstallDestinationCandidates([target]);
     expect(group?.ambiguous).toBe(false);
     expect(group?.candidates[0]).toMatchObject({ declaredPath: resolve(target) });
     expect(group?.candidates[0]?.canonicalPath).toBeUndefined();
@@ -112,7 +108,7 @@ it.effect("unresolved Unicode aliases form one ambiguity set", () =>
     const decomposed = join(root, "Cafe\u0301", "skills");
     const composed = join(root, "Caf\u00e9", "skills");
 
-    const groups = yield* groupInstallDestinationCandidatesEffect([decomposed, composed]);
+    const groups = yield* groupInstallDestinationCandidates([decomposed, composed]);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.ambiguous).toBe(true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -130,7 +126,7 @@ it.effect("unresolved case aliases follow the containing filesystem", () =>
     );
     const caseInsensitive = yield* exists(toggledRoot);
 
-    const groups = yield* groupInstallDestinationCandidatesEffect([upper, lower]);
+    const groups = yield* groupInstallDestinationCandidates([upper, lower]);
     expect(groups).toHaveLength(caseInsensitive ? 1 : 2);
     if (caseInsensitive) expect(groups[0]?.ambiguous).toBe(true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -144,8 +140,8 @@ it.effect("resolved target aliases retain declarations and share physical identi
     yield* makeDirectory(target);
     yield* symlink(target, alias);
 
-    const direct = yield* installDestinationPathIdentityEffect(target);
-    const linked = yield* installDestinationPathIdentityEffect(alias);
+    const direct = yield* installDestinationPathIdentity(target);
+    const linked = yield* installDestinationPathIdentity(alias);
     expect(linked.declaredPath).toBe(resolve(alias));
     expect(linked.canonicalPath).toBe(direct.canonicalPath);
     expect(linked.comparisonKey).toBe(direct.comparisonKey);

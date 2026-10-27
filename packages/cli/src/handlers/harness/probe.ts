@@ -4,7 +4,7 @@ import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
-import { probeRequestedHarnessesEffect } from "../../harness/probe.js";
+import { probeRequestedHarnesses } from "../../harness/probe.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
@@ -17,7 +17,7 @@ export const harnessProbeCliCommand = Command.make(
     handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const probes = yield* probeRequestedHarnessesEffect(Option.getOrUndefined(harness));
+        const probes = yield* probeRequestedHarnesses(Option.getOrUndefined(harness));
         const failed = probes.some((probe) => probe.status === "failed");
         yield* renderer.result(
           result("experimentalHarnessProbe", { probes }, failed ? 12 : undefined),

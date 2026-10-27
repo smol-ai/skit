@@ -1,7 +1,7 @@
 import { Clock, Effect } from "effect";
 import { join } from "node:path";
-import { validateSkitDirectoryEffect } from "../../artifact/skit.js";
-import { originalTreeHashEffect, retainedTreePath } from "../retention/retain-tree.js";
+import { validateSkitDirectory } from "../../artifact/skit.js";
+import { originalTreeHash, retainedTreePath } from "../retention/retain-tree.js";
 import { versionBacking, type Skill, type SkillVersion } from "../library-contracts.js";
 import type { LibraryState } from "../library-state.js";
 
@@ -9,7 +9,7 @@ import type { LibraryState } from "../library-state.js";
  * What one retained Skill Version installs from, read from its verified retained original. An
  * `invalid` source cannot be installed; a missing original fails as the filesystem reports it.
  */
-export const installedSkillSourceEffect = Effect.fn("Library.installedSkillSource")(function* (
+export const installedSkillSource = Effect.fn("Library.installedSkillSource")(function* (
   state: LibraryState,
   originalsPath: string,
   skill: Skill,
@@ -21,7 +21,7 @@ export const installedSkillSourceEffect = Effect.fn("Library.installedSkillSourc
   const root = retainedTreePath(originalsPath, backing.copy.digest);
   const authored = version.materialization_profile === "declared-skit-skill/v1";
   const validated = authored
-    ? yield* validateSkitDirectoryEffect(root, "retained", {
+    ? yield* validateSkitDirectory(root, "retained", {
         assessmentContext: "project",
         acceptances: state.assessmentAcceptances ?? [],
         evaluatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -36,7 +36,7 @@ export const installedSkillSourceEffect = Effect.fn("Library.installedSkillSourc
     return { kind: "invalid" as const, detail: `authored descriptor lacks ${skill.name}` };
   const retainedPath =
     backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-  if ((yield* originalTreeHashEffect(retainedPath)) !== version.source_digest)
+  if ((yield* originalTreeHash(retainedPath)) !== version.source_digest)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} changed` };
   return {
     kind: "source" as const,

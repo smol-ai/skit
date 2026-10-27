@@ -1,5 +1,5 @@
 import { Data, Effect, Schema } from "effect";
-import { retainObservedCollectionEffect, LibraryStore, sourceLocator } from "@smolai/skit-core";
+import { retainObservedCollection, LibraryStore, sourceLocator } from "@smolai/skit-core";
 import { type SetupOptions } from "./setup.js";
 import { SetupKnownSourceSelection, type SetupResult } from "./setup-contract.js";
 import { prepareSkillsShImportEvidence } from "./skills-sh-lock-source.js";
@@ -110,7 +110,7 @@ export const applySetupObservedCollections = Effect.fn("Setup.applyObservedColle
     );
     retained.push(
       yield* Effect.scoped(
-        retainObservedCollectionEffect({
+        retainObservedCollection({
           input: sourceLocator(evidence.source),
           source: evidence.source,
           retainedAt: observedAt,

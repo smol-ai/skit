@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
-import { withInstalledSkillMutationEffect } from "../../projection/mutation.js";
+import { withInstalledSkillMutation } from "../../projection/mutation.js";
 import { removeBindingEntities } from "../binding-intent.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
@@ -43,7 +43,7 @@ export class SkillRemovalRequiresCollection
  * `planned` records them. The caller holds the writer lock; a Library that moved on since it was
  * planned is refused before any installed skill is touched, so nothing outside the plan is removed.
  */
-export const removeCollectionEffect = Effect.fn("Library.removeCollection")(function* (
+export const removeCollection = Effect.fn("Library.removeCollection")(function* (
   planned: LibraryState,
   options: { collectionId: string; variantsPath: string },
 ) {
@@ -60,7 +60,7 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
       .filter((skill) => skill.collection_id === options.collectionId)
       .map((skill) => skill.skill_id),
   );
-  const result = yield* withInstalledSkillMutationEffect(
+  const result = yield* withInstalledSkillMutation(
     planned,
     {
       rootFor: () => undefined,

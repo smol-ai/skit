@@ -6,15 +6,15 @@ import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
 import {
-  awaitDeviceApprovalEffect,
+  awaitDeviceApproval,
   clearPendingLogin,
   loginEffect,
   type PendingDeviceLogin,
   readPendingLogin,
-  resolveLoginTargetEffect,
-  reuseLoginEffect,
+  resolveLoginTarget,
+  reuseLogin,
   savePendingLogin,
-  startDeviceLoginEffect,
+  startDeviceLogin,
 } from "../../registry/auth.js";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { SelectionCancelled } from "../../presentation/interaction-failures.js";
@@ -75,10 +75,10 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       return yield* new ScopesInvalid({
         allowed: ["library:sync", "authoring:write", "publication:write"],
       });
-    const origin = yield* resolveLoginTargetEffect(options.registry, options.home);
+    const origin = yield* resolveLoginTarget(options.registry, options.home);
     if (!options.relogin) {
       const existing = yield* Effect.scoped(
-        reuseLoginEffect({
+        reuseLogin({
           origin,
           scopes,
           alias: options.alias,
@@ -122,12 +122,9 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       renderer.withStatus(
         "Signing in",
         Effect.gen(function* () {
-          const started =
-            pending ?? (yield* Effect.scoped(startDeviceLoginEffect({ origin, scopes })));
+          const started = pending ?? (yield* Effect.scoped(startDeviceLogin({ origin, scopes })));
           yield* announce(started);
-          const approvedSessionToken = yield* Effect.scoped(
-            awaitDeviceApprovalEffect(started, scopes),
-          );
+          const approvedSessionToken = yield* Effect.scoped(awaitDeviceApproval(started, scopes));
           // Redemption consumes the device code. Later credential failures must start a fresh
           // login instead of retrying a code the Registry can no longer accept.
           yield* clearPendingLogin(options.home);
@@ -156,7 +153,7 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       );
     // An agent's user sees its command's output only once the command ends, so start the login,
     // hand back the code, and leave waiting for approval to the next run.
-    const started = yield* startDeviceLoginEffect({ origin, scopes }).pipe(
+    const started = yield* startDeviceLogin({ origin, scopes }).pipe(
       Effect.catchTag("DeviceLoginUnavailable", () => new InteractiveLoginUnavailable()),
     );
     yield* savePendingLogin(started, options.home);

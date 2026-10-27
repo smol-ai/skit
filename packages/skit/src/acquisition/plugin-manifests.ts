@@ -38,7 +38,7 @@ const within = (root: string, path: string) => {
 };
 
 /** All declaration reads and selected directories stay within the acquired Source. */
-export const containedPluginPathEffect = Effect.fn("Source.containedPluginPath")(function* (
+export const containedPluginPath = Effect.fn("Source.containedPluginPath")(function* (
   sourceRoot: string,
   base: string,
   path: string,
@@ -69,12 +69,12 @@ export const containedPluginPathEffect = Effect.fn("Source.containedPluginPath")
   return selected;
 });
 
-const readManifestEffect = Effect.fn("Source.readPluginManifest")(function* (
+const readManifest = Effect.fn("Source.readPluginManifest")(function* (
   sourceRoot: string,
   path: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const selected = yield* containedPluginPathEffect(sourceRoot, dirname(path), basename(path));
+  const selected = yield* containedPluginPath(sourceRoot, dirname(path), basename(path));
   const info = yield* fs.stat(selected);
   if (info.type !== "File" || Number(info.size) > 1_048_576)
     return yield* new PluginManifestInvalid({
@@ -96,7 +96,7 @@ function skillPaths(value: unknown, path: string) {
   );
 }
 
-const scanSkillDirectoryEffect = Effect.fn("Source.scanPluginSkills")(function* (
+const scanSkillDirectory = Effect.fn("Source.scanPluginSkills")(function* (
   sourceRoot: string,
   root: string,
   path: string,
@@ -109,14 +109,14 @@ const scanSkillDirectoryEffect = Effect.fn("Source.scanPluginSkills")(function* 
       detail: "Skill path escapes the plugin root",
       reason: "escape",
     });
-  const selected = yield* containedPluginPathEffect(sourceRoot, root, path);
+  const selected = yield* containedPluginPath(sourceRoot, root, path);
   if ((yield* fs.stat(selected)).type !== "Directory")
     return yield* new PluginManifestInvalid({
       path: selected,
       detail: "Expected a Skill directory",
     });
   if (yield* fs.exists(join(selected, "SKILL.md"))) {
-    yield* containedPluginPathEffect(sourceRoot, selected, "SKILL.md");
+    yield* containedPluginPath(sourceRoot, selected, "SKILL.md");
     return [selected];
   }
   const skills: string[] = [];
@@ -125,15 +125,15 @@ const scanSkillDirectoryEffect = Effect.fn("Source.scanPluginSkills")(function* 
     const info = yield* probe.identity.lstat(child);
     if (info.type !== "Directory" && info.type !== "SymbolicLink") continue;
     if (!(yield* fs.exists(join(child, "SKILL.md")))) continue;
-    yield* containedPluginPathEffect(sourceRoot, selected, name);
-    yield* containedPluginPathEffect(sourceRoot, child, "SKILL.md");
+    yield* containedPluginPath(sourceRoot, selected, name);
+    yield* containedPluginPath(sourceRoot, child, "SKILL.md");
     skills.push(child);
   }
   return skills;
 });
 
 /** Decode declarations separately from SKIT's choice of Collection members. */
-export const readPluginUnitsEffect = Effect.fn("Source.readPluginUnits")(function* (
+export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
   sourceRoot: string,
   directories: readonly string[],
   containmentRoot = sourceRoot,
@@ -182,7 +182,7 @@ export const readPluginUnitsEffect = Effect.fn("Source.readPluginUnits")(functio
     // Portable package identity and components are canonical; the Codex overlay
     // supplies settings, not an additional set of Skill directories.
     if (provider === "codex" && (yield* fs.exists(join(root, "plugin.json")))) {
-      const portable = yield* readManifestEffect(containmentRoot, join(root, "plugin.json"));
+      const portable = yield* readManifest(containmentRoot, join(root, "plugin.json"));
       if (portable.$schema === "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json") {
         manifestPath = join(root, "plugin.json");
         manifest = portable;
@@ -190,7 +190,7 @@ export const readPluginUnitsEffect = Effect.fn("Source.readPluginUnits")(functio
       }
     }
     if (manifest === undefined && (yield* fs.exists(manifestPath)))
-      manifest = yield* readManifestEffect(containmentRoot, manifestPath);
+      manifest = yield* readManifest(containmentRoot, manifestPath);
     if (
       provider === "portable" &&
       manifest?.$schema !== "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
@@ -234,7 +234,7 @@ export const readPluginUnitsEffect = Effect.fn("Source.readPluginUnits")(functio
       paths.push(".");
     const members = new Set<string>();
     for (const path of new Set(paths))
-      for (const member of yield* scanSkillDirectoryEffect(containmentRoot, root, path))
+      for (const member of yield* scanSkillDirectory(containmentRoot, root, path))
         members.add(member);
     units.push({ name, provider, root, skills: [...members].sort() });
     registered.add(`${provider}:${root}`);
@@ -251,7 +251,7 @@ export const readPluginUnitsEffect = Effect.fn("Source.readPluginUnits")(functio
       if (!(yield* fs.exists(path))) continue;
       const marketplace = yield* attempt(
         Effect.gen(function* () {
-          const marketplace = yield* readManifestEffect(containmentRoot, path);
+          const marketplace = yield* readManifest(containmentRoot, path);
           if (!Array.isArray(marketplace.plugins))
             return yield* new PluginManifestInvalid({ path, detail: "plugins must be an array" });
           if (marketplace.plugins.length > 5_000)
@@ -302,7 +302,7 @@ export const readPluginUnitsEffect = Effect.fn("Source.readPluginUnits")(functio
             }
             // Remote plugin dependencies are not part of this acquired Source.
             if (local === undefined) return;
-            const root = yield* containedPluginPathEffect(containmentRoot, directory, local);
+            const root = yield* containedPluginPath(containmentRoot, directory, local);
             yield* addUnit(root, provider, entry, directory);
           }),
           directory === sourceRoot,

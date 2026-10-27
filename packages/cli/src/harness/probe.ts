@@ -3,7 +3,7 @@ import { captureBounded } from "./probe-process.js";
 import { delimiter, join } from "node:path";
 // Probing is one Effect workflow. The PATH search and the `--version` subprocess are real I/O and
 // belong to the caller's fiber, so an interrupted probe kills the child. The TUI composes
-// `probeHarnessEffect` on its own host runtime; the command table, install-method
+// `probeHarness` on its own host runtime; the command table, install-method
 // classification, version parsing and result shape are shared and pure.
 import { HarnessName, LinkStat, harnessDrivers, harnessFromAlias } from "@smolai/skit-core";
 import { Result } from "effect";
@@ -80,7 +80,7 @@ const executableOnPath = Effect.fn("Probe.executableOnPath")(function* (
 });
 
 /** One Harness probe, owned by the caller's fiber: an interrupt kills the child. */
-export const probeHarnessEffect = Effect.fn("Probe.harness")(function* (
+export const probeHarness = Effect.fn("Probe.harness")(function* (
   harnessId: HarnessName,
   options: HarnessProbeOptions = {},
 ) {
@@ -112,21 +112,21 @@ export const probeHarnessEffect = Effect.fn("Probe.harness")(function* (
   });
 });
 
-export const probeHarnessesEffect = Effect.fn("Probe.harnesses")(function* (
+export const probeHarnesses = Effect.fn("Probe.harnesses")(function* (
   harnessIds: readonly HarnessName[] = HarnessName.literals,
   options: HarnessProbeOptions = {},
 ) {
   const results: HarnessProbeResult[] = [];
-  for (const harness of harnessIds) results.push(yield* probeHarnessEffect(harness, options));
+  for (const harness of harnessIds) results.push(yield* probeHarness(harness, options));
   return results;
 });
 
 /** Resolve a user-facing Harness alias, then run the shared probe workflow. */
-export const probeRequestedHarnessesEffect = Effect.fn("Probe.requestedHarnesses")(function* (
+export const probeRequestedHarnesses = Effect.fn("Probe.requestedHarnesses")(function* (
   subject?: string,
   options: HarnessProbeOptions = {},
 ) {
   const requested = subject ? harnessFromAlias(subject) : undefined;
   if (subject && !requested) return yield* new UnknownHarness({ value: subject });
-  return yield* probeHarnessesEffect(requested ? [requested] : undefined, options);
+  return yield* probeHarnesses(requested ? [requested] : undefined, options);
 });

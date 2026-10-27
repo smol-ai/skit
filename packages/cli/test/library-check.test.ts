@@ -2,8 +2,8 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
-import { checkSubjectsEffect } from "../src/workflows/library/check.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { checkSubjects } from "../src/workflows/library/check.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
 it.effect("checks retained custody without treating an observed local copy as an upstream", () =>
@@ -15,7 +15,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const retained = yield* retainLibrarySourceEffect(source).pipe(
+    const retained = yield* retainLibrarySource(source).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
@@ -24,7 +24,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     assert.strictEqual(loaded.present, true);
     if (!loaded.present) return;
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkSubjectsEffect(loaded.state, retained.collection_id, (collection) =>
+    const current = yield* checkSubjects(loaded.state, retained.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
       Effect.provideService(LibraryStore, {
@@ -44,7 +44,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
     const path = retainedTreePath(join(home, "originals"), loaded.state.retained_copies[0]!.digest);
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkSubjectsEffect(loaded.state, retained.collection_id).pipe(
+    const changed = yield* checkSubjects(loaded.state, retained.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
@@ -59,10 +59,7 @@ it.effect("checks retained custody without treating an observed local copy as an
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutObservedCopy = yield* checkSubjectsEffect(
-      loaded.state,
-      retained.collection_id,
-    ).pipe(
+    const withoutObservedCopy = yield* checkSubjects(loaded.state, retained.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),

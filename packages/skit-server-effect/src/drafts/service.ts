@@ -18,7 +18,7 @@ import {
   DatabaseError,
   databaseError,
   type DatabaseSqlClient,
-  r2BodyEffect,
+  r2Body,
 } from "../platform/cloudflare.js";
 import { IntegrityError } from "../integrity/contracts.js";
 import { validateArtifactBundle } from "../integrity/validate.js";
@@ -260,7 +260,7 @@ export const layer = Layer.effect(
           const object = yield* blobs("read draft blob", (bucket) => bucket.get(file.object_key));
           if (object === null) return yield* new DraftBlobMissing({ path: file.path });
           const content = new Uint8Array(
-            yield* r2BodyEffect("read draft blob body", () => object.arrayBuffer()),
+            yield* r2Body("read draft blob body", () => object.arrayBuffer()),
           );
           return {
             path: file.path,

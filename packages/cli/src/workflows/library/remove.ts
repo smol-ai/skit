@@ -1,8 +1,8 @@
-import { markAuthorWorkspaceRemovedEffect } from "../../library/author-workspace.js";
+import { markAuthorWorkspaceRemoved } from "../../library/author-workspace.js";
 import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import {
   bindingSkillIds,
-  removeCollectionEffect,
+  removeCollection,
   SkillRemovalRequiresCollection,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -14,7 +14,7 @@ export interface RemoveOptions {
   readonly dryRun: boolean;
 }
 
-export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
+export const planRemove = Effect.fn("Library.planRemove")(function* (
   state: LibraryState,
   query: string,
 ) {
@@ -56,13 +56,13 @@ export const planRemoveEffect = Effect.fn("Library.planRemove")(function* (
   };
 });
 
-export const executeRemoveEffect = Effect.fn("Library.executeRemove")(
+export const executeRemove = Effect.fn("Library.executeRemove")(
   function* (state: LibraryState, options: RemoveOptions) {
-    const plan = yield* planRemoveEffect(state, options.query);
+    const plan = yield* planRemove(state, options.query);
     if (options.dryRun) return { kind: "plan" as const, value: plan };
     // Planning only admits a Skill that is its Collection's only Skill, so removal is of a Collection.
     // It removes exactly what was planned, and is refused if the Library has since moved on.
-    const removed = yield* removeCollectionEffect(state, {
+    const removed = yield* removeCollection(state, {
       collectionId:
         plan.subject_kind === "collection"
           ? plan.subject_id
@@ -71,7 +71,7 @@ export const executeRemoveEffect = Effect.fn("Library.executeRemove")(
       variantsPath: (yield* LibraryStore).variantsPath,
     });
     if (plan.subject_kind === "collection")
-      yield* markAuthorWorkspaceRemovedEffect(state, plan.subject_id);
+      yield* markAuthorWorkspaceRemoved(state, plan.subject_id);
     return { kind: "removed" as const, value: { ...plan, retired: removed.retired } };
   },
   (effect, _state, options) => (options.dryRun ? effect : withLibraryWriter(effect)),

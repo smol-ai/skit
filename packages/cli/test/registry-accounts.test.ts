@@ -6,7 +6,7 @@ import {
   type AuthConfig,
   officialRegistryOrigin,
 } from "../src/registry/accounts.js";
-import { resolveAuthEffect, reuseLoginEffect } from "../src/registry/auth.js";
+import { resolveAuth, reuseLogin } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -124,7 +124,7 @@ it.effect("resolves selection and credential from a single file read", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     let reads = 0;
-    const auth = yield* resolveAuthEffect("/accounts", "work").pipe(
+    const auth = yield* resolveAuth("/accounts", "work").pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         readFileString: () =>
@@ -146,7 +146,7 @@ it.effect("login reuse checks the credential and alias from the same file snapsh
     const fs = yield* FileSystem.FileSystem;
     let reads = 0;
     const result = yield* Effect.scoped(
-      reuseLoginEffect({
+      reuseLogin({
         origin: one,
         alias: "work",
         scopes: ["library:sync"],

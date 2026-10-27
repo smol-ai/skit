@@ -37,7 +37,7 @@ export const installedSkillWorkDirectoryEffect = Effect.fn("Projection.workDirec
  * Move an owned copy aside instead of deleting it. It stays `pending` until the Library state that
  * no longer records it is saved, so its absence is never read as the user's deletion.
  */
-export const backUpInstalledSkillEffect = Effect.fn("Projection.backUp")(function* (
+export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
   projection: Pick<InstalledSkill, "root" | "path" | "projection_id">,
   action: "replace" | "retire",
 ) {
@@ -114,17 +114,17 @@ const installedSkillBackups = Effect.fn("Projection.backups")(function* (
 });
 
 /** Unsettled backups retain their existing narrow protocol. */
-export const pendingInstalledSkillBackupsEffect = (
+export const pendingInstalledSkillBackups = (
   projection: Pick<InstalledSkill, "root" | "projection_id">,
 ) => installedSkillBackups(projection, false);
 
 /** Inspect both kept and pending predecessors without following a redirected backup directory. */
-export const inspectInstalledSkillBackupsEffect = (
+export const inspectInstalledSkillBackups = (
   projection: Pick<InstalledSkill, "root" | "projection_id">,
 ) => installedSkillBackups(projection, true);
 
 /** A kept backup may hold bytes nothing else does. It stays until an operator removes it. */
-export const keepInstalledSkillBackupEffect = Effect.fn("Projection.keepBackup")(function* (
+export const keepInstalledSkillBackup = Effect.fn("Projection.keepBackup")(function* (
   backup: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -140,7 +140,7 @@ export const keepInstalledSkillBackupEffect = Effect.fn("Projection.keepBackup")
  * escaping, so no name can impersonate another entry. Undefined for anything else, such as a link,
  * which SKIT never writes and this comparison does not cover.
  */
-export const losslessTreeEffect = Effect.fn("Projection.losslessTree")(function* (root: string) {
+export const losslessTree = Effect.fn("Projection.losslessTree")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const entries: Array<{ path: string[]; type: string; mode: number; sha256?: string }> = [];

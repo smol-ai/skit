@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import { RateLimitError, rateLimitEffect } from "./cloudflare.js";
+import { RateLimitError, rateLimit } from "./cloudflare.js";
 
 export interface RateLimiterService {
   readonly limit: (key: string) => Effect.Effect<{ readonly success: boolean }, RateLimitError>;
@@ -16,10 +16,10 @@ export class BootstrapRateLimiter extends Context.Service<
 
 export const patLayer = (binding: RateLimit) =>
   Layer.succeed(PatRateLimiter, {
-    limit: (key) => rateLimitEffect(binding, key),
+    limit: (key) => rateLimit(binding, key),
   });
 
 export const bootstrapLayer = (binding: RateLimit) =>
   Layer.succeed(BootstrapRateLimiter, {
-    limit: (key) => rateLimitEffect(binding, key),
+    limit: (key) => rateLimit(binding, key),
   });

@@ -34,19 +34,19 @@ export * from "./platform/path-identity.js";
 export * from "./projection/policy.js";
 export {
   InstalledSkillFailure,
-  inspectOwnershipMarkerEffect,
-  installedSkillCustodyEffect,
-  installedSkillDisplacedEffect,
-  installedSkillNameEffect,
-  withInstalledSkillMutationEffect,
-  prepareInstalledSkillRebuildEffect,
+  inspectOwnershipMarker,
+  installedSkillCustody,
+  installedSkillDisplaced,
+  installedSkillName,
+  withInstalledSkillMutation,
+  prepareInstalledSkillRebuild,
   type InstalledSkillMutation,
   type NativeInstalledSkillContext,
   type InstalledSkillMutationError,
   type InstalledSkillAdoption,
 } from "./projection/mutation.js";
-export { inspectInstalledSkillBackupsEffect } from "./projection/backups.js";
-export { copyLocalTreeEffect } from "./platform/copy-tree.js";
+export { inspectInstalledSkillBackups } from "./projection/backups.js";
+export { copyLocalTree } from "./platform/copy-tree.js";
 export { ensureSkillsDirectoryWritable } from "./projection/writable.js";
 export { discoveryPathExcluded } from "./acquisition/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
@@ -64,9 +64,9 @@ export { withLibraryWriterLock } from "./library/store/writer-lock.js";
 export * from "./library/inventory/refresh.js";
 
 export {
-  originalTreeHashEffect,
+  originalTreeHash,
   retainedTreePath,
-  retainLocalTreeEffect,
+  retainLocalTree,
 } from "./library/retention/retain-tree.js";
 export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
@@ -85,11 +85,7 @@ export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
 export * from "./library/audit/audit-log.js";
-export {
-  writeRawAtomicEffect,
-  writeJsonAtomicEffect,
-  writeJsonExclusiveEffect,
-} from "./platform/atomic-write.js";
+export { writeRawAtomic, writeJsonAtomic, writeJsonExclusive } from "./platform/atomic-write.js";
 export * from "./usage/contracts.js";
 export { SkillUsage, skillUsageLayer } from "./usage/scanner.js";
 

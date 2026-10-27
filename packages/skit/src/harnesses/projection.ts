@@ -18,7 +18,7 @@ export type HarnessInvocationWriteFailure =
  *
  * Returns true when the directory changed, or would change under `dryRun`.
  */
-export function applyHarnessInvocationPolicyEffect(
+export function applyHarnessInvocationPolicy(
   directory: string,
   harness: HarnessName,
   policy: InvocationPolicy,

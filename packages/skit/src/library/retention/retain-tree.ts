@@ -1,23 +1,23 @@
-import { copyLocalTreeEffect } from "../../platform/copy-tree.js";
+import { copyLocalTree } from "../../platform/copy-tree.js";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { walkTreeEffect } from "../../artifact/tree.js";
+import { walkTree } from "../../artifact/tree.js";
 import { ContentAddressCollision } from "../../failures.js";
-import { deterministicTreeHashEffect } from "../../artifact/skit.js";
+import { deterministicTreeHash } from "../../artifact/skit.js";
 import type { Digest } from "../../contracts.js";
 
 export const retainedTreePath = (objectsPath: string, digest: Digest) =>
   join(objectsPath, digest.slice(7, 9), digest.slice(7));
 
 /** Materialize exactly the normalized inventory; excluded source residue never enters an object. */
-const copyNormalizedTreeEffect = Effect.fn("Retention.copyNormalizedTree")(function* (
+const copyNormalizedTree = Effect.fn("Retention.copyNormalizedTree")(function* (
   root: string,
   destination: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(destination, { recursive: true, mode: 0o700 });
-  for (const entry of yield* walkTreeEffect(root, "normalized")) {
+  for (const entry of yield* walkTree(root, "normalized")) {
     if (entry.kind !== "file") continue;
     const path = join(destination, entry.path);
     yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
@@ -25,7 +25,7 @@ const copyNormalizedTreeEffect = Effect.fn("Retention.copyNormalizedTree")(funct
   }
 });
 
-export const originalTreeHashEffect = Effect.fn("Retention.originalHash")(function* (root: string) {
+export const originalTreeHash = Effect.fn("Retention.originalHash")(function* (root: string) {
   const hash = createHash("sha256");
   const append = (value: string | Uint8Array) => {
     const bytes = typeof value === "string" ? Buffer.from(value) : value;
@@ -33,7 +33,7 @@ export const originalTreeHashEffect = Effect.fn("Retention.originalHash")(functi
     hash.update(bytes);
     hash.update("\0");
   };
-  for (const entry of yield* walkTreeEffect(root, "verbatim")) {
+  for (const entry of yield* walkTree(root, "verbatim")) {
     append(entry.path);
     append(entry.kind);
     if (entry.kind === "file") {
@@ -45,7 +45,7 @@ export const originalTreeHashEffect = Effect.fn("Retention.originalHash")(functi
 });
 
 /** Saved immutable objects are never rollback-owned, even when this call created them. */
-export const retainLocalTreeEffect = Effect.fn("Retention.retainTree")(function* (
+export const retainLocalTree = Effect.fn("Retention.retainTree")(function* (
   root: string,
   objectsPath: string,
   expected: Digest,
@@ -53,7 +53,7 @@ export const retainLocalTreeEffect = Effect.fn("Retention.retainTree")(function*
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = retainedTreePath(objectsPath, expected);
-  const hash = verbatim ? originalTreeHashEffect : deterministicTreeHashEffect;
+  const hash = verbatim ? originalTreeHash : deterministicTreeHash;
   if (yield* fs.exists(path)) {
     if ((yield* hash(path)) !== expected) return yield* new ContentAddressCollision();
     return path;
@@ -67,13 +67,8 @@ export const retainLocalTreeEffect = Effect.fn("Retention.retainTree")(function*
       });
       const temporary = join(directory, "tree");
       if (verbatim)
-        yield* copyLocalTreeEffect(
-          root,
-          temporary,
-          [join(root, ".skit"), join(root, ".git")],
-          true,
-        );
-      else yield* copyNormalizedTreeEffect(root, temporary);
+        yield* copyLocalTree(root, temporary, [join(root, ".skit"), join(root, ".git")], true);
+      else yield* copyNormalizedTree(root, temporary);
       if ((yield* hash(temporary)) !== expected) return yield* new ContentAddressCollision();
       // Another writer's immutable object is never replaced or removed on rollback.
       if (yield* fs.exists(path)) {

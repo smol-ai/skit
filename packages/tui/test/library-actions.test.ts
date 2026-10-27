@@ -11,7 +11,7 @@ import { skitLayer } from "@smolai/skit-core";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
-  probeHarnessEffect,
+  probeHarness,
   proposeLibraryCollectionChange,
 } from "../../cli/src/front-end";
 import { tuiLibrary } from "./helpers/library-fixture";
@@ -113,7 +113,7 @@ test("disposing the host kills a Harness probe that is still running", async () 
       yield* fs.chmod(join(bin, "codex"), 0o755);
     }),
   );
-  const probe = host.run(probeHarnessEffect("codex", { path: bin })).then(
+  const probe = host.run(probeHarness("codex", { path: bin })).then(
     () => "completed",
     () => "interrupted",
   );

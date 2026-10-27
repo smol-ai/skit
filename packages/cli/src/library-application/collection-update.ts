@@ -7,7 +7,7 @@ import {
 } from "@smolai/skit-core";
 import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
 import type { InventoryRootOptions } from "../projection/roots.js";
-import { retainLibrarySourceEffect, inspectLibrarySourceEffect } from "./source-acquisition.js";
+import { retainLibrarySource, inspectLibrarySource } from "./source-acquisition.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
 import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import { LibraryProgress } from "./progress.js";
@@ -42,7 +42,7 @@ export class CollectionNotUpdatable
   }
 }
 
-const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
+const subjectSource = Effect.fn("Library.updateSource")(function* (
   subject: LibrarySubject,
   sourceInput?: string,
 ) {
@@ -133,7 +133,7 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
       subject_id: subject.subjectId,
       label: subject.label,
     });
-  const input = yield* subjectSourceEffect(subject, acquisition.input.value);
+  const input = yield* subjectSource(subject, acquisition.input.value);
   return { acquisition, priorTree, input };
 });
 
@@ -143,7 +143,7 @@ export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdat
   subject: LibrarySubject,
 ) {
   const { acquisition, priorTree: tree, input } = yield* resolveUpdate(state, subject);
-  const inspected = yield* inspectLibrarySourceEffect(
+  const inspected = yield* inspectLibrarySource(
     input,
     undefined,
     tree.members.map((member) => member.source_path),
@@ -215,7 +215,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       const subject = { id: before.subjectId, label: before.label };
       const retained = yield* progress.around(
         { kind: "source", subject },
-        retainLibrarySourceEffect(
+        retainLibrarySource(
           input,
           undefined,
           priorTree.members.map((member) => member.source_path),

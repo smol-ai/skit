@@ -1,14 +1,14 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import {
-  retainAuthoredCollectionUnderLockEffect,
-  retainObservedCollectionEffect,
+  retainAuthoredCollectionUnderLock,
+  retainObservedCollection,
 } from "../src/library/observed-import.js";
-import { originalTreeHashEffect, retainedTreePath } from "../src/library/retention/retain-tree.js";
+import { originalTreeHash, retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary } from "./helpers/library-store.js";
@@ -50,15 +50,15 @@ for (const kind of ["observed", "authored"] as const) {
           return yield* Effect.scoped(
             withLibraryWriter(
               kind === "authored"
-                ? retainAuthoredCollectionUnderLockEffect({ ...request, root: path })
-                : retainObservedCollectionEffect({
+                ? retainAuthoredCollectionUnderLock({ ...request, root: path })
+                : retainObservedCollection({
                     ...request,
                     skills: [
                       {
                         name: "review",
                         sourcePath: join(path, memberPath),
                         relativePath: memberPath,
-                        observedHash: yield* deterministicTreeHashEffect(join(path, memberPath)),
+                        observedHash: yield* deterministicTreeHash(join(path, memberPath)),
                       },
                     ],
                     observations: [],
@@ -79,14 +79,14 @@ for (const kind of ["observed", "authored"] as const) {
         assert.strictEqual(state.acquisitions[0]?.retained_copy_id, receipt.retainedCopyId);
         assert.strictEqual(state.skills[0]?.skill_id, receipt.skills[0]?.skill_id);
         const retainedRoot = retainedTreePath(store.originalsPath, receipt.snapshotDigest);
-        assert.strictEqual(yield* originalTreeHashEffect(retainedRoot), receipt.snapshotDigest);
+        assert.strictEqual(yield* originalTreeHash(retainedRoot), receipt.snapshotDigest);
         const member = receipt.members[0];
         assert.ok(member);
         assert.strictEqual(member.name, "review");
         assert.strictEqual(member.sourcePath, memberPath);
         assert.strictEqual(copy.members[0]?.artifact_digest, member.artifactDigest);
         assert.strictEqual(
-          yield* originalTreeHashEffect(join(retainedRoot, member.sourcePath)),
+          yield* originalTreeHash(join(retainedRoot, member.sourcePath)),
           member.sourceDigest,
         );
         assert.strictEqual(
@@ -151,15 +151,15 @@ for (const kind of ["observed", "authored"] as const) {
         return yield* Effect.scoped(
           withLibraryWriter(
             kind === "authored"
-              ? retainAuthoredCollectionUnderLockEffect({ ...request, root: source })
-              : retainObservedCollectionEffect({
+              ? retainAuthoredCollectionUnderLock({ ...request, root: source })
+              : retainObservedCollection({
                   ...request,
                   skills: [
                     {
                       name: "review",
                       sourcePath: source,
                       relativePath: ".",
-                      observedHash: yield* deterministicTreeHashEffect(source),
+                      observedHash: yield* deterministicTreeHash(source),
                     },
                   ],
                   observations: [],
@@ -259,8 +259,8 @@ for (const kind of ["observed", "authored"] as const) {
           return yield* Effect.scoped(
             withLibraryWriter(
               kind === "authored"
-                ? retainAuthoredCollectionUnderLockEffect({ ...request, root: source })
-                : retainObservedCollectionEffect({
+                ? retainAuthoredCollectionUnderLock({ ...request, root: source })
+                : retainObservedCollection({
                     ...request,
                     observations: [],
                     skills: yield* Effect.forEach(names, (name) =>
@@ -270,7 +270,7 @@ for (const kind of ["observed", "authored"] as const) {
                           name,
                           sourcePath: path,
                           relativePath: `skills/${name}`,
-                          observedHash: yield* deterministicTreeHashEffect(path),
+                          observedHash: yield* deterministicTreeHash(path),
                         };
                       }),
                     ),

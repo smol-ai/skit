@@ -1,8 +1,4 @@
-import {
-  captureSnapshotArchiveEffect,
-  retainedTreePath,
-  type SnapshotArchive,
-} from "@smolai/skit-core";
+import { captureSnapshotArchive, retainedTreePath, type SnapshotArchive } from "@smolai/skit-core";
 import { Effect } from "effect";
 import type { SyncObserver, SyncPhase } from "./library-sync-progress.js";
 
@@ -19,9 +15,7 @@ export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(f
       const archives = new Map<string, SnapshotArchive>();
       for (const [verified, tree] of copies.entries()) {
         yield* observer.tick({ phase, completed: verified });
-        const archive = yield* captureSnapshotArchiveEffect(
-          retainedTreePath(originalsPath, tree.digest),
-        );
+        const archive = yield* captureSnapshotArchive(retainedTreePath(originalsPath, tree.digest));
         if (archive.digest !== tree.digest)
           return { _tag: "Changed" as const, digest: tree.digest };
         // Verify every reference, including copies sharing the same digest.

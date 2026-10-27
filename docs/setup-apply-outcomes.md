@@ -39,7 +39,7 @@ Preview runs without the Library writer lock. On approval, `applySetupPlan` runs
 | S3 | If the plan saves roots, or imports or adds without a machine identity: write `machine.json`, without scanning | `setup-apply.ts`; `setup-discovery.ts` `saveSetupMachineConfig` |
 | S4 | Observed-source imports, one Collection group at a time, each retained and published before the next; each lockfile's hash is checked first | `setup-observed-collections.ts` |
 | S5 | Existing-entry binds: per selection bind and project against the approved content hash, then retire aliases | `setup-existing-binding.ts`; `setup-local-custody.ts` `bindSetupCopy` |
-| S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `retainLibrarySourceEffect`, bind and project, then retire aliases | `setup-local-custody.ts` |
+| S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `retainLibrarySource`, bind and project, then retire aliases | `setup-local-custody.ts` |
 | S7 | Explicit removals, last: check the Library is still at the apply's revision, preflight every entry (identity and link target; for a directory also its approved content hash and no new custody marker), create checked recovery containers, publish the immutable receipt exclusively, then for each entry check it again and rename it | `setup-apply.ts`; `setup-removal.ts` |
 | S8 | Outside the writer: offer a skills.sh update check, which loads the Library and may prompt | handler `offerSkillsShUpdateCheck` |
 

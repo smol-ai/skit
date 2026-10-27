@@ -3,13 +3,13 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import {
   LibraryStore,
-  captureSnapshotArchiveEffect,
-  deterministicTreeHashEffect,
-  libraryManifestFromLocalStateEffect,
+  captureSnapshotArchive,
+  deterministicTreeHash,
+  libraryManifestFromLocalState,
   libraryStoreLayer,
   makeMachineId,
   retainedTreePath,
-  retainObservedCollectionEffect,
+  retainObservedCollection,
   skitLayer,
   withLibraryWriter,
 } from "@smolai/skit-core";
@@ -40,7 +40,7 @@ export const syncJourney = (failDownload: boolean) =>
             join(sourcePath, "SKILL.md"),
             `# ${name}\nFixture Skill for sync preview.\n`,
           );
-          yield* retainObservedCollectionEffect({
+          yield* retainObservedCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: name },
             input: sourcePath,
@@ -50,7 +50,7 @@ export const syncJourney = (failDownload: boolean) =>
                 name,
                 sourcePath,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(sourcePath),
+                observedHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
             observations: [],
@@ -70,9 +70,9 @@ export const syncJourney = (failDownload: boolean) =>
             },
           ],
         };
-        const manifest = yield* libraryManifestFromLocalStateEffect(bound);
+        const manifest = yield* libraryManifestFromLocalState(bound);
         const archives = yield* Effect.forEach(state.retained_copies, (tree) =>
-          captureSnapshotArchiveEffect(retainedTreePath(store.originalsPath, tree.digest)),
+          captureSnapshotArchive(retainedTreePath(store.originalsPath, tree.digest)),
         );
         return { manifest, archives };
       }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));

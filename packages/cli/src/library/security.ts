@@ -1,15 +1,15 @@
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
-  acceptSecurityFindingFromStateEffect,
+  acceptSecurityFindingFromState,
   LibraryStore,
-  securityReviewFromStateEffect,
+  securityReviewFromState,
   type Digest,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 
 export const reviewLibrarySecurity = Effect.fn("Library.reviewSecurity")(function* (query: string) {
   const state = yield* (yield* LibraryStore).load;
-  return yield* securityReviewFromStateEffect(state, query);
+  return yield* securityReviewFromState(state, query);
 });
 
 export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(function* (
@@ -22,5 +22,5 @@ export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(
   },
 ) {
   const state = yield* (yield* LibraryStore).load;
-  return yield* acceptSecurityFindingFromStateEffect(state, query, input);
+  return yield* acceptSecurityFindingFromState(state, query, input);
 }, withLibraryWriter);

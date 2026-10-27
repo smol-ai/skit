@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "@smolai/skit-core";
-import { previewLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { previewLibrarySource } from "../src/library-application/source-acquisition.js";
 import { assertCollectionImport } from "./helpers/collection-import.js";
 import manifest from "./fixtures/collections/full-manifest.json" with { type: "json" };
 
@@ -38,7 +38,7 @@ it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
     Effect.gen(function* () {
       const collection = manifest.find((entry) => entry.repository === "NVIDIA/skills");
       if (collection === undefined) return assert.fail("Missing NVIDIA upstream pin");
-      const preview = yield* previewLibrarySourceEffect({
+      const preview = yield* previewLibrarySource({
         type: "github",
         owner: "NVIDIA",
         repository: "skills",
@@ -59,7 +59,7 @@ it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
       if (collection === undefined) return assert.fail("Missing A Smart Bear upstream pin");
       const path = "plugins/asb-skills/skills/asb-positioning";
       for (const selection of [{ subpath: path }, { skillDirectories: [path] }]) {
-        const preview = yield* previewLibrarySourceEffect({
+        const preview = yield* previewLibrarySource({
           type: "github",
           owner: "asmartbear",
           repository: "asb-skills",

@@ -11,8 +11,8 @@ import {
   BootstrapOperations,
   BootstrapStatusInvalid,
   BootstrapTimedOut,
-  bootstrapServerEffect,
-  originFromWranglerConfigEffect,
+  bootstrapServer,
+  originFromWranglerConfig,
   removeBootstrapSecretInvocation,
   type BootstrapOperationsShape,
 } from "../src/bootstrap/server-bootstrap.js";
@@ -76,7 +76,7 @@ describe("server bootstrap journey", () => {
   it.effect("owns installation, setup, polling and cleanup", () => {
     const { observed, layer } = operations([true, false]);
     return Effect.gen(function* () {
-      const result = yield* bootstrapServerEffect({
+      const result = yield* bootstrapServer({
         configPath: "./wrangler.jsonc",
         origin: "https://skit.example",
         pollIntervalMs: 0,
@@ -96,7 +96,7 @@ describe("server bootstrap journey", () => {
   it.effect("reports an existing claim without opening setup", () => {
     const { observed, layer } = operations([false]);
     return Effect.gen(function* () {
-      const result = yield* bootstrapServerEffect({
+      const result = yield* bootstrapServer({
         configPath: "./wrangler.jsonc",
         origin: "https://skit.example",
       });
@@ -117,7 +117,7 @@ describe("server bootstrap journey", () => {
       false,
     ]);
     return Effect.gen(function* () {
-      const result = yield* bootstrapServerEffect({
+      const result = yield* bootstrapServer({
         origin: "https://skit.example",
         pollIntervalMs: 0,
       });
@@ -134,7 +134,7 @@ describe("server bootstrap journey", () => {
       message: "browser unavailable",
     });
     fixture.value.openBrowser = () => Effect.fail(failure);
-    return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+    return bootstrapServer({ origin: "https://skit.example" }).pipe(
       Effect.provide(Layer.merge(fixture.layer, skitLayer)),
       Effect.flip,
       Effect.map((actual) => {
@@ -147,7 +147,7 @@ describe("server bootstrap journey", () => {
   it.effect("rejects an invalid status response without retrying", () => {
     const invalid = new BootstrapStatusInvalid({ message: "Invalid response" });
     const fixture = operations([invalid, false]);
-    return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+    return bootstrapServer({ origin: "https://skit.example" }).pipe(
       Effect.provide(Layer.merge(fixture.layer, skitLayer)),
       Effect.flip,
       Effect.map((failure) => {
@@ -163,7 +163,7 @@ describe("server bootstrap journey", () => {
     Effect.gen(function* () {
       const failures = Array.from({ length: 5 }, (_, i) => statusFailure(`failure ${i}`));
       const fixture = operations([...failures, false]);
-      const fiber = yield* bootstrapServerEffect({
+      const fiber = yield* bootstrapServer({
         origin: "https://skit.example",
         pollIntervalMs: 1_000,
       }).pipe(Effect.provide(Layer.merge(fixture.layer, skitLayer)), Effect.flip, Effect.forkChild);
@@ -194,7 +194,7 @@ describe("server bootstrap journey", () => {
           Deferred.succeed(cleanupStarted, undefined).pipe(
             Effect.andThen(Deferred.await(finishCleanup)),
           );
-        const fiber = yield* bootstrapServerEffect({
+        const fiber = yield* bootstrapServer({
           origin: "https://skit.example",
           timeoutMs: 100,
           pollIntervalMs: 1_000,
@@ -222,7 +222,7 @@ describe("server bootstrap journey", () => {
       message: "Wrangler lost its connection after writing the secret",
     });
     fixture.value.installSecret = () => Effect.fail(failure);
-    return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+    return bootstrapServer({ origin: "https://skit.example" }).pipe(
       Effect.provide(Layer.merge(fixture.layer, skitLayer)),
       Effect.flip,
       Effect.map((actual) => {
@@ -248,7 +248,7 @@ describe("server bootstrap journey", () => {
           );
         if (operation === "install-secret") fixture.value.installSecret = stalled;
         else fixture.value.removeSecret = stalled;
-        const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+        const fiber = yield* bootstrapServer({ origin: "https://skit.example" }).pipe(
           Effect.provide(Layer.merge(fixture.layer, skitLayer)),
           Effect.flip,
           Effect.forkChild,
@@ -289,7 +289,7 @@ describe("server bootstrap journey", () => {
       });
       fixture.value.installSecret = () => Effect.fail(original);
       fixture.value.removeSecret = () => Effect.fail(cleanup);
-      return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+      return bootstrapServer({ origin: "https://skit.example" }).pipe(
         Effect.provide(Layer.merge(fixture.layer, skitLayer)),
         Effect.flip,
         Effect.map((failure) => {
@@ -319,7 +319,7 @@ describe("server bootstrap journey", () => {
             }),
           ),
         );
-      const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+      const fiber = yield* bootstrapServer({ origin: "https://skit.example" }).pipe(
         Effect.provide(Layer.merge(fixture.layer, skitLayer)),
         Effect.forkChild,
       );
@@ -353,7 +353,7 @@ describe("server bootstrap journey", () => {
             }),
           ),
         );
-      const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+      const fiber = yield* bootstrapServer({ origin: "https://skit.example" }).pipe(
         Effect.provide(Layer.merge(fixture.layer, skitLayer)),
         Effect.forkChild,
       );
@@ -381,7 +381,7 @@ describe("server bootstrap journey", () => {
     });
     fixture.value.openBrowser = () => Effect.fail(original);
     fixture.value.removeSecret = () => Effect.fail(cleanup);
-    return bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+    return bootstrapServer({ origin: "https://skit.example" }).pipe(
       Effect.provide(Layer.merge(fixture.layer, skitLayer)),
       Effect.flip,
       Effect.map((failure) => {
@@ -401,7 +401,7 @@ describe("server bootstrap journey", () => {
         ++checks === 1
           ? Effect.succeed(true)
           : Deferred.succeed(polling, undefined).pipe(Effect.andThen(Effect.never));
-      const fiber = yield* bootstrapServerEffect({
+      const fiber = yield* bootstrapServer({
         origin: "https://skit.example",
         pollIntervalMs: 0,
       }).pipe(Effect.provide(Layer.merge(fixture.layer, skitLayer)), Effect.forkChild);
@@ -423,12 +423,12 @@ describe("server bootstrap journey", () => {
           "vars": { "PUBLIC_APP_ORIGIN": "https://right.example", },
         }`,
         );
-        assert.strictEqual(yield* originFromWranglerConfigEffect(config), "https://right.example");
+        assert.strictEqual(yield* originFromWranglerConfig(config), "https://right.example");
         yield* fs.writeFileString(
           config,
           `{ "vars": { "PUBLIC_APP_ORIGIN": "https://right.example" }, "env": { "production": {} } }`,
         );
-        const failure = yield* Effect.flip(originFromWranglerConfigEffect(config));
+        const failure = yield* Effect.flip(originFromWranglerConfig(config));
         assert.instanceOf(failure, BootstrapConfigInvalid);
         assert.match(failure.message, /explicit --url/);
       }),

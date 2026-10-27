@@ -7,7 +7,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import {
   type Digest,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   LibraryState,
   libraryStoreLayer,
@@ -1051,7 +1051,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     yield* git(f.repository, "add", "skit.json", "skit.remote.json", "skills/council/SKILL.md");
     yield* git(f.repository, "commit", "-qm", "authored skit");
 
-    const contentHash = yield* deterministicTreeHashEffect(projectedSkill);
+    const contentHash = yield* deterministicTreeHash(projectedSkill);
     const skitLocator = "skit://registry.test/tim/skills";
     const collectionId = makeCollectionId();
     const versionId = makeRetainedCopyId();
@@ -1325,8 +1325,8 @@ it.effect(
       yield* f.fs.makeDirectory(orphaned, { recursive: true });
       yield* f.fs.writeFileString(join(current, "SKILL.md"), skillDocument("current"));
       yield* f.fs.writeFileString(join(orphaned, "SKILL.md"), skillDocument("orphaned"));
-      const currentHash = yield* deterministicTreeHashEffect(current);
-      const orphanedHash = yield* deterministicTreeHashEffect(orphaned);
+      const currentHash = yield* deterministicTreeHash(current);
+      const orphanedHash = yield* deterministicTreeHash(orphaned);
       const collectionId = makeCollectionId();
       const versionId = makeRetainedCopyId();
       const currentVersionId = makeSkillVersionId();

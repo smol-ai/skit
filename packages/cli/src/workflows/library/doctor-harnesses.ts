@@ -17,7 +17,7 @@ import {
   SourceProcess,
   type SourceProcessResult,
 } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../../harness/probe.js";
+import { probeHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck, doctorCodexCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -367,7 +367,7 @@ export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       detail:
         "Custom skills directories do not describe the harness's native discovery. Run doctor without root overrides.",
     };
-  const probe = yield* probeHarnessEffect(harness);
+  const probe = yield* probeHarness(harness);
   const version = probe.version ? { version: probe.version } : {};
   if (probe.status !== "installed" || !probe.executablePath)
     return {

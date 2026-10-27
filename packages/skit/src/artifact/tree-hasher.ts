@@ -3,7 +3,7 @@ import type { PlatformError } from "effect/PlatformError";
 import type { Digest } from "../contracts.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
-import { deterministicTreeHashEffect } from "./skit.js";
+import { deterministicTreeHash } from "./skit.js";
 
 /**
  * The deterministic hash of an installed tree, reached through the environment.
@@ -21,5 +21,5 @@ export class TreeHasher extends Context.Service<
 >()("skit/artifact/TreeHasher") {}
 
 export const treeHasherLayer: Layer.Layer<TreeHasher> = Layer.succeed(TreeHasher)({
-  hash: deterministicTreeHashEffect,
+  hash: deterministicTreeHash,
 });

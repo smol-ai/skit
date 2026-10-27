@@ -1,5 +1,5 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { LinkStat, deterministicTreeHashEffect } from "@smolai/skit-core";
+import { LinkStat, deterministicTreeHash } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
 import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
 import {
@@ -21,7 +21,7 @@ import {
   observeHarnessSkills,
   readableSkillsDirectories,
 } from "../src/projection/harness-shadows.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
@@ -69,7 +69,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          const retained = yield* retainLibrarySourceEffect(f.source);
+          const retained = yield* retainLibrarySource(f.source);
           const store = yield* LibraryStore;
           const before = yield* store.load;
           if (retained.collection_id === undefined)
@@ -338,7 +338,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          yield* retainLibrarySourceEffect(f.source);
+          yield* retainLibrarySource(f.source);
           const result = yield* Effect.result(
             setLibraryBindings({
               query: "review",
@@ -385,7 +385,7 @@ it.effect(
         writingTo(
           f.home.home,
           Effect.gen(function* () {
-            yield* retainLibrarySourceEffect(f.source);
+            yield* retainLibrarySource(f.source);
             const store = yield* LibraryStore;
             yield* setLibraryBindings({
               query: "review",
@@ -441,7 +441,7 @@ it.effect(
               {
                 kind: "existing",
                 subjectId: "review",
-                observedHash: yield* deterministicTreeHashEffect(f.source),
+                observedHash: yield* deterministicTreeHash(f.source),
               },
             );
             const outcome = yield* adoption.apply();
@@ -598,7 +598,7 @@ it.effect("preserves selected links and equal copies automatically across add an
       );
     }
     yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
+    yield* f.home.owned(writingTo(f.home.home, retainLibrarySource(f.source)));
     const interaction = yield* makeScriptedInteraction([
       ["review", "later", "ordinary-one", "ordinary-two"],
       true,
@@ -654,7 +654,7 @@ for (const operation of ["add", "bind"] as const) {
           writingTo(
             f.home.home,
             Effect.gen(function* () {
-              if (operation === "bind") yield* retainLibrarySourceEffect(f.source);
+              if (operation === "bind") yield* retainLibrarySource(f.source);
               const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
               const before = yield* (yield* LibraryStore).load;
               const observed = yield* runSetup(setup);
@@ -745,7 +745,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
     );
     yield* f.fs.symlink(later, laterAlias);
     yield* initializeLibraryMachine(f.home.home);
-    yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
+    yield* f.home.owned(writingTo(f.home.home, retainLibrarySource(f.source)));
     const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
     const result = yield* f.home.owned(
       writingTo(
@@ -812,7 +812,7 @@ it.effect.each(["source", "alias"] as const)(
           );
           const adoption = yield* prepareLocalAdoption({ bindings: f.home.bindings }, selection, {
             kind: "retain",
-            observedHash: yield* deterministicTreeHashEffect(f.source),
+            observedHash: yield* deterministicTreeHash(f.source),
             custody: { harnesses: ["codex"], machineId: observed.machineConfig.machineId },
           });
           expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);

@@ -244,7 +244,7 @@ survives inverse computation when undo removes the only setup-added entry.
 Before
 intent inverse -> computed fields only
 file recovery -> free destinations only
-projectBindingEffect -> reconciles every Skill at the target
+projectBinding -> reconciles every Skill at the target
 native projection backups -> private pending/kept paths
 
 After

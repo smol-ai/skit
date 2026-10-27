@@ -1,10 +1,10 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
+import { retainObservedCollection } from "../src/library/observed-import.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -25,11 +25,11 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
           name: "spec",
           sourcePath: path,
           relativePath,
-          observedHash: yield* deterministicTreeHashEffect(path),
+          observedHash: yield* deterministicTreeHash(path),
         };
       });
-    const retain = (skills: Parameters<typeof retainObservedCollectionEffect>[0]["skills"]) =>
-      retainObservedCollectionEffect({
+    const retain = (skills: Parameters<typeof retainObservedCollection>[0]["skills"]) =>
+      retainObservedCollection({
         machineId,
         source: { type: "local", path: source },
         input: source,

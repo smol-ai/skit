@@ -4,20 +4,20 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   Digest,
   LinkStat,
   LibraryStore,
   canonicalJson,
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   type InstalledSkill,
   type LibraryStateReadError,
   pathIsWithin,
   withLibraryWriterLock,
-  writeJsonExclusiveEffect,
+  writeJsonExclusive,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { leavePnpmSkillEffect } from "../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../projection/pnpm-skills.js";
 
 const Identity = Schema.Struct({ path: Schema.String, dev: Schema.Number, ino: Schema.Number });
 const EntryFields = {
@@ -198,7 +198,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
         return yield* new PlanIsStale();
     });
     yield* check;
-    const observed = yield* inspectOwnershipMarkerEffect(path);
+    const observed = yield* inspectOwnershipMarker(path);
     if (
       observed.kind !== "valid" ||
       observed.marker.projection_id !== expected.projection_id ||
@@ -212,7 +212,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     moves.push({
       name: request.name,
       path,
-      observedHash: yield* deterministicTreeHashEffect(path),
+      observedHash: yield* deterministicTreeHash(path),
     });
   }
   return yield* prepareMoves(
@@ -238,7 +238,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
       entry: RecoveryEntry,
     ) {
       yield* checkRegistered;
-      yield* leavePnpmSkillEffect(entry.path);
+      yield* leavePnpmSkill(entry.path);
       const current = yield* links.identity.lstat(entry.path);
       const physicalParent = yield* links.realPathNative(dirname(entry.path));
       const parent = yield* links.identity.lstat(physicalParent);
@@ -254,7 +254,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
       )
         return yield* new PlanIsStale();
       if (entry.type !== "Directory") return;
-      const hash = yield* Effect.result(deterministicTreeHashEffect(entry.path));
+      const hash = yield* Effect.result(deterministicTreeHash(entry.path));
       const marker = yield* fs
         .readFileString(join(entry.path, ".skit-ownership.json"))
         .pipe(
@@ -276,7 +276,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     yield* ensureRecoveryOperation(home, dirname(recoveryDirectory));
     yield* fs.makeDirectory(recoveryDirectory, { mode: 0o700 });
     // Write once, exclusively, before any move. Filesystem evidence supplies progress.
-    yield* writeJsonExclusiveEffect(join(recoveryDirectory, "receipt.json"), {
+    yield* writeJsonExclusive(join(recoveryDirectory, "receipt.json"), {
       schemaVersion: 2,
       entries,
     });
@@ -447,7 +447,7 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
         else if (matches && entry.type === "SymbolicLink")
           matches = (yield* fs.readLink(path)) === entry.linkTarget;
         else if (matches) {
-          const normalized = yield* Effect.result(deterministicTreeHashEffect(path));
+          const normalized = yield* Effect.result(deterministicTreeHash(path));
           matches = normalized._tag === "Success" && normalized.success === entry.observedHash;
         }
         return { exists: true, matches, stat, hash };

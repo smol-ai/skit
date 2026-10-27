@@ -10,9 +10,9 @@ import {
   bindingSkillIds,
   type LibraryState,
   currentSkillVersion,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
   LibraryStore,
-  projectBindingEffect,
+  projectBinding,
   MachineSettings,
   retainedTreePath,
   sourceAcquisitions,
@@ -30,7 +30,7 @@ import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryHome,
   retainObservedIn,
   scratch,
@@ -67,7 +67,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
             name: item.name,
             sourcePath: item.path,
             relativePath: item.name,
-            observedHash: yield* deterministicTreeHashEffect(item.path),
+            observedHash: yield* deterministicTreeHash(item.path),
           };
         }),
       );
@@ -113,7 +113,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     yield* home.owned(
       writingTo(
         home.home,
-        projectBindingEffect({
+        projectBinding({
           target: "agents",
           root: bindingRoot("agents", { kind: "global" }, home.inventory),
           variantsPath: home.variantsPath,
@@ -330,8 +330,8 @@ it.effect(
       expect(observation.input.value).toBe(
         retainedTreePath(join(f.home.home, "originals"), copy.digest),
       );
-      const afterManifest = yield* libraryManifestFromLocalStateEffect(after);
-      const restoredManifest = yield* libraryManifestFromLocalStateEffect(restored);
+      const afterManifest = yield* libraryManifestFromLocalState(after);
+      const restoredManifest = yield* libraryManifestFromLocalState(restored);
       expect(restoredManifest.acquisitions).toEqual(restored.acquisitions);
       const synced = mergeLibraryManifests(afterManifest, restoredManifest, afterManifest);
       expect(synced.conflicts).toEqual([]);

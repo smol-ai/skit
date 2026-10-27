@@ -1,6 +1,6 @@
 import {
-  artifactUsesSymlinkEffect,
-  inspectOwnershipMarkerEffect,
+  artifactUsesSymlink,
+  inspectOwnershipMarker,
   isJsonObject,
   stringAt,
   type JsonObject,
@@ -34,7 +34,7 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
       evidence: pnpm.ledgerPath,
     };
   const markerPath = join(dirname(path), ".skit-ownership.json");
-  const markerInspection = yield* inspectOwnershipMarkerEffect(dirname(path)).pipe(
+  const markerInspection = yield* inspectOwnershipMarker(dirname(path)).pipe(
     Effect.orElseSucceed(() => ({ kind: "absent" }) as const),
   );
   if (markerInspection.kind === "valid") {
@@ -66,7 +66,7 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
         ? (stringAt(locked, "sourceUrl") ?? stringAt(locked, "source") ?? path)
         : path,
     };
-  if (yield* artifactUsesSymlinkEffect(path))
+  if (yield* artifactUsesSymlink(path))
     return { confidence: "exact" as const, source: "symlink", evidence: yield* canonical(path) };
   return { confidence: "unknown" as const, source: null, evidence: path };
 });

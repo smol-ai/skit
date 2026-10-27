@@ -4,7 +4,7 @@ import {
   evaluateSkillFrontmatter,
   harnessDrivers,
   HarnessName,
-  observationPathIdentityEffect,
+  observationPathIdentity,
   resolveSkillsDirectory,
   type HarnessProfile,
   type SkillsDirectory,
@@ -117,7 +117,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
     for (const root of profile.roots.filter((candidate) => candidate.readable)) {
       const path = resolveSkillsDirectory(root as SkillsDirectory, context);
       const scope = root.scope === "global" ? "user" : "project";
-      const key = `${scope}\0${(yield* observationPathIdentityEffect(path)).comparisonKey}`;
+      const key = `${scope}\0${(yield* observationPathIdentity(path)).comparisonKey}`;
       const entry = roots.get(key) ?? { harnesses: new Set(), roles: new Set(), scope, path };
       if (root.role === "native" && !entry.roles.has("native")) entry.path = path;
       entry.harnesses.add(profile.id);

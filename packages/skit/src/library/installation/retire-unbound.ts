@@ -5,7 +5,7 @@ import {
   type LibraryState,
   type InstalledSkill,
 } from "../library-state.js";
-import { withInstalledSkillMutationEffect } from "../../projection/mutation.js";
+import { withInstalledSkillMutation } from "../../projection/mutation.js";
 import { LibraryStore } from "../store/library-store.js";
 import { bindingSkillIds, type Binding } from "../library-contracts.js";
 import type { InstallDestination } from "../../vocabulary.js";
@@ -29,7 +29,7 @@ export const repositorySelectsInstalledSkill = (state: LibraryState, projection:
  * Retire owned installed skills nothing wants any more: their Skill lost its Binding, or their target
  * is inactive on this device or a former per-Harness root. Caller owns the writer lock.
  */
-export const retireUnboundGlobalInstalledSkillsEffect = Effect.fn(
+export const retireUnboundGlobalInstalledSkills = Effect.fn(
   "Library.retireUnboundGlobalProjections",
 )(function* (options: {
   variantsPath: string;
@@ -54,7 +54,7 @@ export const retireUnboundGlobalInstalledSkillsEffect = Effect.fn(
           !repositorySelectsInstalledSkill(loaded, projection))),
   );
   if (targets.length === 0) return 0;
-  const result = yield* withInstalledSkillMutationEffect(
+  const result = yield* withInstalledSkillMutation(
     loaded,
     {
       rootFor: () => undefined,

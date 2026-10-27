@@ -9,8 +9,8 @@ import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/sk
 import { retainedTreePath } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { updateSubjects, updateExitCode } from "../src/library-application/update.js";
 import { silentLibraryProgressLayer } from "../src/library-application/progress.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
@@ -65,7 +65,7 @@ const fixture = Effect.gen(function* () {
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
-  for (const url of urls) yield* run(retainLibrarySourceEffect({ type: "archive", url }));
+  for (const url of urls) yield* run(retainLibrarySource({ type: "archive", url }));
   const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
   bodies.set(urls[0]!, yield* archive("broken", true, "after"));
   bodies.set(urls[1]!, yield* archive("healthy", false, "after"));
@@ -84,7 +84,7 @@ it.effect("stops the batch when shared machine settings cannot be read", () =>
     yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
     const before = yield* f.fs.readFileString(join(f.home, "state.json"));
     const error = yield* f
-      .run(updateSubjectsEffect(f.options).pipe(Effect.provide(silentLibraryProgressLayer)))
+      .run(updateSubjects(f.options).pipe(Effect.provide(silentLibraryProgressLayer)))
       .pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
@@ -105,7 +105,7 @@ it.effect(
         pathOrDescriptor: join(f.root, "source-temp"),
       });
       const outcomes = yield* f.run(
-        updateSubjectsEffect(f.options).pipe(
+        updateSubjects(f.options).pipe(
           Effect.provide(
             rendererTestLayer({
               withStatus: (status, operation) =>
@@ -172,7 +172,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
         let failed = false;
         const outcomes = yield* f.run(
-          updateSubjectsEffect(options).pipe(
+          updateSubjects(options).pipe(
             Effect.provide(
               rendererTestLayer({
                 withStatus: (status, operation) =>
@@ -229,7 +229,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         const retained = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
         const retry = yield* writingTo(
           f.home,
-          f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
+          f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
         assert.include(yield* f.fs.readFileString(projectionPath), "after");
@@ -237,7 +237,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         assert.strictEqual(after.acquisitions.length, retained.acquisitions.length);
         const unchanged = yield* writingTo(
           f.home,
-          f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
+          f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue(
           unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
@@ -254,7 +254,7 @@ for (const kind of ["defect", "interrupt"] as const) {
         kind === "defect" ? Effect.die(new Error("programming defect")) : Effect.interrupt;
       const exit = yield* Effect.exit(
         f.run(
-          updateSubjectsEffect(f.options).pipe(
+          updateSubjects(f.options).pipe(
             Effect.provide(rendererTestLayer({ withStatus: () => failure })),
           ),
         ),
@@ -280,7 +280,7 @@ it.effect("stops on typed filesystem errors in shared Library storage", () =>
     });
     const exit = yield* Effect.exit(
       f.run(
-        updateSubjectsEffect(f.options).pipe(
+        updateSubjects(f.options).pipe(
           Effect.provide(rendererTestLayer()),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
@@ -317,7 +317,7 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
     );
     f.bodies.set(f.urls[0]!, yield* f.fs.readFile(archivePath));
     const outcomes = yield* f.run(
-      updateSubjectsEffect(f.options).pipe(Effect.provide(rendererTestLayer())),
+      updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer())),
     );
     assert.isTrue("status" in outcomes[0]!);
     if (!("status" in outcomes[0]!)) return;
@@ -336,7 +336,7 @@ it.effect("aborts the batch on typed shared state failures", () =>
       Effect.gen(function* () {
         const store = yield* LibraryStore;
         return yield* Effect.exit(
-          updateSubjectsEffect(f.options).pipe(
+          updateSubjects(f.options).pipe(
             Effect.provide(rendererTestLayer()),
             Effect.provideService(LibraryStore, {
               ...store,
@@ -375,7 +375,7 @@ it.effect("stops on corruption of an existing retained object", () =>
     );
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));
     const exit = yield* Effect.exit(
-      f.run(updateSubjectsEffect(f.options).pipe(Effect.provide(rendererTestLayer()))),
+      f.run(updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer()))),
     );
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit))

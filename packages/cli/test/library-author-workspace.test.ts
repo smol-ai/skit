@@ -9,11 +9,11 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { executeRemoveEffect } from "../src/workflows/library/remove.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { executeRemove } from "../src/workflows/library/remove.js";
 import { systemError } from "effect/PlatformError";
 import {
-  ensureAuthorWorkspaceRegisteredEffect,
+  ensureAuthorWorkspaceRegistered,
   type AuthorWorkspaceOptions,
 } from "../src/library/author-workspace.js";
 import {
@@ -36,7 +36,7 @@ it.effect(
       const options = {
         workspaceId: () => `workspace_${"a".repeat(32)}`,
       };
-      const first = yield* home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
+      const first = yield* home.owned(ensureAuthorWorkspaceRegistered(source, options));
       assert.ok(first.entry);
       assert.strictEqual(
         first.entry.collection?.upstream?.source_identity.kind,
@@ -53,7 +53,7 @@ it.effect(
 
       const skillPath = join(source, "skills", "review", "SKILL.md");
       yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated.\n`);
-      const refreshed = yield* home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
+      const refreshed = yield* home.owned(ensureAuthorWorkspaceRegistered(source, options));
       assert.ok(refreshed.entry);
       assert.strictEqual(
         refreshed.entry.collection?.collection_id,
@@ -79,7 +79,7 @@ const workspaceFixture = Effect.gen(function* () {
   yield* initializeLibraryMachine(home.home);
   const path = join(source, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
   const ensure = (options: AuthorWorkspaceOptions = {}) =>
-    home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
+    home.owned(ensureAuthorWorkspaceRegistered(source, options));
   const metadata = fs.readFileString(path).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
@@ -123,7 +123,7 @@ it.effect("rejects a copied workspace identity before scaffolding or publishing"
     yield* f.fs.copy(f.source, copy);
     const before = yield* captureDisk([f.source, copy, f.home.home], { identity: true });
     const failure = yield* Effect.flip(
-      f.home.owned(ensureAuthorWorkspaceRegisteredEffect(copy, { scaffold: true })),
+      f.home.owned(ensureAuthorWorkspaceRegistered(copy, { scaffold: true })),
     );
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
@@ -138,7 +138,7 @@ it.effect("removal requires explicit re-registration and preserves workspace ide
     const identity = (yield* f.metadata).workspace_id;
     const state = yield* f.home.durable;
     yield* f.home.owned(
-      executeRemoveEffect(state, { query: first.entry.collection.collection_id, dryRun: false }),
+      executeRemove(state, { query: first.entry.collection.collection_id, dryRun: false }),
     );
     assert.strictEqual((yield* f.metadata).registration, "removed");
     assert.strictEqual((yield* f.ensure()).entry, undefined);
@@ -165,7 +165,7 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     });
     yield* f.fs.writeFileString(f.path, replacement);
     yield* f.home.owned(
-      executeRemoveEffect(yield* f.home.durable, {
+      executeRemove(yield* f.home.durable, {
         query: first.entry.collection.collection_id,
         dryRun: false,
       }),
@@ -222,7 +222,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
-      yield* f.home.owned(retainLibrarySourceEffect(f.source));
+      yield* f.home.owned(retainLibrarySource(f.source));
       const before = yield* captureDisk([f.source, f.home.home], { identity: true });
       const failure = yield* Effect.flip(f.ensure({ scaffold: true }));
       assert.strictEqual(failure._tag, "DirectoryAlreadyRetained");

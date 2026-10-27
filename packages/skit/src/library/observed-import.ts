@@ -1,8 +1,8 @@
 import { Data, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import { dirname, join } from "node:path";
-import { deterministicTreeHashEffect, validateSkitDirectoryEffect } from "../artifact/skit.js";
+import { deterministicTreeHash, validateSkitDirectory } from "../artifact/skit.js";
 import { InvalidLibraryState } from "../failures.js";
-import { copyLocalTreeEffect } from "../platform/copy-tree.js";
+import { copyLocalTree } from "../platform/copy-tree.js";
 import {
   makeAcquisitionId,
   makeCollectionId,
@@ -25,11 +25,11 @@ import {
 import {
   LibraryState,
   decodeLibraryState,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
 } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
-import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
-import { materializedSkillDigestEffect } from "./skill-materialization.js";
+import { originalTreeHash, retainLocalTree } from "./retention/retain-tree.js";
+import { materializedSkillDigest } from "./skill-materialization.js";
 import {
   collectionLabelFromSource,
   sourceIdentityFromSource,
@@ -88,71 +88,71 @@ export interface RetainedSkillFact {
   readonly materializationProfile: MaterializationProfile;
 }
 
-export const prepareObservedCollectionEffect = Effect.fn("Library.prepareObservedCollection")(
-  function* (skills: ObservedImport["skills"]) {
-    const seen: ObservedSkill[] = [];
-    if (skills.length === 0)
-      return yield* new ObservedImportInvalid({ reason: "empty observed Collection" });
-    for (const skill of skills) {
-      if (!safeRelative(skill.relativePath))
-        return yield* new ObservedImportInvalid({
-          reason: `unsafe Skill path ${JSON.stringify(skill.relativePath)} for ${JSON.stringify(skill.name)}`,
-        });
-      const duplicate = seen.find((previous) => previous.name === skill.name);
-      if (duplicate)
-        return yield* new ObservedImportInvalid({
-          reason: `duplicate Skill name ${JSON.stringify(skill.name)} at ${JSON.stringify(duplicate.relativePath)} and ${JSON.stringify(skill.relativePath)}`,
-        });
-      const overlap = seen.find(
-        ({ relativePath: path }) =>
-          path === "." ||
-          skill.relativePath === "." ||
-          path === skill.relativePath ||
-          path.startsWith(`${skill.relativePath}/`) ||
-          skill.relativePath.startsWith(`${path}/`),
-      );
-      if (overlap)
-        return yield* new ObservedImportInvalid({
-          reason: `overlapping Skill paths ${JSON.stringify(overlap.relativePath)} (${JSON.stringify(overlap.name)}) and ${JSON.stringify(skill.relativePath)} (${JSON.stringify(skill.name)})`,
-        });
-      seen.push(skill);
-    }
-    const fs = yield* FileSystem.FileSystem;
-    const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-observed-v4-" });
-    const staged = join(workspace, "verbatim");
-    if (skills[0]?.relativePath !== ".") yield* fs.makeDirectory(staged);
-    const facts: RetainedSkillFact[] = [];
-    for (const skill of skills) {
-      const path = join(staged, skill.relativePath);
-      yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
-      yield* copyLocalTreeEffect(
-        skill.sourcePath,
-        path,
-        [
-          join(skill.sourcePath, ".git"),
-          join(skill.sourcePath, ".skit"),
-          join(skill.sourcePath, ".skit-ownership.json"),
-        ],
-        true,
-      );
-      if ((yield* deterministicTreeHashEffect(path)) !== skill.observedHash)
-        return yield* new ObservedImportInvalid({
-          reason: `observed Skill ${skill.name} changed`,
-        });
-      facts.push({
-        name: skill.name,
-        sourcePath: skill.relativePath,
-        sourceDigest: yield* originalTreeHashEffect(path),
-        artifactDigest: yield* Effect.scoped(
-          materializedSkillDigestEffect({ retainedRoot: staged, sourcePath: skill.relativePath }),
-        ),
-        validationDigest: skill.observedHash,
-        materializationProfile: "plain-skill/v1",
+export const prepareObservedCollection = Effect.fn("Library.prepareObservedCollection")(function* (
+  skills: ObservedImport["skills"],
+) {
+  const seen: ObservedSkill[] = [];
+  if (skills.length === 0)
+    return yield* new ObservedImportInvalid({ reason: "empty observed Collection" });
+  for (const skill of skills) {
+    if (!safeRelative(skill.relativePath))
+      return yield* new ObservedImportInvalid({
+        reason: `unsafe Skill path ${JSON.stringify(skill.relativePath)} for ${JSON.stringify(skill.name)}`,
       });
-    }
-    return { staged, facts, digest: yield* originalTreeHashEffect(staged) };
-  },
-);
+    const duplicate = seen.find((previous) => previous.name === skill.name);
+    if (duplicate)
+      return yield* new ObservedImportInvalid({
+        reason: `duplicate Skill name ${JSON.stringify(skill.name)} at ${JSON.stringify(duplicate.relativePath)} and ${JSON.stringify(skill.relativePath)}`,
+      });
+    const overlap = seen.find(
+      ({ relativePath: path }) =>
+        path === "." ||
+        skill.relativePath === "." ||
+        path === skill.relativePath ||
+        path.startsWith(`${skill.relativePath}/`) ||
+        skill.relativePath.startsWith(`${path}/`),
+    );
+    if (overlap)
+      return yield* new ObservedImportInvalid({
+        reason: `overlapping Skill paths ${JSON.stringify(overlap.relativePath)} (${JSON.stringify(overlap.name)}) and ${JSON.stringify(skill.relativePath)} (${JSON.stringify(skill.name)})`,
+      });
+    seen.push(skill);
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-observed-v4-" });
+  const staged = join(workspace, "verbatim");
+  if (skills[0]?.relativePath !== ".") yield* fs.makeDirectory(staged);
+  const facts: RetainedSkillFact[] = [];
+  for (const skill of skills) {
+    const path = join(staged, skill.relativePath);
+    yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
+    yield* copyLocalTree(
+      skill.sourcePath,
+      path,
+      [
+        join(skill.sourcePath, ".git"),
+        join(skill.sourcePath, ".skit"),
+        join(skill.sourcePath, ".skit-ownership.json"),
+      ],
+      true,
+    );
+    if ((yield* deterministicTreeHash(path)) !== skill.observedHash)
+      return yield* new ObservedImportInvalid({
+        reason: `observed Skill ${skill.name} changed`,
+      });
+    facts.push({
+      name: skill.name,
+      sourcePath: skill.relativePath,
+      sourceDigest: yield* originalTreeHash(path),
+      artifactDigest: yield* Effect.scoped(
+        materializedSkillDigest({ retainedRoot: staged, sourcePath: skill.relativePath }),
+      ),
+      validationDigest: skill.observedHash,
+      materializationProfile: "plain-skill/v1",
+    });
+  }
+  return { staged, facts, digest: yield* originalTreeHash(staged) };
+});
 
 const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
@@ -308,7 +308,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         }),
     ),
   );
-  yield* libraryManifestFromLocalStateEffect(successor).pipe(
+  yield* libraryManifestFromLocalState(successor).pipe(
     Effect.mapError(
       (error) =>
         new ObservedImportInvalid({
@@ -329,18 +329,18 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 });
 
 /** Retain observed bytes and return their receipt while the caller holds Library write authority. */
-export const retainObservedCollectionEffect = Effect.fn("Library.retainObservedCollection")(
-  function* (request: ObservedImport) {
-    const store = yield* LibraryStore;
-    const prepared = yield* prepareObservedCollectionEffect(request.skills);
-    yield* retainLocalTreeEffect(prepared.staged, store.originalsPath, prepared.digest, true);
-    return yield* persistPrepared({
-      ...request,
-      retainedDigest: prepared.digest,
-      facts: prepared.facts,
-    });
-  },
-);
+export const retainObservedCollection = Effect.fn("Library.retainObservedCollection")(function* (
+  request: ObservedImport,
+) {
+  const store = yield* LibraryStore;
+  const prepared = yield* prepareObservedCollection(request.skills);
+  yield* retainLocalTree(prepared.staged, store.originalsPath, prepared.digest, true);
+  return yield* persistPrepared({
+    ...request,
+    retainedDigest: prepared.digest,
+    facts: prepared.facts,
+  });
+});
 
 export class InstalledSkillObservationChanged
   extends Data.TaggedError("Library.InstalledSkillObservationChanged")<{ path: string }>
@@ -360,7 +360,7 @@ export class InstalledSkillObservationChanged
  * The Acquisition records only the local path and machine that were actually observed. It does
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
-export const retainChangedInstalledSkillEffect = Effect.fn("Library.retainChangedInstalledSkill")(
+export const retainChangedInstalledSkill = Effect.fn("Library.retainChangedInstalledSkill")(
   function* (request: {
     readonly skillId: LibraryState["skills"][number]["skill_id"];
     readonly projectionId: LibraryState["projections"][number]["projection_id"];
@@ -388,7 +388,7 @@ export const retainChangedInstalledSkillEffect = Effect.fn("Library.retainChange
     )
       return yield* new InstalledSkillObservationChanged({ path: request.path });
 
-    const prepared = yield* prepareObservedCollectionEffect([
+    const prepared = yield* prepareObservedCollection([
       {
         name: "projection-observation",
         sourcePath: request.path,
@@ -400,7 +400,7 @@ export const retainChangedInstalledSkillEffect = Effect.fn("Library.retainChange
         Effect.fail(new InstalledSkillObservationChanged({ path: request.path })),
       ),
     );
-    yield* retainLocalTreeEffect(prepared.staged, store.originalsPath, prepared.digest, true);
+    yield* retainLocalTree(prepared.staged, store.originalsPath, prepared.digest, true);
     const fact = prepared.facts[0]!;
     const machineId = yield* MachineSettings.ensureIdentity(store.home);
     const retainedCopy = state.retained_copies.find(
@@ -478,10 +478,10 @@ export interface AuthoredImport {
   readonly revision?: SourceRevision;
   readonly retainedAt: string;
 }
-export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
+export const retainAuthoredCollectionUnderLock = Effect.fn(
   "Library.retainAuthoredCollectionUnderLock",
 )(function* (request: AuthoredImport) {
-  const validated = yield* validateSkitDirectoryEffect(request.root, "retained", {
+  const validated = yield* validateSkitDirectory(request.root, "retained", {
     assessmentContext: "retain",
   });
   if (validated.diagnostics.some((item) => item.severity === "error"))
@@ -489,8 +489,8 @@ export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
       reason: "authored Descriptor or Skill content is invalid",
     });
   const store = yield* LibraryStore;
-  const retainedDigest = yield* originalTreeHashEffect(request.root);
-  const retainedRoot = yield* retainLocalTreeEffect(
+  const retainedDigest = yield* originalTreeHash(request.root);
+  const retainedRoot = yield* retainLocalTree(
     request.root,
     store.originalsPath,
     retainedDigest,
@@ -507,9 +507,9 @@ export const retainAuthoredCollectionUnderLockEffect = Effect.fn(
     facts.push({
       name: member.name,
       sourcePath: member.path,
-      sourceDigest: yield* originalTreeHashEffect(join(retainedRoot, member.path)),
+      sourceDigest: yield* originalTreeHash(join(retainedRoot, member.path)),
       artifactDigest: yield* Effect.scoped(
-        materializedSkillDigestEffect({
+        materializedSkillDigest({
           retainedRoot,
           sourcePath: member.path,
           shared: member.shared,

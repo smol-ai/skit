@@ -5,7 +5,7 @@ import {
   type LibraryState,
   type SkillId,
   type SkillVersionId,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   pathIsWithin,
   installDestinationHarnesses,
 } from "@smolai/skit-core";
@@ -14,7 +14,7 @@ import { custodyAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyObservedOwner } from "./setup-onboarding.js";
 import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
-import { probeHarnessesEffect } from "../../harness/probe.js";
+import { probeHarnesses } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
   SetupInstalledSkill,
@@ -101,7 +101,7 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
       sorted.find((candidate) => candidate.repository) ??
       hit;
     const authoredCollection = authoredBySkillPath.get(hit.realPath);
-    const hashResult = yield* Effect.result(deterministicTreeHashEffect(hit.realPath));
+    const hashResult = yield* Effect.result(deterministicTreeHash(hit.realPath));
     const contentIdentity = Result.isFailure(hashResult)
       ? { status: "unhashable" as const, libraryMatches: [] }
       : (() => {
@@ -233,7 +233,7 @@ export const observeSetupCopies = Effect.fn("Setup.observeCopies")(function* (
 ) {
   const indexes = indexSetupLibrary(evidence.library, evidence.authoredCollections);
   const { instances, onboardingInstances } = yield* observeSetupInstances(evidence, indexes, home);
-  const probes = (yield* probeHarnessesEffect(undefined, { path: probePath })).map((probe) => ({
+  const probes = (yield* probeHarnesses(undefined, { path: probePath })).map((probe) => ({
     harness: probe.harnessId,
     status: probe.status,
     command: probe.command,

@@ -26,7 +26,7 @@ import {
   DeleteRequiresPrivate,
   RegistryUnreachable,
 } from "../../registry/failures.js";
-import { resolveAuthForOriginEffect, type ResolvedAuth } from "../../registry/auth.js";
+import { resolveAuthForOrigin, type ResolvedAuth } from "../../registry/auth.js";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
@@ -35,7 +35,7 @@ import {
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { handleRegistryCommand } from "../../application.js";
-import { resolveAuthEffect } from "../../registry/auth.js";
+import { resolveAuth } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
@@ -71,7 +71,7 @@ export class AuthorDeleteResponseError
  * connection rather than leaving the body streaming. This never retries: a delete that may have
  * been accepted must not be sent twice.
  */
-export const deleteAuthorSkitEffect = Effect.fn("deleteAuthorSkitEffect")(function* (
+export const deleteAuthorSkit = Effect.fn("deleteAuthorSkit")(function* (
   remote: AuthorRemoteHome,
   options: { token?: string; dryRun?: boolean },
 ): Effect.fn.Return<
@@ -138,13 +138,11 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
   const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(destination);
   const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
   const remote = yield* parseAuthorDestinationEffect(destination, startup?.origin);
-  const credentials = yield* resolveAuthForOriginEffect(remote.origin, options.home);
+  const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     options.dryRun ? "Planning private SKIT deletion" : "Deleting private SKIT",
-    Effect.scoped(
-      deleteAuthorSkitEffect(remote, { token: credentials.token, dryRun: options.dryRun }),
-    ),
+    Effect.scoped(deleteAuthorSkit(remote, { token: credentials.token, dryRun: options.dryRun })),
   );
 });
 
@@ -165,7 +163,7 @@ export const authorDeleteCliCommand = Command.make(
       return yield* handleRegistryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const authState = yield* resolveAuthEffect(selectedHome).pipe(Effect.result);
+          const authState = yield* resolveAuth(selectedHome).pipe(Effect.result);
           const value = yield* authorDeleteCommand(skit, {
             authState,
             home: selectedHome,

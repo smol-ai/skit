@@ -1,8 +1,8 @@
 import {
   currentSkillVersion,
   invocationMetadataAdapters,
-  readSkitDescriptorEffect,
-  originalTreeHashEffect,
+  readSkitDescriptor,
+  originalTreeHash,
   RetainedContentInvalid,
   resolveDeclaredInvocation,
   retainedTreePath,
@@ -22,7 +22,7 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
   state: LibraryState,
   originalsPath: string,
   skill: Skill,
-  hashTree: (path: string) => ReturnType<typeof originalTreeHashEffect>,
+  hashTree: (path: string) => ReturnType<typeof originalTreeHash>,
 ) {
   const version = currentSkillVersion(state, skill);
   const backing = version === undefined ? undefined : versionBacking(state, skill, version);
@@ -42,9 +42,9 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
     });
   const descriptor =
     backing.member.materialization_profile === "declared-skit-skill/v1"
-      ? yield* readSkitDescriptorEffect(root)
+      ? yield* readSkitDescriptor(root)
       : undefined;
-  // Match installedSkillSourceEffect: descriptor names choose their declared source directory.
+  // Match installedSkillSource: descriptor names choose their declared source directory.
   const member = descriptor?.skills.find((member) => member.name === skill.name);
   if (descriptor !== undefined && member === undefined)
     return yield* new RetainedContentInvalid({
@@ -90,7 +90,7 @@ export const makeLibrarySkillInvocationReader = Effect.fn("Library.skillInvocati
   function* (state: LibraryState, originalsPath: string) {
     const hashes = yield* Cache.make({
       capacity: Math.max(1, state.retained_copies.length + state.skills.length),
-      lookup: originalTreeHashEffect,
+      lookup: originalTreeHash,
     });
     return (skill: Skill) =>
       readInvocation(state, originalsPath, skill, (path) => Cache.get(hashes, path)).pipe(

@@ -1,7 +1,7 @@
 import { dirname, join, relative, resolve } from "node:path";
 import { Effect } from "effect";
 import { LinkStat } from "@smolai/skit-core";
-import { leavePnpmSkillEffect } from "../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../projection/pnpm-skills.js";
 import { PlanIsStale } from "../library/failures.js";
 
 /** A registered marker cannot override repository, authored or package-manager ownership. */
@@ -9,7 +9,7 @@ export const checkSetupGlobalContent = Effect.fn("Setup.checkGlobalContent")(fun
   path: string,
 ) {
   const links = yield* LinkStat;
-  yield* leavePnpmSkillEffect(path);
+  yield* leavePnpmSkill(path);
   const present = (entry: string) =>
     links.lstat(entry).pipe(
       Effect.as(true),

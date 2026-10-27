@@ -4,10 +4,10 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   skitLayer,
-  retainAuthoredCollectionUnderLockEffect,
+  retainAuthoredCollectionUnderLock,
   type SkillsShLockFileEntry,
 } from "@smolai/skit-core";
 import {
@@ -56,7 +56,7 @@ it.effect(
                   name: "review",
                   sourcePath: source,
                   relativePath: "review",
-                  observedHash: yield* deterministicTreeHashEffect(source),
+                  observedHash: yield* deterministicTreeHash(source),
                 },
               ],
               observations: [],
@@ -259,7 +259,7 @@ skills:
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLockEffect({
+          retainAuthoredCollectionUnderLock({
             root: source,
             source: { type: "local", path: source },
             input: source,

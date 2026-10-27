@@ -38,12 +38,12 @@ import {
   draftCreateRequestSchema,
   draftUpdateRequestSchema,
   Digest,
-  parseContractEffect,
+  parseContract,
   planThreeWaySync,
   normalizeRegistryNamespace,
   normalizeRegistrySkitSlug,
-  validateSkitDirectoryEffect,
-  walkTreeEffect,
+  validateSkitDirectory,
+  walkTree,
   type SyncFileVersion,
   SkitContractError,
 } from "@smolai/skit-core";
@@ -236,7 +236,7 @@ export function skitLocator(remote: AuthorRemoteHome): string {
   return `skit://${authority}/${remote.namespace}/${remote.skit}`;
 }
 
-export function readAuthorRemoteEffect(
+export function readAuthorRemote(
   root: string,
 ): Effect.Effect<AuthorRemoteHome | undefined, AuthorRemoteMetadataInvalid, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -317,7 +317,7 @@ const writeState = Effect.fn("Sync.writeState")(function* (
 });
 const readTree = Effect.fn("Sync.readTree")(function* (root: string) {
   const result: Record<string, SyncFileVersion> = {};
-  for (const entry of yield* walkTreeEffect(root, "normalized", { respectGitIgnore: true })) {
+  for (const entry of yield* walkTree(root, "normalized", { respectGitIgnore: true })) {
     if (entry.kind !== "file") continue;
     result[entry.path] = {
       bytes: entry.bytes,
@@ -353,7 +353,7 @@ function filesForWire(files: Record<string, SyncFileVersion>) {
   }));
 }
 
-export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
+export const syncDraft = Effect.fn("Sync.draft")(function* (
   rootInput: string,
   options: {
     apply: boolean;
@@ -367,7 +367,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const fs = yield* FileSystem.FileSystem;
   const root = resolve(rootInput);
   const configuredBase = options.baseUrl;
-  const storedRemote = yield* readAuthorRemoteEffect(root);
+  const storedRemote = yield* readAuthorRemote(root);
   if (storedRemote && options.to)
     return yield* new AuthorRemoteAlreadyExists({ locator: skitLocator(storedRemote) });
   if (storedRemote && options.visibility)
@@ -379,7 +379,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     });
   if (!storedRemote && options.to && !options.visibility)
     return yield* new VisibilityNotAccepted({ reason: "required" });
-  const validation = yield* validateSkitDirectoryEffect(root, "draft", {
+  const validation = yield* validateSkitDirectory(root, "draft", {
     assessmentContext: "author",
   });
   if (validation.diagnostics.some((item) => item.severity === "error"))
@@ -451,7 +451,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
       };
     const created = yield* client.drafts
       .create({
-        payload: yield* parseContractEffect("draft create request", draftCreateRequestSchema, {
+        payload: yield* parseContract("draft create request", draftCreateRequestSchema, {
           owner,
           slug,
           title: slug,
@@ -545,7 +545,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     yield* fs.makeDirectory(dirname(staged), { recursive: true });
     yield* fs.writeFile(staged, file.bytes);
   }
-  const mergedValidation = yield* validateSkitDirectoryEffect(staging, "draft", {
+  const mergedValidation = yield* validateSkitDirectory(staging, "draft", {
     assessmentContext: "author",
   });
   if (mergedValidation.diagnostics.some((item) => item.severity === "error"))
@@ -556,7 +556,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
       remote: mergedValidation.descriptor.slug,
       local: localDescriptor.slug,
     });
-  const body = yield* parseContractEffect("draft update request", draftUpdateRequestSchema, {
+  const body = yield* parseContract("draft update request", draftUpdateRequestSchema, {
     title: remoteResponse.draft.title,
     description: remoteResponse.draft.description ?? undefined,
     visibility: remoteResponse.draft.visibility,

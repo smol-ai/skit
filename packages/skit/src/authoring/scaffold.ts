@@ -4,9 +4,9 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type { DescriptorFailure } from "../failures.js";
 import { DuplicateSkillNames, SkillDiscoveryLimitExceeded, SkillNameInvalid } from "../failures.js";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
-import { writeRawAtomicEffect } from "../platform/atomic-write.js";
+import { writeRawAtomic } from "../platform/atomic-write.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { readSkitDescriptorEffect } from "../artifact/skit.js";
+import { readSkitDescriptor } from "../artifact/skit.js";
 import { kebabNameSchema } from "../schemas.js";
 
 const isKebabName = Schema.is(kebabNameSchema);
@@ -110,20 +110,20 @@ function initDiscovery(
   });
 }
 
-const createScaffoldFileEffect = Effect.fn("Author.createScaffoldFile")(function* (
+const createScaffoldFile = Effect.fn("Author.createScaffoldFile")(function* (
   path: string,
   contents: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(dirname(path), { recursive: true });
-  yield* writeRawAtomicEffect(path, contents, true, 0o644).pipe(
+  yield* writeRawAtomic(path, contents, true, 0o644).pipe(
     Effect.catchTag("PlatformError", (error) =>
       error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
     ),
   );
 });
 
-const completeScaffoldEffect = Effect.fn("Author.completeScaffold")(function* (
+const completeScaffold = Effect.fn("Author.completeScaffold")(function* (
   root: string,
   slug: string,
 ) {
@@ -142,17 +142,17 @@ const completeScaffoldEffect = Effect.fn("Author.completeScaffold")(function* (
   };
   // The Skill conforms even when installed directly, without SKIT.
   const skill = `---\nname: ${slug}\ndescription: Describe exactly when this skill should be used.\ndisable-model-invocation: true\n---\n\n# ${slug}\n\nAdd instructions here.\n`;
-  yield* createScaffoldFileEffect(
+  yield* createScaffoldFile(
     join(root, "skills", slug, "agents", "openai.yaml"),
     "policy:\n  allow_implicit_invocation: false\n",
   );
-  yield* createScaffoldFileEffect(join(root, "skills", slug, "SKILL.md"), skill);
-  yield* createScaffoldFileEffect(join(root, "README.md"), `# ${slug}\n`);
-  yield* createScaffoldFileEffect(join(root, "skit.json"), `${JSON.stringify(config, null, 2)}\n`);
+  yield* createScaffoldFile(join(root, "skills", slug, "SKILL.md"), skill);
+  yield* createScaffoldFile(join(root, "README.md"), `# ${slug}\n`);
+  yield* createScaffoldFile(join(root, "skit.json"), `${JSON.stringify(config, null, 2)}\n`);
   yield* fs.remove(join(root, ".skit", "init-scaffold")).pipe(Effect.uninterruptible);
 });
 
-export const initSkitEffect = Effect.fn("Author.initScaffold")(function* (
+export const initSkit = Effect.fn("Author.initScaffold")(function* (
   path: string,
 ): Effect.fn.Return<
   InitSkitResult,
@@ -181,7 +181,7 @@ export const initSkitEffect = Effect.fn("Author.initScaffold")(function* (
     return yield* new DuplicateSkillNames();
   const discovered = yield* initDiscovery(root, existingSkills);
   if (checkpoint !== undefined) {
-    yield* completeScaffoldEffect(root, checkpoint);
+    yield* completeScaffold(root, checkpoint);
     return { path: root, discovered };
   }
   if (yield* fs.exists(join(root, "skit.json"))) return { path: root, discovered };
@@ -189,7 +189,7 @@ export const initSkitEffect = Effect.fn("Author.initScaffold")(function* (
   if (yield* fs.exists(readmePath)) {
     const readme = yield* fs.readFileString(readmePath);
     if (/^---\r?\n[\s\S]*?^skit:\s*1\s*$/m.test(readme)) {
-      yield* readSkitDescriptorEffect(root);
+      yield* readSkitDescriptor(root);
       return { path: root, discovered };
     }
   }
@@ -199,7 +199,7 @@ export const initSkitEffect = Effect.fn("Author.initScaffold")(function* (
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "my-skit";
   if (existingSkills.length) {
-    yield* writeRawAtomicEffect(
+    yield* writeRawAtomic(
       join(root, "skit.json"),
       `${JSON.stringify({ slug, skills: existingSkills }, null, 2)}\n`,
       true,
@@ -207,7 +207,7 @@ export const initSkitEffect = Effect.fn("Author.initScaffold")(function* (
     );
     return { path: root, discovered };
   }
-  yield* writeRawAtomicEffect(checkpointPath, slug, true);
-  yield* completeScaffoldEffect(root, slug);
+  yield* writeRawAtomic(checkpointPath, slug, true);
+  yield* completeScaffold(root, slug);
   return { path: root, discovered };
 });

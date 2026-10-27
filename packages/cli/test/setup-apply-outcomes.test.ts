@@ -25,7 +25,7 @@ import { PlanIsStale } from "../src/library/failures.js";
 import { SetupDiscovery, SetupPlanStale } from "../src/workflows/library/setup.js";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   initializeLibraryMachine,
   libraryHome,
   retainObservedIn,
@@ -598,7 +598,7 @@ const retainDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
               name: "delta",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(source),
+              observedHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],

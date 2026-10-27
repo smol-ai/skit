@@ -3,18 +3,15 @@ import { resolve } from "node:path";
 import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
 import {
-  inspectOwnershipMarkerEffect,
-  installedSkillCustodyEffect,
-  withInstalledSkillMutationEffect,
+  inspectOwnershipMarker,
+  installedSkillCustody,
+  withInstalledSkillMutation,
   type InstalledSkillAdoption,
 } from "../../projection/mutation.js";
-import {
-  pathIsWithin,
-  installDestinationPathIdentityEffect,
-} from "../../platform/path-identity.js";
+import { pathIsWithin, installDestinationPathIdentity } from "../../platform/path-identity.js";
 import { InstalledSkillRetireConflict } from "../../failures.js";
 import { repositorySelectsInstalledSkill } from "./retire-unbound.js";
-import { installedSkillSourceEffect } from "./installed-skill-source.js";
+import { installedSkillSource } from "./installed-skill-source.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { Digest, InstallDestination } from "../../vocabulary.js";
 import { scopeBinding, type InstalledSkill } from "../library-state.js";
@@ -38,7 +35,7 @@ export class InstalledSkillInvalid
 }
 
 /** Reconcile one Binding; return the number of Skill copies written. Caller owns the writer lock. */
-export const projectBindingEffect = Effect.fn("Library.projectBinding")(function* (options: {
+export const projectBinding = Effect.fn("Library.projectBinding")(function* (options: {
   target: InstallDestination;
   scope?: { kind: "global" } | { kind: "repository"; root: string };
   root: string;
@@ -87,7 +84,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     ...state.projections.filter((item) => item.target === options.target).map((item) => item.root),
     ...state.local_bindings.map((item) => item.scope.root),
   ])) {
-    const identity = yield* installDestinationPathIdentityEffect(root).pipe(
+    const identity = yield* installDestinationPathIdentity(root).pipe(
       Effect.orElseSucceed(() => ({
         comparisonKey: `path:${resolve(root)}`,
         canonicalPath: resolve(root),
@@ -122,10 +119,10 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     `Refusing to relocate modified Skill from ${projection.path}`;
   // Refuse an edited former copy before creating another installation or removing any old copy.
   for (const projection of former) {
-    if ((yield* installedSkillCustodyEffect(projection)).kind === "conflicted")
+    if ((yield* installedSkillCustody(projection)).kind === "conflicted")
       return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(projection) });
   }
-  const result = yield* withInstalledSkillMutationEffect(
+  const result = yield* withInstalledSkillMutation(
     state,
     {
       rootFor: () => options.root,
@@ -143,7 +140,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           // A copy without SKIT's marker was never SKIT's to remove: it was already there when SKIT
           // tried to install (a conflict). Disabling drops SKIT's record and leaves it in place. A
           // managed copy edited since SKIT wrote it is refused, so no edit is lost.
-          const marker = yield* inspectOwnershipMarkerEffect(existing.path);
+          const marker = yield* inspectOwnershipMarker(existing.path);
           yield* mutation.retire(
             existing,
             marker.kind === "absent" ? "report" : "throw",
@@ -157,7 +154,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         );
         const toRetire: InstalledSkill[] = [];
         for (const item of selected) {
-          const source = yield* installedSkillSourceEffect(
+          const source = yield* installedSkillSource(
             mutation.state,
             store.originalsPath,
             item.skill,
@@ -217,7 +214,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         }
         // Finish the whole installation batch before removing any former working copy.
         for (const old of toRetire) {
-          if ((yield* installedSkillCustodyEffect(old)).kind === "conflicted")
+          if ((yield* installedSkillCustody(old)).kind === "conflicted")
             return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(old) });
         }
         for (const old of toRetire) {

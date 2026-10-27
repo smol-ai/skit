@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Data, Effect, FileSystem } from "effect";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   canonicalJson,
   hashParts,
   FailureTypeId,
@@ -494,7 +494,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     const compared = [];
     for (const instance of observed.instances.filter((item) => names.has(item.name))) {
       const markdown = yield* fs.readFileString(join(instance.path, "SKILL.md"));
-      const currentHash = yield* deterministicTreeHashEffect(instance.path);
+      const currentHash = yield* deterministicTreeHash(instance.path);
       if (currentHash !== instance.contentIdentity.observedHash)
         return yield* invalid("This copy changed; observe setup again before comparing");
       compared.push({

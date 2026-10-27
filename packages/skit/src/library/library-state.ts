@@ -173,20 +173,20 @@ export const encodeLibraryState = Schema.encodeEffect(
   Schema.fromJsonString(LibraryStateDocument, { space: 2 }),
 );
 
-export const libraryManifestFromLocalStateEffect = Effect.fn(
-  "Library.libraryManifestFromLocalState",
-)(function* (state: LibraryState) {
-  const snapshot_digests = librarySnapshotDigests(state);
-  return yield* LibraryManifest.makeEffect(
-    currentLibraryManifest({
-      collections: state.collections,
-      skills: state.skills,
-      retained_copies: state.retained_copies,
-      acquisitions: state.acquisitions,
-      snapshot_digests,
-      bindings: state.global_bindings.map(
-        ({ invocation_policies: _policies, ...binding }) => binding,
-      ),
-    }),
-  );
-});
+export const libraryManifestFromLocalState = Effect.fn("Library.libraryManifestFromLocalState")(
+  function* (state: LibraryState) {
+    const snapshot_digests = librarySnapshotDigests(state);
+    return yield* LibraryManifest.makeEffect(
+      currentLibraryManifest({
+        collections: state.collections,
+        skills: state.skills,
+        retained_copies: state.retained_copies,
+        acquisitions: state.acquisitions,
+        snapshot_digests,
+        bindings: state.global_bindings.map(
+          ({ invocation_policies: _policies, ...binding }) => binding,
+        ),
+      }),
+    );
+  },
+);

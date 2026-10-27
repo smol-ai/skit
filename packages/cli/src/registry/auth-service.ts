@@ -3,8 +3,8 @@ import { Context, Effect, Layer, Result } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import { ChildProcessSpawner } from "effect/process";
 import {
-  resolveAuthEffect,
-  resolveRegistryLocatorEffect,
+  resolveAuth,
+  resolveRegistryLocator,
   type RegistryConfigurationError,
   type ResolvedAuth,
 } from "./auth.js";
@@ -36,7 +36,7 @@ export interface RegistryAuth {
   readonly resolveLocator: (
     input: string,
     registry?: string,
-  ) => ReturnType<typeof resolveRegistryLocatorEffect>;
+  ) => ReturnType<typeof resolveRegistryLocator>;
 }
 
 const noRegistryAccess: RegistryAuthAccess = { authState: Result.succeed({ source: "none" }) };
@@ -57,7 +57,7 @@ export const registryAuthLayer = (home?: string) =>
       // Stored tokens may live in the OS credential store, read through its command-line tool.
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const ambient = yield* Effect.cached(
-        resolveAuthEffect(home).pipe(
+        resolveAuth(home).pipe(
           Effect.provideService(SkitConfiguration, paths),
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
           Effect.result,
@@ -68,14 +68,14 @@ export const registryAuthLayer = (home?: string) =>
         resolve: (registry, command) =>
           registry === undefined && command === undefined
             ? ambient
-            : resolveAuthEffect(home, registry, undefined, command).pipe(
+            : resolveAuth(home, registry, undefined, command).pipe(
                 Effect.provideService(SkitConfiguration, paths),
                 Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
                 Effect.result,
                 Effect.map(accessFrom),
               ),
         resolveLocator: (input, registry) =>
-          resolveRegistryLocatorEffect(input, {
+          resolveRegistryLocator(input, {
             home,
             ...(registry === undefined ? {} : { registry }),
           }).pipe(Effect.provideService(SkitConfiguration, paths)),

@@ -2,11 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import {
-  LibraryManifest,
-  inspectOwnershipMarkerEffect,
-  makeSkillVersionId,
-} from "@smolai/skit-core";
+import { LibraryManifest, inspectOwnershipMarker, makeSkillVersionId } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
@@ -76,7 +72,7 @@ it.effect(
       );
       assert.strictEqual(bAfter.acquisitions.length, 3);
       assert.strictEqual(bAfter.retained_copies.length, 3);
-      const marker = yield* inspectOwnershipMarkerEffect(join(b.root, "review"));
+      const marker = yield* inspectOwnershipMarker(join(b.root, "review"));
       assert.strictEqual(marker.kind, "valid");
       if (marker.kind === "valid") assert.strictEqual(marker.marker.skill_version_id, publishedId);
       assert.strictEqual(

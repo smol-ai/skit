@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { systemError } from "effect/PlatformError";
-import { LinkStat, skitLayer, deterministicTreeHashEffect } from "@smolai/skit-core";
+import { LinkStat, skitLayer, deterministicTreeHash } from "@smolai/skit-core";
 import {
   listRecoveryOperations,
   prepareRecoveryRestore,
@@ -65,7 +65,7 @@ const recoveryFixture = Effect.fn("Test.recoveryFixture")(function* () {
   yield* fs.writeFileString(external, "outside");
   yield* fs.symlink(external, join(source, ".skit", "external-link"));
   yield* fs.symlink("review", alias);
-  const observedHash = yield* deterministicTreeHashEffect(source);
+  const observedHash = yield* deterministicTreeHash(source);
   const plan = yield* prepareRecoveryMoves(home, [
     { name: "review", path: source, observedHash },
     { name: "alias", path: alias },
@@ -290,7 +290,7 @@ it.effect("legacy moved flags are ignored and receipts remain unchanged after re
           type: "Directory",
           dev: info.dev,
           ino: info.ino,
-          observedHash: yield* deterministicTreeHashEffect(f.source),
+          observedHash: yield* deterministicTreeHash(f.source),
           moved: false,
         },
       ],
@@ -355,7 +355,7 @@ it.effect(
           {
             name: "review",
             path: f.source,
-            observedHash: yield* deterministicTreeHashEffect(f.source),
+            observedHash: yield* deterministicTreeHash(f.source),
           },
         ],
         operation,

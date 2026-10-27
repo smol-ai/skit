@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { LibraryStore, libraryStoreLayer, retainedTreePath } from "@smolai/skit-core";
 import {
-  retainLibrarySourceEffect,
-  previewLibrarySourceEffect,
+  retainLibrarySource,
+  previewLibrarySource,
 } from "../../src/library-application/source-acquisition.js";
 import { writingTo } from "./library-home.js";
 
@@ -18,12 +18,12 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
 ) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-real-collection-" });
-  const preview = yield* previewLibrarySourceEffect(source);
+  const preview = yield* previewLibrarySource(source);
   assert.deepStrictEqual(
     preview.skills.map((skill) => skill.verbatim_path).toSorted(),
     [...expectedPaths].toSorted(),
   );
-  const added = yield* writingTo(home, retainLibrarySourceEffect(source));
+  const added = yield* writingTo(home, retainLibrarySource(source));
   assert.deepStrictEqual(added.skills, preview.skills);
   const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
     Effect.provide(libraryStoreLayer({ home })),

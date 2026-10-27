@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { join } from "node:path";
-import { authorDeleteCommand, deleteAuthorSkitEffect } from "../src/workflows/author/delete.js";
+import { authorDeleteCommand, deleteAuthorSkit } from "../src/workflows/author/delete.js";
 import { DeleteRequiresPrivate } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
@@ -38,7 +38,7 @@ it.effect("previews and deletes the selected private SKIT", () =>
     );
     return Effect.gen(function* () {
       const value = yield* Effect.scoped(
-        deleteAuthorSkitEffect(remote, { token: "secret", dryRun }),
+        deleteAuthorSkit(remote, { token: "secret", dryRun }),
       ).pipe(Effect.provide(registryHttpLayer(registry)));
       assert.isDefined(request);
       assert.strictEqual(request.method, "DELETE");
@@ -56,7 +56,7 @@ it.effect("refuses non-private deletion with a stable conflict", () => {
   const registry = testHttpClientLayer(() =>
     Effect.succeed(Response.json({ error: "delete_requires_private" }, { status: 409 })),
   );
-  return Effect.scoped(deleteAuthorSkitEffect(remote, { token: "secret" })).pipe(
+  return Effect.scoped(deleteAuthorSkit(remote, { token: "secret" })).pipe(
     Effect.provide(registryHttpLayer(registry)),
     Effect.flip,
     Effect.map((failure) => assert.instanceOf(failure, DeleteRequiresPrivate)),

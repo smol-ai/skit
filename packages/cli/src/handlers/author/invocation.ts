@@ -1,4 +1,4 @@
-import { generateInvocationMetadataEffect } from "@smolai/skit-core";
+import { generateInvocationMetadata } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";
@@ -14,7 +14,7 @@ export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(functio
   dryRun: boolean,
 ) {
   const root = resolve(input);
-  const generated = yield* generateInvocationMetadataEffect(root, { dryRun });
+  const generated = yield* generateInvocationMetadata(root, { dryRun });
   return { root, dryRun, generated };
 });
 

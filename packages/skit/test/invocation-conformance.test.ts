@@ -6,13 +6,13 @@ import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
-  applyInvocationPolicyEffect,
+  applyInvocationPolicy,
   assessInvocationConformance,
-  createSkitArchiveEffect,
-  generateInvocationMetadataEffect,
-  isAuthorWorkspaceEffect,
+  createSkitArchive,
+  generateInvocationMetadata,
+  isAuthorWorkspace,
   resolveDeclaredInvocation,
-  validateSkitDirectoryEffect,
+  validateSkitDirectory,
   type InvocationPolicy,
 } from "../src/index.js";
 
@@ -81,7 +81,7 @@ effectIt.effect.each([
     Effect.gen(function* () {
       const root = yield* workspace(policy);
 
-      const generated = yield* generateInvocationMetadataEffect(root);
+      const generated = yield* generateInvocationMetadata(root);
 
       expect(generated.map((item) => [item.harness, item.changed])).toEqual([
         ["claude-code", true],
@@ -90,8 +90,7 @@ effectIt.effect.each([
       expect(yield* read(join(root, "skills", "review", "SKILL.md"))).toContain(claude);
       expect(yield* read(join(root, CODEX))).toContain(codex);
       expect(
-        (yield* validateSkitDirectoryEffect(root, "draft", { assessmentContext: "publish" }))
-          .diagnostics,
+        (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
       ).toEqual([]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -105,15 +104,14 @@ effectIt.effect("generation removes both fields for host policy", () =>
     yield* makeDirectory(join(root, "skills", "review", "agents"), { recursive: true });
     yield* write(join(root, CODEX), "policy:\n  allow_implicit_invocation: false\n");
 
-    yield* generateInvocationMetadataEffect(root);
+    yield* generateInvocationMetadata(root);
 
     expect(yield* read(join(root, "skills", "review", "SKILL.md"))).toBe(
       "---\nname: review\ndescription: Review.\n---\n# Review\n",
     );
     expect(yield* exists(join(root, CODEX))).toBe(false);
     expect(
-      (yield* validateSkitDirectoryEffect(root, "draft", { assessmentContext: "publish" }))
-        .diagnostics,
+      (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
     ).toEqual([]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -128,13 +126,12 @@ effectIt.effect(
       );
       const before = yield* read(join(root, "skills", "review", "SKILL.md"));
 
-      expect(yield* generateInvocationMetadataEffect(root)).toEqual([]);
+      expect(yield* generateInvocationMetadata(root)).toEqual([]);
       expect(
-        (yield* validateSkitDirectoryEffect(root, "draft", { assessmentContext: "publish" }))
-          .diagnostics,
+        (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
       ).toEqual([]);
       const archive = join(yield* makeTemporaryDirectory, "release.zip");
-      yield* createSkitArchiveEffect(root, archive);
+      yield* createSkitArchive(root, archive);
 
       expect(yield* read(join(root, "skills", "review", "SKILL.md"))).toBe(before);
       expect(Number((yield* stat(archive)).size)).toBeGreaterThan(0);
@@ -146,7 +143,7 @@ effectIt.effect("generation refuses a source that is not an Author Workspace", (
     const root = yield* workspace("explicit");
     yield* remove(join(root, ".skit"), { recursive: true });
 
-    const result = yield* generateInvocationMetadataEffect(root).pipe(Effect.result);
+    const result = yield* generateInvocationMetadata(root).pipe(Effect.result);
     expect(result).toMatchObject({
       _tag: "Failure",
       failure: { _tag: "NotAnAuthorWorkspace" },
@@ -161,7 +158,7 @@ effectIt.effect("a dry run reports the drift without writing it", () =>
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
 
-    const generated = yield* generateInvocationMetadataEffect(root, { dryRun: true });
+    const generated = yield* generateInvocationMetadata(root, { dryRun: true });
 
     expect(generated.every((item) => item.changed)).toBe(true);
     expect(yield* read(join(root, "skills", "review", "SKILL.md"))).not.toContain(
@@ -175,10 +172,10 @@ effectIt.effect("validation reports drift as an author warning and a publication
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
 
-    const authoring = yield* validateSkitDirectoryEffect(root, "draft", {
+    const authoring = yield* validateSkitDirectory(root, "draft", {
       assessmentContext: "author",
     });
-    const publication = yield* validateSkitDirectoryEffect(root, "draft", {
+    const publication = yield* validateSkitDirectory(root, "draft", {
       assessmentContext: "publish",
     });
 
@@ -197,7 +194,7 @@ effectIt.effect("validation reports drift as an author warning and a publication
     expect(authoring.diagnostics[0]?.message).toContain("skit author invocation");
     expect(publication.diagnostics.every((item) => item.severity === "error")).toBe(true);
     expect(
-      yield* createSkitArchiveEffect(root, join(root, "release.zip")).pipe(Effect.result),
+      yield* createSkitArchive(root, join(root, "release.zip")).pipe(Effect.result),
     ).toMatchObject({
       _tag: "Failure",
       failure: { _tag: "SkitValidationFailed" },
@@ -211,8 +208,7 @@ effectIt.effect("acquired sources are never assessed for conformance", () =>
 
     for (const context of ["retain", "project"] as const)
       expect(
-        (yield* validateSkitDirectoryEffect(root, "draft", { assessmentContext: context }))
-          .diagnostics,
+        (yield* validateSkitDirectory(root, "draft", { assessmentContext: context })).diagnostics,
       ).toEqual([]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -220,16 +216,16 @@ effectIt.effect("acquired sources are never assessed for conformance", () =>
 effectIt.effect("projecting a conforming artifact rewrites nothing", () =>
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
-    yield* generateInvocationMetadataEffect(root);
+    yield* generateInvocationMetadata(root);
     const skill = join(root, "skills", "review");
     const claudeBefore = yield* read(join(skill, "SKILL.md"));
     const codexBefore = yield* read(join(root, CODEX));
 
-    yield* applyInvocationPolicyEffect(skill, "claude", "explicit");
+    yield* applyInvocationPolicy(skill, "claude", "explicit");
     expect(yield* read(join(skill, "SKILL.md"))).toBe(claudeBefore);
 
     // The shared copy also gains OpenCode and Devin settings; the authored Codex file is untouched.
-    yield* applyInvocationPolicyEffect(skill, "agents", "explicit");
+    yield* applyInvocationPolicy(skill, "agents", "explicit");
     expect(yield* read(join(root, CODEX))).toBe(codexBefore);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -418,9 +414,9 @@ test("one declaration can still yield different author defaults per Harness nati
 effectIt.effect("workspace detection reports present and absent metadata", () =>
   Effect.gen(function* () {
     const root = yield* workspace(undefined);
-    expect(yield* isAuthorWorkspaceEffect(root)).toBe(true);
+    expect(yield* isAuthorWorkspace(root)).toBe(true);
     yield* remove(join(root, ".skit", "workspace.json"));
-    expect(yield* isAuthorWorkspaceEffect(root)).toBe(false);
+    expect(yield* isAuthorWorkspace(root)).toBe(false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -435,7 +431,7 @@ effectIt.effect.each(["claude-code", "codex", "missing"] as const)(
         yield* makeDirectory(join(root, "skills/review/agents"), { recursive: true });
         yield* write(path, harness === "codex" ? "policy: [" : "---\nname: [\n---\n");
       }
-      const outcome = yield* generateInvocationMetadataEffect(root).pipe(Effect.result);
+      const outcome = yield* generateInvocationMetadata(root).pipe(Effect.result);
       expect(outcome).toMatchObject({
         _tag: "Failure",
         failure: {
@@ -466,7 +462,7 @@ effectIt.effect.each(["read", "write"] as const)(
       );
       const operation = Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        return yield* generateInvocationMetadataEffect(root).pipe(
+        return yield* generateInvocationMetadata(root).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
             readFileString: (path, options) =>
@@ -531,7 +527,7 @@ effectIt.effect("unexpected adapter exceptions remain defects", () =>
           adapter.write = original;
         }),
     );
-    const exit = yield* Effect.exit(generateInvocationMetadataEffect(root).pipe(Effect.result));
+    const exit = yield* Effect.exit(generateInvocationMetadata(root).pipe(Effect.result));
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") expect(Cause.hasDies(exit.cause)).toBe(true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

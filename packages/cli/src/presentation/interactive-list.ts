@@ -201,7 +201,7 @@ const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
 });
 
 /** Interactive Library browser backed by the portable enable and disable workflows. */
-export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
+export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
   initial: LibrarySessionState,
   configuration: InstalledSkillOptions,
 ) {

@@ -13,11 +13,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import {
-  planUpdatesEffect,
-  updateSubjectsEffect,
-  updateExitCode,
-} from "../../library-application/update.js";
+import { planUpdates, updateSubjects, updateExitCode } from "../../library-application/update.js";
 import {
   prepareInstalledSkillRetention,
   InstalledSkillRetentionMissing,
@@ -63,12 +59,12 @@ export const updateCliCommand = Command.make(
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
-            planUpdatesEffect(query),
+            planUpdates(query),
           );
           return yield* renderer.result(result("updatePlan", value));
         }
         const configuration = yield* libraryCommandConfiguration(input);
-        const value = yield* updateSubjectsEffect({ roots: configuration.inventory }, query).pipe(
+        const value = yield* updateSubjects({ roots: configuration.inventory }, query).pipe(
           Effect.provide(terminalLibraryProgressLayer),
         );
         yield* renderer.result(result("update", value, updateExitCode(value)));

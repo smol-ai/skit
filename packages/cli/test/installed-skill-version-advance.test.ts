@@ -4,10 +4,10 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
   currentSkillVersion,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  projectBindingEffect,
+  projectBinding,
   refreshLibraryInventory,
 } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
@@ -39,7 +39,7 @@ const boundRawReview = Effect.gen(function* () {
                 name: "raw-review",
                 sourcePath: source,
                 relativePath: "raw-review",
-                observedHash: yield* deterministicTreeHashEffect(source),
+                observedHash: yield* deterministicTreeHash(source),
               },
             ],
             observations: [],
@@ -71,7 +71,7 @@ const boundRawReview = Effect.gen(function* () {
   );
   const project = writingTo(
     home,
-    projectBindingEffect({
+    projectBinding({
       target: "agents",
       root: roots.codexRoot,
       variantsPath: join(home, "variants"),
@@ -220,7 +220,7 @@ for (const followedCollection of [false, true])
                 name: "other",
                 sourcePath: otherSource,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(otherSource),
+                observedHash: yield* deterministicTreeHash(otherSource),
               },
             ],
             observations: [],

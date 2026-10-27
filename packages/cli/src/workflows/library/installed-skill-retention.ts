@@ -1,15 +1,15 @@
 import {
   canonicalJson,
-  deterministicTreeHashEffect,
-  inspectOwnershipMarkerEffect,
+  deterministicTreeHash,
+  inspectOwnershipMarker,
   LibraryStore,
   libraryStateRevision,
   bindingSkillIds,
   effectiveGlobalBindings,
   currentSkillVersion,
-  prepareObservedCollectionEffect,
-  projectBindingEffect,
-  retainChangedInstalledSkillEffect,
+  prepareObservedCollection,
+  projectBinding,
+  retainChangedInstalledSkill,
   retainedTreePath,
   versionBacking,
   withLibraryWriter,
@@ -112,13 +112,13 @@ const observeInstalledSkillRetention = Effect.fn("Library.planInstalledSkillRete
     (projection) => projection.skill_id === skill.skill_id,
   );
   const selected = yield* matchingInstalledSkill(candidates, selector);
-  const observed = yield* deterministicTreeHashEffect(selected.path);
+  const observed = yield* deterministicTreeHash(selected.path);
   if (observed === selected.expected_digest)
     return yield* new InstalledSkillRetentionMissing({
       message: `${selected.path} has not changed from its retained Version`,
     });
   const prepared = yield* Effect.scoped(
-    prepareObservedCollectionEffect([
+    prepareObservedCollection([
       {
         name: skill.name,
         sourcePath: selected.path,
@@ -129,7 +129,7 @@ const observeInstalledSkillRetention = Effect.fn("Library.planInstalledSkillRete
   );
   const observations: Array<InstalledSkillRetentionPlan["projections"][number]> = [];
   for (const projection of candidates) {
-    const digest = yield* deterministicTreeHashEffect(projection.path);
+    const digest = yield* deterministicTreeHash(projection.path);
     observations.push({
       projection_id: projection.projection_id,
       target: projection.target,
@@ -205,7 +205,7 @@ const applyPreparedInstalledSkillRetention = Effect.fn("Library.applyInstalledSk
         )!;
         const retained = preview.retention_required
           ? yield* Effect.scoped(
-              retainChangedInstalledSkillEffect({
+              retainChangedInstalledSkill({
                 skillId: preview.skill_id,
                 projectionId: preview.selected_projection_id,
                 path: selected.path,
@@ -238,7 +238,7 @@ const applyPreparedInstalledSkillRetention = Effect.fn("Library.applyInstalledSk
         >();
         for (const projection of preview.projections) {
           if (projection.observed_digest !== preview.observed_digest) continue;
-          const marker = yield* inspectOwnershipMarkerEffect(projection.path);
+          const marker = yield* inspectOwnershipMarker(projection.path);
           if (marker.kind === "valid")
             accepted.set(projection.projection_id, {
               observedHash: projection.observed_digest,
@@ -260,7 +260,7 @@ const applyPreparedInstalledSkillRetention = Effect.fn("Library.applyInstalledSk
           const coordinate = `${projection.target}\0${canonicalJson(binding.scope)}\0${projection.root}`;
           if (reconciled.has(coordinate)) continue;
           reconciled.add(coordinate);
-          yield* projectBindingEffect({
+          yield* projectBinding({
             target: projection.target,
             scope: binding.scope,
             root: projection.root,

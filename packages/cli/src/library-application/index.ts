@@ -20,7 +20,7 @@ export {
   type LibrarySkillRow,
   type PendingLibraryChange,
 } from "./session.js";
-export { planUpdatesEffect, updateSubjectsEffect, updateExitCode } from "./update.js";
+export { planUpdates, updateSubjects, updateExitCode } from "./update.js";
 export {
   LibraryProgress,
   libraryProgressLayer,

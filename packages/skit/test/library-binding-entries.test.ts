@@ -1,12 +1,12 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { projectBindingEffect } from "../src/library/installation/project-binding.js";
-import { removeCollectionEffect } from "../src/library/installation/remove.js";
+import { projectBinding } from "../src/library/installation/project-binding.js";
+import { removeCollection } from "../src/library/installation/remove.js";
 import type { BindingEntry } from "../src/library/library-contracts.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
+import { retainObservedCollection } from "../src/library/observed-import.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -38,13 +38,13 @@ const upstream = Effect.gen(function* () {
           name,
           sourcePath: directory,
           relativePath: name,
-          observedHash: yield* deterministicTreeHashEffect(directory),
+          observedHash: yield* deterministicTreeHash(directory),
         });
       }
       return yield* Effect.scoped(
         withLibraryWriterLock(
           home,
-          retainObservedCollectionEffect({
+          retainObservedCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
@@ -75,7 +75,7 @@ const upstream = Effect.gen(function* () {
     });
   const project = withLibraryWriterLock(
     home,
-    projectBindingEffect({
+    projectBinding({
       target: "agents",
       root,
       variantsPath: join(home, "variants"),
@@ -134,7 +134,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
     yield* project;
     const error = yield* withLibraryWriterLock(
       home,
-      removeCollectionEffect(planned, { collectionId, variantsPath: join(home, "variants") }),
+      removeCollection(planned, { collectionId, variantsPath: join(home, "variants") }),
     ).pipe(Effect.provide(storeLayer), Effect.flip);
 
     assert.strictEqual(error._tag, "LibraryChanged");

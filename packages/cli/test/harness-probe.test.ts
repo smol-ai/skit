@@ -3,7 +3,7 @@ import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { skitLayer } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../src/harness/probe.js";
+import { probeHarness } from "../src/harness/probe.js";
 
 describe("harness probe", () => {
   it.effect("reports executable, resolved target, and parsed product version", () =>
@@ -17,7 +17,7 @@ describe("harness probe", () => {
       yield* fs.chmod(target, 0o755);
       yield* fs.symlink(target, executable);
 
-      const result = yield* probeHarnessEffect("claude-code", { path: root });
+      const result = yield* probeHarness("claude-code", { path: root });
 
       expect(result).toEqual(
         expect.objectContaining({
@@ -33,7 +33,7 @@ describe("harness probe", () => {
 
   it.effect("reports a missing executable without spawning it", () =>
     Effect.gen(function* () {
-      const result = yield* probeHarnessEffect("codex", { path: "" });
+      const result = yield* probeHarness("codex", { path: "" });
       expect(result).toEqual(
         expect.objectContaining({ status: "missing", executablePath: null, version: null }),
       );
@@ -52,7 +52,7 @@ describe("harness probe", () => {
       yield* fs.chmod(target, 0o755);
       yield* fs.symlink(target, executable);
 
-      const result = yield* probeHarnessEffect("devin", { path: root });
+      const result = yield* probeHarness("devin", { path: root });
 
       expect(result).toMatchObject({
         harnessId: "devin",

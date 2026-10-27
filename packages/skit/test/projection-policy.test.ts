@@ -3,7 +3,7 @@ import { parse } from "yaml";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
-import { applyInvocationPolicyEffect, overrideInvocationIntent } from "../src/projection/policy.js";
+import { applyInvocationPolicy, overrideInvocationIntent } from "../src/projection/policy.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const makeDirectory = (path: string) => FileSystem.FileSystem.use((fs) => fs.makeDirectory(path));
@@ -31,9 +31,9 @@ it.effect("projects explicit-only intent into native Harness settings", () =>
     const codex = yield* skill();
     const opencode = yield* skill();
 
-    yield* applyInvocationPolicyEffect(claude, "claude", "explicit");
-    yield* applyInvocationPolicyEffect(codex, "agents", "explicit");
-    yield* applyInvocationPolicyEffect(opencode, "agents", "explicit");
+    yield* applyInvocationPolicy(claude, "claude", "explicit");
+    yield* applyInvocationPolicy(codex, "agents", "explicit");
+    yield* applyInvocationPolicy(opencode, "agents", "explicit");
 
     expect(yield* read(join(claude, "SKILL.md"))).toContain("disable-model-invocation: true");
     expect(parse(yield* read(join(codex, "agents", "openai.yaml")))).toMatchObject({
@@ -49,7 +49,7 @@ it.effect("one .agents copy carries every reader's native invocation metadata", 
   Effect.gen(function* () {
     const agents = yield* skill();
 
-    yield* applyInvocationPolicyEffect(agents, "agents", "explicit");
+    yield* applyInvocationPolicy(agents, "agents", "explicit");
 
     expect(parse(yield* read(join(agents, "agents", "openai.yaml")))).toMatchObject({
       policy: { allow_implicit_invocation: false },
@@ -68,7 +68,7 @@ it.effect("projects implicit intent as portable OpenCode metadata", () =>
       "name: review\ndisable-model-invocation: true\nmetadata:\n  other: keep",
     );
 
-    yield* applyInvocationPolicyEffect(directory, "agents", "implicit");
+    yield* applyInvocationPolicy(directory, "agents", "implicit");
 
     expect(frontmatter(yield* read(join(directory, "SKILL.md")))).toMatchObject({
       metadata: { other: "keep", "opencode/autoinvoke": "true" },
@@ -82,7 +82,7 @@ it.effect("shared host policy clears invocation constraints and preserves unrela
     const directory = yield* skill(
       'name: review\ndisable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: "false"\n  other: keep',
     );
-    yield* applyInvocationPolicyEffect(
+    yield* applyInvocationPolicy(
       directory,
       "agents",
       "explicit",
@@ -100,7 +100,7 @@ it.effect("OpenCode rejects a non-map metadata field on write with a tagged fail
   Effect.gen(function* () {
     for (const metadata of ["", "value", "[value]"]) {
       const directory = yield* skill(`name: review\nmetadata: ${metadata}`);
-      const result = yield* applyInvocationPolicyEffect(directory, "agents", "explicit").pipe(
+      const result = yield* applyInvocationPolicy(directory, "agents", "explicit").pipe(
         Effect.result,
       );
 
@@ -120,7 +120,7 @@ it.effect("OpenCode overwrites an authored implicit value and preserves CRLF", (
       '---\r\nname: review\r\nmetadata: { opencode/autoinvoke: "true", other: keep }\r\n---\r\n# Review\r\n',
     );
 
-    yield* applyInvocationPolicyEffect(
+    yield* applyInvocationPolicy(
       directory,
       "agents",
       "implicit",
@@ -147,8 +147,8 @@ it.effect("a declaration overrides stale native metadata", () =>
       "policy:\n  allow_implicit_invocation: true\n",
     );
 
-    yield* applyInvocationPolicyEffect(claude, "claude", "explicit");
-    yield* applyInvocationPolicyEffect(codex, "agents", "explicit");
+    yield* applyInvocationPolicy(claude, "claude", "explicit");
+    yield* applyInvocationPolicy(codex, "agents", "explicit");
 
     expect(yield* read(join(claude, "SKILL.md"))).toContain("disable-model-invocation: true");
     expect(yield* read(join(codex, "agents", "openai.yaml"))).toContain(
@@ -170,8 +170,8 @@ it.effect("an undeclared skill keeps its native metadata byte-identical", () =>
     );
     const before = yield* read(join(claude, "SKILL.md"));
 
-    yield* applyInvocationPolicyEffect(claude, "claude", undefined);
-    yield* applyInvocationPolicyEffect(codex, "agents", undefined);
+    yield* applyInvocationPolicy(claude, "claude", undefined);
+    yield* applyInvocationPolicy(codex, "agents", undefined);
 
     expect(yield* read(join(claude, "SKILL.md"))).toBe(before);
     expect(yield* read(join(codex, "agents", "openai.yaml"))).toBe(
@@ -192,8 +192,8 @@ it.effect("declared host policy removes native invocation metadata", () =>
       "policy:\n  allow_implicit_invocation: true\n",
     );
 
-    yield* applyInvocationPolicyEffect(claude, "claude", "host-policy");
-    yield* applyInvocationPolicyEffect(codex, "agents", "host-policy");
+    yield* applyInvocationPolicy(claude, "claude", "host-policy");
+    yield* applyInvocationPolicy(codex, "agents", "host-policy");
 
     expect(yield* read(join(claude, "SKILL.md"))).toBe(
       "---\nname: review\ndescription: Review.\n---\n# Review\n",
@@ -211,7 +211,7 @@ it.effect("host policy keeps unrelated Codex metadata", () =>
       "policy:\n  allow_implicit_invocation: true\n  other: keep\n",
     );
 
-    yield* applyInvocationPolicyEffect(codex, "agents", "host-policy");
+    yield* applyInvocationPolicy(codex, "agents", "host-policy");
 
     expect(yield* read(join(codex, "agents", "openai.yaml"))).toBe("policy:\n  other: keep\n");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -223,7 +223,7 @@ it.effect("a local override still wins over the author's declaration", () =>
       "name: review\ndescription: Review.\ndisable-model-invocation: true",
     );
 
-    yield* applyInvocationPolicyEffect(
+    yield* applyInvocationPolicy(
       claude,
       "claude",
       "explicit",
@@ -245,12 +245,7 @@ it.effect("an install-time override wins over authored settings", () =>
       "policy:\n  allow_implicit_invocation: true\n",
     );
 
-    yield* applyInvocationPolicyEffect(
-      codex,
-      "agents",
-      "implicit",
-      overrideInvocationIntent("explicit"),
-    );
+    yield* applyInvocationPolicy(codex, "agents", "implicit", overrideInvocationIntent("explicit"));
 
     expect(parse(yield* read(join(codex, "agents", "openai.yaml")))).toMatchObject({
       policy: { allow_implicit_invocation: false },
@@ -263,7 +258,7 @@ it.effect("host policy leaves native files unchanged", () =>
     const directory = yield* skill();
     const before = yield* read(join(directory, "SKILL.md"));
 
-    yield* applyInvocationPolicyEffect(
+    yield* applyInvocationPolicy(
       directory,
       "claude",
       "explicit",
@@ -278,7 +273,7 @@ it.effect("safely replaces an empty Claude invocation value", () =>
   Effect.gen(function* () {
     const directory = yield* skill("name: review\ndisable-model-invocation:");
 
-    yield* applyInvocationPolicyEffect(
+    yield* applyInvocationPolicy(
       directory,
       "claude",
       "implicit",
@@ -296,7 +291,7 @@ it.effect("adds frontmatter when an explicit Claude override has none", () =>
     const directory = yield* makeTemporaryDirectory;
     yield* write(join(directory, "SKILL.md"), "# Review\n");
 
-    yield* applyInvocationPolicyEffect(
+    yield* applyInvocationPolicy(
       directory,
       "claude",
       undefined,
@@ -313,7 +308,7 @@ it.effect("writes new Codex metadata in canonical block style", () =>
   Effect.gen(function* () {
     const directory = yield* skill();
 
-    yield* applyInvocationPolicyEffect(directory, "agents", "explicit");
+    yield* applyInvocationPolicy(directory, "agents", "explicit");
 
     expect(yield* read(join(directory, "agents", "openai.yaml"))).toBe(
       "policy:\n  allow_implicit_invocation: false\n",
@@ -326,7 +321,7 @@ it.effect("does not infer model invocation from dependency-only trigger modes", 
     const directory = yield* skill();
     const before = yield* read(join(directory, "SKILL.md"));
 
-    yield* applyInvocationPolicyEffect(directory, "claude", undefined);
+    yield* applyInvocationPolicy(directory, "claude", undefined);
 
     expect(yield* read(join(directory, "SKILL.md"))).toBe(before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -338,7 +333,7 @@ it.effect("preserves long frontmatter scalars on one line", () =>
       "Use this skill when the user asks for a thorough code review of a branch, a pull request, or any set of pending changes that need scrutiny.";
     const directory = yield* skill(`name: review\ndescription: ${description}`);
 
-    yield* applyInvocationPolicyEffect(directory, "claude", "explicit");
+    yield* applyInvocationPolicy(directory, "claude", "explicit");
 
     expect(yield* read(join(directory, "SKILL.md"))).toContain(`description: ${description}\n`);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -348,7 +343,7 @@ it.effect("does not treat an inline separator as the frontmatter delimiter", () 
   Effect.gen(function* () {
     const directory = yield* skill("name: review\ndescription: separator is ---\nother: x");
 
-    yield* applyInvocationPolicyEffect(directory, "claude", "explicit");
+    yield* applyInvocationPolicy(directory, "claude", "explicit");
 
     const projected = yield* read(join(directory, "SKILL.md"));
     expect(projected).toContain("description: separator is ---\n");
@@ -366,7 +361,7 @@ it.effect("adds policy inside empty frontmatter", () =>
     const directory = yield* makeTemporaryDirectory;
     yield* write(join(directory, "SKILL.md"), "---\n---\n# Review\n");
 
-    yield* applyInvocationPolicyEffect(directory, "claude", "explicit");
+    yield* applyInvocationPolicy(directory, "claude", "explicit");
 
     expect(yield* read(join(directory, "SKILL.md"))).toBe(
       "---\ndisable-model-invocation: true\n---\n# Review\n",
@@ -379,7 +374,7 @@ it.effect("preserves CRLF throughout Claude frontmatter", () =>
     const directory = yield* makeTemporaryDirectory;
     yield* write(join(directory, "SKILL.md"), "---\r\nname: review\r\n---\r\n# Review\r\n");
 
-    yield* applyInvocationPolicyEffect(directory, "claude", "explicit");
+    yield* applyInvocationPolicy(directory, "claude", "explicit");
 
     const projected = yield* read(join(directory, "SKILL.md"));
     expect(projected).not.toMatch(/(?<!\r)\n/);

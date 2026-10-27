@@ -6,7 +6,7 @@ import { LibraryChangedOnServer } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import {
   LibraryManifestTooNew,
-  librarySyncApiEffect,
+  librarySyncApi,
 } from "../src/workflows/library/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -23,12 +23,12 @@ const wire = (name: string) =>
 /** Run the client against one literal response, recording the request it sent. */
 const exchange = <A, E>(
   response: () => Response,
-  use: (api: Effect.Success<ReturnType<typeof librarySyncApiEffect>>) => Effect.Effect<A, E>,
+  use: (api: Effect.Success<ReturnType<typeof librarySyncApi>>) => Effect.Effect<A, E>,
 ) => {
   const sent: { method: string; path: string; body: unknown }[] = [];
   return Effect.scoped(
     Effect.gen(function* () {
-      const api = yield* librarySyncApiEffect({ origin: "https://registry.test", token: "test" });
+      const api = yield* librarySyncApi({ origin: "https://registry.test", token: "test" });
       const result = yield* use(api);
       return { result, sent };
     }).pipe(

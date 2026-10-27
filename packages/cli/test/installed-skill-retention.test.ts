@@ -2,10 +2,10 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  projectBindingEffect,
+  projectBinding,
   skitLayer,
 } from "@smolai/skit-core";
 import { prepareInstalledSkillRetention } from "../src/workflows/library/installed-skill-retention.js";
@@ -35,7 +35,7 @@ const projectionFixture = Effect.gen(function* () {
             name: "review",
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(source),
+            observedHash: yield* deterministicTreeHash(source),
           },
         ],
         observations: [],
@@ -69,7 +69,7 @@ const projectionFixture = Effect.gen(function* () {
   for (const target of ["agents", "claude"] as const)
     yield* writingTo(
       home,
-      projectBindingEffect({
+      projectBinding({
         target,
         root: rootByTarget[target],
         variantsPath: join(home, "variants"),
@@ -139,7 +139,7 @@ it.effect(
                 name: "review",
                 sourcePath: source,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(source),
+                observedHash: yield* deterministicTreeHash(source),
               },
             ],
             observations: [],

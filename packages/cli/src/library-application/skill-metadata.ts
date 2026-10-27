@@ -1,6 +1,6 @@
 import {
   currentSkillVersion,
-  readSkitDescriptorEffect,
+  readSkitDescriptor,
   retainedTreePath,
   versionBacking,
   type LibraryState,
@@ -88,9 +88,9 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
       if (!descriptors.has(backing.copy.digest))
         descriptors.set(
           backing.copy.digest,
-          yield* readSkitDescriptorEffect(
-            retainedTreePath(originalsPath, backing.copy.digest),
-          ).pipe(Effect.orElseSucceed(() => undefined)),
+          yield* readSkitDescriptor(retainedTreePath(originalsPath, backing.copy.digest)).pipe(
+            Effect.orElseSucceed(() => undefined),
+          ),
         );
       const descriptor = descriptors
         .get(backing.copy.digest)

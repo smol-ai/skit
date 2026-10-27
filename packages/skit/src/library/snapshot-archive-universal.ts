@@ -42,7 +42,7 @@ const fromBase64 = (value: string) =>
   });
 
 /** Decode, validate archive hierarchy, and recompute the verbatim tree digest. */
-export const verifySnapshotArchiveEffect = Effect.fn("Library.verifySnapshotArchive")(function* (
+export const verifySnapshotArchive = Effect.fn("Library.verifySnapshotArchive")(function* (
   input: unknown,
 ) {
   const archive = yield* Schema.decodeUnknownEffect(SnapshotArchive)(input).pipe(

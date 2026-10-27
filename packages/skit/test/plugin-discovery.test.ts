@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { Effect, FileSystem } from "effect";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
-import { readPluginUnitsEffect } from "../src/acquisition/plugin-manifests.js";
+import { resolveSkitSource } from "../src/acquisition/sources.js";
+import { readPluginUnits } from "../src/acquisition/plugin-manifests.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const fixture = Effect.gen(function* () {
@@ -19,7 +19,7 @@ const fixture = Effect.gen(function* () {
     write(`${path}/SKILL.md`, `---\nname: ${name}\ndescription: Review changes.\n---\n\n${body}\n`);
   const json = (path: string, value: unknown) => write(path, JSON.stringify(value));
   const discover = (previousSkillPaths?: readonly string[]) =>
-    resolveSkitSourceEffect(root, { previousSkillPaths }).pipe(
+    resolveSkitSource(root, { previousSkillPaths }).pipe(
       Effect.map((resolved) => {
         assert(resolved.descriptorKind === "observed");
         return resolved;
@@ -100,7 +100,7 @@ it.effect("does not merge different same-name Skills across plugin namespaces", 
         ["commercial", "finance", "legal"].map((name) => join(f.root, "plugins", name)),
       );
     }
-    const selected = yield* resolveSkitSourceEffect(join(f.root, "plugins/legal"));
+    const selected = yield* resolveSkitSource(join(f.root, "plugins/legal"));
     assert(selected.descriptorKind === "observed");
     assert.deepStrictEqual(selected.observedSkillPaths, ["skills/review"]);
     // Equal names and bytes alone do not establish an alias between separate packages.
@@ -146,7 +146,7 @@ it.effect("keeps shared-root marketplace selections separate in the declaration 
         { name: "finance", source: ".", skills: ["./finance"] },
       ],
     });
-    const units = yield* readPluginUnitsEffect(f.root, [f.root]);
+    const units = yield* readPluginUnits(f.root, [f.root]);
     assert.deepStrictEqual(
       units.map((unit) => ({
         name: unit.name,
@@ -199,7 +199,7 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
       ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "tools"],
     ])
       execFileSync("git", args, { cwd: f.root });
-    const error = yield* resolveSkitSourceEffect({
+    const error = yield* resolveSkitSource({
       type: "git",
       remote: pathToFileURL(f.root).href,
       subpath: ".",
@@ -342,7 +342,7 @@ it.effect("keeps declared SKIT descriptor precedence inside plugin directories",
       slug: "tools",
       skills: [{ name: "review", path: "skills/review" }],
     });
-    const resolved = yield* resolveSkitSourceEffect(f.root);
+    const resolved = yield* resolveSkitSource(f.root);
     assert(resolved.descriptorKind === "declared");
     assert.strictEqual(resolved.root, join(f.root, "plugins/tools"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

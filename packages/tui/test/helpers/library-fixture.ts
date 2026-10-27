@@ -1,12 +1,12 @@
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryStoreLayer,
   LibraryStore,
   LinkStat,
   makeMachineId,
-  retainObservedCollectionEffect,
+  retainObservedCollection,
   withLibraryWriter,
 } from "@smolai/skit-core";
 import {
@@ -51,12 +51,12 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         yield* fs.writeFileString(join(source, skill, "SKILL.md"), `${skill}\n`);
       }
       return yield* withLibraryWriter(
-        retainObservedCollectionEffect({
+        retainObservedCollection({
           source: { type: "local", path: source },
           input: source,
           retainedAt: "2026-10-14T00:00:00.000Z",
           skills: yield* Effect.forEach(skills, (skill) =>
-            Effect.map(deterministicTreeHashEffect(join(source, skill)), (observedHash) => ({
+            Effect.map(deterministicTreeHash(join(source, skill)), (observedHash) => ({
               name: skill,
               sourcePath: join(source, skill),
               relativePath: skill,

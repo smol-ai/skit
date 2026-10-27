@@ -5,7 +5,7 @@ import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
   authorListCommand,
-  listAuthorSkitsEffect,
+  listAuthorSkits,
   AuthorListIdentityError,
 } from "../src/workflows/author/list.js";
 import { SkitContractError } from "@smolai/skit-core";
@@ -23,9 +23,7 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
 const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>
-  listAuthorSkitsEffect(input).pipe(
-    Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
-  );
+  listAuthorSkits(input).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))));
 
 const input = { origin: "https://registry.test", token: "test-token" };
 const item = {

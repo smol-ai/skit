@@ -2,22 +2,22 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import {
-  retainChangedInstalledSkillEffect,
+  retainChangedInstalledSkill,
   type InstalledSkill,
   InvalidLibraryState,
   LibraryStore,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryStoreLayer,
   makeMachineId,
-  projectBindingEffect,
-  removeCollectionEffect,
-  retainObservedCollectionEffect,
+  projectBinding,
+  removeCollection,
+  retainObservedCollection,
   withLibraryWriter,
   LibraryState,
   type InstallDestination,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
+import { syncLibrary } from "../../src/workflows/library/library-sync.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
@@ -120,11 +120,11 @@ export const devices = Effect.gen(function* () {
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
       retainProjectionEdit: (projection: InstalledSkill) =>
         Effect.gen(function* () {
-          return yield* retainChangedInstalledSkillEffect({
+          return yield* retainChangedInstalledSkill({
             skillId: projection.skill_id,
             projectionId: projection.projection_id,
             path: projection.path,
-            observedHash: yield* deterministicTreeHashEffect(projection.path),
+            observedHash: yield* deterministicTreeHash(projection.path),
             retainedAt: "2026-02-01T00:00:00Z",
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
@@ -146,7 +146,7 @@ export const devices = Effect.gen(function* () {
             join(sourcePath, "SKILL.md"),
             options.bytes ?? `${repository}\n`,
           );
-          return yield* retainObservedCollectionEffect({
+          return yield* retainObservedCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
@@ -156,7 +156,7 @@ export const devices = Effect.gen(function* () {
                 name: options.name ?? repository,
                 sourcePath,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(sourcePath),
+                observedHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
             observations: [],
@@ -174,11 +174,11 @@ export const devices = Effect.gen(function* () {
                 name: skillName,
                 sourcePath: path,
                 relativePath: skillName,
-                observedHash: yield* deterministicTreeHashEffect(path),
+                observedHash: yield* deterministicTreeHash(path),
               };
             }),
           );
-          return yield* retainObservedCollectionEffect({
+          return yield* retainObservedCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
@@ -190,7 +190,7 @@ export const devices = Effect.gen(function* () {
       remove: (collectionId: string) =>
         Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.flatMap((state) =>
-            removeCollectionEffect(state, { collectionId, variantsPath: join(home, "variants") }),
+            removeCollection(state, { collectionId, variantsPath: join(home, "variants") }),
           ),
           withLibraryWriter,
           Effect.provide(layer),
@@ -199,7 +199,7 @@ export const devices = Effect.gen(function* () {
         scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
         projectionRoot = root,
       ) =>
-        projectBindingEffect({
+        projectBinding({
           target: "agents",
           scope,
           root: projectionRoot,
@@ -207,19 +207,19 @@ export const devices = Effect.gen(function* () {
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       sync: (
         options: {
-          observer?: Parameters<typeof syncLibraryEffect>[0]["observer"];
-          restoreObserver?: Parameters<typeof syncLibraryEffect>[0]["restoreObserver"];
-          onPlan?: Parameters<typeof syncLibraryEffect>[0]["onPlan"];
+          observer?: Parameters<typeof syncLibrary>[0]["observer"];
+          restoreObserver?: Parameters<typeof syncLibrary>[0]["restoreObserver"];
+          onPlan?: Parameters<typeof syncLibrary>[0]["onPlan"];
           apply?: boolean;
           adopt?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
-          deviceSelection?: Parameters<typeof syncLibraryEffect>[0]["deviceSelection"];
-          inventory?: Parameters<typeof syncLibraryEffect>[0]["inventory"];
+          deviceSelection?: Parameters<typeof syncLibrary>[0]["deviceSelection"];
+          inventory?: Parameters<typeof syncLibrary>[0]["inventory"];
           rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
-        syncLibraryEffect({
+        syncLibrary({
           origin: "https://registry.test",
           token: "test",
           apply: true,

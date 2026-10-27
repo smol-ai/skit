@@ -1,6 +1,6 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option, Result } from "effect";
-import { LibraryStore, sourceInputWithVersionEffect } from "@smolai/skit-core";
+import { LibraryStore, sourceInputWithVersion } from "@smolai/skit-core";
 import {
   readDescriptionLoad,
   descriptionLoadMessage,
@@ -19,10 +19,10 @@ import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
 import {
-  retainLibrarySourceEffect,
-  previewLibrarySourceEffect,
+  retainLibrarySource,
+  previewLibrarySource,
 } from "../../library-application/source-acquisition.js";
-import { rejectDedicatedInstallerSourceEffect } from "../../workflows/library/dedicated-installer-catalog.js";
+import { rejectDedicatedInstallerSource } from "../../workflows/library/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
 const version = optionalString("version", "Select a source version.");
@@ -42,7 +42,7 @@ export const addCliCommand = Command.make(
         const registryAuth = yield* RegistryAuth;
         const requestedVersion = Option.getOrUndefined(input.version);
         const source = input.source
-          ? yield* sourceInputWithVersionEffect(input.source, requestedVersion)
+          ? yield* sourceInputWithVersion(input.source, requestedVersion)
           : undefined;
         const locator = source
           ? yield* registryAuth.resolveLocator(source, Option.getOrUndefined(input.registry))
@@ -74,17 +74,17 @@ export const addCliCommand = Command.make(
             requires: "<source>",
             hint: "A source is `owner/repo`, a Git or GitHub URL, or a local path; `--list` previews it without adding.",
           });
-        yield* rejectDedicatedInstallerSourceEffect(selectedSource);
+        yield* rejectDedicatedInstallerSource(selectedSource);
         if (input.preview) {
           const value = yield* renderer.withStatus(
             `Inspecting ${selectedSource}`,
-            withSelectedRegistry(previewLibrarySourceEffect(selectedSource, requestedVersion)),
+            withSelectedRegistry(previewLibrarySource(selectedSource, requestedVersion)),
           );
           return yield* renderer.result(result("addPreview", value));
         }
         const retained = yield* renderer.withStatus(
           "Retaining source",
-          withSelectedRegistry(retainLibrarySourceEffect(selectedSource, requestedVersion)),
+          withSelectedRegistry(retainLibrarySource(selectedSource, requestedVersion)),
         );
         yield* renderer.result(
           result("add", {

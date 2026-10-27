@@ -1,8 +1,8 @@
 import {
   LibraryStore,
   deviceInstallationIntent,
-  projectBindingEffect,
-  retireUnboundGlobalInstalledSkillsEffect,
+  projectBinding,
+  retireUnboundGlobalInstalledSkills,
   withLibraryWriter,
   type DeviceBinding,
   type RepositoryBinding,
@@ -46,7 +46,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstall
   // Copies at a former or inactive target are never wanted, whichever Bindings changed.
   const state = yield* (yield* LibraryStore).load;
   const intent = deviceInstallationIntent(state);
-  const retired = yield* retireUnboundGlobalInstalledSkillsEffect({
+  const retired = yield* retireUnboundGlobalInstalledSkills({
     variantsPath: options.variantsPath,
     activeTargets,
     desiredBindings: intent.bindings,
@@ -73,7 +73,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstall
               : undefined
             : bindingRoot(target, binding.scope, options.roots);
       if (root === undefined) continue;
-      projected += yield* projectBindingEffect({
+      projected += yield* projectBinding({
         target,
         scope: binding.scope,
         root,

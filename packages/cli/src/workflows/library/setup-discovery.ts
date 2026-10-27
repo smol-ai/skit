@@ -4,11 +4,11 @@ import {
   LinkStat,
   LibraryStore,
   harnessProfile,
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   observeInventory,
   parseSkillFrontmatter,
   pathIsWithin,
-  readSkitDescriptorEffect,
+  readSkitDescriptor,
   resolveSkillsDirectory,
   sourceLocator,
   SourceIdentity,
@@ -412,7 +412,7 @@ const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
 });
 
 export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
-  const inspection = yield* inspectOwnershipMarkerEffect(path);
+  const inspection = yield* inspectOwnershipMarker(path);
   if (inspection.kind === "absent") return { custody: "unmanaged" as const };
   return inspection.kind === "valid"
     ? { custody: "skit-managed" as const, marker: inspection.marker }
@@ -510,7 +510,7 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
     const descriptorPath = join(repository, "skit.json");
     const remotePath = join(repository, "skit.remote.json");
     if (!(yield* fs.exists(descriptorPath)) || !(yield* fs.exists(remotePath))) continue;
-    const descriptor = yield* readSkitDescriptorEffect(repository).pipe(
+    const descriptor = yield* readSkitDescriptor(repository).pipe(
       Effect.orElseSucceed(() => undefined),
     );
     const remote = yield* fs.readFileString(remotePath).pipe(

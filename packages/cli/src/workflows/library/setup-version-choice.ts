@@ -3,12 +3,12 @@ import { Clock, Effect, FileSystem } from "effect";
 import {
   canonicalJson,
   currentSkillVersion,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   hashParts,
   LibraryStore,
-  prepareInstalledSkillRebuildEffect,
-  projectBindingEffect,
-  retainChangedInstalledSkillEffect,
+  prepareInstalledSkillRebuild,
+  projectBinding,
+  retainChangedInstalledSkill,
   scopeBinding,
 } from "@smolai/skit-core";
 import type { SetupReconciliationFact, SetupVersionChoice } from "./setup-contract.js";
@@ -79,7 +79,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const copy = live.find((fact) => fact.path === choice.path && fact.skillId === choice.skillId);
     if (!copy?.currentHash) return yield* new PlanIsStale();
     yield* Effect.scoped(
-      retainChangedInstalledSkillEffect({
+      retainChangedInstalledSkill({
         skillId: copy.skillId,
         projectionId: copy.projectionId,
         path: copy.path,
@@ -100,7 +100,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const policy = scopeBinding(retained, { kind: "global" })?.invocation_policies?.[fact.skillId];
     const digest = yield* Effect.scoped(
       Effect.gen(function* () {
-        const renderer = yield* prepareInstalledSkillRebuildEffect(
+        const renderer = yield* prepareInstalledSkillRebuild(
           retained,
           store.originalsPath,
           { ...projection, skill_version_id: version.skill_version_id },
@@ -109,7 +109,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
         const directory = yield* fs.makeTempDirectoryScoped({ prefix: "skit-setup-choice-" });
         const path = join(directory, "skill");
         yield* renderer.build(path);
-        return yield* deterministicTreeHashEffect(path);
+        return yield* deterministicTreeHash(path);
       }),
     );
     desired.set(fact.projectionId, digest);
@@ -130,7 +130,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const projection = retained.projections.find(
       (item) => item.projection_id === fact.projectionId,
     )!;
-    yield* projectBindingEffect({
+    yield* projectBinding({
       target: fact.target,
       scope: { kind: "global" },
       root: projection.root,
@@ -145,7 +145,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       !after ||
       after.status !== "installed" ||
       after.expected_digest !== desired.get(fact.projectionId) ||
-      (yield* deterministicTreeHashEffect(fact.path)) !== desired.get(fact.projectionId)
+      (yield* deterministicTreeHash(fact.path)) !== desired.get(fact.projectionId)
     )
       return yield* new PlanIsStale();
   }

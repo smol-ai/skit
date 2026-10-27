@@ -1,7 +1,7 @@
 import { Clock, Effect } from "effect";
 import {
   makeAcquisitionId,
-  originalTreeHashEffect,
+  originalTreeHash,
   retainedTreePath,
   sourceAcquisitions,
   type Acquisition,
@@ -52,7 +52,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       continue;
     }
     const path = retainedTreePath(originalsPath, copy.digest);
-    const verified = yield* Effect.result(originalTreeHashEffect(path));
+    const verified = yield* Effect.result(originalTreeHash(path));
     if (verified._tag === "Failure" || verified.success !== copy.digest) {
       conflicts.push(`Prior retained source bytes changed: ${prior.collectionId}`);
       continue;

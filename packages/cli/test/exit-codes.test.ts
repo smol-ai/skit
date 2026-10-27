@@ -15,7 +15,7 @@ import {
   NoSkitDescriptorFound,
   InstalledSkillFileMissing,
   ReadmeFrontmatterMissing,
-  resolveSkitSourceEffect,
+  resolveSkitSource,
   skitLayer,
 } from "@smolai/skit-core";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
@@ -137,7 +137,7 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
       Layer.provideMerge(NodeHttpServer.layer(createServer, { port: 0 })),
     );
     const outcome = yield* Effect.scoped(
-      resolveSkitSourceEffect("https://example.com/SKILL.md").pipe(Effect.flip),
+      resolveSkitSource("https://example.com/SKILL.md").pipe(Effect.flip),
     ).pipe(Effect.provide(routes.pipe(Layer.provideMerge(client))), Effect.provide(skitLayer));
     expect(classifyFailure(outcome)).toMatchObject({ code: "VALIDATION_FAILED", exitCode: 65 });
   }),

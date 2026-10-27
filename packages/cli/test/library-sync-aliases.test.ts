@@ -3,9 +3,9 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import {
-  captureSnapshotArchiveEffect,
+  captureSnapshotArchive,
   currentSkillVersion,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
   LibraryManifest,
   LibraryState,
   retainedTreePath,
@@ -41,14 +41,13 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 ) {
   const state = yield* device.state;
   assert.isTrue(Schema.is(LibraryState)(state));
-  yield* libraryManifestFromLocalStateEffect(state);
+  yield* libraryManifestFromLocalState(state);
   const ancestry = state.sync_ancestry;
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const digest of new Set([...retained, ...state.retained_copies.map((copy) => copy.digest)]))
     assert.strictEqual(
-      (yield* captureSnapshotArchiveEffect(
-        retainedTreePath(join(device.home, "originals"), digest),
-      )).digest,
+      (yield* captureSnapshotArchive(retainedTreePath(join(device.home, "originals"), digest)))
+        .digest,
       digest,
     );
   const head = server.remote;

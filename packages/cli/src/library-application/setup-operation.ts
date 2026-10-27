@@ -16,7 +16,7 @@ import {
   MachineSettings,
   InstalledSkill,
   InstallDestination,
-  writeJsonExclusiveEffect,
+  writeJsonExclusive,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
 import { activeInstallDestinationsEffect, bindingRoot } from "../projection/roots.js";
@@ -211,7 +211,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   let expectedSettings = setupDiscoverySettings(settings);
   let expectedMachineId = settings.machineId;
   yield* ensureRecoveryOperation(store.home, directory);
-  yield* writeJsonExclusiveEffect(join(directory, "setup.json"), {
+  yield* writeJsonExclusive(join(directory, "setup.json"), {
     schemaVersion: 1,
     kind: "setup",
     planId: approval.planId,
@@ -240,14 +240,14 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       const step = { ...change, schemaVersion: 1 as const, sequence: ++sequence };
       const key = String(step.sequence).padStart(8, "0");
       const path = join(changes, `${key}.json`);
-      yield* writeJsonExclusiveEffect(path, step);
+      yield* writeJsonExclusive(path, step);
       return { sequence: step.sequence, digest: hashParts([yield* fs.readFileString(path)]) };
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
   );
   const markSaved = Effect.fn("SetupOperation.markSaved")(
     function* (receipt: { sequence: number; digest: Digest }) {
-      yield* writeJsonExclusiveEffect(
+      yield* writeJsonExclusive(
         join(changes, `${String(receipt.sequence).padStart(8, "0")}.published.json`),
         { schemaVersion: 1, sequence: receipt.sequence, digest: receipt.digest },
       );
@@ -316,7 +316,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     }),
     complete: Effect.fn("SetupOperation.complete")(
       function* () {
-        yield* writeJsonExclusiveEffect(join(directory, "complete.json"), {
+        yield* writeJsonExclusive(join(directory, "complete.json"), {
           schemaVersion: 1,
           intent: expectedIntent,
           settings: expectedSettings,

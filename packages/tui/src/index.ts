@@ -47,8 +47,8 @@ import {
 } from "../../cli/src/library-application/index";
 import {
   errorMessage,
-  auditLocalCapabilitiesV1Alpha4Effect,
-  probeHarnessEffect,
+  auditLocalCapabilitiesV1Alpha4,
+  probeHarness,
   type HarnessProbeResult,
 } from "../../cli/src/front-end";
 import {
@@ -121,7 +121,7 @@ const libraryConfiguration = {
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
 const report = await libraryHost.run(
-  auditLocalCapabilitiesV1Alpha4Effect({
+  auditLocalCapabilitiesV1Alpha4({
     home: flag("--home"),
     cwd: flag("--cwd") ?? resolve(import.meta.dir, "../../.."),
     probes: [],
@@ -799,7 +799,7 @@ async function runHarnessProbe(item: AuditItem): Promise<void> {
   probing.add(item.name);
   let result: HarnessProbeResult;
   try {
-    result = await libraryHost.run(probeHarnessEffect(item.name));
+    result = await libraryHost.run(probeHarness(item.name));
   } catch (error) {
     item.status = "error";
     item.summary = `Harness probe failed: ${errorMessage(error)}`;

@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { prepareObservedCollectionEffect } from "../src/library/observed-import.js";
+import { prepareObservedCollection } from "../src/library/observed-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 for (const [name, paths, expected] of [
@@ -9,7 +9,7 @@ for (const [name, paths, expected] of [
 ] as const) {
   it.effect(`reports ${name} with the affected paths`, () =>
     Effect.gen(function* () {
-      const error = yield* prepareObservedCollectionEffect(
+      const error = yield* prepareObservedCollection(
         paths.map((relativePath, index) => ({
           name: name === "duplicate names" ? "same" : index === 0 ? "first" : "second",
           relativePath,

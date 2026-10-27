@@ -11,7 +11,7 @@ import { result } from "../contracts.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { terminalPrompterLayer } from "../../presentation/prompter.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
-import { browseLibraryEffect } from "../../presentation/interactive-list.js";
+import { browseLibrary } from "../../presentation/interactive-list.js";
 import { openLibrarySession } from "../../library-application/session.js";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
@@ -50,7 +50,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
         ? Effect.gen(function* () {
             const configuration = yield* libraryCommandConfiguration(input);
             const session = yield* openLibrarySession();
-            yield* browseLibraryEffect(session, configuration.pull.bindings);
+            yield* browseLibrary(session, configuration.pull.bindings);
           }).pipe(Effect.provide(terminalPrompterLayer))
         : presentListCommand(),
     );

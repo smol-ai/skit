@@ -1,22 +1,19 @@
 import {
-  planRetainedContentEffect,
-  prepareRestoreEffect,
+  planRetainedContent,
+  prepareRestore,
   type LibraryManifest,
   type SnapshotArchive,
   type RestoreObserver,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import type { librarySyncApiEffect } from "./library-sync-api.js";
+import type { librarySyncApi } from "./library-sync-api.js";
 import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
 
-type SnapshotApi = Pick<
-  Effect.Success<ReturnType<typeof librarySyncApiEffect>>,
-  "download" | "upload"
->;
+type SnapshotApi = Pick<Effect.Success<ReturnType<typeof librarySyncApi>>, "download" | "upload">;
 type RemoteSnapshots = { readonly library_id: string; readonly manifest: LibraryManifest } | null;
 
 /** Sync owns upload selection and transport; core owns content availability and restoration. */
-export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer")(function* (
+export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(function* (
   archives: readonly SnapshotArchive[],
   desired: LibraryManifest,
   remote: RemoteSnapshots,
@@ -30,7 +27,7 @@ export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer
   },
 ) {
   const observer = options.observer ?? silentSyncObserver;
-  const content = yield* planRetainedContentEffect(desired, {
+  const content = yield* planRetainedContent(desired, {
     originalsPath: options.originalsPath,
     localArchives: archives,
   });
@@ -46,7 +43,7 @@ export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer
     snapshotCount: remote === null ? uploads.length : content.download.length,
     restore: Effect.fn("Library.sync.restoreSnapshots")(function* () {
       return yield* Effect.scoped(
-        prepareRestoreEffect(desired, content, {
+        prepareRestore(desired, content, {
           originalsPath: options.originalsPath,
           ...(options.restoreObserver === undefined ? {} : { observer: options.restoreObserver }),
           ...(remote === null

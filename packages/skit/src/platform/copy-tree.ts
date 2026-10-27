@@ -5,7 +5,7 @@ import { LinkStat } from "./link-stat.js";
 import { TreeError } from "../shared/tree-error.js";
 
 /** Settled namespace operations and scoped handles: no abandoned recursive cp. */
-export const copyLocalTreeEffect = Effect.fn("Retention.copyTree")(function* (
+export const copyLocalTree = Effect.fn("Retention.copyTree")(function* (
   from: string,
   to: string,
   excluded: string | readonly string[] | undefined,
@@ -20,7 +20,7 @@ export const copyLocalTreeEffect = Effect.fn("Retention.copyTree")(function* (
   if (info.type === "Directory") {
     yield* fs.makeDirectory(to, { mode: info.mode }).pipe(Effect.uninterruptible);
     for (const name of yield* fs.readDirectory(from))
-      yield* copyLocalTreeEffect(join(from, name), join(to, name), exclusions, verbatim);
+      yield* copyLocalTree(join(from, name), join(to, name), exclusions, verbatim);
     yield* fs.chmod(to, info.mode).pipe(Effect.uninterruptible);
   } else if (info.type === "File") {
     yield* Effect.scoped(

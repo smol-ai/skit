@@ -1,12 +1,8 @@
 import { Data, Effect, FileSystem } from "effect";
 import { basename, join, relative, resolve, sep } from "node:path";
-import { deterministicTreeHashEffect } from "../artifact/skit.js";
+import { deterministicTreeHash } from "../artifact/skit.js";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
-import {
-  containedPluginPathEffect,
-  readPluginUnitsEffect,
-  type PluginUnit,
-} from "./plugin-manifests.js";
+import { containedPluginPath, readPluginUnits, type PluginUnit } from "./plugin-manifests.js";
 import type { SourceDiscoveryDiagnostic } from "./source-diagnostics.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
@@ -31,7 +27,7 @@ export class PluginSkillConflict
 }
 
 /** Manifest facts determine ownership; existing paths determine refresh compatibility. */
-export const selectPluginMembersEffect = Effect.fn("Source.selectPluginMembers")(function* (
+export const selectPluginMembers = Effect.fn("Source.selectPluginMembers")(function* (
   root: string,
   directories: readonly string[],
   foundSkills: readonly string[],
@@ -41,7 +37,7 @@ export const selectPluginMembersEffect = Effect.fn("Source.selectPluginMembers")
 ) {
   const fs = yield* FileSystem.FileSystem;
   const diagnostics: SourceDiscoveryDiagnostic[] = [];
-  const units = yield* readPluginUnitsEffect(root, directories, containmentRoot, {
+  const units = yield* readPluginUnits(root, directories, containmentRoot, {
     diagnostics,
     strictRoot,
   });
@@ -66,8 +62,8 @@ export const selectPluginMembersEffect = Effect.fn("Source.selectPluginMembers")
   // Existing membership is additive, never an exclusive lock that hides newly added Skills.
   for (const path of previousSkillPaths) {
     if (!(yield* fs.exists(join(root, path, "SKILL.md")))) continue;
-    const directory = yield* containedPluginPathEffect(containmentRoot, root, path);
-    yield* containedPluginPathEffect(containmentRoot, directory, "SKILL.md");
+    const directory = yield* containedPluginPath(containmentRoot, root, path);
+    yield* containedPluginPath(containmentRoot, directory, "SKILL.md");
     if (!candidates.includes(directory)) candidates.push(directory);
   }
   const previous = new Set(previousSkillPaths.map((path) => resolve(root, path)));
@@ -84,7 +80,7 @@ export const selectPluginMembersEffect = Effect.fn("Source.selectPluginMembers")
   const digest = Effect.fn("Source.pluginMirrorDigest")(function* (path: string) {
     let value = digests.get(path);
     if (value === undefined) {
-      value = yield* deterministicTreeHashEffect(yield* fs.realPath(path));
+      value = yield* deterministicTreeHash(yield* fs.realPath(path));
       digests.set(path, value);
     }
     return value;

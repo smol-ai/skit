@@ -3,17 +3,17 @@ import { dirname, join, resolve } from "node:path";
 import type { HarnessName } from "../../contracts.js";
 import type { LibraryState } from "../library-state.js";
 import { LinkStat } from "../../platform/link-stat.js";
-import { deterministicTreeHashEffect } from "../../artifact/skit.js";
-import { observationPathIdentityEffect, pathIsWithin } from "../../platform/path-identity.js";
+import { deterministicTreeHash } from "../../artifact/skit.js";
+import { observationPathIdentity, pathIsWithin } from "../../platform/path-identity.js";
 import {
   expectedInstalledSkillHashResult,
-  installedSkillDisplacedEffect,
-  readOwnershipMarkerEffect,
-  inspectOwnershipMarkerEffect,
+  installedSkillDisplaced,
+  readOwnershipMarker,
+  inspectOwnershipMarker,
 } from "../../projection/mutation.js";
 import {
-  keepInstalledSkillBackupEffect,
-  pendingInstalledSkillBackupsEffect,
+  keepInstalledSkillBackup,
+  pendingInstalledSkillBackups,
 } from "../../projection/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {
@@ -53,7 +53,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
       // absence is not evidence that the user deleted an installed copy.
       if (projection.status === "pending" || projection.status === "suppressed") continue;
       // Nor is the absence of the very copy SKIT moved aside before it could save why.
-      if (yield* installedSkillDisplacedEffect(projection)) projection.status = "pending";
+      if (yield* installedSkillDisplaced(projection)) projection.status = "pending";
       else {
         projection.status = "suppressed";
         projection.suppression_reason = "native_delete";
@@ -61,8 +61,8 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
       }
       continue;
     }
-    const observed = yield* deterministicTreeHashEffect(projection.path);
-    const marker = yield* readOwnershipMarkerEffect(projection.path);
+    const observed = yield* deterministicTreeHash(projection.path);
+    const marker = yield* readOwnershipMarker(projection.path);
     projection.observed_digest = observed;
     const expected = expectedInstalledSkillHashResult(projection, marker);
     projection.status =
@@ -72,10 +72,10 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
   }
   const managed = new Set<string>();
   for (const projection of state.projections)
-    managed.add((yield* observationPathIdentityEffect(projection.path)).comparisonKey);
+    managed.add((yield* observationPathIdentity(projection.path)).comparisonKey);
   const priorUnmanaged = new Map<string, LibraryState["unmanaged"][number]>();
   for (const item of state.unmanaged)
-    priorUnmanaged.set((yield* observationPathIdentityEffect(item.path)).comparisonKey, item);
+    priorUnmanaged.set((yield* observationPathIdentity(item.path)).comparisonKey, item);
   state.unmanaged = state.unmanaged.filter(
     (item) =>
       typeof item.path !== "string" || !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
@@ -162,9 +162,9 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
             return Effect.succeed(false);
           }),
         );
-        if (!skill && (!directory || (yield* inspectOwnershipMarkerEffect(path)).kind === "absent"))
+        if (!skill && (!directory || (yield* inspectOwnershipMarker(path)).kind === "absent"))
           continue;
-        const identity = yield* observationPathIdentityEffect(path);
+        const identity = yield* observationPathIdentity(path);
         if (managed.has(identity.comparisonKey)) continue;
         const observed = observedPaths.get(identity.comparisonKey) ?? {
           path,
@@ -180,8 +180,8 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
     }
   for (const observed of observedPaths.values()) {
     const harnesses = [...observed.harnesses].sort();
-    const observedHash = yield* deterministicTreeHashEffect(observed.canonicalPath);
-    const marker = yield* inspectOwnershipMarkerEffect(observed.path);
+    const observedHash = yield* deterministicTreeHash(observed.canonicalPath);
+    const marker = yield* inspectOwnershipMarker(observed.path);
     if (marker.kind === "invalid") {
       state.custodyIssues.push({
         code: "INVALID_OWNERSHIP_MARKER",
@@ -209,7 +209,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
       });
     } else {
       const prior = priorUnmanaged.get(
-        (yield* observationPathIdentityEffect(observed.path)).comparisonKey,
+        (yield* observationPathIdentity(observed.path)).comparisonKey,
       );
       state.unmanaged.push({
         harness: observed.harness,
@@ -238,14 +238,14 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   // no longer explain an absence, so they are kept, never discarded.
   for (const projection of state.projections) {
     if (projection.status !== "installed") continue;
-    const marker = yield* readOwnershipMarkerEffect(projection.path);
+    const marker = yield* readOwnershipMarker(projection.path);
     if (
       marker?.projection_id === projection.projection_id &&
       marker.skill_id === projection.skill_id &&
       projection.observed_digest === projection.expected_digest
     )
-      for (const backup of yield* pendingInstalledSkillBackupsEffect(projection))
-        yield* keepInstalledSkillBackupEffect(backup);
+      for (const backup of yield* pendingInstalledSkillBackups(projection))
+        yield* keepInstalledSkillBackup(backup);
   }
   return { state, roots };
 });

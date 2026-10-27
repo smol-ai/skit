@@ -16,7 +16,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 export { readCodexSkills, CodexDoctorFailure } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../../harness/probe.js";
+import { probeHarness } from "../../harness/probe.js";
 
 export const CodexDoctorInstance = Schema.Struct({
   name: Schema.String,
@@ -143,7 +143,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       detail:
         "A custom --codex-root does not describe Codex's configured discovery. Run doctor without that override to check native discovery.",
     };
-  const probe = yield* probeHarnessEffect("codex");
+  const probe = yield* probeHarness("codex");
   if (probe.status !== "installed" || !probe.executablePath)
     return {
       ...empty,

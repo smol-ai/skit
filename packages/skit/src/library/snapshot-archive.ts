@@ -1,17 +1,11 @@
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { originalTreeHashEffect } from "./retention/retain-tree.js";
-import { walkTreeEffect } from "../artifact/tree.js";
+import { originalTreeHash } from "./retention/retain-tree.js";
+import { walkTree } from "../artifact/tree.js";
 import { SnapshotArchive, type SnapshotArchiveEntry } from "./library-contracts.js";
-import {
-  SnapshotArchiveInvalid,
-  verifySnapshotArchiveEffect,
-} from "./snapshot-archive-universal.js";
+import { SnapshotArchiveInvalid, verifySnapshotArchive } from "./snapshot-archive-universal.js";
 
-export {
-  SnapshotArchiveInvalid,
-  verifySnapshotArchiveEffect,
-} from "./snapshot-archive-universal.js";
+export { SnapshotArchiveInvalid, verifySnapshotArchive } from "./snapshot-archive-universal.js";
 
 const base64 = (bytes: Uint8Array): string => {
   let binary = "";
@@ -21,11 +15,11 @@ const base64 = (bytes: Uint8Array): string => {
 };
 
 /** Capture only verbatim-tree members; `.git` and SKIT residue are excluded by that profile. */
-export const captureSnapshotArchiveEffect = Effect.fn("Library.captureSnapshotArchive")(function* (
+export const captureSnapshotArchive = Effect.fn("Library.captureSnapshotArchive")(function* (
   root: string,
 ) {
   const entries: SnapshotArchiveEntry[] = [];
-  for (const entry of yield* walkTreeEffect(root, "verbatim")) {
+  for (const entry of yield* walkTree(root, "verbatim")) {
     if (entry.kind === "file")
       entries.push({
         path: entry.path,
@@ -37,14 +31,14 @@ export const captureSnapshotArchiveEffect = Effect.fn("Library.captureSnapshotAr
   }
   return SnapshotArchive.make({
     profile: "verbatim/v1",
-    digest: yield* originalTreeHashEffect(root),
+    digest: yield* originalTreeHash(root),
     entries,
   });
 });
 
 /** Materialize only a previously verified archive in an owned scoped workspace. */
-export const materializeVerifiedSnapshotEffect = Effect.fn("Library.materializeVerifiedSnapshot")(
-  function* (verified: Effect.Success<ReturnType<typeof verifySnapshotArchiveEffect>>) {
+export const materializeVerifiedSnapshot = Effect.fn("Library.materializeVerifiedSnapshot")(
+  function* (verified: Effect.Success<ReturnType<typeof verifySnapshotArchive>>) {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-private-snapshot-" });
     for (const entry of verified.entries) {
@@ -58,7 +52,7 @@ export const materializeVerifiedSnapshotEffect = Effect.fn("Library.materializeV
       }
       if (entry.kind === "symlink") yield* fs.symlink(entry.target, path);
     }
-    if ((yield* originalTreeHashEffect(root)) !== verified.archive.digest)
+    if ((yield* originalTreeHash(root)) !== verified.archive.digest)
       return yield* new SnapshotArchiveInvalid({ reason: "materialized tree digest mismatch" });
     return root;
   },

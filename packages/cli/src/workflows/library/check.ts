@@ -1,13 +1,13 @@
 import {
   currentSkillVersion,
   LibraryStore,
-  originalTreeHashEffect,
+  originalTreeHash,
   retainedTreePath,
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { inspectLibrarySourceEffect } from "../../library-application/source-acquisition.js";
-import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
+import { inspectLibrarySource } from "../../library-application/source-acquisition.js";
+import { checkSkillsShSubject } from "./skills-sh-update-check.js";
 import {
   latestSubjectAcquisition,
   resolveOwningLibrarySubjects,
@@ -15,7 +15,7 @@ import {
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
 
-export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* (
+export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
   state: LibraryState,
   query?: string,
   onCollection?: (collection: {
@@ -53,19 +53,18 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
             );
       const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
-      const inspected =
-        source === undefined ? undefined : yield* inspectLibrarySourceEffect(source);
+      const inspected = source === undefined ? undefined : yield* inspectLibrarySource(source);
       const retained_copies = [];
       for (const copy of copies) {
         retained_copies.push({
           retained_copy_id: copy.retained_copy_id,
           digest: copy.digest,
           retained_bytes_current:
-            (yield* originalTreeHashEffect(retainedTreePath(store.originalsPath, copy.digest))) ===
+            (yield* originalTreeHash(retainedTreePath(store.originalsPath, copy.digest))) ===
             copy.digest,
         });
       }
-      const skillsSh = yield* checkSkillsShSubjectEffect(subject, acquisition, currentCopy);
+      const skillsSh = yield* checkSkillsShSubject(subject, acquisition, currentCopy);
       return {
         subject_id: subject.subjectId,
         subject_kind: subject.kind,

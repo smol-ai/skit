@@ -7,10 +7,10 @@ import {
   LibraryState,
   libraryStoreLayer,
   InvalidLibraryState,
-  captureSnapshotArchiveEffect,
-  deterministicTreeHashEffect,
+  captureSnapshotArchive,
+  deterministicTreeHash,
   retainedTreePath,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import {
@@ -118,13 +118,13 @@ const cases: readonly {
         yield* b.retain("from-b");
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
-        const archive = yield* captureSnapshotArchiveEffect(
+        const archive = yield* captureSnapshotArchive(
           retainedTreePath(join(b.home, "originals"), competingState.retained_copies[0]!.digest),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
           _tag: "CompetingWrite",
-          manifest: yield* libraryManifestFromLocalStateEffect(competingState),
+          manifest: yield* libraryManifestFromLocalState(competingState),
         });
         const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
@@ -548,7 +548,7 @@ const cases: readonly {
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
         inject({ _tag: "ObstructAfterSave", home: a.home, path: join(a.root, "second") });
         assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
-        const observed = yield* deterministicTreeHashEffect(projection.path);
+        const observed = yield* deterministicTreeHash(projection.path);
         const recorded = (yield* a.state).projections.find(
           (item) => item.projection_id === projection.projection_id,
         );
@@ -614,7 +614,7 @@ for (const scenario of cases)
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-// The commit order stated once in syncLibraryEffect: snapshots are uploaded, then the head is written
+// The commit order stated once in syncLibrary: snapshots are uploaded, then the head is written
 // on exactly the revision this sync read, and only then is local state saved.
 it.effect("oracle: every applying path commits remote before local, on the revision it read", () =>
   Effect.gen(function* () {
@@ -819,7 +819,7 @@ it.effect("a prepared device transition cannot save into another Library home", 
     const { a, b } = yield* devices;
     yield* a.retain("first");
     const state = yield* a.state;
-    const manifest = yield* libraryManifestFromLocalStateEffect(state);
+    const manifest = yield* libraryManifestFromLocalState(state);
     const transition = yield* prepareSyncDeviceTransition({
       current: state,
       aligned: state,

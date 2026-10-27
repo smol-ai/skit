@@ -2,14 +2,14 @@ import { it as effectIt } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
   retainedTreePath,
   type ObservedSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -63,7 +63,7 @@ effectIt.effect(
           name,
           sourcePath: path,
           relativePath: name,
-          observedHash: yield* deterministicTreeHashEffect(path),
+          observedHash: yield* deterministicTreeHash(path),
         });
       }
       const retain = (skills: typeof members, retainedAt: string) =>
@@ -132,7 +132,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A😀é"\n---\n',
       );
-      const first = yield* retainLibrarySourceEffect(source).pipe(
+      const first = yield* retainLibrarySource(source).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
       const firstState = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -143,7 +143,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A much longer new description"\n---\n',
       );
-      yield* retainLibrarySourceEffect(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+      yield* retainLibrarySource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );

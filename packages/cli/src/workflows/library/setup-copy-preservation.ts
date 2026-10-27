@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
-import { deterministicTreeHashEffect, LinkStat } from "@smolai/skit-core";
+import { deterministicTreeHash, LinkStat } from "@smolai/skit-core";
 import type { HarnessShadow } from "../../projection/harness-shadows.js";
 import { checkSetupGlobalContent } from "../../library-application/setup-content-custody.js";
 import { PlanIsStale } from "../../library/failures.js";
@@ -21,7 +21,7 @@ export const captureSetupCopies = Effect.fn("Setup.captureCopies")(function* (
         error.reason._tag === "NotFound" ? Effect.succeed(false) : Effect.fail(error),
       ),
     );
-  const selectedHash = yield* deterministicTreeHashEffect(sourcePath);
+  const selectedHash = yield* deterministicTreeHash(sourcePath);
   const paths = [
     ...new Set(
       shadows.flatMap((shadow) =>
@@ -41,7 +41,7 @@ export const captureSetupCopies = Effect.fn("Setup.captureCopies")(function* (
         return yield* new PlanIsStale();
       for (const name of [".skit-ownership.json", "skit.remote.json", "skit.json", ".skit"])
         if (yield* present(join(path, name))) return yield* new PlanIsStale();
-      const observedHash = yield* deterministicTreeHashEffect(path);
+      const observedHash = yield* deterministicTreeHash(path);
       if (observedHash !== selectedHash) return yield* new PlanIsStale();
       return { path, observedHash, dev: info.dev, ino: info.ino };
     }),

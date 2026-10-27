@@ -1,12 +1,5 @@
 import { Schema } from "effect";
-import {
-  CollectionId,
-  LegacyMachineId,
-  MachineId,
-  InstalledSkillId,
-  SkillId,
-  SkillVersionId,
-} from "../entity-ids.js";
+import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
 import { Digest, HarnessName } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.

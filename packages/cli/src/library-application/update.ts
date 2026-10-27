@@ -29,7 +29,7 @@ const selectSubjects = Effect.fn("Library.selectUpdates")(function* (
 });
 
 /** Preview the Collections selected from the current Library. */
-export const planUpdatesEffect = Effect.fn("Library.planUpdates")(function* (query?: string) {
+export const planUpdates = Effect.fn("Library.planUpdates")(function* (query?: string) {
   const state = yield* (yield* LibraryStore).load;
   const selected = yield* selectSubjects(state, query);
   return yield* Effect.forEach(selected, (subject) => previewCollectionUpdate(state, subject));
@@ -47,7 +47,7 @@ export function updateExitCode(outcomes: UpdateResult): number {
 }
 
 /** Keep selection, baseline and ordered results inside one batch writer. */
-export const updateSubjectsEffect = Effect.fn("Library.updateSubjects")(function* (
+export const updateSubjects = Effect.fn("Library.updateSubjects")(function* (
   options: UpdateOptions,
   query?: string,
 ) {

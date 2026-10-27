@@ -5,17 +5,17 @@ import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { join, resolve } from "node:path";
 import {
-  createSkitArchiveEffect,
+  createSkitArchive,
   SkitContractError,
   type DescriptorFailure,
   type ReleasePublishResponse,
   type SkitValidationFailed,
   type TreeError,
   type TreeRequirements,
-  parseContractEffect,
-  readSkitDescriptorEffect,
+  parseContract,
+  readSkitDescriptor,
   releasePublishRequestSchema,
-  validateSkitDirectoryEffect,
+  validateSkitDirectory,
 } from "@smolai/skit-core";
 import {
   ForbiddenOriginResponse,
@@ -38,7 +38,7 @@ import {
   registryApiFailure,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
-import { readAuthorRemoteEffect } from "./sync.js";
+import { readAuthorRemote } from "./sync.js";
 import {
   AuthorRemoteMetadataInvalid,
   DraftOutOfSync,
@@ -96,7 +96,7 @@ function stringField(body: unknown, field: string): string | undefined {
   const value: unknown = Reflect.get(body, field);
   return typeof value === "string" ? value : undefined;
 }
-export const publishEffect = Effect.fn("publishEffect")(function* (
+export const publish = Effect.fn("publish")(function* (
   root: string,
   version: string,
   revision: string | undefined,
@@ -108,8 +108,8 @@ export const publishEffect = Effect.fn("publishEffect")(function* (
 > {
   const absolute = resolve(root);
   const commandPath = /^[A-Za-z0-9_./-]+$/.test(root) ? root : `'${root.replaceAll("'", `'\\''`)}'`;
-  yield* readSkitDescriptorEffect(absolute);
-  const remote = yield* readAuthorRemoteEffect(absolute);
+  yield* readSkitDescriptor(absolute);
+  const remote = yield* readAuthorRemote(absolute);
   if (!remote) return yield* Effect.fail(new NoRemoteHome());
   const owner = remote.namespace;
   const slug = remote.skit;
@@ -124,7 +124,7 @@ export const publishEffect = Effect.fn("publishEffect")(function* (
   }
   // Reject drift locally, before an archive exists: a published Skill's own contents must already
   // satisfy its Descriptor, so a consumer installing it directly honours the author's declaration.
-  const validation = yield* validateSkitDirectoryEffect(absolute, version, {
+  const validation = yield* validateSkitDirectory(absolute, version, {
     assessmentContext: "publish",
   });
   const blocking = validation.diagnostics.filter((item) => item.severity === "error");
@@ -142,11 +142,11 @@ export const publishEffect = Effect.fn("publishEffect")(function* (
     (path) => fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie),
   );
   const archive = join(temporary, "release.zip");
-  yield* createSkitArchiveEffect(absolute, archive);
+  yield* createSkitArchive(absolute, archive);
   const http = yield* (yield* RegistryHttp).client;
   const token = options.token;
   const bytes = yield* fs.readFile(archive);
-  const body = yield* parseContractEffect("publish request", releasePublishRequestSchema, {
+  const body = yield* parseContract("publish request", releasePublishRequestSchema, {
     version,
     ...(revision === undefined ? {} : { revision_id: revision }),
     archive_base64: Buffer.from(bytes).toString("base64"),

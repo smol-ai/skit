@@ -5,14 +5,14 @@ import { Clock, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
-import { writeJsonAtomicEffect, writeRawAtomicEffect } from "../../platform/atomic-write.js";
+import { writeJsonAtomic, writeRawAtomic } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
   encodeLibraryState,
   CURRENT_LIBRARY_STATE_VERSION,
   emptyLibraryState,
   LibraryState,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
   libraryStateRevision,
 } from "../library-state.js";
 import { LibraryStateFromV4 } from "./state-schema-v4.js";
@@ -50,7 +50,7 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
   const state = yield* decodeLibraryState(value).pipe(
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library state" })),
   );
-  yield* libraryManifestFromLocalStateEffect(state).pipe(
+  yield* libraryManifestFromLocalState(state).pipe(
     Effect.mapError(
       (issue) =>
         new InvalidLibraryState({
@@ -131,17 +131,17 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
         ),
       );
       // Keep the pre-migration file: migration drops history it can no longer represent.
-      yield* writeJsonAtomicEffect(
+      yield* writeJsonAtomic(
         `${path}.v${lockedVersion.schemaVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
         lockedValue,
       );
-      yield* writeJsonAtomicEffect(path, migrated);
+      yield* writeJsonAtomic(path, migrated);
       return migrated;
     }),
   );
 });
 
-export const inspectLocalLibraryStateEffect = Effect.fn("Library.inspectState")(function* (
+export const inspectLocalLibraryState = Effect.fn("Library.inspectState")(function* (
   home: string,
 ): Effect.fn.Return<
   InspectedLibraryState,
@@ -158,7 +158,7 @@ export const inspectLocalLibraryStateEffect = Effect.fn("Library.inspectState")(
  * Replace `base` with `next`, checking and writing under the writer lock and save mutex. Fails
  * with `LibraryChanged`, writing nothing, when the Library on disk is no longer `base`.
  */
-export const saveLibraryStateEffect = Effect.fn("Library.saveState")(function* (
+export const saveLibraryState = Effect.fn("Library.saveState")(function* (
   home: string,
   next: LibraryState,
   base: LibraryState,
@@ -181,7 +181,7 @@ export const saveLibraryStateEffect = Effect.fn("Library.saveState")(function* (
           : yield* decodeCurrentState(path, value);
       if (libraryStateRevision(current) !== libraryStateRevision(base))
         return yield* new LibraryChanged({ path });
-      yield* writeRawAtomicEffect(path, `${text}\n`);
+      yield* writeRawAtomic(path, `${text}\n`);
     }),
   );
 });

@@ -4,15 +4,15 @@ import {
   bindingSkillIds,
   canonicalJson,
   currentSkillVersion,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   hashParts,
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   LibraryStore,
-  prepareInstalledSkillRebuildEffect,
-  installedSkillDisplacedEffect,
+  prepareInstalledSkillRebuild,
+  installedSkillDisplaced,
   repositorySelectsInstalledSkill,
   scopeBinding,
-  projectBindingEffect,
+  projectBinding,
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
@@ -148,7 +148,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       continue;
     }
     if (before.entry === null) {
-      const displaced = yield* installedSkillDisplacedEffect(projection);
+      const displaced = yield* installedSkillDisplaced(projection);
       facts.push(
         displaced
           ? protect("An unsettled backup explains the missing copy")
@@ -193,7 +193,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       );
       continue;
     }
-    const marker = yield* inspectOwnershipMarkerEffect(projection.path);
+    const marker = yield* inspectOwnershipMarker(projection.path);
     if (
       marker.kind !== "valid" ||
       marker.marker.projection_id !== projection.projection_id ||
@@ -209,7 +209,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
     const desired = yield* Effect.result(
       Effect.scoped(
         Effect.gen(function* () {
-          const renderer = yield* prepareInstalledSkillRebuildEffect(
+          const renderer = yield* prepareInstalledSkillRebuild(
             state,
             store.originalsPath,
             { ...projection, skill_version_id: version.skill_version_id },
@@ -218,7 +218,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
           const directory = yield* fs.makeTempDirectoryScoped({ prefix: "skit-setup-desired-" });
           const path = join(directory, "skill");
           yield* renderer.build(path);
-          return yield* deterministicTreeHashEffect(path);
+          return yield* deterministicTreeHash(path);
         }),
       ),
     );
@@ -226,7 +226,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       facts.push(protect("The selected retained version could not be rendered"));
       continue;
     }
-    const current = yield* deterministicTreeHashEffect(projection.path);
+    const current = yield* deterministicTreeHash(projection.path);
     const after = yield* observeSetupFile(resolve(projection.path));
     if (canonicalJson(before) !== canonicalJson(after)) {
       facts.push(protect("The copy changed during observation"));
@@ -280,8 +280,8 @@ export const applyRoutineSetupReconciliation = Effect.fn("Setup.applyRoutineReco
         return yield* new PlanIsStale();
       if (fact.status !== "incoming-update" && !fact.metadataChanged) continue;
       yield* checkSetupGlobalContent(fact.path);
-      const current = yield* deterministicTreeHashEffect(fact.path);
-      const marker = yield* inspectOwnershipMarkerEffect(fact.path);
+      const current = yield* deterministicTreeHash(fact.path);
+      const marker = yield* inspectOwnershipMarker(fact.path);
       if (
         marker.kind !== "valid" ||
         marker.marker.projection_id !== projection.projection_id ||
@@ -301,7 +301,7 @@ export const applyRoutineSetupReconciliation = Effect.fn("Setup.applyRoutineReco
       const evidence = hashParts([canonicalJson(yield* observeSetupFile(resolve(fact.path)))]);
       if (evidence !== fact.evidence || current !== fact.currentHash)
         return yield* new PlanIsStale();
-      yield* projectBindingEffect({
+      yield* projectBinding({
         target: fact.target,
         scope: { kind: "global" },
         root: projection.root,
@@ -323,7 +323,7 @@ export const applyRoutineSetupReconciliation = Effect.fn("Setup.applyRoutineReco
         after.status !== "installed" ||
         after.expected_digest !== fact.desiredHash ||
         after.skill_version_id !== fact.desiredVersionId ||
-        (yield* deterministicTreeHashEffect(fact.path)) !== fact.desiredHash
+        (yield* deterministicTreeHash(fact.path)) !== fact.desiredHash
       )
         return yield* new PlanIsStale();
     }

@@ -163,7 +163,7 @@ export class PnpmSkillManaged
   }
 }
 
-export const leavePnpmSkillEffect = Effect.fn("PnpmSkills.leaveManaged")(function* (path: string) {
+export const leavePnpmSkill = Effect.fn("PnpmSkills.leaveManaged")(function* (path: string) {
   const owner = yield* pnpmSkillOwner(path);
   if (owner) return yield* new PnpmSkillManaged({ path, package: owner.package });
 });

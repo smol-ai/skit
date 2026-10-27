@@ -3,17 +3,14 @@ import type { RestoreObserver, RestorePhase } from "./restore-progress.js";
 import type { Digest } from "../contracts.js";
 import { ContentAddressCollision } from "../failures.js";
 import { retainedTreePath } from "./retention/retain-tree.js";
-import { resolveSkitSourceEffect } from "../acquisition/sources.js";
-import { deterministicTreeHashEffect } from "../artifact/skit.js";
-import { prepareObservedCollectionEffect } from "./observed-import.js";
+import { resolveSkitSource } from "../acquisition/sources.js";
+import { deterministicTreeHash } from "../artifact/skit.js";
+import { prepareObservedCollection } from "./observed-import.js";
 import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { originalTreeHashEffect, retainLocalTreeEffect } from "./retention/retain-tree.js";
-import {
-  captureSnapshotArchiveEffect,
-  materializeVerifiedSnapshotEffect,
-} from "./snapshot-archive.js";
-import { verifySnapshotArchiveEffect } from "./snapshot-archive-universal.js";
+import { originalTreeHash, retainLocalTree } from "./retention/retain-tree.js";
+import { captureSnapshotArchive, materializeVerifiedSnapshot } from "./snapshot-archive.js";
+import { verifySnapshotArchive } from "./snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "./library-state.js";
 import {
   acquisitionIsSourceRestorable,
@@ -100,7 +97,7 @@ const restorableSource = (acquisition: Acquisition): SkitSource | undefined => {
   }
 };
 
-const reacquireSourceArchiveEffect = Effect.fn("Library.restore.reacquireSource")(function* (
+const reacquireSourceArchive = Effect.fn("Library.restore.reacquireSource")(function* (
   manifest: LibraryManifest,
   digest: string,
   options: RestoreOptions,
@@ -138,7 +135,7 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.restore.reacquireSource"
           digest,
           detail: "retained copy has no single materialization profile",
         });
-      const resolved = yield* resolveSkitSourceEffect(source, {
+      const resolved = yield* resolveSkitSource(source, {
         registryBaseUrl: options.registryBaseUrl,
         ...(options.registryToken === undefined ? {} : { registryToken: options.registryToken }),
         ...(commit === undefined
@@ -152,9 +149,9 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.restore.reacquireSource"
             digest,
             detail: "declared retained copy source has no declared Descriptor",
           });
-        return yield* captureSnapshotArchiveEffect(resolved.root);
+        return yield* captureSnapshotArchive(resolved.root);
       }
-      const prepared = yield* prepareObservedCollectionEffect(
+      const prepared = yield* prepareObservedCollection(
         yield* Effect.forEach(copy.members, (member) =>
           Effect.gen(function* () {
             const sourcePath =
@@ -165,12 +162,12 @@ const reacquireSourceArchiveEffect = Effect.fn("Library.restore.reacquireSource"
               name: member.source_path,
               sourcePath,
               relativePath: member.source_path,
-              observedHash: yield* deterministicTreeHashEffect(sourcePath),
+              observedHash: yield* deterministicTreeHash(sourcePath),
             };
           }),
         ),
       );
-      return yield* captureSnapshotArchiveEffect(prepared.staged);
+      return yield* captureSnapshotArchive(prepared.staged);
     }),
   );
   if (archive.digest !== digest)
@@ -223,7 +220,7 @@ const invalidPlan = (
 };
 
 /** Resolve every required byte before writing any new immutable object. */
-const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives")(function* <
+const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(function* <
   E = never,
   R = never,
 >(
@@ -257,7 +254,7 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
             return yield* new RestoreInvalid({
               detail: `retained copy ${digest} disappeared after planning`,
             });
-          if ((yield* originalTreeHashEffect(path)) !== digest)
+          if ((yield* originalTreeHash(path)) !== digest)
             return yield* new ContentAddressCollision();
           existingPaths.set(digest, path);
           yield* observer.tick({ phase, completed: index + 1, subject });
@@ -308,7 +305,7 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
       copy.digest;
     const archive = yield* observer.around(
       { kind: "fetch-source", subject },
-      reacquireSourceArchiveEffect(manifest, copy.digest, options),
+      reacquireSourceArchive(manifest, copy.digest, options),
     );
     archives.set(archive.digest, archive);
   }
@@ -324,10 +321,7 @@ const completeRestoreArchivesEffect = Effect.fn("Library.completeRestoreArchives
  * Prepare the exact content a manifest requires, without saving Library state or rewriting
  * Acquisition provenance. Available snapshots and exact source reconstruction share verification.
  */
-export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function* <
-  E = never,
-  R = never,
->(
+export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E = never, R = never>(
   manifest: LibraryManifest,
   plan: RetainedContentPlan,
   options: RestoreOptions & {
@@ -335,7 +329,7 @@ export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function
   },
 ) {
   const observer = options.observer ?? silentObserver;
-  const { archives, existingPaths } = yield* completeRestoreArchivesEffect(manifest, plan, options);
+  const { archives, existingPaths } = yield* completeRestoreArchives(manifest, plan, options);
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
   const verifiedPaths = new Map(existingPaths);
@@ -356,18 +350,18 @@ export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function
             path = retainedTreePath(options.originalsPath, tree.digest);
             if (yield* fs.exists(path)) {
               // Existing immutable objects still need verification, but no unpack/copy cycle.
-              if ((yield* originalTreeHashEffect(path)) !== tree.digest)
+              if ((yield* originalTreeHash(path)) !== tree.digest)
                 return yield* new ContentAddressCollision();
             } else {
               if (archive === undefined)
                 return yield* new RestoreInvalid({
                   detail: `retained copy ${tree.digest} not downloaded`,
                 });
-              const verified = yield* verifySnapshotArchiveEffect(archive);
+              const verified = yield* verifySnapshotArchive(archive);
               path = yield* Effect.scoped(
                 Effect.gen(function* () {
-                  const temporary = yield* materializeVerifiedSnapshotEffect(verified);
-                  return yield* retainLocalTreeEffect(
+                  const temporary = yield* materializeVerifiedSnapshot(verified);
+                  return yield* retainLocalTree(
                     temporary,
                     options.originalsPath,
                     tree.digest,
@@ -380,7 +374,7 @@ export const prepareRestoreEffect = Effect.fn("Library.prepareRestore")(function
           }
           for (const member of tree.members) {
             const directory = member.source_path === "." ? path : join(path, member.source_path);
-            if ((yield* originalTreeHashEffect(directory)) !== member.source_digest)
+            if ((yield* originalTreeHash(directory)) !== member.source_digest)
               return yield* new RestoreInvalid({
                 detail: `retained member ${member.source_path} source bytes disagree`,
               });
@@ -440,7 +434,7 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
 }
 
 /** Keep current device custody while replacing the portable Library fields. */
-export const blendRestoredStateEffect = Effect.fn("Library.blendRestoredState")(function* (
+export const blendRestoredState = Effect.fn("Library.blendRestoredState")(function* (
   current: LibraryState,
   restored: LibraryState,
 ) {

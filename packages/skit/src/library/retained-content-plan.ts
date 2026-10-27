@@ -12,7 +12,7 @@ export interface RetainedContentPlan {
 }
 
 /** Read-only: no hashing, downloads, source acquisition, or writes. */
-export const planRetainedContentEffect = Effect.fn("Library.planRetainedContent")(function* (
+export const planRetainedContent = Effect.fn("Library.planRetainedContent")(function* (
   manifest: LibraryManifest,
   options: { readonly originalsPath: string; readonly localArchives: readonly SnapshotArchive[] },
 ) {

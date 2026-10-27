@@ -3,7 +3,7 @@ import { D1Client } from "@effect/sql-d1";
 import {
   SnapshotArchive,
   SnapshotArchiveInvalid,
-  verifySnapshotArchiveEffect,
+  verifySnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
 import type { Principal } from "../auth/authentication.js";
 import { Authorization } from "../authorization/service.js";
@@ -12,7 +12,7 @@ import {
   DatabaseError,
   blobStorageEffectFrom,
   databaseError,
-  r2BodyEffect,
+  r2Body,
   Bindings,
 } from "../platform/cloudflare.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
@@ -94,13 +94,11 @@ export const layer = Layer.effect(
     const readObject = Effect.fn("LibrarySnapshots.readObject")(function* (key: string) {
       const object = yield* blob("read snapshot object", (bucket) => bucket.get(key));
       if (object === null || !("body" in object)) return yield* new SnapshotStoreInvalid();
-      const json = yield* r2BodyEffect("read snapshot body", () => object.text());
+      const json = yield* r2Body("read snapshot body", () => object.text());
       const value = yield* Schema.decodeUnknownEffect(JsonUnknown)(json).pipe(
         Effect.mapError(() => new SnapshotStoreInvalid()),
       );
-      return yield* verifySnapshotArchiveEffect(value).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
-      );
+      return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Crypto.Crypto, crypto));
     });
     const ownDefault = (principal: Principal) =>
       findOwnedLibrary({
@@ -118,7 +116,7 @@ export const layer = Layer.effect(
       principal: Principal,
       archive: SnapshotArchive,
     ) {
-      const verified = yield* verifySnapshotArchiveEffect(archive).pipe(
+      const verified = yield* verifySnapshotArchive(archive).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
       const library = yield* ownDefault(principal);

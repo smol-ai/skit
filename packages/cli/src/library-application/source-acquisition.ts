@@ -1,24 +1,24 @@
 import { officialRegistryOrigin } from "../registry/accounts.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
-  deterministicTreeHashEffect,
-  originalTreeHashEffect,
-  validateSkitDirectoryEffect,
-  readSkitDescriptorEffect,
+  deterministicTreeHash,
+  originalTreeHash,
+  validateSkitDirectory,
+  readSkitDescriptor,
   parseSkillFrontmatter,
-  parseSkitSourceEffect,
+  parseSkitSource,
   sourceLocator,
-  prepareObservedCollectionEffect,
-  resolveSkitSourceEffect,
-  retainAuthoredCollectionUnderLockEffect,
-  retainObservedCollectionEffect,
+  prepareObservedCollection,
+  resolveSkitSource,
+  retainAuthoredCollectionUnderLock,
+  retainObservedCollection,
   type SkitSource,
   type ResolvedSkitSource,
 } from "@smolai/skit-core";
 import { Data, Clock, Effect, FileSystem } from "effect";
 import { basename, dirname, join, relative } from "node:path";
 import { RegistryAuth } from "../registry/auth-service.js";
-import { leavePnpmSkillEffect } from "../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../projection/pnpm-skills.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export class AddNoSkills
@@ -42,16 +42,16 @@ const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(fun
   if (source.type !== "local") return;
   const inputRoot = basename(source.path) === "SKILL.md" ? dirname(source.path) : source.path;
   if (resolved.descriptorKind === "declared") {
-    const descriptor = yield* readSkitDescriptorEffect(resolved.root);
+    const descriptor = yield* readSkitDescriptor(resolved.root);
     const memberRoot = join(inputRoot, relative(resolved.originalRoot, resolved.root));
     for (const skill of descriptor.skills) {
-      yield* leavePnpmSkillEffect(join(memberRoot, skill.path));
-      yield* leavePnpmSkillEffect(join(resolved.root, skill.path));
+      yield* leavePnpmSkill(join(memberRoot, skill.path));
+      yield* leavePnpmSkill(join(resolved.root, skill.path));
     }
   } else {
     for (const path of resolved.observedSkillPaths) {
-      yield* leavePnpmSkillEffect(join(inputRoot, path));
-      yield* leavePnpmSkillEffect(join(resolved.originalRoot, path));
+      yield* leavePnpmSkill(join(inputRoot, path));
+      yield* leavePnpmSkill(join(resolved.originalRoot, path));
     }
   }
 });
@@ -77,7 +77,7 @@ const observeSourceSkills = Effect.fn("Library.observeSourceSkills")(function* (
             : basename(sourcePath),
         sourcePath,
         relativePath,
-        observedHash: yield* deterministicTreeHashEffect(sourcePath),
+        observedHash: yield* deterministicTreeHash(sourcePath),
       };
     }),
   );
@@ -97,16 +97,16 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
 ) {
   const auth = yield* RegistryAuth;
   const resolvedRegistry = yield* auth.resolve();
-  const parsed = typeof input === "string" ? yield* parseSkitSourceEffect(input) : input;
+  const parsed = typeof input === "string" ? yield* parseSkitSource(input) : input;
   // `skit:` shorthand with no Registry configured means the hosted Registry, read anonymously.
   const registry =
     resolvedRegistry.origin === undefined && parsed.type === "registry"
       ? { ...resolvedRegistry, origin: officialRegistryOrigin }
       : resolvedRegistry;
-  if (parsed.type === "local") yield* leavePnpmSkillEffect(parsed.path);
+  if (parsed.type === "local") yield* leavePnpmSkill(parsed.path);
   if (parsed.type === "registry" && registry.configurationError)
     return yield* Effect.fail(registry.configurationError);
-  const resolved = yield* resolveSkitSourceEffect(input, {
+  const resolved = yield* resolveSkitSource(input, {
     registryBaseUrl: registry.origin,
     registryToken: registry.token,
     ...(version === undefined ? {} : { version }),
@@ -121,7 +121,7 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
   });
 }, Effect.scoped);
 
-export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(function* (
+export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function* (
   input: string | SkitSource,
   version?: string,
   previousSkillPaths?: readonly string[],
@@ -129,12 +129,12 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
   return yield* withResolvedSource(input, version, previousSkillPaths, ({ parsed, resolved }) =>
     Effect.gen(function* () {
       if (resolved.descriptorKind === "declared") {
-        const validated = yield* validateSkitDirectoryEffect(resolved.root, "retained", {
+        const validated = yield* validateSkitDirectory(resolved.root, "retained", {
           assessmentContext: "retain",
         });
         return {
           kind: "authored" as const,
-          snapshot_digest: yield* originalTreeHashEffect(resolved.root),
+          snapshot_digest: yield* originalTreeHash(resolved.root),
           skills: validated.descriptor.skills.map((skill) => ({
             name: skill.name,
             verbatim_path: skill.path,
@@ -143,7 +143,7 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
       }
       const skills = yield* observeSourceSkills(resolved, sourceLocator(parsed));
       const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
-      const prepared = yield* prepareObservedCollectionEffect(skills);
+      const prepared = yield* prepareObservedCollection(skills);
       return {
         kind: "plain" as const,
         ...diagnostics,
@@ -162,11 +162,11 @@ export const inspectLibrarySourceEffect = Effect.fn("Library.inspectSource")(fun
   );
 });
 
-export const previewLibrarySourceEffect = Effect.fn("Library.previewSource")(function* (
+export const previewLibrarySource = Effect.fn("Library.previewSource")(function* (
   input: string | SkitSource,
   version?: string,
 ) {
-  const inspected = yield* inspectLibrarySourceEffect(input, version);
+  const inspected = yield* inspectLibrarySource(input, version);
   return {
     kind: inspected.kind,
     skills: inspected.skills,
@@ -175,7 +175,7 @@ export const previewLibrarySourceEffect = Effect.fn("Library.previewSource")(fun
 });
 
 /** Own the retention transaction, including partial commits and temporary-source cleanup. */
-export const retainLibrarySourceEffect = Effect.fn("Library.addSource")(function* (
+export const retainLibrarySource = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
   version?: string,
   previousSkillPaths?: readonly string[],
@@ -207,8 +207,8 @@ export const retainLibrarySourceEffect = Effect.fn("Library.addSource")(function
         };
         const retained =
           resolved.descriptorKind === "declared"
-            ? yield* retainAuthoredCollectionUnderLockEffect({ ...request, root: resolved.root })
-            : yield* retainObservedCollectionEffect({
+            ? yield* retainAuthoredCollectionUnderLock({ ...request, root: resolved.root })
+            : yield* retainObservedCollection({
                 ...request,
                 skills: yield* observeSourceSkills(resolved, historicalInput),
                 observations: [],

@@ -4,17 +4,17 @@ import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  captureSnapshotArchiveEffect,
-  libraryManifestFromLocalStateEffect,
+  captureSnapshotArchive,
+  libraryManifestFromLocalState,
   LibraryStore,
   libraryStoreLayer,
   retainedTreePath,
-  projectBindingEffect,
+  projectBinding,
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { syncLibraryEffect } from "../src/workflows/library/library-sync.js";
+import { retainLibrarySource } from "../src/library-application/source-acquisition.js";
+import { syncLibrary } from "../src/workflows/library/library-sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";
 import { librarySyncServer } from "./helpers/library-sync-server.js";
@@ -69,15 +69,15 @@ const fixture = Effect.gen(function* () {
       Effect.provide(libraryStoreLayer({ home })),
     );
   const sync = () =>
-    writingTo(freshHome, syncLibraryEffect({ origin, apply: true })).pipe(
+    writingTo(freshHome, syncLibrary({ origin, apply: true })).pipe(
       Effect.provide(registryHttpLayer(http)),
       Effect.provide(http),
     );
   const seed = (source: SkitSource) =>
     Effect.gen(function* () {
-      yield* writingTo(home, retainLibrarySourceEffect(source)).pipe(Effect.provide(http));
+      yield* writingTo(home, retainLibrarySource(source)).pipe(Effect.provide(http));
       const state = yield* load(home);
-      const manifest = yield* libraryManifestFromLocalStateEffect(state);
+      const manifest = yield* libraryManifestFromLocalState(state);
       assert.deepStrictEqual(manifest.snapshot_digests, []);
       assert.strictEqual(
         server.respond("PUT", "/api/library/portable", { expected_revision_id: null, manifest })
@@ -119,7 +119,7 @@ it.effect(
       yield* f.sync();
       assert.deepStrictEqual((yield* f.load(f.freshHome)).retained_copies, state.retained_copies);
       const digest = state.retained_copies[0]!.digest;
-      assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
+      assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
       for (const [path, bytes] of Object.entries(f.files))
         assert.strictEqual(yield* f.fs.readFileString(join(f.root(digest), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
@@ -143,7 +143,7 @@ it.effect(
             },
             restored,
           );
-          yield* projectBindingEffect({
+          yield* projectBinding({
             target: "agents",
             root: targetRoot,
             variantsPath: join(f.freshHome, "variants"),
@@ -172,7 +172,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     const state = yield* f.seed(registrySource);
     yield* f.sync();
     const digest = state.retained_copies[0]!.digest;
-    assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
+    assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "README.md")));
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "skills/.gitkeep")));
     assert.strictEqual(
@@ -266,7 +266,7 @@ it.effect.each(["git", "github"] as const)(
       );
       yield* f.sync().pipe(Effect.provide(localGit));
       const digest = state.retained_copies[0]!.digest;
-      assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
+      assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.root(digest), "skit.json")),
         f.files["skit.json"],
