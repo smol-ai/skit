@@ -8,7 +8,7 @@ import {
   LibraryStore,
   skitLayer,
   retainAuthoredCollectionUnderLockEffect,
-  type SkillsShObservation,
+  type SkillsShLockFileEntry,
 } from "@smolai/skit-core";
 import {
   readLibrarySkillMetadata,
@@ -65,7 +65,7 @@ it.effect(
         );
       }
       const state = yield* home.durable;
-      const observation = (index: number): SkillsShObservation => ({
+      const observation = (index: number): SkillsShLockFileEntry => ({
         type: "skills.sh-lock",
         machine_id: state.acquisitions[index]!.machine_id,
         observed_at: state.acquisitions[index]!.acquired_at,

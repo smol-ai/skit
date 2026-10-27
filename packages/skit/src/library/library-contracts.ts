@@ -126,7 +126,7 @@ export const Upstream = Schema.Struct({
 });
 export type Upstream = typeof Upstream.Type;
 
-export const SkillsShObservation = Schema.Struct({
+export const SkillsShLockFileEntry = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machine_id: MachineId,
   observed_at: Schema.String,
@@ -161,7 +161,7 @@ export const SkillsShObservation = Schema.Struct({
     }),
   ),
 });
-export interface SkillsShObservation extends Schema.Schema.Type<typeof SkillsShObservation> {}
+export interface SkillsShLockFileEntry extends Schema.Schema.Type<typeof SkillsShLockFileEntry> {}
 
 export const MaterializationProfile = Schema.Literals(["plain-skill/v1", "declared-skit-skill/v1"]);
 export type MaterializationProfile = typeof MaterializationProfile.Type;
@@ -224,7 +224,7 @@ export const Acquisition = Schema.Struct({
   revision: Schema.optionalKey(Schema.NonEmptyString),
   acquired_at: Schema.String,
   machine_id: MachineId,
-  observations: Schema.Array(SkillsShObservation),
+  observations: Schema.Array(SkillsShLockFileEntry),
 });
 export interface Acquisition extends Schema.Schema.Type<typeof Acquisition> {}
 

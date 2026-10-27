@@ -12,10 +12,10 @@ import {
   MachineId,
 } from "./entity-ids.js";
 import * as MachineSettings from "./machine-settings.js";
-import { acquisitionObservations } from "./acquisition-evidence.js";
 import {
   Acquisition,
   type MaterializationProfile,
+  type SkillsShLockFileEntry,
   type SkitSource,
   sourceAcquisitions,
   type SourceRevision,
@@ -35,7 +35,6 @@ import {
   sourceIdentityFromSource,
   type SourceDeclaration,
 } from "./source-identity.js";
-import type { SkillsShProvenanceObservation } from "./store/state-schema.js";
 import type { Digest } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
@@ -69,7 +68,7 @@ export interface ObservedImport {
   readonly revision?: SourceRevision;
   readonly retainedAt: string;
   readonly skills: readonly ObservedSkill[];
-  readonly observations: readonly SkillsShProvenanceObservation[];
+  readonly observations: readonly SkillsShLockFileEntry[];
 }
 
 const safeRelative = (path: string) =>
@@ -234,7 +233,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     ...(revision === undefined ? {} : { revision }),
     acquired_at: request.retainedAt,
     machine_id: machineId,
-    observations: acquisitionObservations(request.observations, machineId),
+    // The importing machine records the entries, as it records the Acquisition itself.
+    observations: request.observations.map((entry) => ({ ...entry, machine_id: machineId })),
   };
   const skillAt = (path: string) =>
     state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);

@@ -7,10 +7,7 @@ import {
   type SkillExampleManifest,
   type SkitDescriptor,
 } from "./schemas.js";
-import {
-  SkillsShProvenanceObservation,
-  SkillAssessmentAcceptance,
-} from "./library/store/state-schema.js";
+import { SkillAssessmentAcceptance } from "./library/store/state-schema.js";
 import {
   Digest,
   HarnessName,
@@ -27,7 +24,6 @@ export {
   InvocationPolicy,
   InstallDestination,
   RecordedInstallDestination,
-  SkillsShProvenanceObservation,
   SkitBindingScope,
   SkillAssessmentAcceptance,
   SkitValidationDiagnostic,

@@ -32,29 +32,6 @@ export const InventoryScanIssue = Schema.Union([
   }),
 ]);
 export type InventoryScanIssue = typeof InventoryScanIssue.Type;
-export const SkillsShProvenanceObservation = Schema.Struct({
-  type: Schema.Literal("skills.sh-lock"),
-  machineId: Schema.Union([LegacyMachineId, MachineId]),
-  observedAt: Schema.String,
-  sourceUpdatedAt: Schema.optionalKey(Schema.String),
-  lockPath: Schema.String,
-  lockVersion: Schema.Number,
-  lockScope: Schema.Literals(["project", "global"]),
-  lockContentHash: Digest,
-  source: Schema.String,
-  sourceType: Schema.String,
-  sourceUrl: Schema.optionalKey(Schema.String),
-  sourceBaseUrl: Schema.optionalKey(Schema.String),
-  ref: Schema.optionalKey(Schema.String),
-  skillName: Schema.String,
-  skillPath: Schema.optionalKey(Schema.String),
-  computedHash: Schema.optionalKey(Schema.String),
-  skillFolderHash: Schema.optionalKey(Schema.String),
-  wellKnownDigest: Schema.optionalKey(Schema.String),
-  contentAgreement: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
-  originalEntry: Schema.JsonObject,
-});
-export type SkillsShProvenanceObservation = typeof SkillsShProvenanceObservation.Type;
 export const SkillAssessmentAcceptance = Schema.Struct({
   fingerprint: Digest,
   artifactContentDigest: Digest,

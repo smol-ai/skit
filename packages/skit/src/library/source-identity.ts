@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import type { MachineId } from "./entity-ids.js";
-import { sanitizeSourceClaim } from "./acquisition-evidence.js";
+import { sanitizeSourceClaim } from "./skills-sh-lock-file.js";
 import type { SkitSource, SourceIdentity } from "./library-contracts.js";
 
 export interface SourceDeclaration {

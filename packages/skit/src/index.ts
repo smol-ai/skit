@@ -70,6 +70,7 @@ export {
 } from "./library/retention/retain-tree.js";
 export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
+export { skillsShLockFileEntry } from "./library/skills-sh-lock-file.js";
 export * from "./library/library-state.js";
 export * from "./library/binding-intent.js";
 export * from "./library/library-restore.js";

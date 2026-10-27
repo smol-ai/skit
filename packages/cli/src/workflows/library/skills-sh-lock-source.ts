@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
-import { sourceLocator, SkitSource } from "@smolai/skit-core";
-import type { MachineId, SkillsShProvenanceObservation } from "@smolai/skit-core";
+import { skillsShLockFileEntry, sourceLocator, SkitSource } from "@smolai/skit-core";
+import type { MachineId, SkillsShLockFileEntry } from "@smolai/skit-core";
 import type {
   SetupLockMatch,
   SetupSkillsLock,
@@ -258,33 +258,33 @@ const retainedSkillPath = (lockPath: string | undefined, name: string) => {
   return normalized.endsWith("/SKILL.md") ? normalized.slice(0, -"/SKILL.md".length) : normalized;
 };
 
-const observationFor = (
+const lockFileEntryFor = (
   lock: SetupLockMatch,
   machineId: MachineId,
   observedAt: string,
   skillName: string,
-): SkillsShProvenanceObservation => ({
-  type: "skills.sh-lock",
-  machineId,
-  observedAt,
-  ...(lock.entry.updatedAt ? { sourceUpdatedAt: lock.entry.updatedAt } : {}),
-  lockPath: lock.lockPath,
-  lockVersion: lock.lockVersion,
-  lockScope: lock.scope,
-  lockContentHash: lock.lockContentHash,
-  source: lock.entry.source,
-  sourceType: lock.entry.sourceType,
-  ...(lock.entry.sourceUrl ? { sourceUrl: lock.entry.sourceUrl } : {}),
-  ...(lock.entry.sourceBaseUrl ? { sourceBaseUrl: lock.entry.sourceBaseUrl } : {}),
-  ...(lock.entry.ref ? { ref: lock.entry.ref } : {}),
-  skillName,
-  ...(lock.entry.skillPath ? { skillPath: lock.entry.skillPath } : {}),
-  ...(lock.entry.computedHash ? { computedHash: lock.entry.computedHash } : {}),
-  ...(lock.entry.skillFolderHash ? { skillFolderHash: lock.entry.skillFolderHash } : {}),
-  ...(lock.entry.wellKnownDigest ? { wellKnownDigest: lock.entry.wellKnownDigest } : {}),
-  contentAgreement: lock.content,
-  originalEntry: lock.entry.originalEntry,
-});
+): SkillsShLockFileEntry =>
+  skillsShLockFileEntry({
+    machine_id: machineId,
+    observed_at: observedAt,
+    ...(lock.entry.updatedAt ? { source_updated_at: lock.entry.updatedAt } : {}),
+    lock_path: lock.lockPath,
+    lock_version: lock.lockVersion,
+    lock_scope: lock.scope,
+    lock_content_hash: lock.lockContentHash,
+    source: lock.entry.source,
+    source_type: lock.entry.sourceType,
+    ...(lock.entry.sourceUrl ? { source_url: lock.entry.sourceUrl } : {}),
+    ...(lock.entry.sourceBaseUrl ? { source_base_url: lock.entry.sourceBaseUrl } : {}),
+    ...(lock.entry.ref ? { ref: lock.entry.ref } : {}),
+    skill_name: skillName,
+    ...(lock.entry.skillPath ? { skill_path: lock.entry.skillPath } : {}),
+    ...(lock.entry.computedHash ? { computed_hash: lock.entry.computedHash } : {}),
+    ...(lock.entry.skillFolderHash ? { skill_folder_hash: lock.entry.skillFolderHash } : {}),
+    ...(lock.entry.wellKnownDigest ? { well_known_digest: lock.entry.wellKnownDigest } : {}),
+    content_agreement: lock.content,
+    original_entry: lock.entry.originalEntry,
+  });
 
 /** Revalidate lock claims and prepare evidence for retention, without fetching upstream bytes. */
 export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImportEvidence")(
@@ -355,7 +355,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       for (const observation of matchingInstances.flatMap((item) =>
         item.locks.filter((candidateLock) => setupLockGroupKey(candidateLock) === groupKey),
       ))
-        provenance.push(observationFor(observation, machineId, observedAt, candidate.name));
+        provenance.push(lockFileEntryFor(observation, machineId, observedAt, candidate.name));
     }
     for (const lock of new Map(claimedMembers.map(({ lock }) => [lock.lockPath, lock])).values()) {
       const text = yield* fs

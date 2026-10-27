@@ -18,7 +18,7 @@ import {
   MaterializationProfile,
   RetainedCopy,
   type Skill,
-  SkillsShObservation,
+  SkillsShLockFileEntry,
   SourceIdentity,
   SourceRelativePath,
   SourceTracking,
@@ -83,7 +83,7 @@ export const AcquisitionV5 = Schema.Struct({
   source_revision: Schema.optionalKey(Schema.String),
   acquired_at: Schema.String,
   machine_id: MachineId,
-  observations: Schema.Array(SkillsShObservation),
+  observations: Schema.Array(SkillsShLockFileEntry),
 });
 export type AcquisitionV5 = typeof AcquisitionV5.Type;
 
