@@ -4,7 +4,7 @@ import { Digest, SkillId } from "@smolai/skit-core";
 import {
   SetupApplied,
   SetupResult,
-  SetupReconciliationFact,
+  InstalledSkillChange,
   SetupVersionChoice,
 } from "../workflows/library/setup-contract.js";
 import {
@@ -40,7 +40,7 @@ export const SetupReviewOutput = Schema.Struct({
   canApply: Schema.Boolean,
   summary: Schema.Struct({
     sourceUpdateMayNeedReview: Schema.Boolean,
-    reconciliation: Schema.Array(SetupReconciliationFact),
+    reconciliation: Schema.Array(InstalledSkillChange),
     versionChoices: Schema.Array(SetupVersionChoice),
     savesMachineSettings: Schema.Boolean,
     createsMachineIdentity: Schema.Boolean,

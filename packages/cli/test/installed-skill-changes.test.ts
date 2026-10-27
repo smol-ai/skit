@@ -242,7 +242,7 @@ it.effect("competing changes fail usefully before any update or inverse receipt 
     const before = yield* f.home.durable;
     const removed = yield* f.fs.readDirectory(join(f.home.home, "removed"));
     const failed = yield* Effect.flip(f.apply);
-    expect(failed._tag).toBe("SetupReconciliationRequired");
+    expect(failed._tag).toBe("ChangeChoiceRequired");
     expect(yield* f.home.durable).toEqual(before);
     expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(
       document("Competing user edits"),

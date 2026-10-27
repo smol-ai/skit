@@ -34,10 +34,7 @@ import {
 import { setupVersionAlternatives } from "./setup-version-choice.js";
 import { planSetupRemovals, setupRemovablePaths } from "./setup-removal.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
-import {
-  setupReconciliationChanges,
-  unresolvedSetupReconciliation,
-} from "./setup-reconciliation.js";
+import { hasChangesToApply, changesNeedingChoice } from "./installed-skill-changes.js";
 
 /**
  * Applying the recommended plan would create another agent-visible copy of these skills, and
@@ -387,8 +384,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       custody: structuredClone(approval.ownership),
     };
     return {
-      canApply: !unresolvedSetupReconciliation(approval.reconciliation ?? [], versionChoices)
-        .length,
+      canApply: !changesNeedingChoice(approval.reconciliation ?? [], versionChoices).length,
       reviewId: hashParts([
         canonicalJson({
           planId: observed.onboarding.planId,
@@ -405,8 +401,8 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         imports.length > 0 ||
         decisions.length > 0 ||
         approval.removals.entries.length > 0 ||
-        setupReconciliationChanges(approval.reconciliation ?? [], versionChoices) ||
-        unresolvedSetupReconciliation(approval.reconciliation ?? [], versionChoices).length > 0,
+        hasChangesToApply(approval.reconciliation ?? [], versionChoices) ||
+        changesNeedingChoice(approval.reconciliation ?? [], versionChoices).length > 0,
       summary: structuredClone(summary),
       apply: (withStatus: SetupApplyOptions["withStatus"]) =>
         applySetupPlan({ manage: manageOptions, withStatus }, approved),

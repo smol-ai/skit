@@ -62,7 +62,7 @@ export function installedSkillStatusLabel(status: string): string {
   );
 }
 
-export function reconciliationOperationLabel(operation: string): string {
+export function operationLabel(operation: string): string {
   return (
     {
       install: "Installed",

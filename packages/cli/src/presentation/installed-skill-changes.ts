@@ -1,12 +1,12 @@
 import type {
-  SetupReconciliationFact,
-  SetupReconciliationOutcome,
+  InstalledSkillChange,
+  InstalledSkillChangeResult,
   SetupVersionChoice,
 } from "../workflows/library/setup-contract.js";
 import { terminalData } from "./terminal-text.js";
 
-export function renderSetupReconciliation(
-  fact: SetupReconciliationFact,
+export function renderInstalledSkillChange(
+  fact: InstalledSkillChange,
   displayPath: (path: string) => string = (path) => path,
 ) {
   const label = {
@@ -24,7 +24,7 @@ export function renderSetupReconciliation(
 
 export function renderSetupVersionChoice(
   choice: SetupVersionChoice,
-  facts: readonly SetupReconciliationFact[],
+  facts: readonly InstalledSkillChange[],
   displayPath: (path: string) => string = (path) => path,
 ) {
   const name = facts.find((fact) => fact.skillId === choice.skillId)?.name ?? choice.skillId;
@@ -35,18 +35,18 @@ export function renderSetupVersionChoice(
   return `Use ${version} for ${terminalData(name)}; preserve displaced copies in recovery`;
 }
 
-export function renderReviewedReconciliation(
-  fact: SetupReconciliationFact,
+export function renderReviewedChanges(
+  fact: InstalledSkillChange,
   choices: readonly SetupVersionChoice[],
   displayPath: (path: string) => string = (path) => path,
 ) {
   return fact.status !== "native-delete" &&
     choices.some((choice) => choice.skillId === fact.skillId)
     ? `${terminalData(fact.name)} · Install selected version · ${terminalData(displayPath(fact.path))}`
-    : renderSetupReconciliation(fact, displayPath);
+    : renderInstalledSkillChange(fact, displayPath);
 }
 
-export function renderSetupReconciliationOutcome(outcome: SetupReconciliationOutcome) {
+export function renderChangeResult(outcome: InstalledSkillChangeResult) {
   const label = {
     updated: "Updated active copy",
     unchanged: "Unchanged",

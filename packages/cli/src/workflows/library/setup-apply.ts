@@ -16,9 +16,9 @@ import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
   SetupKnownSourceSelection,
-  SetupReconciliationFact,
+  InstalledSkillChange,
   SetupVersionChoice,
-  SetupReconciliationOutcome,
+  InstalledSkillChangeResult,
 } from "./setup-contract.js";
 import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
 import { manageSetupCopies } from "./setup-manage.js";
@@ -26,11 +26,11 @@ import { importSetupCollections } from "./setup-import.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
 import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import {
-  applyRoutineSetupReconciliation,
-  setupReconciliationChanges,
-  SetupReconciliationRequired,
-  unresolvedSetupReconciliation,
-} from "./setup-reconciliation.js";
+  installSelectedVersions,
+  hasChangesToApply,
+  ChangeChoiceRequired,
+  changesNeedingChoice,
+} from "./installed-skill-changes.js";
 import { applyChosenSetupVersions, setupVersionAlternatives } from "./setup-version-choice.js";
 import { PlanIsStale } from "../../library/failures.js";
 
@@ -45,7 +45,7 @@ export interface SetupApproval {
   readonly ownership: readonly SetupCopySelection[];
   readonly removals: PreparedRecoveryMoves;
   readonly versionChoices?: readonly SetupVersionChoice[];
-  readonly reconciliation?: readonly SetupReconciliationFact[];
+  readonly reconciliation?: readonly InstalledSkillChange[];
 }
 
 export interface SetupApplyOptions {
@@ -103,8 +103,8 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       )
     )
       return yield* new PlanIsStale();
-    const unresolved = unresolvedSetupReconciliation(reconciliation, versionChoices);
-    if (unresolved.length) return yield* new SetupReconciliationRequired({ facts: unresolved });
+    const unresolved = changesNeedingChoice(reconciliation, versionChoices);
+    if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
     // Only enabled global copies install into this device's skills directories. Prove those roots
     // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
     // read-only) fails the apply whole instead of leaving a Library with no copies behind.
@@ -120,7 +120,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         ),
     );
     const enablingCopies = projectedCopies.length > 0;
-    const projects = enablingCopies || setupReconciliationChanges(reconciliation, versionChoices);
+    const projects = enablingCopies || hasChangesToApply(reconciliation, versionChoices);
     if (projects)
       for (const target of yield* activeInstallDestinationsEffect(approval.setup.inventory))
         if (
@@ -148,7 +148,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     );
     const warnings: { name: string; message: string }[] = [];
     const recoveryDirectories: string[] = [];
-    const reconciliationOutcomes: SetupReconciliationOutcome[] = [];
+    const reconciliationOutcomes: InstalledSkillChangeResult[] = [];
     const manage = {
       ...options.manage,
       recoveryOperationDirectory: approval.removals.operationDirectory,
@@ -253,7 +253,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         reconciliationOutcomes.push(
           ...(yield* options.withStatus(
             "Reconciling reviewed existing copies",
-            applyRoutineSetupReconciliation(
+            installSelectedVersions(
               reconciliation.filter(
                 (fact) => !chosenSkills.has(fact.skillId) && !deferredSkills.has(fact.skillId),
               ),

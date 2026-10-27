@@ -12,10 +12,10 @@ import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { scanSetupCopies } from "./setup-scan.js";
 import {
-  checkSetupReconciliation,
-  setupReconciliationChanges,
-  unresolvedSetupReconciliation,
-} from "./setup-reconciliation.js";
+  findInstalledSkillChanges,
+  hasChangesToApply,
+  changesNeedingChoice,
+} from "./installed-skill-changes.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 import {
   copyConflict,
@@ -125,7 +125,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-    const reconciliation = yield* checkSetupReconciliation(
+    const reconciliation = yield* findInstalledSkillChanges(
       library,
       options.inventory,
       sortedInstances,
@@ -209,10 +209,10 @@ const scanForSetup = Effect.fn("Library.setup")(
       onboarding: {
         planId,
         candidates: onboarding,
-        ...(!unresolvedSetupReconciliation(reconciliation).length &&
+        ...(!changesNeedingChoice(reconciliation).length &&
         (recommended.sources.length ||
           recommended.copies.length ||
-          setupReconciliationChanges(reconciliation))
+          hasChangesToApply(reconciliation))
           ? {
               applyCommand: setupApplyCommandLine({
                 planId,

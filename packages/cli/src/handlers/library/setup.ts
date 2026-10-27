@@ -43,7 +43,7 @@ import { checkSubjects } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupReviewSkillChoices } from "../../presentation/setup-skills.js";
 
-import { renderSetupReconciliationOutcome } from "../../presentation/setup-reconciliation.js";
+import { renderChangeResult } from "../../presentation/installed-skill-changes.js";
 import {
   chooseSetupCopyDecisions,
   chooseSetupVersions,
@@ -242,7 +242,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   yield* renderer.note(
     [
       "Selected setup changes were applied.",
-      ...applied.reconciliation.map((outcome) => renderSetupReconciliationOutcome(outcome)),
+      ...applied.reconciliation.map((outcome) => renderChangeResult(outcome)),
       `Setup operation: ${applied.operationId}. Preview full undo with skit library undo ${applied.operationId} using the same --home.`,
     ].join("\n"),
     "Setup complete",

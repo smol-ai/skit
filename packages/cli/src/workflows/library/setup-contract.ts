@@ -211,7 +211,7 @@ export const SetupInstalledSkill = Schema.Struct({
 });
 export type SetupInstalledSkill = typeof SetupInstalledSkill.Type;
 
-export const SetupReconciliationFact = Schema.Struct({
+export const InstalledSkillChange = Schema.Struct({
   projectionId: InstalledSkillId,
   skillId: SkillId,
   name: Schema.String,
@@ -233,15 +233,15 @@ export const SetupReconciliationFact = Schema.Struct({
   metadataChanged: Schema.Boolean,
   reason: Schema.optionalKey(Schema.String),
 });
-export type SetupReconciliationFact = typeof SetupReconciliationFact.Type;
-export const SetupReconciliationOutcome = Schema.Struct({
+export type InstalledSkillChange = typeof InstalledSkillChange.Type;
+export const InstalledSkillChangeResult = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
   projectionId: InstalledSkillId,
   name: Schema.String,
   path: Schema.String,
   status: Schema.Literals(["updated", "unchanged", "local-kept", "native-delete", "pending"]),
 });
-export type SetupReconciliationOutcome = typeof SetupReconciliationOutcome.Type;
+export type InstalledSkillChangeResult = typeof InstalledSkillChangeResult.Type;
 
 const SetupOnboardingBase = {
   shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
@@ -342,7 +342,7 @@ export const SetupResult = Schema.Struct({
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),
   authoredCollections: Schema.Array(SetupAuthoredCollection),
   projections: Schema.Array(SetupInstalledSkill),
-  reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationFact)),
+  reconciliation: Schema.optionalKey(Schema.Array(InstalledSkillChange)),
   onboarding: Schema.Struct({
     planId: Digest,
     candidates: Schema.Array(SetupOnboardingCandidate),
@@ -371,7 +371,7 @@ export type SetupResult = typeof SetupResult.Type;
 /** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
  * every other observed skill was left alone. */
 export const SetupApplied = Schema.Struct({
-  reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationOutcome)),
+  reconciliation: Schema.optionalKey(Schema.Array(InstalledSkillChangeResult)),
   operationId: Schema.optionalKey(Schema.String),
   removed: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, path: Schema.String })),

@@ -98,7 +98,7 @@ their original inode, stale-plan refusal, occupied and redirected destinations,
 marker symlinks, receipt publication failure, interrupted Library/settings inverse
 publication, repeated undo preserving later choices, and executable CLI actions
 through the parser and rendered result. Changed-projection, partial-forward and baseline reconciliation cases are covered
-by `setup-reconciliation.test.ts`; see `setup-recovery-refactor.md` for the complete
+by `installed-skill-changes.test.ts`; see `setup-recovery-refactor.md` for the complete
 requirement mapping and remaining deliberate custody boundaries.
 
 Automatic preservation now has final-state proof in

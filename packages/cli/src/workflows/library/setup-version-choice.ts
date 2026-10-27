@@ -11,14 +11,14 @@ import {
   retainChangedInstalledSkill,
   scopeBinding,
 } from "@smolai/skit-core";
-import type { SetupReconciliationFact, SetupVersionChoice } from "./setup-contract.js";
+import type { InstalledSkillChange, SetupVersionChoice } from "./setup-contract.js";
 import { captureSetupFile } from "../../library-application/setup-operation.js";
 import { prepareOwnedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { checkSetupGlobalContent } from "../../library-application/setup-external-ownership.js";
 import { PlanIsStale } from "../../library/failures.js";
 
 /** Alternatives are derived once by the application; adapters only select these values. */
-export const setupVersionAlternatives = (facts: readonly SetupReconciliationFact[]) => {
+export const setupVersionAlternatives = (facts: readonly InstalledSkillChange[]) => {
   const skills = [
     ...new Set(facts.filter((fact) => fact.status === "competing").map((fact) => fact.skillId)),
   ];
@@ -40,7 +40,7 @@ export const setupVersionAlternatives = (facts: readonly SetupReconciliationFact
 
 /** Setup owns the writer and inverse record. This owner preserves every reviewed live copy. */
 export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(function* (
-  facts: readonly SetupReconciliationFact[],
+  facts: readonly InstalledSkillChange[],
   choices: readonly SetupVersionChoice[],
   operationDirectory: string,
 ) {

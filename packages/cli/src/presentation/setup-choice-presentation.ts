@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type {
-  SetupReconciliationFact,
+  InstalledSkillChange,
   SetupVersionChoice,
 } from "../workflows/library/setup-contract.js";
 import type { SetupReviewSummary } from "../workflows/library/setup-review.js";
@@ -13,7 +13,7 @@ import {
 } from "../workflows/library/setup-decisions.js";
 import { Prompter, type Choice } from "./prompter.js";
 import { Renderer } from "./renderer.js";
-import { renderSetupVersionChoice, renderReviewedReconciliation } from "./setup-reconciliation.js";
+import { renderSetupVersionChoice, renderReviewedChanges } from "./installed-skill-changes.js";
 
 const skillCount = (count: number) => `${count} skill${count === 1 ? "" : "s"}`;
 
@@ -109,7 +109,7 @@ export function setupPlanLines(input: {
       renderSetupVersionChoice(choice, summary.reconciliation, displayPath),
     ),
     ...summary.reconciliation.map((fact) =>
-      renderReviewedReconciliation(fact, summary.versionChoices, displayPath),
+      renderReviewedChanges(fact, summary.versionChoices, displayPath),
     ),
     ...(summary.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),
     ...summary.repositoryDecisions.map(
@@ -203,7 +203,7 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
 /** The application has already supplied eligible alternatives and ownership facts. */
 export const chooseSetupVersions = Effect.fn("CLI.setup.chooseVersions")(function* (
   alternatives: readonly SetupVersionChoice[],
-  facts: readonly SetupReconciliationFact[],
+  facts: readonly InstalledSkillChange[],
   displayPath: (path: string) => string,
 ) {
   const prompter = yield* Prompter;

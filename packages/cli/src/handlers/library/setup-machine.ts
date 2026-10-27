@@ -9,7 +9,7 @@ import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import type { SetupDuplicateAction as SetupDuplicateActionType } from "../../workflows/library/setup-decisions.js";
 import type { SetupApplied } from "../../workflows/library/setup-contract.js";
 import type { SetupCommandSelection } from "../../commands/setup-actions.js";
-import { setupReconciliationOutcomes } from "../../workflows/library/setup-reconciliation.js";
+import { changeResults } from "../../workflows/library/installed-skill-changes.js";
 
 /**
  * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must
@@ -87,8 +87,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
   const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
   return {
     planId,
-    reconciliation:
-      applied?.reconciliation ?? setupReconciliationOutcomes(plan.summary.reconciliation, false),
+    reconciliation: applied?.reconciliation ?? changeResults(plan.summary.reconciliation, false),
     ...(applied ? { operationId: applied.operationId } : {}),
     removed: removals.entries.map(({ name, path }) => ({ name, path })),
     recoveryDirectories: [

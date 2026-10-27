@@ -19,11 +19,11 @@ import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, conditionNextStep, severityHeadline } from "./condition-language.js";
 import { terminalData } from "./terminal-text.js";
 import {
-  renderSetupReconciliation,
-  renderSetupReconciliationOutcome,
+  renderInstalledSkillChange,
+  renderChangeResult,
   renderSetupVersionChoice,
-  renderReviewedReconciliation,
-} from "./setup-reconciliation.js";
+  renderReviewedChanges,
+} from "./installed-skill-changes.js";
 import { createColors } from "picocolors";
 
 export interface RenderContext {
@@ -801,11 +801,7 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v2">): s
       ),
     );
   if (data.reconciliation?.length)
-    lines.push(
-      "",
-      "Existing managed copies",
-      ...data.reconciliation.map(renderSetupReconciliationOutcome),
-    );
+    lines.push("", "Existing managed copies", ...data.reconciliation.map(renderChangeResult));
   if (data.leftAlone.length)
     lines.push(
       "",
@@ -876,7 +872,7 @@ function renderSetup(data: ContractDataForId<"skit.setup.v9">): string {
     lines.push(
       "",
       "Existing copy reconciliation",
-      ...data.reconciliation.map((fact) => renderSetupReconciliation(fact)),
+      ...data.reconciliation.map((fact) => renderInstalledSkillChange(fact)),
     );
   const contentMatches = renderSetupContentMatches(data);
   if (contentMatches.length) lines.push("", ...contentMatches);
@@ -1100,7 +1096,7 @@ const contractPresenters: ContractPresenters = {
         renderSetupVersionChoice(choice, data.summary.reconciliation),
       ),
       ...data.summary.reconciliation.map((fact) =>
-        renderReviewedReconciliation(fact, data.summary.versionChoices),
+        renderReviewedChanges(fact, data.summary.versionChoices),
       ),
       ...data.summary.sources.map(
         (source) => `Import ${source.source}: ${source.names.join(", ")}`,

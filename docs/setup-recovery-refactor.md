@@ -499,12 +499,12 @@ after setup cannot turn retained marker lineage into permission to move its file
 | Contract | Evidence |
 | --- | --- |
 | Immutable inventory before moves, shared operation with unique batches, exact filesystem/link evidence, legacy normalization, occupied/stale/EXDEV refusal, interrupted and repeated restore | `recovery-moves.test.ts`, `recovery-command.test.ts` |
-| Concrete selected-home/root/work-dir actions across observation, explicit choices, comparisons, read-only review, apply, stale failure and recovery | `setup-actions.test.ts`, `setup-reconciliation.test.ts`, `recovery-command.test.ts`; generated `skit.setup.v9`, applied v2 and new recovery/review/undo v1 contracts |
+| Concrete selected-home/root/work-dir actions across observation, explicit choices, comparisons, read-only review, apply, stale failure and recovery | `setup-actions.test.ts`, `installed-skill-changes.test.ts`, `recovery-command.test.ts`; generated `skit.setup.v9`, applied v2 and new recovery/review/undo v1 contracts |
 | Typed intent evidence before publication; partial forward/settings/Library effects; receipt acknowledgement uncertainty | `setup-operation.test.ts`, `setup-apply-outcomes.test.ts` |
 | Guarded per-entry inverse of bindings, device/version choices, policies, saved roots and repository decisions; unrelated edits/artifacts retained; undo twice | `setup-undo-intent.test.ts`, `setup-undo.test.ts`, `setup-undo-sources.test.ts` |
-| Changed independent projections, exact saved-directory restoration, adopted originals, newer edits, protected owners and redirected paths, interrupted inverse | `setup-undo.test.ts`, `setup-reconciliation.test.ts` |
-| Baseline/current/desired classification, passive scoped rendering, local-only drift/native deletion preserved, marker disagreement protected, routine updates and marker-only alignment | `setup-reconciliation.test.ts` |
-| Competing edits require a concrete retained/local active-version choice; both versions discoverable, exact originals saved before projection; partial choice undo | `setup-reconciliation.test.ts` through domain apply, literal CLI actions and guided renderer |
+| Changed independent projections, exact saved-directory restoration, adopted originals, newer edits, protected owners and redirected paths, interrupted inverse | `setup-undo.test.ts`, `installed-skill-changes.test.ts` |
+| Baseline/current/desired classification, passive scoped rendering, local-only drift/native deletion preserved, marker disagreement protected, routine updates and marker-only alignment | `installed-skill-changes.test.ts` |
+| Competing edits require a concrete retained/local active-version choice; both versions discoverable, exact originals saved before projection; partial choice undo | `installed-skill-changes.test.ts` through domain apply, literal CLI actions and guided renderer |
 | Automatic equal global duplicate/link preservation after explicit enablement; replacements verified per reader before cleanup | `setup-duplicate-backup.test.ts`, `setup-actions.test.ts`, `setup-manage.test.ts` |
 | Native binding/projection default behavior retained; setup limits selection/pruning/relocation/retirement to chosen Skills | `binding-changes.test.ts`, core `library-projection.test.ts`, `library-binding-entries.test.ts`, `projection-policy.test.ts` |
 

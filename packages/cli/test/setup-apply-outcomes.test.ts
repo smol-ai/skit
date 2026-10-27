@@ -248,7 +248,7 @@ it.effect(
       const before = yield* captureDisk(f.disk);
       const { exit } = yield* f.setup([["alpha"]]);
       assert.isTrue(Exit.isFailure(exit));
-      if (Exit.isFailure(exit)) assert.match(String(exit.cause), /SetupReconciliationRequired/);
+      if (Exit.isFailure(exit)) assert.match(String(exit.cause), /ChangeChoiceRequired/);
       const paths = changedPaths(f.root, yield* diskChanges(before));
       assert.deepStrictEqual(paths.deleted, []);
       assert.deepStrictEqual(paths.changed, ["library/state.json"]);

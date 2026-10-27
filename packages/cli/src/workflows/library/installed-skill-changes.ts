@@ -24,17 +24,17 @@ import {
   type InventoryRootOptions,
 } from "../../projection/roots.js";
 import type {
-  SetupReconciliationFact,
+  InstalledSkillChange,
   SetupSkillInstance,
   SetupVersionChoice,
-  SetupReconciliationOutcome,
+  InstalledSkillChangeResult,
 } from "./setup-contract.js";
 import { checkSetupGlobalContent } from "../../library-application/setup-external-ownership.js";
 import { PlanIsStale } from "../../library/failures.js";
 
-export class SetupReconciliationRequired
-  extends Data.TaggedError("SetupReconciliationRequired")<{
-    readonly facts: readonly SetupReconciliationFact[];
+export class ChangeChoiceRequired
+  extends Data.TaggedError("ChangeChoiceRequired")<{
+    readonly facts: readonly InstalledSkillChange[];
   }>
   implements SkitFailure
 {
@@ -52,8 +52,8 @@ export class SetupReconciliationRequired
     "Review setup's current copy and retained-version facts before applying these unresolved changes.";
 }
 
-export const unresolvedSetupReconciliation = (
-  facts: readonly SetupReconciliationFact[],
+export const changesNeedingChoice = (
+  facts: readonly InstalledSkillChange[],
   choices: readonly SetupVersionChoice[] = [],
 ) =>
   facts.filter(
@@ -61,16 +61,16 @@ export const unresolvedSetupReconciliation = (
       fact.status === "protected" ||
       (fact.status === "competing" && !choices.some((choice) => choice.skillId === fact.skillId)),
   );
-export const setupReconciliationChanges = (
-  facts: readonly SetupReconciliationFact[],
+export const hasChangesToApply = (
+  facts: readonly InstalledSkillChange[],
   choices: readonly SetupVersionChoice[] = [],
 ) =>
   choices.length > 0 ||
   facts.some((fact) => fact.status === "incoming-update" || fact.metadataChanged);
-export const setupReconciliationOutcomes = (
-  facts: readonly SetupReconciliationFact[],
+export const changeResults = (
+  facts: readonly InstalledSkillChange[],
   applied: boolean,
-): SetupReconciliationOutcome[] =>
+): InstalledSkillChangeResult[] =>
   facts.map((fact) => ({
     projectionId: fact.projectionId,
     name: fact.name,
@@ -88,7 +88,7 @@ export const setupReconciliationOutcomes = (
   }));
 
 /** Compare the same byte owner used for writes with corroborated last-written ownership. */
-export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(function* (
+export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChanges")(function* (
   state: LibraryState,
   roots: InventoryRootOptions,
   instances: readonly SetupSkillInstance[],
@@ -99,7 +99,7 @@ export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(f
   if (!binding) return [];
   const selected = new Set(bindingSkillIds(state, binding));
   const targets = yield* activeInstallDestinationsEffect(roots);
-  const facts: SetupReconciliationFact[] = [];
+  const facts: InstalledSkillChange[] = [];
   for (const projection of state.projections) {
     const target = projection.target;
     if (
@@ -133,7 +133,7 @@ export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(f
     }
     const before = observed.success;
     const evidence = hashParts([canonicalJson(before)]);
-    const protect = (reason: string): SetupReconciliationFact => ({
+    const protect = (reason: string): InstalledSkillChange => ({
       ...base,
       evidence,
       status: "protected",
@@ -257,76 +257,75 @@ export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(f
 });
 
 /** The caller owns setup's writer and inverse evidence; this owner limits native work to reviewed coordinates. */
-export const applyRoutineSetupReconciliation = Effect.fn("Setup.applyRoutineReconciliation")(
-  function* (facts: readonly SetupReconciliationFact[]) {
-    const unresolved = unresolvedSetupReconciliation(facts);
-    if (unresolved.length) return yield* new SetupReconciliationRequired({ facts: unresolved });
-    const store = yield* LibraryStore;
-    for (const fact of facts) {
-      if (fact.status === "native-delete") continue;
-      const state = yield* store.load;
-      const projection = state.projections.find((item) => item.projection_id === fact.projectionId);
-      const skill = state.skills.find((item) => item.skill_id === fact.skillId);
-      const binding = scopeBinding(state, { kind: "global" });
-      if (
-        !projection ||
-        !skill ||
-        !binding ||
-        !bindingSkillIds(state, binding).includes(fact.skillId) ||
-        currentSkillVersion(state, skill)?.skill_version_id !== fact.desiredVersionId ||
-        projection.path !== fact.path ||
-        projection.target !== fact.target
-      )
-        return yield* new PlanIsStale();
-      if (fact.status !== "incoming-update" && !fact.metadataChanged) continue;
-      yield* checkSetupGlobalContent(fact.path);
-      const current = yield* deterministicTreeHash(fact.path);
-      const marker = yield* inspectOwnershipMarker(fact.path);
-      if (
-        marker.kind !== "valid" ||
-        marker.marker.projection_id !== projection.projection_id ||
-        marker.marker.skill_id !== projection.skill_id ||
-        marker.marker.skill_version_id !== projection.skill_version_id ||
-        marker.marker.expected_digest !== projection.expected_digest
-      )
-        return yield* new PlanIsStale();
-      // Another approved additive setup stage may already have aligned this exact copy.
-      if (
-        current === fact.desiredHash &&
-        projection.skill_version_id === fact.desiredVersionId &&
-        projection.expected_digest === fact.desiredHash &&
-        projection.status === "installed"
-      )
-        continue;
-      const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
-      if (evidence !== fact.evidence || current !== fact.currentHash)
-        return yield* new PlanIsStale();
-      yield* installEnabledSkills({
-        target: fact.target,
-        scope: { kind: "global" },
-        root: projection.root,
-        variantsPath: store.variantsPath,
-        onlySkillIds: [fact.skillId],
-        ...(current === fact.desiredHash
-          ? {
-              acceptedObservations: new Map([
-                [fact.projectionId, { observedHash: current, marker: marker.marker }],
-              ]),
-            }
-          : {}),
-      });
-      const after = (yield* store.load).projections.find(
-        (item) => item.projection_id === fact.projectionId,
-      );
-      if (
-        !after ||
-        after.status !== "installed" ||
-        after.expected_digest !== fact.desiredHash ||
-        after.skill_version_id !== fact.desiredVersionId ||
-        (yield* deterministicTreeHash(fact.path)) !== fact.desiredHash
-      )
-        return yield* new PlanIsStale();
-    }
-    return setupReconciliationOutcomes(facts, true);
-  },
-);
+export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions")(function* (
+  facts: readonly InstalledSkillChange[],
+) {
+  const unresolved = changesNeedingChoice(facts);
+  if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
+  const store = yield* LibraryStore;
+  for (const fact of facts) {
+    if (fact.status === "native-delete") continue;
+    const state = yield* store.load;
+    const projection = state.projections.find((item) => item.projection_id === fact.projectionId);
+    const skill = state.skills.find((item) => item.skill_id === fact.skillId);
+    const binding = scopeBinding(state, { kind: "global" });
+    if (
+      !projection ||
+      !skill ||
+      !binding ||
+      !bindingSkillIds(state, binding).includes(fact.skillId) ||
+      currentSkillVersion(state, skill)?.skill_version_id !== fact.desiredVersionId ||
+      projection.path !== fact.path ||
+      projection.target !== fact.target
+    )
+      return yield* new PlanIsStale();
+    if (fact.status !== "incoming-update" && !fact.metadataChanged) continue;
+    yield* checkSetupGlobalContent(fact.path);
+    const current = yield* deterministicTreeHash(fact.path);
+    const marker = yield* inspectOwnershipMarker(fact.path);
+    if (
+      marker.kind !== "valid" ||
+      marker.marker.projection_id !== projection.projection_id ||
+      marker.marker.skill_id !== projection.skill_id ||
+      marker.marker.skill_version_id !== projection.skill_version_id ||
+      marker.marker.expected_digest !== projection.expected_digest
+    )
+      return yield* new PlanIsStale();
+    // Another approved additive setup stage may already have aligned this exact copy.
+    if (
+      current === fact.desiredHash &&
+      projection.skill_version_id === fact.desiredVersionId &&
+      projection.expected_digest === fact.desiredHash &&
+      projection.status === "installed"
+    )
+      continue;
+    const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
+    if (evidence !== fact.evidence || current !== fact.currentHash) return yield* new PlanIsStale();
+    yield* installEnabledSkills({
+      target: fact.target,
+      scope: { kind: "global" },
+      root: projection.root,
+      variantsPath: store.variantsPath,
+      onlySkillIds: [fact.skillId],
+      ...(current === fact.desiredHash
+        ? {
+            acceptedObservations: new Map([
+              [fact.projectionId, { observedHash: current, marker: marker.marker }],
+            ]),
+          }
+        : {}),
+    });
+    const after = (yield* store.load).projections.find(
+      (item) => item.projection_id === fact.projectionId,
+    );
+    if (
+      !after ||
+      after.status !== "installed" ||
+      after.expected_digest !== fact.desiredHash ||
+      after.skill_version_id !== fact.desiredVersionId ||
+      (yield* deterministicTreeHash(fact.path)) !== fact.desiredHash
+    )
+      return yield* new PlanIsStale();
+  }
+  return changeResults(facts, true);
+});
