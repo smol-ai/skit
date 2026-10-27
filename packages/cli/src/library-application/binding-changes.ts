@@ -18,9 +18,8 @@ import {
   type SkitFailure,
   type LibraryState,
   type ProjectionAdoption,
-  type SkitBindingScope,
 } from "@smolai/skit-core";
-import { Data, Effect, FileSystem, Option } from "effect";
+import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import {
   activeProjectionTargetsEffect,
   bindingRoot,
@@ -45,7 +44,8 @@ export type {
   BindingChangeIntent,
   BindingPlacement,
 } from "../workflows/library/binding-selection.js";
-import type { SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
+import { classifyFailure } from "../failure-classification.js";
+import { SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 
 export interface BindingChangeRequest extends BindingSelection {
   /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
@@ -79,6 +79,7 @@ const preparedPlans = new WeakMap<
     requests: readonly BindingChangeRequest[];
     configuration: BindingChangeConfiguration;
     repairs: readonly boolean[];
+    targets: readonly ProjectionTarget[];
   }
 >();
 
@@ -91,6 +92,44 @@ export class SetEnabledStale
   readonly remediation = "Preview the Binding change again.";
 }
 
+/** Accepted intent survives a later failure; callers must not mistake this for rejection. */
+export class BindingChangeIncomplete
+  extends Schema.TaggedError<BindingChangeIncomplete>()("Library.BindingChangeIncomplete", {
+    results: Schema.Array(SetEnabledResult),
+    reason: Schema.Literals(["destinations", "reconciliation", "request"]),
+    failure: Schema.Unknown,
+  })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  get code() {
+    return classifyFailure(this.failure).code;
+  }
+  get message() {
+    return `Binding intent was saved or already in place, but the operation did not complete. ${classifyFailure(this.failure).message}`;
+  }
+  readonly remediation =
+    "Inspect the saved bindings and installed copies, resolve the reported condition, then preview and retry the change. No binding rollback was attempted.";
+}
+
+class BindingDestinationsIncomplete
+  extends Schema.TaggedError<BindingDestinationsIncomplete>()(
+    "Library.BindingDestinationsIncomplete",
+    {
+      paths: Schema.Array(Schema.String),
+    },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  get message() {
+    return `Selected destinations have not converged: ${this.paths.join(", ")}`;
+  }
+  readonly remediation =
+    "Inspect these destinations and preserve foreign or modified content before retrying.";
+}
+
 const stale = () =>
   new SetEnabledStale({ message: "Library changed after this Binding change was previewed" });
 
@@ -98,6 +137,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   state: LibraryState,
   options: BindingChangeRequest,
   configuration: BindingChangeConfiguration,
+  targets: readonly ProjectionTarget[],
 ) {
   const { plan, skillIds, newlyEnabledSkills } = yield* calculateBindingChange(state, options);
   const { scope, bindings, changed } = plan;
@@ -116,7 +156,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   const unmanaged: Array<{ target: ProjectionTarget; path: string }> = [];
   if (options.enabled) {
     const fs = yield* FileSystem.FileSystem;
-    for (const target of yield* activeProjectionTargetsEffect(configuration)) {
+    for (const target of targets) {
       const root = bindingRoot(target, scope, configuration);
       for (const skillId of skillIds) {
         const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
@@ -134,7 +174,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   if (!changed) {
     const fs = yield* FileSystem.FileSystem;
     const bound = bindings.map((binding) => new Set(bindingSkillIds(state, binding)));
-    for (const target of yield* activeProjectionTargetsEffect(configuration)) {
+    for (const target of targets) {
       const root = bindingRoot(target, scope, configuration);
       const projections = state.projections.filter(
         (projection) => projection.root === root && projection.target === target,
@@ -176,10 +216,11 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     overrides: structuredClone(configuration.overrides),
   };
   const captured = structuredClone(requests);
+  const targets = yield* activeProjectionTargetsEffect(routing);
   let projected = current;
   const changes = [];
   for (const request of captured) {
-    const change = yield* previewChange(projected, request, routing);
+    const change = yield* previewChange(projected, request, routing, targets);
     changes.push(change);
     // Later previews see earlier intent at the same Scope, just as apply does.
     for (const binding of change.bindings) projected = replaceScopeBinding(projected, binding);
@@ -190,6 +231,7 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     revision: libraryStateRevision(current),
     requests: captured,
     configuration: routing,
+    targets,
     repairs: changes.map((change) => change.repair === true),
   });
   return plan;
@@ -240,7 +282,16 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   options: BindingChangeRequest,
   configuration: BindingChangeConfiguration,
   repair: boolean,
+  activeTargets: readonly ProjectionTarget[],
 ) {
+  const currentTargets = yield* activeProjectionTargetsEffect(configuration);
+  if (
+    currentTargets.length !== activeTargets.length ||
+    currentTargets.some((target, index) => target !== activeTargets[index])
+  )
+    return yield* new SetEnabledStale({
+      message: "Installed agent targets changed after this Binding change was previewed",
+    });
   const expectedRevision = libraryStateRevision(state);
   const store = yield* LibraryStore;
   const current = yield* store.load;
@@ -285,7 +336,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   }
   if (options.enabled && options.allowDuplicate) {
     const destinations: string[] = [];
-    for (const target of yield* activeProjectionTargetsEffect(configuration))
+    for (const target of activeTargets)
       for (const skill of plan.skills)
         destinations.push(join(bindingRoot(target, plan.scope, configuration), skill));
     const links = shadows.flatMap((shadow) =>
@@ -297,9 +348,18 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   }
   // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
   // published, so enabling never records intent its copies cannot follow.
-  if (options.enabled)
-    for (const target of yield* activeProjectionTargetsEffect(configuration))
-      yield* ensureProjectionRootWritable(bindingRoot(target, plan.scope, configuration));
+  const roots = activeTargets.map((target) => bindingRoot(target, plan.scope, configuration));
+  const destinations: { target: ProjectionTarget; path: string }[] = [];
+  for (const target of activeTargets)
+    for (const name of plan.skills)
+      destinations.push({
+        target,
+        path: join(
+          bindingRoot(target, plan.scope, configuration),
+          yield* projectionNameEffect(name),
+        ),
+      });
+  if (options.enabled) for (const root of roots) yield* ensureProjectionRootWritable(root);
   if (plan.changed) {
     let next = current;
     for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);
@@ -308,58 +368,108 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       .publish(next, current)
       .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(stale())));
   }
-  yield* reconcileLibraryProjections({
-    roots: configuration,
-    variantsPath: store.variantsPath,
-    onlyBindings: plan.bindings,
-    restoreNativeDeletedSkills: options.enabled ? skillIds : [],
-    ...(options.preserveUnselectedProjections ? { onlySkillIds: skillIds } : {}),
-    ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
-    // Enabling a skill the user already installed by hand takes custody of an identical copy
-    // instead of recording a conflict with it.
-    adoptIdentical: options.enabled,
-  });
-  let result = {
-    ...plan,
-    ...(repair ? { repair } : {}),
-    ...(shadows.length ? { shadows } : {}),
-    ...(warnings.length ? { warnings } : {}),
-  };
-  if (!options.enabled) {
-    // Reconciliation needs empty Bindings to retire their copies; prune them only afterward.
-    const settled = yield* store.load;
-    const pruned = pruneEmptyBindings(settled);
-    if (pruned !== settled) yield* store.publish(pruned, settled);
-    result = {
-      ...result,
-      bindings: plan.bindings.filter((binding) => binding.entries.length > 0),
-    };
-  }
-  return {
-    kind: "applied" as const,
-    value: {
-      ...result,
-      projections: yield* changedProjections(configuration, plan.scope, skillIds),
-    },
-  };
-});
-
-/** Every copy of the changed skills at this scope after reconciling, as recorded. */
-const changedProjections = Effect.fn("LibraryBindings.changedProjections")(function* (
-  configuration: BindingChangeConfiguration,
-  scope: SkitBindingScope,
-  skillIds: readonly string[],
-) {
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
-  const roots: string[] = [];
-  for (const target of yield* activeProjectionTargetsEffect(configuration))
-    roots.push(bindingRoot(target, scope, configuration));
-  return state.projections.flatMap(({ target, root, path, status, skill_id }) =>
-    target !== "legacy" && skillIds.includes(skill_id) && roots.includes(root)
+  // Only typed failures after intent acceptance become incomplete installation outcomes.
+  // Defects and interruption retain their original Effect semantics.
+  const reconciled = yield* Effect.result(
+    Effect.gen(function* () {
+      yield* reconcileLibraryProjections({
+        roots: configuration,
+        rootFor: (target) =>
+          activeTargets.includes(target)
+            ? bindingRoot(target, plan.scope, configuration)
+            : undefined,
+        variantsPath: store.variantsPath,
+        onlyBindings: plan.bindings,
+        restoreNativeDeletedSkills: options.enabled ? skillIds : [],
+        ...(options.preserveUnselectedProjections ? { onlySkillIds: skillIds } : {}),
+        ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
+        adoptIdentical: options.enabled,
+      });
+      const settled = yield* store.load;
+      if (
+        libraryStateRevision(settled) !==
+        libraryStateRevision((yield* lastPublishedLibraryState) ?? current)
+      )
+        return yield* stale();
+      if (options.enabled) return settled;
+      // Empty Bindings are needed to retire copies; prune only after reconciliation.
+      const pruned = pruneEmptyBindings(settled);
+      if (pruned !== settled) yield* store.publish(pruned, settled);
+      return pruned;
+    }),
+  );
+  const recorded = Result.isSuccess(reconciled)
+    ? reconciled.success
+    : ((yield* lastPublishedLibraryState) ?? current);
+  const projections = recorded.projections.flatMap(({ target, root, path, status, skill_id }) =>
+    target !== "legacy" &&
+    skillIds.includes(skill_id) &&
+    activeTargets.includes(target) &&
+    root === bindingRoot(target, plan.scope, configuration)
       ? [{ target, path, status }]
       : [],
   );
+  const missing = options.enabled
+    ? destinations.filter(
+        (destination) =>
+          !projections.some(
+            (projection) =>
+              projection.target === destination.target &&
+              projection.path === destination.path &&
+              projection.status === "installed",
+          ),
+      )
+    : [];
+  const unresolved = projections.filter(
+    (projection) =>
+      !options.enabled ||
+      projection.status !== "installed" ||
+      !destinations.some(
+        (destination) =>
+          destination.target === projection.target && destination.path === projection.path,
+      ),
+  );
+  const unresolvedPaths = [
+    ...new Set([...missing, ...unresolved].map((destination) => destination.path)),
+  ];
+  const complete = Result.isSuccess(reconciled) && unresolvedPaths.length === 0;
+  const failure = Result.isFailure(reconciled)
+    ? reconciled.failure
+    : complete
+      ? undefined
+      : new BindingDestinationsIncomplete({ paths: unresolvedPaths });
+  const classified = failure === undefined ? undefined : classifyFailure(failure);
+  const value: SetEnabledResult = {
+    ...plan,
+    bindings: options.enabled
+      ? plan.bindings
+      : plan.bindings.filter((binding) => binding.entries.length > 0),
+    ...(repair ? { repair } : {}),
+    ...(shadows.length ? { shadows } : {}),
+    ...(warnings.length ? { warnings } : {}),
+    projections,
+    application: {
+      intent: plan.changed ? "saved" : "unchanged",
+      revision: libraryStateRevision(recorded),
+      status: complete ? "complete" : "incomplete",
+      ...(classified === undefined
+        ? {}
+        : {
+            failure: {
+              code: classified.code,
+              message: classified.message,
+              remediation: classified.remediation,
+            },
+          }),
+    },
+  };
+  if (!complete)
+    return yield* new BindingChangeIncomplete({
+      results: [value],
+      reason: Result.isFailure(reconciled) ? "reconciliation" : "destinations",
+      failure,
+    });
+  return { kind: "applied" as const, value };
 });
 
 /** Revalidate and apply the prepared requests in order under one recording writer. */
@@ -373,19 +483,53 @@ export const applyBindingChanges = Effect.fn("LibraryBindings.apply")(function* 
     Effect.gen(function* () {
       let expected = yield* store.load;
       if (libraryStateRevision(expected) !== prepared.revision) return yield* stale();
-      const outcomes: Array<{ readonly kind: "applied"; readonly value: SetEnabledResult }> = [];
-      for (const [index, request] of prepared.requests.entries()) {
-        outcomes.push(
-          yield* applyChange(
-            expected,
-            request,
-            prepared.configuration,
-            prepared.repairs[index] ?? false,
-          ),
-        );
-        expected = (yield* lastPublishedLibraryState) ?? expected;
-      }
-      return outcomes;
+      let revision = prepared.revision;
+      return yield* Effect.gen(function* () {
+        const outcomes: Array<{ readonly kind: "applied"; readonly value: SetEnabledResult }> = [];
+        for (const [index, request] of prepared.requests.entries()) {
+          const applied = yield* Effect.result(
+            applyChange(
+              expected,
+              request,
+              prepared.configuration,
+              prepared.repairs[index] ?? false,
+              prepared.targets,
+            ),
+          );
+          if (Result.isFailure(applied)) {
+            if (applied.failure instanceof BindingChangeIncomplete)
+              return yield* new BindingChangeIncomplete({
+                results: [...outcomes.map((outcome) => outcome.value), ...applied.failure.results],
+                reason: applied.failure.reason,
+                failure: applied.failure.failure,
+              });
+            if (outcomes.length)
+              return yield* new BindingChangeIncomplete({
+                results: outcomes.map((outcome) => outcome.value),
+                reason: "request",
+                failure: applied.failure,
+              });
+            return yield* applied.failure;
+          }
+          outcomes.push(applied.success);
+          expected = (yield* lastPublishedLibraryState) ?? expected;
+        }
+        return outcomes;
+      }).pipe(
+        Effect.provideService(LibraryStore, {
+          ...store,
+          publish: (next, base) =>
+            libraryStateRevision(base) !== revision
+              ? Effect.fail(stale())
+              : store.publish(next, base).pipe(
+                  Effect.tap(() =>
+                    Effect.sync(() => {
+                      revision = libraryStateRevision(next);
+                    }),
+                  ),
+                ),
+        }),
+      );
     }),
   );
 });

@@ -809,6 +809,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "enable",
     "applied",
     result("enable", {
+      application: { intent: "saved", status: "complete", revision: "0".repeat(64) },
       subject_id: collectionId,
       skills: ["review"],
       scope: { kind: "global" },
@@ -836,6 +837,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "disable",
     "applied",
     result("disable", {
+      application: { intent: "saved", status: "complete", revision: "0".repeat(64) },
       subject_id: collectionId,
       skills: ["review"],
       scope: { kind: "global" },

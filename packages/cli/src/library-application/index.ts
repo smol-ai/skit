@@ -51,6 +51,7 @@ export {
 
 export {
   applyBindingChanges,
+  BindingChangeIncomplete,
   openBindingChangeSelection,
   type BindingChangeIntent,
   type BindingPlacement,

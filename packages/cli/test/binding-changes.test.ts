@@ -1,10 +1,15 @@
 import { assert, it } from "@effect/vitest";
-import { Clock, ConfigProvider, Effect, FileSystem, Layer } from "effect";
+import { systemError } from "effect/PlatformError";
+import { Cause, Clock, ConfigProvider, Effect, Exit, FileSystem, Layer, Option } from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHashEffect,
   inspectOwnershipMarkerEffect,
   LibraryStore,
+  libraryStateRevision,
+  bindingSkillIds,
+  scopeBinding,
+  InvalidLibraryState,
   ProjectionRootNotWritable,
   skillUsageLayer,
   SkillUsage,
@@ -12,12 +17,14 @@ import {
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import {
   applyBindingChanges,
+  BindingChangeIncomplete,
   openBindingChangeSelection,
   previewBindingChanges,
   type BindingChangeRequest,
 } from "../src/library-application/binding-changes.js";
 import {
   openLibrarySession,
+  proposeLibraryEnable,
   proposeLibraryCollectionChange,
   confirmLibraryChange,
 } from "../src/library-application/session.js";
@@ -28,6 +35,12 @@ import {
   openDoctorCleanupSelection,
 } from "../src/library-application/doctor-cleanup.js";
 import { observedUsageStory } from "../src/storybook/usage-stories.js";
+import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
+import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
+import { skitCommand } from "../src/commands/tree.js";
+import { runCommandTree } from "../src/commands/runtime.js";
+import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { renderContract } from "../src/presentation/contract-presenters.js";
 import { Prompter, PromptCancelled } from "../src/presentation/prompter.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -867,10 +880,11 @@ it.effect("enabling never adopts a git checkout, even one holding the projected 
     yield* f.fs.writeFileString(join(checkout, "SKILL.md"), "# alpha\n");
     const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
 
-    const [outcome] = yield* f.home.owned(applyBindingChanges(plan));
+    const failure = yield* Effect.flip(f.home.owned(applyBindingChanges(plan)));
+    assert.instanceOf(failure, BindingChangeIncomplete);
 
     assert.deepStrictEqual(
-      outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+      failure.results[0]?.projections.map((p) => p.status),
       ["conflicted"],
     );
     assert.strictEqual((yield* inspectOwnershipMarkerEffect(checkout)).kind, "absent");
@@ -891,10 +905,11 @@ it.effect("a different copy at the destination is reported, and disabling leaves
       [join(f.destination, "alpha")],
     );
 
-    const [enabled] = yield* f.home.owned(applyBindingChanges(enable));
+    const failure = yield* Effect.flip(f.home.owned(applyBindingChanges(enable)));
+    assert.instanceOf(failure, BindingChangeIncomplete);
 
     assert.deepStrictEqual(
-      enabled?.kind === "applied" ? enabled.value.projections.map((p) => p.status) : [],
+      failure.results[0]?.projections.map((p) => p.status),
       ["conflicted"],
     );
     const disable = yield* f.home.owned(
@@ -938,9 +953,10 @@ it.effect("enable leaves repository-owned identical copies unmanaged, including 
       yield* f.fs.makeDirectory(skill, { recursive: true });
       yield* f.fs.writeFileString(join(skill, "SKILL.md"), "# alpha\n");
       const enable = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
-      const [outcome] = yield* f.home.owned(applyBindingChanges(enable));
+      const failure = yield* Effect.flip(f.home.owned(applyBindingChanges(enable)));
+      assert.instanceOf(failure, BindingChangeIncomplete);
       assert.deepStrictEqual(
-        outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+        failure.results[0]?.projections.map((p) => p.status),
         ["conflicted"],
       );
       assert.strictEqual((yield* inspectOwnershipMarkerEffect(skill)).kind, "absent");
@@ -950,5 +966,477 @@ it.effect("enable leaves repository-owned identical copies unmanaged, including 
       yield* f.home.owned(applyBindingChanges(disable));
       assert.strictEqual(yield* f.fs.readFileString(join(skill, "SKILL.md")), "# alpha\n");
     }
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "saved enablement and the first installed target survive a later target failure, then retry converges",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const claude = join(f.root, "claude-skills");
+      yield* f.fs.makeDirectory(claude);
+      const configuration = {
+        ...f.home.bindings,
+        overrides: { ...f.home.bindings.overrides, "claude-code": [claude] },
+      };
+      const plan = yield* f.home.owned(previewBindingChanges([f.request], configuration));
+      const failed = yield* Effect.flip(
+        f.home.owned(applyBindingChanges(plan)).pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            rename: (from, to) =>
+              to === join(claude, "alpha")
+                ? Effect.fail(
+                    systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      pathOrDescriptor: to,
+                    }),
+                  )
+                : f.fs.rename(from, to),
+          }),
+        ),
+      );
+      assert.instanceOf(failed, BindingChangeIncomplete);
+      assert.strictEqual(failed.code, "OPERATION_FAILED");
+      const state = yield* f.home.durable;
+      const binding = scopeBinding(state, { kind: "global" });
+      assert.ok(binding);
+      assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+      assert.strictEqual(failed.results[0]?.application.intent, "saved");
+      assert.strictEqual(failed.results[0]?.application.status, "incomplete");
+      assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
+        "# alpha\n",
+      );
+      assert.strictEqual(yield* f.fs.exists(join(claude, "alpha")), false);
+      assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
+      const retry = yield* f.home.owned(previewBindingChanges([f.request], configuration));
+      const [completed] = yield* f.home.owned(applyBindingChanges(retry));
+      assert.strictEqual(completed.value.application.intent, "unchanged");
+      assert.strictEqual(completed.value.application.status, "complete");
+      assert.deepStrictEqual(
+        completed.value.projections.map((projection) => projection.status),
+        ["installed", "installed"],
+      );
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(claude, "alpha", "SKILL.md")),
+        "# alpha\n",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a refused intent publication remains a refusal and creates no installed copy", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+    const before = yield* f.home.durable;
+    const failed = yield* Effect.flip(
+      f.home.owned(
+        applyBindingChanges(plan).pipe(
+          Effect.provideServiceEffect(
+            LibraryStore,
+            Effect.map(LibraryStore, (store) => ({
+              ...store,
+              publish: () =>
+                Effect.fail(
+                  new InvalidLibraryState({ path: store.statePath, detail: "Refused publication" }),
+                ),
+            })),
+          ),
+        ),
+      ),
+    );
+    assert.instanceOf(failed, InvalidLibraryState);
+    assert.deepStrictEqual(yield* f.home.durable, before);
+    assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "a failed disable saves the desired removal while preserving the edited active copy",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const enable = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+      yield* f.home.owned(applyBindingChanges(enable));
+      const path = join(f.destination, "alpha", "SKILL.md");
+      yield* f.fs.writeFileString(path, "Independent user edits\n");
+      const disable = yield* f.home.owned(
+        previewBindingChanges([{ ...f.request, enabled: false }], f.home.bindings),
+      );
+      const failed = yield* Effect.flip(f.home.owned(applyBindingChanges(disable)));
+      assert.instanceOf(failed, BindingChangeIncomplete);
+      assert.strictEqual(failed.code, "CONFLICT");
+      const state = yield* f.home.durable;
+      const binding = scopeBinding(state, { kind: "global" });
+      assert.ok(binding);
+      assert.deepStrictEqual(bindingSkillIds(state, binding), []);
+      assert.strictEqual(failed.results[0]?.application.intent, "saved");
+      assert.strictEqual(failed.results[0]?.application.status, "incomplete");
+      assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
+      assert.strictEqual(yield* f.fs.readFileString(path), "Independent user edits\n");
+      assert.strictEqual(
+        (yield* inspectOwnershipMarkerEffect(join(f.destination, "alpha"))).kind,
+        "valid",
+      );
+      yield* f.fs.writeFileString(path, "# alpha\n");
+      const retry = yield* f.home.owned(
+        previewBindingChanges([{ ...f.request, enabled: false }], f.home.bindings),
+      );
+      const [completed] = yield* f.home.owned(applyBindingChanges(retry));
+      assert.strictEqual(completed.value.application.status, "complete");
+      assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "the Library session reports incomplete installation and refreshes the saved desired selection",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const path = join(f.destination, "alpha");
+      yield* f.fs.makeDirectory(path, { recursive: true });
+      yield* f.fs.writeFileString(join(path, "SKILL.md"), "Foreign copy must remain\n");
+      const opened = yield* f.home.owned(openLibrarySession());
+      const row = opened.skills.find((skill) => skill.name === "alpha");
+      assert.ok(row);
+      const proposed = yield* f.home.owned(
+        proposeLibraryEnable(opened, f.home.bindings, row, { scope: { kind: "global" } }),
+      );
+      const confirmed = yield* f.home.owned(confirmLibraryChange(proposed));
+      assert.strictEqual(confirmed.outcome?.kind, "failed");
+      if (confirmed.outcome?.kind === "failed") {
+        assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
+        assert.match(confirmed.outcome.failure.message, /intent was saved/);
+      }
+      assert.strictEqual(
+        confirmed.skills.find((skill) => skill.name === "alpha")?.bindings.length,
+        1,
+      );
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(path, "SKILL.md")),
+        "Foreign copy must remain\n",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a batch retains earlier results and stops after an accepted scope cannot install", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const repository = join(f.root, "project");
+    const target = join(repository, ".agents", "skills", "beta");
+    const plan = yield* f.home.owned(
+      previewBindingChanges(
+        [
+          f.request,
+          {
+            ...f.request,
+            selectedSkills: ["beta"],
+            scope: { kind: "repository", root: repository },
+          },
+          { ...f.request, enabled: false },
+        ],
+        f.home.bindings,
+      ),
+    );
+    const failed = yield* Effect.flip(
+      f.home.owned(applyBindingChanges(plan)).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...f.fs,
+          rename: (from, to) =>
+            to === target
+              ? Effect.fail(
+                  systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "rename",
+                    pathOrDescriptor: to,
+                  }),
+                )
+              : f.fs.rename(from, to),
+        }),
+      ),
+    );
+    assert.instanceOf(failed, BindingChangeIncomplete);
+    assert.deepStrictEqual(
+      failed.results.map((result) => result.application.status),
+      ["complete", "incomplete"],
+    );
+    assert.deepStrictEqual(
+      failed.results.map((result) => result.skills),
+      [["alpha"], ["beta"]],
+    );
+    assert.strictEqual(
+      yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
+      "# alpha\n",
+    );
+    assert.strictEqual(yield* f.fs.exists(target), false);
+    const state = yield* f.home.durable;
+    assert.strictEqual(state.local_bindings.length, 1);
+    const binding = scopeBinding(state, { kind: "global" });
+    assert.ok(binding);
+    assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect.each(["defect", "interruption"] as const)(
+  "a post-acceptance %s keeps its Effect semantics",
+  (kind) =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+      const exit = yield* Effect.exit(
+        f.home.owned(applyBindingChanges(plan)).pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            rename: (from, to) =>
+              to === join(f.destination, "alpha")
+                ? kind === "defect"
+                  ? Effect.die("Test projection defect")
+                  : Effect.interrupt
+                : f.fs.rename(from, to),
+          }),
+        ),
+      );
+      assert.isTrue(Exit.isFailure(exit));
+      if (Exit.isFailure(exit)) {
+        assert.isTrue(
+          kind === "defect" ? Cause.hasDies(exit.cause) : Cause.hasInterrupts(exit.cause),
+        );
+        assert.isFalse(Cause.hasFails(exit.cause));
+      }
+      const state = yield* f.home.durable;
+      const binding = scopeBinding(state, { kind: "global" });
+      assert.ok(binding);
+      assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "the parsed CLI reports saved intent, a concrete incomplete result and exit 12 for a foreign destination",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const destination = join(f.destination, "alpha");
+      yield* f.fs.makeDirectory(destination, { recursive: true });
+      yield* f.fs.writeFileString(join(destination, "SKILL.md"), "Foreign active bytes\n");
+      const interaction = yield* makeScriptedInteraction([]);
+      yield* runCommandTree(
+        skitCommand,
+        [
+          "enable",
+          "alpha",
+          "--global",
+          "--json",
+          "--home",
+          f.home.home,
+          "--codex-root",
+          f.destination,
+          "--claude-root",
+          join(f.root, "absent-claude"),
+          "--opencode-root",
+          join(f.root, "absent-opencode"),
+        ],
+        "test",
+      ).pipe(Effect.provide(interaction.layer));
+      assert.deepStrictEqual(yield* interaction.failures, []);
+      const [result] = yield* interaction.results;
+      assert.ok(result);
+      assert.strictEqual(result.contract, "enable");
+      if (result.contract !== "enable") return;
+      assert.strictEqual(result.schema, "skit.enable.v9");
+      assert.strictEqual(result.exitCode, 12);
+      assert.strictEqual(result.data.application.status, "incomplete");
+      assert.strictEqual(result.data.application.intent, "saved");
+      assert.strictEqual(
+        result.data.application.revision,
+        libraryStateRevision(yield* f.home.durable),
+      );
+      const rendered = renderContract(result, { color: false, detail: "full" });
+      assert.match(rendered, /Library choice saved/);
+      assert.match(rendered, /Installed copies need attention/);
+      assert.notMatch(rendered, /^Enabled/);
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(destination, "SKILL.md")),
+        "Foreign active bytes\n",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "a newly active agent target invalidates the review before any binding is published",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const claude = join(f.home.inventory.home, ".claude", "skills");
+      const configuration = f.home.bindings;
+      const plan = yield* f.home.owned(previewBindingChanges([f.request], configuration));
+      const before = yield* f.home.durable;
+      yield* f.fs.makeDirectory(claude, { recursive: true });
+      const error = yield* Effect.flip(f.home.owned(applyBindingChanges(plan)));
+      assert.strictEqual(error._tag, "Library.SetEnabledStale");
+      assert.deepStrictEqual(yield* f.home.durable, before);
+      assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+      assert.strictEqual(yield* f.fs.exists(join(claude, "alpha")), false);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "a later refusal keeps earlier scope results without claiming the refused intent was saved",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const configuration = { ...f.home.bindings, overrides: {} };
+      const plan = yield* f.home.owned(
+        previewBindingChanges(
+          [f.request, { ...f.request, selectedSkills: ["beta"] }],
+          configuration,
+        ),
+      );
+      const duplicate = join(f.home.inventory.home, ".codex", "skills", "beta");
+      let introduced = false;
+      const failed = yield* Effect.flip(
+        f.home.owned(
+          applyBindingChanges(plan).pipe(
+            Effect.provideServiceEffect(
+              LibraryStore,
+              Effect.map(LibraryStore, (store) => ({
+                ...store,
+                publish: (next, base) =>
+                  Effect.gen(function* () {
+                    yield* store.publish(next, base);
+                    if (!introduced) {
+                      introduced = true;
+                      yield* f.fs.makeDirectory(duplicate, { recursive: true });
+                      yield* f.fs.writeFileString(
+                        join(duplicate, "SKILL.md"),
+                        "Independent beta copy\n",
+                      );
+                    }
+                  }),
+              })),
+            ),
+          ),
+        ),
+      );
+      assert.instanceOf(failed, BindingChangeIncomplete);
+      assert.strictEqual(failed.reason, "request");
+      assert.strictEqual(failed.code, "CONFLICT");
+      assert.deepStrictEqual(
+        failed.results.map((result) => result.skills),
+        [["alpha"]],
+      );
+      assert.strictEqual(failed.results[0]?.application.status, "complete");
+      const state = yield* f.home.durable;
+      const binding = scopeBinding(state, { kind: "global" });
+      assert.ok(binding);
+      assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+      assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
+        "Independent beta copy\n",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "an intervening state change after intent acceptance is not rebased by projection publication",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+      let changed = false;
+      const failed = yield* Effect.flip(
+        f.home.owned(
+          applyBindingChanges(plan).pipe(
+            Effect.provideServiceEffect(
+              LibraryStore,
+              Effect.map(LibraryStore, (store) => ({
+                ...store,
+                publish: (next, base) =>
+                  Effect.gen(function* () {
+                    yield* store.publish(next, base);
+                    if (!changed) {
+                      changed = true;
+                      // Simulate an external non-cooperating writer after this operation's first commit.
+                      yield* f.fs.writeFileString(
+                        store.statePath,
+                        JSON.stringify({ ...next, custodyIssues: [] }),
+                      );
+                    }
+                  }),
+              })),
+            ),
+          ),
+        ),
+      );
+      assert.instanceOf(failed, BindingChangeIncomplete);
+      assert.strictEqual(failed.reason, "reconciliation");
+      assert.strictEqual(failed.code, "CONFLICT");
+      const current = yield* f.home.durable;
+      assert.deepStrictEqual(current.custodyIssues, []);
+      assert.deepStrictEqual(current.projections, []);
+      assert.notStrictEqual(failed.results[0]?.application.revision, libraryStateRevision(current));
+      assert.strictEqual(failed.results[0]?.application.status, "incomplete");
+      const binding = scopeBinding(current, { kind: "global" });
+      assert.ok(binding);
+      assert.strictEqual(bindingSkillIds(current, binding).length, 1);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("the CLI adapter keeps the I/O failure exit code after saving enablement", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const interaction = yield* makeScriptedInteraction([]);
+    const configuration = yield* libraryCommandConfiguration({
+      home: Option.some(f.home.home),
+      codexRoot: Option.some(f.destination),
+      claudeRoot: Option.some(join(f.root, "claude")),
+      opencodeRoot: Option.some(join(f.root, "opencode")),
+      devinRoot: [],
+    });
+    yield* f.home.owned(
+      presentSetEnabled({
+        action: "enable",
+        enabled: true,
+        subject: "alpha",
+        scope: { kind: "global" },
+        cwd: f.root,
+        all: false,
+        dryRun: false,
+        interactive: false,
+        configuration,
+      }).pipe(
+        Effect.provide(interaction.layer),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...f.fs,
+          rename: (from, to) =>
+            to === join(f.destination, "alpha")
+              ? Effect.fail(
+                  systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "rename",
+                    pathOrDescriptor: to,
+                  }),
+                )
+              : f.fs.rename(from, to),
+        }),
+      ),
+    );
+    assert.deepStrictEqual(yield* interaction.failures, []);
+    const [result] = yield* interaction.results;
+    assert.ok(result);
+    assert.strictEqual(result.contract, "enable");
+    if (result.contract !== "enable") return;
+    assert.strictEqual(result.exitCode, 1);
+    assert.strictEqual(result.data.application.status, "incomplete");
+    assert.strictEqual(result.data.application.failure?.code, "OPERATION_FAILED");
+    assert.strictEqual(result.data.application.intent, "saved");
+    assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

@@ -532,7 +532,20 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
     ],
     roots,
   );
-  const [result] = yield* applyBindingChanges(plan);
+  const applied = yield* applyBindingChanges(plan).pipe(
+    Effect.map((results) => ({ results, warnings: [] as { name: string; message: string }[] })),
+    Effect.catchTag("Library.BindingChangeIncomplete", (failure) =>
+      // Setup can retain the chosen source while other differing copies stay active.
+      // Report the owner's incomplete destinations; actual reconciliation failures stop setup.
+      failure.reason === "destinations"
+        ? Effect.succeed({
+            results: failure.results.map((value) => ({ kind: "applied" as const, value })),
+            warnings: [{ name: selection.name, message: failure.message }],
+          })
+        : Effect.fail(failure),
+    ),
+  );
+  const [result] = applied.results;
   const outcome = retirement
     ? yield* preserveAfterProjection(roots, subjectId, selection.name, retirement)
     : undefined;
@@ -542,8 +555,12 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
       retirement && outcome?.kind === "retired" && retirement.moves.entries.length
         ? [retirement.moves.recoveryDirectory]
         : [],
-    warnings:
-      outcome?.kind === "preserved" ? [{ name: selection.name, message: outcome.message }] : [],
+    warnings: [
+      ...applied.warnings,
+      ...(outcome?.kind === "preserved"
+        ? [{ name: selection.name, message: outcome.message }]
+        : []),
+    ],
   };
 });
 

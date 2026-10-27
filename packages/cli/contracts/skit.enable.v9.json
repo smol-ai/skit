@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.v8",
+  "$id": "skit.enable.v9",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -334,6 +334,54 @@
         ]
       }
     },
+    "application": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "type": "string",
+          "enum": [
+            "saved",
+            "unchanged"
+          ]
+        },
+        "revision": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "incomplete"
+          ]
+        },
+        "failure": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "remediation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "remediation"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "intent",
+        "revision",
+        "status"
+      ],
+      "additionalProperties": true
+    },
     "projections": {
       "type": "array",
       "items": {
@@ -369,6 +417,7 @@
     "enabled",
     "changed",
     "bindings",
+    "application",
     "projections"
   ],
   "additionalProperties": true,
