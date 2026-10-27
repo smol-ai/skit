@@ -2,9 +2,9 @@ import { Clock, Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
-import { UnsafeProjectionBackups } from "../failures.js";
+import { UnsafeInstalledSkillBackups } from "../failures.js";
 import { makeOperationId } from "../library/entity-ids.js";
-import type { ManagedProjection } from "../library/library-state.js";
+import type { InstalledSkill } from "../library/library-state.js";
 import { LinkStat } from "../platform/link-stat.js";
 
 const BACKUPS_DIRECTORY = ".skit-backups";
@@ -15,18 +15,18 @@ const IGNORE_EVERYTHING = "*\n";
  * sees them; but a root mounted from another device shares that device only with its own entries,
  * and a rename is the only lossless move, so there they live hidden inside the root instead.
  */
-export const projectionWorkDirectory = (
+export const installedSkillWorkDirectory = (
   realRoot: string,
   rootDevice: number,
   parentDevice: number,
 ) => (rootDevice === parentDevice ? dirname(realRoot) : realRoot);
 
-export const projectionWorkDirectoryEffect = Effect.fn("Projection.workDirectory")(function* (
+export const installedSkillWorkDirectoryEffect = Effect.fn("Projection.workDirectory")(function* (
   root: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const realRoot = yield* fs.realPath(root);
-  return projectionWorkDirectory(
+  return installedSkillWorkDirectory(
     realRoot,
     (yield* fs.stat(realRoot)).dev,
     (yield* fs.stat(dirname(realRoot))).dev,
@@ -37,17 +37,20 @@ export const projectionWorkDirectoryEffect = Effect.fn("Projection.workDirectory
  * Move an owned copy aside instead of deleting it. It stays `pending` until the Library state that
  * no longer records it is saved, so its absence is never read as the user's deletion.
  */
-export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
-  projection: Pick<ManagedProjection, "root" | "path" | "projection_id">,
+export const backUpInstalledSkillEffect = Effect.fn("Projection.backUp")(function* (
+  projection: Pick<InstalledSkill, "root" | "path" | "projection_id">,
   action: "replace" | "retire",
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const backups = join(yield* projectionWorkDirectoryEffect(projection.root), BACKUPS_DIRECTORY);
+  const backups = join(
+    yield* installedSkillWorkDirectoryEffect(projection.root),
+    BACKUPS_DIRECTORY,
+  );
   yield* fs.makeDirectory(backups, { recursive: true, mode: 0o700 });
   // A repository can commit its own `.skit-backups`, so never follow a link planted there.
   if ((yield* links.lstat(backups)).type !== "Directory")
-    return yield* new UnsafeProjectionBackups({ path: backups });
+    return yield* new UnsafeInstalledSkillBackups({ path: backups });
   // Backups beside a repository's skills root must never be committed with it. An existing ignore
   // file is only read, never rewritten, and must still ignore everything.
   const ignore = join(backups, ".gitignore");
@@ -64,7 +67,7 @@ export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
     ((yield* links.lstat(ignore)).type !== "File" ||
       (yield* fs.readFileString(ignore)) !== IGNORE_EVERYTHING)
   )
-    return yield* new UnsafeProjectionBackups({ path: ignore });
+    return yield* new UnsafeInstalledSkillBackups({ path: ignore });
   const stamp = new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "-");
   const backup = join(
     backups,
@@ -75,8 +78,8 @@ export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
 });
 
 /** Pending backups of one Projection, wherever its root's device placed them. */
-const projectionBackups = Effect.fn("Projection.backups")(function* (
-  projection: Pick<ManagedProjection, "root" | "projection_id">,
+const installedSkillBackups = Effect.fn("Projection.backups")(function* (
+  projection: Pick<InstalledSkill, "root" | "projection_id">,
   includeKept: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -111,17 +114,17 @@ const projectionBackups = Effect.fn("Projection.backups")(function* (
 });
 
 /** Unsettled backups retain their existing narrow protocol. */
-export const pendingProjectionBackupsEffect = (
-  projection: Pick<ManagedProjection, "root" | "projection_id">,
-) => projectionBackups(projection, false);
+export const pendingInstalledSkillBackupsEffect = (
+  projection: Pick<InstalledSkill, "root" | "projection_id">,
+) => installedSkillBackups(projection, false);
 
 /** Inspect both kept and pending predecessors without following a redirected backup directory. */
-export const inspectProjectionBackupsEffect = (
-  projection: Pick<ManagedProjection, "root" | "projection_id">,
-) => projectionBackups(projection, true);
+export const inspectInstalledSkillBackupsEffect = (
+  projection: Pick<InstalledSkill, "root" | "projection_id">,
+) => installedSkillBackups(projection, true);
 
 /** A kept backup may hold bytes nothing else does. It stays until an operator removes it. */
-export const keepProjectionBackupEffect = Effect.fn("Projection.keepBackup")(function* (
+export const keepInstalledSkillBackupEffect = Effect.fn("Projection.keepBackup")(function* (
   backup: string,
 ) {
   const fs = yield* FileSystem.FileSystem;

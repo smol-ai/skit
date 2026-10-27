@@ -6,14 +6,14 @@ import { LinkStat } from "../../platform/link-stat.js";
 import { deterministicTreeHashEffect } from "../../artifact/skit.js";
 import { observationPathIdentityEffect, pathIsWithin } from "../../platform/path-identity.js";
 import {
-  expectedProjectionHashResult,
-  projectionDisplacedEffect,
+  expectedInstalledSkillHashResult,
+  installedSkillDisplacedEffect,
   readOwnershipMarkerEffect,
   inspectOwnershipMarkerEffect,
 } from "../../projection/mutation.js";
 import {
-  keepProjectionBackupEffect,
-  pendingProjectionBackupsEffect,
+  keepInstalledSkillBackupEffect,
+  pendingInstalledSkillBackupsEffect,
 } from "../../projection/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {
@@ -53,7 +53,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
       // absence is not evidence that the user deleted an installed copy.
       if (projection.status === "pending" || projection.status === "suppressed") continue;
       // Nor is the absence of the very copy SKIT moved aside before it could save why.
-      if (yield* projectionDisplacedEffect(projection)) projection.status = "pending";
+      if (yield* installedSkillDisplacedEffect(projection)) projection.status = "pending";
       else {
         projection.status = "suppressed";
         projection.suppression_reason = "native_delete";
@@ -64,7 +64,7 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
     const observed = yield* deterministicTreeHashEffect(projection.path);
     const marker = yield* readOwnershipMarkerEffect(projection.path);
     projection.observed_digest = observed;
-    const expected = expectedProjectionHashResult(projection, marker);
+    const expected = expectedInstalledSkillHashResult(projection, marker);
     projection.status =
       marker && Result.isSuccess(expected) && observed === expected.success
         ? "installed"
@@ -244,8 +244,8 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
       marker.skill_id === projection.skill_id &&
       projection.observed_digest === projection.expected_digest
     )
-      for (const backup of yield* pendingProjectionBackupsEffect(projection))
-        yield* keepProjectionBackupEffect(backup);
+      for (const backup of yield* pendingInstalledSkillBackupsEffect(projection))
+        yield* keepInstalledSkillBackupEffect(backup);
   }
   return { state, roots };
 });

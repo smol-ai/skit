@@ -10,8 +10,12 @@ import {
   RetainedCopy,
   Skill,
 } from "../library-contracts.js";
-import { AbsoluteDevicePath, ManagedProjection } from "../library-state.js";
-import { HarnessName, InvocationPolicy, type RecordedProjectionTarget } from "../../vocabulary.js";
+import { AbsoluteDevicePath, InstalledSkill } from "../library-state.js";
+import {
+  HarnessName,
+  InvocationPolicy,
+  type RecordedInstallDestination,
+} from "../../vocabulary.js";
 import { BindingV6 } from "./manifest-v6.js";
 import { LibraryDeviceStateFields } from "./state-schema.js";
 import { LibraryStateFromV7, type LibraryStateV7 } from "./state-schema-v7.js";
@@ -26,7 +30,7 @@ const RepositoryBindingV6 = Schema.Struct({
   entries: Schema.Array(BindingEntry),
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
-const { target: _target, ...projectionFields } = ManagedProjection.fields;
+const { target: _target, ...projectionFields } = InstalledSkill.fields;
 const ManagedProjectionV6 = Schema.Struct({ ...projectionFields, harness: HarnessName });
 
 /** Frozen v6 state: Bindings and Projections were keyed by Harness. */
@@ -48,7 +52,7 @@ const projectionTargets = {
   "claude-code": "claude",
   opencode: "legacy",
   devin: "legacy",
-} as const satisfies Record<HarnessName, RecordedProjectionTarget>;
+} as const satisfies Record<HarnessName, RecordedInstallDestination>;
 
 /**
  * Merge per-Harness Bindings at one Scope. An invocation override survives only when every

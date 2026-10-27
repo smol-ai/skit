@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { Effect } from "effect";
 import { LinkStat, pathIsWithin } from "@smolai/skit-core";
-import { collectHarnessRoots, type SetupOptions } from "./setup.js";
+import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
 import {
   prepareRecoveryMoves,
@@ -15,7 +15,7 @@ export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
 ) {
   const links = yield* LinkStat;
   const roots: string[] = [];
-  for (const { root } of collectHarnessRoots(
+  for (const { root } of collectSkillsDirectories(
     options.inventory,
     observed.repositories.map((item) => item.path),
   )) {

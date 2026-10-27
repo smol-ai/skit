@@ -3,7 +3,7 @@ import {
   CollectionId,
   LegacyMachineId,
   MachineId,
-  ProjectionId,
+  InstalledSkillId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
@@ -84,7 +84,7 @@ export const CustodyIssue = Schema.Struct({
   detail: Schema.optional(Schema.String),
   collectionId: Schema.optional(CollectionId),
   skillId: Schema.optional(SkillId),
-  projectionId: Schema.optional(ProjectionId),
+  projectionId: Schema.optional(InstalledSkillId),
   expectedHash: Schema.optional(Digest),
   matchesExpectedHash: Schema.optional(Schema.Boolean),
 });

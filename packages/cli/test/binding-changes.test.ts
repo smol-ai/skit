@@ -10,7 +10,7 @@ import {
   bindingSkillIds,
   scopeBinding,
   InvalidLibraryState,
-  ProjectionRootNotWritable,
+  SkillsDirectoryNotWritable,
   skillUsageLayer,
   SkillUsage,
 } from "@smolai/skit-core";
@@ -255,7 +255,7 @@ it.effect("retrying an already selected device Skill still checks unmanaged copi
       previewBindingChanges([f.request], { ...f.home.bindings, overrides: {} }),
     );
     const error = yield* f.home.owned(applyBindingChanges(plan)).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "ProjectionWouldDuplicate");
+    assert.strictEqual(error._tag, "InstalledSkillWouldDuplicate");
     assert.strictEqual(yield* f.fs.readFileString(join(native, "SKILL.md")), "native copy\n");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -333,7 +333,7 @@ it.effect("rechecks duplicates created after preview before saving Binding inten
     yield* f.fs.makeDirectory(nativeCopy, { recursive: true });
     yield* f.fs.writeFileString(join(nativeCopy, "SKILL.md"), "native copy\n");
     const error = yield* f.home.owned(applyBindingChanges(plan)).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "ProjectionWouldDuplicate");
+    assert.strictEqual(error._tag, "InstalledSkillWouldDuplicate");
     assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
     assert.strictEqual(yield* f.fs.readFileString(join(nativeCopy, "SKILL.md")), "native copy\n");
@@ -347,7 +347,7 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
     const error = yield* f.home
       .owned(applyBindingChanges(plan))
       .pipe(withSandboxDenying(join(f.root, "account", ".agents")), Effect.flip);
-    assert.instanceOf(error, ProjectionRootNotWritable);
+    assert.instanceOf(error, SkillsDirectoryNotWritable);
     assert.strictEqual(error.root, f.destination);
     assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
@@ -931,7 +931,7 @@ it.effect("allow-duplicate refuses to replace the user's link at the destination
 
     const error = yield* f.home.owned(applyBindingChanges(plan)).pipe(Effect.flip);
 
-    assert.strictEqual(error._tag, "ProjectionWouldReplaceLink");
+    assert.strictEqual(error._tag, "InstalledSkillWouldReplaceLink");
     assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
     assert.strictEqual(yield* f.fs.readLink(join(f.destination, "alpha")), elsewhere);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

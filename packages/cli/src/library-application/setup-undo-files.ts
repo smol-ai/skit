@@ -5,16 +5,16 @@ import {
   copyLocalTreeEffect,
   effectiveGlobalBindings,
   inspectOwnershipMarkerEffect,
-  inspectProjectionBackupsEffect,
+  inspectInstalledSkillBackupsEffect,
   LibraryStore,
   LinkStat,
   pathIsWithin,
-  prepareProjectionRebuildEffect,
+  prepareInstalledSkillRebuildEffect,
   retainedTreePath,
   versionBacking,
   writeRawAtomicEffect,
   type LibraryState,
-  type ManagedProjection,
+  type InstalledSkill,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
 import { inspectSetupOperation, observeSetupFile } from "./setup-operation.js";
@@ -27,7 +27,7 @@ type File = Operation["files"][number];
 type Observed = Effect.Success<ReturnType<typeof observeSetupFile>>;
 
 /** Observation timestamps are evidence, not a change to desired projection custody. */
-export const projectionChoice = (projection: ManagedProjection | undefined) =>
+export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
   projection === undefined
     ? null
     : {
@@ -106,7 +106,7 @@ const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
 export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(function* (
   operationId: string,
   operation: Operation,
-  expected: readonly ManagedProjection[],
+  expected: readonly InstalledSkill[],
   state: LibraryState,
   preservationDirectory: string,
   priorPreservations: readonly string[],
@@ -128,10 +128,10 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     source?: string;
     transfer?: "move" | "copy" | "rebuild";
   }[] = [];
-  const moves: { name: string; projection: ManagedProjection }[] = [];
+  const moves: { name: string; projection: InstalledSkill }[] = [];
   const rebuilds = new Map<
     string,
-    Effect.Success<ReturnType<typeof prepareProjectionRebuildEffect>>
+    Effect.Success<ReturnType<typeof prepareInstalledSkillRebuildEffect>>
   >();
   const affected = new Set<string>();
   const physicalPaths: string[] = [];
@@ -143,7 +143,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     const saved = recovery.entries.filter((entry) => entry.path === file.path);
     const observed = yield* observeSetupFile(file.path);
     observations.push(observed);
-    const changedProjection = !equal(projectionChoice(prior), projectionChoice(after));
+    const changedProjection = !equal(installedSkillChoice(prior), installedSkillChoice(after));
     const possibleClaim =
       observed.entry?.marker !== file.entry?.marker &&
       after?.status === "installed" &&
@@ -196,8 +196,8 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     }
     physicalPaths.push(physical);
     if (
-      !equal(projectionChoice(current), projectionChoice(after)) &&
-      !equal(projectionChoice(current), projectionChoice(prior))
+      !equal(installedSkillChoice(current), installedSkillChoice(after)) &&
+      !equal(installedSkillChoice(current), installedSkillChoice(prior))
     ) {
       conflicts.push(`Projection choice changed: ${file.path}`);
       continue;
@@ -214,7 +214,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     const owned =
       current &&
       after &&
-      equal(projectionChoice(current), projectionChoice(after)) &&
+      equal(installedSkillChoice(current), installedSkillChoice(after)) &&
       marker?.kind === "valid" &&
       marker.marker.projection_id === current.projection_id &&
       marker.marker.skill_id === current.skill_id &&
@@ -276,7 +276,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     }
     for (const projection of [prior, after]) {
       if (source !== undefined || projection === undefined) continue;
-      for (const path of yield* inspectProjectionBackupsEffect(projection)) {
+      for (const path of yield* inspectInstalledSkillBackupsEffect(projection)) {
         const evidence = yield* observeSetupFile(path);
         if (
           evidence.entry?.hash === file.entry.hash &&
@@ -307,7 +307,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       const policy =
         effectiveGlobalBindings(restoredState)[0]?.invocation_policies?.[prior.skill_id];
       const rebuilt = yield* Effect.result(
-        prepareProjectionRebuildEffect(
+        prepareInstalledSkillRebuildEffect(
           restoredState,
           store.originalsPath,
           prior,

@@ -23,18 +23,18 @@ import {
   readSkitDescriptorEffect,
   validateSkitDirectoryEffect,
   type HarnessName,
-  type HarnessRootOverrides,
+  type SkillsDirectoryOverrides,
   type LibraryState,
   makeMachineId,
   retainObservedCollectionEffect,
   withLibraryWriter,
 } from "@smolai/skit-core";
-import type { ProjectionOptions } from "../../src/workflows/library/projection-options.js";
+import type { InstalledSkillOptions } from "../../src/workflows/library/installed-skill-options.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
-export type HarnessRoots = HarnessRootOverrides;
+export type HarnessRoots = SkillsDirectoryOverrides;
 
 export interface LibraryHomeInput {
   readonly home: string;
@@ -93,7 +93,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     configHome: join(input.inventoryHome ?? home, "config"),
     overrides: roots,
   };
-  const bindings: ProjectionOptions = inventory;
+  const bindings: InstalledSkillOptions = inventory;
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;

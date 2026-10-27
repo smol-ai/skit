@@ -6,7 +6,7 @@ import {
   LibraryStore,
   libraryManifestFromLocalStateEffect,
   type LibraryManifest,
-  type ProjectionTarget,
+  type InstallDestination,
   type RestoreObserver,
   deviceInstallationIntent,
   prepareDeviceInstallation,
@@ -19,13 +19,13 @@ import { prepareSyncTransferEffect } from "./library-sync-snapshots.js";
 import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
 import { librarySyncApiEffect } from "./library-sync-api.js";
 import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
-import { reconcileLibraryProjections } from "./projection-reconciliation.js";
+import { updateInstalledSkills } from "./update-installed-skills.js";
 import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
 import {
   prepareSyncDeviceTransition,
-  resolveSyncProjectionCollisionsEffect,
-} from "./library-sync-projections.js";
+  resolveSyncInstalledSkillCollisionsEffect,
+} from "./library-sync-installed-skills.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { selectDeviceSkills } from "./device-selection.js";
@@ -50,7 +50,10 @@ const emptyManifest: LibraryManifest = currentLibraryManifest({
 });
 const same = (a: LibraryManifest, b: LibraryManifest) =>
   canonicalJson(normalizeLibraryManifest(a)) === canonicalJson(normalizeLibraryManifest(b));
-const projectionCounts = (result: { readonly projected: number; readonly retired: number }) => ({
+const installedSkillCounts = (result: {
+  readonly projected: number;
+  readonly retired: number;
+}) => ({
   projected: result.projected,
   retired: result.retired,
 });
@@ -84,7 +87,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
       | { readonly skills: readonly string[]; readonly collections: readonly string[] };
     inventory?: InventoryRootOptions;
     projection?: {
-      rootFor: (target: ProjectionTarget) => string | undefined;
+      rootFor: (target: InstallDestination) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
     observer?: SyncObserver;
@@ -199,7 +202,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
     );
     const collision = yield* observer.around(
       { kind: "check-destinations" },
-      resolveSyncProjectionCollisionsEffect(
+      resolveSyncInstalledSkillCollisionsEffect(
         installation.manifest,
         options.projection?.rootFor,
         options.keepEnabled,
@@ -250,7 +253,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           : {}),
         changed: false,
         revision_id: remote.revision_id,
-        ...projectionCounts(projections),
+        ...installedSkillCounts(projections),
       };
     }
 
@@ -330,7 +333,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         : {}),
       revision_id: saved.revision_id,
       snapshots,
-      ...projectionCounts(projections),
+      ...installedSkillCounts(projections),
       retired: retired + projections.retired,
       plan,
     };
@@ -340,12 +343,12 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         if (!choosing) {
           const result = yield* observer.around(
             { kind: "enable" },
-            reconcileLibraryProjections({
+            updateInstalledSkills({
               ...projectionOptions,
               includeRepositoryBindings: true,
             }),
           );
-          return { ...projectionCounts(result), issues: [] as string[] };
+          return { ...installedSkillCounts(result), issues: [] as string[] };
         }
         const issues = [
           ...missingSelection,
@@ -381,7 +384,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
         const attempt = yield* Effect.result(
           observer.around(
             { kind: "enable" },
-            reconcileLibraryProjections({
+            updateInstalledSkills({
               ...projectionOptions,
               includeRepositoryBindings: true,
             }),
@@ -409,7 +412,7 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
           issues.push(
             `Cannot install at ${projection.path}: existing content or ownership conflicts. Preserve it and review before retrying.`,
           );
-        return { ...projectionCounts(attempt.success), issues };
+        return { ...installedSkillCounts(attempt.success), issues };
       });
     }
   },

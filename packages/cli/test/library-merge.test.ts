@@ -12,7 +12,7 @@ import {
   makeSkillVersionId,
   LibraryManifest,
   LibraryState,
-  makeProjectionId,
+  makeInstalledSkillId,
   restoreCustodyConflicts,
 } from "@smolai/skit-core";
 import {
@@ -448,7 +448,7 @@ it.effect(
         unmanaged: [],
         projections: [
           {
-            projection_id: makeProjectionId(),
+            projection_id: makeInstalledSkillId(),
             skill_id: skillId,
             skill_version_id: localId,
             target: "agents",

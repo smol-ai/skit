@@ -11,7 +11,7 @@ import { bindingChangeSelection, type BindingChangeIntent } from "./binding-chan
 import { bindingPlacements } from "../workflows/library/binding-selection.js";
 import {
   bindingRoot,
-  existingRepositoryProjectionRoot,
+  existingRepositorySkillsDirectory,
   type InventoryRootOptions,
 } from "../projection/roots.js";
 import { scanLocalUsage } from "./local-usage.js";
@@ -66,8 +66,11 @@ export function suggestDoctorCleanup(
           p.skillIds.includes(skill.skill_id) &&
           resolve(
             p.scope.kind === "repository"
-              ? (existingRepositoryProjectionRoot(state, { scope: p.scope, entries: [] }, target) ??
-                  bindingRoot(target, p.scope, configuration))
+              ? (existingRepositorySkillsDirectory(
+                  state,
+                  { scope: p.scope, entries: [] },
+                  target,
+                ) ?? bindingRoot(target, p.scope, configuration))
               : bindingRoot(target, p.scope, configuration),
           ) === resolve(projection.root),
       );

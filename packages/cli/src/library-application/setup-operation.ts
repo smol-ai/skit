@@ -14,12 +14,12 @@ import {
   LinkStat,
   MachineId,
   MachineSettings,
-  ManagedProjection,
-  ProjectionTarget,
+  InstalledSkill,
+  InstallDestination,
   writeJsonExclusiveEffect,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
-import { activeProjectionTargetsEffect, bindingRoot } from "../projection/roots.js";
+import { activeInstallDestinationsEffect, bindingRoot } from "../projection/roots.js";
 import type { SetupApproval } from "../workflows/library/setup-apply.js";
 import { ensureRecoveryOperation, recoveryOperationPath } from "./recovery-moves.js";
 import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
@@ -57,10 +57,10 @@ const Operation = Schema.Struct({
   kind: Schema.Literal("setup"),
   planId: Digest,
   before: SetupIntent,
-  projections: Schema.Array(ManagedProjection),
+  projections: Schema.Array(InstalledSkill),
   settings: SetupDiscoverySettings,
   machineId: Schema.NullOr(MachineId),
-  targets: Schema.Array(Schema.Struct({ target: ProjectionTarget, root: DevicePath })),
+  targets: Schema.Array(Schema.Struct({ target: InstallDestination, root: DevicePath })),
   projectionPaths: Schema.optionalKey(Schema.Array(DevicePath)),
   files: Schema.Array(FileEvidence),
 });
@@ -72,8 +72,8 @@ const LibraryChange = Schema.Struct({
   afterRevision: Schema.String,
   before: SetupIntent,
   after: SetupIntent,
-  projectionsBefore: Schema.Array(ManagedProjection),
-  projectionsAfter: Schema.Array(ManagedProjection),
+  projectionsBefore: Schema.Array(InstalledSkill),
+  projectionsAfter: Schema.Array(InstalledSkill),
 });
 const SettingsChange = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -93,7 +93,7 @@ const Completion = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   intent: SetupIntent,
   settings: SetupDiscoverySettings,
-  projections: Schema.Array(ManagedProjection),
+  projections: Schema.Array(InstalledSkill),
 });
 
 const maybeStat = Effect.fn("SetupOperation.stat")(function* (path: string) {
@@ -162,7 +162,9 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   const links = yield* LinkStat;
   const settings = yield* MachineSettings.read(store.home);
   const directory = approval.removals.operationDirectory;
-  const targets = projecting ? yield* activeProjectionTargetsEffect(approval.setup.inventory) : [];
+  const targets = projecting
+    ? yield* activeInstallDestinationsEffect(approval.setup.inventory)
+    : [];
   const possibleTargets = projecting ? (["agents", "claude"] as const) : [];
   const projectionPaths = new Set(
     (approval.reconciliation ?? [])

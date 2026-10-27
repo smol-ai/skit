@@ -1,11 +1,11 @@
 import {
-  activeProjectionTargetsEffect,
+  activeInstallDestinationsEffect,
   bindingRoot,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
 import {
   observeHarnessShadows,
-  readableHarnessRoots,
+  readableSkillsDirectories,
   type HarnessShadow,
 } from "../../projection/harness-shadows.js";
 import {
@@ -31,7 +31,7 @@ import {
   HarnessName,
   inspectNormalizedTreeEffect,
   inspectOwnershipMarkerEffect,
-  projectionCustodyEffect,
+  installedSkillCustodyEffect,
   LibraryStore,
   LinkStat,
   hasHarnessProfile,
@@ -51,7 +51,7 @@ import {
   retainLibrarySourceEffect,
   inspectLibrarySourceEffect,
 } from "../../library-application/source-acquisition.js";
-import type { ProjectionOptions } from "./projection-options.js";
+import type { InstalledSkillOptions } from "./installed-skill-options.js";
 
 const LocalAdoptionTarget = Schema.Struct({
   path: Schema.String,
@@ -110,7 +110,7 @@ const LocalAdoptionPlan = Schema.Struct({
 interface LocalAdoptionPlan extends Schema.Schema.Type<typeof LocalAdoptionPlan> {}
 
 export interface LocalAdoptionOptions {
-  readonly bindings: ProjectionOptions;
+  readonly bindings: InstalledSkillOptions;
   readonly recoveryOperationDirectory?: string;
 }
 
@@ -483,7 +483,7 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
     const shadows = yield* observeHarnessShadows(roots, { kind: "global" }, [selection.name]);
     // A link at SKIT's own destination is replaced by the projection itself, which keeps it in that
     // root's backups; moving it afterwards would find the new copy there instead.
-    const destinations = (yield* activeProjectionTargetsEffect(roots)).map((target) =>
+    const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
       join(bindingRoot(target, { kind: "global" }, roots), selection.name),
     );
     const store = yield* LibraryStore;
@@ -547,7 +547,7 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
   );
   const [result] = applied.results;
   const outcome = retirement
-    ? yield* preserveAfterProjection(roots, subjectId, selection.name, retirement)
+    ? yield* preserveAfterInstalledSkill(roots, subjectId, selection.name, retirement)
     : undefined;
   return {
     result,
@@ -634,62 +634,65 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
 });
 
 /** Existing entries stay active until every affected reader has a verified replacement. */
-const preserveAfterProjection = Effect.fn("LocalAdoption.preserveCopiesAfterProjection")(function* (
-  roots: InventoryRootOptions,
-  subjectId: string,
-  name: string,
-  retirement: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const state = yield* (yield* LibraryStore).load;
-  const subject = yield* resolveLibrarySubject(state, subjectId);
-  const skill = subject.skills.find((item) => item.name === name);
-  const canonical = (path: string) =>
-    fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
-  const readableRoots = yield* Effect.forEach(
-    readableHarnessRoots(roots, { kind: "global" }).filter((root) =>
-      retirement.harnesses.includes(root.harness),
-    ),
-    (root) => canonical(root.root),
-  );
-  let required = 0;
-  for (const target of yield* activeProjectionTargetsEffect(roots)) {
-    const root = bindingRoot(target, { kind: "global" }, roots);
-    if (!readableRoots.includes(yield* canonical(root))) continue;
-    required++;
-    const path = join(root, name);
-    const expectedPath = yield* canonical(path);
-    const candidates = state.projections.filter(
-      (projection) => projection.skill_id === skill?.skill_id && projection.status === "installed",
+const preserveAfterInstalledSkill = Effect.fn("LocalAdoption.preserveCopiesAfterInstall")(
+  function* (
+    roots: InventoryRootOptions,
+    subjectId: string,
+    name: string,
+    retirement: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
+  ) {
+    const fs = yield* FileSystem.FileSystem;
+    const state = yield* (yield* LibraryStore).load;
+    const subject = yield* resolveLibrarySubject(state, subjectId);
+    const skill = subject.skills.find((item) => item.name === name);
+    const canonical = (path: string) =>
+      fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
+    const readableRoots = yield* Effect.forEach(
+      readableSkillsDirectories(roots, { kind: "global" }).filter((root) =>
+        retirement.harnesses.includes(root.harness),
+      ),
+      (root) => canonical(root.root),
     );
-    const installedPaths = yield* Effect.forEach(candidates, (projection) =>
-      canonical(projection.path),
-    );
-    if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
+    let required = 0;
+    for (const target of yield* activeInstallDestinationsEffect(roots)) {
+      const root = bindingRoot(target, { kind: "global" }, roots);
+      if (!readableRoots.includes(yield* canonical(root))) continue;
+      required++;
+      const path = join(root, name);
+      const expectedPath = yield* canonical(path);
+      const candidates = state.projections.filter(
+        (projection) =>
+          projection.skill_id === skill?.skill_id && projection.status === "installed",
+      );
+      const installedPaths = yield* Effect.forEach(candidates, (projection) =>
+        canonical(projection.path),
+      );
+      if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
+        return {
+          kind: "preserved" as const,
+          message: `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
+        };
+      const projection = candidates.find((candidate) => candidate.path === path);
+      const custody = projection ? yield* installedSkillCustodyEffect(projection) : undefined;
+      if (
+        !projection ||
+        custody?.kind !== "intact" ||
+        custody.observed !== projection.expected_digest ||
+        custody.marker.expected_digest !== projection.expected_digest ||
+        custody.marker.skill_version_id !== projection.skill_version_id ||
+        (yield* (yield* LinkStat).lstat(path)).type !== "Directory"
+      )
+        return {
+          kind: "preserved" as const,
+          message: `Bound ${name}; existing copies remain because the replacement at ${path} changed before preservation.`,
+        };
+    }
+    if (!required)
       return {
         kind: "preserved" as const,
-        message: `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
+        message: `Bound ${name}; existing copies were left in place because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
       };
-    const projection = candidates.find((candidate) => candidate.path === path);
-    const custody = projection ? yield* projectionCustodyEffect(projection) : undefined;
-    if (
-      !projection ||
-      custody?.kind !== "intact" ||
-      custody.observed !== projection.expected_digest ||
-      custody.marker.expected_digest !== projection.expected_digest ||
-      custody.marker.skill_version_id !== projection.skill_version_id ||
-      (yield* (yield* LinkStat).lstat(path)).type !== "Directory"
-    )
-      return {
-        kind: "preserved" as const,
-        message: `Bound ${name}; existing copies remain because the replacement at ${path} changed before preservation.`,
-      };
-  }
-  if (!required)
-    return {
-      kind: "preserved" as const,
-      message: `Bound ${name}; existing copies were left in place because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
-    };
-  yield* retirement.moves.apply();
-  return { kind: "retired" as const };
-});
+    yield* retirement.moves.apply();
+    return { kind: "retired" as const };
+  },
+);

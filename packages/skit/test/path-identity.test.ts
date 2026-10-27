@@ -5,10 +5,10 @@ import { expect, test } from "vitest";
 import { Effect, FileSystem } from "effect";
 import {
   artifactUsesSymlinkEffect,
-  groupProjectionTargetCandidatesEffect,
+  groupInstallDestinationCandidatesEffect,
   observationPathIdentityEffect,
   pathIsWithin,
-  projectionTargetPathIdentityEffect,
+  installDestinationPathIdentityEffect,
 } from "../src/platform/path-identity.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -99,7 +99,7 @@ it.effect("a lone unresolved target has declared identity and may materialize", 
     const root = yield* temporaryDirectory("skit-target-unresolved-");
     const target = join(root, "future", "skills");
 
-    const [group] = yield* groupProjectionTargetCandidatesEffect([target]);
+    const [group] = yield* groupInstallDestinationCandidatesEffect([target]);
     expect(group?.ambiguous).toBe(false);
     expect(group?.candidates[0]).toMatchObject({ declaredPath: resolve(target) });
     expect(group?.candidates[0]?.canonicalPath).toBeUndefined();
@@ -112,7 +112,7 @@ it.effect("unresolved Unicode aliases form one ambiguity set", () =>
     const decomposed = join(root, "Cafe\u0301", "skills");
     const composed = join(root, "Caf\u00e9", "skills");
 
-    const groups = yield* groupProjectionTargetCandidatesEffect([decomposed, composed]);
+    const groups = yield* groupInstallDestinationCandidatesEffect([decomposed, composed]);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.ambiguous).toBe(true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -130,7 +130,7 @@ it.effect("unresolved case aliases follow the containing filesystem", () =>
     );
     const caseInsensitive = yield* exists(toggledRoot);
 
-    const groups = yield* groupProjectionTargetCandidatesEffect([upper, lower]);
+    const groups = yield* groupInstallDestinationCandidatesEffect([upper, lower]);
     expect(groups).toHaveLength(caseInsensitive ? 1 : 2);
     if (caseInsensitive) expect(groups[0]?.ambiguous).toBe(true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -144,8 +144,8 @@ it.effect("resolved target aliases retain declarations and share physical identi
     yield* makeDirectory(target);
     yield* symlink(target, alias);
 
-    const direct = yield* projectionTargetPathIdentityEffect(target);
-    const linked = yield* projectionTargetPathIdentityEffect(alias);
+    const direct = yield* installDestinationPathIdentityEffect(target);
+    const linked = yield* installDestinationPathIdentityEffect(alias);
     expect(linked.declaredPath).toBe(resolve(alias));
     expect(linked.canonicalPath).toBe(direct.canonicalPath);
     expect(linked.comparisonKey).toBe(direct.comparisonKey);

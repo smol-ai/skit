@@ -48,10 +48,10 @@ export const AcquisitionId = entityId(EntityIdPrefixes.acquisition).pipe(
   Schema.brand("AcquisitionId"),
 );
 export type AcquisitionId = typeof AcquisitionId.Type;
-export const ProjectionId = entityId(EntityIdPrefixes.projection).pipe(
-  Schema.brand("ProjectionId"),
+export const InstalledSkillId = entityId(EntityIdPrefixes.projection).pipe(
+  Schema.brand("InstalledSkillId"),
 );
-export type ProjectionId = typeof ProjectionId.Type;
+export type InstalledSkillId = typeof InstalledSkillId.Type;
 export const MachineId = entityId(EntityIdPrefixes.machine).pipe(Schema.brand("MachineId"));
 export type MachineId = typeof MachineId.Type;
 export const OperationId = entityId(EntityIdPrefixes.operation).pipe(Schema.brand("OperationId"));
@@ -71,8 +71,8 @@ export const makeRetainedCopyId = (): RetainedCopyId =>
   typeidUnboxed(EntityIdPrefixes.retainedCopy) as unknown as RetainedCopyId;
 export const makeAcquisitionId = (): AcquisitionId =>
   typeidUnboxed(EntityIdPrefixes.acquisition) as unknown as AcquisitionId;
-export const makeProjectionId = (): ProjectionId =>
-  typeidUnboxed(EntityIdPrefixes.projection) as unknown as ProjectionId;
+export const makeInstalledSkillId = (): InstalledSkillId =>
+  typeidUnboxed(EntityIdPrefixes.projection) as unknown as InstalledSkillId;
 export const makeMachineId = (): MachineId =>
   typeidUnboxed(EntityIdPrefixes.machine) as unknown as MachineId;
 export const makeOperationId = (): OperationId =>

@@ -5,13 +5,13 @@ import {
   currentSkillVersion,
   canonicalJson,
   LibraryStore,
-  ensureProjectionRootWritable,
+  ensureSkillsDirectoryWritable,
   libraryStateRevision,
   withLibraryWriter,
   type Digest,
   type SkillId,
 } from "@smolai/skit-core";
-import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
+import { activeInstallDestinationsEffect, bindingRoot } from "../../projection/roots.js";
 import type { LocalAdoptionOptions } from "./local-adoption.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
@@ -20,7 +20,7 @@ import type {
   SetupVersionChoice,
   SetupReconciliationOutcome,
 } from "./setup-contract.js";
-import { isSetupProjectionTarget, type SetupCopySelection } from "./setup-decisions.js";
+import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
 import { applySetupExistingBindings } from "./setup-existing-binding.js";
 import { applySetupLocalCustody } from "./setup-local-custody.js";
 import { applySetupObservedCollections } from "./setup-observed-collections.js";
@@ -112,7 +112,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     const projectedCopies = [...approval.bindings, ...approval.custody].filter(
       (copy) =>
         copy.duplicateAction !== "retain-only" &&
-        isSetupProjectionTarget(
+        isSetupInstallDestination(
           scan.observed.instances.find((instance) => instance.path === copy.sourcePath),
         ) &&
         !scan.observed.onboarding.candidates.some(
@@ -123,7 +123,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     const enablingCopies = projectedCopies.length > 0;
     const projects = enablingCopies || setupReconciliationChanges(reconciliation, versionChoices);
     if (projects)
-      for (const target of yield* activeProjectionTargetsEffect(approval.setup.inventory))
+      for (const target of yield* activeInstallDestinationsEffect(approval.setup.inventory))
         if (
           enablingCopies ||
           reconciliation.some(
@@ -135,7 +135,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
                   versionChoices.some((choice) => choice.skillId === fact.skillId))),
           )
         )
-          yield* ensureProjectionRootWritable(
+          yield* ensureSkillsDirectoryWritable(
             bindingRoot(target, { kind: "global" }, approval.setup.inventory),
           );
     let current = scan.observed;

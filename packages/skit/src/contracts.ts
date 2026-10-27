@@ -15,18 +15,18 @@ import {
   Digest,
   HarnessName,
   InvocationPolicy,
-  ProjectionTarget,
-  RecordedProjectionTarget,
+  InstallDestination,
+  RecordedInstallDestination,
   SkitBindingScope,
   SkitValidationDiagnostic,
 } from "./vocabulary.js";
-import { CollectionId, ProjectionId, SkillId, SkillVersionId } from "./library/entity-ids.js";
+import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./library/entity-ids.js";
 export {
   Digest,
   HarnessName,
   InvocationPolicy,
-  ProjectionTarget,
-  RecordedProjectionTarget,
+  InstallDestination,
+  RecordedInstallDestination,
   SkillsShProvenanceObservation,
   SkitBindingScope,
   SkillAssessmentAcceptance,
@@ -101,7 +101,7 @@ export interface SkitReleaseIdentity {
 const OwnershipMarkerV2 = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   projectionPolicyVersion: Schema.Literal(1),
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   collection_id: CollectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
@@ -112,7 +112,7 @@ const OwnershipMarkerV2 = Schema.Struct({
 const OwnershipMarkerV3 = Schema.Struct({
   schemaVersion: Schema.Literal(3),
   projectionPolicyVersion: Schema.Literal(1),
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
   expected_digest: Digest,
@@ -122,7 +122,7 @@ const OwnershipMarkerV3 = Schema.Struct({
 export const OwnershipMarker = Schema.Struct({
   schemaVersion: Schema.Literal(4),
   projectionPolicyVersion: Schema.Literal(1),
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
   expected_digest: Digest,

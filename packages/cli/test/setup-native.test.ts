@@ -16,7 +16,7 @@ import {
   makeMachineId,
   MachineSettings,
   SourceProcess,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
@@ -1059,9 +1059,9 @@ it.effect("identifies a bound authored SKIT and joins it to its library projecti
     const skillId = makeSkillId();
     const acquisitionId = makeAcquisitionId();
     const machineId = makeMachineId();
-    const projectionId = makeProjectionId();
+    const projectionId = makeInstalledSkillId();
     const orphanedSkill = join(f.codex, "orphaned");
-    const orphanedProjectionId = makeProjectionId();
+    const orphanedProjectionId = makeInstalledSkillId();
     const orphanedCollectionId = makeCollectionId();
     const orphanedSkillId = makeSkillId();
     const orphanedSkillVersionId = makeSkillVersionId();
@@ -1333,9 +1333,9 @@ it.effect("reconciles current, missing, and orphaned SKIT projections without pe
     const missingSkillId = makeSkillId();
     const acquisitionId = makeAcquisitionId();
     const machineId = makeMachineId();
-    const currentProjectionId = makeProjectionId();
-    const missingProjectionId = makeProjectionId();
-    const orphanedProjectionId = makeProjectionId();
+    const currentProjectionId = makeInstalledSkillId();
+    const missingProjectionId = makeInstalledSkillId();
+    const orphanedProjectionId = makeInstalledSkillId();
     const orphanedCollectionId = makeCollectionId();
     const orphanedSkillId = makeSkillId();
     const orphanedVersionId = makeSkillVersionId();

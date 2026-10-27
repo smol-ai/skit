@@ -3,7 +3,7 @@ import {
   SkillAlias,
   type HarnessShadow,
   observeHarnessSkills,
-  readableHarnessRoots,
+  readableSkillsDirectories,
 } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { createHash } from "node:crypto";
@@ -170,8 +170,8 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       })));
     const aliasIndex = yield* observeHarnessSkills(
       [
-        ...readableHarnessRoots(roots, { kind: "global" }, ["codex"]),
-        ...readableHarnessRoots(roots, { kind: "repository", root: cwd }, ["codex"]),
+        ...readableSkillsDirectories(roots, { kind: "global" }, ["codex"]),
+        ...readableSkillsDirectories(roots, { kind: "repository", root: cwd }, ["codex"]),
       ],
       { errors },
     ).pipe(

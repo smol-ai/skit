@@ -19,7 +19,7 @@ import { LibraryStore } from "@smolai/skit-core";
 import {
   observeHarnessShadows,
   observeHarnessSkills,
-  readableHarnessRoots,
+  readableSkillsDirectories,
 } from "../src/projection/harness-shadows.js";
 import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
@@ -97,7 +97,9 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
             }),
           ]);
           const result = yield* Effect.result(setLibraryBindings(options));
-          expect(Result.isFailure(result) && result.failure._tag).toBe("ProjectionWouldDuplicate");
+          expect(Result.isFailure(result) && result.failure._tag).toBe(
+            "InstalledSkillWouldDuplicate",
+          );
           expect((yield* store.load).global_bindings).toEqual(before.global_bindings);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
           yield* setLibraryBindings({ ...options, allowDuplicate: true });
@@ -178,7 +180,7 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const index = yield* observeHarnessSkills(
-        readableHarnessRoots(f.home.inventory, { kind: "global" }),
+        readableSkillsDirectories(f.home.inventory, { kind: "global" }),
       );
       expect(
         codexSkillAliases(join(f.source, "SKILL.md"), join(f.source, "SKILL.md"), index),
@@ -359,7 +361,9 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
               ],
             }),
           );
-          expect(Result.isFailure(result) && result.failure._tag).toBe("ProjectionWouldDuplicate");
+          expect(Result.isFailure(result) && result.failure._tag).toBe(
+            "InstalledSkillWouldDuplicate",
+          );
           expect((yield* (yield* LibraryStore).load).global_bindings).toEqual([]);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
         }),

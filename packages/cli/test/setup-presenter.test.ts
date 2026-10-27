@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
@@ -119,7 +119,7 @@ it("omits managed Library projections while preserving unmanaged copies and orph
     contentIdentity: { status: "none", libraryMatches: [] },
   };
   const membership = {
-    projectionId: makeProjectionId(),
+    projectionId: makeInstalledSkillId(),
     skillId: makeSkillId(),
     skillVersionId: makeSkillVersionId(),
   };
@@ -308,7 +308,7 @@ it("separates installed, repository-authored, and loose skills", () => {
             kind: "skit",
             membership: {
               kind: "retained",
-              projectionId: makeProjectionId(),
+              projectionId: makeInstalledSkillId(),
               collectionId: managedCollectionId,
               skillId: managedSkillId,
               skillVersionId: managedSkillVersionId,

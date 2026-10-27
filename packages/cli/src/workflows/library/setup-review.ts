@@ -18,7 +18,7 @@ import type {
   SetupVersionChoice,
 } from "./setup-contract.js";
 import {
-  isSetupProjectionTarget,
+  isSetupInstallDestination,
   setupReviewCopies,
   setupSelectedCopies,
   setupSourceChoiceId,
@@ -270,7 +270,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       observed.instances.some(
         (instance) =>
           instance.path === copy.sourcePath &&
-          (instance.git.repository !== undefined || !isSetupProjectionTarget(instance)),
+          (instance.git.repository !== undefined || !isSetupInstallDestination(instance)),
       ),
     );
     const displayCopy = (copy: { readonly name: string; readonly sourcePath: string }) => ({
@@ -300,7 +300,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         .filter(
           (copy) =>
             copy.duplicateAction !== "retain-only" &&
-            isSetupProjectionTarget(
+            isSetupInstallDestination(
               observed.instances.find((instance) => instance.path === copy.sourcePath),
             ) &&
             !observed.onboarding.candidates.some(
@@ -314,7 +314,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         .filter(
           (copy) =>
             copy.duplicateAction === "retain-only" ||
-            !isSetupProjectionTarget(
+            !isSetupInstallDestination(
               observed.instances.find((instance) => instance.path === copy.sourcePath),
             ) ||
             observed.onboarding.candidates.some(

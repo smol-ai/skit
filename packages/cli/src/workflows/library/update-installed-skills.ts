@@ -2,29 +2,29 @@ import {
   LibraryStore,
   deviceInstallationIntent,
   projectBindingEffect,
-  retireUnboundGlobalProjectionsEffect,
+  retireUnboundGlobalInstalledSkillsEffect,
   withLibraryWriter,
   type DeviceBinding,
   type RepositoryBinding,
-  type ProjectionTarget,
-  type ProjectionAdoption,
+  type InstallDestination,
+  type InstalledSkillAdoption,
   type SkillId,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
-  activeProjectionTargetsEffect,
+  activeInstallDestinationsEffect,
   bindingRoot,
-  existingRepositoryProjectionRoot,
+  existingRepositorySkillsDirectory,
 } from "../../projection/roots.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 
-export interface LibraryProjectionReconciliationOptions {
+export interface UpdateInstalledSkillsOptions {
   readonly roots?: InventoryRootOptions;
   /** A target's global root, or undefined when it is inactive; overrides `roots` for routing. */
-  readonly rootFor?: (target: ProjectionTarget) => string | undefined;
+  readonly rootFor?: (target: InstallDestination) => string | undefined;
   readonly variantsPath: string;
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
-  readonly adoption?: ProjectionAdoption;
+  readonly adoption?: InstalledSkillAdoption;
   /** Adopt unmanaged copies that already hold exactly the projected bytes. */
   readonly adoptIdentical?: boolean;
   readonly restoreNativeDeletedSkills?: readonly string[];
@@ -33,22 +33,20 @@ export interface LibraryProjectionReconciliationOptions {
   readonly onlySkillIds?: readonly SkillId[];
 }
 
-const targets = ["agents", "claude"] as const satisfies readonly ProjectionTarget[];
+const targets = ["agents", "claude"] as const satisfies readonly InstallDestination[];
 
-const reconcileWithinWrite = Effect.fnUntraced(function* (
-  options: LibraryProjectionReconciliationOptions,
-) {
+const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstalledSkillsOptions) {
   // Without routing this device's targets are unknown, not inactive: retire nothing for that.
   const activeTargets =
     options.rootFor !== undefined
       ? targets.filter((target) => options.rootFor!(target) !== undefined)
       : options.roots !== undefined
-        ? yield* activeProjectionTargetsEffect(options.roots)
+        ? yield* activeInstallDestinationsEffect(options.roots)
         : targets;
   // Copies at a former or inactive target are never wanted, whichever Bindings changed.
   const state = yield* (yield* LibraryStore).load;
   const intent = deviceInstallationIntent(state);
-  const retired = yield* retireUnboundGlobalProjectionsEffect({
+  const retired = yield* retireUnboundGlobalInstalledSkillsEffect({
     variantsPath: options.variantsPath,
     activeTargets,
     desiredBindings: intent.bindings,
@@ -60,7 +58,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
   const bindings = options.includeRepositoryBindings
     ? intent.allBindings
     : (options.onlyBindings ?? intent.allBindings);
-  const outcomes: Array<{ target: ProjectionTarget; scope: (typeof bindings)[number]["scope"] }> =
+  const outcomes: Array<{ target: InstallDestination; scope: (typeof bindings)[number]["scope"] }> =
     [];
   for (const binding of bindings) {
     const repositoryBinding =
@@ -71,7 +69,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
           ? options.rootFor(target)
           : options.roots === undefined
             ? options.includeRepositoryBindings && repositoryBinding !== undefined
-              ? existingRepositoryProjectionRoot(state, repositoryBinding, target)
+              ? existingRepositorySkillsDirectory(state, repositoryBinding, target)
               : undefined
             : bindingRoot(target, binding.scope, options.roots);
       if (root === undefined) continue;
@@ -92,8 +90,8 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
 });
 
 /** Converge every active Projection target with current Binding intent under write authority. */
-export const reconcileLibraryProjections = Effect.fn("LibraryProjections.reconcile")(function* (
-  options: LibraryProjectionReconciliationOptions,
+export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(function* (
+  options: UpdateInstalledSkillsOptions,
 ) {
   return yield* withLibraryWriter(reconcileWithinWrite(options));
 });

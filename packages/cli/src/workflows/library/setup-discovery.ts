@@ -9,7 +9,7 @@ import {
   parseSkillFrontmatter,
   pathIsWithin,
   readSkitDescriptorEffect,
-  resolveHarnessRoot,
+  resolveSkillsDirectory,
   sourceLocator,
   SourceIdentity,
   SourceProcess,
@@ -19,7 +19,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { readSkillsLock } from "./skills-sh-lock-source.js";
-import { readableHarnessRoots } from "../../projection/harness-shadows.js";
+import { readableSkillsDirectories } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
@@ -228,7 +228,7 @@ function catalogRoots(
   if (scope === "project" && !context.repository) return [];
   return harnessProfile(harness)
     .roots.filter((root) => root.scope === scope && root.readable)
-    .map((root) => resolveHarnessRoot(root, context));
+    .map((root) => resolveSkillsDirectory(root, context));
 }
 
 const skillNameAt = Effect.fn("Setup.skillName")(function* (directory: string) {
@@ -419,13 +419,13 @@ export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
     : { custody: "invalid-marker" as const };
 });
 
-export const collectHarnessRoots = (
+export const collectSkillsDirectories = (
   inventory: InventoryRootOptions,
   repositories: readonly string[],
 ) => {
   const roots: Array<{ harness: Harness; scope: "global" | "project"; root: string }> = [];
   for (const harness of HarnessName.literals) {
-    for (const { root } of readableHarnessRoots(inventory, { kind: "global" }, [harness]))
+    for (const { root } of readableSkillsDirectories(inventory, { kind: "global" }, [harness]))
       roots.push({ harness, scope: "global", root });
     for (const repository of repositories)
       for (const root of catalogRoots(harness, "project", {
@@ -441,7 +441,7 @@ export const collectHarnessRoots = (
 /** Discover selected locations, routing every copy to its nearest selected repository. */
 const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
   walk: WalkResult,
-  harnessRoots: ReturnType<typeof collectHarnessRoots>,
+  harnessRoots: ReturnType<typeof collectSkillsDirectories>,
 ) {
   const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
   const roots = [
@@ -605,7 +605,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
         [...existingDecisions].filter(([, status]) => status === "watched").map(([path]) => path),
       );
   const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
-  const harnessRoots = collectHarnessRoots(options.inventory, walk.repositories);
+  const harnessRoots = collectSkillsDirectories(options.inventory, walk.repositories);
   const store = yield* LibraryStore;
   const library = yield* store.load;
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);

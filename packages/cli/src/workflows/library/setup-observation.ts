@@ -7,7 +7,7 @@ import {
   type SkillVersionId,
   deterministicTreeHashEffect,
   pathIsWithin,
-  projectionTargetHarnesses,
+  installDestinationHarnesses,
 } from "@smolai/skit-core";
 import { sourceIdentityLabel } from "../../library-application/skill-metadata.js";
 import { custodyAt, type SetupEvidence } from "./setup-discovery.js";
@@ -17,7 +17,7 @@ import { makePnpmSkillObserver, pnpmSkillOwner } from "../../projection/pnpm-ski
 import { probeHarnessesEffect } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
-  SetupProjection,
+  SetupInstalledSkill,
   SetupSkillInstance,
 } from "./setup-contract.js";
 const indexSetupLibrary = (
@@ -198,12 +198,12 @@ const observeSetupInstances = Effect.fn("Setup.observeInstances")(function* (
   return { instances, onboardingInstances };
 });
 
-const observeSetupProjections = Effect.fn("Setup.observeProjections")(function* (
+const observeSetupInstalledSkills = Effect.fn("Setup.observeInstalledSkills")(function* (
   observedLibrary: SetupEvidence["observedLibrary"],
   indexes: ReturnType<typeof indexSetupLibrary>,
 ) {
   const { libraryCollectionsById } = indexes;
-  const projections: SetupProjection[] = [];
+  const projections: SetupInstalledSkill[] = [];
   const fs = yield* FileSystem.FileSystem;
   for (const projection of observedLibrary.projections) {
     const skill = observedLibrary.skills.find(
@@ -219,7 +219,7 @@ const observeSetupProjections = Effect.fn("Setup.observeProjections")(function* 
       name: skill.name,
       path,
       harnesses:
-        projection.target === "legacy" ? [] : [...projectionTargetHarnesses[projection.target]],
+        projection.target === "legacy" ? [] : [...installDestinationHarnesses[projection.target]],
       status: !present ? "missing" : projection.status === "installed" ? "current" : "modified",
     });
   }
@@ -238,6 +238,6 @@ export const observeSetupCopies = Effect.fn("Setup.observeCopies")(function* (
     status: probe.status,
     command: probe.command,
   }));
-  const projections = yield* observeSetupProjections(evidence.observedLibrary, indexes);
+  const projections = yield* observeSetupInstalledSkills(evidence.observedLibrary, indexes);
   return { instances, onboardingInstances, probes, projections };
 });

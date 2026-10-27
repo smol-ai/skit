@@ -1,7 +1,7 @@
 import type { HarnessName } from "../contracts.js";
 
-export type HarnessRootBase = "home" | "config" | "repository";
-export type HarnessRootRole = "native" | "compatibility";
+export type SkillsDirectoryBase = "home" | "config" | "repository";
+export type SkillsDirectoryRole = "native" | "compatibility";
 export type HarnessEvidence = "documented" | "observed" | "unknown";
 export type FrontmatterValueType =
   | "string"
@@ -76,12 +76,12 @@ export interface HarnessSkillMetadataContract {
   fields: readonly HarnessSkillMetadataField[];
 }
 
-export interface HarnessRoot {
+export interface SkillsDirectory {
   id: string;
-  base: HarnessRootBase;
+  base: SkillsDirectoryBase;
   path: string;
   scope: "global" | "project";
-  role: HarnessRootRole;
+  role: SkillsDirectoryRole;
   readable: boolean;
   writable: boolean;
   evidence: HarnessEvidence;
@@ -107,7 +107,7 @@ export interface HarnessProfile {
     version: string;
     verifiedAt: string;
   };
-  roots: readonly HarnessRoot[];
+  roots: readonly SkillsDirectory[];
   documentation: readonly HarnessDocumentationSource[];
   frontmatter: readonly HarnessFrontmatterContract[];
   skillMetadata?: readonly HarnessSkillMetadataContract[];
@@ -123,9 +123,9 @@ export function defineHarnessProfile<const T extends HarnessProfile>(profile: T)
 }
 
 /** Device-local Skill roots that stand in for a Harness's own global roots. */
-export type HarnessRootOverrides = Partial<Record<HarnessName, readonly string[]>>;
+export type SkillsDirectoryOverrides = Partial<Record<HarnessName, readonly string[]>>;
 
-export interface HarnessRootContext {
+export interface SkillsDirectoryContext {
   home: string;
   configHome: string;
   repository?: string;

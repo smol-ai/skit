@@ -13,7 +13,7 @@ import {
   HarnessMetadataInvalid,
   InvalidLibraryState,
   NoSkitDescriptorFound,
-  ProjectionFileMissing,
+  InstalledSkillFileMissing,
   ReadmeFrontmatterMissing,
   resolveSkitSourceEffect,
   skitLayer,
@@ -109,7 +109,7 @@ test("validation failures from shipped commands carry their own remediation", ()
     new DescriptorMalformed({ format: "json", detail: "unexpected token" }),
     new DirectSkillDocumentInvalid(),
     new NoSkitDescriptorFound(),
-    new ProjectionFileMissing({ path: "/skills/review/SKILL.md" }),
+    new InstalledSkillFileMissing({ path: "/skills/review/SKILL.md" }),
     new HarnessMetadataInvalid({ path: "/skills/review/SKILL.md", kind: "SKILL.md frontmatter" }),
     new InvalidLibraryState({ path: "/home/.skit/state.json", detail: "schema v2" }),
   ]) {

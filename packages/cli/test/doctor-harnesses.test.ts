@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
   currentLibraryState,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
@@ -355,7 +355,7 @@ const collisionFixture = () => {
     local_bindings: [],
     unmanaged: [],
     projections: (["agents", "claude"] as const).map((target) => ({
-      projection_id: makeProjectionId(),
+      projection_id: makeInstalledSkillId(),
       skill_id: skillId,
       skill_version_id: versionId,
       target,

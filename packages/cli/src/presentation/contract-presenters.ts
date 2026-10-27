@@ -653,7 +653,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v9">): strin
   return lines;
 }
 
-function renderSetupProjections(
+function renderSetupInstalledSkills(
   projections: ContractDataForId<"skit.setup.v9">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
@@ -867,7 +867,7 @@ function renderSetup(data: ContractDataForId<"skit.setup.v9">): string {
       projection.collectionId === undefined || !authoredCollectionIds.has(projection.collectionId),
   );
   if (externalProjections.length)
-    lines.push("", "Existing SKIT projections", ...renderSetupProjections(externalProjections));
+    lines.push("", "Existing SKIT projections", ...renderSetupInstalledSkills(externalProjections));
   if (data.reconciliation?.length)
     lines.push(
       "",

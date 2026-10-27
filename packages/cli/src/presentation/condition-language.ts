@@ -50,7 +50,7 @@ export function changeActionLabel(action: "add" | "update" | "remove"): string {
   return { add: "Add", update: "Update", remove: "Remove" }[action];
 }
 
-export function projectionStatusLabel(status: string): string {
+export function installedSkillStatusLabel(status: string): string {
   return (
     {
       pending: "waiting to be installed",

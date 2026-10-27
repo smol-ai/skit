@@ -10,9 +10,9 @@ import { currentSkillVersion, versionBacking } from "../src/library/library-cont
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { projectBindingEffect } from "../src/library/installation/project-binding.js";
 import { removeCollectionEffect } from "../src/library/installation/remove.js";
-import { retireUnboundGlobalProjectionsEffect } from "../src/library/installation/retire-unbound.js";
+import { retireUnboundGlobalInstalledSkillsEffect } from "../src/library/installation/retire-unbound.js";
 import {
-  retainChangedProjectionEffect,
+  retainChangedInstalledSkillEffect,
   retainObservedCollectionEffect,
 } from "../src/library/observed-import.js";
 import type { LibraryState } from "../src/library/library-state.js";
@@ -27,13 +27,13 @@ import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
 import {
-  backUpProjectionEffect,
+  backUpInstalledSkillEffect,
   losslessTreeEffect,
-  projectionWorkDirectory,
+  installedSkillWorkDirectory,
 } from "../src/projection/backups.js";
 import {
   inspectOwnershipMarkerEffect,
-  withProjectionMutationEffect,
+  withInstalledSkillMutationEffect,
 } from "../src/projection/mutation.js";
 
 const machineId = migratedMachineId(
@@ -170,7 +170,7 @@ it.effect(
           ),
         ).pipe(Effect.provide(storeLayer)),
       );
-      const retire = retireUnboundGlobalProjectionsEffect({
+      const retire = retireUnboundGlobalInstalledSkillsEffect({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents", "claude"],
       }).pipe(Effect.provide(storeLayer));
@@ -199,7 +199,7 @@ it.effect("saves nothing when the written Projection does not hash to the retain
     ).pipe(Effect.result);
     assert.strictEqual(Result.isFailure(projected), true);
     if (Result.isFailure(projected))
-      assert.strictEqual(projected.failure._tag, "ProjectionFailure");
+      assert.strictEqual(projected.failure._tag, "InstalledSkillFailure");
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(storeLayer),
     );
@@ -343,8 +343,8 @@ for (const changed of ["bytes", "ownership"] as const)
       const result = yield* project(newRoot).pipe(Effect.result);
       assert.strictEqual(Result.isFailure(result), true);
       if (Result.isFailure(result)) {
-        assert.strictEqual(result.failure._tag, "ProjectionRetireConflict");
-        if (result.failure._tag === "ProjectionRetireConflict")
+        assert.strictEqual(result.failure._tag, "InstalledSkillRetireConflict");
+        if (result.failure._tag === "InstalledSkillRetireConflict")
           assert.include(result.failure.detail, path);
       }
       assert.strictEqual(yield* fs.exists(join(newRoot, "review")), false);
@@ -518,7 +518,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     const result = yield* project(newRoot).pipe(Effect.result);
     assert.strictEqual(Result.isFailure(result), true);
     if (Result.isFailure(result))
-      assert.strictEqual(result.failure._tag, "Library.ProjectionInvalid");
+      assert.strictEqual(result.failure._tag, "Library.InstalledSkillInvalid");
     assert.strictEqual(
       yield* fs.readFileString(join(targetRoot, "review", "SKILL.md")),
       "raw Skill bytes\n",
@@ -556,7 +556,7 @@ it.effect("retires a bound Skill's copies at a target that is no longer active",
       );
     const retired = yield* withLibraryWriterLock(
       home,
-      retireUnboundGlobalProjectionsEffect({
+      retireUnboundGlobalInstalledSkillsEffect({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
       }).pipe(Effect.provide(storeLayer)),
@@ -600,7 +600,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     );
     const retired = yield* withLibraryWriterLock(
       home,
-      retireUnboundGlobalProjectionsEffect({
+      retireUnboundGlobalInstalledSkillsEffect({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
         inactiveOnly: true,
@@ -628,7 +628,7 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
     yield* fs.writeFileString(edited, "my edit\n");
     const retire = withLibraryWriterLock(
       home,
-      retireUnboundGlobalProjectionsEffect({
+      retireUnboundGlobalInstalledSkillsEffect({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
         inactiveOnly: true,
@@ -679,7 +679,7 @@ const projectionFixture = (second = false, emptyDirectories: readonly string[] =
       );
     const retire = withLibraryWriterLock(
       home,
-      retireUnboundGlobalProjectionsEffect({ variantsPath, activeTargets: ["agents"] }).pipe(
+      retireUnboundGlobalInstalledSkillsEffect({ variantsPath, activeTargets: ["agents"] }).pipe(
         Effect.asVoid,
         Effect.provide(storeLayer),
       ),
@@ -905,7 +905,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
             yield* fs.writeFileString(join(target, "SKILL.md"), bytes);
             const second = yield* withLibraryWriterLock(
               home,
-              retainChangedProjectionEffect({
+              retainChangedInstalledSkillEffect({
                 skillId: first.skill_id,
                 projectionId: first.projection_id,
                 path: target,
@@ -993,7 +993,7 @@ it.effect(
       const projection = (yield* load).projections[0];
       assert.ok(projection);
       // A process killed after moving the copy aside, before publishing what it meant to do.
-      yield* backUpProjectionEffect(projection, "replace");
+      yield* backUpInstalledSkillEffect(projection, "replace");
       yield* refresh;
       assert.strictEqual((yield* load).projections[0]?.status, "pending");
       yield* project();
@@ -1017,7 +1017,7 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       assert.ok(projection);
       if (stale === "observed-successor") {
         // Killed after installing a successor but before publishing it; inventory then verifies it.
-        const backup = yield* backUpProjectionEffect(projection, "replace");
+        const backup = yield* backUpInstalledSkillEffect(projection, "replace");
         yield* fs.copy(backup, projection.path);
         yield* refresh;
       } else {
@@ -1086,7 +1086,7 @@ it.effect("an unchanged batch still saves onto its loaded state before settling 
     yield* project();
     const projection = (yield* load).projections[0]!;
     // Killed after moving the intact copy aside and restoring it, before publishing anything.
-    yield* fs.copy(yield* backUpProjectionEffect(projection, "replace"), projection.path);
+    yield* fs.copy(yield* backUpInstalledSkillEffect(projection, "replace"), projection.path);
     const { counter, layer } = countingStore(storeLayer);
     yield* withLibraryWriterLock(
       home,
@@ -1108,12 +1108,12 @@ it.effect("a backup is never settled against a state the Library has moved on fr
     const loaded = yield* load;
     const projection = loaded.projections[0]!;
     // A reproducible copy moved aside, then a writer without the lock changes the Library.
-    yield* backUpProjectionEffect(projection, "replace");
+    yield* backUpInstalledSkillEffect(projection, "replace");
     yield* edit(explicitPolicies);
     const failed = yield* withLibraryWriterLock(
       home,
       LibraryStore.use((store) =>
-        withProjectionMutationEffect(
+        withInstalledSkillMutationEffect(
           loaded,
           {
             rootFor: () => undefined,
@@ -1161,7 +1161,10 @@ it.effect("the last published state stays the Library's across unchanged and cha
         assert.deepStrictEqual(yield* expected, changed);
         yield* current;
         yield* store.save(unbound(yield* expected), yield* expected);
-        yield* retireUnboundGlobalProjectionsEffect({ variantsPath, activeTargets: ["agents"] });
+        yield* retireUnboundGlobalInstalledSkillsEffect({
+          variantsPath,
+          activeTargets: ["agents"],
+        });
         assert.deepStrictEqual((yield* expected).projections, []);
         yield* current;
       }),
@@ -1309,7 +1312,7 @@ for (const planted of [
 
       assert.strictEqual(
         Result.isFailure(failed) && failed.failure._tag,
-        "UnsafeProjectionBackups",
+        "UnsafeInstalledSkillBackups",
       );
       assert.strictEqual(yield* fs.readFileString(sentinel), "unrelated bytes\n");
       assert.deepStrictEqual(yield* fs.readDirectory(outside), ["sentinel"]);
@@ -1355,9 +1358,12 @@ for (const location of ["beside", "inside"] as const)
     );
 
 it("works beside a root on its parent's device, and inside a root mounted from another", () => {
-  assert.strictEqual(projectionWorkDirectory("/home/me/.claude/skills", 1, 1), "/home/me/.claude");
   assert.strictEqual(
-    projectionWorkDirectory("/home/me/.claude/skills", 2, 1),
+    installedSkillWorkDirectory("/home/me/.claude/skills", 1, 1),
+    "/home/me/.claude",
+  );
+  assert.strictEqual(
+    installedSkillWorkDirectory("/home/me/.claude/skills", 2, 1),
     "/home/me/.claude/skills",
   );
 });

@@ -4,7 +4,7 @@ import {
   AdoptionReceiptId,
   CollectionId,
   MachineId,
-  ProjectionId,
+  InstalledSkillId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
@@ -43,7 +43,7 @@ const RepositoryBindingV4 = Schema.Struct({
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
 const ManagedProjectionV4 = Schema.Struct({
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   collection_id: CollectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
@@ -64,7 +64,7 @@ const AdoptionReceiptV4 = Schema.Struct({
   path: AbsoluteDevicePath,
   observed_digest: Digest,
   skill_version_id: SkillVersionId,
-  projection_ids: Schema.Array(ProjectionId),
+  projection_ids: Schema.Array(InstalledSkillId),
 });
 
 export const LibraryStateV4 = Schema.Struct({

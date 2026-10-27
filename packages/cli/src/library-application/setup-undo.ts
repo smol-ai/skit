@@ -18,7 +18,7 @@ import { PlanIsStale } from "../library/failures.js";
 import { ensureRecoveryOperation, recoveryOperationDirectory } from "./recovery-moves.js";
 import { RecoveryInvalid } from "./recovery-evidence.js";
 import { inspectSetupOperation } from "./setup-operation.js";
-import { prepareSetupUndoFiles, projectionChoice } from "./setup-undo-files.js";
+import { prepareSetupUndoFiles, installedSkillChoice } from "./setup-undo-files.js";
 import { prepareSetupSourceUndo, type UndoSourceObservation } from "./setup-undo-sources.js";
 import {
   reverseSetupDiscovery,
@@ -167,7 +167,7 @@ const observeUndo = Effect.fn("SetupUndo.observe")(function* (
   for (const path of files?.affected ?? []) {
     const prior = saved.operation.projections.find((item) => item.path === path);
     const current = nextProjections.find((item) => item.path === path);
-    if (equal(projectionChoice(prior), projectionChoice(current))) continue;
+    if (equal(installedSkillChoice(prior), installedSkillChoice(current))) continue;
     const index = nextProjections.findIndex((item) => item.path === path);
     if (index >= 0) nextProjections.splice(index, 1);
     if (prior) nextProjections.push(structuredClone(prior));

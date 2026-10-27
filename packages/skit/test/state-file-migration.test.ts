@@ -7,7 +7,7 @@ import {
   makeAcquisitionId,
   makeCollectionId,
   makeMachineId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
@@ -340,7 +340,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
       local_bindings: [],
       projections: [
         {
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           skill_id: ids.alpha,
           skill_version_id: ids.alpha1,
           harness: "codex",
@@ -432,7 +432,7 @@ for (const agreed of [true, false])
           invocation_policies: { [skill.skill_id]: policy },
         });
         const projection = (harness: string, root: string) => ({
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           skill_id: skill.skill_id,
           skill_version_id: version,
           harness,

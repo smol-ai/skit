@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
-import { withProjectionMutationEffect } from "../../projection/mutation.js";
+import { withInstalledSkillMutationEffect } from "../../projection/mutation.js";
 import { removeBindingEntities } from "../binding-intent.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
@@ -60,7 +60,7 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
       .filter((skill) => skill.collection_id === options.collectionId)
       .map((skill) => skill.skill_id),
   );
-  const result = yield* withProjectionMutationEffect(
+  const result = yield* withInstalledSkillMutationEffect(
     planned,
     {
       rootFor: () => undefined,

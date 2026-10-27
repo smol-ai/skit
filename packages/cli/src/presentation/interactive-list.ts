@@ -16,7 +16,7 @@ import {
   invocationBriefing,
   invocationRowSummary,
 } from "../library-application/read-model.js";
-import type { ProjectionOptions } from "../workflows/library/projection-options.js";
+import type { InstalledSkillOptions } from "../workflows/library/installed-skill-options.js";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
@@ -74,7 +74,7 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
 
 const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   progress: string,
 ) {
   const prompter = yield* Prompter;
@@ -116,7 +116,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
 
 const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
 ) {
   const scope = yield* promptForScope(resolve(process.cwd()));
@@ -143,7 +143,7 @@ const chooseBinding = Effect.fn("CLI.libraryBrowse.chooseBinding")(function* (
 
 const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
 ) {
   const renderer = yield* Renderer;
@@ -178,7 +178,7 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
 
 const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
 ) {
   const options = row.bindings.map((binding, index) => ({
@@ -203,7 +203,7 @@ const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
 /** Interactive Library browser backed by the portable enable and disable workflows. */
 export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
   initial: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
 ) {
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;

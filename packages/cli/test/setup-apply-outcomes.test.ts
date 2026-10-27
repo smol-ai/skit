@@ -5,7 +5,7 @@ import { assert, it } from "@effect/vitest";
 import {
   InvalidLibraryState,
   LibraryStore,
-  ProjectionRootNotWritable,
+  SkillsDirectoryNotWritable,
   skitLayer,
 } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -412,7 +412,7 @@ it.effect("an unwritable projection root fails the apply before any stage writes
       .setup([["alpha", "remove\0gamma"], true])
       .pipe(withSandboxDenying(join(f.root, ".codex")));
     const error = failure(exit);
-    assert.instanceOf(error, ProjectionRootNotWritable);
+    assert.instanceOf(error, SkillsDirectoryNotWritable);
     assert.strictEqual(error.root, join(f.root, ".codex", "skills"));
     assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

@@ -439,7 +439,7 @@ effectIt.effect.each(["claude-code", "codex", "missing"] as const)(
       expect(outcome).toMatchObject({
         _tag: "Failure",
         failure: {
-          _tag: harness === "missing" ? "ProjectionFileMissing" : "HarnessMetadataInvalid",
+          _tag: harness === "missing" ? "InstalledSkillFileMissing" : "HarnessMetadataInvalid",
         },
       });
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

@@ -9,7 +9,7 @@ import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
 import type { InventoryRootOptions } from "../projection/roots.js";
 import { retainLibrarySourceEffect, inspectLibrarySourceEffect } from "./source-acquisition.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
-import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
+import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import { LibraryProgress } from "./progress.js";
 import {
   latestSubjectAcquisition,
@@ -237,7 +237,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         phase = "projection";
         const reconciled = yield* progress.around(
           { kind: "projection", subject },
-          reconcileLibraryProjections({
+          updateInstalledSkills({
             roots: options.roots,
             variantsPath: store.variantsPath,
             onlyBindings: [...effectiveGlobalBindings(current), ...current.local_bindings].filter(

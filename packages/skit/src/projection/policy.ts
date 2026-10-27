@@ -1,10 +1,10 @@
-import type { InvocationPolicy, ProjectionTarget } from "../contracts.js";
+import type { InvocationPolicy, InstallDestination } from "../contracts.js";
 import { Effect, FileSystem } from "effect";
 import {
   applyHarnessInvocationPolicyEffect,
   type HarnessInvocationWriteFailure,
 } from "../harnesses/projection.js";
-import { projectionTargetHarnesses } from "../harnesses/projection-targets.js";
+import { installDestinationHarnesses } from "../harnesses/install-destinations.js";
 
 export type InvocationIntent =
   | { source: "declared" }
@@ -23,7 +23,7 @@ export function overrideInvocationIntent(policy: InvocationPolicy): InvocationIn
  */
 export function applyInvocationPolicyEffect(
   directory: string,
-  target: ProjectionTarget,
+  target: InstallDestination,
   declaredPolicy: InvocationPolicy | undefined,
   intent: InvocationIntent = declaredInvocationIntent,
 ): Effect.Effect<void, HarnessInvocationWriteFailure, FileSystem.FileSystem> {
@@ -35,8 +35,8 @@ export function applyInvocationPolicyEffect(
   // from the reader map used by inventory and setup.
   const adapters =
     target === "agents"
-      ? [...projectionTargetHarnesses[target], "claude-code" as const]
-      : projectionTargetHarnesses[target];
+      ? [...installDestinationHarnesses[target], "claude-code" as const]
+      : installDestinationHarnesses[target];
   return Effect.forEach(
     adapters,
     (harness) => applyHarnessInvocationPolicyEffect(directory, harness, policy),

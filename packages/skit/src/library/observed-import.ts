@@ -342,8 +342,8 @@ export const retainObservedCollectionEffect = Effect.fn("Library.retainObservedC
   },
 );
 
-export class ProjectionObservationChanged
-  extends Data.TaggedError("Library.ProjectionObservationChanged")<{ path: string }>
+export class InstalledSkillObservationChanged
+  extends Data.TaggedError("Library.InstalledSkillObservationChanged")<{ path: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -360,7 +360,7 @@ export class ProjectionObservationChanged
  * The Acquisition records only the local path and machine that were actually observed. It does
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
-export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedProjection")(
+export const retainChangedInstalledSkillEffect = Effect.fn("Library.retainChangedInstalledSkill")(
   function* (request: {
     readonly skillId: LibraryState["skills"][number]["skill_id"];
     readonly projectionId: LibraryState["projections"][number]["projection_id"];
@@ -386,7 +386,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
       projection.skill_id !== skill.skill_id ||
       projection.path !== request.path
     )
-      return yield* new ProjectionObservationChanged({ path: request.path });
+      return yield* new InstalledSkillObservationChanged({ path: request.path });
 
     const prepared = yield* prepareObservedCollectionEffect([
       {
@@ -397,7 +397,7 @@ export const retainChangedProjectionEffect = Effect.fn("Library.retainChangedPro
       },
     ]).pipe(
       Effect.catchTag("Library.ObservedImportInvalid", () =>
-        Effect.fail(new ProjectionObservationChanged({ path: request.path })),
+        Effect.fail(new InstalledSkillObservationChanged({ path: request.path })),
       ),
     );
     yield* retainLocalTreeEffect(prepared.staged, store.originalsPath, prepared.digest, true);

@@ -4,7 +4,7 @@ import { Data, Effect } from "effect";
 import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
 import { isEntryLink, observeHarnessShadows } from "../../projection/harness-shadows.js";
 import {
-  activeProjectionTargetsEffect,
+  activeInstallDestinationsEffect,
   bindingRoot,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
@@ -24,7 +24,11 @@ import {
   setupDuplicateChoiceRequired,
 } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
+export {
+  collectSkillsDirectories,
+  saveSetupMachineConfig,
+  SetupDiscovery,
+} from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
 export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
@@ -100,7 +104,7 @@ const observeSetup = Effect.fn("Library.setup")(
     const shadows = globalNames.length
       ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
       : [];
-    const targets = shadows.length ? yield* activeProjectionTargetsEffect(options.inventory) : [];
+    const targets = shadows.length ? yield* activeInstallDestinationsEffect(options.inventory) : [];
     const onboarding = candidates.map((candidate) => {
       const matches = shadows.filter((shadow) => shadow.name === candidate.name);
       if (!matches.length) return candidate;

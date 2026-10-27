@@ -6,7 +6,7 @@ import { ConfigProvider, Effect, FileSystem, Schema } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
@@ -165,7 +165,7 @@ describe("experimental capability audit", () => {
           JSON.stringify({
             schemaVersion: 2,
             projectionPolicyVersion: 1,
-            projection_id: makeProjectionId(),
+            projection_id: makeInstalledSkillId(),
             collection_id: makeCollectionId(),
             skill_id: makeSkillId(),
             skill_version_id: makeSkillVersionId(),
@@ -203,7 +203,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({
           schemaVersion: 2,
           projectionPolicyVersion: 1,
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           collection_id: makeCollectionId(),
           skill_id: makeSkillId(),
           skill_version_id: makeSkillVersionId(),
@@ -258,7 +258,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({
           schemaVersion: 3,
           projectionPolicyVersion: 1,
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           skill_id: makeSkillId(),
           skill_version_id: makeSkillVersionId(),
           expected_digest: `sha256:${"a".repeat(64)}`,
@@ -481,7 +481,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({
           schemaVersion: 2,
           projectionPolicyVersion: 1,
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           collection_id: makeCollectionId(),
           skill_id: makeSkillId(),
           skill_version_id: makeSkillVersionId(),

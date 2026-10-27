@@ -44,7 +44,7 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
     backing.member.materialization_profile === "declared-skit-skill/v1"
       ? yield* readSkitDescriptorEffect(root)
       : undefined;
-  // Match projectionSourceEffect: descriptor names choose their declared source directory.
+  // Match installedSkillSourceEffect: descriptor names choose their declared source directory.
   const member = descriptor?.skills.find((member) => member.name === skill.name);
   if (descriptor !== undefined && member === undefined)
     return yield* new RetainedContentInvalid({

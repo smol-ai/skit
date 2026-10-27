@@ -10,7 +10,7 @@ import {
   LibraryStore,
   canonicalJson,
   inspectOwnershipMarkerEffect,
-  type ManagedProjection,
+  type InstalledSkill,
   type LibraryStateReadError,
   pathIsWithin,
   withLibraryWriterLock,
@@ -176,7 +176,7 @@ export const prepareRecoveryMoves = (
 
 /** Preserve exactly reviewed, registered projections; marker text alone never grants custody. */
 export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
-  requests: readonly { name: string; projection: ManagedProjection }[],
+  requests: readonly { name: string; projection: InstalledSkill }[],
   operationDirectory?: string,
 ) {
   const store = yield* LibraryStore;

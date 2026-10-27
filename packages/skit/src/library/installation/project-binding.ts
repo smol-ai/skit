@@ -4,24 +4,27 @@ import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
 import {
   inspectOwnershipMarkerEffect,
-  projectionCustodyEffect,
-  withProjectionMutationEffect,
-  type ProjectionAdoption,
+  installedSkillCustodyEffect,
+  withInstalledSkillMutationEffect,
+  type InstalledSkillAdoption,
 } from "../../projection/mutation.js";
-import { pathIsWithin, projectionTargetPathIdentityEffect } from "../../platform/path-identity.js";
-import { ProjectionRetireConflict } from "../../failures.js";
-import { repositorySelectsProjection } from "./retire-unbound.js";
-import { projectionSourceEffect } from "./projection-source.js";
+import {
+  pathIsWithin,
+  installDestinationPathIdentityEffect,
+} from "../../platform/path-identity.js";
+import { InstalledSkillRetireConflict } from "../../failures.js";
+import { repositorySelectsInstalledSkill } from "./retire-unbound.js";
+import { installedSkillSourceEffect } from "./installed-skill-source.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { Digest, ProjectionTarget } from "../../vocabulary.js";
-import { scopeBinding, type ManagedProjection } from "../library-state.js";
-import { makeProjectionId } from "../entity-ids.js";
+import type { Digest, InstallDestination } from "../../vocabulary.js";
+import { scopeBinding, type InstalledSkill } from "../library-state.js";
+import { makeInstalledSkillId } from "../entity-ids.js";
 import type { SkillId } from "../entity-ids.js";
 import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
-export class ProjectionInvalid
-  extends Data.TaggedError("Library.ProjectionInvalid")<{
+export class InstalledSkillInvalid
+  extends Data.TaggedError("Library.InstalledSkillInvalid")<{
     detail: string;
   }>
   implements SkitFailure
@@ -36,7 +39,7 @@ export class ProjectionInvalid
 
 /** Reconcile one Binding; return the number of Skill copies written. Caller owns the writer lock. */
 export const projectBindingEffect = Effect.fn("Library.projectBinding")(function* (options: {
-  target: ProjectionTarget;
+  target: InstallDestination;
   scope?: { kind: "global" } | { kind: "repository"; root: string };
   root: string;
   variantsPath: string;
@@ -45,7 +48,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
   /** The existing copies the operator chose to take custody of, as previewed. */
-  adoption?: ProjectionAdoption;
+  adoption?: InstalledSkillAdoption;
   /** Adopt unmanaged copies that already hold exactly the projected bytes. */
   adoptIdentical?: boolean;
   restoreNativeDeletedSkills?: readonly string[];
@@ -56,7 +59,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const state = yield* store.load;
   const scope = options.scope ?? { kind: "global" as const };
   const binding = scopeBinding(state, scope);
-  if (binding === undefined) return yield* new ProjectionInvalid({ detail: "Binding is missing" });
+  if (binding === undefined)
+    return yield* new InstalledSkillInvalid({ detail: "Binding is missing" });
 
   const boundSkillIds = bindingSkillIds(state, binding).filter(
     (id) => options.onlySkillIds === undefined || options.onlySkillIds.includes(id),
@@ -71,7 +75,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         : [{ skill, version, tree: backing.copy, member: backing.member }];
     });
   if (selected.length !== boundSkillIds.length)
-    return yield* new ProjectionInvalid({
+    return yield* new InstalledSkillInvalid({
       detail: "Binding selects a Skill without a selected retained Version",
     });
 
@@ -83,7 +87,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     ...state.projections.filter((item) => item.target === options.target).map((item) => item.root),
     ...state.local_bindings.map((item) => item.scope.root),
   ])) {
-    const identity = yield* projectionTargetPathIdentityEffect(root).pipe(
+    const identity = yield* installDestinationPathIdentityEffect(root).pipe(
       Effect.orElseSucceed(() => ({
         comparisonKey: `path:${resolve(root)}`,
         canonicalPath: resolve(root),
@@ -92,7 +96,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     rootKeys.set(root, identity.comparisonKey);
     canonicalRoots.set(root, identity.canonicalPath ?? resolve(root));
   }
-  const atTarget = (projection: ManagedProjection) =>
+  const atTarget = (projection: InstalledSkill) =>
     projection.target === options.target &&
     (options.onlySkillIds === undefined || options.onlySkillIds.includes(projection.skill_id)) &&
     rootKeys.get(projection.root) === rootKeys.get(options.root);
@@ -103,7 +107,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
             projection.target === options.target &&
             !atTarget(projection) &&
             boundSkillIds.includes(projection.skill_id) &&
-            !repositorySelectsProjection(state, projection) &&
+            !repositorySelectsInstalledSkill(state, projection) &&
             !state.local_bindings.some(
               (local) =>
                 bindingSkillIds(state, local).includes(projection.skill_id) &&
@@ -114,14 +118,14 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
             ),
         )
       : [];
-  const retirementMessage = (projection: ManagedProjection) =>
+  const retirementMessage = (projection: InstalledSkill) =>
     `Refusing to relocate modified Skill from ${projection.path}`;
   // Refuse an edited former copy before creating another installation or removing any old copy.
   for (const projection of former) {
-    if ((yield* projectionCustodyEffect(projection)).kind === "conflicted")
-      return yield* new ProjectionRetireConflict({ detail: retirementMessage(projection) });
+    if ((yield* installedSkillCustodyEffect(projection)).kind === "conflicted")
+      return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(projection) });
   }
-  const result = yield* withProjectionMutationEffect(
+  const result = yield* withInstalledSkillMutationEffect(
     state,
     {
       rootFor: () => options.root,
@@ -151,21 +155,21 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           mutation.state.projections.length,
           ...mutation.state.projections.filter((item) => !atTarget(item)),
         );
-        const toRetire: ManagedProjection[] = [];
+        const toRetire: InstalledSkill[] = [];
         for (const item of selected) {
-          const source = yield* projectionSourceEffect(
+          const source = yield* installedSkillSourceEffect(
             mutation.state,
             store.originalsPath,
             item.skill,
             item.version,
           );
           if (source.kind === "invalid")
-            return yield* new ProjectionInvalid({ detail: source.detail });
+            return yield* new InstalledSkillInvalid({ detail: source.detail });
           const previousRows = state.projections.filter(
             (candidate) => candidate.skill_id === item.skill.skill_id && atTarget(candidate),
           );
           const priorProjection = previousRows[0];
-          const projectionId = priorProjection?.projection_id ?? makeProjectionId();
+          const projectionId = priorProjection?.projection_id ?? makeInstalledSkillId();
           const policy = binding.invocation_policies?.[item.skill.skill_id];
           const projected = yield* mutation.project({
             installation: { libraryPath: source.libraryPath },
@@ -213,8 +217,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         }
         // Finish the whole installation batch before removing any former working copy.
         for (const old of toRetire) {
-          if ((yield* projectionCustodyEffect(old)).kind === "conflicted")
-            return yield* new ProjectionRetireConflict({ detail: retirementMessage(old) });
+          if ((yield* installedSkillCustodyEffect(old)).kind === "conflicted")
+            return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(old) });
         }
         for (const old of toRetire) {
           yield* mutation.retire(old, "throw", retirementMessage(old));

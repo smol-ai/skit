@@ -3,12 +3,12 @@ import type { PlatformError } from "effect/PlatformError";
 import { dirname, join } from "node:path";
 
 import type { HarnessName, InvocationPolicy } from "../contracts.js";
-import { HarnessMetadataInvalid, ProjectionFileMissing } from "../failures.js";
+import { HarnessMetadataInvalid, InstalledSkillFileMissing } from "../failures.js";
 import { invocationMetadataAdapters } from "./invocation-metadata.js";
 
 export type HarnessInvocationWriteFailure =
   | HarnessMetadataInvalid
-  | ProjectionFileMissing
+  | InstalledSkillFileMissing
   | PlatformError;
 
 /**
@@ -37,7 +37,7 @@ export function applyHarnessInvocationPolicyEffect(
         ),
       );
     if (text === undefined && adapter.required)
-      return yield* Effect.fail(new ProjectionFileMissing({ path }));
+      return yield* Effect.fail(new InstalledSkillFileMissing({ path }));
     const next = yield* Effect.fromResult(adapter.write(text, policy, path));
     if (next === null) {
       if (text === undefined) return false;

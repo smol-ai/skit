@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest";
 import {
   inspectOwnershipMarkerEffect,
   MachineSettings,
-  ProjectionRootNotWritable,
+  SkillsDirectoryNotWritable,
   skitLayer,
 } from "@smolai/skit-core";
 import { setupApplyCommand, setupCommand } from "../src/handlers/library/setup.js";
@@ -132,7 +132,7 @@ it.effect(
       const refused = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
         .pipe(denied);
-      assert.instanceOf(failure(refused), ProjectionRootNotWritable);
+      assert.instanceOf(failure(refused), SkillsDirectoryNotWritable);
       assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
 
       const retained = yield* f

@@ -2,8 +2,8 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import {
-  retainChangedProjectionEffect,
-  type ManagedProjection,
+  retainChangedInstalledSkillEffect,
+  type InstalledSkill,
   InvalidLibraryState,
   LibraryStore,
   deterministicTreeHashEffect,
@@ -14,7 +14,7 @@ import {
   retainObservedCollectionEffect,
   withLibraryWriter,
   LibraryState,
-  type ProjectionTarget,
+  type InstallDestination,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
@@ -118,9 +118,9 @@ export const devices = Effect.gen(function* () {
         );
       }),
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
-      retainProjectionEdit: (projection: ManagedProjection) =>
+      retainProjectionEdit: (projection: InstalledSkill) =>
         Effect.gen(function* () {
-          return yield* retainChangedProjectionEffect({
+          return yield* retainChangedInstalledSkillEffect({
             skillId: projection.skill_id,
             projectionId: projection.projection_id,
             path: projection.path,
@@ -216,7 +216,7 @@ export const devices = Effect.gen(function* () {
           keepEnabled?: readonly string[];
           deviceSelection?: Parameters<typeof syncLibraryEffect>[0]["deviceSelection"];
           inventory?: Parameters<typeof syncLibraryEffect>[0]["inventory"];
-          rootFor?: (target: ProjectionTarget) => string | undefined;
+          rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
         syncLibraryEffect({

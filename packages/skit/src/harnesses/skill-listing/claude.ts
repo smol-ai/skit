@@ -1,8 +1,8 @@
 import { Config, Effect, FileSystem, Option, Schema } from "effect";
 import { basename, dirname, join, resolve } from "node:path";
 import { platform } from "node:os";
-import { harnessProfiles, resolveHarnessRoot } from "../catalog.js";
-import type { HarnessRootOverrides, SkillListingContract } from "../contracts.js";
+import { harnessProfiles, resolveSkillsDirectory } from "../catalog.js";
+import type { SkillsDirectoryOverrides, SkillListingContract } from "../contracts.js";
 import { parseSkillFrontmatter } from "../frontmatter.js";
 import { modelContextWindow } from "../../models/model-context-windows.js";
 import type { LibraryState } from "../../library/library-state.js";
@@ -12,7 +12,7 @@ export interface ClaudeListingOptions {
   readonly cwd: string;
   readonly home: string;
   readonly configHome: string;
-  readonly overrides?: HarnessRootOverrides;
+  readonly overrides?: SkillsDirectoryOverrides;
 }
 
 const Settings = Schema.Struct({
@@ -323,7 +323,7 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
         ...harnessProfiles["claude-code"].roots
           .filter((root) => root.readable && root.scope === "project")
           .map((root) => ({
-            root: resolveHarnessRoot(root, {
+            root: resolveSkillsDirectory(root, {
               home: options.home,
               configHome: options.configHome,
               repository: current,

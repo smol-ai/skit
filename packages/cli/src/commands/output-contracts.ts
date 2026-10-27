@@ -35,9 +35,9 @@ import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 import { RepositoryPolicyResult } from "../workflows/library/setup-contract.js";
 import {
-  ProjectionRetentionPlan,
-  ProjectionRetentionResult,
-} from "../workflows/library/projection-retention-contract.js";
+  InstalledSkillRetentionPlan,
+  InstalledSkillRetentionResult,
+} from "../workflows/library/installed-skill-retention-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
 
@@ -127,11 +127,11 @@ export const outputContracts = {
   updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),
   projectionRetention: effectOutput(
     "skit.update.projection-retention.v2",
-    ProjectionRetentionResult,
+    InstalledSkillRetentionResult,
   ),
   projectionRetentionPlan: effectOutput(
     "skit.update.projection-retention.plan.v2",
-    ProjectionRetentionPlan,
+    InstalledSkillRetentionPlan,
   ),
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),

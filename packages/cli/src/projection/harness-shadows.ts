@@ -7,10 +7,14 @@ import {
   LinkStat,
   harnessDrivers,
   parseSkillFrontmatter,
-  resolveHarnessRoot,
+  resolveSkillsDirectory,
   type SkitBindingScope,
 } from "@smolai/skit-core";
-import { activeProjectionTargetsEffect, bindingRoot, type InventoryRootOptions } from "./roots.js";
+import {
+  activeInstallDestinationsEffect,
+  bindingRoot,
+  type InventoryRootOptions,
+} from "./roots.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export const SkillAlias = Schema.Struct({
@@ -37,7 +41,7 @@ export const HarnessShadow = Schema.Struct({
 });
 export type HarnessShadow = typeof HarnessShadow.Type;
 /** Each Harness's readable Skill roots for a scope; a global override stands in for its own. */
-export function readableHarnessRoots(
+export function readableSkillsDirectories(
   options: InventoryRootOptions,
   scope: SkitBindingScope,
   harnesses: readonly HarnessName[] = HarnessName.literals,
@@ -49,7 +53,7 @@ export function readableHarnessRoots(
         (root) => root.readable && root.scope === (scope.kind === "global" ? "global" : "project"),
       )
       .map((root) =>
-        resolveHarnessRoot(root, {
+        resolveSkillsDirectory(root, {
           home: options.home,
           configHome: options.configHome,
           ...(scope.kind === "repository" ? { repository: scope.root } : {}),
@@ -169,8 +173,8 @@ export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(func
   errors?: ShadowObservationError[],
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const targets = yield* activeProjectionTargetsEffect(options);
-  const roots = readableHarnessRoots(options, scope);
+  const targets = yield* activeInstallDestinationsEffect(options);
+  const roots = readableSkillsDirectories(options, scope);
   const destinations = targets.flatMap((target) =>
     names.map((name) => join(bindingRoot(target, scope, options), name)),
   );
@@ -224,8 +228,8 @@ export const observeHarnessShadows = Effect.fn("Projection.observeShadows")(func
 });
 
 /** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
-export class ProjectionWouldReplaceLink
-  extends Data.TaggedError("ProjectionWouldReplaceLink")<{ links: readonly string[] }>
+export class InstalledSkillWouldReplaceLink
+  extends Data.TaggedError("InstalledSkillWouldReplaceLink")<{ links: readonly string[] }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -237,8 +241,8 @@ export class ProjectionWouldReplaceLink
   }
 }
 
-export class ProjectionWouldDuplicate
-  extends Data.TaggedError("ProjectionWouldDuplicate")<{
+export class InstalledSkillWouldDuplicate
+  extends Data.TaggedError("InstalledSkillWouldDuplicate")<{
     shadows: readonly HarnessShadow[];
   }>
   implements SkitFailure

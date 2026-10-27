@@ -17,7 +17,7 @@ import {
   LibraryApiRejected,
   LibraryManifestTooNew,
 } from "../src/workflows/library/library-sync-api.js";
-import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-projections.js";
+import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-installed-skills.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import {
   assertDiskUnchanged,

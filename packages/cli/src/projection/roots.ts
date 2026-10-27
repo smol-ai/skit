@@ -3,14 +3,14 @@ import { Effect, Record } from "effect";
 import {
   HarnessName,
   harnessDrivers,
-  projectionRoot,
-  projectionTargetProfiles,
-  projectionTargetRoot,
-  resolveHarnessRoot,
+  installSkillsDirectory,
+  installDestinationProfiles,
+  installDestinationDirectory,
+  resolveSkillsDirectory,
   deduplicateInventoryRoots,
   pathIsWithin,
-  type HarnessRootOverrides,
-  type ProjectionTarget,
+  type SkillsDirectoryOverrides,
+  type InstallDestination,
   type SkitBindingScope,
   type LibraryState,
   type InventoryScanRoot,
@@ -21,14 +21,14 @@ export interface InventoryRootOptions {
   readonly home: string;
   readonly configHome: string;
   /** Codex's override is the shared `.agents/skills` root, which Codex reads natively. */
-  readonly overrides: HarnessRootOverrides;
+  readonly overrides: SkillsDirectoryOverrides;
 }
 
 /** Reuse a repository's own route, excluding routes owned by a nested repository Binding. */
-export function existingRepositoryProjectionRoot(
+export function existingRepositorySkillsDirectory(
   state: LibraryState,
   binding: RepositoryBinding,
-  target: ProjectionTarget,
+  target: InstallDestination,
 ): string | undefined {
   return state.projections.find(
     (projection) =>
@@ -45,14 +45,14 @@ export function existingRepositoryProjectionRoot(
 
 /** Resolve one target's writable physical Skill root for a Scope. */
 export function bindingRoot(
-  target: ProjectionTarget,
+  target: InstallDestination,
   scope: SkitBindingScope,
   options: InventoryRootOptions,
 ): string {
-  const override = options.overrides[projectionTargetProfiles[target]]?.[0];
+  const override = options.overrides[installDestinationProfiles[target]]?.[0];
   if (scope.kind === "global" && override !== undefined) return resolve(override);
   return resolve(
-    projectionTargetRoot(target, scope.kind === "global" ? "global" : "project", {
+    installDestinationDirectory(target, scope.kind === "global" ? "global" : "project", {
       home: options.home,
       configHome: options.configHome,
       ...(scope.kind === "repository" ? { repository: scope.root } : {}),
@@ -61,20 +61,20 @@ export function bindingRoot(
 }
 
 /** The targets this device materializes into: `.agents` always, `.claude` only with Claude Code. */
-export const activeProjectionTargetsEffect = Effect.fn("Projection.activeTargets")(function* (
-  options: InventoryRootOptions,
-) {
-  const detected = yield* detectInstalledHarnessesEffect({
-    home: options.home,
-    configHome: options.configHome,
-    overrides: options.overrides,
-  });
-  return activeProjectionTargets(detected);
-});
+export const activeInstallDestinationsEffect = Effect.fn("Projection.activeInstallDestinations")(
+  function* (options: InventoryRootOptions) {
+    const detected = yield* detectInstalledHarnessesEffect({
+      home: options.home,
+      configHome: options.configHome,
+      overrides: options.overrides,
+    });
+    return activeInstallDestinations(detected);
+  },
+);
 
-export const activeProjectionTargets = (
+export const activeInstallDestinations = (
   detected: readonly HarnessName[],
-): readonly ProjectionTarget[] =>
+): readonly InstallDestination[] =>
   detected.includes("claude-code") ? ["agents", "claude"] : ["agents"];
 
 /** Every Harness's own global roots, plus the target roots of each repository Binding. */
@@ -92,16 +92,16 @@ export function selectInventoryRoots(
           ? [
               ...driver.profile.roots
                 .filter((root) => root.scope === "global" && root.readable)
-                .map((root) => resolveHarnessRoot(root, context)),
+                .map((root) => resolveSkillsDirectory(root, context)),
               ...overrides,
             ]
           : overrides.length > 0
             ? overrides
-            : [projectionRoot(harness, "global", context)];
+            : [installSkillsDirectory(harness, "global", context)];
       return roots.flatMap((root) => (root === null ? [] : [{ harness, root: resolve(root) }]));
     }),
     ...state.local_bindings.flatMap((binding) =>
-      Record.toEntries(projectionTargetProfiles).map(([target, harness]) => ({
+      Record.toEntries(installDestinationProfiles).map(([target, harness]) => ({
         harness,
         root: bindingRoot(target, binding.scope, options),
       })),

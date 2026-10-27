@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import {
   HarnessName,
   harnessDrivers,
-  resolveHarnessRoot,
-  type HarnessRootOverrides,
+  resolveSkillsDirectory,
+  type SkillsDirectoryOverrides,
 } from "@smolai/skit-core";
 
 export function harnessLabel(harness: HarnessName): string {
@@ -16,7 +16,7 @@ export function harnessLabel(harness: HarnessName): string {
 export interface HarnessProbeOptions {
   home: string;
   configHome?: string;
-  overrides?: HarnessRootOverrides;
+  overrides?: SkillsDirectoryOverrides;
   /** Whether a filesystem marker is present. Detection is a pure decision over this probe. */
   exists: (path: string) => boolean;
 }
@@ -28,7 +28,7 @@ function installMarkers(harness: HarnessName, context: { home: string; configHom
     (root) => root.scope === "global" && root.role === "native",
   );
   return [
-    ...(native ? [dirname(resolveHarnessRoot(native, context))] : []),
+    ...(native ? [dirname(resolveSkillsDirectory(native, context))] : []),
     ...driver.installMarkers,
   ];
 }

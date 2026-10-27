@@ -10,7 +10,7 @@ export interface ObservationPathIdentity {
   comparisonKey: string;
 }
 
-export interface ProjectionTargetPathIdentity {
+export interface InstallDestinationPathIdentity {
   /** Absolute configured or routed path retained for collision diagnostics. */
   declaredPath: string;
   /** Byte-faithful physical path. Absent until the complete target resolves. */
@@ -19,9 +19,9 @@ export interface ProjectionTargetPathIdentity {
   comparisonKey: string;
 }
 
-export interface ProjectionTargetCandidateGroup {
+export interface InstallDestinationCandidateGroup {
   comparisonKey: string;
-  candidates: ProjectionTargetPathIdentity[];
+  candidates: InstallDestinationPathIdentity[];
   /** A lone unresolved candidate may materialize normally; only competing declarations block. */
   ambiguous: boolean;
 }
@@ -112,9 +112,9 @@ function nearestExistingAncestor(
  * filesystem proves an alternate spelling resolves to that same ancestor. The comparison key is
  * evidence for pre-mutation collision detection, not a persisted identity.
  */
-export function projectionTargetPathIdentityEffect(
+export function installDestinationPathIdentityEffect(
   path: string,
-): Effect.Effect<ProjectionTargetPathIdentity, PlatformError, LinkStat> {
+): Effect.Effect<InstallDestinationPathIdentity, PlatformError, LinkStat> {
   return Effect.gen(function* () {
     const probe = yield* LinkStat;
     const declaredPath = resolve(path);
@@ -142,13 +142,13 @@ export function projectionTargetPathIdentityEffect(
 }
 
 /** Group possible aliases without treating a single new target as ambiguous. */
-export function groupProjectionTargetCandidatesEffect(
+export function groupInstallDestinationCandidatesEffect(
   paths: readonly string[],
-): Effect.Effect<ProjectionTargetCandidateGroup[], PlatformError, LinkStat> {
+): Effect.Effect<InstallDestinationCandidateGroup[], PlatformError, LinkStat> {
   return Effect.gen(function* () {
-    const groups = new Map<string, ProjectionTargetPathIdentity[]>();
+    const groups = new Map<string, InstallDestinationPathIdentity[]>();
     for (const path of paths) {
-      const candidate = yield* projectionTargetPathIdentityEffect(path);
+      const candidate = yield* installDestinationPathIdentityEffect(path);
       const group = groups.get(candidate.comparisonKey) ?? [];
       group.push(candidate);
       groups.set(candidate.comparisonKey, group);

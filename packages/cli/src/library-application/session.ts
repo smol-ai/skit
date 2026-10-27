@@ -1,4 +1,4 @@
-import { ProjectionWouldDuplicate } from "../projection/harness-shadows.js";
+import { InstalledSkillWouldDuplicate } from "../projection/harness-shadows.js";
 import type { SkillMetadata } from "./skill-metadata.js";
 import {
   retainedTreePath,
@@ -19,7 +19,7 @@ import { invocationReadModel, type InvocationReadModel } from "../invocation/rea
 import type { AuthorInvocationRead } from "../invocation/library-source.js";
 import { bindingRowLabel, destinationLabel } from "./read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
-import type { ProjectionOptions } from "../workflows/library/projection-options.js";
+import type { InstalledSkillOptions } from "../workflows/library/installed-skill-options.js";
 import {
   applyBindingChanges,
   openBindingChangeSelection,
@@ -196,7 +196,7 @@ const factFromPlan = (plan: BindingChangePlan["changes"][number]): PreviewFacts 
 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   state: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   intent: BindingChangeIntent,
   policies: readonly InvocationReadModel[] = [],
 ) {
@@ -210,7 +210,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
       const plan = yield* selection.preview(intent, configuration);
       for (const change of plan.changes)
         if (change.shadows?.length)
-          return yield* new ProjectionWouldDuplicate({ shadows: change.shadows });
+          return yield* new InstalledSkillWouldDuplicate({ shadows: change.shadows });
       return plan;
     }),
   );
@@ -257,7 +257,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
 
 export function proposeLibraryEnable(
   state: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
   selection: { readonly scope: Scope; readonly invocation?: InvocationOption },
 ) {
@@ -279,7 +279,7 @@ export function proposeLibraryEnable(
 
 export function proposeLibraryDisable(
   state: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
   bindings: readonly LibraryBindingRow[],
 ) {
@@ -297,7 +297,7 @@ export function libraryCollectionScopes(state: LibrarySessionState, collectionId
 /** Whole-Collection intent follows future Source membership changes. */
 export function proposeLibraryCollectionChange(
   state: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   collectionId: string,
   enabled: boolean,
   scopes: readonly Scope[],
@@ -312,7 +312,7 @@ export function proposeLibraryCollectionChange(
 
 export function proposeLibraryInvocation(
   state: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
   binding: LibraryBindingRow,
   invocation: InvocationOption,

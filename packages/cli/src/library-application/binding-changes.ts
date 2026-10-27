@@ -4,10 +4,10 @@ import {
   bindingShadowCheckSkills,
   LinkStat,
   deterministicTreeHashEffect,
-  ensureProjectionRootWritable,
+  ensureSkillsDirectoryWritable,
   inspectOwnershipMarkerEffect,
-  projectionNameEffect,
-  type ProjectionTarget,
+  installedSkillNameEffect,
+  type InstallDestination,
   replaceScopeBinding,
   pruneEmptyBindings,
   lastSavedLibraryState,
@@ -17,22 +17,22 @@ import {
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
-  type ProjectionAdoption,
+  type InstalledSkillAdoption,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import {
-  activeProjectionTargetsEffect,
+  activeInstallDestinationsEffect,
   bindingRoot,
   type InventoryRootOptions,
 } from "../projection/roots.js";
 import {
   isEntryLink,
   observeHarnessShadows,
-  ProjectionWouldDuplicate,
-  ProjectionWouldReplaceLink,
+  InstalledSkillWouldDuplicate,
+  InstalledSkillWouldReplaceLink,
   type ShadowObservationError,
 } from "../projection/harness-shadows.js";
-import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
+import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import {
   calculateBindingChange,
   expandBindingIntent,
@@ -59,7 +59,7 @@ export interface BindingChangeRequest extends BindingSelection {
     readonly ino: number;
     readonly linkTarget?: string;
   }[];
-  readonly adoption?: ProjectionAdoption;
+  readonly adoption?: InstalledSkillAdoption;
 }
 
 export type BindingChangeConfiguration = InventoryRootOptions;
@@ -79,7 +79,7 @@ const preparedPlans = new WeakMap<
     requests: readonly BindingChangeRequest[];
     configuration: BindingChangeConfiguration;
     repairs: readonly boolean[];
-    targets: readonly ProjectionTarget[];
+    targets: readonly InstallDestination[];
   }
 >();
 
@@ -137,7 +137,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   state: LibraryState,
   options: BindingChangeRequest,
   configuration: BindingChangeConfiguration,
-  targets: readonly ProjectionTarget[],
+  targets: readonly InstallDestination[],
 ) {
   const { plan, skillIds, newlyEnabledSkills } = yield* calculateBindingChange(state, options);
   const { scope, bindings, changed } = plan;
@@ -153,7 +153,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
     : [];
   // Apply settles these only once it has staged SKIT's copy to compare; a preview can say they
   // are there. A link at a destination is a shadow, reported above.
-  const unmanaged: Array<{ target: ProjectionTarget; path: string }> = [];
+  const unmanaged: Array<{ target: InstallDestination; path: string }> = [];
   if (options.enabled) {
     const fs = yield* FileSystem.FileSystem;
     for (const target of targets) {
@@ -161,7 +161,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
       for (const skillId of skillIds) {
         const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
         if (skill === undefined) continue;
-        const path = join(root, yield* projectionNameEffect(skill.name));
+        const path = join(root, yield* installedSkillNameEffect(skill.name));
         if (!(yield* fs.exists(path))) continue;
         if (Option.isSome(yield* Effect.option(fs.readLink(path)))) continue;
         if ((yield* inspectOwnershipMarkerEffect(path)).kind === "valid") continue;
@@ -216,7 +216,7 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     overrides: structuredClone(configuration.overrides),
   };
   const captured = structuredClone(requests);
-  const targets = yield* activeProjectionTargetsEffect(routing);
+  const targets = yield* activeInstallDestinationsEffect(routing);
   let projected = current;
   const changes = [];
   for (const request of captured) {
@@ -282,9 +282,9 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   options: BindingChangeRequest,
   configuration: BindingChangeConfiguration,
   repair: boolean,
-  activeTargets: readonly ProjectionTarget[],
+  activeTargets: readonly InstallDestination[],
 ) {
-  const currentTargets = yield* activeProjectionTargetsEffect(configuration);
+  const currentTargets = yield* activeInstallDestinationsEffect(configuration);
   if (
     currentTargets.length !== activeTargets.length ||
     currentTargets.some((target, index) => target !== activeTargets[index])
@@ -332,7 +332,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       }
       if (aliases.length) remaining.push({ ...shadow, aliases });
     }
-    if (remaining.length) return yield* new ProjectionWouldDuplicate({ shadows: remaining });
+    if (remaining.length) return yield* new InstalledSkillWouldDuplicate({ shadows: remaining });
   }
   if (options.enabled && options.allowDuplicate) {
     const destinations: string[] = [];
@@ -344,22 +344,22 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
         .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
         .map((alias) => alias.path),
     );
-    if (links.length) return yield* new ProjectionWouldReplaceLink({ links });
+    if (links.length) return yield* new InstalledSkillWouldReplaceLink({ links });
   }
   // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
   // saved, so enabling never records intent its copies cannot follow.
   const roots = activeTargets.map((target) => bindingRoot(target, plan.scope, configuration));
-  const destinations: { target: ProjectionTarget; path: string }[] = [];
+  const destinations: { target: InstallDestination; path: string }[] = [];
   for (const target of activeTargets)
     for (const name of plan.skills)
       destinations.push({
         target,
         path: join(
           bindingRoot(target, plan.scope, configuration),
-          yield* projectionNameEffect(name),
+          yield* installedSkillNameEffect(name),
         ),
       });
-  if (options.enabled) for (const root of roots) yield* ensureProjectionRootWritable(root);
+  if (options.enabled) for (const root of roots) yield* ensureSkillsDirectoryWritable(root);
   if (plan.changed) {
     let next = current;
     for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);
@@ -372,7 +372,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   // Defects and interruption retain their original Effect semantics.
   const reconciled = yield* Effect.result(
     Effect.gen(function* () {
-      yield* reconcileLibraryProjections({
+      yield* updateInstalledSkills({
         roots: configuration,
         rootFor: (target) =>
           activeTargets.includes(target)

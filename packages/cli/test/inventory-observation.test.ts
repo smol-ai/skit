@@ -7,7 +7,7 @@ import {
   LibraryStore,
   libraryDoctorReport,
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
   observeInventory,
@@ -94,7 +94,7 @@ it.effect.each([true, false])(
           ? {
               schemaVersion: 2,
               projectionPolicyVersion: 1,
-              projection_id: makeProjectionId(),
+              projection_id: makeInstalledSkillId(),
               collection_id: makeCollectionId(),
               skill_id: makeSkillId(),
               skill_version_id: makeSkillVersionId(),

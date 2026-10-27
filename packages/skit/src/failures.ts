@@ -271,8 +271,8 @@ export class RegistryNotConfigured
 // duplicate identity profile — which indicate a defect here rather than something an operator
 // did, and are deliberately not part of any error channel.
 
-export class UnsafeProjectionName
-  extends Data.TaggedError("UnsafeProjectionName")<{
+export class UnsafeInstalledSkillName
+  extends Data.TaggedError("UnsafeInstalledSkillName")<{
     name: string;
   }>
   implements SkitFailure
@@ -285,8 +285,8 @@ export class UnsafeProjectionName
   }
 }
 
-export class UnsafeProjectionBackups
-  extends Data.TaggedError("UnsafeProjectionBackups")<{
+export class UnsafeInstalledSkillBackups
+  extends Data.TaggedError("UnsafeInstalledSkillBackups")<{
     path: string;
   }>
   implements SkitFailure
@@ -360,8 +360,8 @@ export class UnknownInstalledSkill
   }
 }
 
-export class NoProjectionRoot
-  extends Data.TaggedError("NoProjectionRoot")<{ target: string }>
+export class NoSkillsDirectory
+  extends Data.TaggedError("NoSkillsDirectory")<{ target: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -379,8 +379,8 @@ export class NoProjectionRoot
  * Agent sandboxes do this routinely: Codex's default sandbox keeps `.agents` read-only even inside
  * its writable workspace, so the remediation names that case before ordinary permissions.
  */
-export class ProjectionRootNotWritable
-  extends Data.TaggedError("ProjectionRootNotWritable")<{ root: string }>
+export class SkillsDirectoryNotWritable
+  extends Data.TaggedError("SkillsDirectoryNotWritable")<{ root: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -507,8 +507,8 @@ export class NotAnAuthorWorkspace
   }
 }
 
-export class ProjectionFileMissing
-  extends Data.TaggedError("ProjectionFileMissing")<{
+export class InstalledSkillFileMissing
+  extends Data.TaggedError("InstalledSkillFileMissing")<{
     path: string;
   }>
   implements SkitFailure
@@ -560,8 +560,8 @@ export class RetainedContentInvalid
  * or a rematerialization. The condition is the same one either way, and naming it means callers
  * match on that rather than on a shared CONFLICT code.
  */
-export class ProjectionRetireConflict
-  extends Data.TaggedError("ProjectionRetireConflict")<{
+export class InstalledSkillRetireConflict
+  extends Data.TaggedError("InstalledSkillRetireConflict")<{
     detail: string;
   }>
   implements SkitFailure

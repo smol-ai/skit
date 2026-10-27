@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Effect, Schema, Struct } from "effect";
 import { isAbsolute, resolve } from "node:path";
-import { ProjectionId, SkillId, SkillVersionId } from "./entity-ids.js";
+import { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
   Acquisition,
   Binding,
@@ -14,7 +14,7 @@ import {
   librarySnapshotDigests,
 } from "./library-contracts.js";
 import { HarnessInstallStatus, LibraryDeviceStateFields } from "./store/state-schema.js";
-import { Digest, InvocationPolicy, RecordedProjectionTarget } from "../vocabulary.js";
+import { Digest, InvocationPolicy, RecordedInstallDestination } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
@@ -35,11 +35,11 @@ export const RepositoryBinding = Schema.Struct({
 });
 export interface RepositoryBinding extends Schema.Schema.Type<typeof RepositoryBinding> {}
 
-export const ManagedProjection = Schema.Struct({
-  projection_id: ProjectionId,
+export const InstalledSkill = Schema.Struct({
+  projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  target: RecordedProjectionTarget,
+  target: RecordedInstallDestination,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
   expected_digest: Digest,
@@ -49,7 +49,7 @@ export const ManagedProjection = Schema.Struct({
   suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),
   projected_at: Schema.String,
 });
-export interface ManagedProjection extends Schema.Schema.Type<typeof ManagedProjection> {}
+export interface InstalledSkill extends Schema.Schema.Type<typeof InstalledSkill> {}
 
 /**
  * The portable Library this state was last reconciled with. It lives in the same document as the
@@ -84,7 +84,7 @@ export const LibraryState = Schema.Struct({
   acquisitions: Schema.mutable(Schema.Array(Acquisition)),
   global_bindings: Schema.mutable(Schema.Array(DeviceBinding)),
   local_bindings: Schema.mutable(Schema.Array(RepositoryBinding)),
-  projections: Schema.mutable(Schema.Array(ManagedProjection)),
+  projections: Schema.mutable(Schema.Array(InstalledSkill)),
 }).check(
   Schema.makeFilter(
     (state) => {

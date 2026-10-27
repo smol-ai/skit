@@ -1,7 +1,7 @@
 import {
   DeviceBinding,
   InvocationPolicy,
-  ProjectionTarget,
+  InstallDestination,
   RepositoryBinding,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
@@ -34,7 +34,7 @@ export const SetEnabledPlan = Schema.Struct({
    * and exits 12.
    */
   unmanaged_destinations: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ target: ProjectionTarget, path: Schema.String })),
+    Schema.Array(Schema.Struct({ target: InstallDestination, path: Schema.String })),
   ),
   warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
@@ -61,7 +61,7 @@ export const SetEnabledResult = SetEnabledPlan.pipe(
      */
     projections: Schema.Array(
       Schema.Struct({
-        target: ProjectionTarget,
+        target: InstallDestination,
         path: Schema.String,
         status: Schema.String,
       }),

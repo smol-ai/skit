@@ -5,10 +5,10 @@ import {
   harnessDrivers,
   HarnessName,
   observationPathIdentityEffect,
-  resolveHarnessRoot,
+  resolveSkillsDirectory,
   type HarnessProfile,
-  type HarnessRoot,
-  type HarnessRootRole,
+  type SkillsDirectory,
+  type SkillsDirectoryRole,
   type JsonObject,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
@@ -48,7 +48,7 @@ export interface SkillCandidate {
   canonicalPath: string;
   name: string;
   harnesses: readonly HarnessName[];
-  role: HarnessRootRole;
+  role: SkillsDirectoryRole;
   scope: "user" | "project";
   provenance?: AuditObservation["provenance"];
 }
@@ -99,7 +99,7 @@ export const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: In
 
 interface AuditedRoot {
   harnesses: Set<HarnessName>;
-  roles: Set<HarnessRootRole>;
+  roles: Set<SkillsDirectoryRole>;
   scope: "user" | "project";
   path: string;
 }
@@ -115,7 +115,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
   const context = { home, configHome: join(home, ".config"), repository: cwd };
   for (const profile of profiles)
     for (const root of profile.roots.filter((candidate) => candidate.readable)) {
-      const path = resolveHarnessRoot(root as HarnessRoot, context);
+      const path = resolveSkillsDirectory(root as SkillsDirectory, context);
       const scope = root.scope === "global" ? "user" : "project";
       const key = `${scope}\0${(yield* observationPathIdentityEffect(path)).comparisonKey}`;
       const entry = roots.get(key) ?? { harnesses: new Set(), roles: new Set(), scope, path };

@@ -65,7 +65,7 @@ export type SetupCopyConflict =
     };
 
 /** Eligible global copies have harness readers and no repository custody. */
-export const isSetupProjectionTarget = (
+export const isSetupInstallDestination = (
   instance: SetupSkillInstance | undefined,
 ): instance is SetupSkillInstance & { readonly scope: "global" } =>
   instance?.scope === "global" && !instance.git.repository && instance.harnesses.length > 0;
@@ -84,7 +84,7 @@ export function copyConflict(
   const shadows = candidate?.shadows ?? [];
   if (
     !shadows.length ||
-    !isSetupProjectionTarget(instance) ||
+    !isSetupInstallDestination(instance) ||
     candidate?.action === "repository-owned"
   )
     return { kind: "none" };
@@ -99,7 +99,7 @@ export function copyConflict(
           alias.via === "directory" &&
           alias.path === shadow.canonicalPath &&
           copy !== undefined &&
-          isSetupProjectionTarget(copy) &&
+          isSetupInstallDestination(copy) &&
           !copy.git.repository &&
           (copy.owner.kind === "unknown" || copy.owner.kind === "skills-sh") &&
           copy.contentIdentity.observedHash === selectedHash

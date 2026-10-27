@@ -56,7 +56,7 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   }).pipe(Effect.provide(libraryStoreLayer({ home: library.skitHome })));
 });
 
-const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
+const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
   library: ResolvedSkitConfiguration,
   observations: readonly AuditObservation[],
 ) {
@@ -176,7 +176,7 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
   // An audited home other than the configured one has its own Library, unless SKIT_HOME names one.
   const library =
     options.home === undefined ? paths : yield* resolveSkitConfiguration(undefined, home);
-  findings.push(...(yield* auditProjectionCustody(library, skills.observations)));
+  findings.push(...(yield* auditInstalledSkillCustody(library, skills.observations)));
 
   const codex = yield* auditCodex(home, cwd);
   observations.push(...codex.observations);

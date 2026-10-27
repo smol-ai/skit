@@ -7,7 +7,7 @@ import {
   LibraryStore,
   LinkStat,
   MachineSettings,
-  prepareProjectionRebuildEffect,
+  prepareInstalledSkillRebuildEffect,
   skitLayer,
 } from "@smolai/skit-core";
 import { checkSetupGlobalContent } from "../src/library-application/setup-content-custody.js";
@@ -77,9 +77,14 @@ it.effect(
           const store = yield* LibraryStore;
           const state = yield* store.load;
           const prior = state.projections.find((projection) => projection.path === f.successor)!;
-          const rebuilt = yield* prepareProjectionRebuildEffect(state, store.originalsPath, prior, {
-            source: "declared",
-          });
+          const rebuilt = yield* prepareInstalledSkillRebuildEffect(
+            state,
+            store.originalsPath,
+            prior,
+            {
+              source: "declared",
+            },
+          );
           const stage = join(f.root, "reconstructed");
           yield* rebuilt.build(stage);
           expect(yield* recoveryFingerprint(stage, "exclude")).toBe(

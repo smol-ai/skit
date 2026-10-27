@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 import {
   LibraryStore,
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
   Digest,
@@ -185,7 +185,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         ],
         projections: [
           {
-            projection_id: makeProjectionId(),
+            projection_id: makeInstalledSkillId(),
             skill_id: skillId,
             skill_version_id: versionId,
             target: "agents" as const,

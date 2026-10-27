@@ -6,7 +6,7 @@ import {
   CollectionId,
   MachineId,
   OperationId,
-  ProjectionId,
+  InstalledSkillId,
   AdoptionReceiptId,
   RetainedCopyId,
   SkillId,
@@ -46,7 +46,7 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
   assert.strictEqual(Schema.is(SkillVersionId)(ids.version), true);
   assert.strictEqual(Schema.is(RetainedCopyId)(ids.retained), true);
   assert.strictEqual(Schema.is(AcquisitionId)(ids.acquisition), true);
-  assert.strictEqual(Schema.is(ProjectionId)(ids.projection), true);
+  assert.strictEqual(Schema.is(InstalledSkillId)(ids.projection), true);
   assert.strictEqual(Schema.is(MachineId)(ids.machine), true);
   assert.strictEqual(Schema.is(OperationId)(ids.operation), true);
   assert.strictEqual(Schema.is(AdoptionReceiptId)(ids.receipt), true);
@@ -64,7 +64,7 @@ it("uses an explicit timestamp without reading the clock", () => {
     new Date("2026-09-16T00:00:00.000Z"),
     "legacy-projection",
   );
-  assert.strictEqual(Schema.is(ProjectionId)(id), true);
+  assert.strictEqual(Schema.is(InstalledSkillId)(id), true);
   assert.strictEqual(
     new Date(
       Number.parseInt(toUUID(fromString(id)).replaceAll("-", "").slice(0, 12), 16),

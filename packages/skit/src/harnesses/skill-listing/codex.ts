@@ -2,7 +2,7 @@ import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { modelContextWindow } from "../../models/model-context-windows.js";
 import type { LibraryState } from "../../library/library-state.js";
-import type { HarnessRootOverrides } from "../contracts.js";
+import type { SkillsDirectoryOverrides } from "../contracts.js";
 import { invocationMetadataAdapters } from "../invocation-metadata.js";
 import { estimateCodexListing, type CodexListingSkill } from "./codex-allocation.js";
 import type { ListingBudget } from "./contracts.js";
@@ -10,7 +10,7 @@ import { readCodexSkills } from "./codex-discovery.js";
 
 export interface CodexListingOptions {
   readonly cwd: string;
-  readonly overrides?: HarnessRootOverrides;
+  readonly overrides?: SkillsDirectoryOverrides;
 }
 
 const Configuration = Schema.Struct({

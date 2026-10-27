@@ -6,7 +6,7 @@ import {
   prepareLocalAdoption,
   type LocalAdoptionOptions,
 } from "./local-adoption.js";
-import { SetupCopySelection, copyConflict, isSetupProjectionTarget } from "./setup-decisions.js";
+import { SetupCopySelection, copyConflict, isSetupInstallDestination } from "./setup-decisions.js";
 import type { SetupResult } from "./setup-contract.js";
 
 const SetupLocalCustodySelections = Schema.Array(SetupCopySelection);
@@ -97,14 +97,14 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
             instance.path !== selection.sourcePath &&
             observedHash !== undefined &&
             instance.contentIdentity.observedHash === observedHash &&
-            isSetupProjectionTarget(instance),
+            isSetupInstallDestination(instance),
         )
         .map((instance) => instance.path);
       const adoption = yield* prepareLocalAdoption(options, selection, {
         kind: "retain",
         observedHash,
         ...(equalCopies.length ? { equalCopies } : {}),
-        ...(candidate.action === "repository-owned" || !isSetupProjectionTarget(selectedInstance)
+        ...(candidate.action === "repository-owned" || !isSetupInstallDestination(selectedInstance)
           ? {}
           : {
               custody: {

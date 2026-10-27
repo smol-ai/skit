@@ -11,7 +11,7 @@ import {
   refreshLibraryInventory,
 } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
-import { reconcileLibraryProjections } from "../src/workflows/library/projection-reconciliation.js";
+import { updateInstalledSkills } from "../src/workflows/library/update-installed-skills.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 
@@ -323,9 +323,7 @@ it.effect(
       const { fs, home, layer, projected, projection } = yield* boundRawReview;
       const reconciled = yield* writingTo(
         home,
-        reconcileLibraryProjections({ variantsPath: join(home, "variants") }).pipe(
-          Effect.provide(layer),
-        ),
+        updateInstalledSkills({ variantsPath: join(home, "variants") }).pipe(Effect.provide(layer)),
       );
       assert.strictEqual(reconciled.retired, 0);
       assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");

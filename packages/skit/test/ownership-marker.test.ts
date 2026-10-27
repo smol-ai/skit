@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import {
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
@@ -10,7 +10,7 @@ import { parseOwnershipMarker } from "../src/projection/mutation.js";
 const current = {
   schemaVersion: 4,
   projectionPolicyVersion: 1,
-  projection_id: makeProjectionId(),
+  projection_id: makeInstalledSkillId(),
   skill_id: makeSkillId(),
   skill_version_id: makeSkillVersionId(),
   expected_digest: `sha256:${"a".repeat(64)}`,

@@ -19,9 +19,9 @@ import {
   updateExitCode,
 } from "../../library-application/update.js";
 import {
-  prepareProjectionRetention,
-  ProjectionRetentionMissing,
-} from "../../workflows/library/projection-retention.js";
+  prepareInstalledSkillRetention,
+  InstalledSkillRetentionMissing,
+} from "../../workflows/library/installed-skill-retention.js";
 
 const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
 const dryRun = Flag.Boolean("dry-run").pipe(
@@ -44,7 +44,7 @@ export const updateCliCommand = Command.make(
         const projectionSelector = Option.getOrUndefined(input.fromProjection);
         if (projectionSelector !== undefined) {
           if (query === undefined)
-            return yield* new ProjectionRetentionMissing({
+            return yield* new InstalledSkillRetentionMissing({
               message: "A Skill is required with --from-projection",
             });
           const value = yield* renderer.withStatus(
@@ -52,7 +52,7 @@ export const updateCliCommand = Command.make(
               ? "Inspecting changed Projection bytes"
               : "Retaining changed Projection bytes",
             Effect.gen(function* () {
-              const prepared = yield* prepareProjectionRetention(query, projectionSelector);
+              const prepared = yield* prepareInstalledSkillRetention(query, projectionSelector);
               return input.dryRun
                 ? result("projectionRetentionPlan", prepared.preview)
                 : result("projectionRetention", yield* prepared.apply());

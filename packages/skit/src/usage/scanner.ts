@@ -12,7 +12,7 @@ import {
   InvalidUsageOptions,
   type UsageCoverage,
   type UsageOptions,
-  type UsageProjection,
+  type InstalledSkillUsage,
   type UsageReport,
   type UsageRow,
 } from "./contracts.js";
@@ -349,7 +349,7 @@ export const skillUsageLayer = Layer.effect(
         if (options.progress) yield* options.progress(completed, files.length);
       }
       // Resolve only the small observed identity set, never every advertised skill.
-      const projections = new Map<string, UsageProjection[]>();
+      const projections = new Map<string, InstalledSkillUsage[]>();
       for (const projection of options.projections ?? []) {
         const document = projection.path.endsWith("/SKILL.md")
           ? projection.path

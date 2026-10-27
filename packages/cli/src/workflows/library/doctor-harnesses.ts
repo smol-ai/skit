@@ -1,7 +1,7 @@
 import {
   HarnessShadow,
   observeHarnessSkills,
-  readableHarnessRoots,
+  readableSkillsDirectories,
   type ShadowObservationError,
 } from "../../projection/harness-shadows.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
@@ -481,8 +481,8 @@ export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")
   const aliasErrors: ShadowObservationError[] = [];
   const locations = yield* observeHarnessSkills(
     [
-      ...readableHarnessRoots(options, { kind: "global" }),
-      ...readableHarnessRoots(options, { kind: "repository", root: cwd }),
+      ...readableSkillsDirectories(options, { kind: "global" }),
+      ...readableSkillsDirectories(options, { kind: "repository", root: cwd }),
     ],
     { errors: aliasErrors },
   );

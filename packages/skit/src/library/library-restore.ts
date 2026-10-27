@@ -25,7 +25,7 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "./library-contracts.js";
-import { repositorySelectsProjection } from "./installation/retire-unbound.js";
+import { repositorySelectsInstalledSkill } from "./installation/retire-unbound.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class RestoreInvalid
@@ -419,7 +419,7 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
       (!manifest.bindings.some((binding) =>
         bindingSkillIds(manifest, binding).includes(projection.skill_id),
       ) &&
-        !repositorySelectsProjection(current, projection)) ||
+        !repositorySelectsInstalledSkill(current, projection)) ||
       (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
         ? []
         : [`device:${projection.projection_id}:managed-projection`],

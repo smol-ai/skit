@@ -8,9 +8,9 @@ import {
   hashParts,
   inspectOwnershipMarkerEffect,
   LibraryStore,
-  prepareProjectionRebuildEffect,
-  projectionDisplacedEffect,
-  repositorySelectsProjection,
+  prepareInstalledSkillRebuildEffect,
+  installedSkillDisplacedEffect,
+  repositorySelectsInstalledSkill,
   scopeBinding,
   projectBindingEffect,
   FailureTypeId,
@@ -19,7 +19,7 @@ import {
 } from "@smolai/skit-core";
 import { observeSetupFile } from "../../library-application/setup-operation.js";
 import {
-  activeProjectionTargetsEffect,
+  activeInstallDestinationsEffect,
   bindingRoot,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
@@ -98,14 +98,14 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
   const binding = scopeBinding(state, { kind: "global" });
   if (!binding) return [];
   const selected = new Set(bindingSkillIds(state, binding));
-  const targets = yield* activeProjectionTargetsEffect(roots);
+  const targets = yield* activeInstallDestinationsEffect(roots);
   const facts: SetupReconciliationFact[] = [];
   for (const projection of state.projections) {
     const target = projection.target;
     if (
       target === "legacy" ||
       !selected.has(projection.skill_id) ||
-      repositorySelectsProjection(state, projection)
+      repositorySelectsInstalledSkill(state, projection)
     )
       continue;
     const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
@@ -148,7 +148,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       continue;
     }
     if (before.entry === null) {
-      const displaced = yield* projectionDisplacedEffect(projection);
+      const displaced = yield* installedSkillDisplacedEffect(projection);
       facts.push(
         displaced
           ? protect("An unsettled projection backup explains the missing copy")
@@ -209,7 +209,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
     const desired = yield* Effect.result(
       Effect.scoped(
         Effect.gen(function* () {
-          const renderer = yield* prepareProjectionRebuildEffect(
+          const renderer = yield* prepareInstalledSkillRebuildEffect(
             state,
             store.originalsPath,
             { ...projection, skill_version_id: version.skill_version_id },

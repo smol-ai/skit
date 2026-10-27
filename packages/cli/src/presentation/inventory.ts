@@ -3,12 +3,12 @@ import { metadataDate } from "./skill-metadata.js";
 import { basename, dirname, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
 import {
-  projectionTargetHarnesses,
+  installDestinationHarnesses,
   type HarnessName,
   type LibraryInventory,
 } from "@smolai/skit-core";
 import { harnessLabel } from "../harness/catalog.js";
-import { conditionHeadline, projectionStatusLabel } from "./condition-language.js";
+import { conditionHeadline, installedSkillStatusLabel } from "./condition-language.js";
 import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 
 type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
@@ -331,7 +331,7 @@ export function renderInventory(
       harnesses: new Set<HarnessName>(),
     };
     if (projection.target !== "legacy")
-      for (const harness of projectionTargetHarnesses[projection.target])
+      for (const harness of installDestinationHarnesses[projection.target])
         row.harnesses.add(harness);
     row.statuses.add(projection.status);
     managed.set(path, row);
@@ -340,7 +340,7 @@ export function renderInventory(
     add(
       [...row.harnesses],
       path,
-      `  ${row.name} · managed · ${[...row.statuses].sort().map(projectionStatusLabel).join(", ")}\n    ${path}`,
+      `  ${row.name} · managed · ${[...row.statuses].sort().map(installedSkillStatusLabel).join(", ")}\n    ${path}`,
     );
   for (const item of state.unmanaged) {
     const paths = item.paths ?? [item.path];

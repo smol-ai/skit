@@ -6,9 +6,9 @@ import {
   deterministicTreeHashEffect,
   hashParts,
   LibraryStore,
-  prepareProjectionRebuildEffect,
+  prepareInstalledSkillRebuildEffect,
   projectBindingEffect,
-  retainChangedProjectionEffect,
+  retainChangedInstalledSkillEffect,
   scopeBinding,
 } from "@smolai/skit-core";
 import type { SetupReconciliationFact, SetupVersionChoice } from "./setup-contract.js";
@@ -79,7 +79,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const copy = live.find((fact) => fact.path === choice.path && fact.skillId === choice.skillId);
     if (!copy?.currentHash) return yield* new PlanIsStale();
     yield* Effect.scoped(
-      retainChangedProjectionEffect({
+      retainChangedInstalledSkillEffect({
         skillId: copy.skillId,
         projectionId: copy.projectionId,
         path: copy.path,
@@ -100,7 +100,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const policy = scopeBinding(retained, { kind: "global" })?.invocation_policies?.[fact.skillId];
     const digest = yield* Effect.scoped(
       Effect.gen(function* () {
-        const renderer = yield* prepareProjectionRebuildEffect(
+        const renderer = yield* prepareInstalledSkillRebuildEffect(
           retained,
           store.originalsPath,
           { ...projection, skill_version_id: version.skill_version_id },

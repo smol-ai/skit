@@ -3,8 +3,8 @@ import { join } from "node:path";
 import {
   LibraryManifest,
   LibraryState,
-  ManagedProjection,
-  ProjectionId,
+  InstalledSkill,
+  InstalledSkillId,
   SkillId,
   LibraryStore,
   LibraryChanged,
@@ -13,16 +13,16 @@ import {
   bindingSkillIds,
   currentSkillVersion,
   mergeGlobalBindings,
-  projectionCustodyEffect,
-  projectionNameEffect,
-  projectionTargetPathIdentityEffect,
-  repositorySelectsProjection,
-  withProjectionMutationEffect,
-  type ProjectionTarget,
+  installedSkillCustodyEffect,
+  installedSkillNameEffect,
+  installDestinationPathIdentityEffect,
+  repositorySelectsInstalledSkill,
+  withInstalledSkillMutationEffect,
+  type InstallDestination,
   type BindingEntry,
 } from "@smolai/skit-core";
 import { SyncConflictDetail } from "./library-sync-contract.js";
-import { existingRepositoryProjectionRoot } from "../../projection/roots.js";
+import { existingRepositorySkillsDirectory } from "../../projection/roots.js";
 
 const targets = ["agents", "claude"] as const;
 const Candidate = Schema.Struct({
@@ -33,130 +33,128 @@ const Candidate = Schema.Struct({
 });
 
 /** Compare destinations using filesystem evidence, including symlink and case aliases. */
-export const resolveSyncProjectionCollisionsEffect = Effect.fn("Library.sync.projectionCollisions")(
-  function* (
-    manifest: LibraryManifest,
-    rootFor: ((target: ProjectionTarget) => string | undefined) | undefined,
-    keepEnabled: readonly string[] = [],
-    device?: LibraryState,
-  ) {
-    const groups = new Map<string, (typeof Candidate.Type)[]>();
-    const enabled = new Set(
-      manifest.bindings.flatMap((binding) => bindingSkillIds(manifest, binding)),
-    );
-    for (const target of targets) {
-      const root = rootFor?.(target);
-      if (root === undefined) continue;
-      for (const skill of manifest.skills.filter((item) => enabled.has(item.skill_id))) {
-        const path = join(root, yield* projectionNameEffect(skill.name));
-        const identity = yield* projectionTargetPathIdentityEffect(path);
-        const group = groups.get(identity.comparisonKey) ?? [];
-        group.push({ path, skill_id: skill.skill_id, target, global: true });
-        groups.set(identity.comparisonKey, group);
-      }
+export const resolveSyncInstalledSkillCollisionsEffect = Effect.fn(
+  "Library.sync.installedSkillCollisions",
+)(function* (
+  manifest: LibraryManifest,
+  rootFor: ((target: InstallDestination) => string | undefined) | undefined,
+  keepEnabled: readonly string[] = [],
+  device?: LibraryState,
+) {
+  const groups = new Map<string, (typeof Candidate.Type)[]>();
+  const enabled = new Set(
+    manifest.bindings.flatMap((binding) => bindingSkillIds(manifest, binding)),
+  );
+  for (const target of targets) {
+    const root = rootFor?.(target);
+    if (root === undefined) continue;
+    for (const skill of manifest.skills.filter((item) => enabled.has(item.skill_id))) {
+      const path = join(root, yield* installedSkillNameEffect(skill.name));
+      const identity = yield* installDestinationPathIdentityEffect(path);
+      const group = groups.get(identity.comparisonKey) ?? [];
+      group.push({ path, skill_id: skill.skill_id, target, global: true });
+      groups.set(identity.comparisonKey, group);
     }
-    if (device !== undefined) {
-      for (const binding of device.local_bindings) {
-        for (const target of targets) {
-          const root = existingRepositoryProjectionRoot(device, binding, target);
-          if (root === undefined) continue;
-          const ids = new Set(bindingSkillIds(manifest, binding));
-          for (const skill of manifest.skills.filter((item) => ids.has(item.skill_id))) {
-            const path = join(root, yield* projectionNameEffect(skill.name));
-            const identity = yield* projectionTargetPathIdentityEffect(path);
-            const group = groups.get(identity.comparisonKey) ?? [];
-            group.push({ path, skill_id: skill.skill_id, target, global: false });
-            groups.set(identity.comparisonKey, group);
-          }
+  }
+  if (device !== undefined) {
+    for (const binding of device.local_bindings) {
+      for (const target of targets) {
+        const root = existingRepositorySkillsDirectory(device, binding, target);
+        if (root === undefined) continue;
+        const ids = new Set(bindingSkillIds(manifest, binding));
+        for (const skill of manifest.skills.filter((item) => ids.has(item.skill_id))) {
+          const path = join(root, yield* installedSkillNameEffect(skill.name));
+          const identity = yield* installDestinationPathIdentityEffect(path);
+          const group = groups.get(identity.comparisonKey) ?? [];
+          group.push({ path, skill_id: skill.skill_id, target, global: false });
+          groups.set(identity.comparisonKey, group);
         }
       }
     }
-    const collisions = [...groups.values()].filter(
-      (items) => new Set(items.map((item) => `${item.target}:${item.skill_id}`)).size > 1,
+  }
+  const collisions = [...groups.values()].filter(
+    (items) => new Set(items.map((item) => `${item.target}:${item.skill_id}`)).size > 1,
+  );
+  const canChoose = (items: readonly (typeof Candidate.Type)[]) =>
+    items.every((item) => item.global) && new Set(items.map((item) => item.target)).size === 1;
+  const candidates = new Set(
+    collisions.filter(canChoose).flatMap((items) => items.map((item) => item.skill_id)),
+  );
+  const invalid =
+    keepEnabled.some((id) => ![...candidates].some((candidate) => candidate === id)) ||
+    collisions.some(
+      (items) =>
+        new Set(
+          items.filter((item) => keepEnabled.includes(item.skill_id)).map((item) => item.skill_id),
+        ).size > 1,
     );
-    const canChoose = (items: readonly (typeof Candidate.Type)[]) =>
-      items.every((item) => item.global) && new Set(items.map((item) => item.target)).size === 1;
-    const candidates = new Set(
-      collisions.filter(canChoose).flatMap((items) => items.map((item) => item.skill_id)),
-    );
-    const invalid =
-      keepEnabled.some((id) => ![...candidates].some((candidate) => candidate === id)) ||
-      collisions.some(
-        (items) =>
-          new Set(
-            items
-              .filter((item) => keepEnabled.includes(item.skill_id))
-              .map((item) => item.skill_id),
-          ).size > 1,
-      );
-    const disabled = new Set<string>();
-    const conflicts: SyncConflictDetail[] = [];
-    for (const items of collisions) {
-      const selected = items.find((item) => keepEnabled.includes(item.skill_id));
-      if (selected !== undefined && canChoose(items)) {
-        for (const item of items)
-          if (item.skill_id !== selected.skill_id) disabled.add(item.skill_id);
-        continue;
-      }
-      const labels = [...new Set(items.map((item) => item.skill_id))].map((id) => {
-        const skill = manifest.skills.find((item) => item.skill_id === id);
-        const collection = manifest.collections.find(
-          (item) => item.collection_id === skill?.collection_id,
-        );
-        return `${skill?.name ?? id} from ${collection?.label ?? id} (${id})`;
-      });
-      conflicts.push(
-        SyncConflictDetail.make({
-          key: `projection:${items.map((item) => item.path).sort()[0]}:collision`,
-          message: `${labels.join("; ")} use the same destination. ${canChoose(items) ? "Keep one enabled Library-wide with skit sync --apply --keep-enabled <skill-id>. Both remain retained." : "Configure distinct projection roots or disable the competing repository selection before syncing."}`,
-          resolution: canChoose(items) ? "keep-enabled" : "local",
-        }),
-      );
+  const disabled = new Set<string>();
+  const conflicts: SyncConflictDetail[] = [];
+  for (const items of collisions) {
+    const selected = items.find((item) => keepEnabled.includes(item.skill_id));
+    if (selected !== undefined && canChoose(items)) {
+      for (const item of items)
+        if (item.skill_id !== selected.skill_id) disabled.add(item.skill_id);
+      continue;
     }
-    const bindings =
-      disabled.size === 0
-        ? manifest.bindings
-        : mergeGlobalBindings(manifest, [
-            {
-              entries: manifest.bindings.flatMap((binding) =>
-                binding.entries.flatMap((entry): BindingEntry[] => {
-                  const ids = bindingSkillIds(manifest, { entries: [entry] });
-                  if (!ids.some((id) => disabled.has(id))) return [entry];
-                  return ids
-                    .filter((id) => !disabled.has(id))
-                    .map((skill_id) => ({ kind: "skill", skill_id }));
-                }),
-              ),
-            },
-          ]);
-    return {
-      manifest: yield* LibraryManifest.makeEffect({ ...manifest, bindings }),
-      conflicts,
-      invalid,
-    };
-  },
-);
+    const labels = [...new Set(items.map((item) => item.skill_id))].map((id) => {
+      const skill = manifest.skills.find((item) => item.skill_id === id);
+      const collection = manifest.collections.find(
+        (item) => item.collection_id === skill?.collection_id,
+      );
+      return `${skill?.name ?? id} from ${collection?.label ?? id} (${id})`;
+    });
+    conflicts.push(
+      SyncConflictDetail.make({
+        key: `projection:${items.map((item) => item.path).sort()[0]}:collision`,
+        message: `${labels.join("; ")} use the same destination. ${canChoose(items) ? "Keep one enabled Library-wide with skit sync --apply --keep-enabled <skill-id>. Both remain retained." : "Configure distinct projection roots or disable the competing repository selection before syncing."}`,
+        resolution: canChoose(items) ? "keep-enabled" : "local",
+      }),
+    );
+  }
+  const bindings =
+    disabled.size === 0
+      ? manifest.bindings
+      : mergeGlobalBindings(manifest, [
+          {
+            entries: manifest.bindings.flatMap((binding) =>
+              binding.entries.flatMap((entry): BindingEntry[] => {
+                const ids = bindingSkillIds(manifest, { entries: [entry] });
+                if (!ids.some((id) => disabled.has(id))) return [entry];
+                return ids
+                  .filter((id) => !disabled.has(id))
+                  .map((skill_id) => ({ kind: "skill", skill_id }));
+              }),
+            ),
+          },
+        ]);
+  return {
+    manifest: yield* LibraryManifest.makeEffect({ ...manifest, bindings }),
+    conflicts,
+    invalid,
+  };
+});
 
-const SyncProjectionPlan = Schema.Struct({
-  projections: Schema.Array(ManagedProjection),
-  retire: Schema.Array(ProjectionId),
-  remove: Schema.Array(ProjectionId),
+const SyncInstalledSkillPlan = Schema.Struct({
+  projections: Schema.Array(InstalledSkill),
+  retire: Schema.Array(InstalledSkillId),
+  remove: Schema.Array(InstalledSkillId),
   conflicts: Schema.Array(SyncConflictDetail),
   issues: Schema.Array(SyncConflictDetail),
 });
-type SyncProjectionPlan = typeof SyncProjectionPlan.Type;
+type SyncInstalledSkillPlan = typeof SyncInstalledSkillPlan.Type;
 
 /** Preview every affected copy, including repository custody, before any remote write. */
-const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(function* (
+const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkills")(function* (
   current: LibraryState,
   aligned: LibraryState,
   manifest: LibraryManifest,
-  rootFor: ((target: ProjectionTarget) => string | undefined) | undefined,
+  rootFor: ((target: InstallDestination) => string | undefined) | undefined,
   deferDeviceConflicts: boolean,
 ) {
-  const projections: ManagedProjection[] = [];
-  const retire: ProjectionId[] = [];
-  const remove: ProjectionId[] = [];
+  const projections: InstalledSkill[] = [];
+  const retire: InstalledSkillId[] = [];
+  const remove: InstalledSkillId[] = [];
   const conflicts: SyncConflictDetail[] = [];
   const issues: SyncConflictDetail[] = [];
   const enabledIds = new Set(
@@ -207,7 +205,7 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
     const global = manifest.bindings.some((binding) =>
       bindingSkillIds(manifest, binding).includes(projection.skill_id),
     );
-    const repository = repositorySelectsProjection(aligned, projection);
+    const repository = repositorySelectsInstalledSkill(aligned, projection);
     const activeTarget = targets.find((target) => target === projection.target);
     const active =
       activeTarget !== undefined && (rootFor === undefined || rootFor(activeTarget) !== undefined);
@@ -220,8 +218,8 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
       global && !repository && activeTarget !== undefined ? rootFor?.(activeTarget) : undefined;
     const relocating =
       root !== undefined &&
-      (yield* projectionTargetPathIdentityEffect(root)).comparisonKey !==
-        (yield* projectionTargetPathIdentityEffect(projection.root)).comparisonKey;
+      (yield* installDestinationPathIdentityEffect(root)).comparisonKey !==
+        (yield* installDestinationPathIdentityEffect(projection.root)).comparisonKey;
     const changing =
       removing ||
       reidentifying ||
@@ -229,7 +227,7 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
       relocating ||
       (selected !== undefined && selected.skill_version_id !== projection.skill_version_id);
     if (changing) {
-      const custody = yield* projectionCustodyEffect(original);
+      const custody = yield* installedSkillCustodyEffect(original);
       if (custody.kind === "conflicted") {
         if (
           deferDeviceConflicts &&
@@ -311,20 +309,26 @@ const planSyncProjectionsEffect = Effect.fn("Library.sync.planProjections")(func
         : {}),
     });
   }
-  return yield* SyncProjectionPlan.makeEffect({ projections, retire, remove, conflicts, issues });
+  return yield* SyncInstalledSkillPlan.makeEffect({
+    projections,
+    retire,
+    remove,
+    conflicts,
+    issues,
+  });
 });
 
 /**
  * Keep old references durable until portable state and ancestry can be saved together.
  * Saves only onto `current`, the state sync planned from, and returns the state it saved.
  */
-const retireSyncProjectionsEffect = Effect.fn("Library.sync.retireProjections")(function* (
-  plan: SyncProjectionPlan,
+const retireSyncInstalledSkillsEffect = Effect.fn("Library.sync.retireInstalledSkills")(function* (
+  plan: SyncInstalledSkillPlan,
   current: LibraryState,
 ) {
   const store = yield* LibraryStore;
   if (plan.retire.length === 0) return { retired: 0, state: current };
-  const result = yield* withProjectionMutationEffect(
+  const result = yield* withInstalledSkillMutationEffect(
     current,
     {
       rootFor: () => undefined,
@@ -365,7 +369,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
     readonly aligned: LibraryState;
     readonly baseline?: LibraryState;
     readonly manifest: LibraryManifest;
-    readonly rootFor: ((target: ProjectionTarget) => string | undefined) | undefined;
+    readonly rootFor: ((target: InstallDestination) => string | undefined) | undefined;
     readonly deferDeviceConflicts?: boolean;
   }) {
     const store = yield* LibraryStore;
@@ -376,7 +380,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
     const plan =
       current === undefined
         ? undefined
-        : yield* planSyncProjectionsEffect(
+        : yield* planSyncInstalledSkillsEffect(
             current,
             aligned,
             options.manifest,
@@ -399,7 +403,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
             const retirement =
               plan === undefined
                 ? { retired: 0, state: baseline }
-                : yield* retireSyncProjectionsEffect(plan, baseline);
+                : yield* retireSyncInstalledSkillsEffect(plan, baseline);
             const blended = yield* blendRestoredStateEffect(
               { ...aligned, projections: [...(plan?.projections ?? [])] },
               restored,

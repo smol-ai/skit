@@ -22,7 +22,7 @@ export * from "./harnesses/invocation-metadata.js";
 export * from "./invocation/conformance.js";
 export * from "./authoring/invocation/generation.js";
 export * from "./harnesses/default-roots.js";
-export * from "./harnesses/projection-targets.js";
+export * from "./harnesses/install-destinations.js";
 export * from "./library/inventory/doctor-report.js";
 export * from "./library/security/review.js";
 export * from "./authoring/archive.js";
@@ -33,21 +33,21 @@ export * from "./platform/layer.js";
 export * from "./platform/path-identity.js";
 export * from "./projection/policy.js";
 export {
-  ProjectionFailure,
+  InstalledSkillFailure,
   inspectOwnershipMarkerEffect,
-  projectionCustodyEffect,
-  projectionDisplacedEffect,
-  projectionNameEffect,
-  withProjectionMutationEffect,
-  prepareProjectionRebuildEffect,
-  type ProjectionMutation,
-  type NativeProjectionContext,
-  type ProjectionMutationError,
-  type ProjectionAdoption,
+  installedSkillCustodyEffect,
+  installedSkillDisplacedEffect,
+  installedSkillNameEffect,
+  withInstalledSkillMutationEffect,
+  prepareInstalledSkillRebuildEffect,
+  type InstalledSkillMutation,
+  type NativeInstalledSkillContext,
+  type InstalledSkillMutationError,
+  type InstalledSkillAdoption,
 } from "./projection/mutation.js";
-export { inspectProjectionBackupsEffect } from "./projection/backups.js";
+export { inspectInstalledSkillBackupsEffect } from "./projection/backups.js";
 export { copyLocalTreeEffect } from "./platform/copy-tree.js";
-export { ensureProjectionRootWritable } from "./projection/writable.js";
+export { ensureSkillsDirectoryWritable } from "./projection/writable.js";
 export { discoveryPathExcluded } from "./acquisition/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
 export * from "./artifact/descriptor.js";

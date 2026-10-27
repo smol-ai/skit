@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import {
   type OwnershipMarker,
   StoredOwnershipMarker,
-  type ProjectionTarget,
+  type InstallDestination,
   type Digest,
   type InvocationPolicy,
 } from "../contracts.js";
@@ -24,43 +24,43 @@ import type { TreeError } from "../shared/tree-error.js";
 import {
   AdoptionContentMismatch,
   AdoptionTargetChanged,
-  NoProjectionRoot,
+  NoSkillsDirectory,
   OwnershipMarkerDisagrees,
-  ProjectionRetireConflict,
-  ProjectionRootNotWritable,
-  UnsafeProjectionBackups,
-  UnsafeProjectionName,
+  InstalledSkillRetireConflict,
+  SkillsDirectoryNotWritable,
+  UnsafeInstalledSkillBackups,
+  UnsafeInstalledSkillName,
 } from "../failures.js";
 import {
-  type ProjectionId as ProjectionIdType,
+  type InstalledSkillId as InstalledSkillIdType,
   type SkillId as SkillIdType,
   type SkillVersionId as SkillVersionIdType,
 } from "../library/entity-ids.js";
-import type { ManagedProjection } from "../library/library-state.js";
+import type { InstalledSkill } from "../library/library-state.js";
 import {
   effectiveGlobalBindings,
   libraryStateRevision,
   type LibraryState,
 } from "../library/library-state.js";
-import { projectionSourceEffect } from "../library/installation/projection-source.js";
+import { installedSkillSourceEffect } from "../library/installation/installed-skill-source.js";
 import {
-  backUpProjectionEffect,
-  keepProjectionBackupEffect,
+  backUpInstalledSkillEffect,
+  keepInstalledSkillBackupEffect,
   losslessTreeEffect,
-  pendingProjectionBackupsEffect,
-  projectionWorkDirectoryEffect,
+  pendingInstalledSkillBackupsEffect,
+  installedSkillWorkDirectoryEffect,
 } from "./backups.js";
-import { ensureProjectionRootWritable } from "./writable.js";
+import { ensureSkillsDirectoryWritable } from "./writable.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 
-export type RetireProjectionResult =
+export type RetireInstalledSkillResult =
   | { kind: "absent" }
   | { kind: "conflicted"; observed: Digest }
   | { kind: "retired"; observed: Digest };
 
-export interface MaterializeProjectionRequest {
+export interface MaterializeInstalledSkillRequest {
   /** Projection custody coordinate and retained root, without a publication contract. */
   installation: { readonly libraryPath: string };
   skill: {
@@ -69,16 +69,16 @@ export interface MaterializeProjectionRequest {
     readonly name: string;
     readonly contentHash: Digest;
   };
-  target: ProjectionTarget;
+  target: InstallDestination;
   /** An enclosing native batch can declare distinct roots on one target. */
   root?: string;
   sourcePath: string;
   shared?: Array<{ from: string; to: string }>;
   declaredInvocation?: InvocationPolicy;
   invocationIntent: InvocationIntent;
-  previous?: ManagedProjection;
+  previous?: InstalledSkill;
   /** Exact preview evidence authorizing Custody transfer of this unmanaged target. */
-  adoption?: ProjectionAdoption;
+  adoption?: InstalledSkillAdoption;
   /**
    * Take custody of an unmanaged directory at the destination when it already holds exactly the
    * bytes this projection would write. Adopting it adds SKIT's marker and changes nothing else.
@@ -86,13 +86,13 @@ export interface MaterializeProjectionRequest {
   adoptIdentical?: boolean;
   /** Exact preview evidence authorizing a changed managed Projection as the selected Version. */
   replacement?: {
-    projectionId: ProjectionIdType;
+    projectionId: InstalledSkillIdType;
     observedHash: Digest;
     marker: OwnershipMarker;
   };
-  state: ProjectionState;
+  state: InstalledSkillState;
   identity: {
-    readonly projectionId: ProjectionIdType;
+    readonly projectionId: InstalledSkillIdType;
     readonly skillId: SkillIdType;
     readonly skillVersionId: SkillVersionIdType;
   };
@@ -101,11 +101,11 @@ export interface MaterializeProjectionRequest {
   projectedAt: string;
 }
 
-export interface ProjectionState extends LibraryState {}
+export interface InstalledSkillState extends LibraryState {}
 
 /** A projection could not be materialized or verified. */
-export class ProjectionFailure
-  extends Data.TaggedError("ProjectionFailure")<{
+export class InstalledSkillFailure
+  extends Data.TaggedError("InstalledSkillFailure")<{
     message: string;
   }>
   implements SkitFailure
@@ -123,35 +123,35 @@ function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.
 }
 
 /** Shared owned copy policy, with Projection's existing unsupported-entry failure. */
-const copyProjectionTree = Effect.fn("Projection.copyTree")((from: string, to: string) =>
+const copyInstalledSkillTree = Effect.fn("Projection.copyTree")((from: string, to: string) =>
   copyLocalTreeEffect(from, to, undefined, false).pipe(
     Effect.catchTag("TreeError", (error) =>
-      Effect.fail(new ProjectionFailure({ message: error.message })),
+      Effect.fail(new InstalledSkillFailure({ message: error.message })),
     ),
   ),
 );
 
 const copySkill = Effect.fn("Projection.copySkill")(function* (
   request: Pick<
-    MaterializeProjectionRequest,
+    MaterializeInstalledSkillRequest,
     "sourcePath" | "shared" | "target" | "declaredInvocation" | "invocationIntent"
   > & { destination: string; libraryPath: string },
 ): Effect.fn.Return<
   void,
-  ProjectionFailure | HarnessInvocationWriteFailure,
+  InstalledSkillFailure | HarnessInvocationWriteFailure,
   FileSystem.FileSystem | LinkStat
 > {
   const fs = yield* FileSystem.FileSystem;
   // overwrite stays false: copying onto an existing tree must fail, not merge.
-  yield* copyProjectionTree(request.sourcePath, request.destination);
+  yield* copyInstalledSkillTree(request.sourcePath, request.destination);
   for (const mapping of request.shared ?? []) {
     const target = resolve(request.destination, mapping.to);
     if (relative(request.destination, target).startsWith(".."))
-      return yield* new ProjectionFailure({
+      return yield* new InstalledSkillFailure({
         message: `Shared mapping target escaped child: ${mapping.to}`,
       });
     yield* fs.makeDirectory(dirname(target), { recursive: true }).pipe(Effect.uninterruptible);
-    yield* copyProjectionTree(join(request.libraryPath, mapping.from), target);
+    yield* copyInstalledSkillTree(join(request.libraryPath, mapping.from), target);
   }
   yield* applyInvocationPolicyEffect(
     request.destination,
@@ -162,15 +162,15 @@ const copySkill = Effect.fn("Projection.copySkill")(function* (
 });
 
 /** Rebuild one former copy into caller-owned staging, using the same byte owner as projection. */
-export const prepareProjectionRebuildEffect = Effect.fn("Projection.prepareRebuild")(function* (
+export const prepareInstalledSkillRebuildEffect = Effect.fn("Projection.prepareRebuild")(function* (
   state: LibraryState,
   originalsPath: string,
-  projection: ManagedProjection,
+  projection: InstalledSkill,
   invocationIntent: InvocationIntent,
 ) {
   const target = projection.target;
   if (target === "legacy")
-    return yield* new ProjectionFailure({
+    return yield* new InstalledSkillFailure({
       message: "Legacy projections require their original saved bytes",
     });
   const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
@@ -178,18 +178,18 @@ export const prepareProjectionRebuildEffect = Effect.fn("Projection.prepareRebui
     (item) => item.skill_version_id === projection.skill_version_id,
   );
   if (!skill || !version)
-    return yield* new ProjectionFailure({
+    return yield* new InstalledSkillFailure({
       message: "Former projection has no retained Skill Version",
     });
-  const source = yield* projectionSourceEffect(state, originalsPath, skill, version);
-  if (source.kind !== "source") return yield* new ProjectionFailure({ message: source.detail });
+  const source = yield* installedSkillSourceEffect(state, originalsPath, skill, version);
+  if (source.kind !== "source") return yield* new InstalledSkillFailure({ message: source.detail });
   return {
     retainedRoot: source.libraryPath,
     build: Effect.fn("Projection.rebuildBytes")(function* (destination: string) {
       // Retained bytes may have changed since review; validate them again before reading.
-      const current = yield* projectionSourceEffect(state, originalsPath, skill, version);
+      const current = yield* installedSkillSourceEffect(state, originalsPath, skill, version);
       if (current.kind !== "source")
-        return yield* new ProjectionFailure({ message: current.detail });
+        return yield* new InstalledSkillFailure({ message: current.detail });
       yield* copySkill({
         ...current,
         libraryPath: current.libraryPath,
@@ -228,7 +228,7 @@ const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_
 // expected-digest check below is what detects local edits.
 const markerMatches = (
   marker: OwnershipMarker,
-  request: Pick<MaterializeProjectionRequest, "identity">,
+  request: Pick<MaterializeInstalledSkillRequest, "identity">,
 ) =>
   marker.projection_id === request.identity.projectionId &&
   marker.skill_id === request.identity.skillId;
@@ -240,8 +240,8 @@ const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.expected_digest === right.expected_digest;
 
 const ownershipMarker = (
-  request: MaterializeProjectionRequest,
-  projectionId: ProjectionIdType,
+  request: MaterializeInstalledSkillRequest,
+  projectionId: InstalledSkillIdType,
   expectedHash: Digest,
 ): OwnershipMarker => ({
   schemaVersion: 4,
@@ -274,8 +274,8 @@ export function inspectOwnershipMarkerEffect(
 }
 
 /** Pure hash policy: disagreement is data, not a thrown domain exception. */
-export function expectedProjectionHashResult(
-  projection: ManagedProjection,
+export function expectedInstalledSkillHashResult(
+  projection: InstalledSkill,
   marker: OwnershipMarker | null,
 ): Result.Result<Digest, OwnershipMarkerDisagrees> {
   if (marker && projection.expected_digest !== markerExpectedHash(marker))
@@ -290,16 +290,16 @@ export function expectedProjectionHashResult(
 
 /** Moves an owned copy into a pending backup for the mutation that will settle it. */
 type BackUp = (
-  projection: ManagedProjection,
+  projection: InstalledSkill,
   action: "replace" | "retire",
-) => Effect.Effect<void, UnsafeProjectionBackups | PlatformError, TreeRequirements>;
+) => Effect.Effect<void, UnsafeInstalledSkillBackups | PlatformError, TreeRequirements>;
 
-const materializeProjectionEffect = Effect.fn("Projection.materialize")(function* (
-  request: MaterializeProjectionRequest,
-  context: NativeProjectionContext & { readonly backUp: BackUp },
+const materializeInstalledSkillEffect = Effect.fn("Projection.materialize")(function* (
+  request: MaterializeInstalledSkillRequest,
+  context: NativeInstalledSkillContext & { readonly backUp: BackUp },
 ): Effect.fn.Return<
-  { projection: ManagedProjection; changed: boolean },
-  ProjectionMutationError,
+  { projection: InstalledSkill; changed: boolean },
+  InstalledSkillMutationError,
   TreeRequirements | TreeHasher
 > {
   let changed = false;
@@ -307,12 +307,12 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
   const hasher = yield* TreeHasher;
   const { installation, skill, target, previous } = request;
   const root = request.root ?? context.rootFor(target);
-  if (!root) return yield* Effect.fail(new NoProjectionRoot({ target }));
-  yield* ensureProjectionRootWritable(root);
-  const destination = join(root, yield* projectionNameEffect(skill.name));
+  if (!root) return yield* Effect.fail(new NoSkillsDirectory({ target }));
+  yield* ensureSkillsDirectoryWritable(root);
+  const destination = join(root, yield* installedSkillNameEffect(skill.name));
   const projectionId = request.identity.projectionId;
   const prior = previous?.projection_id === projectionId ? previous : undefined;
-  const workDirectory = yield* projectionWorkDirectoryEffect(root);
+  const workDirectory = yield* installedSkillWorkDirectoryEffect(root);
   return yield* Effect.scoped(
     Effect.gen(function* () {
       // Staged on the root's own device, so installing it is a rename even through a symlink.
@@ -327,7 +327,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         libraryPath: installation.libraryPath,
       });
       const desiredHash = yield* deterministicTreeHashEffect(temporary);
-      const projection: ManagedProjection = {
+      const projection: InstalledSkill = {
         projection_id: projectionId,
         skill_id: request.identity.skillId,
         skill_version_id: request.identity.skillVersionId,
@@ -367,14 +367,14 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           });
           if (mode !== "install") yield* context.backUp(projection, "replace");
           else if (yield* fs.exists(destination))
-            return yield* new ProjectionFailure({
+            return yield* new InstalledSkillFailure({
               message: `Projection appeared before materialization: ${destination}`,
             });
           yield* fs.rename(temporary, destination).pipe(Effect.uninterruptible);
         }
         const observed = yield* hasher.hash(destination);
         if (observed !== desiredHash)
-          return yield* new ProjectionFailure({
+          return yield* new InstalledSkillFailure({
             message: `Post-${verification} hash verification failed for ${skill.skillId} at ${target}`,
           });
         changed = true;
@@ -385,7 +385,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         prior?.status === "suppressed" &&
         prior.suppression_reason === "native_delete" &&
         !(yield* exists(destination)) &&
-        !(yield* projectionDisplacedEffect(prior));
+        !(yield* installedSkillDisplacedEffect(prior));
       if (nativeDeletion) {
         projection.status = "suppressed";
         projection.suppression_reason = "native_delete";
@@ -465,7 +465,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
           const variant = join(
             context.variantsPath,
             target,
-            yield* projectionNameEffect(skill.name),
+            yield* installedSkillNameEffect(skill.name),
             observed.slice(7),
           );
           if (!(yield* exists(variant))) {
@@ -475,7 +475,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
               prefix: ".skit-stage-",
             });
             const temporaryVariant = join(variantStaging, "variant");
-            yield* copyProjectionTree(destination, temporaryVariant);
+            yield* copyInstalledSkillTree(destination, temporaryVariant);
             yield* fs.rename(temporaryVariant, variant).pipe(Effect.uninterruptible);
           }
           return {
@@ -506,8 +506,8 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
  * a caller can also ask it *first*. A batch may use that to refuse before changing any derived
  * directory.
  */
-export const projectionCustodyEffect = Effect.fn("Projection.custody")(function* (
-  projection: ManagedProjection,
+export const installedSkillCustodyEffect = Effect.fn("Projection.custody")(function* (
+  projection: InstalledSkill,
 ): Effect.fn.Return<
   | { kind: "absent" }
   | { kind: "intact"; observed: Digest; marker: OwnershipMarker }
@@ -529,25 +529,25 @@ export const projectionCustodyEffect = Effect.fn("Projection.custody")(function*
   return { kind: "intact" as const, observed, marker };
 });
 
-const retireProjectionEffect = Effect.fn("Projection.retire")(function* (
-  projection: ManagedProjection,
+const retireInstalledSkillEffect = Effect.fn("Projection.retire")(function* (
+  projection: InstalledSkill,
   onConflict: "throw" | "report",
   conflictMessage: string,
   backUp: BackUp,
 ): Effect.fn.Return<
-  RetireProjectionResult,
-  | ProjectionRetireConflict
+  RetireInstalledSkillResult,
+  | InstalledSkillRetireConflict
   | OwnershipMarkerDisagrees
-  | UnsafeProjectionBackups
+  | UnsafeInstalledSkillBackups
   | TreeError
   | PlatformError,
   TreeRequirements | TreeHasher
 > {
-  const custody = yield* projectionCustodyEffect(projection);
+  const custody = yield* installedSkillCustodyEffect(projection);
   if (custody.kind === "absent") return { kind: "absent" as const };
   if (custody.kind === "conflicted") {
     if (onConflict === "report") return { kind: "conflicted" as const, observed: custody.observed };
-    return yield* new ProjectionRetireConflict({ detail: conflictMessage });
+    return yield* new InstalledSkillRetireConflict({ detail: conflictMessage });
   }
   const { observed } = custody;
   yield* backUp(projection, "retire");
@@ -561,10 +561,10 @@ const retireProjectionEffect = Effect.fn("Projection.retire")(function* (
  * Whether a pending backup holds the very copy a recorded Projection describes, so it still
  * explains that Projection's absence. A backup of an earlier copy explains nothing about a later one.
  */
-export const projectionDisplacedEffect = Effect.fn("Projection.displaced")(function* (
-  projection: ManagedProjection,
+export const installedSkillDisplacedEffect = Effect.fn("Projection.displaced")(function* (
+  projection: InstalledSkill,
 ) {
-  for (const backup of yield* pendingProjectionBackupsEffect(projection)) {
+  for (const backup of yield* pendingInstalledSkillBackupsEffect(projection)) {
     const marker = yield* readOwnershipMarkerEffect(backup);
     if (
       marker?.projection_id === projection.projection_id &&
@@ -604,7 +604,7 @@ const reproducibleEffect = Effect.fn("Projection.reproducible")(function* (
   const target = recorded.target;
   // A former per-Harness root's transforms are no longer known, so its copy cannot be restaged.
   if (skill === undefined || version === undefined || target === "legacy") return false;
-  const source = yield* projectionSourceEffect(prior, originalsPath, skill, version);
+  const source = yield* installedSkillSourceEffect(prior, originalsPath, skill, version);
   const expected = yield* losslessTreeEffect(backup);
   if (source.kind === "invalid" || expected === undefined) return false;
   const policies = new Set(
@@ -636,47 +636,48 @@ const reproducibleEffect = Effect.fn("Projection.reproducible")(function* (
  * copies with identical bytes already at another target's destination. Each is adopted only while
  * its content still hashes to `observedHash`, so adopting one adds SKIT's marker and nothing else.
  */
-export interface ProjectionAdoption {
+export interface InstalledSkillAdoption {
   readonly path: string;
   readonly equalPaths?: readonly string[];
   readonly observedHash: Digest;
 }
 
-export type ProjectionMutationError =
+export type InstalledSkillMutationError =
   | AdoptionContentMismatch
   | AdoptionTargetChanged
-  | ProjectionFailure
-  | NoProjectionRoot
-  | ProjectionRootNotWritable
-  | UnsafeProjectionName
+  | InstalledSkillFailure
+  | NoSkillsDirectory
+  | SkillsDirectoryNotWritable
+  | UnsafeInstalledSkillName
   | OwnershipMarkerDisagrees
-  | ProjectionRetireConflict
-  | UnsafeProjectionBackups
+  | InstalledSkillRetireConflict
+  | UnsafeInstalledSkillBackups
   | HarnessInvocationWriteFailure
   | TreeError
   | PlatformError;
 
-export interface NativeProjectionContext {
-  readonly rootFor: (target: ProjectionTarget) => string | undefined;
+export interface NativeInstalledSkillContext {
+  readonly rootFor: (target: InstallDestination) => string | undefined;
   readonly variantsPath: string;
 }
 
-export const projectionNameEffect = Effect.fn("Projection.name")(function* (name: string) {
-  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) return yield* new UnsafeProjectionName({ name });
+export const installedSkillNameEffect = Effect.fn("Projection.name")(function* (name: string) {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) return yield* new UnsafeInstalledSkillName({ name });
   return name;
 });
-export interface ProjectionMutation<S extends ProjectionState = ProjectionState> {
+export interface InstalledSkillMutation<S extends InstalledSkillState = InstalledSkillState> {
   readonly state: S;
   readonly project: (
-    request: Omit<MaterializeProjectionRequest, "state">,
-  ) => Effect.Effect<ManagedProjection, ProjectionMutationError, TreeRequirements | TreeHasher>;
+    request: Omit<MaterializeInstalledSkillRequest, "state">,
+  ) => Effect.Effect<InstalledSkill, InstalledSkillMutationError, TreeRequirements | TreeHasher>;
   readonly retire: (
-    projection: ManagedProjection,
+    projection: InstalledSkill,
     onConflict: "throw" | "report",
     conflictMessage: string,
   ) => Effect.Effect<
-    Exclude<RetireProjectionResult, { kind: "retired" }> | { kind: "retired"; observed: Digest },
-    ProjectionMutationError,
+    | Exclude<RetireInstalledSkillResult, { kind: "retired" }>
+    | { kind: "retired"; observed: Digest },
+    InstalledSkillMutationError,
     TreeRequirements | TreeHasher
   >;
 }
@@ -692,8 +693,8 @@ export interface ProjectionMutation<S extends ProjectionState = ProjectionState>
  * retained original reproduces them, otherwise kept. A batch that leaves the state as loaded, wrote
  * nothing and has no backup to settle saves nothing.
  */
-export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(function* <
-  S extends ProjectionState,
+export const withInstalledSkillMutationEffect = Effect.fn("Projection.mutate")(function* <
+  S extends InstalledSkillState,
   T,
   PE,
   PR,
@@ -701,33 +702,33 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
   SR,
 >(
   loaded: S,
-  context: NativeProjectionContext & {
+  context: NativeInstalledSkillContext & {
     /** Where retained originals live, to prove a backup reproducible before discarding it. */
     readonly originalsPath: string;
     /** Save `next` only if the Library is still `base`, the state this mutation loaded. */
     readonly save: (next: S, base: S) => Effect.Effect<void, PE, PR>;
   },
-  stage: (mutation: ProjectionMutation<S>) => Effect.Effect<T, SE, SR>,
+  stage: (mutation: InstalledSkillMutation<S>) => Effect.Effect<T, SE, SR>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const candidate = structuredClone(loaded);
   const changedProjections = new Set<string>();
-  const touched = new Map<string, ManagedProjection>();
-  const onDisk = new Map<string, ManagedProjection>();
+  const touched = new Map<string, InstalledSkill>();
+  const onDisk = new Map<string, InstalledSkill>();
   const backUp: BackUp = (projection, action) =>
-    backUpProjectionEffect(projection, action).pipe(
+    backUpInstalledSkillEffect(projection, action).pipe(
       Effect.map(() => {
         onDisk.set(projection.projection_id, { ...projection, status: "pending" });
       }),
     );
-  const mutation: ProjectionMutation<S> = {
+  const mutation: InstalledSkillMutation<S> = {
     state: candidate,
     project: Effect.fn("Projection.project")(function* (request) {
       const root = request.root ?? context.rootFor(request.target);
-      if (!root) return yield* new NoProjectionRoot({ target: request.target });
-      yield* projectionNameEffect(request.skill.name);
+      if (!root) return yield* new NoSkillsDirectory({ target: request.target });
+      yield* installedSkillNameEffect(request.skill.name);
       const projectionId = request.identity.projectionId;
-      const result = yield* materializeProjectionEffect(
+      const result = yield* materializeInstalledSkillEffect(
         { ...request, state: candidate },
         { ...context, backUp },
       ).pipe(
@@ -749,7 +750,7 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
     }),
     retire: Effect.fn("Projection.retire")(function* (projection, onConflict, message) {
       touched.set(projection.projection_id, projection);
-      const result = yield* retireProjectionEffect(projection, onConflict, message, backUp);
+      const result = yield* retireInstalledSkillEffect(projection, onConflict, message, backUp);
       return result.kind === "retired"
         ? { kind: "retired" as const, observed: result.observed }
         : result;
@@ -773,7 +774,7 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
   );
   const value = yield* stage(mutation).pipe(Effect.onError(() => saveOnDisk));
   const pending = yield* Effect.forEach([...touched.values()], (projection) =>
-    Effect.map(pendingProjectionBackupsEffect(projection), (backups) =>
+    Effect.map(pendingInstalledSkillBackupsEffect(projection), (backups) =>
       backups.map((backup) => ({ backup, projectionId: projection.projection_id })),
     ),
   ).pipe(
@@ -797,7 +798,7 @@ export const withProjectionMutationEffect = Effect.fn("Projection.mutate")(funct
         )
       )
         yield* fs.remove(backup, { recursive: true });
-      else yield* keepProjectionBackupEffect(backup);
+      else yield* keepInstalledSkillBackupEffect(backup);
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("Library changed, but projection backups stayed pending", cause),

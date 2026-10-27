@@ -8,7 +8,7 @@ import {
   projectBindingEffect,
   skitLayer,
 } from "@smolai/skit-core";
-import { prepareProjectionRetention } from "../src/workflows/library/projection-retention.js";
+import { prepareInstalledSkillRetention } from "../src/workflows/library/installed-skill-retention.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
@@ -89,7 +89,7 @@ it.effect(
       const before = yield* LibraryStore.use((store) => store.load).pipe(
         Effect.provide(storeLayer),
       );
-      const prepared = yield* prepareProjectionRetention(skill.name, "agents").pipe(
+      const prepared = yield* prepareInstalledSkillRetention(skill.name, "agents").pipe(
         Effect.provide(storeLayer),
       );
       const plan = prepared.preview;
@@ -163,7 +163,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
   (change) =>
     Effect.gen(function* () {
       const f = yield* projectionFixture;
-      const prepared = yield* prepareProjectionRetention(f.skill.name, "agents").pipe(
+      const prepared = yield* prepareInstalledSkillRetention(f.skill.name, "agents").pipe(
         Effect.provide(f.storeLayer),
       );
       let applicationLayer = f.storeLayer;
@@ -200,7 +200,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
         { identity: true },
       );
       const failure = yield* Effect.flip(prepared.apply().pipe(Effect.provide(applicationLayer)));
-      assert.strictEqual(failure._tag, "Library.ProjectionRetentionStale");
+      assert.strictEqual(failure._tag, "Library.InstalledSkillRetentionStale");
       yield* assertDiskUnchanged(before);
       const state = yield* LibraryStore.use((store) => store.load).pipe(
         Effect.provide(f.storeLayer),
@@ -219,7 +219,7 @@ it.effect("adopts identical edited copies into one retained Version", () =>
     const before = yield* captureDisk([f.home, f.roots.codexRoot, f.roots.claudeRoot], {
       identity: true,
     });
-    const prepared = yield* prepareProjectionRetention(f.skill.name, "agents").pipe(
+    const prepared = yield* prepareInstalledSkillRetention(f.skill.name, "agents").pipe(
       Effect.provide(f.storeLayer),
     );
     yield* assertDiskUnchanged(before);

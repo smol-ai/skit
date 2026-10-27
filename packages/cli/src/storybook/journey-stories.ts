@@ -11,7 +11,7 @@ import {
   makeAcquisitionId,
   makeCollectionId,
   makeMachineId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
@@ -161,7 +161,7 @@ const previewDoctorCleanup = Effect.scoped(
           ],
           projections: [
             {
-              projection_id: makeProjectionId(),
+              projection_id: makeInstalledSkillId(),
               skill_id: skillId,
               skill_version_id: skillVersionId,
               target: "agents",

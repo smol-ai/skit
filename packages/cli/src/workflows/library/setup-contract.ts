@@ -4,7 +4,7 @@ import {
   Digest,
   HarnessName,
   MachineId,
-  ProjectionId,
+  InstalledSkillId,
   SkillId,
   SkillVersionId,
 } from "@smolai/skit-core";
@@ -93,7 +93,7 @@ export type SetupContentIdentity = typeof SetupContentIdentity.Type;
 export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("retained"),
-    projectionId: ProjectionId,
+    projectionId: InstalledSkillId,
     collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
@@ -102,7 +102,7 @@ export const SetupManagedMembership = Schema.Union([
   }),
   Schema.Struct({
     kind: Schema.tag("missing-from-library"),
-    projectionId: ProjectionId,
+    projectionId: InstalledSkillId,
     collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
@@ -200,7 +200,7 @@ export const SetupAuthoredCollection = Schema.Struct({
 });
 export type SetupAuthoredCollection = typeof SetupAuthoredCollection.Type;
 
-export const SetupProjection = Schema.Struct({
+export const SetupInstalledSkill = Schema.Struct({
   collectionId: Schema.optionalKey(CollectionId),
   collectionDisplayName: Schema.String,
   skillId: SkillId,
@@ -209,10 +209,10 @@ export const SetupProjection = Schema.Struct({
   harnesses: Schema.Array(HarnessName),
   status: Schema.Literals(["current", "modified", "missing"]),
 });
-export type SetupProjection = typeof SetupProjection.Type;
+export type SetupInstalledSkill = typeof SetupInstalledSkill.Type;
 
 export const SetupReconciliationFact = Schema.Struct({
-  projectionId: ProjectionId,
+  projectionId: InstalledSkillId,
   skillId: SkillId,
   name: Schema.String,
   path: Schema.String,
@@ -236,7 +236,7 @@ export const SetupReconciliationFact = Schema.Struct({
 export type SetupReconciliationFact = typeof SetupReconciliationFact.Type;
 export const SetupReconciliationOutcome = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
-  projectionId: ProjectionId,
+  projectionId: InstalledSkillId,
   name: Schema.String,
   path: Schema.String,
   status: Schema.Literals(["updated", "unchanged", "local-kept", "native-delete", "pending"]),
@@ -341,7 +341,7 @@ export const SetupResult = Schema.Struct({
   repositories: Schema.Array(SetupRepository),
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),
   authoredCollections: Schema.Array(SetupAuthoredCollection),
-  projections: Schema.Array(SetupProjection),
+  projections: Schema.Array(SetupInstalledSkill),
   reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationFact)),
   onboarding: Schema.Struct({
     planId: Digest,

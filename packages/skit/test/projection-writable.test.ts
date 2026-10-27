@@ -1,9 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { ProjectionRootNotWritable } from "../src/failures.js";
+import { SkillsDirectoryNotWritable } from "../src/failures.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { ensureProjectionRootWritable } from "../src/projection/writable.js";
+import { ensureSkillsDirectoryWritable } from "../src/projection/writable.js";
 
 it.effect("a writable root is created and left without scratch directories", () =>
   Effect.gen(function* () {
@@ -11,7 +11,7 @@ it.effect("a writable root is created and left without scratch directories", () 
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-writable-" });
     const root = join(home, ".agents", "skills");
 
-    yield* ensureProjectionRootWritable(root);
+    yield* ensureSkillsDirectoryWritable(root);
 
     assert.deepStrictEqual(yield* fs.readDirectory(root), []);
     assert.deepStrictEqual(yield* fs.readDirectory(join(home, ".agents")), ["skills"]);
@@ -28,9 +28,9 @@ it.effect("a root under a read-only directory fails naming the root", () =>
     yield* Effect.addFinalizer(() => Effect.orDie(fs.chmod(parent, 0o700)));
     const root = join(parent, "skills");
 
-    const error = yield* Effect.flip(ensureProjectionRootWritable(root));
+    const error = yield* Effect.flip(ensureSkillsDirectoryWritable(root));
 
-    assert.instanceOf(error, ProjectionRootNotWritable);
+    assert.instanceOf(error, SkillsDirectoryNotWritable);
     assert.strictEqual(error.root, root);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

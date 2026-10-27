@@ -4,7 +4,7 @@ import { Data } from "effect";
 import {
   makeCollectionId,
   makeOperationId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeRetainedCopyId,
   makeSkillId,
   makeSkillVersionId,
@@ -34,7 +34,7 @@ const otherVersionId = makeRetainedCopyId();
 const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
 const retainedTreeId = makeRetainedCopyId();
-const projectionId = makeProjectionId();
+const installedSkillId = makeInstalledSkillId();
 const binding = {
   scope: { kind: "global" as const },
   entries: [{ kind: "skill" as const, skill_id: skillId }],
@@ -831,14 +831,14 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       skill_id: skillId,
       skill_name: "review",
       previous_skill_version_id: skillVersionId,
-      selected_projection_id: projectionId,
+      selected_projection_id: installedSkillId,
       observed_digest: digest,
       snapshot_digest: digest,
       retained_path: `/home/story/.skit/originals/${digest}`,
       retention_required: true,
       projections: [
         {
-          projection_id: projectionId,
+          projection_id: installedSkillId,
           target: "agents",
           path: "/home/story/.agents/skills/review",
           observed_digest: digest,
@@ -860,7 +860,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       retained: true,
       projections: [
         {
-          projection_id: projectionId,
+          projection_id: installedSkillId,
           target: "agents",
           path: "/home/story/.agents/skills/review",
           status: "projected",
