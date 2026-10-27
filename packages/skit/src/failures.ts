@@ -539,8 +539,8 @@ export class HarnessMetadataInvalid
 }
 
 /** Retained content whose diagnostics block acquisition, with the codes that blocked it. */
-export class RetainedContentInvalid
-  extends Data.TaggedError("RetainedContentInvalid")<{
+export class ImportContentInvalid
+  extends Data.TaggedError("ImportContentInvalid")<{
     diagnostics: readonly string[];
   }>
   implements SkitFailure

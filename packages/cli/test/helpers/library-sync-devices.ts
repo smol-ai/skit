@@ -2,7 +2,7 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import {
-  retainChangedInstalledSkill,
+  importEdit,
   type InstalledSkill,
   InvalidLibraryState,
   LibraryStore,
@@ -120,7 +120,7 @@ export const devices = Effect.gen(function* () {
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
       retainProjectionEdit: (projection: InstalledSkill) =>
         Effect.gen(function* () {
-          return yield* retainChangedInstalledSkill({
+          return yield* importEdit({
             skillId: projection.skill_id,
             projectionId: projection.projection_id,
             path: projection.path,

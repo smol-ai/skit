@@ -6,7 +6,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
-import { retainedTreePath } from "@smolai/skit-core";
+import { collectionVersionPath } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
 import { writingTo } from "./helpers/library-home.js";
 import { importSource } from "../src/library-application/import-source.js";
@@ -370,7 +370,7 @@ it.effect("stops on corruption of an existing retained object", () =>
       (copy) => copy.retained_copy_id === f.before.acquisitions[0]!.retained_copy_id,
     )!;
     yield* f.fs.writeFileString(
-      join(retainedTreePath(join(f.home, "originals"), copy.digest), "a", "SKILL.md"),
+      join(collectionVersionPath(join(f.home, "originals"), copy.digest), "a", "SKILL.md"),
       "corrupted",
     );
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));

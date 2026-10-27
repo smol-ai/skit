@@ -34,10 +34,7 @@ import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 import { RepositoryPolicyResult } from "../workflows/library/setup-contract.js";
-import {
-  InstalledSkillRetentionPlan,
-  InstalledSkillRetentionResult,
-} from "../workflows/library/installed-skill-retention-contract.js";
+import { EditImportPlan, EditImportResult } from "../workflows/library/import-edit-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
 
@@ -125,14 +122,8 @@ export const outputContracts = {
   check: effectOutput("skit.check.v7", CheckResult),
   update: effectOutput("skit.update.v8", UpdateResult),
   updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),
-  projectionRetention: effectOutput(
-    "skit.update.projection-retention.v2",
-    InstalledSkillRetentionResult,
-  ),
-  projectionRetentionPlan: effectOutput(
-    "skit.update.projection-retention.plan.v2",
-    InstalledSkillRetentionPlan,
-  ),
+  projectionRetention: effectOutput("skit.update.projection-retention.v2", EditImportResult),
+  projectionRetentionPlan: effectOutput("skit.update.projection-retention.plan.v2", EditImportPlan),
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),
   enable: effectOutput("skit.enable.v9", SetEnabledResult),

@@ -5,7 +5,7 @@ import {
   COLLECTION_CONTROL_DIRECTORY,
   AUTHOR_WORKSPACE_METADATA_FILE,
   LibraryStore,
-  retainedTreePath,
+  collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
@@ -47,7 +47,9 @@ it.effect(
       const firstTree = firstState.retained_copies[0];
       assert.ok(firstTree);
       assert.strictEqual(
-        yield* fs.exists(join(retainedTreePath(home.originals, firstTree.digest), "skit.json")),
+        yield* fs.exists(
+          join(collectionVersionPath(home.originals, firstTree.digest), "skit.json"),
+        ),
         true,
       );
 
@@ -205,7 +207,7 @@ it.effect(
       assert.strictEqual(retained.collections.length, 1);
       const copy = retained.retained_copies[0]!;
       assert.isTrue(
-        yield* f.fs.exists(join(retainedTreePath(f.home.originals, copy.digest), "skit.json")),
+        yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.digest), "skit.json")),
       );
       const retried = yield* f.ensure();
       assert.strictEqual(
@@ -225,7 +227,7 @@ it.effect(
       yield* f.home.owned(importSource(f.source));
       const before = yield* captureDisk([f.source, f.home.home], { identity: true });
       const failure = yield* Effect.flip(f.ensure({ scaffold: true }));
-      assert.strictEqual(failure._tag, "DirectoryAlreadyRetained");
+      assert.strictEqual(failure._tag, "DirectoryAlreadyInLibrary");
       yield* assertDiskUnchanged(before);
       assert.isFalse(yield* f.fs.exists(f.path));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

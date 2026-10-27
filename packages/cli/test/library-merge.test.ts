@@ -7,7 +7,7 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
   LibraryManifest,
@@ -32,14 +32,14 @@ const skillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const collectionId = makeCollectionId();
 const acquisitionId = makeImportId();
-const retainedCopyId = makeRetainedCopyId();
+const retainedCopyId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const second = makeSkillVersionId();
 const third = makeSkillVersionId();
 const acquisitionB = makeImportId();
 const acquisitionC = makeImportId();
-const copyB = makeRetainedCopyId();
-const copyC = makeRetainedCopyId();
+const copyB = makeCollectionVersionId();
+const copyC = makeCollectionVersionId();
 const collection = {
   collection_id: collectionId,
   label: "fixture/skills",
@@ -165,7 +165,7 @@ it.effect(
         ),
       });
       const extra = makeSkillId();
-      const copy = makeRetainedCopyId();
+      const copy = makeCollectionVersionId();
       const latestDigest = `sha256:${"d".repeat(64)}`;
       const local = yield* decode({
         ...remote,
@@ -648,7 +648,7 @@ it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
 
 // A Collection with two Skills, `alpha` and `beta`, observed by one source import.
 const pairCollection = makeCollectionId();
-const pairCopy = makeRetainedCopyId();
+const pairCopy = makeCollectionVersionId();
 const pairDigest = `sha256:${"d".repeat(64)}`;
 const alpha = makeSkillId();
 const beta = makeSkillId();

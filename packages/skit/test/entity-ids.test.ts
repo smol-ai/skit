@@ -8,7 +8,7 @@ import {
   OperationId,
   InstalledSkillId,
   AdoptionReceiptId,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
   deterministicMigrationId,
@@ -44,7 +44,7 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
   assert.strictEqual(Schema.is(CollectionId)(ids.collection), true);
   assert.strictEqual(Schema.is(SkillId)(ids.skill), true);
   assert.strictEqual(Schema.is(SkillVersionId)(ids.version), true);
-  assert.strictEqual(Schema.is(RetainedCopyId)(ids.retained), true);
+  assert.strictEqual(Schema.is(CollectionVersionId)(ids.retained), true);
   assert.strictEqual(Schema.is(ImportId)(ids.acquisition), true);
   assert.strictEqual(Schema.is(InstalledSkillId)(ids.projection), true);
   assert.strictEqual(Schema.is(MachineId)(ids.machine), true);

@@ -8,7 +8,7 @@ import {
   makeCollectionId,
   makeMachineId,
   makeInstalledSkillId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
@@ -119,7 +119,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
     const firstAcquisition = fixture.acquisitions[0];
     const secondCollectionId = makeCollectionId();
     const secondAcquisitionId = makeImportId();
-    const secondCopyId = makeRetainedCopyId();
+    const secondCopyId = makeCollectionVersionId();
     fixture.retained_copies.push({
       ...fixture.retained_copies[0],
       retained_copy_id: secondCopyId,
@@ -193,9 +193,9 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
       first: makeImportId(),
       second: makeImportId(),
       edit: makeImportId(),
-      firstCopy: makeRetainedCopyId(),
-      secondCopy: makeRetainedCopyId(),
-      editCopy: makeRetainedCopyId(),
+      firstCopy: makeCollectionVersionId(),
+      secondCopy: makeCollectionVersionId(),
+      editCopy: makeCollectionVersionId(),
     };
     const version = (id: string, character: string, origins: [string, string][]) => ({
       skill_version_id: id,

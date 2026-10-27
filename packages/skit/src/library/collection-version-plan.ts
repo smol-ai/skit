@@ -1,10 +1,10 @@
 import { Effect, FileSystem } from "effect";
 import type { Digest } from "../contracts.js";
 import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
-import { retainedTreePath } from "./retention/retain-tree.js";
+import { collectionVersionPath } from "./collection-version.js";
 
 /** Captured local archives plus availability observations. Preparation verifies bytes before use. */
-export interface RetainedContentPlan {
+export interface CollectionVersionPlan {
   readonly localArchives: readonly SnapshotArchive[];
   readonly reusable: readonly Digest[];
   readonly download: readonly Digest[];
@@ -12,7 +12,7 @@ export interface RetainedContentPlan {
 }
 
 /** Read-only: no hashing, downloads, source acquisition, or writes. */
-export const planRetainedContent = Effect.fn("Library.planRetainedContent")(function* (
+export const planCollectionVersions = Effect.fn("Library.planCollectionVersions")(function* (
   manifest: LibraryManifest,
   options: { readonly originalsPath: string; readonly localArchives: readonly SnapshotArchive[] },
 ) {
@@ -27,7 +27,7 @@ export const planRetainedContent = Effect.fn("Library.planRetainedContent")(func
     if (seen.has(copy.digest)) continue;
     seen.add(copy.digest);
     if (available.has(copy.digest)) continue;
-    if (yield* fs.exists(retainedTreePath(options.originalsPath, copy.digest)))
+    if (yield* fs.exists(collectionVersionPath(options.originalsPath, copy.digest)))
       reusable.push(copy.digest);
     else if (snapshots.has(copy.digest)) download.push(copy.digest);
     else reacquire.push(copy.retained_copy_id);
@@ -37,5 +37,5 @@ export const planRetainedContent = Effect.fn("Library.planRetainedContent")(func
     reusable,
     download,
     reacquire,
-  } satisfies RetainedContentPlan;
+  } satisfies CollectionVersionPlan;
 });

@@ -1,14 +1,14 @@
-import type { RetainedContentPlan } from "./retained-content-plan.js";
+import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { RestoreProgress, RestorePhase } from "./restore-progress.js";
 import type { Digest } from "../contracts.js";
 import { ContentAddressCollision } from "../failures.js";
-import { retainedTreePath } from "./retention/retain-tree.js";
+import { collectionVersionPath } from "./collection-version.js";
 import { resolveSkitSource } from "../sources/resolve.js";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { prepareImport } from "./import-collection.js";
 import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { originalTreeHash, retainLocalTree } from "./retention/retain-tree.js";
+import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
 import { captureSnapshotArchive, materializeVerifiedSnapshot } from "./snapshot-archive.js";
 import { verifySnapshotArchive } from "./snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "./library-state.js";
@@ -185,7 +185,7 @@ const silentRestoreProgress: RestoreProgress = {
 /** Reject incomplete or foreign plans before any I/O. Their bytes still need verifying. */
 const invalidPlan = (
   manifest: LibraryManifest,
-  plan: RetainedContentPlan,
+  plan: CollectionVersionPlan,
   hasDownload: boolean,
 ): string | undefined => {
   const required = new Set(manifest.retained_copies.map((copy) => copy.digest));
@@ -224,7 +224,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
   R = never,
 >(
   manifest: LibraryManifest,
-  plan: RetainedContentPlan,
+  plan: CollectionVersionPlan,
   options: RestoreOptions & {
     readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
   },
@@ -241,7 +241,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
       phase,
       Effect.gen(function* () {
         for (const [index, digest] of plan.reusable.entries()) {
-          const path = retainedTreePath(options.originalsPath, digest);
+          const path = collectionVersionPath(options.originalsPath, digest);
           const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
           const subject =
             manifest.acquisitions.find(
@@ -322,7 +322,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
  */
 export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E = never, R = never>(
   manifest: LibraryManifest,
-  plan: RetainedContentPlan,
+  plan: CollectionVersionPlan,
   options: RestoreOptions & {
     readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
   },
@@ -346,7 +346,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
           const archive = received.get(tree.digest);
           let path = verifiedPaths.get(tree.digest);
           if (path === undefined) {
-            path = retainedTreePath(options.originalsPath, tree.digest);
+            path = collectionVersionPath(options.originalsPath, tree.digest);
             if (yield* fs.exists(path)) {
               // Existing immutable objects still need verification, but no unpack/copy cycle.
               if ((yield* originalTreeHash(path)) !== tree.digest)
@@ -360,7 +360,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
               path = yield* Effect.scoped(
                 Effect.gen(function* () {
                   const temporary = yield* materializeVerifiedSnapshot(verified);
-                  return yield* retainLocalTree(
+                  return yield* writeCollectionVersion(
                     temporary,
                     options.originalsPath,
                     tree.digest,

@@ -9,7 +9,7 @@ import {
   InvalidLibraryState,
   captureSnapshotArchive,
   deterministicTreeHash,
-  retainedTreePath,
+  collectionVersionPath,
   libraryManifestFromLocalState,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
@@ -119,7 +119,10 @@ const cases: readonly {
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
         const archive = yield* captureSnapshotArchive(
-          retainedTreePath(join(b.home, "originals"), competingState.retained_copies[0]!.digest),
+          collectionVersionPath(
+            join(b.home, "originals"),
+            competingState.retained_copies[0]!.digest,
+          ),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
@@ -850,9 +853,9 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
     yield* a.retain("first");
     yield* a.sync();
     const digest = server.remote!.manifest.snapshot_digests[0]!;
-    const destination = retainedTreePath(join(b.home, "originals"), digest);
+    const destination = collectionVersionPath(join(b.home, "originals"), digest);
     yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
-    yield* fs.copy(retainedTreePath(join(a.home, "originals"), digest), destination);
+    yield* fs.copy(collectionVersionPath(join(a.home, "originals"), digest), destination);
     inject({ _tag: "FailDownload", digest });
     const before = yield* captureDisk(b.disk);
     const preview = yield* b.sync({ apply: false });

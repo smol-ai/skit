@@ -8,7 +8,7 @@ import {
   libraryManifestFromLocalState,
   LibraryManifest,
   LibraryState,
-  retainedTreePath,
+  collectionVersionPath,
   type SkillId,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
@@ -46,7 +46,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const digest of new Set([...retained, ...state.retained_copies.map((copy) => copy.digest)]))
     assert.strictEqual(
-      (yield* captureSnapshotArchive(retainedTreePath(join(device.home, "originals"), digest)))
+      (yield* captureSnapshotArchive(collectionVersionPath(join(device.home, "originals"), digest)))
         .digest,
       digest,
     );

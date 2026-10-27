@@ -8,7 +8,7 @@ import {
   DeviceBinding,
   DeviceSkillSelection,
   RepositoryBinding,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
   CurrentMachineDocument,
@@ -28,7 +28,7 @@ export const SetupIntent = Schema.Struct({
       Schema.Struct({
         collectionId: CollectionId,
         acquisitionId: ImportId,
-        retainedCopyId: RetainedCopyId,
+        retainedCopyId: CollectionVersionId,
       }),
     ),
   ),

@@ -1,6 +1,6 @@
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { originalTreeHash } from "./retention/retain-tree.js";
+import { originalTreeHash } from "./collection-version.js";
 import { walkTree } from "../artifact/tree.js";
 import { SnapshotArchive, type SnapshotArchiveEntry } from "./library-contracts.js";
 import { SnapshotArchiveInvalid, verifySnapshotArchive } from "./snapshot-archive-universal.js";

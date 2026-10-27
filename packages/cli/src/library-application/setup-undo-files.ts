@@ -10,7 +10,7 @@ import {
   LinkStat,
   pathIsWithin,
   prepareInstalledSkillRebuild,
-  retainedTreePath,
+  collectionVersionPath,
   versionBacking,
   writeRawAtomic,
   type LibraryState,
@@ -290,7 +290,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         for (const version of skill.versions) {
           const backing = versionBacking(state, skill, version);
           if (!backing) continue;
-          const root = retainedTreePath(store.originalsPath, backing.copy.digest);
+          const root = collectionVersionPath(store.originalsPath, backing.copy.digest);
           const path =
             backing.member.source_path === "." ? root : join(root, backing.member.source_path);
           const evidence = yield* Effect.result(captureSetupFile(path));

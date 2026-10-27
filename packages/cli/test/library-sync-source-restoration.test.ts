@@ -8,7 +8,7 @@ import {
   libraryManifestFromLocalState,
   LibraryStore,
   libraryStoreLayer,
-  retainedTreePath,
+  collectionVersionPath,
   installEnabledSkills,
   SourceProcess,
   type SkitSource,
@@ -106,7 +106,7 @@ const fixture = Effect.gen(function* () {
       assert.strictEqual(result.exitCode, 0);
       release = yield* fs.readFile(archive);
     }),
-    root: (digest: string) => retainedTreePath(join(freshHome, "originals"), digest),
+    root: (digest: string) => collectionVersionPath(join(freshHome, "originals"), digest),
   };
 });
 

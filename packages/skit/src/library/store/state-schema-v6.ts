@@ -7,7 +7,7 @@ import {
   bindingSkillIds,
   Collection,
   mergeBindingEntries,
-  RetainedCopy,
+  CollectionVersion,
   Skill,
 } from "../library-contracts.js";
 import { AbsoluteDevicePath, InstalledSkill } from "../library-state.js";
@@ -39,7 +39,7 @@ export const LibraryStateV6 = Schema.Struct({
   schemaVersion: Schema.Literal(6),
   collections: Schema.Array(Collection),
   skills: Schema.Array(Skill),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(CollectionVersion),
   acquisitions: Schema.Array(Import),
   global_bindings: Schema.Array(DeviceBindingV6),
   local_bindings: Schema.Array(RepositoryBindingV6),

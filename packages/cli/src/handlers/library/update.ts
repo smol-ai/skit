@@ -14,10 +14,7 @@ import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { planUpdates, updateSubjects, updateExitCode } from "../../library-application/update.js";
-import {
-  prepareInstalledSkillRetention,
-  InstalledSkillRetentionMissing,
-} from "../../workflows/library/installed-skill-retention.js";
+import { prepareEditImport, EditImportMissing } from "../../workflows/library/import-edit.js";
 
 const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
 const dryRun = Flag.Boolean("dry-run").pipe(
@@ -40,7 +37,7 @@ export const updateCliCommand = Command.make(
         const projectionSelector = Option.getOrUndefined(input.fromProjection);
         if (projectionSelector !== undefined) {
           if (query === undefined)
-            return yield* new InstalledSkillRetentionMissing({
+            return yield* new EditImportMissing({
               message: "A Skill is required with --from-projection",
             });
           const value = yield* renderer.withStatus(
@@ -48,7 +45,7 @@ export const updateCliCommand = Command.make(
               ? "Inspecting changed installed-skill bytes"
               : "Retaining changed installed-skill bytes",
             Effect.gen(function* () {
-              const prepared = yield* prepareInstalledSkillRetention(query, projectionSelector);
+              const prepared = yield* prepareEditImport(query, projectionSelector);
               return input.dryRun
                 ? result("projectionRetentionPlan", prepared.preview)
                 : result("projectionRetention", yield* prepared.apply());

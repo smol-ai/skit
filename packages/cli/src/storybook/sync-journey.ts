@@ -8,7 +8,7 @@ import {
   libraryManifestFromLocalState,
   libraryStoreLayer,
   makeMachineId,
-  retainedTreePath,
+  collectionVersionPath,
   importCollection,
   skitLayer,
   withLibraryWriter,
@@ -72,7 +72,7 @@ export const syncJourney = (failDownload: boolean) =>
         };
         const manifest = yield* libraryManifestFromLocalState(bound);
         const archives = yield* Effect.forEach(state.retained_copies, (tree) =>
-          captureSnapshotArchive(retainedTreePath(store.originalsPath, tree.digest)),
+          captureSnapshotArchive(collectionVersionPath(store.originalsPath, tree.digest)),
         );
         return { manifest, archives };
       }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));

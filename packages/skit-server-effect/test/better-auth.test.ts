@@ -10,7 +10,7 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core/universal/consumer";
@@ -881,7 +881,7 @@ describe("Better Auth adapter", () => {
       const collectionId = makeCollectionId();
       const skillId = makeSkillId();
       const skillVersionId = makeSkillVersionId();
-      const retainedCopyId = makeRetainedCopyId();
+      const retainedCopyId = makeCollectionVersionId();
       const acquisitionId = makeImportId();
       const machineId = makeMachineId();
       // A v5 manifest as an older CLI would write it, then the current model of the same Library.

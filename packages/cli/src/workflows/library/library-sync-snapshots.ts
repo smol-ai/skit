@@ -1,5 +1,5 @@
 import {
-  planRetainedContent,
+  planCollectionVersions,
   prepareRestore,
   type LibraryManifest,
   type SnapshotArchive,
@@ -27,7 +27,7 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
   },
 ) {
   const progress = options.progress ?? silentSyncProgress;
-  const content = yield* planRetainedContent(desired, {
+  const content = yield* planCollectionVersions(desired, {
     originalsPath: options.originalsPath,
     localArchives: archives,
   });

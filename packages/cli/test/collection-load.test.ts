@@ -5,7 +5,7 @@ import {
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  retainedTreePath,
+  collectionVersionPath,
   type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
@@ -153,7 +153,10 @@ effectIt.effect(
       const originals = join(home, "originals");
       const measure = readDescriptionLoad(selectedState, originals, [skill]);
       expect(yield* measure).toEqual({ skills: 1, characters: 3, unknown: 0 });
-      const retainedFile = join(retainedTreePath(originals, first.snapshot_digest), "SKILL.md");
+      const retainedFile = join(
+        collectionVersionPath(originals, first.snapshot_digest),
+        "SKILL.md",
+      );
       for (const text of [
         "---\nname: review\ndescription: [bad\n---\n",
         "---\nname: review\ndescription: 123\n---\n",

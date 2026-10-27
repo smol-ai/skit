@@ -8,7 +8,7 @@ import {
   LibraryStore,
   prepareInstalledSkillRebuild,
   installEnabledSkills,
-  retainChangedInstalledSkill,
+  importEdit,
   scopeBinding,
 } from "@smolai/skit-core";
 import type { InstalledSkillChange, SetupVersionChoice } from "./setup-contract.js";
@@ -79,7 +79,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const copy = live.find((fact) => fact.path === choice.path && fact.skillId === choice.skillId);
     if (!copy?.currentHash) return yield* new PlanIsStale();
     yield* Effect.scoped(
-      retainChangedInstalledSkill({
+      importEdit({
         skillId: copy.skillId,
         projectionId: copy.projectionId,
         path: copy.path,

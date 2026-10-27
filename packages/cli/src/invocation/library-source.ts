@@ -3,9 +3,9 @@ import {
   invocationMetadataAdapters,
   readSkitDescriptor,
   originalTreeHash,
-  RetainedContentInvalid,
+  ImportContentInvalid,
   resolveDeclaredInvocation,
-  retainedTreePath,
+  collectionVersionPath,
   versionBacking,
   type LibraryState,
   type Skill,
@@ -27,17 +27,17 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
   const version = currentSkillVersion(state, skill);
   const backing = version === undefined ? undefined : versionBacking(state, skill, version);
   if (backing === undefined)
-    return yield* new RetainedContentInvalid({
+    return yield* new ImportContentInvalid({
       diagnostics: [`Skill ${skill.name} has no selected retained backing`],
     });
-  const root = retainedTreePath(originalsPath, backing.copy.digest);
+  const root = collectionVersionPath(originalsPath, backing.copy.digest);
   if ((yield* hashTree(root)) !== backing.copy.digest)
-    return yield* new RetainedContentInvalid({
+    return yield* new ImportContentInvalid({
       diagnostics: [`Retained copy for ${skill.name} changed`],
     });
   const retainedPath = join(root, backing.member.source_path);
   if (version === undefined || (yield* hashTree(retainedPath)) !== version.source_digest)
-    return yield* new RetainedContentInvalid({
+    return yield* new ImportContentInvalid({
       diagnostics: [`Retained Skill ${skill.name} changed`],
     });
   const descriptor =
@@ -47,7 +47,7 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
   // Match installedSkillSource: descriptor names choose their declared source directory.
   const member = descriptor?.skills.find((member) => member.name === skill.name);
   if (descriptor !== undefined && member === undefined)
-    return yield* new RetainedContentInvalid({
+    return yield* new ImportContentInvalid({
       diagnostics: [`Retained descriptor lacks Skill ${skill.name}`],
     });
   const declaring = member ?? { name: skill.name, path: backing.member.source_path };

@@ -4,11 +4,8 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
-import {
-  retainAuthoredCollectionUnderLock,
-  importCollection,
-} from "../src/library/import-collection.js";
-import { originalTreeHash, retainedTreePath } from "../src/library/retention/retain-tree.js";
+import { importAuthoredCollection, importCollection } from "../src/library/import-collection.js";
+import { originalTreeHash, collectionVersionPath } from "../src/library/collection-version.js";
 import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary } from "./helpers/library-store.js";
@@ -50,7 +47,7 @@ for (const kind of ["observed", "authored"] as const) {
           return yield* Effect.scoped(
             withLibraryWriter(
               kind === "authored"
-                ? retainAuthoredCollectionUnderLock({ ...request, root: path })
+                ? importAuthoredCollection({ ...request, root: path })
                 : importCollection({
                     ...request,
                     skills: [
@@ -78,7 +75,7 @@ for (const kind of ["observed", "authored"] as const) {
         assert.strictEqual(copy.digest, receipt.snapshotDigest);
         assert.strictEqual(state.acquisitions[0]?.retained_copy_id, receipt.retainedCopyId);
         assert.strictEqual(state.skills[0]?.skill_id, receipt.skills[0]?.skill_id);
-        const retainedRoot = retainedTreePath(store.originalsPath, receipt.snapshotDigest);
+        const retainedRoot = collectionVersionPath(store.originalsPath, receipt.snapshotDigest);
         assert.strictEqual(yield* originalTreeHash(retainedRoot), receipt.snapshotDigest);
         const member = receipt.members[0];
         assert.ok(member);
@@ -151,7 +148,7 @@ for (const kind of ["observed", "authored"] as const) {
         return yield* Effect.scoped(
           withLibraryWriter(
             kind === "authored"
-              ? retainAuthoredCollectionUnderLock({ ...request, root: source })
+              ? importAuthoredCollection({ ...request, root: source })
               : importCollection({
                   ...request,
                   skills: [
@@ -259,7 +256,7 @@ for (const kind of ["observed", "authored"] as const) {
           return yield* Effect.scoped(
             withLibraryWriter(
               kind === "authored"
-                ? retainAuthoredCollectionUnderLock({ ...request, root: source })
+                ? importAuthoredCollection({ ...request, root: source })
                 : importCollection({
                     ...request,
                     observations: [],

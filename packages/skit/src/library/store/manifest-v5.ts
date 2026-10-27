@@ -3,7 +3,7 @@ import {
   ImportId,
   CollectionId,
   MachineId,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
@@ -16,7 +16,7 @@ import {
   HistoricalLocator,
   librarySnapshotDigests,
   MaterializationProfile,
-  RetainedCopy,
+  CollectionVersion,
   type Skill,
   SkillsShLockFileEntry,
   SourceIdentity,
@@ -75,7 +75,7 @@ export type SkillV5 = typeof SkillV5.Type;
 
 export const AcquisitionV5 = Schema.Struct({
   acquisition_id: ImportId,
-  retained_copy_id: RetainedCopyId,
+  retained_copy_id: CollectionVersionId,
   source_identity: SourceIdentity,
   tracking: SourceTracking,
   selection: AcquisitionSelectionV5,
@@ -97,7 +97,7 @@ export const LibraryManifestV5 = Schema.Struct({
   schema: Schema.Literal("skit.library.v5"),
   collections: Schema.Array(CollectionV5),
   skills: Schema.Array(SkillV5),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(CollectionVersion),
   acquisitions: Schema.Array(AcquisitionV5),
   snapshot_digests: Schema.Array(Digest),
   bindings: Schema.Array(BindingV5),
@@ -107,7 +107,7 @@ export type LibraryManifestV5 = typeof LibraryManifestV5.Type;
 export interface LibraryEntitiesV5 {
   readonly collections: readonly CollectionV5[];
   readonly skills: readonly SkillV5[];
-  readonly retained_copies: readonly RetainedCopy[];
+  readonly retained_copies: readonly CollectionVersion[];
   readonly acquisitions: readonly AcquisitionV5[];
 }
 

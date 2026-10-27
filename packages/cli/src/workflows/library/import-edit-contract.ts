@@ -7,7 +7,7 @@ import {
 } from "@smolai/skit-core";
 import { Schema } from "effect";
 
-const InstalledSkillRetentionCopy = Schema.Struct({
+const EditCandidate = Schema.Struct({
   projection_id: InstalledSkillId,
   target: RecordedInstallDestination,
   path: Schema.String,
@@ -15,7 +15,7 @@ const InstalledSkillRetentionCopy = Schema.Struct({
   agreement: Schema.Literals(["selected", "identical", "different"]),
 });
 
-export const InstalledSkillRetentionPlan = Schema.Struct({
+export const EditImportPlan = Schema.Struct({
   revision: Schema.String,
   skill_id: SkillId,
   skill_name: Schema.String,
@@ -25,11 +25,11 @@ export const InstalledSkillRetentionPlan = Schema.Struct({
   snapshot_digest: Digest,
   retained_path: Schema.String,
   retention_required: Schema.Boolean,
-  projections: Schema.Array(InstalledSkillRetentionCopy),
+  projections: Schema.Array(EditCandidate),
 });
-export type InstalledSkillRetentionPlan = typeof InstalledSkillRetentionPlan.Type;
+export type EditImportPlan = typeof EditImportPlan.Type;
 
-export const InstalledSkillRetentionResult = Schema.Struct({
+export const EditImportResult = Schema.Struct({
   skill_id: SkillId,
   skill_name: Schema.String,
   previous_skill_version_id: SkillVersionId,
@@ -46,4 +46,4 @@ export const InstalledSkillRetentionResult = Schema.Struct({
     }),
   ),
 });
-export type InstalledSkillRetentionResult = typeof InstalledSkillRetentionResult.Type;
+export type EditImportResult = typeof EditImportResult.Type;

@@ -4,7 +4,7 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
@@ -18,7 +18,7 @@ const otherSkillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const otherVersionId = makeSkillVersionId();
 const acquisitionId = makeImportId();
-const retainedCopyId = makeRetainedCopyId();
+const retainedCopyId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const sourceIdentity = {
   kind: "registry" as const,

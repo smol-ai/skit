@@ -2,7 +2,7 @@ import { Clock, Effect } from "effect";
 import {
   makeImportId,
   originalTreeHash,
-  retainedTreePath,
+  collectionVersionPath,
   sourceImports,
   type Import,
   type CollectionId,
@@ -51,7 +51,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       conflicts.push(`Prior retained source evidence is unavailable: ${prior.collectionId}`);
       continue;
     }
-    const path = retainedTreePath(originalsPath, copy.digest);
+    const path = collectionVersionPath(originalsPath, copy.digest);
     const verified = yield* Effect.result(originalTreeHash(path));
     if (verified._tag === "Failure" || verified.success !== copy.digest) {
       conflicts.push(`Prior retained source bytes changed: ${prior.collectionId}`);

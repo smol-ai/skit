@@ -6,7 +6,7 @@ import {
   materializeVerifiedSnapshot,
   verifySnapshotArchive,
 } from "../src/library/snapshot-archive.js";
-import { originalTreeHash } from "../src/library/retention/retain-tree.js";
+import { originalTreeHash } from "../src/library/collection-version.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("verifies real retained bytes and rejects a changed archive", () =>

@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { Clock, Effect } from "effect";
-import { LibraryStore, retainedTreePath, type LibraryState } from "@smolai/skit-core";
+import { LibraryStore, collectionVersionPath, type LibraryState } from "@smolai/skit-core";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import type { LibrarySubject } from "./subject-resolution.js";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
@@ -90,7 +90,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       })),
     };
   const tip = evidence.commit;
-  const root = retainedTreePath(store.originalsPath, retainedCopy.digest);
+  const root = collectionVersionPath(store.originalsPath, retainedCopy.digest);
   const members: SkillsShUpdateMember[] = [];
   for (const observation of observations) {
     const claimed = observation.computed_hash ?? observation.skill_folder_hash;

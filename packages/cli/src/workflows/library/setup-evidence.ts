@@ -1,7 +1,7 @@
 import type { LibraryState, MachineId } from "@smolai/skit-core";
 import { setupLockGroupKey, resolveSkillsShSelectedSource } from "./skills-sh-lock-source.js";
 import type { SetupSkillInstance } from "./setup-contract.js";
-export interface SetupRetainedEvidence {
+export interface SetupImportEvidence {
   readonly library?: LibraryState;
   readonly machineId?: MachineId;
 }
@@ -17,7 +17,7 @@ export const lockEvidenceKey = (
 /** Join each acquisition's lock observations to retained versions on this machine. */
 export const indexSetupOnboardingEvidence = (
   instances: readonly SetupSkillInstance[],
-  retained?: SetupRetainedEvidence,
+  retained?: SetupImportEvidence,
 ) => {
   const library = retained?.library;
   const retainedByLockEvidence = new Map<string, Set<string>>();

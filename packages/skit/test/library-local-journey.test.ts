@@ -5,9 +5,9 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { importCollection } from "../src/library/import-collection.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
-import { planRetainedContent } from "../src/library/retained-content-plan.js";
+import { planCollectionVersions } from "../src/library/collection-version-plan.js";
 import { prepareRestore } from "../src/library/library-restore.js";
-import { retainedTreePath } from "../src/library/retention/retain-tree.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
 import { captureSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -55,7 +55,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     assert.strictEqual(saved.state.acquisitions[0]?.input.value, installed);
     const tree = saved.state.retained_copies[0];
     assert.ok(tree);
-    const firstOriginal = retainedTreePath(join(firstHome, "originals"), tree.digest);
+    const firstOriginal = collectionVersionPath(join(firstHome, "originals"), tree.digest);
     assert.strictEqual(
       yield* fs.readFileString(join(firstOriginal, "notes.txt")),
       "retained too\n",
@@ -65,7 +65,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
     const archive = yield* captureSnapshotArchive(firstOriginal);
     const originalsPath = join(secondHome, "originals");
-    const plan = yield* planRetainedContent(manifest, {
+    const plan = yield* planCollectionVersions(manifest, {
       originalsPath,
       localArchives: [archive],
     });
@@ -76,7 +76,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     if (!second.present) return;
     assert.deepStrictEqual(second.state.acquisitions, saved.state.acquisitions);
     assert.deepStrictEqual(second.state.local_bindings, []);
-    const secondOriginal = retainedTreePath(join(secondHome, "originals"), tree.digest);
+    const secondOriginal = collectionVersionPath(join(secondHome, "originals"), tree.digest);
     assert.strictEqual(
       yield* fs.readFileString(join(secondOriginal, "SKILL.md")),
       "observed locally\n",

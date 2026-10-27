@@ -4,7 +4,7 @@ import {
   ImportId,
   CollectionId,
   MachineId,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
 } from "./entity-ids.js";
@@ -193,21 +193,21 @@ export const Collection = Schema.Struct({
 });
 export interface Collection extends Schema.Schema.Type<typeof Collection> {}
 
-export const RetainedCopyMember = Schema.Struct({
+export const CollectionVersionSkill = Schema.Struct({
   source_path: CollectionRelativePath,
   source_digest: Digest,
   artifact_digest: Digest,
   materialization_profile: MaterializationProfile,
 });
-export type RetainedCopyMember = typeof RetainedCopyMember.Type;
+export type CollectionVersionSkill = typeof CollectionVersionSkill.Type;
 
-export const RetainedCopy = Schema.Struct({
-  retained_copy_id: RetainedCopyId,
+export const CollectionVersion = Schema.Struct({
+  retained_copy_id: CollectionVersionId,
   digest: Digest,
   copy_profile: Schema.Literal("verbatim/v1"),
-  members: Schema.Array(RetainedCopyMember),
+  members: Schema.Array(CollectionVersionSkill),
 });
-export interface RetainedCopy extends Schema.Schema.Type<typeof RetainedCopy> {}
+export interface CollectionVersion extends Schema.Schema.Type<typeof CollectionVersion> {}
 
 /**
  * One observation of bytes for a Collection: either its Source, or a local edit the user retained
@@ -217,7 +217,7 @@ export const Import = Schema.Struct({
   acquisition_id: ImportId,
   collection_id: CollectionId,
   kind: Schema.Literals(["source", "retained-edit"]),
-  retained_copy_id: RetainedCopyId,
+  retained_copy_id: CollectionVersionId,
   source_identity: SourceIdentity,
   /** Where the bytes were read from, for provenance and display. Never parsed back. */
   input: HistoricalLocator,
@@ -245,7 +245,7 @@ export const importCanBeRefetched = (acquisition: Import): boolean => {
 };
 
 export const librarySnapshotDigests = (input: {
-  readonly retained_copies: readonly RetainedCopy[];
+  readonly retained_copies: readonly CollectionVersion[];
   readonly acquisitions: readonly Import[];
 }): string[] =>
   [
@@ -315,7 +315,7 @@ export const mergeGlobalBindings = (
 
 interface LibraryEntities {
   readonly skills: readonly Skill[];
-  readonly retained_copies: readonly RetainedCopy[];
+  readonly retained_copies: readonly CollectionVersion[];
   readonly acquisitions: readonly Import[];
 }
 
@@ -431,7 +431,7 @@ export const LibraryManifest = Schema.Struct({
   schema: Schema.Literal(CURRENT_PORTABLE_LIBRARY_SCHEMA),
   collections: Schema.Array(Collection),
   skills: Schema.Array(Skill),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(CollectionVersion),
   acquisitions: Schema.Array(Import),
   snapshot_digests: Schema.Array(Digest),
   bindings: Schema.Array(Binding),

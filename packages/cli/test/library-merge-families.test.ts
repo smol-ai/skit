@@ -9,14 +9,14 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
   type Import,
   type BindingEntry,
   type Collection,
   type CollectionId,
-  type RetainedCopy,
+  type CollectionVersion,
   type Skill,
   type SkillId,
   type SkillVersion,
@@ -35,7 +35,7 @@ const digest = (text: string) => `sha256:${createHash("sha256").update(text).dig
 interface Side {
   readonly collections: readonly Collection[];
   readonly skills: readonly Skill[];
-  readonly retained_copies: readonly RetainedCopy[];
+  readonly retained_copies: readonly CollectionVersion[];
   readonly acquisitions: readonly Import[];
   readonly entries: readonly BindingEntry[];
 }
@@ -49,7 +49,7 @@ const none: Side = {
 
 interface Observation {
   readonly acquisition: Import;
-  readonly copy: RetainedCopy;
+  readonly copy: CollectionVersion;
   readonly versions: Readonly<Record<string, SkillVersion>>;
 }
 
@@ -82,8 +82,8 @@ const fixture = (paths: readonly string[]) => {
     members: Readonly<Record<string, SkillVersion>>,
     at: string,
   ): Omit<Observation, "versions"> => {
-    const retained_copy_id = makeRetainedCopyId();
-    const copy: RetainedCopy = {
+    const retained_copy_id = makeCollectionVersionId();
+    const copy: CollectionVersion = {
       retained_copy_id,
       digest: digest(canonicalJson(members)),
       copy_profile: "verbatim/v1",

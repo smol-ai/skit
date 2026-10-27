@@ -2,7 +2,7 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { LibraryStore, libraryStoreLayer, retainedTreePath } from "@smolai/skit-core";
+import { LibraryStore, libraryStoreLayer, collectionVersionPath } from "@smolai/skit-core";
 import { importSource, previewLibrarySource } from "../../src/library-application/import-source.js";
 import { writingTo } from "./library-home.js";
 
@@ -28,7 +28,7 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
   assert.strictEqual(state.collections.length, 1);
   assert.strictEqual(state.skills.length, expectedPaths.length);
   assert.strictEqual(new Set(state.skills.map((skill) => skill.name)).size, state.skills.length);
-  const retained = retainedTreePath(join(home, "originals"), added.snapshot_digest);
+  const retained = collectionVersionPath(join(home, "originals"), added.snapshot_digest);
   assert.strictEqual(yield* fs.exists(join(retained, "plugins")), false);
   return { preview, retained };
 });

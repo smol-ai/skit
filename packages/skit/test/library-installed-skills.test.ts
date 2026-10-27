@@ -7,11 +7,11 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
-import { retainedTreePath } from "../src/library/retention/retain-tree.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
 import { installEnabledSkills } from "../src/library/installation/install-enabled.js";
 import { removeCollection } from "../src/library/installation/remove.js";
 import { leftoverSkills, uninstallSkills } from "../src/library/installation/uninstall.js";
-import { retainChangedInstalledSkill, importCollection } from "../src/library/import-collection.js";
+import { importEdit, importCollection } from "../src/library/import-collection.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
 import {
@@ -527,7 +527,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     assert.ok(backing);
     yield* fs.writeFileString(
       join(
-        retainedTreePath(join(home, "originals"), backing.copy.digest),
+        collectionVersionPath(join(home, "originals"), backing.copy.digest),
         backing.member.source_path,
         "SKILL.md",
       ),
@@ -926,7 +926,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
             yield* fs.writeFileString(join(target, "SKILL.md"), bytes);
             const second = yield* withLibraryWriterLock(
               home,
-              retainChangedInstalledSkill({
+              importEdit({
                 skillId: first.skill_id,
                 projectionId: first.projection_id,
                 path: target,
@@ -949,7 +949,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
               })),
             }));
           }
-          const retained = retainedTreePath(join(home, "originals"), backed);
+          const retained = collectionVersionPath(join(home, "originals"), backed);
           if (original === "missing") yield* fs.remove(retained, { recursive: true });
           if (original === "corrupt")
             yield* fs.writeFileString(join(retained, "SKILL.md"), "tampered retained bytes\n");

@@ -7,7 +7,7 @@ import {
   inspectOwnershipMarker,
   scanInventory,
   makeImportId,
-  retainedTreePath,
+  collectionVersionPath,
   type SkillId,
 } from "@smolai/skit-core";
 import { RegistryUnreachable } from "../src/registry/failures.js";
@@ -465,7 +465,9 @@ for (const localBytes of ["B\n", "base\n"]) {
         );
         const merged = yield* b.state;
         for (const copy of localCopies) {
-          assert.isTrue(yield* fs.exists(retainedTreePath(join(b.home, "originals"), copy.digest)));
+          assert.isTrue(
+            yield* fs.exists(collectionVersionPath(join(b.home, "originals"), copy.digest)),
+          );
         }
         assert.equal(merged.skills[0]?.versions.length, 2);
         assert.equal(merged.skills[0]?.local_version_id, undefined);

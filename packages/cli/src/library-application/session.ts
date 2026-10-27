@@ -1,10 +1,10 @@
 import { InstalledSkillWouldDuplicate } from "../projection/duplicates.js";
 import type { SkillMetadata } from "./skill-metadata.js";
 import {
-  retainedTreePath,
+  collectionVersionPath,
   versionBacking,
   LibraryStore,
-  RetainedContentInvalid,
+  ImportContentInvalid,
   type SourceIdentity,
   type SkitBindingScope as Scope,
 } from "@smolai/skit-core";
@@ -139,7 +139,7 @@ export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillConten
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(
     join(
-      retainedTreePath(store.originalsPath, backing.copy.digest),
+      collectionVersionPath(store.originalsPath, backing.copy.digest),
       backing.member.source_path,
       "SKILL.md",
     ),
@@ -177,7 +177,7 @@ const unavailablePolicyChange = (
     pending: undefined,
     outcome: {
       kind: "failed",
-      failure: classifyFailure(new RetainedContentInvalid({ diagnostics: [reason] })),
+      failure: classifyFailure(new ImportContentInvalid({ diagnostics: [reason] })),
     },
   }) satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
 

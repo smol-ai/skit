@@ -8,10 +8,10 @@ import {
   libraryManifestFromLocalState,
   makeMachineId,
   prepareRestore,
-  planRetainedContent,
+  planCollectionVersions,
   type RestorePhase,
   type RestoreTick,
-  retainedTreePath,
+  collectionVersionPath,
   importCollection,
   SourceProcess,
   withLibraryWriterLock,
@@ -83,7 +83,7 @@ const fixture = Effect.gen(function* () {
   const manifest = yield* libraryManifestFromLocalState(saved.state);
   assert.deepStrictEqual(manifest.snapshot_digests, [privateCopy.snapshotDigest]);
   const privateArchive = yield* captureSnapshotArchive(
-    retainedTreePath(join(home, "originals"), privateCopy.snapshotDigest),
+    collectionVersionPath(join(home, "originals"), privateCopy.snapshotDigest),
   );
   const archivePath = join(root, "release.zip");
   const repack = Effect.gen(function* () {
@@ -114,7 +114,7 @@ const fixture = Effect.gen(function* () {
   const restore = (available: readonly SnapshotArchive[] = [privateArchive]) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const plan = yield* planRetainedContent(manifest, {
+        const plan = yield* planCollectionVersions(manifest, {
           originalsPath,
           localArchives: available,
         });
@@ -187,7 +187,7 @@ it.effect("prepares downloaded private content and exact source content without 
         authorization: "Bearer restore-token",
       },
     ]);
-    const sourceRoot = retainedTreePath(f.originalsPath, f.source.snapshotDigest);
+    const sourceRoot = collectionVersionPath(f.originalsPath, f.source.snapshotDigest);
     assert.strictEqual((yield* captureSnapshotArchive(sourceRoot)).digest, f.source.snapshotDigest);
     assert.strictEqual(
       yield* f.fs.readFileString(join(sourceRoot, "skills/review/SKILL.md")),
@@ -196,7 +196,7 @@ it.effect("prepares downloaded private content and exact source content without 
     assert.strictEqual(yield* f.fs.exists(join(sourceRoot, "unrelated.txt")), false);
     assert.strictEqual(
       yield* f.fs.readFileString(
-        join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+        join(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
       ),
       "Private notes\n",
     );
@@ -208,7 +208,7 @@ it.effect("available source archives require no source access", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const sourceArchive = yield* captureSnapshotArchive(
-      retainedTreePath(join(f.home, "originals"), f.source.snapshotDigest),
+      collectionVersionPath(join(f.home, "originals"), f.source.snapshotDigest),
     );
     f.unavailable();
     const restored = yield* f.restore([f.privateArchive, sourceArchive]);
@@ -267,7 +267,7 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
         return unpinned;
       }),
     };
-    const plan = yield* planRetainedContent(manifest, {
+    const plan = yield* planCollectionVersions(manifest, {
       originalsPath: f.originalsPath,
       localArchives: [f.privateArchive],
     });
@@ -289,11 +289,11 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
     const f = yield* fixture;
     yield* f.restore();
     const archives = yield* Effect.forEach(f.manifest.retained_copies, (tree) =>
-      captureSnapshotArchive(retainedTreePath(f.originalsPath, tree.digest)),
+      captureSnapshotArchive(collectionVersionPath(f.originalsPath, tree.digest)),
     );
     f.unavailable();
     const ticks: RestoreTick[] = [];
-    const plan = yield* planRetainedContent(f.manifest, {
+    const plan = yield* planCollectionVersions(f.manifest, {
       originalsPath: f.originalsPath,
       localArchives: archives,
     });
@@ -319,7 +319,7 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
       [0, 1, 1, 2],
     );
     yield* f.fs.writeFileString(
-      join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+      join(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
       "Damaged",
     );
     const error = yield* restore.pipe(Effect.flip);
@@ -356,7 +356,7 @@ it.effect("existing unlisted objects restore without source access or private ar
     assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
     assert.deepStrictEqual(f.requests, []);
     yield* f.fs.writeFileString(
-      join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+      join(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
       "Damaged",
     );
     const error = yield* f.restore([]).pipe(Effect.flip);
@@ -373,10 +373,10 @@ it.effect(
       yield* f.restore();
       f.requests.length = 0;
       yield* f.fs.writeFileString(
-        join(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
+        join(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
         "Damaged",
       );
-      const plan = yield* planRetainedContent(f.manifest, {
+      const plan = yield* planCollectionVersions(f.manifest, {
         originalsPath: f.originalsPath,
         localArchives: [],
       }).pipe(
@@ -407,11 +407,11 @@ it.effect("a copy disappearing after planning fails without an unplanned downloa
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* f.restore();
-    const plan = yield* planRetainedContent(f.manifest, {
+    const plan = yield* planCollectionVersions(f.manifest, {
       originalsPath: f.originalsPath,
       localArchives: [],
     });
-    yield* f.fs.remove(retainedTreePath(f.originalsPath, f.privateCopy.snapshotDigest), {
+    yield* f.fs.remove(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), {
       recursive: true,
     });
     const error = yield* prepareRestore(f.manifest, plan, {
@@ -436,7 +436,7 @@ it.effect("verified whole-tree bytes do not bypass member digest verification", 
         })),
       })),
     };
-    const plan = yield* planRetainedContent(manifest, {
+    const plan = yield* planCollectionVersions(manifest, {
       originalsPath: f.originalsPath,
       localArchives: [],
     });
@@ -453,9 +453,9 @@ it.effect("an incomplete plan fails before retaining any available archive", () 
   Effect.gen(function* () {
     const f = yield* fixture;
     const sourceArchive = yield* captureSnapshotArchive(
-      retainedTreePath(join(f.home, "originals"), f.source.snapshotDigest),
+      collectionVersionPath(join(f.home, "originals"), f.source.snapshotDigest),
     );
-    const plan = yield* planRetainedContent(f.manifest, {
+    const plan = yield* planCollectionVersions(f.manifest, {
       originalsPath: f.originalsPath,
       localArchives: [sourceArchive],
     });
@@ -476,7 +476,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const plan = yield* planRetainedContent(f.manifest, {
+      const plan = yield* planCollectionVersions(f.manifest, {
         originalsPath: f.originalsPath,
         localArchives: [],
       });

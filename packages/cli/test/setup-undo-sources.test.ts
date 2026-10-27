@@ -14,7 +14,7 @@ import {
   LibraryStore,
   installEnabledSkills,
   MachineSettings,
-  retainedTreePath,
+  collectionVersionPath,
   sourceImports,
   skitLayer,
 } from "@smolai/skit-core";
@@ -328,7 +328,7 @@ it.effect(
         (item) => item.retained_copy_id === original.retained_copy_id,
       )!;
       expect(observation.input.value).toBe(
-        retainedTreePath(join(f.home.home, "originals"), copy.digest),
+        collectionVersionPath(join(f.home.home, "originals"), copy.digest),
       );
       const afterManifest = yield* libraryManifestFromLocalState(after);
       const restoredManifest = yield* libraryManifestFromLocalState(restored);
@@ -412,7 +412,7 @@ it.effect(
         (item) => item.retained_copy_id === original.retained_copy_id,
       )!;
       const path = join(
-        retainedTreePath(join(f.home.home, "originals"), copy.digest),
+        collectionVersionPath(join(f.home.home, "originals"), copy.digest),
         "existing",
         "SKILL.md",
       );

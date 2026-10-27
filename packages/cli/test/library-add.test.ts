@@ -10,7 +10,7 @@ import {
   libraryManifestFromLocalState,
   deterministicTreeHash,
   libraryStoreLayer,
-  retainedTreePath,
+  collectionVersionPath,
 } from "@smolai/skit-core";
 import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
 import { planUpdates, updateSubjects } from "../src/library-application/update.js";
@@ -54,7 +54,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(state.retained_copies[0]?.retained_copy_id, added.retained_version_id);
     assert.strictEqual(
       yield* fs.readFileString(
-        join(retainedTreePath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+        join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
       ),
       bytes,
     );
@@ -146,7 +146,11 @@ it.effect("reports the retained package when its source disappears after publica
     assert.strictEqual(state.retained_copies[0]?.digest, added.snapshot_digest);
     assert.strictEqual(
       yield* fs.readFileString(
-        join(retainedTreePath(store.originalsPath, added.snapshot_digest), memberPath, "SKILL.md"),
+        join(
+          collectionVersionPath(store.originalsPath, added.snapshot_digest),
+          memberPath,
+          "SKILL.md",
+        ),
       ),
       bytes,
     );
@@ -181,7 +185,7 @@ it.effect("retains the exact bytes of a direct SKILL.md URL", () =>
     );
     assert.strictEqual(
       yield* fs.readFileString(
-        join(retainedTreePath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+        join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
       ),
       bytes,
     );
@@ -378,7 +382,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
     assert.strictEqual(
       yield* fs.exists(
         join(
-          retainedTreePath(join(home, "originals"), added.snapshot_digest),
+          collectionVersionPath(join(home, "originals"), added.snapshot_digest),
           ".skit-ownership.json",
         ),
       ),

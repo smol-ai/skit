@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import {
   inspectOwnershipMarker,
   libraryManifestFromLocalState,
-  retainedTreePath,
+  collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
 import { importSource } from "../src/library-application/import-source.js";
@@ -96,7 +96,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
       expect.objectContaining({ path: managedSkill, status: "installed" }),
     ]);
     const retainedDocuments = yield* Effect.forEach(state.retained_copies, (copy) =>
-      fs.readFileString(join(retainedTreePath(home.originals, copy.digest), "SKILL.md")),
+      fs.readFileString(join(collectionVersionPath(home.originals, copy.digest), "SKILL.md")),
     );
     expect(retainedDocuments).toEqual(
       expect.arrayContaining([managedText, skillDocument("repo-only", "Repository skill")]),
@@ -166,7 +166,7 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
     expect(state.projections).toHaveLength(2);
     const retained = yield* Effect.forEach(state.retained_copies, (copy) =>
       Effect.gen(function* () {
-        const path = retainedTreePath(home.originals, copy.digest);
+        const path = collectionVersionPath(home.originals, copy.digest);
         return {
           document: yield* fs.readFileString(join(path, "SKILL.md")),
           entries: yield* fs.readDirectory(path),

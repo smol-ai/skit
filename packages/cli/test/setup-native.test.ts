@@ -17,7 +17,7 @@ import {
   MachineSettings,
   SourceProcess,
   makeInstalledSkillId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
@@ -1054,7 +1054,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     const contentHash = yield* deterministicTreeHash(projectedSkill);
     const skitLocator = "skit://registry.test/tim/skills";
     const collectionId = makeCollectionId();
-    const versionId = makeRetainedCopyId();
+    const versionId = makeCollectionVersionId();
     const skillVersionId = makeSkillVersionId();
     const skillId = makeSkillId();
     const acquisitionId = makeImportId();
@@ -1328,7 +1328,7 @@ it.effect(
       const currentHash = yield* deterministicTreeHash(current);
       const orphanedHash = yield* deterministicTreeHash(orphaned);
       const collectionId = makeCollectionId();
-      const versionId = makeRetainedCopyId();
+      const versionId = makeCollectionVersionId();
       const currentVersionId = makeSkillVersionId();
       const missingVersionId = makeSkillVersionId();
       const currentSkillId = makeSkillId();
@@ -1512,7 +1512,7 @@ for (const kind of ["source", "retained-edit"] as const) {
     Effect.sync(() => {
       const machineId = makeMachineId();
       const collectionId = makeCollectionId();
-      const copyId = makeRetainedCopyId();
+      const copyId = makeCollectionVersionId();
       const hash = `sha256:${"a".repeat(64)}`;
       const lock = setupLock("acme/reviews", "agrees", "review");
       const instance = setupInstance("review", "/global/review", {

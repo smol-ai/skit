@@ -33,8 +33,8 @@ export class AuthorWorkspaceMetadataInvalid
   }
 }
 
-export class DirectoryAlreadyRetained
-  extends Data.TaggedError("DirectoryAlreadyRetained")<{
+export class DirectoryAlreadyInLibrary
+  extends Data.TaggedError("DirectoryAlreadyInLibrary")<{
     collectionId: string;
   }>
   implements SkitFailure

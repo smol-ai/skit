@@ -7,7 +7,7 @@ import {
   deterministicTreeHash,
   LibraryStore,
   skitLayer,
-  retainAuthoredCollectionUnderLock,
+  importAuthoredCollection,
   type SkillsShLockFileEntry,
 } from "@smolai/skit-core";
 import {
@@ -259,7 +259,7 @@ skills:
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLock({
+          importAuthoredCollection({
             root: source,
             source: { type: "local", path: source },
             input: source,

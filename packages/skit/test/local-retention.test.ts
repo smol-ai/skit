@@ -2,7 +2,7 @@ import { Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { originalTreeHash, retainLocalTree } from "../src/library/retention/retain-tree.js";
+import { originalTreeHash, writeCollectionVersion } from "../src/library/collection-version.js";
 import { initSkit } from "../src/authoring/scaffold.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -28,13 +28,15 @@ it.effect(
       const f = yield* fixture;
       yield* fs.symlink("file", join(f.source, "link"));
       const hash = yield* originalTreeHash(f.source);
-      const retained = yield* retainLocalTree(f.source, f.objects, hash, true);
+      const retained = yield* writeCollectionVersion(f.source, f.objects, hash, true);
       expect(yield* fs.readLink(join(retained, "link"))).toBe("file");
       expect((yield* fs.stat(join(retained, "file"))).mode & 0o777).toBe(0o751);
       expect(yield* fs.readDirectory(retained)).toEqual(["file", "link"]);
       expect(yield* originalTreeHash(retained)).toBe(hash);
       yield* fs.writeFileString(join(retained, "file"), "corrupted");
-      expect(yield* Effect.exit(retainLocalTree(f.source, f.objects, hash, true))).toMatchObject({
+      expect(
+        yield* Effect.exit(writeCollectionVersion(f.source, f.objects, hash, true)),
+      ).toMatchObject({
         _tag: "Failure",
       });
       expect(yield* fs.readFileString(join(retained, "file"))).toBe("corrupted");
@@ -51,7 +53,7 @@ it.effect.each([true])(
       let changed = false;
       const exit = yield* Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        return yield* retainLocalTree(f.source, f.objects, hash, verbatim).pipe(
+        return yield* writeCollectionVersion(f.source, f.objects, hash, verbatim).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
             open: (path, options) =>
@@ -81,7 +83,7 @@ it.effect.each([true])(
       yield* Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const reached = yield* Deferred.make<void>();
-        const operation = retainLocalTree(f.source, f.objects, hash, verbatim).pipe(
+        const operation = writeCollectionVersion(f.source, f.objects, hash, verbatim).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
             open: (path, options) =>
@@ -113,7 +115,7 @@ it.effect("normalized retention materializes only normalized artifact membership
     yield* fs.writeFileString(join(f.source, ".DS_Store"), "excluded residue");
     yield* fs.writeFileString(join(f.source, ".skit-ownership.json"), "excluded custody");
     const hash = yield* deterministicTreeHash(f.source);
-    const retained = yield* retainLocalTree(f.source, f.objects, hash, false);
+    const retained = yield* writeCollectionVersion(f.source, f.objects, hash, false);
     expect(yield* fs.readDirectory(retained)).toEqual(["file"]);
     expect(yield* deterministicTreeHash(retained)).toBe(hash);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

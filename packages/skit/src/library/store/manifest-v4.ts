@@ -1,7 +1,11 @@
 import { Schema, SchemaGetter } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { CollectionId, SkillId, SkillVersionId } from "../entity-ids.js";
-import { CollectionRelativePath, RetainedCopy, SourceRelativePath } from "../library-contracts.js";
+import {
+  CollectionRelativePath,
+  CollectionVersion,
+  SourceRelativePath,
+} from "../library-contracts.js";
 import {
   AcquisitionV5,
   BindingV5,
@@ -15,7 +19,7 @@ import {
 import { Digest, HarnessName } from "../../vocabulary.js";
 
 export const RetainedCopyV4 = Schema.Struct({
-  ...RetainedCopy.fields,
+  ...CollectionVersion.fields,
   v3_normalized_tree: Schema.optionalKey(
     Schema.Struct({
       digest: Digest,

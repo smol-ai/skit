@@ -2,10 +2,10 @@ import {
   AUTHOR_WORKSPACE_METADATA_FILE,
   COLLECTION_CONTROL_DIRECTORY,
   LibraryStore,
-  RetainedContentInvalid,
+  ImportContentInvalid,
   initSkit,
   validateSkitDirectory,
-  retainAuthoredCollectionUnderLock,
+  importAuthoredCollection,
   writeJsonAtomic,
   writeJsonExclusive,
   withLibraryWriter,
@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import {
   AuthorWorkspaceMetadataInvalid,
   AuthorWorkspaceAlreadyRegistered,
-  DirectoryAlreadyRetained,
+  DirectoryAlreadyInLibrary,
 } from "./failures.js";
 
 const AUTHOR_WORKSPACE_SCHEMA = "skit.author-workspace.v1" as const;
@@ -118,7 +118,7 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
       collection.upstream.source_identity.workspace_id !== expectedWorkspaceId,
   );
   if (conflict)
-    return yield* new DirectoryAlreadyRetained({
+    return yield* new DirectoryAlreadyInLibrary({
       collectionId: conflict.collection_id,
     });
   const planned: AuthorWorkspaceMetadata = workspace ?? {
@@ -171,7 +171,7 @@ const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(functi
         error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
       ),
     );
-  const collection = yield* retainAuthoredCollectionUnderLock({
+  const collection = yield* importAuthoredCollection({
     root,
     source: { type: "local", path: root },
     sourceIdentity: {
@@ -183,7 +183,7 @@ const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(functi
     retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
   });
   if (validated.descriptor.skills.length === 0)
-    return yield* new RetainedContentInvalid({ diagnostics: ["retained Skills are missing"] });
+    return yield* new ImportContentInvalid({ diagnostics: ["retained Skills are missing"] });
   yield* writeJsonAtomic(path, { ...plan.workspace, registration: "registered" });
   return collection;
 });

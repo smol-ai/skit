@@ -5,7 +5,7 @@ import { LinkStat } from "./link-stat.js";
 import { TreeError } from "../shared/tree-error.js";
 
 /** Settled namespace operations and scoped handles: no abandoned recursive cp. */
-export const copyLocalTree = Effect.fn("Retention.copyTree")(function* (
+export const copyLocalTree = Effect.fn("Platform.copyTree")(function* (
   from: string,
   to: string,
   excluded: string | readonly string[] | undefined,

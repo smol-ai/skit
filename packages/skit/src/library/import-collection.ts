@@ -6,7 +6,7 @@ import { copyLocalTree } from "../platform/copy-tree.js";
 import {
   makeImportId,
   makeCollectionId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
   MachineId,
@@ -28,7 +28,7 @@ import {
   libraryManifestFromLocalState,
 } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
-import { originalTreeHash, retainLocalTree } from "./retention/retain-tree.js";
+import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
 import { materializedSkillDigest } from "./skill-materialization.js";
 import {
   collectionLabelFromSource,
@@ -79,7 +79,7 @@ const safeRelative = (path: string) =>
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
 
 /** Member facts from verified retained bytes; `sourcePath` is relative to the retained copy. */
-export interface RetainedSkillFact {
+export interface ImportedSkillFact {
   readonly name: string;
   readonly sourcePath: string;
   readonly sourceDigest: Digest;
@@ -122,7 +122,7 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
   const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-observed-v4-" });
   const staged = join(workspace, "verbatim");
   if (skills[0]?.relativePath !== ".") yield* fs.makeDirectory(staged);
-  const facts: RetainedSkillFact[] = [];
+  const facts: ImportedSkillFact[] = [];
   for (const skill of skills) {
     const path = join(staged, skill.relativePath);
     yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
@@ -158,7 +158,7 @@ const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
 interface PersistPreparedRequest extends ImportRequest {
   readonly retainedDigest: Digest;
-  readonly facts: readonly RetainedSkillFact[];
+  readonly facts: readonly ImportedSkillFact[];
   readonly sourceIdentity?: SourceIdentity;
   readonly label?: string;
 }
@@ -215,7 +215,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const retainedCopy = state.retained_copies.find(
     (candidate) => candidate.digest === request.retainedDigest,
   );
-  const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
+  const retainedCopyId = retainedCopy?.retained_copy_id ?? makeCollectionVersionId();
   // Return the identity and facts of this retained copy, including on an unchanged import.
   // These contain no scoped paths, so callers can consume them after preparation closes.
   const receipt = {
@@ -334,7 +334,7 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
 ) {
   const store = yield* LibraryStore;
   const prepared = yield* prepareImport(request.skills);
-  yield* retainLocalTree(prepared.staged, store.originalsPath, prepared.digest, true);
+  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
   return yield* persistPrepared({
     ...request,
     retainedDigest: prepared.digest,
@@ -360,111 +360,109 @@ export class InstalledSkillChanged
  * The import records only the local path and machine that were actually observed. It does
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
-export const retainChangedInstalledSkill = Effect.fn("Library.retainChangedInstalledSkill")(
-  function* (request: {
-    readonly skillId: LibraryState["skills"][number]["skill_id"];
-    readonly projectionId: LibraryState["projections"][number]["projection_id"];
-    readonly path: string;
-    readonly observedHash: Digest;
-    readonly retainedAt: string;
-  }) {
-    const store = yield* LibraryStore;
-    const current = yield* store.inspect;
-    if (!current.present)
-      return yield* new InvalidLibraryState({
-        path: join(store.home, "state.json"),
-        detail: "Retaining an installed skill's changes requires current Library state",
-      });
-    const state = structuredClone(current.state);
-    const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
-    const projection = state.projections.find(
-      (candidate) => candidate.projection_id === request.projectionId,
-    );
-    if (
-      skill === undefined ||
-      projection === undefined ||
-      projection.skill_id !== skill.skill_id ||
-      projection.path !== request.path
-    )
-      return yield* new InstalledSkillChanged({ path: request.path });
-
-    const prepared = yield* prepareImport([
-      {
-        name: "projection-observation",
-        sourcePath: request.path,
-        relativePath: ".",
-        observedHash: request.observedHash,
-      },
-    ]).pipe(
-      Effect.catchTag("Library.ImportRequestInvalid", () =>
-        Effect.fail(new InstalledSkillChanged({ path: request.path })),
-      ),
-    );
-    yield* retainLocalTree(prepared.staged, store.originalsPath, prepared.digest, true);
-    const fact = prepared.facts[0]!;
-    const machineId = yield* MachineSettings.ensureIdentity(store.home);
-    const retainedCopy = state.retained_copies.find(
-      (candidate) => candidate.digest === prepared.digest,
-    );
-    const retainedCopyId = retainedCopy?.retained_copy_id ?? makeRetainedCopyId();
-    const version = skill.versions.find(
-      (candidate) => candidate.artifact_digest === fact.artifactDigest,
-    ) ?? {
-      skill_version_id: makeSkillVersionId(),
-      source_digest: fact.sourceDigest,
-      artifact_digest: fact.artifactDigest,
-      validation_identity_digest: fact.validationDigest,
-      materialization_profile: fact.materializationProfile,
-    };
-    if (retainedCopy === undefined)
-      state.retained_copies.push({
-        retained_copy_id: retainedCopyId,
-        digest: prepared.digest,
-        copy_profile: "verbatim/v1",
-        members: [
-          {
-            source_path: ".",
-            source_digest: fact.sourceDigest,
-            artifact_digest: fact.artifactDigest,
-            materialization_profile: fact.materializationProfile,
-          },
-        ],
-      });
-    state.acquisitions.push({
-      acquisition_id: makeImportId(),
-      collection_id: skill.collection_id,
-      kind: "retained-edit",
-      retained_copy_id: retainedCopyId,
-      source_identity: {
-        kind: "local",
-        machine_id: machineId,
-        path: { value: request.path },
-      },
-      input: { value: request.path },
-      acquired_at: request.retainedAt,
-      machine_id: machineId,
-      observations: [],
+export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
+  readonly skillId: LibraryState["skills"][number]["skill_id"];
+  readonly projectionId: LibraryState["projections"][number]["projection_id"];
+  readonly path: string;
+  readonly observedHash: Digest;
+  readonly retainedAt: string;
+}) {
+  const store = yield* LibraryStore;
+  const current = yield* store.inspect;
+  if (!current.present)
+    return yield* new InvalidLibraryState({
+      path: join(store.home, "state.json"),
+      detail: "Retaining an installed skill's changes requires current Library state",
     });
-    if (!skill.versions.includes(version)) skill.versions.push(version);
-    skill.local_version_id = version.skill_version_id;
-    const successor = yield* decodeLibraryState(state).pipe(
-      Effect.mapError(
-        (error) =>
-          new InvalidLibraryState({
-            path: join(store.home, "state.json"),
-            detail: `Retaining an installed skill's changes produced invalid Library state: ${String(error)}`,
-          }),
-      ),
-    );
-    yield* store.save(successor, current.state);
-    return {
-      skillVersionId: version.skill_version_id,
-      retainedCopyId,
-      snapshotDigest: prepared.digest,
-      artifactDigest: fact.artifactDigest,
-    };
-  },
-);
+  const state = structuredClone(current.state);
+  const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
+  const projection = state.projections.find(
+    (candidate) => candidate.projection_id === request.projectionId,
+  );
+  if (
+    skill === undefined ||
+    projection === undefined ||
+    projection.skill_id !== skill.skill_id ||
+    projection.path !== request.path
+  )
+    return yield* new InstalledSkillChanged({ path: request.path });
+
+  const prepared = yield* prepareImport([
+    {
+      name: "projection-observation",
+      sourcePath: request.path,
+      relativePath: ".",
+      observedHash: request.observedHash,
+    },
+  ]).pipe(
+    Effect.catchTag("Library.ImportRequestInvalid", () =>
+      Effect.fail(new InstalledSkillChanged({ path: request.path })),
+    ),
+  );
+  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
+  const fact = prepared.facts[0]!;
+  const machineId = yield* MachineSettings.ensureIdentity(store.home);
+  const retainedCopy = state.retained_copies.find(
+    (candidate) => candidate.digest === prepared.digest,
+  );
+  const retainedCopyId = retainedCopy?.retained_copy_id ?? makeCollectionVersionId();
+  const version = skill.versions.find(
+    (candidate) => candidate.artifact_digest === fact.artifactDigest,
+  ) ?? {
+    skill_version_id: makeSkillVersionId(),
+    source_digest: fact.sourceDigest,
+    artifact_digest: fact.artifactDigest,
+    validation_identity_digest: fact.validationDigest,
+    materialization_profile: fact.materializationProfile,
+  };
+  if (retainedCopy === undefined)
+    state.retained_copies.push({
+      retained_copy_id: retainedCopyId,
+      digest: prepared.digest,
+      copy_profile: "verbatim/v1",
+      members: [
+        {
+          source_path: ".",
+          source_digest: fact.sourceDigest,
+          artifact_digest: fact.artifactDigest,
+          materialization_profile: fact.materializationProfile,
+        },
+      ],
+    });
+  state.acquisitions.push({
+    acquisition_id: makeImportId(),
+    collection_id: skill.collection_id,
+    kind: "retained-edit",
+    retained_copy_id: retainedCopyId,
+    source_identity: {
+      kind: "local",
+      machine_id: machineId,
+      path: { value: request.path },
+    },
+    input: { value: request.path },
+    acquired_at: request.retainedAt,
+    machine_id: machineId,
+    observations: [],
+  });
+  if (!skill.versions.includes(version)) skill.versions.push(version);
+  skill.local_version_id = version.skill_version_id;
+  const successor = yield* decodeLibraryState(state).pipe(
+    Effect.mapError(
+      (error) =>
+        new InvalidLibraryState({
+          path: join(store.home, "state.json"),
+          detail: `Retaining an installed skill's changes produced invalid Library state: ${String(error)}`,
+        }),
+    ),
+  );
+  yield* store.save(successor, current.state);
+  return {
+    skillVersionId: version.skill_version_id,
+    retainedCopyId,
+    snapshotDigest: prepared.digest,
+    artifactDigest: fact.artifactDigest,
+  };
+});
 
 export interface AuthoredImport {
   readonly machineId?: MachineId;
@@ -478,52 +476,52 @@ export interface AuthoredImport {
   readonly revision?: SourceRevision;
   readonly retainedAt: string;
 }
-export const retainAuthoredCollectionUnderLock = Effect.fn(
-  "Library.retainAuthoredCollectionUnderLock",
-)(function* (request: AuthoredImport) {
-  const validated = yield* validateSkitDirectory(request.root, "retained", {
-    assessmentContext: "retain",
-  });
-  if (validated.diagnostics.some((item) => item.severity === "error"))
-    return yield* new ImportRequestInvalid({
-      reason: "authored Descriptor or Skill content is invalid",
+export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollectionUnderLock")(
+  function* (request: AuthoredImport) {
+    const validated = yield* validateSkitDirectory(request.root, "retained", {
+      assessmentContext: "retain",
     });
-  const store = yield* LibraryStore;
-  const retainedDigest = yield* originalTreeHash(request.root);
-  const retainedRoot = yield* retainLocalTree(
-    request.root,
-    store.originalsPath,
-    retainedDigest,
-    true,
-  );
-  const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
-  const facts: RetainedSkillFact[] = [];
-  for (const member of validated.descriptor.skills) {
-    const identity = validationByName.get(member.name);
-    if (identity === undefined)
+    if (validated.diagnostics.some((item) => item.severity === "error"))
       return yield* new ImportRequestInvalid({
-        reason: `authored Skill ${member.name} has no validation identity`,
+        reason: "authored Descriptor or Skill content is invalid",
       });
-    facts.push({
-      name: member.name,
-      sourcePath: member.path,
-      sourceDigest: yield* originalTreeHash(join(retainedRoot, member.path)),
-      artifactDigest: yield* Effect.scoped(
-        materializedSkillDigest({
-          retainedRoot,
-          sourcePath: member.path,
-          shared: member.shared,
-        }),
-      ),
-      validationDigest: identity.contentHash,
-      materializationProfile: "declared-skit-skill/v1",
+    const store = yield* LibraryStore;
+    const retainedDigest = yield* originalTreeHash(request.root);
+    const retainedRoot = yield* writeCollectionVersion(
+      request.root,
+      store.originalsPath,
+      retainedDigest,
+      true,
+    );
+    const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
+    const facts: ImportedSkillFact[] = [];
+    for (const member of validated.descriptor.skills) {
+      const identity = validationByName.get(member.name);
+      if (identity === undefined)
+        return yield* new ImportRequestInvalid({
+          reason: `authored Skill ${member.name} has no validation identity`,
+        });
+      facts.push({
+        name: member.name,
+        sourcePath: member.path,
+        sourceDigest: yield* originalTreeHash(join(retainedRoot, member.path)),
+        artifactDigest: yield* Effect.scoped(
+          materializedSkillDigest({
+            retainedRoot,
+            sourcePath: member.path,
+            shared: member.shared,
+          }),
+        ),
+        validationDigest: identity.contentHash,
+        materializationProfile: "declared-skit-skill/v1",
+      });
+    }
+    return yield* persistPrepared({
+      ...request,
+      skills: [],
+      observations: [],
+      retainedDigest,
+      facts,
     });
-  }
-  return yield* persistPrepared({
-    ...request,
-    skills: [],
-    observations: [],
-    retainedDigest,
-    facts,
-  });
-});
+  },
+);

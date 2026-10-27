@@ -5,7 +5,7 @@ import {
   makeCollectionId,
   makeOperationId,
   makeInstalledSkillId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
@@ -29,11 +29,11 @@ const failureStory = (name: string, failure: CommandFailure): OutputStory =>
 
 const digest = `sha256:${"0".repeat(64)}`;
 const collectionId = makeCollectionId();
-const versionId = makeRetainedCopyId();
-const otherVersionId = makeRetainedCopyId();
+const versionId = makeCollectionVersionId();
+const otherVersionId = makeCollectionVersionId();
 const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
-const retainedTreeId = makeRetainedCopyId();
+const collectionVersionId = makeCollectionVersionId();
 const installedSkillId = makeInstalledSkillId();
 const binding = {
   scope: { kind: "global" as const },
@@ -775,7 +775,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         subject_kind: "collection",
         label: "review-tools",
         retained_copies: [
-          { retained_copy_id: retainedTreeId, digest, retained_bytes_current: true },
+          { retained_copy_id: collectionVersionId, digest, retained_bytes_current: true },
         ],
         unresolved_skill_selections: 0,
         source_status: "unverified",
@@ -855,7 +855,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       skill_name: "review",
       previous_skill_version_id: skillVersionId,
       retained_skill_version_id: makeSkillVersionId(),
-      retained_copy_id: retainedTreeId,
+      retained_copy_id: collectionVersionId,
       snapshot_digest: digest,
       retained: true,
       projections: [

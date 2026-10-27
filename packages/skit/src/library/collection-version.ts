@@ -1,17 +1,17 @@
-import { copyLocalTree } from "../../platform/copy-tree.js";
+import { copyLocalTree } from "../platform/copy-tree.js";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { walkTree } from "../../artifact/tree.js";
-import { ContentAddressCollision } from "../../failures.js";
-import { deterministicTreeHash } from "../../artifact/skit.js";
-import type { Digest } from "../../contracts.js";
+import { walkTree } from "../artifact/tree.js";
+import { ContentAddressCollision } from "../failures.js";
+import { deterministicTreeHash } from "../artifact/skit.js";
+import type { Digest } from "../contracts.js";
 
-export const retainedTreePath = (objectsPath: string, digest: Digest) =>
+export const collectionVersionPath = (objectsPath: string, digest: Digest) =>
   join(objectsPath, digest.slice(7, 9), digest.slice(7));
 
 /** Materialize exactly the normalized inventory; excluded source residue never enters an object. */
-const copyNormalizedTree = Effect.fn("Retention.copyNormalizedTree")(function* (
+const copyNormalizedTree = Effect.fn("CollectionVersion.copyNormalizedTree")(function* (
   root: string,
   destination: string,
 ) {
@@ -25,7 +25,9 @@ const copyNormalizedTree = Effect.fn("Retention.copyNormalizedTree")(function* (
   }
 });
 
-export const originalTreeHash = Effect.fn("Retention.originalHash")(function* (root: string) {
+export const originalTreeHash = Effect.fn("CollectionVersion.originalHash")(function* (
+  root: string,
+) {
   const hash = createHash("sha256");
   const append = (value: string | Uint8Array) => {
     const bytes = typeof value === "string" ? Buffer.from(value) : value;
@@ -45,14 +47,14 @@ export const originalTreeHash = Effect.fn("Retention.originalHash")(function* (r
 });
 
 /** Saved immutable objects are never rollback-owned, even when this call created them. */
-export const retainLocalTree = Effect.fn("Retention.retainTree")(function* (
+export const writeCollectionVersion = Effect.fn("CollectionVersion.write")(function* (
   root: string,
   objectsPath: string,
   expected: Digest,
   verbatim: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const path = retainedTreePath(objectsPath, expected);
+  const path = collectionVersionPath(objectsPath, expected);
   const hash = verbatim ? originalTreeHash : deterministicTreeHash;
   if (yield* fs.exists(path)) {
     if ((yield* hash(path)) !== expected) return yield* new ContentAddressCollision();

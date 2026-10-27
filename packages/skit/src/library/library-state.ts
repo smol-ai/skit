@@ -9,7 +9,7 @@ import {
   Collection,
   currentLibraryManifest,
   LibraryManifest,
-  RetainedCopy,
+  CollectionVersion,
   Skill,
   librarySnapshotDigests,
 } from "./library-contracts.js";
@@ -80,7 +80,7 @@ export const LibraryState = Schema.Struct({
   pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
   collections: Schema.mutable(Schema.Array(Collection)),
   skills: Schema.mutable(Schema.Array(Skill)),
-  retained_copies: Schema.mutable(Schema.Array(RetainedCopy)),
+  retained_copies: Schema.mutable(Schema.Array(CollectionVersion)),
   acquisitions: Schema.mutable(Schema.Array(Import)),
   global_bindings: Schema.mutable(Schema.Array(DeviceBinding)),
   local_bindings: Schema.mutable(Schema.Array(RepositoryBinding)),

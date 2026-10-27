@@ -65,16 +65,16 @@ export * from "./library/inventory/refresh.js";
 
 export {
   originalTreeHash,
-  retainedTreePath,
-  retainLocalTree,
-} from "./library/retention/retain-tree.js";
+  collectionVersionPath,
+  writeCollectionVersion,
+} from "./library/collection-version.js";
 export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
 export { skillsShLockFileEntry } from "./library/skills-sh-lock-file.js";
 export * from "./library/library-state.js";
 export * from "./library/binding-intent.js";
 export * from "./library/library-restore.js";
-export * from "./library/retained-content-plan.js";
+export * from "./library/collection-version-plan.js";
 export * from "./library/restore-progress.js";
 export * from "./library/installation/uninstall.js";
 export * from "./library/installation/remove.js";

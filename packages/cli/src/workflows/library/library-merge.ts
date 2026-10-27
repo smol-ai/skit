@@ -19,7 +19,7 @@ import {
   type SkillId,
   type Collection,
   type Skill,
-  type RetainedCopy,
+  type CollectionVersion,
   type Import,
 } from "@smolai/skit-core";
 import { Data, Effect, Result, Schema } from "effect";
@@ -375,7 +375,7 @@ export function mergeLibraryManifests(
       },
     ];
   }
-  const trees = mergeRecords<RetainedCopy>(
+  const trees = mergeRecords<CollectionVersion>(
     "retained-tree",
     base.retained_copies,
     local.retained_copies,

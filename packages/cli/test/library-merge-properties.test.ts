@@ -8,7 +8,7 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
   type BindingEntry,
@@ -24,7 +24,7 @@ const pool = Array.from({ length: 4 }, (_, index) => {
   const digest = `sha256:${String(index).repeat(64)}`;
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
-  const retainedCopyId = makeRetainedCopyId();
+  const retainedCopyId = makeCollectionVersionId();
   return {
     collectionId,
     skillId,

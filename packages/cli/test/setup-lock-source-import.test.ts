@@ -9,7 +9,7 @@ import {
   LibraryAuditLog,
   LibraryStore,
   libraryStoreLayer,
-  retainedTreePath,
+  collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
 import { setupCommand } from "../src/handlers/library/setup.js";
@@ -288,7 +288,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     );
     expect(acquisition.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.retained_copies[0]!;
-    const original = retainedTreePath(home.originals, tree.digest);
+    const original = collectionVersionPath(home.originals, tree.digest);
     expect(yield* fs.readFileString(join(original, "review", "SKILL.md"))).toBe(installedText);
     expect(yield* fs.exists(join(original, "README.md"))).toBe(false);
     const secondSetup = yield* home.owned(runSetup(setup));

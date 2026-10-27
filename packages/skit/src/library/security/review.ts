@@ -15,7 +15,7 @@ import {
   versionBacking,
 } from "../library-contracts.js";
 import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
-import { retainedTreePath } from "../retention/retain-tree.js";
+import { collectionVersionPath } from "../collection-version.js";
 
 const securitySkill = Effect.fn("Library.securitySkill")(function* (
   state: LibraryState,
@@ -56,7 +56,7 @@ export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot
 ) {
   const store = yield* LibraryStore;
   const { version, member, tree } = yield* securitySkill(state, query);
-  const originalPath = retainedTreePath(store.originalsPath, tree.digest);
+  const originalPath = collectionVersionPath(store.originalsPath, tree.digest);
   const skillPath =
     member.source_path === "." ? originalPath : join(originalPath, member.source_path);
   const text = yield* (yield* FileSystem.FileSystem).readFileString(join(skillPath, "SKILL.md"));

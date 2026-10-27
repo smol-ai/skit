@@ -6,9 +6,9 @@ import {
   deterministicTreeHash,
   HarnessName,
   LibraryStore,
-  retainedTreePath,
+  collectionVersionPath,
   resolveDeclaredInvocation,
-  retainAuthoredCollectionUnderLock,
+  importAuthoredCollection,
   skitLayer,
 } from "@smolai/skit-core";
 import {
@@ -203,7 +203,7 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLock({
+          importAuthoredCollection({
             root: source,
             source: { type: "local", path: source },
             input: source,
@@ -223,7 +223,7 @@ Tools
         ).every((agent) => agent.effectivePolicy === "explicit"),
       ).toBe(true);
       const state = yield* home.durable;
-      const retained = retainedTreePath(home.originals, state.retained_copies[0]!.digest);
+      const retained = collectionVersionPath(home.originals, state.retained_copies[0]!.digest);
       yield* fs.writeFileString(join(retained, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(openLibrarySession());
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
@@ -257,7 +257,7 @@ Tools
     yield* home.owned(
       writingTo(
         home.home,
-        retainAuthoredCollectionUnderLock({
+        importAuthoredCollection({
           root: source,
           source: { type: "local", path: source },
           input: source,
@@ -283,7 +283,10 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       const badState = yield* home.durable;
       if (problem === "missing-skill")
         yield* fs.remove(
-          join(retainedTreePath(home.originals, badState.retained_copies[0]!.digest), "SKILL.md"),
+          join(
+            collectionVersionPath(home.originals, badState.retained_copies[0]!.digest),
+            "SKILL.md",
+          ),
         );
       const healthy = join(source, "..", "healthy");
       yield* fs.makeDirectory(healthy);
@@ -393,7 +396,7 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLock({
+          importAuthoredCollection({
             root: source,
             source: { type: "local", path: source },
             input: source,
@@ -403,7 +406,7 @@ Tools
       );
       const state = yield* home.durable;
       const payload = join(
-        retainedTreePath(home.originals, state.retained_copies[0]!.digest),
+        collectionVersionPath(home.originals, state.retained_copies[0]!.digest),
         "retained-payload.txt",
       );
       let payloadReads = 0;

@@ -2,7 +2,7 @@ import {
   currentSkillVersion,
   LibraryStore,
   originalTreeHash,
-  retainedTreePath,
+  collectionVersionPath,
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
@@ -60,7 +60,7 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
           retained_copy_id: copy.retained_copy_id,
           digest: copy.digest,
           retained_bytes_current:
-            (yield* originalTreeHash(retainedTreePath(store.originalsPath, copy.digest))) ===
+            (yield* originalTreeHash(collectionVersionPath(store.originalsPath, copy.digest))) ===
             copy.digest,
         });
       }

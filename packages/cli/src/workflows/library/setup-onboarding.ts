@@ -11,7 +11,7 @@ import {
   indexSetupOnboardingEvidence,
   lockEvidenceKey,
   type SetupOnboardingEvidence,
-  type SetupRetainedEvidence,
+  type SetupImportEvidence,
 } from "./setup-evidence.js";
 import type { SetupLockMatch } from "./setup-contract.js";
 import { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
@@ -121,7 +121,7 @@ export const setupInstanceGroupKey = (instance: SetupSkillInstance): string => {
 
 export const classifySetupOnboarding = (
   instances: ReadonlyArray<SetupSkillInstance>,
-  retained?: SetupRetainedEvidence,
+  retained?: SetupImportEvidence,
 ): SetupOnboardingCandidate[] => {
   const evidence = indexSetupOnboardingEvidence(instances, retained);
   const collections = retained?.library?.collections ?? [];

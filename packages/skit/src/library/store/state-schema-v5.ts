@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { RetainedCopy } from "../library-contracts.js";
+import { CollectionVersion } from "../library-contracts.js";
 import { AbsoluteDevicePath } from "../library-state.js";
 import { HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
@@ -29,7 +29,7 @@ export const LibraryStateV5 = Schema.Struct({
   schemaVersion: Schema.Literal(5),
   collections: Schema.Array(CollectionV5),
   skills: Schema.Array(SkillV5),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(CollectionVersion),
   acquisitions: Schema.Array(AcquisitionV5),
   global_bindings: Schema.Array(DeviceBindingV5),
   local_bindings: Schema.Array(RepositoryBindingV5),

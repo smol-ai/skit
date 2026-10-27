@@ -5,7 +5,7 @@ import {
   LibraryState,
   currentSkillVersion,
   versionBacking,
-  retainedTreePath,
+  collectionVersionPath,
   originalTreeHash,
   scanInventory,
   skitLayer,
@@ -147,7 +147,7 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
           problems.push(`no retained backing for ${skill.name}`);
           continue;
         }
-        const root = retainedTreePath(join(home, ".skit", "originals"), backing.copy.digest);
+        const root = collectionVersionPath(join(home, ".skit", "originals"), backing.copy.digest);
         const path = join(root, backing.member.source_path);
         const hash = yield* originalTreeHash(path).pipe(Effect.option);
         if (hash._tag === "None" || hash.value !== version.source_digest)

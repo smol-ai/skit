@@ -252,7 +252,7 @@ export class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShIm
   },
 ) {}
 
-const retainedSkillPath = (lockPath: string | undefined, name: string) => {
+const lockSkillPath = (lockPath: string | undefined, name: string) => {
   if (!lockPath) return name;
   const normalized = lockPath.replaceAll("\\", "/").replace(/^\.\//, "");
   return normalized.endsWith("/SKILL.md") ? normalized.slice(0, -"/SKILL.md".length) : normalized;
@@ -349,7 +349,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         relativePath:
           lock.entry.sourceType === "well-known"
             ? candidate.name
-            : retainedSkillPath(candidate.skillPath, candidate.name),
+            : lockSkillPath(candidate.skillPath, candidate.name),
         observedHash,
       });
       for (const observation of matchingInstances.flatMap((item) =>

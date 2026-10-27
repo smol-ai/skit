@@ -2,7 +2,12 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LibraryStore, libraryStoreLayer, retainedTreePath, skitLayer } from "@smolai/skit-core";
+import {
+  LibraryStore,
+  libraryStoreLayer,
+  collectionVersionPath,
+  skitLayer,
+} from "@smolai/skit-core";
 import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
 import { writingTo } from "./helpers/library-home.js";
@@ -38,7 +43,7 @@ it.effect(
         state.skills.map((skill) => skill.path),
         manifest.skills.map((skill) => skill.path),
       );
-      const retained = retainedTreePath(join(home, "originals"), result.snapshot_digest);
+      const retained = collectionVersionPath(join(home, "originals"), result.snapshot_digest);
       for (const file of manifest.files) {
         if (!manifest.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
         assert.strictEqual(

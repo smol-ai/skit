@@ -10,7 +10,7 @@ import {
   sourceLocator,
   prepareImport,
   resolveSkitSource,
-  retainAuthoredCollectionUnderLock,
+  importAuthoredCollection,
   importCollection,
   type SkitSource,
   type ResolvedSkitSource,
@@ -207,7 +207,7 @@ export const importSource = Effect.fn("Library.addSource")(function* (
         };
         const retained =
           resolved.descriptorKind === "declared"
-            ? yield* retainAuthoredCollectionUnderLock({ ...request, root: resolved.root })
+            ? yield* importAuthoredCollection({ ...request, root: resolved.root })
             : yield* importCollection({
                 ...request,
                 skills: yield* describeSourceSkills(resolved, historicalInput),

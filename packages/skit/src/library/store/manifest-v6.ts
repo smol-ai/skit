@@ -6,7 +6,7 @@ import {
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
   LibraryManifest,
   mergeGlobalBindings,
-  RetainedCopy,
+  CollectionVersion,
   Skill,
 } from "../library-contracts.js";
 import { Digest, HarnessName } from "../../vocabulary.js";
@@ -23,7 +23,7 @@ export const LibraryManifestV6 = Schema.Struct({
   schema: Schema.Literal("skit.library.v6"),
   collections: Schema.Array(Collection),
   skills: Schema.Array(Skill),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(CollectionVersion),
   acquisitions: Schema.Array(Import),
   snapshot_digests: Schema.Array(Digest),
   bindings: Schema.Array(BindingV6),

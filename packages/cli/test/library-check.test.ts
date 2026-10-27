@@ -1,7 +1,12 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
-import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
+import {
+  libraryStoreLayer,
+  LibraryStore,
+  collectionVersionPath,
+  skitLayer,
+} from "@smolai/skit-core";
 import { checkSubjects } from "../src/workflows/library/check.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
@@ -40,7 +45,10 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(current[0]?.source_status, "not-applicable");
     assert.strictEqual(current[0]?.available_snapshot_digest, undefined);
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
-    const path = retainedTreePath(join(home, "originals"), loaded.state.retained_copies[0]!.digest);
+    const path = collectionVersionPath(
+      join(home, "originals"),
+      loaded.state.retained_copies[0]!.digest,
+    );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
     const changed = yield* checkSubjects(loaded.state, retained.collection_id).pipe(
       Effect.provideService(LibraryStore, {

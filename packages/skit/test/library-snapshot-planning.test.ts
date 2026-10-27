@@ -4,7 +4,7 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
@@ -13,14 +13,14 @@ import {
   librarySnapshotDigests,
   type Import,
   type LibraryManifest,
-  type RetainedCopy,
+  type CollectionVersion,
 } from "../src/library/library-contracts.js";
 import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
-const retainedCopyId = makeRetainedCopyId();
+const retainedCopyId = makeCollectionVersionId();
 const machineId = makeMachineId();
-const copy: RetainedCopy = {
+const copy: CollectionVersion = {
   retained_copy_id: retainedCopyId,
   digest,
   copy_profile: "verbatim/v1",
@@ -106,8 +106,8 @@ it("keeps unpinned, local, and retained-edit acquisitions snapshot-backed", () =
 });
 
 const sourceDigest = `sha256:${"b".repeat(64)}`;
-const sourceCopyId = makeRetainedCopyId();
-const sourceCopy: RetainedCopy = {
+const sourceCopyId = makeCollectionVersionId();
+const sourceCopy: CollectionVersion = {
   ...copy,
   retained_copy_id: sourceCopyId,
   digest: sourceDigest,

@@ -1,7 +1,7 @@
 import { Clock, Effect } from "effect";
 import { join } from "node:path";
 import { validateSkitDirectory } from "../../artifact/skit.js";
-import { originalTreeHash, retainedTreePath } from "../retention/retain-tree.js";
+import { originalTreeHash, collectionVersionPath } from "../collection-version.js";
 import { versionBacking, type Skill, type SkillVersion } from "../library-contracts.js";
 import type { LibraryState } from "../library-state.js";
 
@@ -18,7 +18,7 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
   const backing = versionBacking(state, skill, version);
   if (backing === undefined)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} has no backing` };
-  const root = retainedTreePath(originalsPath, backing.copy.digest);
+  const root = collectionVersionPath(originalsPath, backing.copy.digest);
   const authored = version.materialization_profile === "declared-skit-skill/v1";
   const validated = authored
     ? yield* validateSkitDirectory(root, "retained", {

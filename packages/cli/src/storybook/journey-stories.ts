@@ -12,7 +12,7 @@ import {
   makeCollectionId,
   makeMachineId,
   makeInstalledSkillId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
   skitLayer,
@@ -36,7 +36,7 @@ export interface JourneyStory<A, E, R> {
 
 const digest = `sha256:${"0".repeat(64)}`;
 const collectionId = makeCollectionId();
-const retainedTreeId = makeRetainedCopyId();
+const collectionVersionId = makeCollectionVersionId();
 const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
 const acquisitionId = makeImportId();
@@ -68,7 +68,7 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
   ],
   retained_copies: [
     {
-      retained_copy_id: retainedTreeId,
+      retained_copy_id: collectionVersionId,
       digest,
       copy_profile: "verbatim/v1",
       members: [
@@ -86,7 +86,7 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       acquisition_id: acquisitionId,
       collection_id: collectionId,
       kind: "source",
-      retained_copy_id: retainedTreeId,
+      retained_copy_id: collectionVersionId,
       input: { value: "/fixtures/review" },
       source_identity: {
         kind: "local",
