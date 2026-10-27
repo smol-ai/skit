@@ -351,8 +351,12 @@ describe("CLI contracts", () => {
           },
         );
         expect(processResult.status).toBe(65);
-        expect(processResult.stdout).toBe("");
-        const failure = JSON.parse(processResult.stderr).error;
+        if (command === "setup") expect(processResult.stderr).toBe("");
+        else expect(processResult.stdout).toBe("");
+        const failure =
+          command === "setup"
+            ? JSON.parse(processResult.stdout).data
+            : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
         expect(failure.message).toContain("supports v4–v9");

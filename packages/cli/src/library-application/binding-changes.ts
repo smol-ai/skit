@@ -48,6 +48,8 @@ export type {
 import type { SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 
 export interface BindingChangeRequest extends BindingSelection {
+  /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
+  readonly preserveUnselectedProjections?: boolean;
   readonly allowDuplicate?: boolean;
   /** Setup consent applies only to these exact symlinks, until projection succeeds. */
   readonly allowedShadowAliases?: readonly {
@@ -306,11 +308,12 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       .publish(next, current)
       .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(stale())));
   }
-  const reconciled = yield* reconcileLibraryProjections({
+  yield* reconcileLibraryProjections({
     roots: configuration,
     variantsPath: store.variantsPath,
     onlyBindings: plan.bindings,
     restoreNativeDeletedSkills: options.enabled ? skillIds : [],
+    ...(options.preserveUnselectedProjections ? { onlySkillIds: skillIds } : {}),
     ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
     // Enabling a skill the user already installed by hand takes custody of an identical copy
     // instead of recording a conflict with it.

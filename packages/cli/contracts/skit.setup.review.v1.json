@@ -1,0 +1,302 @@
+{
+  "$id": "skit.setup.review.v1",
+  "type": "object",
+  "properties": {
+    "planId": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "reviewId": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "hasChanges": {
+      "type": "boolean"
+    },
+    "canApply": {
+      "type": "boolean"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "sourceUpdateMayNeedReview": {
+          "type": "boolean"
+        },
+        "reconciliation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "projectionId": {
+                "type": "string"
+              },
+              "skillId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string",
+                "enum": [
+                  "agents",
+                  "claude"
+                ]
+              },
+              "baselineHash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "currentHash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "desiredHash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "desiredVersionId": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "unchanged",
+                  "incoming-update",
+                  "local-only",
+                  "competing",
+                  "protected",
+                  "native-delete"
+                ]
+              },
+              "metadataChanged": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "projectionId",
+              "skillId",
+              "name",
+              "path",
+              "target",
+              "baselineHash",
+              "evidence",
+              "status",
+              "metadataChanged"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "versionChoices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "skillId": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string",
+                "enum": [
+                  "retained",
+                  "local"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "skillId",
+              "version"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "savesMachineSettings": {
+          "type": "boolean"
+        },
+        "createsMachineIdentity": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "source",
+              "names"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "enables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "retains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "preserves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "symlink",
+                  "directory"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "path",
+              "kind"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "removals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Directory",
+                  "SymbolicLink"
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "path",
+              "type"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": [
+        "sourceUpdateMayNeedReview",
+        "reconciliation",
+        "versionChoices",
+        "savesMachineSettings",
+        "createsMachineIdentity",
+        "sources",
+        "enables",
+        "retains",
+        "preserves",
+        "removals"
+      ],
+      "additionalProperties": true
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rel": {
+            "type": "string"
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "required": [
+          "rel",
+          "argv",
+          "effect"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "planId",
+    "reviewId",
+    "hasChanges",
+    "canApply",
+    "summary",
+    "actions"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

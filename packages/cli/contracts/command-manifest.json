@@ -935,6 +935,266 @@
     },
     {
       "path": [
+        "library",
+        "recovery",
+        "list"
+      ],
+      "stability": "stable",
+      "summary": "List machine-local saved-file recovery operations; files are retained until manually removed.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read"
+        ]
+      },
+      "outputSchemas": [
+        "skit.recovery.list.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "library",
+        "recovery",
+        "inspect"
+      ],
+      "stability": "stable",
+      "summary": "Inspect receipts and actual original/saved files without changing them.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read"
+        ]
+      },
+      "outputSchemas": [
+        "skit.recovery.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [
+        {
+          "name": "operation",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "library",
+        "recovery",
+        "restore"
+      ],
+      "stability": "stable",
+      "summary": "Preview or restore verified saved files into free original paths. Does not undo Library bindings or settings.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.recovery.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit library recovery restore OPERATION --json"
+      ],
+      "positionals": [
+        {
+          "name": "operation",
+          "required": true
+        }
+      ],
+      "flags": {
+        "apply": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Restore only if this reviewed recovery planId still matches. Omit to preview."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
+        "library",
+        "undo"
+      ],
+      "stability": "stable",
+      "summary": "Preview or undo one setup's intent, installed copies and machine discovery settings while keeping retained artifacts.",
+      "effects": {
+        "capabilities": [
+          "filesystem.read",
+          "filesystem.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.setup.undo.v1"
+      ],
+      "exitCodes": [
+        0,
+        11,
+        12,
+        64
+      ],
+      "interactive": false,
+      "examples": [],
+      "positionals": [
+        {
+          "name": "operation",
+          "required": true
+        }
+      ],
+      "flags": {
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "apply": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Undo only the exact reviewed planId. Omit to preview without writing."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
         "list"
       ],
       "stability": "stable",
@@ -1929,8 +2189,11 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v8",
-        "skit.setup.applied.v1"
+        "skit.setup.v9",
+        "skit.setup.applied.v2",
+        "skit.setup.review.v1",
+        "skit.setup.failed.v1",
+        "skit.setup.comparison.v1"
       ],
       "exitCodes": [
         0,
@@ -1962,12 +2225,62 @@
         "apply": {
           "type": "string",
           "valueName": "string",
-          "description": "Apply the recommended plan with this planId (from `skit setup --json`) without prompting."
+          "description": "Apply this observed planId without prompting; explicit selections also need --reviewed."
+        },
+        "review": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Preview explicit or recommended choices against this observed planId without applying."
+        },
+        "compare": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Compare observed copies of the selected skill paths against this planId."
+        },
+        "reviewed": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The reviewId returned by --review; required when applying explicit selections."
         },
         "duplicates": {
           "type": "choice",
           "valueName": "choice",
-          "description": "With --apply, how to handle skills agents already see elsewhere: retain-only keeps them in the Library without enabling, keep-both enables them anyway, retire-aliases replaces redundant symlinks. (choices: retain-only, retire-aliases, keep-both)"
+          "description": "Override automatic preservation for selected skills: retain-only keeps Library artifacts without enabling; keep-both keeps existing copies active; retire-aliases preserves individual links; preserve-duplicates preserves eligible equal global directories. (choices: retain-only, retire-aliases, keep-both, preserve-duplicates)"
+        },
+        "use-retained": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Use the retained active version for this competing Skill identifier."
+        },
+        "use-copy": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Use this current copy as the active version of its competing Skill."
+        },
+        "reconcile-skill": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Review this already-enabled Skill without selecting unrelated sources; repeat to choose more."
+        },
+        "only-selected": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Use only the explicitly selected sources/copies/removals, including an empty selection."
+        },
+        "select-path": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Choose this observed copy path; repeat to choose more."
+        },
+        "select-source": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Choose this public source identifier from setup JSON; repeat to choose more."
+        },
+        "remove-path": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Preserve this eligible installed copy in recovery; repeat to choose more."
         },
         "json": {
           "type": "boolean",

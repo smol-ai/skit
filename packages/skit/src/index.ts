@@ -36,13 +36,17 @@ export {
   ProjectionFailure,
   inspectOwnershipMarkerEffect,
   projectionCustodyEffect,
+  projectionDisplacedEffect,
   projectionNameEffect,
   withProjectionMutationEffect,
+  prepareProjectionRebuildEffect,
   type ProjectionMutation,
   type NativeProjectionContext,
   type ProjectionMutationError,
   type ProjectionAdoption,
 } from "./projection/mutation.js";
+export { inspectProjectionBackupsEffect } from "./projection/backups.js";
+export { copyLocalTreeEffect } from "./platform/copy-tree.js";
 export { ensureProjectionRootWritable } from "./projection/writable.js";
 export { discoveryPathExcluded } from "./acquisition/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
@@ -80,7 +84,11 @@ export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
 export * from "./library/audit/audit-log.js";
-export { writeJsonAtomicEffect, writeJsonExclusiveEffect } from "./platform/atomic-write.js";
+export {
+  writeRawAtomicEffect,
+  writeJsonAtomicEffect,
+  writeJsonExclusiveEffect,
+} from "./platform/atomic-write.js";
 export * from "./usage/contracts.js";
 export { SkillUsage, skillUsageLayer } from "./usage/scanner.js";
 

@@ -20,7 +20,8 @@ The acceptance tests drive `setupCommand` itself with `interactive: true`, a scr
 | **Library state** | `<home>/state.json` | Each import, add, and bind publication | Atomic rename, compare-and-swap against the loaded base, under the Library writer |
 | **Migration backup** | `<home>/state.json.v<N>.backup-<time>` | The state loader, on first read of a legacy state | Atomic rename; the migrated state is written after it |
 | **Originals** | `<home>/originals/<digest>` | Retention, before the state that references it | Content-addressed; unreferenced trees are inert |
-| **Recovery folder** | `<home>/removed/<uuid>/` with `receipt.json` | `applySetupRemovals` | Per-entry rename; the receipt is rewritten atomically after each |
+| **Recovery folder** | `<home>/removed/<operation>/<batch>/` with immutable `receipt.json` | `applySetupRemovals` | Exclusive receipt publication before the first rename; progress is derived from actual paths |
+| **Setup inverse evidence** | `<home>/removed/<operation>/setup.json`, `changes/`, `complete.json` | `beginSetupOperation`, settings owner callback and setup publication wrapper | Immutable typed before/expected-after receipts before settings/Library publication; confirmed publications are acknowledged separately |
 | **Agent roots** | Harness skills roots and their `.skit-backups` | Removals (move out), binds (managed projection replaces the copy) | Per entry |
 
 ## Current behaviour
@@ -34,11 +35,12 @@ Preview runs without the Library writer lock. On approval, `applySetupPlan` runs
 | S0 | Preview: `runSetup` with `persistRoots: false`, plus a second observation if repository decisions were asked. The plan ID covers the candidates, the instances, the repository configs and the Library revision | handler `setupCommand`; `workflows/library/setup.ts` `observeSetup` |
 | S1 | Confirmation prompt; declining returns the preview | handler `setupCommand` |
 | S2 | The one apply-time scan, held to the approved plan ID | `setup-apply.ts`; `workflows/library/setup.ts` `revalidateSetupPlan` |
+| S2a | Capture the original filesystem and desired-intent evidence in a setup operation, after approved-plan revalidation and projection-root preflight | `library-application/setup-operation.ts` |
 | S3 | If the plan saves roots, or imports or adds without a machine identity: write `machine.json`, without scanning | `setup-apply.ts`; `setup-discovery.ts` `saveSetupMachineConfig` |
 | S4 | Observed-source imports, one Collection group at a time, each retained and published before the next; each lockfile's hash is checked first | `setup-observed-collections.ts` |
 | S5 | Existing-entry binds: per selection bind and project against the approved content hash, then retire aliases | `setup-existing-binding.ts`; `setup-local-custody.ts` `bindSetupCopy` |
 | S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `retainLibrarySourceEffect`, bind and project, then retire aliases | `setup-local-custody.ts` |
-| S7 | Explicit removals, last: check the Library is still at the apply's revision, preflight every entry (identity and link target; for a directory also its approved content hash and no new custody marker), create the recovery folder, write the receipt, then for each entry check it again, rename it, and rewrite the receipt | `setup-apply.ts`; `setup-removal.ts` |
+| S7 | Explicit removals, last: check the Library is still at the apply's revision, preflight every entry (identity and link target; for a directory also its approved content hash and no new custody marker), create checked recovery containers, publish the immutable receipt exclusively, then for each entry check it again and rename it | `setup-apply.ts`; `setup-removal.ts` |
 | S8 | Outside the writer: offer a skills.sh update check, which loads the Library and may prompt | handler `offerSkillsShUpdateCheck` |
 
 During S3 to S6 every Library publication must build on the approved revision or on the apply's own previous publication; any other base fails with `LibraryChanged`, which a binding stage reports as its own conflict. There is no closing verification scan: a guided apply returns the S2 observation with the saved machine configuration, and guided setup does not render it.
@@ -53,17 +55,17 @@ During S3 to S6 every Library publication must build on the approved revision or
 | Any approved apply | One scan after approval, however many stages run | `an approved apply scans once after approval, whatever stages it runs` |
 | A selected file changes after approval, before S2 | `SetupPlanStale`; only the outside change is on disk | `a selected file changed after approval fails stale before any effect` |
 | Another writer commits a Library revision after approval, before S2 | `SetupPlanStale`; only the outside change is in the Library | `a Library change committed after approval fails stale before any effect` |
-| A selected copy changes after S2, before its custody stage | `PlanIsStale`; `machine.json` may be written; nothing retained, nothing removed | `bytes changed between the apply-time scan and a later stage fail stale` |
+| A selected copy changes after S2, before its custody stage | `PlanIsStale`; `machine.json` and setup inverse evidence may be written; nothing retained, nothing removed | `bytes changed between the apply-time scan and a later stage fail stale` |
 | A selected copy changes after an earlier selection committed | `PlanIsStale`; earlier selections stay added; the changed copy is not retained; nothing removed | `a selected copy changed after the first additive stage fails stale` |
 | Another writer commits a Library revision between stages | A conflict failure at the next publication; earlier publications stay; nothing further is published or removed | `a Library change committed after the first additive stage stops the apply` |
 | A removal selection is edited in place after the apply-time scan | `PlanIsStale`; earlier additive stages stay; the edited copy stays where it is, nothing removed | `a removal selection edited after the first additive stage stays in place` |
 | An additive stage fails | `machine.json` and orphan originals may be written; the failed publication changes nothing; no removal applied | `a failed additive stage leaves every selected removal in place` |
 | S4: a later import group fails | Earlier groups stay retained and published; the failing group may leave orphan originals | Not covered here; needs a skills.sh lock fixture |
 | S5/S6: a later selection fails | Earlier selections stay added, bound and projected; a bind can commit before its alias retirement | Not covered here |
-| S7: a later rename fails | Every additive stage applied; a prefix of entries moved into recovery with their bytes; the rest untouched; the receipt records `moved: true` for the prefix only. No rollback | `a failed removal move leaves a moved prefix, the rest in place, and a receipt` |
+| S7: a later rename fails | Every additive stage applied; a prefix of entries moved into recovery with their bytes; the rest untouched; inspection reports `saved` for the prefix and `at-original` for the rest. No rollback | `a failed removal move leaves a moved prefix, the rest in place, and a receipt` |
 | A removal selection gains a custody marker, even an invalid one, after the apply-time scan | `PlanIsStale`; earlier additive stages stay; the copy stays where it is with its bytes, nothing removed. The tree hash excludes the marker, so this is checked on its own | `a removal selection that gains a custody marker after the scan stays in place` |
-| S7: a later entry is replaced while an earlier one moves | `PlanIsStale`; the earlier entry is in recovery and recorded `moved: true`; the replaced entry is untouched and recorded `moved: false` | `a removal entry replaced during an earlier move stays untouched` |
-| S7: the receipt rewrite after a move fails | The entry is moved, whole, but recorded `moved: false`. No bytes are lost. Nothing reads the receipt back, so a manual recovery must inspect both the original and recovery paths of every entry rather than trust `moved` | `a failed receipt rewrite leaves a moved copy recorded as not moved, bytes intact` (recovery-evidence characterization) |
+| S7: a later entry is replaced while an earlier one moves | `PlanIsStale`; the earlier entry is in recovery (`saved`); the replaced entry is untouched (`conflict`) | `a removal entry replaced during an earlier move stays untouched` |
+| S7: receipt replacement is refused | Removal still succeeds: publication is exclusive and no receipt rewrite occurs after moves | `removal publishes one immutable receipt before moving files` |
 | S8 fails or is cancelled after a successful apply | The command fails, but nothing is undone: every stage before it is durable | Not covered here |
 
 ## Desired behaviour
@@ -76,7 +78,56 @@ Guided apply lives in one workflow. Every requirement holds today:
 | The approved plan ID stays fixed; internal re-observation never refreshes consent | `a selected file changed after approval fails stale before any effect`, `bytes changed between the apply-time scan and a later stage fail stale` |
 | A stale approval, or a change after an additive stage (a selected file, lockfile, symlink target or Library revision), means no further effects and a clear stale failure | `a selected copy changed after the first additive stage fails stale`, `a Library change committed after the first additive stage stops the apply`, `a removal selection edited after the first additive stage stays in place`, `a removal selection that gains a custody marker after the scan stays in place`, `a removal entry replaced during an earlier move stays untouched`; lockfiles in `setup-lock-source-adoption.test.ts`, symlink targets in `harness-shadows.test.ts` |
 | Additive stages run before removals; an additive failure means no removals | `a failed additive stage leaves every selected removal in place` |
-| If a removal fails, the durable partial state is documented and a recovery receipt is kept | The two S7 rows. When a receipt rewrite fails, the receipt can lag the disk by one move; no bytes are lost and a recovery must inspect both paths, so this is recovery evidence, not a violation |
+| If a removal fails, the durable partial state is documented and a recovery receipt is kept | The S7 rows and recovery filesystem tests. Immutable receipts describe the full inventory before any rename; inspection derives progress from both actual paths, including interrupted batches |
 | A concurrent Library change is never silently rebased | `a Library change committed after approval fails stale before any effect`, `a Library change committed after the first additive stage stops the apply` |
 
 In every row, current and desired, bytes that cannot be reproduced are kept: a removed copy is moved, never deleted, and the tests compare its recovered bytes and mode with the original.
+
+Setup inverse evidence is retained even when a later stage fails before its first
+file move. A recovery directory's presence therefore does not mean files moved;
+inspection must derive file state from immutable batch receipts and actual paths.
+Non-interactive `setup --work-dir` uses a settings-only prepared apply and records
+that effect; it no longer writes settings inside its discovery scan. Its explicit
+flag still enables no skills. The settings-only result refreshes its observation
+after applying, so advertised actions use the current plan identity.
+
+`setup-undo.test.ts` now checks the prepared full-undo path: adopted marker
+release, retained artifacts remaining available, preservation of new writable
+copies (including reviewed user edits), restoration of explicit removals with
+their original inode, stale-plan refusal, occupied and redirected destinations,
+marker symlinks, receipt publication failure, interrupted Library/settings inverse
+publication, repeated undo preserving later choices, and executable CLI actions
+through the parser and rendered result. Changed-projection, partial-forward and baseline reconciliation cases are covered
+by `setup-reconciliation.test.ts`; see `setup-recovery-refactor.md` for the complete
+requirement mapping and remaining deliberate custody boundaries.
+
+Automatic preservation now has final-state proof in
+`setup-duplicate-preservation.test.ts`: equal direct global directories move only
+after every affected reader has a verified replacement, complete original bytes
+remain recoverable, and full undo returns the original inode. Authored controls,
+new repository ownership and changed replacements keep the old copy in place.
+`setup-actions.test.ts` walks concrete actions for mixed directory/link cleanup
+and full undo through the real grammar. Individual source aliases and eligible
+equal global directories no longer require a duplicate-housekeeping question
+after the user selects enablement; other duplicate intent stays explicit.
+
+`setup-undo-sources.test.ts` verifies full undo of an observed-source import into
+an already-followed Collection: prior membership, versions and any selected
+override return while every acquisition and artifact remains. A verified local
+re-observation of the prior retained snapshot uses the existing Acquisition model,
+so ordinary source refresh can advance afterward. The tests also cover newer
+source choices, corrupted originals, clock ordering, settings failure after the
+Library inverse, sync merge compatibility, and real CLI preview/apply actions.
+
+
+Baseline reconciliation now uses corroborated last-written projection evidence.
+Equal current/desired bytes align metadata without replacing the directory;
+untouched copies accept reviewed incoming updates; local-only edits remain active;
+native deletions remain absent. Competing changes require a concrete retained or
+current-copy choice shared by guided setup and literal CLI actions. Selected local
+bytes become ordinary Library history, and exact original directories are saved
+before either version is projected. Full undo restores the previous selection and
+original directories while retaining that history. A settings-only work-dir call
+performs none of this projection work. Source imports that change the reviewed
+desired Version leave affected copies untouched and return a fresh-review
+continuation. A later repository/authored/pnpm owner vetoes inverse replacement.

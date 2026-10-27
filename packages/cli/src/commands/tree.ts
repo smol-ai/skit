@@ -21,6 +21,8 @@ import {
   repositoryListCliCommand,
   repositoryWatchCliCommand,
 } from "../handlers/repository.js";
+import { libraryRecoveryCliCommand } from "../handlers/library/recovery.js";
+import { librarySetupUndoCliCommand } from "../handlers/library/setup-undo.js";
 import { libraryHistoryCliCommand } from "../handlers/library/history.js";
 import { versionCliCommand } from "../handlers/version.js";
 import {
@@ -58,7 +60,11 @@ const registryCommand = Command.make("registry").pipe(
 
 const libraryCommand = Command.make("library").pipe(
   Command.withDescription("Manage local Library storage."),
-  Command.withSubcommands([libraryHistoryCliCommand]),
+  Command.withSubcommands([
+    libraryHistoryCliCommand,
+    libraryRecoveryCliCommand,
+    librarySetupUndoCliCommand,
+  ]),
 );
 
 const repositoryCommand = Command.make("repository").pipe(

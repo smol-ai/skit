@@ -1,0 +1,420 @@
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { Effect, FileSystem } from "effect";
+import {
+  canonicalJson,
+  copyLocalTreeEffect,
+  effectiveGlobalBindings,
+  inspectOwnershipMarkerEffect,
+  inspectProjectionBackupsEffect,
+  LibraryStore,
+  LinkStat,
+  pathIsWithin,
+  prepareProjectionRebuildEffect,
+  retainedTreePath,
+  versionBacking,
+  writeRawAtomicEffect,
+  type LibraryState,
+  type ManagedProjection,
+} from "@smolai/skit-core";
+import { PlanIsStale } from "../library/failures.js";
+import { inspectSetupOperation, observeSetupFile } from "./setup-operation.js";
+import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "./recovery-moves.js";
+import { checkSetupGlobalContent } from "./setup-content-custody.js";
+import { recoveryFingerprint, RecoveryInvalid } from "./recovery-evidence.js";
+
+type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["operation"];
+type File = Operation["files"][number];
+type Observed = Effect.Success<ReturnType<typeof observeSetupFile>>;
+
+/** Observation timestamps are evidence, not a change to desired projection custody. */
+export const projectionChoice = (projection: ManagedProjection | undefined) =>
+  projection === undefined
+    ? null
+    : {
+        projection_id: projection.projection_id,
+        skill_id: projection.skill_id,
+        skill_version_id: projection.skill_version_id,
+        path: projection.path,
+        root: projection.root,
+        target: projection.target,
+        expected_digest: projection.expected_digest,
+        status: projection.status,
+        suppressed_at: projection.suppressed_at,
+      };
+const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
+
+/** Check the original namespace anchor, even when today's nearest existing parent has changed. */
+const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: File) {
+  const links = yield* LinkStat;
+  const physical = yield* links.realPathNative(file.anchor.path);
+  const anchor = yield* links.identity.lstat(physical);
+  if (
+    physical !== file.anchor.physicalPath ||
+    anchor.dev !== file.anchor.dev ||
+    anchor.ino !== file.anchor.ino
+  )
+    return yield* new RecoveryInvalid({ detail: `Redirected original parent: ${file.path}` });
+  const suffix = relative(file.anchor.path, dirname(file.path));
+  const expected = resolve(file.anchor.physicalPath, suffix);
+  // A present parent must still name the same physical namespace. Missing parents are allowed
+  // only for an originally absent entry, which undo never recreates.
+  const parent = yield* links
+    .realPathNative(dirname(file.path))
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+      ),
+    );
+  if (
+    (parent !== undefined && parent !== expected) ||
+    (file.entry !== null && parent === undefined)
+  )
+    return yield* new RecoveryInvalid({
+      detail: `Redirected or missing original parent: ${file.path}`,
+    });
+});
+
+const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
+  path: string,
+  entry: NonNullable<File["entry"]>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const links = yield* LinkStat;
+  const marker = join(path, ".skit-ownership.json");
+  const existing = yield* links
+    .lstat(marker)
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+      ),
+    );
+  if (existing && existing.type !== "File")
+    return yield* new RecoveryInvalid({ detail: `Unsafe ownership marker at ${path}` });
+  if (entry.marker === null) {
+    if (existing) yield* fs.remove(marker).pipe(Effect.uninterruptible);
+  } else {
+    if (entry.markerType !== "File" || entry.markerMode === undefined || entry.markerMode === null)
+      return yield* new RecoveryInvalid({
+        detail: `Original marker metadata unavailable at ${path}`,
+      });
+    yield* writeRawAtomicEffect(marker, entry.marker, false, entry.markerMode & 0o7777);
+    yield* fs.chmod(marker, entry.markerMode & 0o7777);
+  }
+});
+
+/** File effects are prepared from immutable before evidence, never inferred from desired bindings. */
+export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(function* (
+  operationId: string,
+  operation: Operation,
+  expected: readonly ManagedProjection[],
+  state: LibraryState,
+  preservationDirectory: string,
+  priorPreservations: readonly string[],
+  restoredState: LibraryState,
+  confirmedProjectionPaths: ReadonlySet<string>,
+) {
+  const store = yield* LibraryStore;
+  const fs = yield* FileSystem.FileSystem;
+  const links = yield* LinkStat;
+  const recovery = yield* inspectRecoveryOperation(store.home, operationId);
+  const preserved = yield* Effect.forEach(priorPreservations, (id) =>
+    inspectRecoveryOperation(store.home, id),
+  );
+  const conflicts: string[] = [];
+  const observations: Observed[] = [];
+  const actions: {
+    path: string;
+    kind: "release-custody" | "restore" | "remove-created";
+    source?: string;
+    transfer?: "move" | "copy" | "rebuild";
+  }[] = [];
+  const moves: { name: string; projection: ManagedProjection }[] = [];
+  const rebuilds = new Map<
+    string,
+    Effect.Success<ReturnType<typeof prepareProjectionRebuildEffect>>
+  >();
+  const affected = new Set<string>();
+  const physicalPaths: string[] = [];
+  const physicalHome = yield* links.realPathNative(store.home);
+  for (const file of operation.files) {
+    const prior = operation.projections.find((item) => resolve(item.path) === file.path);
+    const after = expected.find((item) => resolve(item.path) === file.path);
+    const current = state.projections.find((item) => resolve(item.path) === file.path);
+    const saved = recovery.entries.filter((entry) => entry.path === file.path);
+    const observed = yield* observeSetupFile(file.path);
+    observations.push(observed);
+    const changedProjection = !equal(projectionChoice(prior), projectionChoice(after));
+    const possibleClaim =
+      observed.entry?.marker !== file.entry?.marker &&
+      after?.status === "installed" &&
+      (file.entry === null || file.entry.marker === null);
+    const approvedPath =
+      operation.projectionPaths === undefined || operation.projectionPaths.includes(file.path);
+    const claim = possibleClaim && approvedPath && confirmedProjectionPaths.has(file.path);
+    if (!saved.length && !changedProjection && possibleClaim && approvedPath && !claim) {
+      conflicts.push(`Setup custody claim is not confirmed: ${file.path}`);
+      continue;
+    }
+    if (!saved.length && !claim && !changedProjection) continue;
+    if ((yield* Effect.result(checkSetupGlobalContent(file.path)))._tag === "Failure") {
+      conflicts.push(
+        `Repository, authored or package-manager ownership protects this path: ${file.path}`,
+      );
+      continue;
+    }
+    affected.add(file.path);
+    if (
+      file.entry?.type === "Directory" &&
+      file.entry.marker === null &&
+      file.entry.hash !== file.entry.unstampedHash
+    ) {
+      conflicts.push(`Original ownership marker is not reproducible: ${file.path}`);
+      continue;
+    }
+    const anchor = yield* Effect.result(checkAnchor(file));
+    if (anchor._tag === "Failure") {
+      conflicts.push(`Original parent changed: ${file.path}`);
+      continue;
+    }
+    const physical = join(observed.anchor.physicalPath, relative(observed.anchor.path, file.path));
+    if (
+      physical === physicalHome ||
+      pathIsWithin(physicalHome, physical) ||
+      pathIsWithin(physical, physicalHome)
+    ) {
+      conflicts.push(`Library storage cannot be restored over: ${file.path}`);
+      continue;
+    }
+    if (
+      physicalPaths.some(
+        (other) =>
+          other === physical || pathIsWithin(other, physical) || pathIsWithin(physical, other),
+      )
+    ) {
+      conflicts.push(`Overlapping original paths: ${file.path}`);
+      continue;
+    }
+    physicalPaths.push(physical);
+    if (
+      !equal(projectionChoice(current), projectionChoice(after)) &&
+      !equal(projectionChoice(current), projectionChoice(prior))
+    ) {
+      conflicts.push(`Projection choice changed: ${file.path}`);
+      continue;
+    }
+    if (
+      observed.entry?.hash === file.entry?.hash &&
+      (observed.entry !== null) === (file.entry !== null)
+    )
+      continue;
+    const marker =
+      observed.entry?.markerType === "File"
+        ? yield* inspectOwnershipMarkerEffect(file.path)
+        : undefined;
+    const owned =
+      current &&
+      after &&
+      equal(projectionChoice(current), projectionChoice(after)) &&
+      marker?.kind === "valid" &&
+      marker.marker.projection_id === current.projection_id &&
+      marker.marker.skill_id === current.skill_id &&
+      marker.marker.skill_version_id === current.skill_version_id &&
+      marker.marker.expected_digest === current.expected_digest;
+    if (
+      file.entry &&
+      observed.entry &&
+      owned &&
+      observed.entry.dev === file.entry.dev &&
+      observed.entry.ino === file.entry.ino &&
+      observed.entry.unstampedHash === file.entry.unstampedHash
+    ) {
+      actions.push({ path: file.path, kind: "release-custody" });
+      continue;
+    }
+    if (
+      file.entry &&
+      observed.entry &&
+      observed.entry.dev === file.entry.dev &&
+      observed.entry.ino === file.entry.ino &&
+      observed.entry.unstampedHash !== file.entry.unstampedHash
+    ) {
+      conflicts.push(`Adopted original was edited: ${file.path}`);
+      continue;
+    }
+    if (observed.entry && !owned) {
+      conflicts.push(`Occupied original path: ${file.path}`);
+      continue;
+    }
+    if (observed.entry && owned) moves.push({ name: basename(file.path), projection: current });
+    if (file.entry === null) {
+      if (observed.entry) actions.push({ path: file.path, kind: "remove-created" });
+      continue;
+    }
+    // Missing a setup-created successor is not permission to reverse a newer user deletion.
+    if (
+      !observed.entry &&
+      after &&
+      !saved.some((entry) => entry.status === "saved") &&
+      !preserved.some((inspection) =>
+        inspection.entries.some((entry) => entry.path === file.path && entry.status === "saved"),
+      )
+    ) {
+      conflicts.push(`Installed copy disappeared without undo preservation: ${file.path}`);
+      continue;
+    }
+    let source: string | undefined;
+    // File recovery calls an occupied destination a conflict. Full undo can first
+    // preserve its owned successor, so validate the saved original independently.
+    for (const entry of saved) {
+      const evidence = yield* observeSetupFile(entry.recoveryPath);
+      if (
+        evidence.entry?.hash === file.entry.hash &&
+        evidence.entry.dev === file.entry.dev &&
+        evidence.entry.ino === file.entry.ino
+      )
+        source = entry.recoveryPath;
+    }
+    for (const projection of [prior, after]) {
+      if (source !== undefined || projection === undefined) continue;
+      for (const path of yield* inspectProjectionBackupsEffect(projection)) {
+        const evidence = yield* observeSetupFile(path);
+        if (
+          evidence.entry?.hash === file.entry.hash &&
+          evidence.entry.dev === file.entry.dev &&
+          evidence.entry.ino === file.entry.ino
+        )
+          source = path;
+      }
+    }
+    // Reconstruction copies immutable retained bytes; it never moves or edits their source.
+    if (source === undefined && file.entry.type === "Directory") {
+      for (const skill of state.skills)
+        for (const version of skill.versions) {
+          const backing = versionBacking(state, skill, version);
+          if (!backing) continue;
+          const root = retainedTreePath(store.originalsPath, backing.copy.digest);
+          const path =
+            backing.member.source_path === "." ? root : join(root, backing.member.source_path);
+          const evidence = yield* Effect.result(observeSetupFile(path));
+          if (
+            evidence._tag === "Success" &&
+            evidence.success.entry?.unstampedHash === file.entry.unstampedHash
+          )
+            source = path;
+        }
+    }
+    if (source === undefined && prior && file.entry.markerType === "File") {
+      const policy =
+        effectiveGlobalBindings(restoredState)[0]?.invocation_policies?.[prior.skill_id];
+      const rebuilt = yield* Effect.result(
+        prepareProjectionRebuildEffect(
+          restoredState,
+          store.originalsPath,
+          prior,
+          policy === undefined ? { source: "declared" } : { source: "override", policy },
+        ),
+      );
+      if (rebuilt._tag === "Success") {
+        rebuilds.set(file.path, rebuilt.success);
+        actions.push({
+          path: file.path,
+          kind: "restore",
+          source: rebuilt.success.retainedRoot,
+          transfer: "rebuild",
+        });
+        continue;
+      }
+    }
+    if (source === undefined) {
+      conflicts.push(`Original bytes unavailable: ${file.path}`);
+      continue;
+    }
+    const original = (yield* observeSetupFile(source)).entry;
+    const transfer =
+      original?.dev === file.entry.dev && original?.ino === file.entry.ino ? "move" : "copy";
+    if (
+      transfer === "move" &&
+      (yield* links.identity.lstat(yield* links.realPathNative(dirname(file.path)))).dev !==
+        original!.dev
+    ) {
+      conflicts.push(`Original cannot be renamed across devices: ${file.path}`);
+      continue;
+    }
+    actions.push({ path: file.path, kind: "restore", source, transfer });
+  }
+  const preservation = yield* prepareOwnedRecoveryMoves(moves, preservationDirectory);
+  const sourceEvidence = yield* Effect.forEach(
+    actions.filter((action) => action.source !== undefined),
+    (action) => observeSetupFile(action.source!),
+  );
+  return {
+    conflicts,
+    observations,
+    actions,
+    affected: [...affected],
+    sourceEvidence,
+    apply: Effect.fn("SetupUndo.applyFiles")(function* () {
+      // Stage and verify every reconstruction before displacing the first live successor.
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const staged = new Map<string, string>();
+          for (const action of actions) {
+            const file = operation.files.find((item) => item.path === action.path)!;
+            yield* checkSetupGlobalContent(file.path);
+            yield* checkAnchor(file);
+            if (action.kind !== "restore" || action.source === undefined || file.entry === null)
+              continue;
+            if (action.transfer === "move") continue;
+            const directory = yield* fs.makeTempDirectoryScoped({
+              directory: dirname(file.path),
+              prefix: ".skit-undo-",
+            });
+            const path = join(directory, basename(file.path));
+            if (action.transfer === "rebuild") yield* rebuilds.get(file.path)!.build(path);
+            else yield* copyLocalTreeEffect(action.source, path, undefined, true);
+            if (file.entry.type === "Directory") yield* restoreMarker(path, file.entry);
+            if ((yield* recoveryFingerprint(path)) !== file.entry.hash)
+              return yield* new RecoveryInvalid({
+                detail: `Reconstruction differs from original: ${file.path}`,
+              });
+            staged.set(file.path, path);
+          }
+          yield* preservation.apply();
+          for (const action of actions) {
+            const file = operation.files.find((item) => item.path === action.path)!;
+            yield* checkSetupGlobalContent(file.path);
+            yield* checkAnchor(file);
+            if (action.kind === "release-custody") {
+              const before = observations.find((item) => item.path === file.path)!;
+              if (!equal(yield* observeSetupFile(file.path), before))
+                return yield* new PlanIsStale();
+              yield* restoreMarker(file.path, file.entry!);
+            } else if (action.kind === "restore") {
+              if ((yield* observeSetupFile(file.path)).entry !== null)
+                return yield* new PlanIsStale();
+              if (
+                action.transfer === "move" &&
+                !equal(
+                  yield* observeSetupFile(action.source!),
+                  sourceEvidence.find((entry) => entry.path === action.source),
+                )
+              )
+                return yield* new PlanIsStale();
+              yield* fs
+                .rename(
+                  action.transfer === "move" ? action.source! : staged.get(file.path)!,
+                  file.path,
+                )
+                .pipe(Effect.uninterruptible);
+            }
+            const actual = (yield* observeSetupFile(file.path)).entry;
+            if (file.entry === null ? actual !== null : actual?.hash !== file.entry.hash)
+              return yield* new RecoveryInvalid({
+                detail: `Original restoration incomplete: ${file.path}`,
+              });
+          }
+        }),
+      );
+    }),
+  };
+});

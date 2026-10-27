@@ -11,8 +11,18 @@ import {
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { observeSetupCopies } from "./setup-observation.js";
+import {
+  observeSetupReconciliation,
+  setupReconciliationChanges,
+  unresolvedSetupReconciliation,
+} from "./setup-reconciliation.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
-import { recommendedSetupSelection, setupApplyCommandLine } from "./setup-decisions.js";
+import {
+  copyConflict,
+  recommendedSetupSelection,
+  setupApplyCommandLine,
+  setupDuplicateChoiceRequired,
+} from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
 export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
@@ -109,6 +119,11 @@ const observeSetup = Effect.fn("Library.setup")(
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
+    const reconciliation = yield* observeSetupReconciliation(
+      library,
+      options.inventory,
+      sortedInstances,
+    );
     const recommended = recommendedSetupSelection(
       sortedInstances,
       onboarding,
@@ -118,6 +133,7 @@ const observeSetup = Effect.fn("Library.setup")(
       canonicalJson({
         candidates: onboarding,
         instances: sortedInstances,
+        reconciliation,
         repositoryConfigs,
         discoveryRoots,
         repositoryDecisions: [...existingDecisions].sort(([left], [right]) =>
@@ -125,6 +141,7 @@ const observeSetup = Effect.fn("Library.setup")(
         ),
         // Consent covers the Library the plan was made against, not only the disk it observed.
         library: libraryStateRevision(library),
+        machine: machineConfig,
       }),
     ]);
     const missingRepositories = !discovering
@@ -186,16 +203,21 @@ const observeSetup = Effect.fn("Library.setup")(
       onboarding: {
         planId,
         candidates: onboarding,
-        ...(recommended.sources.length || recommended.copies.length
+        ...(!unresolvedSetupReconciliation(reconciliation).length &&
+        (recommended.sources.length ||
+          recommended.copies.length ||
+          setupReconciliationChanges(reconciliation))
           ? {
               applyCommand: setupApplyCommandLine({
                 planId,
                 repositoryRoots: discoveryRoots,
                 needsDuplicateDecision: recommended.copies.some((copy) =>
-                  onboarding.some(
-                    (candidate) =>
-                      candidate.paths.includes(copy.sourcePath) && candidate.shadows?.length,
-                  ),
+                  setupDuplicateChoiceRequired({
+                    conflict: copyConflict(
+                      { instances: sortedInstances, onboarding: { candidates: onboarding } },
+                      copy,
+                    ),
+                  }),
                 ),
               }),
             }
@@ -204,6 +226,7 @@ const observeSetup = Effect.fn("Library.setup")(
       },
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,
+      reconciliation,
       brokenLinks: yield* collectBrokenLinks(harnessRoots),
       suppressed: walk.suppressed,
     } satisfies SetupResult;

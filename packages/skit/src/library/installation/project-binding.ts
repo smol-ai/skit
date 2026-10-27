@@ -16,6 +16,7 @@ import { LibraryStore } from "../store/library-store.js";
 import type { Digest, ProjectionTarget } from "../../vocabulary.js";
 import { scopeBinding, type ManagedProjection } from "../library-state.js";
 import { makeProjectionId } from "../entity-ids.js";
+import type { SkillId } from "../entity-ids.js";
 import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
@@ -48,6 +49,8 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   /** Adopt unmanaged copies that already hold exactly the projected bytes. */
   adoptIdentical?: boolean;
   restoreNativeDeletedSkills?: readonly string[];
+  /** Bound selection, pruning and relocation to the explicitly reviewed Skills. */
+  onlySkillIds?: readonly SkillId[];
 }) {
   const store = yield* LibraryStore;
   const state = yield* store.load;
@@ -55,7 +58,9 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   const binding = scopeBinding(state, scope);
   if (binding === undefined) return yield* new ProjectionInvalid({ detail: "Binding is missing" });
 
-  const boundSkillIds = bindingSkillIds(state, binding);
+  const boundSkillIds = bindingSkillIds(state, binding).filter(
+    (id) => options.onlySkillIds === undefined || options.onlySkillIds.includes(id),
+  );
   const selected = state.skills
     .filter((candidate) => boundSkillIds.includes(candidate.skill_id))
     .flatMap((skill) => {
@@ -89,6 +94,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   }
   const atTarget = (projection: ManagedProjection) =>
     projection.target === options.target &&
+    (options.onlySkillIds === undefined || options.onlySkillIds.includes(projection.skill_id)) &&
     rootKeys.get(projection.root) === rootKeys.get(options.root);
   const former =
     scope.kind === "global"

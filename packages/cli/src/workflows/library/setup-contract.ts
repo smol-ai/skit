@@ -11,6 +11,13 @@ import {
 import { Schema } from "effect";
 import { PnpmSkillOwner } from "../../projection/pnpm-skills.js";
 
+export const SetupVersionChoice = Schema.Struct({
+  skillId: SkillId,
+  version: Schema.Literals(["retained", "local"]),
+  path: Schema.optionalKey(Schema.String),
+});
+export type SetupVersionChoice = typeof SetupVersionChoice.Type;
+
 export const SetupProbe = Schema.Struct({
   harness: HarnessName,
   status: Schema.Literals(["installed", "missing", "failed"]),
@@ -204,6 +211,38 @@ export const SetupProjection = Schema.Struct({
 });
 export type SetupProjection = typeof SetupProjection.Type;
 
+export const SetupReconciliationFact = Schema.Struct({
+  projectionId: ProjectionId,
+  skillId: SkillId,
+  name: Schema.String,
+  path: Schema.String,
+  target: Schema.Literals(["agents", "claude"]),
+  baselineHash: Digest,
+  currentHash: Schema.optionalKey(Digest),
+  desiredHash: Schema.optionalKey(Digest),
+  desiredVersionId: Schema.optionalKey(SkillVersionId),
+  evidence: Digest,
+  status: Schema.Literals([
+    "unchanged",
+    "incoming-update",
+    "local-only",
+    "competing",
+    "protected",
+    "native-delete",
+  ]),
+  metadataChanged: Schema.Boolean,
+  reason: Schema.optionalKey(Schema.String),
+});
+export type SetupReconciliationFact = typeof SetupReconciliationFact.Type;
+export const SetupReconciliationOutcome = Schema.Struct({
+  reason: Schema.optionalKey(Schema.String),
+  projectionId: ProjectionId,
+  name: Schema.String,
+  path: Schema.String,
+  status: Schema.Literals(["updated", "unchanged", "local-kept", "native-delete", "pending"]),
+});
+export type SetupReconciliationOutcome = typeof SetupReconciliationOutcome.Type;
+
 const SetupOnboardingBase = {
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
   /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
@@ -276,6 +315,7 @@ export type SetupKnownSourceSelection = typeof SetupKnownSourceSelection.Type;
 export type SetupOnboardingCandidate = typeof SetupOnboardingCandidate.Type;
 
 export const SetupResult = Schema.Struct({
+  operationId: Schema.optionalKey(Schema.String),
   machineConfig: Schema.Struct({
     path: Schema.String,
     machineId: Schema.optionalKey(MachineId),
@@ -302,6 +342,7 @@ export const SetupResult = Schema.Struct({
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),
   authoredCollections: Schema.Array(SetupAuthoredCollection),
   projections: Schema.Array(SetupProjection),
+  reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationFact)),
   onboarding: Schema.Struct({
     planId: Digest,
     candidates: Schema.Array(SetupOnboardingCandidate),
@@ -330,6 +371,12 @@ export type SetupResult = typeof SetupResult.Type;
 /** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
  * every other observed skill was left alone. */
 export const SetupApplied = Schema.Struct({
+  reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationOutcome)),
+  operationId: Schema.optionalKey(Schema.String),
+  removed: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ name: Schema.String, path: Schema.String })),
+  ),
+  recoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
   planId: Digest,
   imported: Schema.Array(
     Schema.Struct({ source: Schema.String, names: Schema.Array(Schema.String) }),
@@ -356,6 +403,9 @@ export const SetupApplied = Schema.Struct({
    * were saved, and any symlink kept because it could not be retired safely.
    */
   aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
+  preservationWarnings: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
+  ),
   aliasesKept: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
   ),

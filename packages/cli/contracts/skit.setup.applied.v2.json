@@ -1,7 +1,72 @@
 {
-  "$id": "skit.setup.applied.v1",
+  "$id": "skit.setup.applied.v2",
   "type": "object",
   "properties": {
+    "reconciliation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "projectionId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "updated",
+              "unchanged",
+              "local-kept",
+              "native-delete",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "projectionId",
+          "name",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "operationId": {
+      "type": "string"
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "recoveryDirectories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "planId": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
@@ -125,6 +190,25 @@
         "type": "string"
       }
     },
+    "preservationWarnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
     "aliasesKept": {
       "type": "array",
       "items": {
@@ -143,6 +227,36 @@
         ],
         "additionalProperties": true
       }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rel": {
+            "type": "string"
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "required": [
+          "rel",
+          "argv",
+          "effect"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
@@ -151,7 +265,8 @@
     "added",
     "reconnected",
     "projections",
-    "leftAlone"
+    "leftAlone",
+    "actions"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

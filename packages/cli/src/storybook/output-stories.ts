@@ -295,6 +295,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "setup",
     "plan",
     result("setup", {
+      actions: [],
+      choices: [],
       machineConfig: {
         path: "/home/story/.skit/machine.json",
         repositoryRoots: ["/work"],
@@ -352,6 +354,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "setup",
     "applied",
     result("setupApplied", {
+      actions: [],
       planId: `sha256:${"0".repeat(64)}`,
       imported: [],
       added: [{ name: "review", sourcePath: "/home/story/.claude/skills/review" }],
