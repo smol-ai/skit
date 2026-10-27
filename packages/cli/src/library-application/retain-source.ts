@@ -57,7 +57,7 @@ const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(fun
 });
 
 /** Describe plain source members once, before retention verifies and stages those observations. */
-const describeSourceSkills = Effect.fn("Library.observeSourceSkills")(function* (
+const describeSourceSkills = Effect.fn("Library.describeSourceSkills")(function* (
   resolved: Extract<ResolvedSkitSource, { descriptorKind: "observed" }>,
   sourceLabel: string,
 ) {

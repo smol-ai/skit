@@ -86,7 +86,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     });
     if (conflict.kind === "preservable") {
       const checked = yield* Effect.result(
-        captureSetupCopies(copy.instance.path, conflict.shadows),
+        captureSetupCopies(copy.instance.path, conflict.duplicates),
       );
       if (checked._tag === "Failure") conflict = { ...conflict, kind: "preserve-copies" };
     }
@@ -195,7 +195,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
           duplicateAction: action,
           approvedCopies: yield* captureSetupCopies(
             copy.sourcePath,
-            copy.conflict.shadows,
+            copy.conflict.duplicates,
             decision.approvedCopies,
           ),
         });
@@ -212,7 +212,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         duplicateAction: action,
         approvedAliases: yield* captureLocalAdoptionAliases(
           copy.sourcePath,
-          copy.conflict.shadows,
+          copy.conflict.duplicates,
           decision.approvedAliases,
         ),
       });

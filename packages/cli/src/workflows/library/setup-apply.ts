@@ -23,7 +23,7 @@ import type {
 import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
 import { applySetupExistingBindings } from "./setup-existing-binding.js";
 import { applySetupLocalCustody } from "./setup-local-custody.js";
-import { importSetupCollections } from "./setup-observed-collections.js";
+import { importSetupCollections } from "./setup-import.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
 import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import {

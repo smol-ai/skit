@@ -753,7 +753,7 @@ it.effect(
           Effect.sync(() => {
             events.push("plan");
           }),
-        restoreObserver: {
+        restoreProgress: {
           around: (phase, operation) =>
             Effect.sync(() => {
               events.push(`start:${phase.kind}`);
@@ -795,7 +795,7 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
     const progress: string[] = [];
     const failure = yield* Effect.flip(
       b.sync({
-        restoreObserver: {
+        restoreProgress: {
           around: (phase, operation) =>
             Effect.sync(() => {
               progress.push(phase.kind);
@@ -875,7 +875,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
     yield* a.retain("second");
     const uploaded: number[] = [];
     yield* a.sync({
-      observer: {
+      progress: {
         around: (phase, operation) =>
           operation.pipe(
             Effect.tap(() =>
@@ -891,7 +891,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
     const completed: string[] = [];
     const retained: number[] = [];
     const result = yield* b.sync({
-      observer: {
+      progress: {
         around: (phase, operation) =>
           operation.pipe(
             Effect.tap(() =>
@@ -902,7 +902,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
           ),
         tick: () => Effect.void,
       },
-      restoreObserver: {
+      restoreProgress: {
         around: (phase, operation) =>
           operation.pipe(
             Effect.tap(() =>

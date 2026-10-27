@@ -7,7 +7,7 @@ import { makeMachineId } from "../src/library/entity-ids.js";
 import {
   retainAuthoredCollectionUnderLock,
   importCollection,
-} from "../src/library/observed-import.js";
+} from "../src/library/import-collection.js";
 import { originalTreeHash, retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";

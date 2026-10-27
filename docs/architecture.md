@@ -183,7 +183,7 @@ treating every file found in a harness root as SKIT-owned.
 
 The default local library is `~/.skit`, overridable with `SKIT_HOME` or `--home`. Its `state.json` is the single authoritative metadata store. Content-addressed originals and normalized releases live alongside it.
 
-The core `LibraryStore` Layer owns fresh state loads and validated atomic publication. Standalone `refreshInventory` composes its load, read-only `observeInventory`, and completed observation publication; the CLI provides the store at application startup. Standalone `setProjectionEffect` owns one core enable/disable mutation through the acquired store. CLI code must use these core boundaries rather than implement a second state writer.
+The core `LibraryStore` Layer owns fresh state loads and validated atomic publication. Standalone `refreshInventory` composes its load, read-only `scanInventory`, and completed observation publication; the CLI provides the store at application startup. Standalone `setProjectionEffect` owns one core enable/disable mutation through the acquired store. CLI code must use these core boundaries rather than implement a second state writer.
 
 Projection changes use one serialized, scoped mutation:
 

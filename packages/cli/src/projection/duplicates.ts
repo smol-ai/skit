@@ -71,7 +71,7 @@ export function readableSkillsDirectories(
 }
 
 /** Preserve the listing path even when a parent/root itself is a symlink. */
-export const readSkillSymlink = Effect.fn("Projection.observeAlias")(function* (path: string) {
+export const readSkillSymlink = Effect.fn("Projection.readSkillSymlink")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   for (let component = resolve(path); ; component = dirname(component)) {
@@ -95,7 +95,7 @@ export const DuplicateScanError = Schema.Struct({
 export type DuplicateScanError = typeof DuplicateScanError.Type;
 
 /** Observe direct skill children only; unrelated unreadable entries never discard the index. */
-export const scanSkillsDirectory = Effect.fn("Projection.observeHarnessSkills")(function* (
+export const scanSkillsDirectory = Effect.fn("Projection.scanSkillsDirectory")(function* (
   roots: readonly { readonly harness: HarnessName; readonly root: string }[],
   options: {
     readonly blockingNames?: readonly string[];
@@ -168,8 +168,8 @@ export class DuplicateScanIncomplete
   readonly remediation = "Inspect the skills directory before enabling another copy.";
 }
 
-/** Exclude the destinations we will reconcile together; other same-scope copies are shadows. */
-export const findDuplicates = Effect.fn("Projection.observeShadows")(function* (
+/** Exclude the destinations we will reconcile together; other same-scope copies are duplicates. */
+export const findDuplicates = Effect.fn("Projection.findDuplicates")(function* (
   options: InventoryRootOptions,
   scope: SkitBindingScope,
   names: readonly string[],
@@ -246,7 +246,7 @@ export class InstalledSkillWouldReplaceLink
 
 export class InstalledSkillWouldDuplicate
   extends Data.TaggedError("InstalledSkillWouldDuplicate")<{
-    shadows: readonly DuplicateCopy[];
+    duplicates: readonly DuplicateCopy[];
   }>
   implements SkitFailure
 {
@@ -255,6 +255,6 @@ export class InstalledSkillWouldDuplicate
   readonly remediation =
     "Remove the redundant agent location, retain without enabling, or explicitly use --allow-duplicate.";
   get message() {
-    return `Enabling would create duplicate skills: ${this.shadows.flatMap((item) => item.aliases.map((alias) => `${item.name} (${item.harness}): ${alias.path}${alias.via === "symlink" ? ` -> ${item.canonicalPath} (symlink${alias.linkPath !== alias.path ? ` at ${alias.linkPath} -> ${alias.linkTarget}` : ""})` : ""}`)).join("; ")}`;
+    return `Enabling would create duplicate skills: ${this.duplicates.flatMap((item) => item.aliases.map((alias) => `${item.name} (${item.harness}): ${alias.path}${alias.via === "symlink" ? ` -> ${item.canonicalPath} (symlink${alias.linkPath !== alias.path ? ` at ${alias.linkPath} -> ${alias.linkTarget}` : ""})` : ""}`)).join("; ")}`;
   }
 }

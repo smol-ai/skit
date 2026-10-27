@@ -36,18 +36,18 @@ export const SetupApprovedCopy = Schema.Struct({
 export interface SetupApprovedCopy extends Schema.Schema.Type<typeof SetupApprovedCopy> {}
 
 /** Every relevant alias must be an individual link to the selected canonical source. */
-export function retirableDuplicateLinks(sourcePath: string, shadows: readonly DuplicateCopy[]) {
+export function retirableDuplicateLinks(sourcePath: string, duplicates: readonly DuplicateCopy[]) {
   if (
-    !shadows.length ||
-    shadows.some(
-      (shadow) =>
-        shadow.canonicalPath !== sourcePath ||
-        shadow.aliases.some((alias) => alias.via !== "symlink" || alias.linkPath !== alias.path),
+    !duplicates.length ||
+    duplicates.some(
+      (duplicate) =>
+        duplicate.canonicalPath !== sourcePath ||
+        duplicate.aliases.some((alias) => alias.via !== "symlink" || alias.linkPath !== alias.path),
     )
   )
     return [];
   return [
-    ...new Set(shadows.flatMap((shadow) => shadow.aliases.map((alias) => alias.path))),
+    ...new Set(duplicates.flatMap((duplicate) => duplicate.aliases.map((alias) => alias.path))),
   ].sort();
 }
 
@@ -55,7 +55,7 @@ export type SetupCopyConflict =
   | { readonly kind: "none" }
   | {
       readonly kind: "retirable" | "preservable" | "preserve-copies";
-      readonly shadows: readonly DuplicateCopy[];
+      readonly duplicates: readonly DuplicateCopy[];
       readonly aliases: readonly string[];
       /**
        * A link sits where SKIT writes this skill's copy. Enabling replaces it, so the copies cannot
@@ -81,23 +81,23 @@ export function copyConflict(
     (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
   );
   const instance = observed.instances.find((item) => item.path === selection.sourcePath);
-  const shadows = candidate?.shadows ?? [];
+  const duplicates = candidate?.shadows ?? [];
   if (
-    !shadows.length ||
+    !duplicates.length ||
     !isSetupInstallDestination(instance) ||
     candidate?.action === "repository-owned"
   )
     return { kind: "none" };
-  const aliases = retirableDuplicateLinks(selection.sourcePath, shadows);
+  const aliases = retirableDuplicateLinks(selection.sourcePath, duplicates);
   const selectedHash = instance?.contentIdentity.observedHash;
   const preservable =
     selectedHash !== undefined &&
-    shadows.every((shadow) =>
-      shadow.aliases.every((alias) => {
+    duplicates.every((duplicate) =>
+      duplicate.aliases.every((alias) => {
         const copy = observed.instances.find((item) => item.path === alias.path);
         return (
           alias.via === "directory" &&
-          alias.path === shadow.canonicalPath &&
+          alias.path === duplicate.canonicalPath &&
           copy !== undefined &&
           isSetupInstallDestination(copy) &&
           !copy.git.repository &&
@@ -108,7 +108,7 @@ export function copyConflict(
     );
   return {
     kind: aliases.length ? "retirable" : preservable ? "preservable" : "preserve-copies",
-    shadows,
+    duplicates,
     aliases,
     replacesLink: (candidate?.destinationLinks?.length ?? 0) > 0,
   };

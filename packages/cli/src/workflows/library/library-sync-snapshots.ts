@@ -22,11 +22,11 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
     readonly originalsPath: string;
     readonly origin: string;
     readonly token?: string;
-    readonly observer?: SyncProgress;
-    readonly restoreObserver?: RestoreProgress;
+    readonly progress?: SyncProgress;
+    readonly restoreProgress?: RestoreProgress;
   },
 ) {
-  const observer = options.observer ?? silentSyncProgress;
+  const progress = options.progress ?? silentSyncProgress;
   const content = yield* planRetainedContent(desired, {
     originalsPath: options.originalsPath,
     localArchives: archives,
@@ -45,7 +45,7 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
       return yield* Effect.scoped(
         prepareRestore(desired, content, {
           originalsPath: options.originalsPath,
-          ...(options.restoreObserver === undefined ? {} : { observer: options.restoreObserver }),
+          ...(options.restoreProgress === undefined ? {} : { progress: options.restoreProgress }),
           ...(remote === null
             ? {}
             : {
@@ -60,13 +60,13 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
     upload: Effect.fn("Library.sync.uploadSnapshots")(function* () {
       if (uploads.length === 0) return;
       const phase = { kind: "upload", total: uploads.length } as const;
-      yield* observer.around(
+      yield* progress.around(
         phase,
         Effect.gen(function* () {
           for (const [index, archive] of uploads.entries()) {
-            yield* observer.tick({ phase, completed: index });
+            yield* progress.tick({ phase, completed: index });
             yield* api.upload(archive);
-            yield* observer.tick({ phase, completed: index + 1 });
+            yield* progress.tick({ phase, completed: index + 1 });
           }
         }),
       );

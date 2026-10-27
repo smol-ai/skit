@@ -210,7 +210,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
       const plan = yield* selection.preview(intent, configuration);
       for (const change of plan.changes)
         if (change.shadows?.length)
-          return yield* new InstalledSkillWouldDuplicate({ shadows: change.shadows });
+          return yield* new InstalledSkillWouldDuplicate({ duplicates: change.shadows });
       return plan;
     }),
   );

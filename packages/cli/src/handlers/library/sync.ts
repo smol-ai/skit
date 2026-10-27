@@ -53,8 +53,8 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       ...(options.deviceSelection === undefined
         ? {}
         : { deviceSelection: options.deviceSelection }),
-      observer: progress.sync,
-      restoreObserver: progress.restore,
+      progress: progress.sync,
+      restoreProgress: progress.restore,
       ...(options.apply
         ? {
             onPlan: (plan) =>

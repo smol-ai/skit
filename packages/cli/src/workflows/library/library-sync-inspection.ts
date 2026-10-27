@@ -6,21 +6,21 @@ import type { SyncProgress, SyncPhase } from "./library-sync-progress.js";
 export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(function* (
   copies: readonly { readonly digest: string }[],
   originalsPath: string,
-  observer: SyncProgress,
+  progress: SyncProgress,
 ) {
   const phase: SyncPhase = { kind: "verify-copies", total: copies.length };
-  return yield* observer.around(
+  return yield* progress.around(
     phase,
     Effect.gen(function* () {
       const archives = new Map<string, SnapshotArchive>();
       for (const [verified, tree] of copies.entries()) {
-        yield* observer.tick({ phase, completed: verified });
+        yield* progress.tick({ phase, completed: verified });
         const archive = yield* captureSnapshotArchive(retainedTreePath(originalsPath, tree.digest));
         if (archive.digest !== tree.digest)
           return { _tag: "Changed" as const, digest: tree.digest };
         // Verify every reference, including copies sharing the same digest.
         if (!archives.has(archive.digest)) archives.set(archive.digest, archive);
-        yield* observer.tick({ phase, completed: verified + 1 });
+        yield* progress.tick({ phase, completed: verified + 1 });
       }
       return { _tag: "Verified" as const, archives: [...archives.values()] };
     }),

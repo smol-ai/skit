@@ -66,7 +66,7 @@ const indexSetupLibrary = (
   return { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath };
 };
 
-const scanSetupInstances = Effect.fn("Setup.observeInstances")(function* (
+const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
   evidence: SetupEvidence,
   indexes: ReturnType<typeof indexSetupLibrary>,
   home: string,
@@ -198,7 +198,7 @@ const scanSetupInstances = Effect.fn("Setup.observeInstances")(function* (
   return { instances, onboardingInstances };
 });
 
-const scanSetupInstalledSkills = Effect.fn("Setup.observeInstalledSkills")(function* (
+const scanSetupInstalledSkills = Effect.fn("Setup.scanInstalledSkills")(function* (
   observedLibrary: SetupEvidence["observedLibrary"],
   indexes: ReturnType<typeof indexSetupLibrary>,
 ) {
@@ -226,7 +226,7 @@ const scanSetupInstalledSkills = Effect.fn("Setup.observeInstalledSkills")(funct
   return projections;
 });
 
-export const scanSetupCopies = Effect.fn("Setup.observeCopies")(function* (
+export const scanSetupCopies = Effect.fn("Setup.scanCopies")(function* (
   evidence: SetupEvidence,
   home: string,
   probePath?: string,

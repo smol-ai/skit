@@ -338,7 +338,7 @@ export const recoveryOperationPath = Effect.fn("Recovery.operationPath")(functio
   return directory;
 });
 
-const readRecoveryOperation = Effect.fn("Recovery.observe")(function* (
+const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   home: string,
   operationId: string,
 ) {

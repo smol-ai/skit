@@ -40,7 +40,7 @@ import {
 
 const fixture = Effect.fn("Test.symlinkFixture")(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.realPath(yield* scratch("skit-shadow-"));
+  const root = yield* fs.realPath(yield* scratch("skit-duplicates-"));
   const source = join(root, "Work", "skills", "review");
   const alias = join(root, ".codex", "skills", "review");
   const destination = join(root, ".agents", "skills", "review");
@@ -294,13 +294,13 @@ it.effect("unreadable unrelated entries warn without dropping readable aliases",
           : f.fs.readFileString(path, ...args),
     });
     const errors: DuplicateScanError[] = [];
-    const shadows = yield* findDuplicates(
+    const duplicates = yield* findDuplicates(
       f.home.inventory,
       { kind: "global" },
       ["review"],
       errors,
     ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-    expect(shadows[0].aliases[0].path).toBe(f.alias);
+    expect(duplicates[0].aliases[0].path).toBe(f.alias);
     expect(errors).toEqual([expect.objectContaining({ path: unrelated })]);
     const blocked = yield* Effect.result(
       findDuplicates(f.home.inventory, { kind: "global" }, ["unrelated"]).pipe(
@@ -348,7 +348,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
               },
               roots: f.home.inventory,
               variantsPath: f.home.variantsPath,
-              allowedShadowAliases: [
+              allowedDuplicateLinks: [
                 {
                   path: f.alias,
                   canonicalPath: f.source,
@@ -412,12 +412,12 @@ it.effect(
               },
               state,
             );
-            const shadows = yield* findDuplicates(
+            const duplicates = yield* findDuplicates(
               { ...f.home.inventory, home: aliasHome },
               { kind: "global" },
               ["review"],
             );
-            const approvedAliases = yield* captureLocalAdoptionAliases(f.source, shadows);
+            const approvedAliases = yield* captureLocalAdoptionAliases(f.source, duplicates);
             const selection = yield* approveLocalAdoption(
               {
                 name: "review",
@@ -427,7 +427,7 @@ it.effect(
               },
               {
                 kind: "retirable",
-                shadows,
+                duplicates,
                 aliases: approvedAliases.map((alias) => alias.path),
                 replacesLink: false,
               },
@@ -661,7 +661,7 @@ for (const operation of ["add", "bind"] as const) {
                 return yield* Effect.die("Expected retirable aliases");
               const approvedAliases = yield* captureLocalAdoptionAliases(
                 f.source,
-                conflict.shadows,
+                conflict.duplicates,
               );
               if (change === "added") {
                 const root = join(f.root, ".codex", "skills");

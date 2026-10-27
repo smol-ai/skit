@@ -207,8 +207,8 @@ export const devices = Effect.gen(function* () {
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       sync: (
         options: {
-          observer?: Parameters<typeof syncLibrary>[0]["observer"];
-          restoreObserver?: Parameters<typeof syncLibrary>[0]["restoreObserver"];
+          progress?: Parameters<typeof syncLibrary>[0]["progress"];
+          restoreProgress?: Parameters<typeof syncLibrary>[0]["restoreProgress"];
           onPlan?: Parameters<typeof syncLibrary>[0]["onPlan"];
           apply?: boolean;
           adopt?: boolean;

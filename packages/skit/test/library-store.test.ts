@@ -3,7 +3,7 @@ import { Deferred, Effect, Fiber, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { importCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/import-collection.js";
 import {
   LibraryStore,
   libraryStoreLayer,

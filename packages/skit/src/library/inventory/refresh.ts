@@ -33,7 +33,7 @@ export function deduplicateInventoryRoots(
   ];
 }
 /** Observe a private snapshot without persistence or recovery capabilities. */
-export const scanInventory = Effect.fn("Library.observeInventory")(function* (
+export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   loaded: LibraryState,
   scanRoots: readonly InventoryScanRoot[],
 ) {

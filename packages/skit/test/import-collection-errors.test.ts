@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { prepareImport } from "../src/library/observed-import.js";
+import { prepareImport } from "../src/library/import-collection.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 for (const [name, paths, expected] of [

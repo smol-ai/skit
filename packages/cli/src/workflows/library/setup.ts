@@ -10,7 +10,7 @@ import {
 } from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
-import { scanSetupCopies } from "./setup-observation.js";
+import { scanSetupCopies } from "./setup-scan.js";
 import {
   checkSetupReconciliation,
   setupReconciliationChanges,
@@ -101,18 +101,20 @@ const scanForSetup = Effect.fn("Library.setup")(
         ),
       )
       .map((candidate) => candidate.name);
-    const shadows = globalNames.length
+    const duplicates = globalNames.length
       ? yield* findDuplicates(options.inventory, { kind: "global" }, globalNames)
       : [];
-    const targets = shadows.length ? yield* activeInstallDestinationsEffect(options.inventory) : [];
+    const targets = duplicates.length
+      ? yield* activeInstallDestinationsEffect(options.inventory)
+      : [];
     const onboarding = candidates.map((candidate) => {
-      const matches = shadows.filter((shadow) => shadow.name === candidate.name);
+      const matches = duplicates.filter((duplicate) => duplicate.name === candidate.name);
       if (!matches.length) return candidate;
       const destinations = targets.map((target) =>
         join(bindingRoot(target, { kind: "global" }, options.inventory), candidate.name),
       );
-      const destinationLinks = matches.flatMap((shadow) =>
-        shadow.aliases
+      const destinationLinks = matches.flatMap((duplicate) =>
+        duplicate.aliases
           .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
           .map((alias) => alias.path),
       );

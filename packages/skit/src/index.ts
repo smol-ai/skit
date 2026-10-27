@@ -79,7 +79,7 @@ export * from "./library/restore-progress.js";
 export * from "./library/installation/retire-unbound.js";
 export * from "./library/installation/remove.js";
 export * from "./library/skill-materialization.js";
-export * from "./library/observed-import.js";
+export * from "./library/import-collection.js";
 export * from "./library/installation/project-binding.js";
 export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";

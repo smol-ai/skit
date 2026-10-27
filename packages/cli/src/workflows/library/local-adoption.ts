@@ -328,7 +328,7 @@ export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function*
       duplicateAction: selection.duplicateAction,
       approvedCopies: yield* captureSetupCopies(
         selection.sourcePath,
-        conflict.shadows,
+        conflict.duplicates,
         selection.approvedCopies,
       ),
     };
@@ -344,7 +344,7 @@ export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function*
     duplicateAction: selection.duplicateAction,
     approvedAliases: yield* captureLocalAdoptionAliases(
       selection.sourcePath,
-      conflict.shadows,
+      conflict.duplicates,
       selection.approvedAliases,
     ),
   };
@@ -448,10 +448,10 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
     operationDirectory?: string,
   ) {
     if (selection.duplicateAction === "preserve-duplicates") {
-      const shadows = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
+      const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
       const copies = yield* captureSetupCopies(
         selection.sourcePath,
-        shadows,
+        duplicates,
         selection.approvedCopies,
       );
       const store = yield* LibraryStore;
@@ -469,17 +469,19 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
           ...moves,
           apply: () =>
             Effect.gen(function* () {
-              yield* captureSetupCopies(selection.sourcePath, shadows, copies);
+              yield* captureSetupCopies(selection.sourcePath, duplicates, copies);
               yield* moves.apply();
             }),
         },
         aliases: [] as readonly SetupApprovedAlias[],
-        harnesses: [...new Set(shadows.map((shadow) => shadow.harness).filter(hasHarnessProfile))],
+        harnesses: [
+          ...new Set(duplicates.map((duplicate) => duplicate.harness).filter(hasHarnessProfile)),
+        ],
       };
     }
     if (selection.duplicateAction !== "retire-aliases") return undefined;
     const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
-    const shadows = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
+    const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
     // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
     // root's backups; moving it afterwards would find the new copy there instead.
     const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
@@ -490,7 +492,7 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
       store.home,
       selection.name,
       selection.sourcePath,
-      shadows,
+      duplicates,
       approvedAliases,
       destinations,
       operationDirectory,
@@ -567,10 +569,10 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
 export const captureLocalAdoptionAliases = Effect.fn("LocalAdoption.captureAliasApproval")(
   function* (
     sourcePath: string,
-    shadows: readonly DuplicateCopy[],
+    duplicates: readonly DuplicateCopy[],
     approved?: readonly SetupApprovedAlias[],
   ) {
-    const paths = retirableDuplicateLinks(sourcePath, shadows);
+    const paths = retirableDuplicateLinks(sourcePath, duplicates);
     if (!paths.length) return yield* new PlanIsStale();
     const links = yield* LinkStat;
     const fs = yield* FileSystem.FileSystem;
@@ -583,8 +585,10 @@ export const captureLocalAdoptionAliases = Effect.fn("LocalAdoption.captureAlias
         const linkTarget = yield* fs.readLink(path);
         if (
           canonicalPath !== sourcePath ||
-          shadows.some((shadow) =>
-            shadow.aliases.some((alias) => alias.path === path && alias.linkTarget !== linkTarget),
+          duplicates.some((duplicate) =>
+            duplicate.aliases.some(
+              (alias) => alias.path === path && alias.linkTarget !== linkTarget,
+            ),
           )
         )
           return yield* new PlanIsStale();
@@ -611,12 +615,12 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
   libraryHome: string,
   name: string,
   sourcePath: string,
-  shadows: readonly DuplicateCopy[],
+  duplicates: readonly DuplicateCopy[],
   approvedAliases: readonly SetupApprovedAlias[] | undefined,
   destinations: readonly string[],
   operationDirectory?: string,
 ) {
-  const aliases = yield* captureLocalAdoptionAliases(sourcePath, shadows, approvedAliases);
+  const aliases = yield* captureLocalAdoptionAliases(sourcePath, duplicates, approvedAliases);
   const moves = yield* prepareRecoveryMoves(
     libraryHome,
     aliases
@@ -628,7 +632,9 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
       })),
     operationDirectory,
   );
-  const harnesses = [...new Set(shadows.map((shadow) => shadow.harness).filter(hasHarnessProfile))];
+  const harnesses = [
+    ...new Set(duplicates.map((duplicate) => duplicate.harness).filter(hasHarnessProfile)),
+  ];
   return { moves, aliases, harnesses };
 });
 

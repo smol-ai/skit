@@ -88,7 +88,7 @@ export interface RetainedSkillFact {
   readonly materializationProfile: MaterializationProfile;
 }
 
-export const prepareImport = Effect.fn("Library.prepareObservedCollection")(function* (
+export const prepareImport = Effect.fn("Library.prepareImport")(function* (
   skills: ImportRequest["skills"],
 ) {
   const seen: ImportRequestSkill[] = [];
@@ -329,7 +329,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 });
 
 /** Retain observed bytes and return their receipt while the caller holds Library write authority. */
-export const importCollection = Effect.fn("Library.retainObservedCollection")(function* (
+export const importCollection = Effect.fn("Library.importCollection")(function* (
   request: ImportRequest,
 ) {
   const store = yield* LibraryStore;

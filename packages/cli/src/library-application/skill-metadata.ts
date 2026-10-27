@@ -69,7 +69,7 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
       state.collections.find((collection) => collection.collection_id === skill.collection_id)
         ?.upstream?.source_identity;
     let sourceUpdated: string | null = null;
-    // Observations whose bytes disagree cannot establish the selected Skill's source date.
+    // Lock file entries whose bytes disagree cannot establish the selected Skill's source date.
     const dates =
       acquisition?.observations
         .filter(

@@ -17,7 +17,7 @@ import {
 } from "../src/sources/resolve.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
-import { prepareImport } from "../src/library/observed-import.js";
+import { prepareImport } from "../src/library/import-collection.js";
 
 const git = (cwd: string, ...args: string[]) =>
   Effect.sync(() => execFileSync("git", args, { cwd, encoding: "utf8" }).trim());

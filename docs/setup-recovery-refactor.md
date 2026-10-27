@@ -83,7 +83,7 @@ audit history as its sole authority. Retained artifacts remain available.
 Before (`6eeb68cd8`, still true after the recovery milestone):
 
 ```text
-observeSetup -> recommendation + shell applyCommand with a duplicate placeholder
+scanForSetup -> recommendation + shell applyCommand with a duplicate placeholder
 CLI --apply -> openSetupReview -> prepareRecommended -> apply
 CLI/TUI prompts -> selectedCopies -> duplicate policy -> prepare -> apply
 JSON consumer -> hardcode selection/command order; cannot select a divergent copy
@@ -92,7 +92,7 @@ JSON consumer -> hardcode selection/command order; cannot select a divergent cop
 After (current working tree):
 
 ```text
-observeSetup -> observed facts + recommendation
+scanForSetup -> observed facts + recommendation
 openSetupReview -> typed source/copy/removal choices + allowed duplicate alternatives
   -> prepareRecommended / prepareExplicit -> captured selection + reviewId + summary + apply
 CLI adapter -> preserve home, roots, work-dir and explicit selections in concrete argv

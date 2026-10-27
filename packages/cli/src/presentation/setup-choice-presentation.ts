@@ -37,10 +37,10 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
         group.flatMap((copy) =>
           copy.conflict.kind === "none"
             ? []
-            : copy.conflict.shadows.flatMap((shadow) =>
-                shadow.aliases.map(
+            : copy.conflict.duplicates.flatMap((duplicate) =>
+                duplicate.aliases.map(
                   (alias) =>
-                    `${displayPath(alias.path)}${alias.via === "symlink" ? ` → ${displayPath(shadow.canonicalPath)} (symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${displayPath(alias.linkPath)}` : ""})` : " (directory)"}`,
+                    `${displayPath(alias.path)}${alias.via === "symlink" ? ` → ${displayPath(duplicate.canonicalPath)} (symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${displayPath(alias.linkPath)}` : ""})` : " (directory)"}`,
                 ),
               ),
         ),

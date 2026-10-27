@@ -26,7 +26,7 @@ type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["opera
 type File = Operation["files"][number];
 type CapturedFile = Effect.Success<ReturnType<typeof captureSetupFile>>;
 
-/** Observation timestamps are evidence, not a change to desired installed-skill custody. */
+/** Scan timestamps are evidence, not a change to desired installed-skill custody. */
 export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
   projection === undefined
     ? null

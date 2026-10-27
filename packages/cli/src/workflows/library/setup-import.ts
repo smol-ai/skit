@@ -34,7 +34,7 @@ export interface SetupImportOptions {
 }
 
 /** Retain selected installed bytes from one freshly revalidated observation. */
-export const importSetupCollections = Effect.fn("Setup.applyObservedCollections")(function* (
+export const importSetupCollections = Effect.fn("Setup.importCollections")(function* (
   options: SetupImportOptions,
   current: SetupResult,
   untrustedSelections: readonly unknown[],

@@ -122,7 +122,7 @@ const fixture = Effect.gen(function* () {
           originalsPath,
           registryBaseUrl: origin,
           registryToken: "restore-token",
-          observer: {
+          progress: {
             around: (phase, operation) =>
               Effect.sync(() => {
                 phases.push(phase);
@@ -299,7 +299,7 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
     });
     const restore = prepareRestore(f.manifest, plan, {
       originalsPath: f.originalsPath,
-      observer: {
+      progress: {
         around: (_phase, operation) => operation,
         tick: (tick) =>
           Effect.sync(() => {
@@ -502,7 +502,7 @@ it.effect(
               downloads++;
               return f.privateArchive;
             }),
-          observer: {
+          progress: {
             around: () => Effect.die("invalid plans must fail before opening a phase"),
             tick: () => Effect.die("invalid plans must not emit ticks"),
           },
@@ -515,7 +515,7 @@ it.effect(
       // A complete plan without its required transport also fails before phases/source fetches.
       const error = yield* prepareRestore(f.manifest, plan, {
         originalsPath: f.originalsPath,
-        observer: {
+        progress: {
           around: () => Effect.die("missing transport must fail before phases"),
           tick: () => Effect.void,
         },

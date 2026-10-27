@@ -16,7 +16,7 @@ import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts } from "../src/presentation/setup-steps.js";
 import { runSetup } from "../src/workflows/library/setup.js";
-import { importSetupCollections } from "../src/workflows/library/setup-observed-collections.js";
+import { importSetupCollections } from "../src/workflows/library/setup-import.js";
 import {
   SetupLockMatch,
   type SetupOnboardingCandidate,

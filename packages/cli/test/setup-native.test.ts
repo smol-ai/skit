@@ -88,7 +88,7 @@ const setupLock = (
   },
 });
 
-const observeSetup = (options: SetupOptions) =>
+const scanForSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
     Effect.provide(
       libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
@@ -147,7 +147,7 @@ it.effect(
         join(copy, "SKILL.md"),
         "---\nname: review\ndescription: Review fixture\n---\n\nReview bytes\n",
       );
-      const missing = yield* observeSetup(f.options);
+      const missing = yield* scanForSetup(f.options);
       expect(missing.instances.find((instance) => instance.aliases.includes(copy))?.owner).toEqual({
         kind: "unknown",
       });
@@ -157,7 +157,7 @@ it.effect(
         _tag: "Failure",
         failure: { _tag: "PlatformError" },
       });
-      const unreadable = yield* Effect.result(observeSetup(f.options));
+      const unreadable = yield* Effect.result(scanForSetup(f.options));
       expect(unreadable).toMatchObject({
         _tag: "Failure",
         failure: { _tag: "PlatformError" },
@@ -168,7 +168,7 @@ it.effect(
 it.effect("persists repository roots only when requested and reuses the machine config", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const first = yield* observeSetup({ ...f.options, persistRoots: true });
+    const first = yield* scanForSetup({ ...f.options, persistRoots: true });
     expect(first.machineConfig).toEqual({
       path: join(f.libraryHome, "machine.json"),
       machineId: expect.any(String),
@@ -184,7 +184,7 @@ it.effect("persists repository roots only when requested and reuses the machine 
       discoveryRoots: [f.work],
       repositories: [],
     });
-    const second = yield* observeSetup({
+    const second = yield* scanForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: false,
@@ -205,7 +205,7 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       `${JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.work] }, null, 2)}\n`,
     );
 
-    const observed = yield* observeSetup({
+    const observed = yield* scanForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: false,
@@ -221,7 +221,7 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       repositoryRoots: [f.work],
     });
 
-    const migrated = yield* observeSetup({
+    const migrated = yield* scanForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: true,
@@ -258,7 +258,7 @@ it.effect("scans only repositories watched by machine configuration", () =>
       join(ignored, ".agents", "skills", "hidden", "SKILL.md"),
       skillDocument("hidden"),
     );
-    yield* observeSetup({
+    yield* scanForSetup({
       ...f.options,
       persistRoots: true,
       repositoryDecisions: [
@@ -267,7 +267,7 @@ it.effect("scans only repositories watched by machine configuration", () =>
       ],
     });
 
-    const inventory = yield* observeSetup({
+    const inventory = yield* scanForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: false,
@@ -304,7 +304,7 @@ it.effect("binds setup consent to current discovery evidence", () =>
     const skill = join(f.codex, "review");
     yield* f.fs.makeDirectory(skill, { recursive: true });
     yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("review"));
-    const preview = yield* observeSetup(f.options);
+    const preview = yield* scanForSetup(f.options);
 
     const unchanged = yield* revalidateSetup(f.options, preview.onboarding.planId);
     expect(unchanged.observed.onboarding.planId).toBe(preview.onboarding.planId);
@@ -365,7 +365,7 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
       yield* f.fs.makeDirectory(join(f.repository, "packages", `package-${index}`, "src"), {
         recursive: true,
       });
-    const observed = yield* observeSetup(f.options);
+    const observed = yield* scanForSetup(f.options);
     const byName = new Map(observed.instances.map((instance) => [instance.name, instance]));
     expect(observed.scan).toEqual({
       complete: true,
@@ -464,7 +464,7 @@ it.effect("applies repository discovery exclusions and declared collection roots
     );
     yield* git(f.repository, "commit", "-qm", "configure discovery");
 
-    const observed = yield* observeSetup(f.options);
+    const observed = yield* scanForSetup(f.options);
     expect(observed.scan.complete).toBe(true);
     expect(observed.instances.map((instance) => instance.name)).toEqual(["private"]);
     expect(observed.instances[0]?.git.status).toBe("ignored");
@@ -550,7 +550,7 @@ it.effect("routes configured copies to the nearest selected repository and its e
         discovery: { exclude: ["custom/blocked"], collections: [] },
       }),
     );
-    const observed = yield* observeSetup({ ...f.options, repositoryRoots: [f.repository, nested] });
+    const observed = yield* scanForSetup({ ...f.options, repositoryRoots: [f.repository, nested] });
     expect(observed.scan.complete).toBe(true);
     expect(observed.instances.map((item) => [item.name, item.git])).toEqual([
       ["review", { status: "untracked", repository: nested }],
@@ -569,7 +569,7 @@ it.effect("reports unsafe repository discovery config instead of applying it", (
       }),
     );
 
-    const observed = yield* observeSetup(f.options);
+    const observed = yield* scanForSetup(f.options);
     expect(observed.scan.complete).toBe(false);
     expect(observed.repositoryConfigs).toEqual([
       expect.objectContaining({ repository: f.repository, status: "malformed" }),
@@ -594,7 +594,7 @@ it.effect("plans equivalent loose installed skills and blocks divergent copies",
       `${skillDocument("divergent")}\nDifferent bytes\n`,
     );
 
-    const observed = yield* observeSetup(f.options);
+    const observed = yield* scanForSetup(f.options);
     const reviewPaths = yield* Effect.forEach([claudeReview, codexReview], (path) =>
       f.fs.realPath(path),
     );
@@ -632,7 +632,7 @@ it.effect("offers equivalent Codex native and shared-root installations for cust
     const physicalSource = yield* f.fs.realPath(source);
     const physicalTarget = yield* f.fs.realPath(target);
 
-    const observed = yield* observeSetup({
+    const observed = yield* scanForSetup({
       ...f.options,
       inventory: {
         home: f.root,
@@ -1270,7 +1270,7 @@ it.effect("coalesces harness aliases and retains broken-link and malformed-lock 
     const globalLock = join(f.root, "state", "skills", ".skill-lock.json");
     yield* f.fs.makeDirectory(join(f.root, "state", "skills"), { recursive: true });
     yield* f.fs.writeFileString(globalLock, "not json");
-    const observed = yield* observeSetup(f.options);
+    const observed = yield* scanForSetup(f.options);
     const review = observed.instances.find((instance) => instance.name === "review");
     expect([...(review?.aliases ?? [])].sort()).toEqual([skill, join(f.codex, "review")].sort());
     expect(review?.scope).toBe("global");
@@ -1295,11 +1295,11 @@ it.effect("examines only immediate children until a nested container is configur
     yield* f.fs.writeFileString(join(skill, "SKILL.md"), skillDocument("nested-review"));
     yield* git(nestedRepository, "init", "-q", "--initial-branch=main");
 
-    const shallow = yield* observeSetup(f.options);
+    const shallow = yield* scanForSetup(f.options);
     expect(shallow.instances.some((instance) => instance.name === "nested-review")).toBe(false);
     expect(shallow.repositories).toEqual([]);
 
-    const configured = yield* observeSetup({
+    const configured = yield* scanForSetup({
       ...f.options,
       repositoryRoots: [f.work, container],
     });
@@ -1664,7 +1664,7 @@ for (const kind of ["source", "retained-edit"] as const) {
 it.effect("includes unreported missing repository config in the approved plan identity", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const missing = yield* observeSetup(f.options);
+    const missing = yield* scanForSetup(f.options);
     expect(missing.repositoryConfigs).toEqual([]);
     yield* f.fs.writeFileString(
       join(f.repository, "skit.config.json"),
@@ -1673,11 +1673,11 @@ it.effect("includes unreported missing repository config in the approved plan id
         discovery: { exclude: [], collections: [] },
       }),
     );
-    const configured = yield* observeSetup(f.options);
+    const configured = yield* scanForSetup(f.options);
     expect(configured.instances).toEqual(missing.instances);
     expect(configured.onboarding.candidates).toEqual(missing.onboarding.candidates);
     expect(configured.onboarding.planId).not.toBe(missing.onboarding.planId);
     yield* f.fs.remove(join(f.repository, "skit.config.json"));
-    expect((yield* observeSetup(f.options)).onboarding.planId).toBe(missing.onboarding.planId);
+    expect((yield* scanForSetup(f.options)).onboarding.planId).toBe(missing.onboarding.planId);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

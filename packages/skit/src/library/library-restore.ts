@@ -5,7 +5,7 @@ import { ContentAddressCollision } from "../failures.js";
 import { retainedTreePath } from "./retention/retain-tree.js";
 import { resolveSkitSource } from "../sources/resolve.js";
 import { deterministicTreeHash } from "../artifact/skit.js";
-import { prepareImport } from "./observed-import.js";
+import { prepareImport } from "./import-collection.js";
 import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { originalTreeHash, retainLocalTree } from "./retention/retain-tree.js";
@@ -42,7 +42,7 @@ export interface RestoreOptions {
   readonly originalsPath: string;
   readonly registryBaseUrl?: string;
   readonly registryToken?: string;
-  readonly observer?: RestoreProgress;
+  readonly progress?: RestoreProgress;
 }
 
 /** Preserve the existing diagnostic tag as source restoration moves behind the core boundary. */
@@ -182,7 +182,7 @@ const silentRestoreProgress: RestoreProgress = {
   tick: () => Effect.void,
 };
 
-/** Reject incomplete or foreign plans before any I/O. Observations still need byte verification. */
+/** Reject incomplete or foreign plans before any I/O. Their bytes still need verifying. */
 const invalidPlan = (
   manifest: LibraryManifest,
   plan: RetainedContentPlan,
@@ -231,13 +231,13 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
 ) {
   const invalid = invalidPlan(manifest, plan, options.download !== undefined);
   if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
-  const observer = options.observer ?? silentRestoreProgress;
+  const progress = options.progress ?? silentRestoreProgress;
   const archives = new Map(plan.localArchives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
   const existingPaths = new Map<string, string>();
   if (plan.reusable.length) {
     const phase = { kind: "verify-local", total: plan.reusable.length } as const;
-    yield* observer.around(
+    yield* progress.around(
       phase,
       Effect.gen(function* () {
         for (const [index, digest] of plan.reusable.entries()) {
@@ -247,7 +247,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
             manifest.acquisitions.find(
               (candidate) => candidate.retained_copy_id === copy?.retained_copy_id,
             )?.input.value ?? digest;
-          yield* observer.tick({ phase, completed: index, subject });
+          yield* progress.tick({ phase, completed: index, subject });
           // Replan on retry rather than silently adding an unplanned transfer.
           if (!(yield* fs.exists(path)))
             return yield* new RestoreInvalid({
@@ -256,7 +256,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
           if ((yield* originalTreeHash(path)) !== digest)
             return yield* new ContentAddressCollision();
           existingPaths.set(digest, path);
-          yield* observer.tick({ phase, completed: index + 1, subject });
+          yield* progress.tick({ phase, completed: index + 1, subject });
         }
       }),
     );
@@ -264,10 +264,10 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
   if (plan.download.length) {
     const phase = { kind: "download", total: plan.download.length } as const;
     let completed = 0;
-    const downloaded = yield* observer.around(
+    const downloaded = yield* progress.around(
       phase,
       Effect.gen(function* () {
-        yield* observer.tick({ phase, completed: 0 });
+        yield* progress.tick({ phase, completed: 0 });
         return yield* Effect.forEach(
           plan.download,
           (digest) =>
@@ -281,7 +281,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
                 return yield* new RestoreInvalid({
                   detail: `download returned ${archive.digest}; expected ${digest}`,
                 });
-              yield* observer.tick({ phase, completed: ++completed });
+              yield* progress.tick({ phase, completed: ++completed });
               return archive;
             }),
           { concurrency: 4 },
@@ -302,7 +302,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
     const subject =
       manifest.acquisitions.find((candidate) => candidate.retained_copy_id === id)?.input.value ??
       copy.digest;
-    const archive = yield* observer.around(
+    const archive = yield* progress.around(
       { kind: "fetch-source", subject },
       refetchSourceArchive(manifest, copy.digest, options),
     );
@@ -327,14 +327,14 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
     readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
   },
 ) {
-  const observer = options.observer ?? silentRestoreProgress;
+  const progress = options.progress ?? silentRestoreProgress;
   const { archives, existingPaths } = yield* completeRestoreArchives(manifest, plan, options);
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
   const verifiedPaths = new Map(existingPaths);
   const phase: RestorePhase = { kind: "retain", total: manifest.retained_copies.length };
   if (phase.total)
-    yield* observer.around(
+    yield* progress.around(
       phase,
       Effect.gen(function* () {
         for (const [index, tree] of manifest.retained_copies.entries()) {
@@ -342,7 +342,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
             manifest.acquisitions.find(
               (candidate) => candidate.retained_copy_id === tree.retained_copy_id,
             )?.input.value ?? tree.digest;
-          yield* observer.tick({ phase, completed: index, subject: label });
+          yield* progress.tick({ phase, completed: index, subject: label });
           const archive = received.get(tree.digest);
           let path = verifiedPaths.get(tree.digest);
           if (path === undefined) {
@@ -378,7 +378,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
                 detail: `retained member ${member.source_path} source bytes disagree`,
               });
           }
-          yield* observer.tick({ phase, completed: index + 1, subject: label });
+          yield* progress.tick({ phase, completed: index + 1, subject: label });
         }
       }),
     );

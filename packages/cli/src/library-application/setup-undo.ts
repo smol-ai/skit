@@ -41,7 +41,7 @@ const Attempt = Schema.Struct({
 const Done = Schema.Struct({ schemaVersion: Schema.Literal(1), planId: Digest });
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
-const readUndo = Effect.fn("SetupUndo.observe")(function* (
+const readUndo = Effect.fn("SetupUndo.read")(function* (
   operationId: string,
   preservationDirectory: string,
   sourceObservations: Map<CollectionId, UndoSourceImport>,

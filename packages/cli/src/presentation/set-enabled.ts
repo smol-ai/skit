@@ -31,9 +31,9 @@ export function renderSetEnabled(
     incomplete || data.changed
       ? ""
       : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
-  const shadows = data.shadows ?? [];
-  const warning = shadows.length
-    ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
+  const duplicates = data.shadows ?? [];
+  const warning = duplicates.length
+    ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${duplicates.flatMap((duplicate) => duplicate.aliases.map((alias) => `  ${duplicate.name} (${duplicate.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${duplicate.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
     : "";
   const warnings = data.warnings
     ?.map((warning) => `Could not inspect ${warning.path}: ${warning.message}`)

@@ -52,7 +52,7 @@ const documentAt = Effect.fn("PnpmSkills.document")(function* (
 /** Corroborate pnpm's ledger with a live link into an installed package's skills directory.
  * A prefix alone, stale ledger entry, or ordinary copy never establishes pnpm management.
  */
-const checkPnpmSkill = Effect.fn("PnpmSkills.observe")(function* (
+const checkPnpmSkill = Effect.fn("PnpmSkills.check")(function* (
   directory: string,
   readDocument: (path: string) => Effect.Effect<PnpmDocument>,
 ) {
@@ -131,8 +131,8 @@ const checkPnpmSkill = Effect.fn("PnpmSkills.observe")(function* (
 
 export type PnpmSkillCheck = (directory: string) => ReturnType<typeof checkPnpmSkill>;
 
-/** One cache per read-only scan. Never share this observer across review and apply. */
-export const makePnpmSkillCheck = Effect.fn("PnpmSkills.makeObserver")(function* () {
+/** One cache per read-only scan. Never share this check across review and apply. */
+export const makePnpmSkillCheck = Effect.fn("PnpmSkills.makeCheck")(function* () {
   const documents = yield* Cache.makeWith(documentAt, {
     capacity: 512,
     timeToLive: (exit) =>

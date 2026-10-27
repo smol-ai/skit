@@ -148,11 +148,11 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
     options.enabled ? plan.skills : [],
     newlyEnabledSkills,
   );
-  const shadows = namesToCheck.length
+  const duplicates = namesToCheck.length
     ? yield* findDuplicates(configuration, scope, namesToCheck, warnings)
     : [];
   // Apply settles these only once it has staged SKIT's copy to compare; a preview can say they
-  // are there. A link at a destination is a shadow, reported above.
+  // are there. A link at a destination is a duplicate, reported above.
   const unmanaged: Array<{ target: InstallDestination; path: string }> = [];
   if (options.enabled) {
     const fs = yield* FileSystem.FileSystem;
@@ -196,7 +196,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   }
   return {
     ...plan,
-    ...(shadows.length ? { shadows } : {}),
+    ...(duplicates.length ? { shadows: duplicates } : {}),
     ...(unmanaged.length ? { unmanaged_destinations: unmanaged } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...(repair ? { repair } : {}),
@@ -305,18 +305,18 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     options.enabled ? plan.skills : [],
     newlyEnabledSkills,
   );
-  const shadows = namesToCheck.length
+  const duplicates = namesToCheck.length
     ? yield* findDuplicates(configuration, plan.scope, namesToCheck, warnings)
     : [];
   if (options.enabled && !options.allowDuplicate) {
     const links = yield* LinkStat;
     const fs = yield* FileSystem.FileSystem;
     const remaining = [];
-    for (const shadow of shadows) {
+    for (const duplicate of duplicates) {
       const aliases = [];
-      for (const alias of shadow.aliases) {
+      for (const alias of duplicate.aliases) {
         const approved = options.allowedDuplicateLinks?.find(
-          (item) => item.path === alias.path && item.canonicalPath === shadow.canonicalPath,
+          (item) => item.path === alias.path && item.canonicalPath === duplicate.canonicalPath,
         );
         if (approved) {
           const info = yield* links.identity.lstat(alias.path);
@@ -330,17 +330,17 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
         }
         aliases.push(alias);
       }
-      if (aliases.length) remaining.push({ ...shadow, aliases });
+      if (aliases.length) remaining.push({ ...duplicate, aliases });
     }
-    if (remaining.length) return yield* new InstalledSkillWouldDuplicate({ shadows: remaining });
+    if (remaining.length) return yield* new InstalledSkillWouldDuplicate({ duplicates: remaining });
   }
   if (options.enabled && options.allowDuplicate) {
     const destinations: string[] = [];
     for (const target of activeTargets)
       for (const skill of plan.skills)
         destinations.push(join(bindingRoot(target, plan.scope, configuration), skill));
-    const links = shadows.flatMap((shadow) =>
-      shadow.aliases
+    const links = duplicates.flatMap((duplicate) =>
+      duplicate.aliases
         .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
         .map((alias) => alias.path),
     );
@@ -442,7 +442,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
       ? plan.bindings
       : plan.bindings.filter((binding) => binding.entries.length > 0),
     ...(repair ? { repair } : {}),
-    ...(shadows.length ? { shadows } : {}),
+    ...(duplicates.length ? { shadows: duplicates } : {}),
     ...(warnings.length ? { warnings } : {}),
     projections,
     application: {

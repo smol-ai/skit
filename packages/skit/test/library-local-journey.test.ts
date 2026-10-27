@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { importCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/import-collection.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { planRetainedContent } from "../src/library/retained-content-plan.js";
 import { prepareRestore } from "../src/library/library-restore.js";

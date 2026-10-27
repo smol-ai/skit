@@ -9,7 +9,7 @@ import { SetupApprovedCopy } from "./setup-decisions.js";
 /** Only direct, equal global copies approved by review can enter automatic preservation. */
 export const captureSetupCopies = Effect.fn("Setup.captureCopies")(function* (
   sourcePath: string,
-  shadows: readonly DuplicateCopy[],
+  duplicates: readonly DuplicateCopy[],
   approved?: readonly SetupApprovedCopy[],
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -24,9 +24,9 @@ export const captureSetupCopies = Effect.fn("Setup.captureCopies")(function* (
   const selectedHash = yield* deterministicTreeHash(sourcePath);
   const paths = [
     ...new Set(
-      shadows.flatMap((shadow) =>
-        shadow.aliases.map((alias) => {
-          if (alias.via !== "directory" || alias.path !== shadow.canonicalPath) return "";
+      duplicates.flatMap((duplicate) =>
+        duplicate.aliases.map((alias) => {
+          if (alias.via !== "directory" || alias.path !== duplicate.canonicalPath) return "";
           return alias.path;
         }),
       ),

@@ -32,7 +32,7 @@ Preview runs without the Library writer lock. On approval, `applySetupPlan` runs
 
 | Step | Effect | Source |
 | --- | --- | --- |
-| S0 | Preview: `runSetup` with `persistRoots: false`, plus a second observation if repository decisions were asked. The plan ID covers the candidates, the instances, the repository configs and the Library revision | handler `setupCommand`; `workflows/library/setup.ts` `observeSetup` |
+| S0 | Preview: `runSetup` with `persistRoots: false`, plus a second observation if repository decisions were asked. The plan ID covers the candidates, the instances, the repository configs and the Library revision | handler `setupCommand`; `workflows/library/setup.ts` `scanForSetup` |
 | S1 | Confirmation prompt; declining returns the preview | handler `setupCommand` |
 | S2 | The one apply-time scan, held to the approved plan ID | `setup-apply.ts`; `workflows/library/setup.ts` `revalidateSetupPlan` |
 | S2a | Capture the original filesystem and desired-intent evidence in a setup operation, after approved-plan revalidation and projection-root preflight | `library-application/setup-operation.ts` |

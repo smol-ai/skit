@@ -108,7 +108,7 @@ const maybeStat = Effect.fn("SetupOperation.stat")(function* (path: string) {
 });
 
 /** Bind absent entries to an existing physical ancestor as well as recording present bytes. */
-export const captureSetupFile = Effect.fn("SetupOperation.observeFile")(function* (path: string) {
+export const captureSetupFile = Effect.fn("SetupOperation.captureFile")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   let anchor = dirname(path);

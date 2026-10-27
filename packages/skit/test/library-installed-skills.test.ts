@@ -11,7 +11,7 @@ import { retainedTreePath } from "../src/library/retention/retain-tree.js";
 import { projectBinding } from "../src/library/installation/project-binding.js";
 import { removeCollection } from "../src/library/installation/remove.js";
 import { retireUnboundGlobalInstalledSkills } from "../src/library/installation/retire-unbound.js";
-import { retainChangedInstalledSkill, importCollection } from "../src/library/observed-import.js";
+import { retainChangedInstalledSkill, importCollection } from "../src/library/import-collection.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
 import {

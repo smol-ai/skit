@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { importCollection } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/import-collection.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 

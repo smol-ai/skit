@@ -90,10 +90,10 @@ export const syncLibrary = Effect.fn("Library.sync")(
       rootFor: (target: InstallDestination) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
-    observer?: SyncProgress;
-    restoreObserver?: RestoreProgress;
+    progress?: SyncProgress;
+    restoreProgress?: RestoreProgress;
   }) {
-    const observer = options.observer ?? silentSyncProgress;
+    const progress = options.progress ?? silentSyncProgress;
 
     const store = yield* LibraryStore;
     const projectionOptions = {
@@ -102,19 +102,19 @@ export const syncLibrary = Effect.fn("Library.sync")(
       ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
     };
     const api = yield* librarySyncApi({ origin: options.origin, token: options.token });
-    const local = yield* observer.around({ kind: "inspect-local" }, store.inspect);
+    const local = yield* progress.around({ kind: "inspect-local" }, store.inspect);
     const manifest = local.present
       ? yield* libraryManifestFromLocalState(local.state)
       : emptyManifest;
     const inventory = yield* inspectSyncSnapshots(
       local.present ? local.state.retained_copies : [],
       store.originalsPath,
-      observer,
+      progress,
     );
     if (inventory._tag === "Changed")
       return { status: "local_bytes_changed" as const, digest: inventory.digest };
 
-    const remote = yield* observer.around({ kind: "read-remote" }, api.read());
+    const remote = yield* progress.around({ kind: "read-remote" }, api.read());
 
     const ancestry = local.present ? local.state.sync_ancestry : undefined;
     const mismatched =
@@ -169,7 +169,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       base_manifest: normalizeLibraryManifest(reconciled),
     });
 
-    const merge = yield* observer.around(
+    const merge = yield* progress.around(
       { kind: "merge" },
       prepareLibraryMerge({
         base,
@@ -200,7 +200,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       (entry) =>
         `The selected ${entry.kind} ${entry.kind === "skill" ? entry.skill_id : entry.collection_id} is no longer in the Library; update this device's selection.`,
     );
-    const collision = yield* observer.around(
+    const collision = yield* progress.around(
       { kind: "check-destinations" },
       resolveSyncInstalledSkillCollisions(
         installation.manifest,
@@ -215,7 +215,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const { account: desired, installation: effectiveManifest } = installation.resolveBindings(
       collision.manifest.bindings,
     );
-    const transition = yield* observer.around(
+    const transition = yield* progress.around(
       { kind: "check-projections" },
       prepareSyncDeviceTransition({
         current: local.present ? local.state : undefined,
@@ -306,13 +306,13 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const saved =
       remote !== null && same(desired, remoteManifest)
         ? remote
-        : yield* observer.around(
+        : yield* progress.around(
             { kind: "save-remote" },
             api.write(remote?.revision_id ?? null, desired),
           );
     // Local state is saved only onto exactly what this plan describes. If it moved, the
     // device keeps its old ancestry and the next sync merges both changes.
-    const retired = yield* observer.around(
+    const retired = yield* progress.around(
       { kind: "save-local" },
       transition
         .saveRestored(restored.state, ancestryAt(saved, desired))
@@ -341,7 +341,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
     function reconcileSelected() {
       return Effect.gen(function* () {
         if (!choosing) {
-          const result = yield* observer.around(
+          const result = yield* progress.around(
             { kind: "enable" },
             updateInstalledSkills({
               ...projectionOptions,
@@ -374,15 +374,15 @@ export const syncLibrary = Effect.fn("Library.sync")(
                 `Could not inspect existing Skill installations: ${String(observed.failure)}`,
               );
             else
-              for (const shadow of observed.success)
+              for (const duplicate of observed.success)
                 issues.push(
-                  `${shadow.name} already exists at ${shadow.aliases.map((alias) => (alias.linkPath === undefined ? alias.path : `${alias.path} (symlink ${alias.linkPath} → ${alias.linkTarget})`)).join(", ")} (resolved: ${shadow.canonicalPath}); review it before enabling.`,
+                  `${duplicate.name} already exists at ${duplicate.aliases.map((alias) => (alias.linkPath === undefined ? alias.path : `${alias.path} (symlink ${alias.linkPath} → ${alias.linkTarget})`)).join(", ")} (resolved: ${duplicate.canonicalPath}); review it before enabling.`,
                 );
           }
         }
         if (issues.length) return { projected: 0, retired: 0, issues };
         const attempt = yield* Effect.result(
-          observer.around(
+          progress.around(
             { kind: "enable" },
             updateInstalledSkills({
               ...projectionOptions,

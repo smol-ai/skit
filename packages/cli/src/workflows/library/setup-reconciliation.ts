@@ -88,7 +88,7 @@ export const setupReconciliationOutcomes = (
   }));
 
 /** Compare the same byte owner used for writes with corroborated last-written custody. */
-export const checkSetupReconciliation = Effect.fn("Setup.observeReconciliation")(function* (
+export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(function* (
   state: LibraryState,
   roots: InventoryRootOptions,
   instances: readonly SetupSkillInstance[],
