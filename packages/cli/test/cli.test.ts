@@ -684,8 +684,13 @@ describe("CLI contracts", () => {
     await writeFile(join(repo, ".agents", "skills", "review", "SKILL.md"), "changed externally\n");
     const result = args(["disable", "review", "--repo", repo, "--json"]);
     expect(result.status).toBe(12);
-    expect(JSON.parse(result.stderr).error.code).toBe("CONFLICT");
-    expect(result.stdout).toBe("");
+    // The disable choice is saved; only removing the edited copy failed.
+    expect(JSON.parse(result.stdout).data.application).toMatchObject({
+      intent: "saved",
+      status: "incomplete",
+      failure: { code: "CONFLICT" },
+    });
+    expect(result.stderr).toBe("");
   });
 
   test("retains selected Projection bytes through the built CLI without overwriting disagreement", async () => {

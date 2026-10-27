@@ -28,6 +28,10 @@ import { setupCommand } from "../src/handlers/library/setup.js";
 import { Renderer } from "../src/presentation/renderer.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
+  inspectRecoveryOperation,
+  listRecoveryOperations,
+} from "../src/library-application/recovery-moves.js";
+import {
   libraryHome,
   scratch,
   writingTo,
@@ -112,54 +116,40 @@ it.effect("enable refuses the extra copy before publishing intent, and dry-run e
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect.each(["retain-only", "retire-aliases", "keep-both"] as const)(
-  "setup duplicate choice: %s",
-  (action) =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const interaction = yield* makeScriptedInteraction([["review"], action, true]);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          setupCommand({
-            options: f.options,
-            interactive: true,
-            dryRun: false,
-            localCustody: { bindings: f.home.bindings },
-          }).pipe(Effect.provide(interaction.layer)),
-        ),
-      );
-      const state = yield* f.home.durable;
-      expect(state.skills.map((skill) => skill.name)).toEqual(["review"]);
-      expect(yield* f.fs.exists(f.source)).toBe(true);
-      expect(yield* f.fs.exists(f.destination)).toBe(action !== "retain-only");
-      expect(yield* f.fs.exists(f.alias)).toBe(action !== "retire-aliases");
-      expect(state.global_bindings.length).toBe(action === "retain-only" ? 0 : 1);
-      const prompts = yield* interaction.prompts;
-      expect(prompts[0].choices[0].selected).toBe(false);
-      expect(prompts[1].choices.map((choice) => choice.value)).toEqual([
-        "retire-aliases",
-        "retain-only",
-        "keep-both",
-      ]);
-      if (action === "retire-aliases") {
-        const removed = join(f.home.home, "removed");
-        const receipt = JSON.parse(
-          yield* f.fs.readFileString(
-            join(removed, (yield* f.fs.readDirectory(removed))[0], "receipt.json"),
-          ),
-        );
-        expect(receipt.entries).toEqual([
-          expect.objectContaining({
-            path: f.alias,
-            linkTarget: f.source,
-            type: "SymbolicLink",
-            moved: true,
-          }),
-        ]);
-        expect(yield* f.fs.readLink(receipt.entries[0].recoveryPath)).toBe(f.source);
-      }
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+// Guided setup no longer asks about individual links; `--duplicates` overrides are covered in
+// setup-apply-reviewed-plan.test.ts.
+it.effect("guided setup preserves an individual link to the selected source without asking", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const interaction = yield* makeScriptedInteraction([["review"], true]);
+    yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        setupCommand({
+          options: f.options,
+          interactive: true,
+          dryRun: false,
+          localCustody: { bindings: f.home.bindings },
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+    expect(yield* interaction.remaining).toBe(0);
+    const state = yield* f.home.durable;
+    expect(state.skills.map((skill) => skill.name)).toEqual(["review"]);
+    expect(state.global_bindings).toHaveLength(1);
+    expect(yield* f.fs.exists(f.source)).toBe(true);
+    expect(yield* f.fs.exists(f.destination)).toBe(true);
+    expect(yield* f.fs.exists(f.alias)).toBe(false);
+    const prompts = yield* interaction.prompts;
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0].choices[0].selected).toBe(false);
+    const [operationId] = yield* listRecoveryOperations(f.home.home);
+    const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+    expect(recovery.entries).toEqual([
+      expect.objectContaining({ path: f.alias, type: "SymbolicLink", status: "saved" }),
+    ]);
+    expect(yield* f.fs.readLink(recovery.entries[0].recoveryPath)).toBe(f.source);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("setup consent becomes stale if the alias target changes", () =>
@@ -492,6 +482,10 @@ it.effect(
             expect(applied.warnings).toEqual([
               expect.objectContaining({
                 name: "review",
+                message: expect.stringContaining("have not converged"),
+              }),
+              expect.objectContaining({
+                name: "review",
                 message: expect.stringContaining("not installed"),
               }),
             ]);
@@ -507,58 +501,44 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-for (const action of ["retain-only", "retire-aliases", "keep-both", "individual"] as const) {
-  it.effect(`applies grouped setup duplicate choices: ${action}`, () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const source = join(f.root, "Work", "skills", "later");
-      const alias = join(f.root, ".codex", "skills", "later");
-      yield* f.fs.makeDirectory(source, { recursive: true });
-      yield* f.fs.writeFileString(
-        join(source, "SKILL.md"),
-        "---\nname: later\ndescription: Later skill\n---\nLater.\n",
-      );
-      yield* f.fs.symlink(source, alias);
-      const interaction = yield* makeScriptedInteraction([
-        ["review", "later"],
-        action,
-        ...(action === "individual" ? ["retire-aliases", "retain-only"] : []),
-        true,
-      ]);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          setupCommand({
-            options: f.options,
-            interactive: true,
-            dryRun: false,
-            localCustody: { bindings: f.home.bindings },
-          }).pipe(Effect.provide(interaction.layer)),
-        ),
-      );
-      expect(yield* interaction.remaining).toBe(0);
-      const state = yield* f.home.durable;
-      expect(state.skills).toHaveLength(2);
-      expect(state.global_bindings.flatMap((binding) => binding.entries)).toHaveLength(
-        action === "retain-only" ? 0 : action === "individual" ? 1 : 2,
-      );
-      for (const path of [f.source, source])
-        expect(yield* f.fs.exists(join(path, "SKILL.md"))).toBe(true);
-      const survivingAliases = yield* Effect.forEach([f.alias, alias], (path) => f.fs.exists(path));
-      expect(survivingAliases.filter(Boolean)).toHaveLength(
-        action === "retire-aliases" ? 0 : action === "individual" ? 1 : 2,
-      );
-      if (action === "retire-aliases") {
-        const removed = join(f.home.home, "removed");
-        expect(yield* f.fs.readDirectory(removed)).toHaveLength(2);
-        for (const name of ["review", "later"])
-          expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(
-            true,
-          );
-      }
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-  );
-}
+it.effect("guided setup preserves every selected individual link in one operation", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const source = join(f.root, "Work", "skills", "later");
+    const alias = join(f.root, ".codex", "skills", "later");
+    yield* f.fs.makeDirectory(source, { recursive: true });
+    yield* f.fs.writeFileString(
+      join(source, "SKILL.md"),
+      "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+    );
+    yield* f.fs.symlink(source, alias);
+    const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
+    yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        setupCommand({
+          options: f.options,
+          interactive: true,
+          dryRun: false,
+          localCustody: { bindings: f.home.bindings },
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+    expect(yield* interaction.remaining).toBe(0);
+    const state = yield* f.home.durable;
+    expect(state.skills).toHaveLength(2);
+    expect(state.global_bindings.flatMap((binding) => binding.entries)).toHaveLength(2);
+    for (const path of [f.source, source])
+      expect(yield* f.fs.exists(join(path, "SKILL.md"))).toBe(true);
+    for (const path of [f.alias, alias]) expect(yield* f.fs.exists(path)).toBe(false);
+    for (const name of ["review", "later"])
+      expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
+    const operations = yield* listRecoveryOperations(f.home.home);
+    expect(operations).toHaveLength(1);
+    const recovery = yield* inspectRecoveryOperation(f.home.home, operations[0]);
+    expect(recovery.entries.map((entry) => entry.path).sort()).toEqual([alias, f.alias].sort());
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
 
 it.effect.each(["retain-only", "keep-both"] as const)(
   "bulk %s preserves a whole-root symlink",
@@ -595,68 +575,68 @@ it.effect.each(["retain-only", "keep-both"] as const)(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect(
-  "uses separate bulk decisions for retirable and ordinary copies across add and bind",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const later = join(f.root, "Work", "skills", "later");
-      yield* f.fs.makeDirectory(later, { recursive: true });
+it.effect("preserves selected links and equal copies automatically across add and bind", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const later = join(f.root, "Work", "skills", "later");
+    yield* f.fs.makeDirectory(later, { recursive: true });
+    yield* f.fs.writeFileString(
+      join(later, "SKILL.md"),
+      "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+    );
+    yield* f.fs.symlink(later, join(f.root, ".codex", "skills", "later"));
+    for (const name of ["ordinary-one", "ordinary-two"]) {
+      const path = join(f.root, ".codex", "skills", name);
+      yield* f.fs.makeDirectory(path);
       yield* f.fs.writeFileString(
-        join(later, "SKILL.md"),
-        "---\nname: later\ndescription: Later skill\n---\nLater.\n",
+        join(path, "SKILL.md"),
+        `---\nname: ${name}\ndescription: Ordinary skill\n---\nOrdinary.\n`,
       );
-      yield* f.fs.symlink(later, join(f.root, ".codex", "skills", "later"));
-      for (const name of ["ordinary-one", "ordinary-two"]) {
-        const path = join(f.root, ".codex", "skills", name);
-        yield* f.fs.makeDirectory(path);
-        yield* f.fs.writeFileString(
-          join(path, "SKILL.md"),
-          `---\nname: ${name}\ndescription: Ordinary skill\n---\nOrdinary.\n`,
-        );
-      }
-      yield* initializeLibraryMachine(f.home.home);
-      yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
-      const interaction = yield* makeScriptedInteraction([
-        ["review", "later", "ordinary-one", "ordinary-two"],
-        "retire-aliases",
-        "retain-only",
-        true,
-      ]);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          setupCommand({
-            options: f.options,
-            interactive: true,
-            dryRun: false,
-            localCustody: { bindings: f.home.bindings },
-          }).pipe(Effect.provide(interaction.layer)),
-        ),
-      );
-      expect(yield* interaction.remaining).toBe(0);
-      const state = yield* f.home.durable;
-      expect(state.skills).toHaveLength(4);
-      const enabled = new Set(
-        state.global_bindings
-          .flatMap((binding) => binding.entries)
-          .flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
-      );
-      expect(
-        state.skills
-          .filter((skill) => enabled.has(skill.skill_id))
-          .map((skill) => skill.name)
-          .sort(),
-      ).toEqual(["later", "review"]);
-      for (const name of ["review", "later"]) {
-        expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name))).toBe(false);
-        expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
-      }
-      for (const name of ["ordinary-one", "ordinary-two"]) {
-        expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name, "SKILL.md"))).toBe(true);
-        expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name))).toBe(false);
-      }
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    }
+    yield* initializeLibraryMachine(f.home.home);
+    yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
+    const interaction = yield* makeScriptedInteraction([
+      ["review", "later", "ordinary-one", "ordinary-two"],
+      true,
+    ]);
+    yield* f.home.owned(
+      writingTo(
+        f.home.home,
+        setupCommand({
+          options: f.options,
+          interactive: true,
+          dryRun: false,
+          localCustody: { bindings: f.home.bindings },
+        }).pipe(Effect.provide(interaction.layer)),
+      ),
+    );
+    expect(yield* interaction.remaining).toBe(0);
+    const state = yield* f.home.durable;
+    expect(state.skills).toHaveLength(4);
+    const enabled = new Set(
+      state.global_bindings
+        .flatMap((binding) => binding.entries)
+        .flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
+    );
+    expect(
+      state.skills
+        .filter((skill) => enabled.has(skill.skill_id))
+        .map((skill) => skill.name)
+        .sort(),
+    ).toEqual(["later", "ordinary-one", "ordinary-two", "review"]);
+    for (const name of ["review", "later", "ordinary-one", "ordinary-two"]) {
+      expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name))).toBe(false);
+      expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
+    }
+    const [operationId] = yield* listRecoveryOperations(f.home.home);
+    const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+    expect(recovery.entries.map((entry) => [entry.name, entry.type, entry.status]).sort()).toEqual([
+      ["later", "SymbolicLink", "saved"],
+      ["ordinary-one", "Directory", "saved"],
+      ["ordinary-two", "Directory", "saved"],
+      ["review", "SymbolicLink", "saved"],
+    ]);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 for (const operation of ["add", "bind"] as const) {
@@ -762,11 +742,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
     yield* f.fs.symlink(later, laterAlias);
     yield* initializeLibraryMachine(f.home.home);
     yield* f.home.owned(writingTo(f.home.home, retainLibrarySourceEffect(f.source)));
-    const interaction = yield* makeScriptedInteraction([
-      ["review", "later"],
-      "retire-aliases",
-      true,
-    ]);
+    const interaction = yield* makeScriptedInteraction([["review", "later"], true]);
     const result = yield* f.home.owned(
       writingTo(
         f.home.home,

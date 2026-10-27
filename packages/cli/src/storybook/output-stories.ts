@@ -11,6 +11,8 @@ import {
 } from "@smolai/skit-core";
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { result } from "../handlers/contracts.js";
+import { recoveryActions } from "../commands/recovery-contract.js";
+import { setupUndoActions } from "../commands/setup-undo-contract.js";
 
 export type OutputStory = Data.TaggedEnum<{
   Result: { readonly name: string; readonly group: string; readonly result: CommandResult };
@@ -380,6 +382,106 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           reason: "divergent-copies",
         },
       ],
+    }),
+  ),
+  resultStory(
+    "setup",
+    "review",
+    result("setupReview", {
+      planId: digest,
+      reviewId: digest,
+      hasChanges: true,
+      canApply: true,
+      summary: {
+        sourceUpdateMayNeedReview: false,
+        reconciliation: [],
+        versionChoices: [],
+        savesMachineSettings: false,
+        createsMachineIdentity: false,
+        sources: [],
+        enables: [{ name: "review", path: "/home/story/Work/skills/review" }],
+        retains: [],
+        preserves: [{ name: "review", path: "/home/story/.codex/skills/review", kind: "symlink" }],
+        removals: [],
+      },
+      actions: [],
+    }),
+  ),
+  resultStory(
+    "setup",
+    "comparison",
+    result("setupComparison", {
+      planId: digest,
+      copies: [
+        {
+          name: "review",
+          path: "/home/story/.claude/skills/review",
+          observedHash: digest,
+          markdown: "---\nname: review\ndescription: Review code\n---\nReview code.\n",
+          truncated: false,
+        },
+      ],
+      actions: [],
+    }),
+  ),
+  resultStory(
+    "setup",
+    "failed",
+    result("setupFailed", {
+      code: "CONFLICT",
+      message: "The machine changed after this setup plan was reviewed",
+      remediation: "Run `skit setup --json` again to review the current machine.",
+      actions: [],
+    }),
+  ),
+  resultStory(
+    "setup",
+    "undo-preview",
+    result("setupUndo", {
+      operationId: "story-operation",
+      planId: digest,
+      status: "ready",
+      phase: "preview",
+      conflicts: [],
+      files: [{ path: "/home/story/.codex/skills/review", kind: "restore" }],
+      intentChanged: true,
+      settingsChanged: false,
+      sourceSelections: [],
+      actions: setupUndoActions("/home/story/.skit", "story-operation", digest),
+    }),
+  ),
+  resultStory(
+    "recovery",
+    "list",
+    result("recoveryList", {
+      operations: [
+        {
+          operationId: "story-operation",
+          actions: recoveryActions("/home/story/.skit", "story-operation"),
+        },
+      ],
+    }),
+  ),
+  resultStory(
+    "recovery",
+    "inspection",
+    result("recovery", {
+      operationId: "story-operation",
+      directory: "/home/story/.skit/removed/story-operation",
+      planId: digest,
+      entries: [
+        {
+          name: "review",
+          path: "/home/story/.codex/skills/review",
+          recoveryPath: "/home/story/.skit/removed/story-operation/batch/review",
+          type: "SymbolicLink",
+          status: "saved",
+          reason: "Saved by setup",
+        },
+      ],
+      legacy: false,
+      phase: "inspection",
+      actions: recoveryActions("/home/story/.skit", "story-operation"),
     }),
   ),
   resultStory(
