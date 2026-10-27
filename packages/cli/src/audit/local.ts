@@ -124,7 +124,7 @@ const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
         severity: "error",
         code: "orphaned-projection-claim",
         subject: observation.path,
-        problem: "Projection claims SKIT ownership, but its Library entry is missing",
+        problem: "Installed skill claims SKIT ownership, but its Library entry is missing",
         locations: [observation.path, markerPath],
         details: {
           markerPath,

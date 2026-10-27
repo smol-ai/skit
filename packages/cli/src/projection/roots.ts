@@ -43,7 +43,7 @@ export function existingRepositorySkillsDirectory(
   )?.root;
 }
 
-/** Resolve one target's writable physical Skill root for a Scope. */
+/** Resolve one target's writable physical skills directory for a Scope. */
 export function bindingRoot(
   target: InstallDestination,
   scope: SkitBindingScope,

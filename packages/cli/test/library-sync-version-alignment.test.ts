@@ -11,7 +11,7 @@ import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 it.effect(
-  "syncs independent identical updates with projected custody and a read-only preview",
+  "syncs independent identical updates with installed-skill custody and a read-only preview",
   () =>
     Effect.gen(function* () {
       const { fs, a, b, server } = yield* devices;

@@ -17,7 +17,7 @@ export function overrideInvocationIntent(policy: InvocationPolicy): InvocationIn
 }
 
 /**
- * Normalize a Projection to the invocation policy in force. A published artifact already carries
+ * Normalize an installed skill to the invocation policy in force. A published artifact already carries
  * its declaration, so this rewrites nothing for a conforming Skill; an undeclared Skill keeps the
  * native metadata its author shipped, which is the Agent Skills compatibility path.
  */

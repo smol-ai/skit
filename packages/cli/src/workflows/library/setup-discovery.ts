@@ -644,7 +644,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
 export type SetupEvidence = Effect.Success<ReturnType<typeof collectSetupEvidence>>;
 
 /**
- * The full setup discovery scan: every harness root, git in every repository, and a tree hash per
+ * The full setup discovery scan: every skills directory, git in every repository, and a tree hash per
  * Skill. Setup scans through this reference so a caller can observe how often it scans.
  */
 export const SetupDiscovery = Context.Reference<{

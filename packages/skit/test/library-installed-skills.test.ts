@@ -41,7 +41,7 @@ const machineId = migratedMachineId(
   "library-projection-test",
 );
 
-/** A retained local Collection with one Skill globally bound to codex, not yet projected. */
+/** A retained local Collection with one Skill globally bound to codex, not yet installed. */
 const boundCollectionWith = (second = false, emptyDirectories: readonly string[] = []) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -183,31 +183,33 @@ it.effect(
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("saves nothing when the written Projection does not hash to the retained bytes", () =>
-  Effect.gen(function* () {
-    const { home, targetRoot, storeLayer } = yield* boundCollection;
-    const diverged = Layer.succeed(TreeHasher)({
-      hash: () => Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`)),
-    });
-    const projected = yield* withLibraryWriterLock(
-      home,
-      projectBindingEffect({
-        target: "agents",
-        root: targetRoot,
-        variantsPath: join(home, "variants"),
-      }).pipe(Effect.provide(storeLayer), Effect.provide(diverged)),
-    ).pipe(Effect.result);
-    assert.strictEqual(Result.isFailure(projected), true);
-    if (Result.isFailure(projected))
-      assert.strictEqual(projected.failure._tag, "InstalledSkillFailure");
-    const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
-    assert.deepStrictEqual(after.projections, []);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "saves nothing when the written installed skill does not hash to the retained bytes",
+  () =>
+    Effect.gen(function* () {
+      const { home, targetRoot, storeLayer } = yield* boundCollection;
+      const diverged = Layer.succeed(TreeHasher)({
+        hash: () => Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`)),
+      });
+      const projected = yield* withLibraryWriterLock(
+        home,
+        projectBindingEffect({
+          target: "agents",
+          root: targetRoot,
+          variantsPath: join(home, "variants"),
+        }).pipe(Effect.provide(storeLayer), Effect.provide(diverged)),
+      ).pipe(Effect.result);
+      assert.strictEqual(Result.isFailure(projected), true);
+      if (Result.isFailure(projected))
+        assert.strictEqual(projected.failure._tag, "InstalledSkillFailure");
+      const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
+        Effect.provide(storeLayer),
+      );
+      assert.deepStrictEqual(after.projections, []);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("refreshes an equivalent Version handle only on an intact owned projection", () =>
+it.effect("refreshes an equivalent Version handle only on an intact owned installed skill", () =>
   Effect.gen(function* () {
     const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
     const target = join(targetRoot, "review");
@@ -320,40 +322,42 @@ it.effect("retires intact former roots when a globally bound Skill moves to a ne
 );
 
 for (const changed of ["bytes", "ownership"] as const)
-  it.effect(`refuses root relocation when the former projection's ${changed} changed`, () =>
-    Effect.gen(function* () {
-      const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
-      const newRoot = join(home, "new-harness", "skills");
-      const project = (root: string) =>
-        withLibraryWriterLock(
-          home,
-          projectBindingEffect({
-            target: "agents",
-            root,
-            variantsPath: join(home, "variants"),
-          }).pipe(Effect.provide(storeLayer)),
+  it.effect(
+    `refuses directory relocation when the former installed skill's ${changed} changed`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+        const newRoot = join(home, "new-harness", "skills");
+        const project = (root: string) =>
+          withLibraryWriterLock(
+            home,
+            projectBindingEffect({
+              target: "agents",
+              root,
+              variantsPath: join(home, "variants"),
+            }).pipe(Effect.provide(storeLayer)),
+          );
+        yield* project(targetRoot);
+        const path = join(targetRoot, "review");
+        if (changed === "bytes")
+          yield* fs.writeFileString(join(path, "SKILL.md"), "my local edits\n");
+        else yield* fs.remove(join(path, ".skit-ownership.json"));
+        const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+        const before = yield* load;
+        const result = yield* project(newRoot).pipe(Effect.result);
+        assert.strictEqual(Result.isFailure(result), true);
+        if (Result.isFailure(result)) {
+          assert.strictEqual(result.failure._tag, "InstalledSkillRetireConflict");
+          if (result.failure._tag === "InstalledSkillRetireConflict")
+            assert.include(result.failure.detail, path);
+        }
+        assert.strictEqual(yield* fs.exists(join(newRoot, "review")), false);
+        assert.strictEqual(
+          yield* fs.readFileString(join(path, "SKILL.md")),
+          changed === "bytes" ? "my local edits\n" : "raw Skill bytes\n",
         );
-      yield* project(targetRoot);
-      const path = join(targetRoot, "review");
-      if (changed === "bytes")
-        yield* fs.writeFileString(join(path, "SKILL.md"), "my local edits\n");
-      else yield* fs.remove(join(path, ".skit-ownership.json"));
-      const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
-      const before = yield* load;
-      const result = yield* project(newRoot).pipe(Effect.result);
-      assert.strictEqual(Result.isFailure(result), true);
-      if (Result.isFailure(result)) {
-        assert.strictEqual(result.failure._tag, "InstalledSkillRetireConflict");
-        if (result.failure._tag === "InstalledSkillRetireConflict")
-          assert.include(result.failure.detail, path);
-      }
-      assert.strictEqual(yield* fs.exists(join(newRoot, "review")), false);
-      assert.strictEqual(
-        yield* fs.readFileString(join(path, "SKILL.md")),
-        changed === "bytes" ? "my local edits\n" : "raw Skill bytes\n",
-      );
-      assert.deepStrictEqual(yield* load, before);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+        assert.deepStrictEqual(yield* load, before);
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 for (const alias of [false, true])
@@ -703,7 +707,7 @@ const projectionFixture = (second = false, emptyDirectories: readonly string[] =
     return { ...bound, variantsPath, load, edit, project, retire, remove, refresh };
   });
 
-/** Every backup beside a real projection root, as `pending`/`kept` and its path. */
+/** Every backup beside a real skills directory, as `pending`/`kept` and its path. */
 const backupsBeside = (root: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -1292,7 +1296,7 @@ for (const planted of [
     Effect.gen(function* () {
       const { fs, home, targetRoot, load, edit, project, retire } = yield* projectionFixture();
       yield* project();
-      // A repository can commit its own `.skit-backups` beside the skills root it shares.
+      // A repository can commit its own `.skit-backups` beside the skills directory it shares.
       const outside = join(home, "outside");
       const sentinel = join(outside, "sentinel");
       yield* fs.makeDirectory(outside);
@@ -1333,7 +1337,7 @@ for (const location of ["beside", "inside"] as const)
           const { fs, home, targetRoot, load, project, refresh } = yield* projectionFixture();
           yield* project();
           const projection = (yield* load).projections[0]!;
-          // Projection ids are readable from ownership markers, so a planted entry can match one.
+          // Installed-skill ids are readable from ownership markers, so a planted entry can match one.
           const outside = join(home, "outside");
           const entry = join(outside, `pending-${projection.projection_id}-planted`);
           yield* fs.makeDirectory(outside);

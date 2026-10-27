@@ -35,7 +35,7 @@ export class InstalledSkillRetentionMissing
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Run `skit doctor` to inspect changed Projections.";
+  readonly remediation = "Run `skit doctor` to inspect changed installed skills.";
 }
 
 export class InstalledSkillRetentionAmbiguous
@@ -55,7 +55,7 @@ export class InstalledSkillRetentionStale
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview the Projection retention again.";
+  readonly remediation = "Preview retaining the installed skill's changes again.";
 }
 
 const matchingSkill = Effect.fn("Library.InstalledSkillRetention.matchSkill")(function* (
@@ -87,11 +87,11 @@ const matchingInstalledSkill = Effect.fn("Library.InstalledSkillRetention.matchI
     );
     if (matches.length === 0)
       return yield* new InstalledSkillRetentionMissing({
-        message: `No Projection matches ${selector}`,
+        message: `No installed skill matches ${selector}`,
       });
     if (matches.length !== 1)
       return yield* new InstalledSkillRetentionAmbiguous({
-        message: `More than one Projection matches ${selector}`,
+        message: `More than one installed skill matches ${selector}`,
       });
     return matches[0]!;
   },
@@ -186,19 +186,19 @@ const applyPreparedInstalledSkillRetention = Effect.fn("Library.applyInstalledSk
     const store = yield* LibraryStore;
     if (store.home !== home)
       return yield* new InstalledSkillRetentionStale({
-        message: "Projection retention belongs to a different Library",
+        message: "This retention preview belongs to a different Library",
       });
     return yield* withLibraryWriter(
       Effect.gen(function* () {
         const current = yield* store.load;
         if (libraryStateRevision(current) !== preview.revision)
           return yield* new InstalledSkillRetentionStale({
-            message: "Library state changed after Projection retention was previewed",
+            message: "Library state changed after the retention was previewed",
           });
         const revalidated = yield* observeInstalledSkillRetention(current, query, selector);
         if (canonicalJson(revalidated) !== canonicalJson(preview))
           return yield* new InstalledSkillRetentionStale({
-            message: "Projection bytes changed after Projection retention was previewed",
+            message: "The installed skill's bytes changed after the retention was previewed",
           });
         const selected = current.projections.find(
           (projection) => projection.projection_id === preview.selected_projection_id,

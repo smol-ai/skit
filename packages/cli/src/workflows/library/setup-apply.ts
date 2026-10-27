@@ -106,7 +106,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       return yield* new PlanIsStale();
     const unresolved = unresolvedSetupReconciliation(reconciliation, versionChoices);
     if (unresolved.length) return yield* new SetupReconciliationRequired({ facts: unresolved });
-    // Only enabled global copies project into this device's roots. Prove those roots
+    // Only enabled global copies install into this device's skills directories. Prove those roots
     // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
     // read-only) fails the apply whole instead of leaving a Library with no copies behind.
     const projectedCopies = [...approval.bindings, ...approval.custody].filter(

@@ -87,7 +87,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     cwd,
     /** Retain another Collection, as a second front end writing to the same Library would. */
     retain,
-    /** The projection options the TUI derives from its flags for this home. */
+    /** The installed-skill options the TUI derives from its flags for this home. */
     configuration,
     /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
     bind: (label: string, scopes: readonly Scope[]) =>

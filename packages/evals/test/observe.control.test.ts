@@ -68,7 +68,7 @@ describe("observe", () => {
     );
   });
 
-  it("reads the Library and its projections from skit's own state", async () => {
+  it("reads the Library and its installed skills from skit's own state", async () => {
     const run = controlRun();
     const fixture = baseCaseFixture(run.home);
     await runSkit(run, "add", join(run.home, ".claude/skills/release-notes"));

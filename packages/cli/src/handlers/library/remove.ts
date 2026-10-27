@@ -38,7 +38,7 @@ export const removeCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Remove a retained Collection and its owned Projections."),
+  Command.withDescription("Remove a retained Collection and the skills SKIT installed from it."),
   Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },

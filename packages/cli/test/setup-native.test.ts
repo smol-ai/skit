@@ -577,7 +577,7 @@ it.effect("reports unsafe repository discovery config instead of applying it", (
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("plans equivalent loose projections and blocks divergent copies", () =>
+it.effect("plans equivalent loose installed skills and blocks divergent copies", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const codexReview = join(f.codex, "review");
@@ -1023,7 +1023,7 @@ it.effect(
     }),
 );
 
-it.effect("identifies a bound authored SKIT and joins it to its library projections", () =>
+it.effect("identifies a bound authored SKIT and joins it to its installed skills", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const authoredSkill = join(f.repository, "skills", "council");
@@ -1313,196 +1313,198 @@ it.effect("examines only immediate children until a nested container is configur
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("reconciles current, missing, and orphaned SKIT projections without persisting", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const current = join(f.codex, "current");
-    const missing = join(f.codex, "missing");
-    const orphaned = join(f.codex, "orphaned");
-    yield* f.fs.makeDirectory(current, { recursive: true });
-    yield* f.fs.makeDirectory(orphaned, { recursive: true });
-    yield* f.fs.writeFileString(join(current, "SKILL.md"), skillDocument("current"));
-    yield* f.fs.writeFileString(join(orphaned, "SKILL.md"), skillDocument("orphaned"));
-    const currentHash = yield* deterministicTreeHashEffect(current);
-    const orphanedHash = yield* deterministicTreeHashEffect(orphaned);
-    const collectionId = makeCollectionId();
-    const versionId = makeRetainedCopyId();
-    const currentVersionId = makeSkillVersionId();
-    const missingVersionId = makeSkillVersionId();
-    const currentSkillId = makeSkillId();
-    const missingSkillId = makeSkillId();
-    const acquisitionId = makeAcquisitionId();
-    const machineId = makeMachineId();
-    const currentProjectionId = makeInstalledSkillId();
-    const missingProjectionId = makeInstalledSkillId();
-    const orphanedProjectionId = makeInstalledSkillId();
-    const orphanedCollectionId = makeCollectionId();
-    const orphanedSkillId = makeSkillId();
-    const orphanedVersionId = makeSkillVersionId();
-    yield* f.fs.writeFileString(
-      join(current, ".skit-ownership.json"),
-      JSON.stringify({
-        schemaVersion: 2,
-        projectionPolicyVersion: 1,
-        projection_id: currentProjectionId,
-        collection_id: collectionId,
-        skill_id: currentSkillId,
-        skill_version_id: currentVersionId,
-        expected_digest: currentHash,
-        harness: "codex",
-      }),
-    );
-    yield* f.fs.writeFileString(
-      join(orphaned, ".skit-ownership.json"),
-      JSON.stringify({
-        schemaVersion: 2,
-        projectionPolicyVersion: 1,
-        projection_id: orphanedProjectionId,
-        collection_id: orphanedCollectionId,
-        skill_id: orphanedSkillId,
-        skill_version_id: orphanedVersionId,
-        expected_digest: orphanedHash,
-        harness: "codex",
-      }),
-    );
-    const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 9,
-      collections: [
-        {
-          collection_id: collectionId,
-          label: "test-collection",
-        },
-      ],
-      skills: [
-        {
-          skill_id: currentSkillId,
-          collection_id: collectionId,
-          path: "current",
-          name: "current",
-          versions: [
-            {
-              skill_version_id: currentVersionId,
-              source_digest: currentHash,
-              artifact_digest: currentHash,
-              validation_identity_digest: currentHash,
-              materialization_profile: "plain-skill/v1",
-            },
-          ],
-        },
-        {
-          skill_id: missingSkillId,
-          collection_id: collectionId,
-          path: "missing",
-          name: "missing",
-          versions: [
-            {
-              skill_version_id: missingVersionId,
-              source_digest: currentHash,
-              artifact_digest: currentHash,
-              validation_identity_digest: currentHash,
-              materialization_profile: "plain-skill/v1",
-            },
-          ],
-        },
-      ],
-      retained_copies: [
-        {
-          retained_copy_id: versionId,
-          digest: currentHash,
-          copy_profile: "verbatim/v1",
-          members: [
-            {
-              source_path: "current",
-              source_digest: currentHash,
-              artifact_digest: currentHash,
-              materialization_profile: "plain-skill/v1",
-            },
-            {
-              source_path: "missing",
-              source_digest: currentHash,
-              artifact_digest: currentHash,
-              materialization_profile: "plain-skill/v1",
-            },
-          ],
-        },
-      ],
-      acquisitions: [
-        {
-          acquisition_id: acquisitionId,
-          collection_id: collectionId,
-          kind: "source",
-          retained_copy_id: versionId,
-          input: { value: "/source" },
-          source_identity: { kind: "local", machine_id: machineId, path: { value: "/source" } },
-          acquired_at: "2026-01-01T00:00:00.000Z",
-          machine_id: machineId,
-          observations: [],
-        },
-      ],
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [
-            { kind: "skill", skill_id: currentSkillId },
-            { kind: "skill", skill_id: missingSkillId },
-          ],
-        },
-      ],
-      local_bindings: [],
-      projections: [
-        {
+it.effect(
+  "reconciles current, missing, and orphaned SKIT installed skills without persisting",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const current = join(f.codex, "current");
+      const missing = join(f.codex, "missing");
+      const orphaned = join(f.codex, "orphaned");
+      yield* f.fs.makeDirectory(current, { recursive: true });
+      yield* f.fs.makeDirectory(orphaned, { recursive: true });
+      yield* f.fs.writeFileString(join(current, "SKILL.md"), skillDocument("current"));
+      yield* f.fs.writeFileString(join(orphaned, "SKILL.md"), skillDocument("orphaned"));
+      const currentHash = yield* deterministicTreeHashEffect(current);
+      const orphanedHash = yield* deterministicTreeHashEffect(orphaned);
+      const collectionId = makeCollectionId();
+      const versionId = makeRetainedCopyId();
+      const currentVersionId = makeSkillVersionId();
+      const missingVersionId = makeSkillVersionId();
+      const currentSkillId = makeSkillId();
+      const missingSkillId = makeSkillId();
+      const acquisitionId = makeAcquisitionId();
+      const machineId = makeMachineId();
+      const currentProjectionId = makeInstalledSkillId();
+      const missingProjectionId = makeInstalledSkillId();
+      const orphanedProjectionId = makeInstalledSkillId();
+      const orphanedCollectionId = makeCollectionId();
+      const orphanedSkillId = makeSkillId();
+      const orphanedVersionId = makeSkillVersionId();
+      yield* f.fs.writeFileString(
+        join(current, ".skit-ownership.json"),
+        JSON.stringify({
+          schemaVersion: 2,
+          projectionPolicyVersion: 1,
           projection_id: currentProjectionId,
           collection_id: collectionId,
           skill_id: currentSkillId,
           skill_version_id: currentVersionId,
-          target: "agents",
-          root: f.codex,
-          path: current,
           expected_digest: currentHash,
-          status: "installed",
-          projected_at: "2026-01-01T00:00:00.000Z",
-        },
-        {
-          projection_id: missingProjectionId,
-          collection_id: collectionId,
-          skill_id: missingSkillId,
-          skill_version_id: missingVersionId,
-          target: "agents",
-          root: f.codex,
-          path: missing,
-          expected_digest: currentHash,
-          status: "installed",
-          projected_at: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-      tombstones: [],
-      unmanaged: [],
-      adoption_receipts: [],
-    });
-    const observed = yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(state, yield* store.load);
-      return yield* runSetup(f.options);
-    }).pipe(
-      Effect.provide(
-        libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
-      ),
-    );
+          harness: "codex",
+        }),
+      );
+      yield* f.fs.writeFileString(
+        join(orphaned, ".skit-ownership.json"),
+        JSON.stringify({
+          schemaVersion: 2,
+          projectionPolicyVersion: 1,
+          projection_id: orphanedProjectionId,
+          collection_id: orphanedCollectionId,
+          skill_id: orphanedSkillId,
+          skill_version_id: orphanedVersionId,
+          expected_digest: orphanedHash,
+          harness: "codex",
+        }),
+      );
+      const state = Schema.decodeUnknownSync(LibraryState)({
+        schemaVersion: 9,
+        collections: [
+          {
+            collection_id: collectionId,
+            label: "test-collection",
+          },
+        ],
+        skills: [
+          {
+            skill_id: currentSkillId,
+            collection_id: collectionId,
+            path: "current",
+            name: "current",
+            versions: [
+              {
+                skill_version_id: currentVersionId,
+                source_digest: currentHash,
+                artifact_digest: currentHash,
+                validation_identity_digest: currentHash,
+                materialization_profile: "plain-skill/v1",
+              },
+            ],
+          },
+          {
+            skill_id: missingSkillId,
+            collection_id: collectionId,
+            path: "missing",
+            name: "missing",
+            versions: [
+              {
+                skill_version_id: missingVersionId,
+                source_digest: currentHash,
+                artifact_digest: currentHash,
+                validation_identity_digest: currentHash,
+                materialization_profile: "plain-skill/v1",
+              },
+            ],
+          },
+        ],
+        retained_copies: [
+          {
+            retained_copy_id: versionId,
+            digest: currentHash,
+            copy_profile: "verbatim/v1",
+            members: [
+              {
+                source_path: "current",
+                source_digest: currentHash,
+                artifact_digest: currentHash,
+                materialization_profile: "plain-skill/v1",
+              },
+              {
+                source_path: "missing",
+                source_digest: currentHash,
+                artifact_digest: currentHash,
+                materialization_profile: "plain-skill/v1",
+              },
+            ],
+          },
+        ],
+        acquisitions: [
+          {
+            acquisition_id: acquisitionId,
+            collection_id: collectionId,
+            kind: "source",
+            retained_copy_id: versionId,
+            input: { value: "/source" },
+            source_identity: { kind: "local", machine_id: machineId, path: { value: "/source" } },
+            acquired_at: "2026-01-01T00:00:00.000Z",
+            machine_id: machineId,
+            observations: [],
+          },
+        ],
+        global_bindings: [
+          {
+            scope: { kind: "global" },
+            entries: [
+              { kind: "skill", skill_id: currentSkillId },
+              { kind: "skill", skill_id: missingSkillId },
+            ],
+          },
+        ],
+        local_bindings: [],
+        projections: [
+          {
+            projection_id: currentProjectionId,
+            collection_id: collectionId,
+            skill_id: currentSkillId,
+            skill_version_id: currentVersionId,
+            target: "agents",
+            root: f.codex,
+            path: current,
+            expected_digest: currentHash,
+            status: "installed",
+            projected_at: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            projection_id: missingProjectionId,
+            collection_id: collectionId,
+            skill_id: missingSkillId,
+            skill_version_id: missingVersionId,
+            target: "agents",
+            root: f.codex,
+            path: missing,
+            expected_digest: currentHash,
+            status: "installed",
+            projected_at: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        tombstones: [],
+        unmanaged: [],
+        adoption_receipts: [],
+      });
+      const observed = yield* Effect.gen(function* () {
+        const store = yield* LibraryStore;
+        yield* store.save(state, yield* store.load);
+        return yield* runSetup(f.options);
+      }).pipe(
+        Effect.provide(
+          libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+        ),
+      );
 
-    expect(observed.projections).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ skillId: currentSkillId, path: current, status: "current" }),
-        expect.objectContaining({ skillId: missingSkillId, path: missing, status: "missing" }),
-      ]),
-    );
-    expect(observed.instances.find((instance) => instance.name === "current")?.owner.kind).toBe(
-      "skit",
-    );
-    expect(observed.instances.find((instance) => instance.name === "orphaned")?.owner.kind).toBe(
-      "skit",
-    );
-    expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
-  }).pipe(Effect.provide(testPlatformLayer)),
+      expect(observed.projections).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ skillId: currentSkillId, path: current, status: "current" }),
+          expect.objectContaining({ skillId: missingSkillId, path: missing, status: "missing" }),
+        ]),
+      );
+      expect(observed.instances.find((instance) => instance.name === "current")?.owner.kind).toBe(
+        "skit",
+      );
+      expect(observed.instances.find((instance) => instance.name === "orphaned")?.owner.kind).toBe(
+        "skit",
+      );
+      expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
+    }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 for (const kind of ["source", "retained-edit"] as const) {

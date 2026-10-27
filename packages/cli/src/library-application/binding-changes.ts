@@ -51,7 +51,7 @@ export interface BindingChangeRequest extends BindingSelection {
   /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
   readonly preserveUnselectedProjections?: boolean;
   readonly allowDuplicate?: boolean;
-  /** Setup consent applies only to these exact symlinks, until projection succeeds. */
+  /** Setup consent applies only to these exact symlinks, until installing succeeds. */
   readonly allowedShadowAliases?: readonly {
     readonly path: string;
     readonly canonicalPath: string;
@@ -276,7 +276,7 @@ export const previewBindingChanges = Effect.fn("LibraryBindings.preview")(functi
   return yield* previewRequests(yield* store.load, store.home, requests, configuration);
 });
 
-/** Authoritatively reload, commit Binding intent, then reconcile Projection reality. */
+/** Authoritatively reload, commit Binding intent, then update installed skills to match it. */
 const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   state: LibraryState,
   options: BindingChangeRequest,

@@ -34,19 +34,19 @@ export const optionalString = (name: string, description: string) =>
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
 export const codexRootFlag = optionalString(
   "codex-root",
-  "Override the shared .agents skills root that Codex and other agents read.",
+  "Override the shared .agents skills directory that Codex and other agents read.",
 );
 export const claudeRootFlag = optionalString(
   "claude-root",
-  "Override the Claude skills root; treats Claude Code as present.",
+  "Override the Claude skills directory; treats Claude Code as present.",
 );
 export const opencodeRootFlag = optionalString(
   "opencode-root",
-  "Scan an OpenCode skills root for inventory; SKIT does not project there.",
+  "Scan an OpenCode skills directory for inventory; SKIT does not install there.",
 );
 export const devinRootFlag = Flag.String("devin-root").pipe(
   Flag.withDescription(
-    "Scan additional Devin skills roots for inventory without changing projection targets.",
+    "Scan additional Devin skills directories for inventory without changing install destinations.",
   ),
   Flag.atLeast(0),
   Flag.map((values) => values.flatMap((value) => value.split(",").filter(Boolean))),

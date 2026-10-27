@@ -175,7 +175,7 @@ function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
   return duplicates.map(({ action, names, aliasCount }) => {
     const examples = names.length <= 5 ? ` · ${names.join(", ")}` : "";
     if (action === "retain-only")
-      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or Projection`;
+      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or installed skill`;
     if (action === "keep-both")
       return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
     if (action === "preserve-duplicates")

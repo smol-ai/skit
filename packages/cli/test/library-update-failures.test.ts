@@ -143,104 +143,106 @@ it.effect(
 );
 
 for (const failurePhase of ["projection", "source-cleanup"] as const) {
-  it.effect(`repairs bound projections after ${failurePhase} failure with a current Source`, () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
-      const options = { ...f.options, roots };
-      const collection = f.before.collections[0]!;
-      yield* writingTo(
-        f.home,
-        f.run(
-          setLibraryBindings({
-            query: collection.collection_id,
-            all: true,
-            roots,
-            variantsPath: options.variantsPath,
-            invocation: {
-              scope: { kind: "global" },
-              enabled: true,
-              dryRun: false,
-            },
-          }),
-        ),
-      );
-      const projectionPath = join(f.root, "codex", "broken", "SKILL.md");
-      const original = yield* f.fs.readFileString(projectionPath);
-      f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
-      let failed = false;
-      const outcomes = yield* f.run(
-        updateSubjectsEffect(options).pipe(
-          Effect.provide(
-            rendererTestLayer({
-              withStatus: (status, operation) =>
-                failurePhase === "source-cleanup" &&
-                typeof status !== "string" &&
-                status.pending === `${collection.label} · Fetching and inspecting Source`
-                  ? operation.pipe(
-                      Effect.ensuring(
-                        Effect.gen(function* () {
-                          failed = true;
-                          return yield* Effect.die(
-                            systemError({
-                              _tag: "PermissionDenied",
-                              module: "FileSystem",
-                              method: "makeTempDirectoryScoped",
-                              pathOrDescriptor: join(f.root, "source-temp"),
-                            }),
-                          );
-                        }),
-                      ),
-                    )
-                  : operation,
+  it.effect(
+    `repairs bound installed skills after ${failurePhase} failure with a current Source`,
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
+        const options = { ...f.options, roots };
+        const collection = f.before.collections[0]!;
+        yield* writingTo(
+          f.home,
+          f.run(
+            setLibraryBindings({
+              query: collection.collection_id,
+              all: true,
+              roots,
+              variantsPath: options.variantsPath,
+              invocation: {
+                scope: { kind: "global" },
+                enabled: true,
+                dryRun: false,
+              },
             }),
           ),
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            makeTempDirectoryScoped: (input) =>
-              failurePhase === "projection" && input?.prefix === ".skit-stage-" && !failed
-                ? Effect.gen(function* () {
-                    failed = true;
-                    return yield* Effect.fail(
-                      systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "makeTempDirectoryScoped",
-                        pathOrDescriptor: join(f.root, "projection-stage"),
-                      }),
-                    );
-                  })
-                : f.fs.makeTempDirectoryScoped(input),
-          }),
-        ),
-      );
-      assert.isTrue(failed);
-      assert.isTrue("status" in outcomes[0]!);
-      if (!("status" in outcomes[0]!)) return;
-      assert.strictEqual(
-        outcomes[0].phase,
-        failurePhase === "projection" ? "projection" : "source",
-      );
-      assert.strictEqual(outcomes[0].source_retained, true);
-      assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-      assert.strictEqual(yield* f.fs.readFileString(projectionPath), original);
-      const retained = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
-      const retry = yield* writingTo(
-        f.home,
-        f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
-      );
-      assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
-      assert.include(yield* f.fs.readFileString(projectionPath), "after");
-      const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
-      assert.strictEqual(after.acquisitions.length, retained.acquisitions.length);
-      const unchanged = yield* writingTo(
-        f.home,
-        f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
-      );
-      assert.isTrue(
-        unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
-      );
-    }).pipe(Effect.provide(testPlatformLayer)),
+        );
+        const projectionPath = join(f.root, "codex", "broken", "SKILL.md");
+        const original = yield* f.fs.readFileString(projectionPath);
+        f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+        let failed = false;
+        const outcomes = yield* f.run(
+          updateSubjectsEffect(options).pipe(
+            Effect.provide(
+              rendererTestLayer({
+                withStatus: (status, operation) =>
+                  failurePhase === "source-cleanup" &&
+                  typeof status !== "string" &&
+                  status.pending === `${collection.label} · Fetching and inspecting Source`
+                    ? operation.pipe(
+                        Effect.ensuring(
+                          Effect.gen(function* () {
+                            failed = true;
+                            return yield* Effect.die(
+                              systemError({
+                                _tag: "PermissionDenied",
+                                module: "FileSystem",
+                                method: "makeTempDirectoryScoped",
+                                pathOrDescriptor: join(f.root, "source-temp"),
+                              }),
+                            );
+                          }),
+                        ),
+                      )
+                    : operation,
+              }),
+            ),
+            Effect.provideService(FileSystem.FileSystem, {
+              ...f.fs,
+              makeTempDirectoryScoped: (input) =>
+                failurePhase === "projection" && input?.prefix === ".skit-stage-" && !failed
+                  ? Effect.gen(function* () {
+                      failed = true;
+                      return yield* Effect.fail(
+                        systemError({
+                          _tag: "PermissionDenied",
+                          module: "FileSystem",
+                          method: "makeTempDirectoryScoped",
+                          pathOrDescriptor: join(f.root, "projection-stage"),
+                        }),
+                      );
+                    })
+                  : f.fs.makeTempDirectoryScoped(input),
+            }),
+          ),
+        );
+        assert.isTrue(failed);
+        assert.isTrue("status" in outcomes[0]!);
+        if (!("status" in outcomes[0]!)) return;
+        assert.strictEqual(
+          outcomes[0].phase,
+          failurePhase === "projection" ? "projection" : "source",
+        );
+        assert.strictEqual(outcomes[0].source_retained, true);
+        assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
+        assert.strictEqual(yield* f.fs.readFileString(projectionPath), original);
+        const retained = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+        const retry = yield* writingTo(
+          f.home,
+          f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
+        );
+        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
+        assert.include(yield* f.fs.readFileString(projectionPath), "after");
+        const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+        assert.strictEqual(after.acquisitions.length, retained.acquisitions.length);
+        const unchanged = yield* writingTo(
+          f.home,
+          f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
+        );
+        assert.isTrue(
+          unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
+        );
+      }).pipe(Effect.provide(testPlatformLayer)),
   );
 }
 

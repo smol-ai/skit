@@ -481,7 +481,7 @@ const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePr
     if (selection.duplicateAction !== "retire-aliases") return undefined;
     const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
     const shadows = yield* observeHarnessShadows(roots, { kind: "global" }, [selection.name]);
-    // A link at SKIT's own destination is replaced by the projection itself, which keeps it in that
+    // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
     // root's backups; moving it afterwards would find the new copy there instead.
     const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
       join(bindingRoot(target, { kind: "global" }, roots), selection.name),

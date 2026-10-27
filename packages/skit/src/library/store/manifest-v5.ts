@@ -132,7 +132,7 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
     .toSorted((left, right) => left.acquired_at.localeCompare(right.acquired_at));
 
   // A Collection's Source is its upstream, or for a local Collection its first Acquisition. Any
-  // other Acquisition of that Collection retained a local edit from a Projection path.
+  // other Acquisition of that Collection retained a local edit from an installed skill path.
   const kindOf = new Map<string, Acquisition["kind"]>();
   for (const collection of input.collections) {
     const owned = oldestFirst.filter(

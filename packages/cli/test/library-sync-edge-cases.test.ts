@@ -191,7 +191,7 @@ it.effect(
 for (const repository of [false, true]) {
   for (const edited of [false, true]) {
     it.effect(
-      `taking remote handles an ${edited ? "edited" : "intact"} ${repository ? "repository" : "global"} projection without disable/re-enable`,
+      `taking remote handles an ${edited ? "edited" : "intact"} ${repository ? "repository" : "global"} installed skill without disable/re-enable`,
       () =>
         Effect.gen(function* () {
           const { fs, a, b } = yield* devices;
@@ -262,20 +262,22 @@ for (const repository of [false, true]) {
   }
 }
 
-it.effect("edited inactive projections remain non-blocking while their references survive", () =>
-  Effect.gen(function* () {
-    const { fs, a, b } = yield* devices;
-    const retained = yield* a.retain("review");
-    const skill = retained.skills[0];
-    assert.ok(skill);
-    yield* a.edit((state) => ({ ...state, global_bindings: [enable([skill.skill_id])] }));
-    yield* a.sync();
-    yield* b.sync();
-    yield* fs.writeFileString(join(b.root, "review", "SKILL.md"), "native edit\n");
-    assert.equal((yield* b.sync({ rootFor: () => undefined })).status, "clean");
-    assert.equal((yield* b.state).projections[0]?.status, "conflicted");
-    assert.equal(yield* fs.readFileString(join(b.root, "review", "SKILL.md")), "native edit\n");
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+it.effect(
+  "edited inactive installed skills remain non-blocking while their references survive",
+  () =>
+    Effect.gen(function* () {
+      const { fs, a, b } = yield* devices;
+      const retained = yield* a.retain("review");
+      const skill = retained.skills[0];
+      assert.ok(skill);
+      yield* a.edit((state) => ({ ...state, global_bindings: [enable([skill.skill_id])] }));
+      yield* a.sync();
+      yield* b.sync();
+      yield* fs.writeFileString(join(b.root, "review", "SKILL.md"), "native edit\n");
+      assert.equal((yield* b.sync({ rootFor: () => undefined })).status, "clean");
+      assert.equal((yield* b.state).projections[0]?.status, "conflicted");
+      assert.equal(yield* fs.readFileString(join(b.root, "review", "SKILL.md")), "native edit\n");
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("nested repository reconciliation retains each repository's own route", () =>
@@ -348,7 +350,7 @@ it.effect("incoming repository name collisions stop before either head changes",
 );
 
 it.effect(
-  "edited projections block remote removal during preview and apply without changing either head",
+  "edited installed skills block remote removal during preview and apply without changing either head",
   () =>
     Effect.gen(function* () {
       const { fs, a, b, remote } = yield* devices;
@@ -570,7 +572,7 @@ it.effect("destination comparison follows the filesystem's case behavior", () =>
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("aliased projection targets stop even when only one Skill is enabled", () =>
+it.effect("aliased install destinations stop even when only one Skill is enabled", () =>
   Effect.gen(function* () {
     const { a, remote } = yield* devices;
     const retained = yield* a.retain("review");

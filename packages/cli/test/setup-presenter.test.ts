@@ -106,7 +106,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   expect(new Set(choices.map((item) => item.value)).size).toBe(instances.length);
 });
 
-it("omits managed Library projections while preserving unmanaged copies and orphaned markers", () => {
+it("omits managed installed skills while preserving unmanaged copies and orphaned markers", () => {
   const unmanaged: SetupSkillInstance = {
     name: "review",
     path: "/home/.claude/skills/review",
@@ -494,8 +494,8 @@ it("presents authored SKITs without treating their source skills as inferred col
 
   expect(output).toContain("Authored SKITs");
   expect(output).toContain("tim/skills · /work/skills");
-  expect(output).toContain("1 authored skill · library present · 1 current projection");
+  expect(output).toContain("1 authored skill · library present · 1 current installed copy");
   expect(output).toContain("council · project · author-source · committed");
   expect(output).not.toContain("Repository collections (inferred)");
-  expect(output).not.toContain("Existing SKIT projections");
+  expect(output).not.toContain("Existing SKIT installed skills");
 });

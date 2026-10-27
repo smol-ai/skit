@@ -160,7 +160,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
   }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Show every observed Skill instance, its Git state, and refreshed Library projections.",
+    "Show every observed Skill instance, its Git state, and refreshed installed skills.",
   ),
   Command.withExamples([{ command: "skit inventory --json" }]),
   Command.annotate(CommandMetadata, {

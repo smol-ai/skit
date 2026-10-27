@@ -40,7 +40,7 @@ export const HarnessShadow = Schema.Struct({
   documentDigest: Schema.String,
 });
 export type HarnessShadow = typeof HarnessShadow.Type;
-/** Each Harness's readable Skill roots for a scope; a global override stands in for its own. */
+/** Each Harness's readable skills directories for a scope; a global override stands in for its own. */
 export function readableSkillsDirectories(
   options: InventoryRootOptions,
   scope: SkitBindingScope,
@@ -113,7 +113,10 @@ export const observeHarnessSkills = Effect.fn("Projection.observeHarnessSkills")
       }),
     );
     if (names.length > 4096) {
-      const error = { path: root, message: "Skill root exceeds the 4096-entry observation limit" };
+      const error = {
+        path: root,
+        message: "Skills directory exceeds the 4096-entry observation limit",
+      };
       options.errors?.push(error);
       if (options.blockingNames?.length) return yield* new ShadowObservationIncomplete(error);
       continue;
@@ -162,7 +165,7 @@ export class ShadowObservationIncomplete
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Inspect the skill root before enabling another copy.";
+  readonly remediation = "Inspect the skills directory before enabling another copy.";
 }
 
 /** Exclude the destinations we will reconcile together; other same-scope copies are shadows. */

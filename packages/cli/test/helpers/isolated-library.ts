@@ -7,8 +7,8 @@ export interface IsolatedRoots {
 }
 
 /**
- * Every writable Harness root under one temporary directory. A root left unset falls back to
- * this machine's real Harness directory, so a Projection for an unset Harness would escape the
+ * Every writable skills directory under one temporary directory. A root left unset falls back to
+ * this machine's real Harness directory, so an installed skill for an unset Harness would escape the
  * test and mutate the operator's own Library. Isolate all of them, not only the ones a test
  * expects to exercise.
  */

@@ -202,7 +202,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
       kind: "finding",
       location: report.roots.cwd,
       status: "warning",
-      summary: "The supported Harness roots contained no auditable entries.",
+      summary: "The supported skills directories contained no auditable entries.",
       evidence: [`deferred harnesses: ${report.coverage.deferredHarnessIds.join(", ") || "none"}`],
       agents: [],
     });
@@ -516,7 +516,7 @@ export function detailPresentation(
               ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
             )
             ? "Inspect custody evidence; this legacy marker does not authorize removal"
-            : "Disable projection and inspect content"
+            : "Disable the installed skill and inspect its content"
           : "Inspect the warnings listed above",
   };
 }

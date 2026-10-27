@@ -9,7 +9,7 @@ export function renderRemovePlan(data: ContractDataForId<"skit.remove.plan.v4">)
       : []),
     ...(data.owned_projections
       ? [
-          `Would also retire ${data.owned_projections} ${data.owned_projections === 1 ? "projection" : "projections"}.`,
+          `Would also retire ${data.owned_projections} ${data.owned_projections === 1 ? "installed skill" : "installed skills"}.`,
         ]
       : []),
   ].join("\n");
@@ -18,7 +18,7 @@ export function renderRemove(data: ContractDataForId<"skit.remove.v4">) {
   return [
     `Removed ${data.skills} ${data.skills === 1 ? "skill" : "skills"} from your library.`,
     ...(data.retired
-      ? [`Retired ${data.retired} ${data.retired === 1 ? "projection" : "projections"}.`]
+      ? [`Retired ${data.retired} ${data.retired === 1 ? "installed skill" : "installed skills"}.`]
       : []),
   ].join("\n");
 }

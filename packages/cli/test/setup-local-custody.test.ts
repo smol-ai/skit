@@ -312,7 +312,7 @@ it.effect(
         ),
       );
       expect((yield* inspectOwnershipMarkerEffect(join(claude, "review"))).kind).toBe("valid");
-      // The Codex root is SKIT's shared destination and already holds the projected bytes, so
+      // The Codex root is SKIT's shared destination and already holds the bytes SKIT would install, so
       // enabling takes custody of that copy in place rather than recording a conflict with it.
       expect((yield* inspectOwnershipMarkerEffect(join(codex, "review"))).kind).toBe("valid");
       expect((yield* home.durable).projections.map((projection) => projection.status)).toEqual([

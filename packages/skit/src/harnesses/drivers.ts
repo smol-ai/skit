@@ -52,7 +52,7 @@ export type HarnessDriver<H extends HarnessName = HarnessName> = {
   readonly installMarkers: readonly string[];
   /**
    * How a device-local root override applies. `replaces`: it stands in for the Harness's global
-   * Skill root and shows the Harness in use. `extends`: it adds roots to scan beside every readable
+   * skills directory and shows the Harness in use. `extends`: it adds roots to scan beside every readable
    * global root and never implies the Harness is installed.
    */
   readonly rootOverride: "replaces" | "extends";

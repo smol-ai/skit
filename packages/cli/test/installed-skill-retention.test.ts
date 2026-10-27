@@ -82,7 +82,7 @@ const projectionFixture = Effect.gen(function* () {
 });
 
 it.effect(
-  "retains explicitly selected Projection bytes and accepts only identical observations",
+  "retains explicitly selected installed-skill bytes and accepts only identical observations",
   () =>
     Effect.gen(function* () {
       const { fs, roots, home, source, skill, storeLayer } = yield* projectionFixture;

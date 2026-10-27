@@ -6,9 +6,9 @@ import type { TreeError } from "../shared/tree-error.js";
 import { deterministicTreeHashEffect } from "./skit.js";
 
 /**
- * The deterministic hash of a projected tree, reached through the environment.
+ * The deterministic hash of an installed tree, reached through the environment.
  *
- * Projection verifies what it just wrote, so the only way to exercise a post-write hash
+ * Installing verifies what it just wrote, so the only way to exercise a post-write hash
  * divergence and its rollback is to substitute this. Production supplies one implementation.
  */
 export class TreeHasher extends Context.Service<

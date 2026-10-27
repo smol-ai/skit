@@ -63,7 +63,7 @@ export const SyncAncestry = Schema.Struct({
 });
 export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
 
-/** Account bindings remain portable; a device may independently choose what it projects. */
+/** Account bindings remain portable; a device may independently choose what it installs. */
 export const DeviceSkillSelection = Schema.Union([
   Schema.Struct({ mode: Schema.Literal("follow-account") }),
   Schema.Struct({ mode: Schema.Literal("choose"), binding: DeviceBinding }),
@@ -113,7 +113,7 @@ export const LibraryState = Schema.Struct({
         })
       );
     },
-    { message: "Device Bindings and Projections must name retained entities" },
+    { message: "Device Bindings and installed skills must name retained entities" },
   ),
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}

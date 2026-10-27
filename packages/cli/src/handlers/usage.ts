@@ -27,11 +27,11 @@ export const usageCliCommand = Command.make(
     end: optionalString("end", "End timestamp, exclusive; defaults to now."),
     codexHome: optionalString(
       "codex-home",
-      "Override the Codex transcript home (not the skills root).",
+      "Override the Codex transcript home (not the skills directory).",
     ),
     claudeHome: optionalString(
       "claude-home",
-      "Override the Claude transcript home (not the skills root).",
+      "Override the Claude transcript home (not the skills directory).",
     ),
   },
   (input) =>

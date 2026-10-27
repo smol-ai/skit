@@ -104,7 +104,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
 });
 
 it.effect(
-  "routine reconciliation leaves an unrelated edited Skill and its projection metadata untouched",
+  "routine reconciliation leaves an unrelated edited Skill and its installed metadata untouched",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();

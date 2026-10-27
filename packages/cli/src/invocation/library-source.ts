@@ -17,7 +17,7 @@ import { errorMessage } from "../failure-classification.js";
 
 export type AuthorInvocationRead = Result.Result<AuthorInvocation, string>;
 
-/** Verify retained bytes and read invocation evidence, without projection assessment or writes. */
+/** Verify retained bytes and read invocation evidence, without install assessment or writes. */
 const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
   state: LibraryState,
   originalsPath: string,

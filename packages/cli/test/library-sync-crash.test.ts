@@ -302,13 +302,13 @@ for (const ancestry of ["missing", "stale"] as const)
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-it.effect("a projection failure after sync saves leaves state and ancestry coherent", () =>
+it.effect("an install failure after sync saves leaves state and ancestry coherent", () =>
   Effect.gen(function* () {
     const { fs, a, b, remote } = yield* devices;
     yield* a.retain("first");
     yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
     yield* a.sync();
-    // B's Harness root is occupied by a file, so no Projection can be written there.
+    // B's skills directory is occupied by a file, so nothing can be installed there.
     yield* fs.writeFileString(b.root, "not a directory\n");
 
     yield* Effect.exit(b.sync());

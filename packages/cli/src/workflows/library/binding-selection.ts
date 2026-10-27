@@ -32,7 +32,7 @@ export const calculateBindingChange = Effect.fn("LibraryBindings.calculate")(fun
 ) {
   if (options.invocation !== undefined && !options.enabled)
     return yield* new OptionCombinationInvalid({
-      detail: "--invocation applies only when enabling a Projection",
+      detail: "--invocation applies only when enabling a skill",
     });
   const subject = yield* resolveLibrarySubject(state, options.query);
   const collection = subject.kind === "collection" ? subject.collection : undefined;

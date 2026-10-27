@@ -33,7 +33,7 @@ const RepositoryBindingV6 = Schema.Struct({
 const { target: _target, ...projectionFields } = InstalledSkill.fields;
 const ManagedProjectionV6 = Schema.Struct({ ...projectionFields, harness: HarnessName });
 
-/** Frozen v6 state: Bindings and Projections were keyed by Harness. */
+/** Frozen v6 state: Bindings and installed skills were keyed by Harness. */
 export const LibraryStateV6 = Schema.Struct({
   ...LibraryDeviceStateFields,
   schemaVersion: Schema.Literal(6),
@@ -106,7 +106,7 @@ const migrateLibraryStateFromV6 = (state: LibraryStateV6): LibraryStateV7 => {
   };
 };
 
-/** v6 → v7: per-Harness Bindings merge per Scope and Projections record a target. */
+/** v6 → v7: per-Harness Bindings merge per Scope and installed skills record a target. */
 export const LibraryStateFromV6 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV6)),
   Schema.decodeTo(LibraryStateFromV7, {

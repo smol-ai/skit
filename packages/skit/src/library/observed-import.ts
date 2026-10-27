@@ -348,14 +348,14 @@ export class InstalledSkillObservationChanged
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Preview the Projection retention again.";
+  readonly remediation = "Preview retaining the installed skill's changes again.";
   get message(): string {
-    return `Projection changed after it was observed: ${this.path}`;
+    return `Installed skill changed after it was observed: ${this.path}`;
   }
 }
 
 /**
- * Retain one explicitly selected managed Projection as a new Version of its existing Skill.
+ * Retain one explicitly selected managed installed skill as a new Version of its existing Skill.
  *
  * The Acquisition records only the local path and machine that were actually observed. It does
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
@@ -373,7 +373,7 @@ export const retainChangedInstalledSkillEffect = Effect.fn("Library.retainChange
     if (!current.present)
       return yield* new InvalidLibraryState({
         path: join(store.home, "state.json"),
-        detail: "Projection retention requires current Library state",
+        detail: "Retaining an installed skill's changes requires current Library state",
       });
     const state = structuredClone(current.state);
     const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
@@ -452,7 +452,7 @@ export const retainChangedInstalledSkillEffect = Effect.fn("Library.retainChange
         (error) =>
           new InvalidLibraryState({
             path: join(store.home, "state.json"),
-            detail: `Projection retention produced invalid Library state: ${String(error)}`,
+            detail: `Retaining an installed skill's changes produced invalid Library state: ${String(error)}`,
           }),
       ),
     );

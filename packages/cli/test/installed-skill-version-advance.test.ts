@@ -95,7 +95,7 @@ const boundRawReview = Effect.gen(function* () {
   return { fs, home, roots, layer, observe, project, projected, projection };
 });
 
-it.effect("rewrites an untouched Projection when the selected Version advances", () =>
+it.effect("rewrites an untouched installed skill when the selected Version advances", () =>
   Effect.gen(function* () {
     const { fs, observe, project, projected, projection } = yield* boundRawReview;
     yield* observe("second verbatim Skill\n");
@@ -107,28 +107,30 @@ it.effect("rewrites an untouched Projection when the selected Version advances",
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("keeps a locally edited Projection conflicted when the selected Version advances", () =>
-  Effect.gen(function* () {
-    const { fs, home, observe, project, projected, projection } = yield* boundRawReview;
-    yield* fs.writeFileString(projected, "my local edit\n");
-    yield* observe("second verbatim Skill\n");
-    yield* project;
-    assert.strictEqual(yield* fs.readFileString(projected), "my local edit\n");
-    const { row } = yield* projection;
-    assert.strictEqual(row.status, "conflicted");
-    const variants = join(home, "variants", "agents", "raw-review");
-    const [variant, ...others] = yield* fs.readDirectory(variants);
-    assert.ok(variant);
-    assert.deepStrictEqual(others, []);
-    assert.strictEqual(
-      yield* fs.readFileString(join(variants, variant, "SKILL.md")),
-      "my local edit\n",
-    );
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+it.effect(
+  "keeps a locally edited installed skill conflicted when the selected Version advances",
+  () =>
+    Effect.gen(function* () {
+      const { fs, home, observe, project, projected, projection } = yield* boundRawReview;
+      yield* fs.writeFileString(projected, "my local edit\n");
+      yield* observe("second verbatim Skill\n");
+      yield* project;
+      assert.strictEqual(yield* fs.readFileString(projected), "my local edit\n");
+      const { row } = yield* projection;
+      assert.strictEqual(row.status, "conflicted");
+      const variants = join(home, "variants", "agents", "raw-review");
+      const [variant, ...others] = yield* fs.readDirectory(variants);
+      assert.ok(variant);
+      assert.deepStrictEqual(others, []);
+      assert.strictEqual(
+        yield* fs.readFileString(join(variants, variant, "SKILL.md")),
+        "my local edit\n",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-// Before the fix, an update left untouched Projections recorded as conflicted at the new Version.
-it.effect("heals an untouched Projection already recorded as conflicted", () =>
+// Before the fix, an update left untouched installed skills recorded as conflicted at the new Version.
+it.effect("heals an untouched installed skill already recorded as conflicted", () =>
   Effect.gen(function* () {
     const { fs, home, layer, observe, project, projected, projection } = yield* boundRawReview;
     yield* observe("second verbatim Skill\n");
@@ -199,7 +201,7 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
 
 for (const followedCollection of [false, true])
   it.effect(
-    `explicit enable recreates only the selected Projection (followed Collection=${followedCollection})`,
+    `explicit enable recreates only the selected installed skill (followed Collection=${followedCollection})`,
     () =>
       Effect.gen(function* () {
         const { fs, home, roots, layer, project, projected } = yield* boundRawReview;

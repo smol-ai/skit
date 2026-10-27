@@ -542,7 +542,7 @@ const cases: readonly {
           yield* b.retain("first", update);
           yield* b.sync();
         } else yield* a.retain("first", update);
-        // An edit the selected Version would replace, and a Skill reconciliation must newly project.
+        // An edit the selected Version would replace, and a Skill reconciliation must newly install.
         const projection = (yield* a.state).projections[0]!;
         yield* fs.writeFileString(join(projection.path, "SKILL.md"), "unretained edit\n");
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
@@ -640,7 +640,7 @@ it.effect("oracle: every applying path commits remote before local, on the revis
 );
 
 // A `--take-remote` key names a merge conflict to take remotely. A push or a pull has none, so the
-// key is refused before projection collisions are checked, as it is on every other path.
+// key is refused before installed-skill collisions are checked, as it is on every other path.
 it.effect("a --take-remote key is refused before collision checks on a push and a pull", () =>
   Effect.gen(function* () {
     const { fs, a, b, server } = yield* devices;

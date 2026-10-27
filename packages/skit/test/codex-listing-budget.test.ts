@@ -129,7 +129,7 @@ test("applies character fallback and the explicit budget override ceiling", () =
 });
 
 it.effect(
-  "joins native discovery to canonical projections, excludes disabled and explicit-only skills, and refreshes policies",
+  "joins native discovery to canonical installed skills, excludes disabled and explicit-only skills, and refreshes policies",
   () =>
     Effect.gen(function* () {
       const f = yield* NativeLibraryFixture;

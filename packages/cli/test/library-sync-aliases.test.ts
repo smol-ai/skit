@@ -144,7 +144,7 @@ it.effect(
       assert.ok(projection);
       assert.strictEqual(projection.skill_id, publishedSkill.skill_id);
       assert.strictEqual(projection.skill_version_id, publishedVersion);
-      // The explicit invocation policy is rendered into the projected frontmatter.
+      // The explicit invocation policy is rendered into the installed frontmatter.
       assert.isTrue(
         (yield* fs.readFileString(join(b.root, "same", "SKILL.md"))).endsWith("same\n"),
       );

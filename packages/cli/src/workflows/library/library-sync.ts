@@ -286,9 +286,9 @@ export const syncLibraryEffect = Effect.fn("Library.sync")(
 
     // The commit order, decided here and nowhere else: (1) retain every copy the result
     // references, (2) upload every snapshot the new head references, (3) write the head by
-    // compare-and-swap on the revision this sync read, (4) retire the Projections the plan
+    // compare-and-swap on the revision this sync read, (4) retire the installed skills the plan
     // removes or reidentifies, (5) save local state with ancestry naming exactly the written
-    // revision, onto exactly the state this sync planned from, (6) reconcile Projections. Remote
+    // revision, onto exactly the state this sync planned from, (6) reconcile installed skills. Remote
     // commits before local, so an interruption leaves R ahead of B and the next sync re-derives
     // the same result from the old base; local state never names a revision R does not hold.
     const restored = yield* transfer.restore();

@@ -197,7 +197,7 @@ const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
     (binding): binding is LibraryBindingRow => binding !== undefined,
   );
   const proposed = yield* proposeLibraryDisable(session, configuration, row, bindings);
-  return yield* applyWithConfirmation(proposed, configuration, "Removing Projections");
+  return yield* applyWithConfirmation(proposed, configuration, "Removing installed skills");
 });
 
 /** Interactive Library browser backed by the portable enable and disable workflows. */
@@ -280,7 +280,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
             return yield* applyWithConfirmation(
               proposed,
               configuration,
-              "Updating Collection Projections",
+              "Updating the Collection's installed skills",
             );
           }),
           session,

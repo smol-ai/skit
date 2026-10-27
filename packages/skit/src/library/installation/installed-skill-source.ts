@@ -6,8 +6,8 @@ import { versionBacking, type Skill, type SkillVersion } from "../library-contra
 import type { LibraryState } from "../library-state.js";
 
 /**
- * What one retained Skill Version projects from, read from its verified retained original. An
- * `invalid` source cannot be projected; a missing original fails as the filesystem reports it.
+ * What one retained Skill Version installs from, read from its verified retained original. An
+ * `invalid` source cannot be installed; a missing original fails as the filesystem reports it.
  */
 export const installedSkillSourceEffect = Effect.fn("Library.installedSkillSource")(function* (
   state: LibraryState,

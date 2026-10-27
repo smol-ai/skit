@@ -61,7 +61,7 @@ export type RetireInstalledSkillResult =
   | { kind: "retired"; observed: Digest };
 
 export interface MaterializeInstalledSkillRequest {
-  /** Projection custody coordinate and retained root, without a publication contract. */
+  /** Installed-skill custody coordinate and retained root, without a save contract. */
   installation: { readonly libraryPath: string };
   skill: {
     readonly skillId: SkillIdType;
@@ -81,10 +81,10 @@ export interface MaterializeInstalledSkillRequest {
   adoption?: InstalledSkillAdoption;
   /**
    * Take custody of an unmanaged directory at the destination when it already holds exactly the
-   * bytes this projection would write. Adopting it adds SKIT's marker and changes nothing else.
+   * bytes this install would write. Adopting it adds SKIT's marker and changes nothing else.
    */
   adoptIdentical?: boolean;
-  /** Exact preview evidence authorizing a changed managed Projection as the selected Version. */
+  /** Exact preview evidence authorizing a changed managed installed skill as the selected Version. */
   replacement?: {
     projectionId: InstalledSkillIdType;
     observedHash: Digest;
@@ -96,14 +96,14 @@ export interface MaterializeInstalledSkillRequest {
     readonly skillId: SkillIdType;
     readonly skillVersionId: SkillVersionIdType;
   };
-  /** Explicit enable may recreate an absent Projection suppressed by native deletion. */
+  /** Explicit enable may recreate an absent installed skill suppressed by native deletion. */
   restoreNativeDeletion?: boolean;
   projectedAt: string;
 }
 
 export interface InstalledSkillState extends LibraryState {}
 
-/** A projection could not be materialized or verified. */
+/** An installed skill could not be written or verified. */
 export class InstalledSkillFailure
   extends Data.TaggedError("InstalledSkillFailure")<{
     message: string;
@@ -112,7 +112,7 @@ export class InstalledSkillFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit doctor` to inspect the Projection, then retry.";
+  readonly remediation = "Run `skit doctor` to inspect the installed skill, then retry.";
 }
 
 function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.FileSystem> {
@@ -122,7 +122,7 @@ function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.
   });
 }
 
-/** Shared owned copy policy, with Projection's existing unsupported-entry failure. */
+/** Shared owned copy policy, with the installer's existing unsupported-entry failure. */
 const copyInstalledSkillTree = Effect.fn("Projection.copyTree")((from: string, to: string) =>
   copyLocalTreeEffect(from, to, undefined, false).pipe(
     Effect.catchTag("TreeError", (error) =>
@@ -161,7 +161,7 @@ const copySkill = Effect.fn("Projection.copySkill")(function* (
   );
 });
 
-/** Rebuild one former copy into caller-owned staging, using the same byte owner as projection. */
+/** Rebuild one former copy into caller-owned staging, using the same byte owner as installing. */
 export const prepareInstalledSkillRebuildEffect = Effect.fn("Projection.prepareRebuild")(function* (
   state: LibraryState,
   originalsPath: string,
@@ -171,7 +171,7 @@ export const prepareInstalledSkillRebuildEffect = Effect.fn("Projection.prepareR
   const target = projection.target;
   if (target === "legacy")
     return yield* new InstalledSkillFailure({
-      message: "Legacy projections require their original saved bytes",
+      message: "Legacy installed skills require their original saved bytes",
     });
   const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
   const version = skill?.versions.find(
@@ -179,7 +179,7 @@ export const prepareInstalledSkillRebuildEffect = Effect.fn("Projection.prepareR
   );
   if (!skill || !version)
     return yield* new InstalledSkillFailure({
-      message: "Former projection has no retained Skill Version",
+      message: "Former installed skill has no retained Skill Version",
     });
   const source = yield* installedSkillSourceEffect(state, originalsPath, skill, version);
   if (source.kind !== "source") return yield* new InstalledSkillFailure({ message: source.detail });
@@ -224,7 +224,7 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
 
 const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_digest;
 
-// Custody is the Projection and Skill; a new selected Version is an ordinary rewrite, and the
+// Custody is the installed skill and Skill; a new selected Version is an ordinary rewrite, and the
 // expected-digest check below is what detects local edits.
 const markerMatches = (
   marker: OwnershipMarker,
@@ -355,7 +355,7 @@ const materializeInstalledSkillEffect = Effect.fn("Projection.materialize")(func
           mode === "marker" &&
           (yield* (yield* LinkStat).lstat(destination)).type !== "SymbolicLink";
         if (inPlace) {
-          // Stage outside the projected tree so an interrupted write cannot leave hash drift.
+          // Stage outside the installed tree so an interrupted write cannot leave hash drift.
           const markerTemporary = join(staging, "ownership.json");
           yield* fs.writeFileString(markerTemporary, marker, { mode: 0o600, flag: "wx" });
           yield* fs
@@ -368,7 +368,7 @@ const materializeInstalledSkillEffect = Effect.fn("Projection.materialize")(func
           if (mode !== "install") yield* context.backUp(projection, "replace");
           else if (yield* fs.exists(destination))
             return yield* new InstalledSkillFailure({
-              message: `Projection appeared before materialization: ${destination}`,
+              message: `Installed skill appeared before installing: ${destination}`,
             });
           yield* fs.rename(temporary, destination).pipe(Effect.uninterruptible);
         }
@@ -500,7 +500,7 @@ const materializeInstalledSkillEffect = Effect.fn("Projection.materialize")(func
 });
 
 /**
- * Whether a recorded Projection is still the one SKIT wrote.
+ * Whether a recorded installed skill is still the one SKIT wrote.
  *
  * This is the custody question `retire` asks immediately before displacing anything, separated so
  * a caller can also ask it *first*. A batch may use that to refuse before changing any derived
@@ -558,8 +558,8 @@ const retireInstalledSkillEffect = Effect.fn("Projection.retire")(function* (
 });
 
 /**
- * Whether a pending backup holds the very copy a recorded Projection describes, so it still
- * explains that Projection's absence. A backup of an earlier copy explains nothing about a later one.
+ * Whether a pending backup holds the very copy a recorded installed skill describes, so it still
+ * explains that installed skill's absence. A backup of an earlier copy explains nothing about a later one.
  */
 export const installedSkillDisplacedEffect = Effect.fn("Projection.displaced")(function* (
   projection: InstalledSkill,
@@ -577,7 +577,7 @@ export const installedSkillDisplacedEffect = Effect.fn("Projection.displaced")(f
 
 /**
  * Whether a backup is exactly what SKIT would write again, proven only from `prior`, the Library
- * state the mutation loaded: the backup's marker must name the recorded Projection and Version, that
+ * state the mutation loaded: the backup's marker must name the recorded installed skill and Version, that
  * Version's retained original must be intact, and restaging it under a recorded invocation policy
  * must reproduce every name, type, mode and byte. Anything short of that proof keeps the backup.
  */
@@ -688,8 +688,8 @@ export interface InstalledSkillMutation<S extends InstalledSkillState = Installe
  * Nothing is rolled back. A failed batch instead saves what its verified filesystem work left
  * behind: each copy it wrote and verified as installed, and each it moved aside, leaving nothing in
  * its place, as `pending`, so an absence SKIT caused is never read as a native deletion. A write
- * that fails verification saves nothing for its Projection. After a save, pending backups of
- * every Projection the batch touched are settled: discarded only when the loaded state proves the
+ * that fails verification saves nothing for its installed skill. After a save, pending backups of
+ * every installed skill the batch touched are settled: discarded only when the loaded state proves the
  * retained original reproduces them, otherwise kept. A batch that leaves the state as loaded, wrote
  * nothing and has no backup to settle saves nothing.
  */
@@ -769,7 +769,7 @@ export const withInstalledSkillMutationEffect = Effect.fn("Projection.mutate")(f
     return context.save(next, loaded);
   }).pipe(
     Effect.catchCause((cause) =>
-      Effect.logWarning("Projections changed, but the Library could not record them", cause),
+      Effect.logWarning("Installed skills changed, but the Library could not record them", cause),
     ),
   );
   const value = yield* stage(mutation).pipe(Effect.onError(() => saveOnDisk));
@@ -780,7 +780,7 @@ export const withInstalledSkillMutationEffect = Effect.fn("Projection.mutate")(f
   ).pipe(
     Effect.map((backups) => backups.flat()),
     Effect.catchCause((cause) =>
-      Effect.as(Effect.logWarning("Projection backups stayed pending", cause), []),
+      Effect.as(Effect.logWarning("Installed-skill backups stayed pending", cause), []),
     ),
   );
   // The save also proves `loaded` is still the Library's, which settling a backup relies on.
@@ -801,7 +801,7 @@ export const withInstalledSkillMutationEffect = Effect.fn("Projection.mutate")(f
       else yield* keepInstalledSkillBackupEffect(backup);
   }).pipe(
     Effect.catchCause((cause) =>
-      Effect.logWarning("Library changed, but projection backups stayed pending", cause),
+      Effect.logWarning("Library changed, but installed-skill backups stayed pending", cause),
     ),
   );
   return { state: candidate, value, projected: changedProjections.size };

@@ -26,7 +26,7 @@ type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["opera
 type File = Operation["files"][number];
 type Observed = Effect.Success<ReturnType<typeof observeSetupFile>>;
 
-/** Observation timestamps are evidence, not a change to desired projection custody. */
+/** Observation timestamps are evidence, not a change to desired installed-skill custody. */
 export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
   projection === undefined
     ? null
@@ -199,7 +199,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       !equal(installedSkillChoice(current), installedSkillChoice(after)) &&
       !equal(installedSkillChoice(current), installedSkillChoice(prior))
     ) {
-      conflicts.push(`Projection choice changed: ${file.path}`);
+      conflicts.push(`Installed-skill choice changed: ${file.path}`);
       continue;
     }
     if (

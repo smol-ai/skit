@@ -49,7 +49,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
   >;
   /** The existing copies the operator chose to take custody of, as previewed. */
   adoption?: InstalledSkillAdoption;
-  /** Adopt unmanaged copies that already hold exactly the projected bytes. */
+  /** Adopt unmanaged copies that already hold exactly the bytes SKIT would install. */
   adoptIdentical?: boolean;
   restoreNativeDeletedSkills?: readonly string[];
   /** Bound selection, pruning and relocation to the explicitly reviewed Skills. */
@@ -141,7 +141,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
           const skill = mutation.state.skills.find((item) => item.skill_id === existing.skill_id);
           if (skill === undefined) continue;
           // A copy without SKIT's marker was never SKIT's to remove: it was already there when SKIT
-          // tried to project (a conflict). Disabling drops SKIT's record and leaves it in place. A
+          // tried to install (a conflict). Disabling drops SKIT's record and leaves it in place. A
           // managed copy edited since SKIT wrote it is refused, so no edit is lost.
           const marker = yield* inspectOwnershipMarkerEffect(existing.path);
           yield* mutation.retire(

@@ -30,7 +30,7 @@ it.effect("persists an empty device choice before either Library exists", () =>
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("syncs new Library content while preserving an edited deselected projection", () =>
+it.effect("syncs new Library content while preserving an edited deselected installed skill", () =>
   Effect.gen(function* () {
     const { a, b, fs } = yield* devices;
     yield* a.retain("first");

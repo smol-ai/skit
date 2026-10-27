@@ -309,7 +309,7 @@ export function renderInventory(
   machine?: MachineInventoryResult["machine"],
   color = createColors(false),
 ): string {
-  // One group per Skill root, headed by every Harness known to read it.
+  // One group per skills directory, headed by every Harness known to read it.
   const groups = new Map<string, { harnesses: Set<HarnessName>; rows: string[] }>();
   const add = (harnesses: readonly HarnessName[], path: string, row: string) => {
     const group = groups.get(dirname(path)) ?? { harnesses: new Set<HarnessName>(), rows: [] };
@@ -353,7 +353,7 @@ export function renderInventory(
   const lines: string[] = [];
   for (const [root, group] of groups)
     lines.push(
-      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former Harness root"} · ${root}`,
+      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former skills directory"} · ${root}`,
       ...group.rows,
       "",
     );
@@ -362,7 +362,7 @@ export function renderInventory(
   if (findings.length) lines.push("", ...findings);
   const library = lines.join("\n").trimEnd();
   if (!machine) return library;
-  const summary = `Library projections · ${managed.size} managed · ${state.unmanaged.length} unmanaged`;
+  const summary = `Installed skills ·${managed.size} managed · ${state.unmanaged.length} unmanaged`;
   return [
     renderMachineSkills(machine, color),
     summary,

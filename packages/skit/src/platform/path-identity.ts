@@ -35,9 +35,9 @@ export function pathIsWithin(root: string, path: string): boolean {
 /**
  * Identify aliases of one physical path during a single inventory or audit pass.
  *
- * This deliberately does not define durable Projection Target identity. Inode identity changes on
+ * This deliberately does not define durable install destination identity. Inode identity changes on
  * atomic replacement, and a symlink may later be retargeted. Durable declared-path and relocation
- * semantics belong to the Projection Target model rather than this observation helper.
+ * semantics belong to the install destination model rather than this observation helper.
  */
 export function observationPathIdentityEffect(
   path: string,
@@ -105,7 +105,7 @@ function nearestExistingAncestor(
 }
 
 /**
- * Describe comparison evidence for a routed Projection Target candidate.
+ * Describe comparison evidence for a routed install destination candidate.
  *
  * Existing targets use byte-faithful realpath identity. An unresolved target is grouped by its
  * nearest existing ancestor and normalized relative suffix. Case folding is used only when the

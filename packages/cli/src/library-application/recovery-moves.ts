@@ -174,7 +174,7 @@ export const prepareRecoveryMoves = (
   operationDirectory = recoveryOperationDirectory(home),
 ) => prepareMoves(home, requests, operationDirectory);
 
-/** Preserve exactly reviewed, registered projections; marker text alone never grants custody. */
+/** Preserve exactly reviewed, registered installed skills; marker text alone never grants custody. */
 export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
   requests: readonly { name: string; projection: InstalledSkill }[],
   operationDirectory?: string,

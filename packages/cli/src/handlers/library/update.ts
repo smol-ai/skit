@@ -29,7 +29,7 @@ const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDefault(false),
 );
 const fromProjection = Flag.String("from-projection").pipe(
-  Flag.withDescription("Retain changed bytes from this Projection ID, Harness, or path."),
+  Flag.withDescription("Retain changed bytes from this installed skill's ID, Harness, or path."),
   Flag.optional,
 );
 
@@ -49,8 +49,8 @@ export const updateCliCommand = Command.make(
             });
           const value = yield* renderer.withStatus(
             input.dryRun
-              ? "Inspecting changed Projection bytes"
-              : "Retaining changed Projection bytes",
+              ? "Inspecting changed installed-skill bytes"
+              : "Retaining changed installed-skill bytes",
             Effect.gen(function* () {
               const prepared = yield* prepareInstalledSkillRetention(query, projectionSelector);
               return input.dryRun

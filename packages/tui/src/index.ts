@@ -666,7 +666,7 @@ const paletteCommands = [
     title: "Open Library",
     description: "Enable, disable, and choose when agents may use Library skills",
     shortcut: "1",
-    keywords: "library enable disable invocation binding projection",
+    keywords: "library enable disable invocation binding installed skill",
     run: () => switchVariant(0),
   },
   {

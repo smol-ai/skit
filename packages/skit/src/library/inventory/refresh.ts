@@ -234,7 +234,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   const roots = deduplicateInventoryRoots(selectRoots(loaded));
   const state = yield* observeInventory(loaded, roots);
   yield* store.save(state, loaded);
-  // A verified installation resolves every older displacement of its Projection. Those backups
+  // A verified installation resolves every older displacement of its installed skill. Those backups
   // no longer explain an absence, so they are kept, never discarded.
   for (const projection of state.projections) {
     if (projection.status !== "installed") continue;

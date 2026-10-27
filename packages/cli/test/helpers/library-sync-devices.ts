@@ -101,7 +101,7 @@ export const devices = Effect.gen(function* () {
     return {
       home,
       root,
-      /** Every root a sync may write: the home, its projections, and their backups. */
+      /** Every root a sync may write: the home, its installed skills, and their backups. */
       disk: [home, root, join(workspace, ".skit-backups")],
       /** Local state saves attempted through this home's LibraryStore, refused or not. */
       get saves() {

@@ -26,7 +26,7 @@ export const repositorySelectsInstalledSkill = (state: LibraryState, projection:
   );
 
 /**
- * Retire owned Projections nothing wants any more: their Skill lost its Binding, or their target
+ * Retire owned installed skills nothing wants any more: their Skill lost its Binding, or their target
  * is inactive on this device or a former per-Harness root. Caller owns the writer lock.
  */
 export const retireUnboundGlobalInstalledSkillsEffect = Effect.fn(

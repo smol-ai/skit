@@ -68,7 +68,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
 });
 
 it.effect(
-  "the projection byte owner reconstructs a former independent copy from retained artifacts",
+  "the installed-skill byte owner reconstructs a former independent copy from retained artifacts",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();

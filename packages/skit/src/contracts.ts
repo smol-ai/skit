@@ -151,7 +151,7 @@ const OwnershipMarkerFromV2 = OwnershipMarkerV2.pipe(
 
 /**
  * A marker as written by any SKIT since v2, brought to the current one through the linear
- * v2 → v3 → v4 chain. Markers live in Projections, outside versioned Library state, so every
+ * v2 → v3 → v4 chain. Markers live in installed skills, outside versioned Library state, so every
  * released version stays readable.
  */
 export const StoredOwnershipMarker = Schema.Union([

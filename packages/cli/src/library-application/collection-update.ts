@@ -137,7 +137,7 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   return { acquisition, priorTree, input };
 });
 
-/** Observe one Collection without retaining content or reconciling Projections. */
+/** Observe one Collection without retaining content or reconciling installed skills. */
 export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
@@ -231,7 +231,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
       // Reconcile even when the Source is current: a previous run may have retained
-      // this snapshot before projection failed or temporary-source cleanup interrupted it.
+      // this snapshot before installing failed or temporary-source cleanup interrupted it.
       {
         const current = yield* (yield* LibraryStore).load;
         phase = "projection";
@@ -344,7 +344,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             error: sourceRetained
               ? {
                   ...error,
-                  remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and reconcile its projections.`,
+                  remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and update its installed skills.`,
                 }
               : error,
           };

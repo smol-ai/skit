@@ -21,7 +21,7 @@ const syncStatus = (phase: SyncPhase) => {
     case "check-destinations":
       return { pending: "Checking Skill destinations", complete: "Checked Skill destinations" };
     case "check-projections":
-      return { pending: "Checking existing projections", complete: "Checked existing projections" };
+      return { pending: "Checking installed skills", complete: "Checked installed skills" };
     case "check-enabled":
       return { pending: "Checking enabled Skills", complete: "Checked enabled Skills" };
     case "save-remote":

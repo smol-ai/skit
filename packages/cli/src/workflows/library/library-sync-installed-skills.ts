@@ -240,7 +240,7 @@ const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkill
           issues.push(
             SyncConflictDetail.make({
               key: `device:${original.projection_id}:modified-projection`,
-              message: `Cannot retire modified Skill at ${original.path}. Save the edited directory outside the projection root, then restore the managed copy before retrying.`,
+              message: `Cannot retire modified Skill at ${original.path}. Save the edited directory outside the skills directory, then restore the managed copy before retrying.`,
               resolution: "local",
             }),
           );
@@ -274,7 +274,7 @@ const planSyncInstalledSkillsEffect = Effect.fn("Library.sync.planInstalledSkill
         conflicts.push(
           SyncConflictDetail.make({
             key: `device:${original.projection_id}:modified-projection`,
-            message: `Sync would replace or remove ${original.path}, whose bytes or ownership changed. Save the edited directory outside the projection root, then restore the managed copy before syncing.`,
+            message: `Sync would replace or remove ${original.path}, whose bytes or ownership changed. Save the edited directory outside the skills directory, then restore the managed copy before syncing.`,
             resolution: "local",
           }),
         );

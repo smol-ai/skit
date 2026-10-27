@@ -1171,8 +1171,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   failureStory("projection-conflict", {
     code: "CONFLICT",
     exitCode: 12,
-    message: "The Projection Target contains content SKIT does not own",
-    remediation: "Run `skit doctor` and reconcile the conflicting Projection.",
+    message: "The install destination contains content SKIT does not own",
+    remediation: "Run `skit doctor` and fix the conflicting installed skill.",
   }),
 ];
 

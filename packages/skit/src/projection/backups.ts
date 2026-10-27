@@ -51,7 +51,7 @@ export const backUpInstalledSkillEffect = Effect.fn("Projection.backUp")(functio
   // A repository can commit its own `.skit-backups`, so never follow a link planted there.
   if ((yield* links.lstat(backups)).type !== "Directory")
     return yield* new UnsafeInstalledSkillBackups({ path: backups });
-  // Backups beside a repository's skills root must never be committed with it. An existing ignore
+  // Backups beside a repository's skills directory must never be committed with it. An existing ignore
   // file is only read, never rewritten, and must still ignore everything.
   const ignore = join(backups, ".gitignore");
   const created = yield* fs
@@ -77,7 +77,7 @@ export const backUpInstalledSkillEffect = Effect.fn("Projection.backUp")(functio
   return backup;
 });
 
-/** Pending backups of one Projection, wherever its root's device placed them. */
+/** Pending backups of one installed skill, wherever its root's device placed them. */
 const installedSkillBackups = Effect.fn("Projection.backups")(function* (
   projection: Pick<InstalledSkill, "root" | "projection_id">,
   includeKept: boolean,

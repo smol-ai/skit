@@ -12,7 +12,7 @@ export type HarnessName = typeof HarnessName.Type;
 export const InstallDestination = Schema.Literals(["agents", "claude"]);
 export type InstallDestination = typeof InstallDestination.Type;
 /**
- * A recorded Projection's target. `legacy` marks a copy at a former per-Harness root; it is
+ * A recorded installed skill's target. `legacy` marks a copy at a former per-Harness directory; it is
  * never desired, so reconciliation retires it under the ordinary custody checks.
  */
 export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);

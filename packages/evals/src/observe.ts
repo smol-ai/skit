@@ -136,7 +136,7 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
     return { exists: true, skills: [], projections: [], problems: ["invalid Library state"] };
   return Effect.runPromise(
     Effect.gen(function* () {
-      // Observe a private snapshot: this verifies projection bytes and markers without repairing
+      // Observe a private snapshot: this verifies installed-skill bytes and markers without repairing
       // anything or publishing refreshed statuses to the machine being judged.
       const observed = yield* observeInventory(decoded.success, []);
       const problems: string[] = [];

@@ -140,8 +140,8 @@ function renderUpdate(data: ContractDataForId<"skit.update.v8">): string {
   if (updated.length === 0 && failures.length === 0)
     return [
       successful.some((item) => item.projected > 0)
-        ? `Sources are current; projections reconciled\n${plural(current, "Source")} checked; no retained snapshots changed.`
-        : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`,
+        ? `Sources are current; installed skills updated\n${plural(current, "Source")} checked; no retained snapshots changed.`
+        : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or installed skills changed.`,
       ...successful.flatMap((item) =>
         item.diagnostics?.length ? [item.label, ...sourceDiagnosticLines(item.diagnostics)] : [],
       ),
@@ -151,7 +151,7 @@ function renderUpdate(data: ContractDataForId<"skit.update.v8">): string {
     lines.push(item.label, ...skillChangeLines(item), ...sourceDiagnosticLines(item.diagnostics));
   for (const item of failures)
     lines.push(
-      `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating projections"}`,
+      `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating installed skills"}`,
       `  Source: ${item.source}`,
       ...(item.source_retained
         ? ["  Source snapshot retained; this Collection did not finish updating."]
@@ -241,7 +241,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
   let hasCollisions = data.codex.findings.some((finding) => finding.kind !== "layered-name");
   for (const issue of data.issues) {
     findings.push(
-      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former Harness root" : `.${issue.target}`}`) : ""}`,
+      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former skills directory" : `.${issue.target}`}`) : ""}`,
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
@@ -674,7 +674,7 @@ function renderSetupInstalledSkills(
         .sort()
         .map(harnessLabel);
       return [
-        `  ${projections[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${projections.length === names.length ? "" : ` · ${projections.length} projections`}`,
+        `  ${projections[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${projections.length === names.length ? "" : ` · ${projections.length} installed copies`}`,
         ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
         `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
       ];
@@ -694,7 +694,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v9">
     const names = collection.skills.map((skill) => skill.name);
     return [
       `  ${collection.namespace}/${collection.skit} · ${collection.repository}`,
-      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${projectionSummary.length ? ` · ${projectionSummary.join(" · ")} projection${projections.length === 1 ? "" : "s"}` : ""}`,
+      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${projectionSummary.length ? ` · ${projectionSummary.join(" · ")} installed cop${projections.length === 1 ? "y" : "ies"}` : ""}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
       `    ${collection.origin}`,
     ];
@@ -867,7 +867,11 @@ function renderSetup(data: ContractDataForId<"skit.setup.v9">): string {
       projection.collectionId === undefined || !authoredCollectionIds.has(projection.collectionId),
   );
   if (externalProjections.length)
-    lines.push("", "Existing SKIT projections", ...renderSetupInstalledSkills(externalProjections));
+    lines.push(
+      "",
+      "Existing SKIT installed skills",
+      ...renderSetupInstalledSkills(externalProjections),
+    );
   if (data.reconciliation?.length)
     lines.push(
       "",

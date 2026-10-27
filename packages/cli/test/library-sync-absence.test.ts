@@ -162,7 +162,7 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-/** A home whose state, projections and ancestry already match the remote head. */
+/** A home whose state, installed skills and ancestry already match the remote head. */
 const anchored = Effect.fn("Test.anchoredHome")(function* (device: Device) {
   yield* device.retain("first");
   yield* device.edit((state) => ({
@@ -190,7 +190,7 @@ it.effect("an anchored home that matches the remote: a clean preview writes noth
 );
 
 // A clean sync whose ancestry already names the head has nothing to anchor, and reconciliation of
-// Projections that are already current saves nothing either.
+// Installed skills that are already current save nothing either.
 it.effect("an anchored home that matches the remote: an applied clean writes nothing", () =>
   Effect.gen(function* () {
     const homes = yield* devices;

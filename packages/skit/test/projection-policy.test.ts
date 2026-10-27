@@ -236,7 +236,7 @@ it.effect("a local override still wins over the author's declaration", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a projection override wins over authored settings", () =>
+it.effect("an install-time override wins over authored settings", () =>
   Effect.gen(function* () {
     const codex = yield* skill();
     yield* makeDirectory(join(codex, "agents"));

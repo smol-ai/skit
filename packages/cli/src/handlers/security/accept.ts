@@ -103,7 +103,7 @@ export const securityAcceptCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
-  Command.withDescription("Accept one finding for Projection of an exact retained Skill Artifact."),
+  Command.withDescription("Accept one finding for installing an exact retained Skill Artifact."),
   Command.withExamples([
     {
       command:

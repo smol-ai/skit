@@ -48,7 +48,7 @@ const invocation = Flag.Literals("invocation", invocationOptions).pipe(
   Flag.optional,
 );
 const dryRun = Flag.Boolean("dry-run").pipe(
-  Flag.withDescription("Report projection changes without applying them."),
+  Flag.withDescription("Report installed-skill changes without applying them."),
   Flag.withDefault(false),
 );
 const allowDuplicate = Flag.Boolean("allow-duplicate").pipe(
@@ -359,7 +359,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       ? "Planning Collection Bindings"
       : input.enabled
         ? "Projecting retained Skills"
-        : "Removing retained Projections",
+        : "Removing installed skills",
     Effect.gen(function* () {
       const plan = yield* selection.preview(intent, input.configuration.inventory);
       return input.dryRun

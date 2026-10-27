@@ -847,7 +847,7 @@ it.effect(
 
 // `skit add ~/.claude/skills/x` then `skit enable x` is how an agent improvises setup: the
 // destination already holds the user's own copy of the skill.
-it.effect("enabling adopts an unmanaged copy that already holds the projected bytes", () =>
+it.effect("enabling adopts an unmanaged copy that already holds the bytes SKIT would install", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
@@ -867,25 +867,27 @@ it.effect("enabling adopts an unmanaged copy that already holds the projected by
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("enabling never adopts a git checkout, even one holding the projected bytes", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const checkout = join(f.destination, "alpha");
-    yield* f.fs.makeDirectory(join(checkout, ".git"), { recursive: true });
-    yield* f.fs.writeFileString(join(checkout, ".git", "HEAD"), "ref: refs/heads/main\n");
-    yield* f.fs.writeFileString(join(checkout, "SKILL.md"), "# alpha\n");
-    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+it.effect(
+  "enabling never adopts a git checkout, even one holding the bytes SKIT would install",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const checkout = join(f.destination, "alpha");
+      yield* f.fs.makeDirectory(join(checkout, ".git"), { recursive: true });
+      yield* f.fs.writeFileString(join(checkout, ".git", "HEAD"), "ref: refs/heads/main\n");
+      yield* f.fs.writeFileString(join(checkout, "SKILL.md"), "# alpha\n");
+      const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
 
-    const failure = yield* Effect.flip(f.home.owned(applyBindingChanges(plan)));
-    assert.instanceOf(failure, BindingChangeIncomplete);
+      const failure = yield* Effect.flip(f.home.owned(applyBindingChanges(plan)));
+      assert.instanceOf(failure, BindingChangeIncomplete);
 
-    assert.deepStrictEqual(
-      failure.results[0]?.projections.map((p) => p.status),
-      ["conflicted"],
-    );
-    assert.strictEqual((yield* inspectOwnershipMarkerEffect(checkout)).kind, "absent");
-    assert.strictEqual(yield* f.fs.exists(join(checkout, ".git", "HEAD")), true);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      assert.deepStrictEqual(
+        failure.results[0]?.projections.map((p) => p.status),
+        ["conflicted"],
+      );
+      assert.strictEqual((yield* inspectOwnershipMarkerEffect(checkout)).kind, "absent");
+      assert.strictEqual(yield* f.fs.exists(join(checkout, ".git", "HEAD")), true);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("a different copy at the destination is reported, and disabling leaves it in place", () =>
@@ -1338,7 +1340,7 @@ it.effect(
 );
 
 it.effect(
-  "an intervening state change after intent acceptance is not rebased by projection publication",
+  "an intervening state change after intent acceptance is not rebased by saving installed skills",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;

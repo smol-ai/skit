@@ -118,7 +118,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit)) : undefined;
 
 it.effect(
-  "retain-only works without projection write access, while enabling still fails before retention",
+  "retain-only works without write access to skills directories, while enabling still fails before retention",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

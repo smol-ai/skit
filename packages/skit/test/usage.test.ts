@@ -174,7 +174,7 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );
 
-it.effect("path identity joins known projections and keeps same-name documents separate", () =>
+it.effect("path identity joins known installed skills and keeps same-name documents separate", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-identities-" });

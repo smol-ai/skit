@@ -319,22 +319,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -410,22 +410,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -504,22 +504,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "days": {
           "type": "integer",
@@ -617,7 +617,7 @@
         "dry-run": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Report projection changes without applying them."
+          "description": "Report installed-skill changes without applying them."
         },
         "json": {
           "type": "boolean",
@@ -632,22 +632,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -730,7 +730,7 @@
         "dry-run": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Report projection changes without applying them."
+          "description": "Report installed-skill changes without applying them."
         },
         "allow-duplicate": {
           "type": "boolean",
@@ -750,22 +750,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -794,7 +794,7 @@
         "inventory"
       ],
       "stability": "stable",
-      "summary": "Show every observed Skill instance, its Git state, and refreshed Library projections.",
+      "summary": "Show every observed Skill instance, its Git state, and refreshed installed skills.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -838,22 +838,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -1236,22 +1236,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -1809,7 +1809,7 @@
         "remove"
       ],
       "stability": "stable",
-      "summary": "Remove a retained Collection and its owned Projections.",
+      "summary": "Remove a retained Collection and the skills SKIT installed from it.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1856,22 +1856,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -1901,7 +1901,7 @@
         "accept"
       ],
       "stability": "stable",
-      "summary": "Accept one finding for Projection of an exact retained Skill Artifact.",
+      "summary": "Accept one finding for installing an exact retained Skill Artifact.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1962,22 +1962,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -2047,22 +2047,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -2297,22 +2297,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -2437,22 +2437,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -2534,7 +2534,7 @@
         "from-projection": {
           "type": "string",
           "valueName": "string",
-          "description": "Retain changed bytes from this Projection ID, Harness, or path."
+          "description": "Retain changed bytes from this installed skill's ID, Harness, or path."
         },
         "json": {
           "type": "boolean",
@@ -2549,22 +2549,22 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills root that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other agents read."
         },
         "claude-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude skills root; treats Claude Code as present."
+          "description": "Override the Claude skills directory; treats Claude Code as present."
         },
         "opencode-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan an OpenCode skills root for inventory; SKIT does not project there."
+          "description": "Scan an OpenCode skills directory for inventory; SKIT does not install there."
         },
         "devin-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Scan additional Devin skills roots for inventory without changing projection targets."
+          "description": "Scan additional Devin skills directories for inventory without changing install destinations."
         },
         "help": {
           "type": "boolean",
@@ -2702,12 +2702,12 @@
         "codex-home": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Codex transcript home (not the skills root)."
+          "description": "Override the Codex transcript home (not the skills directory)."
         },
         "claude-home": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the Claude transcript home (not the skills root)."
+          "description": "Override the Claude transcript home (not the skills directory)."
         },
         "help": {
           "type": "boolean",

@@ -217,7 +217,7 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("does not offer source trees reached through a linked skills root for removal", () =>
+it.effect("does not offer source trees reached through a linked skills directory for removal", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const shared = join(f.root, "shared-skills");

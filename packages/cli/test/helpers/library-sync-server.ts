@@ -34,7 +34,7 @@ export type Fault =
       readonly home: string;
       readonly state: LibraryState;
     }
-  /** A file occupies `path` right after `home` saves, so projection there fails. */
+  /** A file occupies `path` right after `home` saves, so installing there fails. */
   | { readonly _tag: "ObstructAfterSave"; readonly home: string; readonly path: string }
   /** The next head read answers with this literal body, as a Registry another SKIT wrote to. */
   | { readonly _tag: "ServeHead"; readonly body: unknown };

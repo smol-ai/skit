@@ -78,7 +78,7 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
 });
 
 it.effect(
-  "a session reads native per-agent policy from retained bytes and previews the same projection behavior",
+  "a session reads native per-agent policy from retained bytes and previews the same install behavior",
   () =>
     Effect.gen(function* () {
       const { fs, source, home, retain } = yield* fixture();

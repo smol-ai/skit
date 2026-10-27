@@ -25,7 +25,7 @@ export interface UpdateInstalledSkillsOptions {
   readonly variantsPath: string;
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
   readonly adoption?: InstalledSkillAdoption;
-  /** Adopt unmanaged copies that already hold exactly the projected bytes. */
+  /** Adopt unmanaged copies that already hold exactly the bytes SKIT would install. */
   readonly adoptIdentical?: boolean;
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
@@ -89,7 +89,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstall
   return { projected, retired, outcomes };
 });
 
-/** Converge every active Projection target with current Binding intent under write authority. */
+/** Bring every active install destination in line with current Binding intent under write authority. */
 export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(function* (
   options: UpdateInstalledSkillsOptions,
 ) {

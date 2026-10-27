@@ -311,7 +311,7 @@ it.effect("unreadable unrelated entries warn without dropping readable aliases",
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("does not traverse a repository linked into a skill root", () =>
+it.effect("does not traverse a repository linked into a skills directory", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.fs.remove(f.alias);

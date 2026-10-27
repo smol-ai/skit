@@ -123,7 +123,7 @@ export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () 
   return { skills, [sessionSelection]: selection } satisfies LibrarySessionState;
 });
 
-/** Read the exact retained version selected by the front end, never a native Projection. */
+/** Read the exact retained version selected by the front end, never a native installed skill. */
 export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillContent")(function* (
   skillVersionId: string,
 ) {

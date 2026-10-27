@@ -39,9 +39,9 @@ export class SkillRemovalRequiresCollection
 }
 
 /**
- * Remove a Collection with its Skills, Acquisitions, Binding entries and Projections, exactly as
+ * Remove a Collection with its Skills, Acquisitions, Binding entries and installed skills, exactly as
  * `planned` records them. The caller holds the writer lock; a Library that moved on since it was
- * planned is refused before any Projection is touched, so nothing outside the plan is removed.
+ * planned is refused before any installed skill is touched, so nothing outside the plan is removed.
  */
 export const removeCollectionEffect = Effect.fn("Library.removeCollection")(function* (
   planned: LibraryState,

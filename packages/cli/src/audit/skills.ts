@@ -173,7 +173,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
     const inspected = yield* inspectSkill({
       ...skill,
       aliases: [...new Set(aliases.get(skill.canonicalPath) ?? [skill.path])],
-      // A projection ownership marker or lockfile is authoritative; adapter provenance is the
+      // An installed-skill ownership marker or lockfile is authoritative; adapter provenance is the
       // fallback. fileProvenance checks the marker before consulting the lockfile.
       provenance: {
         ...provenance,

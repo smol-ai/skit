@@ -370,7 +370,7 @@ describe("CLI contracts", () => {
     },
   );
 
-  test("reviews and optionally accepts a retained finding without blocking Projection", async () => {
+  test("reviews and optionally accepts a retained finding without blocking install", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-security-cli-"));
     const source = join(root, "source");
     const home = join(root, "home");
@@ -613,7 +613,7 @@ describe("CLI contracts", () => {
     expect(state.global_bindings).toEqual([]);
   });
 
-  test("both targets and lifecycle dry-runs preserve exact state and projections", async () => {
+  test("both destinations and lifecycle dry-runs preserve exact state and installed skills", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-matrix-"));
     const home = join(root, "home");
     const configHome = join(root, "config");
@@ -671,7 +671,7 @@ describe("CLI contracts", () => {
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
   });
 
-  test("projection drift exits with conflict status through the executable", async () => {
+  test("installed-skill drift exits with conflict status through the executable", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-conflict-"));
     const home = join(root, "home"),
       source = join(root, "source"),
@@ -693,7 +693,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("retains selected Projection bytes through the built CLI without overwriting disagreement", async () => {
+  test("retains selected installed-skill bytes through the built CLI without overwriting disagreement", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-projection-retention-"));
     const home = join(root, "home");
     const source = join(root, "source");

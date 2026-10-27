@@ -122,7 +122,7 @@ export function defineHarnessProfile<const T extends HarnessProfile>(profile: T)
   return profile;
 }
 
-/** Device-local Skill roots that stand in for a Harness's own global roots. */
+/** Device-local skills directories that stand in for a Harness's own global roots. */
 export type SkillsDirectoryOverrides = Partial<Record<HarnessName, readonly string[]>>;
 
 export interface SkillsDirectoryContext {

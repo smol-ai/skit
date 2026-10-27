@@ -151,7 +151,7 @@ export const observeSetupReconciliation = Effect.fn("Setup.observeReconciliation
       const displaced = yield* installedSkillDisplacedEffect(projection);
       facts.push(
         displaced
-          ? protect("An unsettled projection backup explains the missing copy")
+          ? protect("An unsettled backup explains the missing copy")
           : {
               ...base,
               evidence,

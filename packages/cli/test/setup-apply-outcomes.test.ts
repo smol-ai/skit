@@ -234,7 +234,7 @@ it.effect("declining or previewing the plan applies nothing after one scan", () 
 );
 
 it.effect(
-  "protected foreign projections refuse setup after only the loader's backed-up migration",
+  "protected foreign installed skills refuse setup after only the loader's backed-up migration",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ machine: true });
@@ -403,8 +403,8 @@ it.effect("a failed additive stage leaves every selected removal in place", () =
 );
 
 // Codex's default sandbox keeps `.agents` read-only inside its writable workspace. Setup must refuse
-// whole rather than adopt a copy into a Library whose Projections it cannot then write.
-it.effect("an unwritable projection root fails the apply before any stage writes", () =>
+// whole rather than adopt a copy into a Library whose installed skills it cannot then write.
+it.effect("an unwritable skills directory fails the apply before any stage writes", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
     const before = yield* captureDisk(f.disk);

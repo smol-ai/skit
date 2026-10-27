@@ -298,7 +298,7 @@ export interface NativeDiscovery {
     unknown,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | SourceProcess
   >;
-  /** Drop diagnostics that only restate SKIT's own expected Projections. */
+  /** Drop diagnostics that only restate SKIT's own expected installed skills. */
   readonly classifyWarnings?: (
     check: HarnessDoctorCheck,
     state: LibraryState,
@@ -365,7 +365,7 @@ export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       ...empty,
       status: "skipped" as const,
       detail:
-        "Custom projection roots do not describe the harness's native discovery. Run doctor without root overrides.",
+        "Custom skills directories do not describe the harness's native discovery. Run doctor without root overrides.",
     };
   const probe = yield* probeHarnessEffect(harness);
   const version = probe.version ? { version: probe.version } : {};

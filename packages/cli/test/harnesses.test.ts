@@ -17,7 +17,7 @@ describe("harness probing", () => {
     ).toEqual(["codex", "claude-code", "opencode", "devin"]);
   });
 
-  test("treats explicit projection roots as installed harnesses", () => {
+  test("treats explicit skills directories as installed harnesses", () => {
     expect(
       detectInstalledHarnesses({
         home: "/empty",
@@ -27,7 +27,7 @@ describe("harness probing", () => {
     ).toEqual(["codex"]);
   });
 
-  test("does not infer Devin availability from repository projection support", () => {
+  test("does not infer Devin availability from repository install support", () => {
     expect(detectInstalledHarnesses({ home: "/empty", exists: () => false })).toEqual([]);
     expect(
       detectInstalledHarnesses({

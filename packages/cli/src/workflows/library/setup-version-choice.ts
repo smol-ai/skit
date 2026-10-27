@@ -60,7 +60,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     )
   )
     return yield* new PlanIsStale();
-  // Check the entire choice before the first retention, rename or projection.
+  // Check the entire choice before the first retention, rename or install.
   for (const fact of live) {
     const projection = state.projections.find((item) => item.projection_id === fact.projectionId);
     const skill = state.skills.find((item) => item.skill_id === fact.skillId);

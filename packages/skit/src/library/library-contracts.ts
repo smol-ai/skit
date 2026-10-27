@@ -211,7 +211,7 @@ export interface RetainedCopy extends Schema.Schema.Type<typeof RetainedCopy> {}
 
 /**
  * One observation of bytes for a Collection: either its Source, or a local edit the user retained
- * from a Projection. `revision` is the exact Git commit or Registry Release when there is one.
+ * from an installed skill. `revision` is the exact Git commit or Registry Release when there is one.
  */
 export const Acquisition = Schema.Struct({
   acquisition_id: AcquisitionId,
@@ -272,7 +272,7 @@ export type BindingEntry = typeof BindingEntry.Type;
 
 /**
  * Skills enabled at a Scope. A Binding does not name a Harness: every Harness that reads a
- * projection target sees its copies, so naming one would promise isolation SKIT cannot give.
+ * install destination sees its copies, so naming one would promise isolation SKIT cannot give.
  */
 export const Binding = Schema.Struct({
   scope: Schema.Struct({ kind: Schema.Literal("global") }),

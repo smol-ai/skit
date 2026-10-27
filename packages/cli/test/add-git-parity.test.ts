@@ -172,7 +172,7 @@ test.runIf(realGit)(
       const previewed = Schema.decodeUnknownSync(AddPreviewDocument)(preview.stdout).data;
       expect(previewed.kind).toBe("authored");
       expect(previewed.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
-      // Preview retains nothing: no state, no Original, no projected bytes.
+      // Preview retains nothing: no state, no Original, no installed bytes.
       expect(existsSync(join(roots.home, "state.json"))).toBe(false);
       expect(existsSync(join(roots.home, "originals"))).toBe(false);
       expect(
@@ -195,7 +195,7 @@ test.runIf(realGit)(
       expect(state.retained_copies).toHaveLength(1);
       expect(state.retained_copies[0].digest).toBe(entry.snapshot_digest);
       expect(state.projections).toEqual([]);
-      // A new add creates no Binding and no Projection.
+      // A new add creates no Binding and no installed skill.
       expect(state.global_bindings).toEqual([]);
       expect(state.local_bindings).toEqual([]);
       expect(existsSync(join(roots.claudeRoot, "review"))).toBe(false);
