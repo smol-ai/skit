@@ -411,12 +411,12 @@ const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
   };
 });
 
-export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
+export const ownershipAt = Effect.fn("Setup.ownership")(function* (path: string) {
   const inspection = yield* inspectOwnershipMarker(path);
-  if (inspection.kind === "absent") return { custody: "unmanaged" as const };
+  if (inspection.kind === "absent") return { ownership: "unmanaged" as const };
   return inspection.kind === "valid"
-    ? { custody: "skit-managed" as const, marker: inspection.marker }
-    : { custody: "invalid-marker" as const };
+    ? { ownership: "skit-managed" as const, marker: inspection.marker }
+    : { ownership: "invalid-marker" as const };
 });
 
 export const collectSkillsDirectories = (

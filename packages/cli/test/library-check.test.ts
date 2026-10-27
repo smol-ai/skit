@@ -6,7 +6,7 @@ import { checkSubjects } from "../src/workflows/library/check.js";
 import { retainLibrarySource } from "../src/library-application/retain-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
-it.effect("checks retained custody without treating an observed local copy as an upstream", () =>
+it.effect("checks retained files without treating an observed local copy as an upstream", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-check-" });

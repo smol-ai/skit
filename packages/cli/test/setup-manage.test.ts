@@ -18,7 +18,7 @@ import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 const skillDocument = (name: string, body: string) =>
   `---\nname: ${name}\ndescription: ${body}\n---\n\n# ${body}\n`;
 
-it.effect("adds selected skills and takes custody only of eligible global copies", () =>
+it.effect("adds selected skills and takes ownership only of eligible global copies", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* scratch("skit-setup-local-custody-");
@@ -64,7 +64,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
           interactive: true,
           dryRun: false,
           workDirFlag: root,
-          localCustody: { bindings: home.bindings },
+          manageOptions: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -113,7 +113,7 @@ it.effect("adds selected skills and takes custody only of eligible global copies
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("adopts skills with empty directories and Finder metadata", () =>
+it.effect("manages skills with empty directories and Finder metadata", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* scratch("skit-setup-incidental-files-");
@@ -149,7 +149,7 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
           },
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: home.bindings },
+          manageOptions: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -192,7 +192,7 @@ it.effect("adopts skills with empty directories and Finder metadata", () =>
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("keeps every conflicting Claude copy visible and adopts only the chosen copy", () =>
+it.effect("keeps every conflicting Claude copy visible and manages only the chosen copy", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* scratch("skit-setup-conflicting-copies-");
@@ -230,7 +230,7 @@ it.effect("keeps every conflicting Claude copy visible and adopts only the chose
           },
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: home.bindings },
+          manageOptions: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -306,14 +306,14 @@ it.effect(
               },
               interactive: true,
               dryRun: false,
-              localCustody: { bindings: home.bindings },
+              manageOptions: { bindings: home.bindings },
             }).pipe(Effect.provide(interaction.layer));
           }),
         ),
       );
       expect((yield* inspectOwnershipMarker(join(claude, "review"))).kind).toBe("valid");
       // The Codex root is SKIT's shared destination and already holds the bytes SKIT would install, so
-      // enabling takes custody of that copy in place rather than recording a conflict with it.
+      // enabling starts managing that copy in place rather than recording a conflict with it.
       expect((yield* inspectOwnershipMarker(join(codex, "review"))).kind).toBe("valid");
       expect((yield* home.durable).projections.map((projection) => projection.status)).toEqual([
         "installed",

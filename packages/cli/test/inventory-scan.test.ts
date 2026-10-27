@@ -80,7 +80,7 @@ it.effect(
 );
 
 it.effect.each([true, false])(
-  "observes a symlinked custody claim without SKILL.md (valid: %s)",
+  "observes a symlinked ownership claim without SKILL.md (valid: %s)",
   (valid) =>
     Effect.gen(function* () {
       const f = yield* NativeLibraryFixture;

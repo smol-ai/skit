@@ -56,7 +56,7 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   }).pipe(Effect.provide(libraryStoreLayer({ home: library.skitHome })));
 });
 
-const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
+const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
   library: ResolvedSkitConfiguration,
   observations: readonly AuditEntry[],
 ) {
@@ -107,7 +107,7 @@ const auditInstalledSkillCustody = Effect.fn("Audit.custody")(function* (
         expectedHash: inspection.marker.expected_digest,
         transactionId: undefined,
       };
-      // A marker claim without a retained ledger entry is custody evidence, not proof that the
+      // A marker claim without a retained ledger entry is ownership evidence, not proof that the
       // collection still exists. Keep it out of the TUI's retained-collection grouping.
       observation.provenance = {
         confidence: "matched",
@@ -176,7 +176,7 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
   // An audited home other than the configured one has its own Library, unless SKIT_HOME names one.
   const library =
     options.home === undefined ? paths : yield* resolveSkitConfiguration(undefined, home);
-  findings.push(...(yield* auditInstalledSkillCustody(library, skills.observations)));
+  findings.push(...(yield* auditOwnershipClaims(library, skills.observations)));
 
   const codex = yield* auditCodex(home, cwd);
   observations.push(...codex.observations);

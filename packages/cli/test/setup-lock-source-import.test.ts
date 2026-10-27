@@ -136,7 +136,7 @@ for (const skillCount of [1, 12]) {
               interactive: true,
               dryRun: false,
               workDirFlag: root,
-              localCustody: { bindings: home.bindings },
+              manageOptions: { bindings: home.bindings },
             }).pipe(Effect.provide(interaction.layer)),
           ),
         );
@@ -414,7 +414,7 @@ it.effect("turns selected GitHub lock paths into a structured GitHub Source", ()
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("adopts a selected member from a two-Skill GitHub lock collection", () =>
+it.effect("manages a selected member from a two-Skill GitHub lock collection", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* scratch("skit-github-lock-adoption-");

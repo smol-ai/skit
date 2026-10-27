@@ -14,7 +14,7 @@ import {
 import type { SetupReconciliationFact, SetupVersionChoice } from "./setup-contract.js";
 import { captureSetupFile } from "../../library-application/setup-operation.js";
 import { prepareOwnedRecoveryMoves } from "../../library-application/recovery-moves.js";
-import { checkSetupGlobalContent } from "../../library-application/setup-content-custody.js";
+import { checkSetupGlobalContent } from "../../library-application/setup-external-ownership.js";
 import { PlanIsStale } from "../../library/failures.js";
 
 /** Alternatives are derived once by the application; adapters only select these values. */

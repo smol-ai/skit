@@ -1,12 +1,12 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { LinkStat, deterministicTreeHash } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
-import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
+import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
 import {
-  captureLocalAdoptionAliases,
-  approveLocalAdoption,
-  prepareLocalAdoption,
-} from "../src/workflows/library/local-adoption.js";
+  captureManageLinks,
+  approveManage,
+  prepareManage,
+} from "../src/workflows/library/manage-existing.js";
 import { applySetupExistingBindings } from "../src/workflows/library/setup-existing-binding.js";
 import { copyConflict } from "../src/workflows/library/setup-decisions.js";
 import type { DuplicateScanError } from "../src/projection/duplicates.js";
@@ -131,7 +131,7 @@ it.effect("guided setup preserves an individual link to the selected source with
           options: f.options,
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: f.home.bindings },
+          manageOptions: { bindings: f.home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -214,13 +214,13 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
           const options = { ...f.options, repositoryRoots: [], persistRoots: false };
           const observed = yield* runSetup(options);
           const result = yield* Effect.result(
-            applySetupLocalCustody({ bindings: f.home.bindings }, observed, [
+            manageSetupCopies({ bindings: f.home.bindings }, observed, [
               { name: "review", sourcePath: f.source },
             ]),
           );
           expect(
             Result.isFailure(result) &&
-              result.failure._tag === "SetupLocalCustodySelectionInvalid" &&
+              result.failure._tag === "SetupManageSelectionInvalid" &&
               result.failure.reason,
           ).toBe("duplicate-action-required");
           const state = yield* (yield* LibraryStore).load;
@@ -258,7 +258,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
                 : f.fs.rename(from, to),
           });
           const result = yield* Effect.result(
-            applySetupLocalCustody({ bindings: f.home.bindings }, observed, [
+            manageSetupCopies({ bindings: f.home.bindings }, observed, [
               { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
             ]).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
           );
@@ -417,8 +417,8 @@ it.effect(
               { kind: "global" },
               ["review"],
             );
-            const approvedAliases = yield* captureLocalAdoptionAliases(f.source, duplicates);
-            const selection = yield* approveLocalAdoption(
+            const approvedAliases = yield* captureManageLinks(f.source, duplicates);
+            const selection = yield* approveManage(
               {
                 name: "review",
                 sourcePath: f.source,
@@ -433,7 +433,7 @@ it.effect(
               },
               () => new Error("Expected retirable aliases"),
             );
-            const adoption = yield* prepareLocalAdoption(
+            const manage = yield* prepareManage(
               { bindings: { ...f.home.inventory, home: aliasHome } },
               selection,
               {
@@ -442,7 +442,7 @@ it.effect(
                 observedHash: yield* deterministicTreeHash(f.source),
               },
             );
-            const outcome = yield* adoption.apply();
+            const outcome = yield* manage.apply();
             expect(outcome.recoveryDirectories).toHaveLength(1);
             expect(yield* f.fs.exists(f.alias)).toBe(false);
             expect(yield* f.fs.exists(f.destination)).toBe(true);
@@ -477,7 +477,7 @@ it.effect(
           Effect.gen(function* () {
             const options = { ...f.options, repositoryRoots: [], persistRoots: false };
             const observed = yield* runSetup(options);
-            const applied = yield* applySetupLocalCustody({ bindings: f.home.bindings }, observed, [
+            const applied = yield* manageSetupCopies({ bindings: f.home.bindings }, observed, [
               { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
               { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
             ]);
@@ -522,7 +522,7 @@ it.effect("guided setup preserves every selected individual link in one operatio
           options: f.options,
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: f.home.bindings },
+          manageOptions: { bindings: f.home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -564,7 +564,7 @@ it.effect.each(["retain-only", "keep-both"] as const)(
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { bindings: f.home.bindings },
+            manageOptions: { bindings: f.home.bindings },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -608,7 +608,7 @@ it.effect("preserves selected links and equal copies automatically across add an
           options: f.options,
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: f.home.bindings },
+          manageOptions: { bindings: f.home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -659,10 +659,7 @@ for (const operation of ["add", "bind"] as const) {
               const conflict = copyConflict(observed, { name: "review", sourcePath: f.source });
               if (conflict.kind !== "retirable")
                 return yield* Effect.die("Expected retirable aliases");
-              const approvedAliases = yield* captureLocalAdoptionAliases(
-                f.source,
-                conflict.duplicates,
-              );
+              const approvedAliases = yield* captureManageLinks(f.source, conflict.duplicates);
               if (change === "added") {
                 const root = join(f.root, ".codex", "skills");
                 yield* f.fs.makeDirectory(root, { recursive: true });
@@ -688,7 +685,7 @@ for (const operation of ["add", "bind"] as const) {
               };
               const result =
                 operation === "add"
-                  ? yield* applySetupLocalCustody({ bindings: f.home.bindings }, fresh, [
+                  ? yield* manageSetupCopies({ bindings: f.home.bindings }, fresh, [
                       selection,
                     ]).pipe(Effect.asVoid, Effect.result)
                   : yield* applySetupExistingBindings({ bindings: f.home.bindings }, fresh, [
@@ -754,7 +751,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
             options: f.options,
             interactive: true,
             dryRun: false,
-            localCustody: { bindings: f.home.bindings },
+            manageOptions: { bindings: f.home.bindings },
           }).pipe(
             Effect.provideService(Renderer, {
               ...renderer,
@@ -786,7 +783,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
 );
 
 it.effect.each(["source", "alias"] as const)(
-  "prepared local adoption rejects changed %s before retaining or retiring anything",
+  "prepared local managing rejects changed %s before retaining or retiring anything",
   (changed) =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -803,15 +800,15 @@ it.effect.each(["source", "alias"] as const)(
             sourcePath: f.source,
             duplicateAction: "retire-aliases" as const,
           };
-          const selection = yield* approveLocalAdoption(
+          const selection = yield* approveManage(
             input,
             copyConflict(observed, input),
             () => new Error("Expected retirable aliases"),
           );
-          const adoption = yield* prepareLocalAdoption({ bindings: f.home.bindings }, selection, {
+          const manage = yield* prepareManage({ bindings: f.home.bindings }, selection, {
             kind: "retain",
             observedHash: yield* deterministicTreeHash(f.source),
-            custody: { harnesses: ["codex"], machineId: observed.machineConfig.machineId },
+            ownership: { harnesses: ["codex"], machineId: observed.machineConfig.machineId },
           });
           expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
@@ -825,7 +822,7 @@ it.effect.each(["source", "alias"] as const)(
             yield* f.fs.rename(f.alias, join(f.root, "displaced-alias"));
             yield* f.fs.symlink(f.source, f.alias);
           }
-          const result = yield* adoption.apply().pipe(Effect.result);
+          const result = yield* manage.apply().pipe(Effect.result);
           expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
           expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
           expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);

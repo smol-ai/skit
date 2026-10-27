@@ -19,7 +19,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       const store = yield* LibraryStore;
       const state = yield* store.load;
       const value = yield* renderer.withStatus(
-        "Checking retained Collection custody",
+        "Checking retained Collections",
         checkSubjects(state, Option.getOrUndefined(input.subject), (collection) =>
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
@@ -28,7 +28,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
     }),
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Check retained Library custody or verified source changes."),
+  Command.withDescription("Check retained Library files or verified source changes."),
   Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),
   Command.annotate(CommandMetadata, {
     effects: {

@@ -348,7 +348,7 @@ export const SetupResult = Schema.Struct({
     candidates: Schema.Array(SetupOnboardingCandidate),
     /** The command that applies the recommendation, with absolute paths; absent when empty. */
     applyCommand: Schema.optionalKey(Schema.String),
-    /** Exactly what `skit setup --apply <planId>` imports and takes custody of. */
+    /** Exactly what `skit setup --apply <planId>` imports and starts managing. */
     recommended: Schema.Struct({
       sources: Schema.Array(
         Schema.Struct({

@@ -45,7 +45,7 @@ export const HarnessInstallStatus = Schema.Literals([
   "suppressed",
 ]);
 export type HarnessInstallStatus = typeof HarnessInstallStatus.Type;
-export const CustodyIssue = Schema.Struct({
+export const OwnershipIssue = Schema.Struct({
   code: Schema.Literals(["ORPHANED_PROJECTION_CLAIM", "INVALID_OWNERSHIP_MARKER"]),
   path: Schema.String,
   canonicalPath: Schema.String,
@@ -58,7 +58,7 @@ export const CustodyIssue = Schema.Struct({
   expectedHash: Schema.optional(Digest),
   matchesExpectedHash: Schema.optional(Schema.Boolean),
 });
-export type CustodyIssue = typeof CustodyIssue.Type;
+export type OwnershipIssue = typeof OwnershipIssue.Type;
 export const LibraryDeviceStateFields = {
   unmanaged: Schema.mutableKey(
     Schema.mutable(
@@ -75,7 +75,7 @@ export const LibraryDeviceStateFields = {
       ),
     ),
   ),
-  custodyIssues: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(CustodyIssue)))),
+  custodyIssues: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(OwnershipIssue)))),
   scanIssues: Schema.mutableKey(Schema.optional(Schema.mutable(Schema.Array(InventoryScanIssue)))),
   assessmentAcceptances: Schema.mutableKey(
     Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptance))),

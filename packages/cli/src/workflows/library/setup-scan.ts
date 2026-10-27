@@ -10,7 +10,7 @@ import {
   installDestinationHarnesses,
 } from "@smolai/skit-core";
 import { sourceIdentityLabel } from "../../library-application/skill-metadata.js";
-import { custodyAt, type SetupEvidence } from "./setup-discovery.js";
+import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyOwner } from "./setup-onboarding.js";
 import { makePnpmSkillCheck, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
@@ -117,19 +117,19 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
             libraryMatches,
           };
         })();
-    const observedCustody = yield* custodyAt(hit.realPath);
-    const markerProjection = observedCustody.marker
+    const observedOwnership = yield* ownershipAt(hit.realPath);
+    const markerProjection = observedOwnership.marker
       ? observedLibrary.projections.find(
-          (projection) => projection.projection_id === observedCustody.marker?.projection_id,
+          (projection) => projection.projection_id === observedOwnership.marker?.projection_id,
         )
       : undefined;
-    const custodyObservation =
+    const ownershipCheck =
       markerProjection !== undefined &&
       !sorted.some((candidate) => resolve(candidate.path) === resolve(markerProjection.path))
-        ? ({ custody: "invalid-marker" } as const)
-        : observedCustody;
+        ? ({ ownership: "invalid-marker" } as const)
+        : observedOwnership;
     const managedMembership = (() => {
-      const marker = "marker" in custodyObservation ? custodyObservation.marker : undefined;
+      const marker = "marker" in ownershipCheck ? ownershipCheck.marker : undefined;
       if (!marker) return undefined;
       const skill = library.skills.find((candidate) => candidate.skill_id === marker.skill_id);
       const collection =
@@ -172,9 +172,9 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
     const instancePath = Boolean(pnpmOwner) !== Boolean(canonicalOwner) ? hit.path : hit.realPath;
     const owner: SetupSkillInstance["owner"] =
       pnpmOwner ??
-      (custodyObservation.custody === "skit-managed" && managedMembership
+      (ownershipCheck.ownership === "skit-managed" && managedMembership
         ? { kind: "skit", membership: managedMembership }
-        : custodyObservation.custody === "invalid-marker"
+        : ownershipCheck.ownership === "invalid-marker"
           ? { kind: "invalid-marker" }
           : authoredCollection
             ? { kind: "authored", ...authoredCollection }

@@ -17,7 +17,7 @@ import {
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
-  type InstalledSkillAdoption,
+  type ManageApproval,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import {
@@ -59,7 +59,7 @@ export interface BindingChangeRequest extends BindingSelection {
     readonly ino: number;
     readonly linkTarget?: string;
   }[];
-  readonly adoption?: InstalledSkillAdoption;
+  readonly manage?: ManageApproval;
 }
 
 export type BindingChangeConfiguration = InventoryRootOptions;
@@ -203,7 +203,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   };
 });
 
-/** The raw request path is retained for internal adoption workflows. */
+/** The raw request path is retained for internal managing workflows. */
 const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
   current: LibraryState,
   home: string,
@@ -267,7 +267,7 @@ export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelecti
 });
 export type BindingChangeSelection = Effect.Success<ReturnType<typeof openBindingChangeSelection>>;
 
-/** Internal adoption/testing entry point; front ends use a held selection and user intent. */
+/** Internal managing/testing entry point; front ends use a held selection and user intent. */
 export const previewBindingChanges = Effect.fn("LibraryBindings.preview")(function* (
   requests: readonly BindingChangeRequest[],
   configuration: BindingChangeConfiguration,
@@ -379,8 +379,8 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
         onlyBindings: plan.bindings,
         restoreNativeDeletedSkills: options.enabled ? skillIds : [],
         ...(options.preserveUnselectedProjections ? { onlySkillIds: skillIds } : {}),
-        ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
-        adoptIdentical: options.enabled,
+        ...(options.manage === undefined ? {} : { manage: options.manage }),
+        manageIdentical: options.enabled,
       });
       const settled = yield* store.load;
       if (

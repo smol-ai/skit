@@ -344,7 +344,7 @@ export class ContentAddressCollision
   }
 }
 
-// -- Library custody ---------------------------------------------------------------------------
+// -- Library ownership ---------------------------------------------------------------------------
 
 export class UnknownInstalledSkill
   extends Data.TaggedError("UnknownInstalledSkill")<{
@@ -393,7 +393,7 @@ export class SkillsDirectoryNotWritable
   }
 }
 
-/** An installed skill was modified or is conflicted, so custody will not be given up silently. */
+/** An installed skill was modified or is conflicted, so ownership will not be given up silently. */
 export class OwnershipMarkerDisagrees
   extends Data.TaggedError("OwnershipMarkerDisagrees")<{
     skillId: string;
@@ -409,33 +409,33 @@ export class OwnershipMarkerDisagrees
   }
 }
 
-/** Explicit Adoption was approved for bytes that are no longer present at the target. */
-export class AdoptionTargetChanged
-  extends Data.TaggedError("AdoptionTargetChanged")<{
+/** Managing was explicitly approved for bytes that are no longer present at the target. */
+export class ManageTargetChanged
+  extends Data.TaggedError("ManageTargetChanged")<{
     path: string;
   }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview the adoption again, then confirm it against the current files.";
+  readonly remediation = "Preview again, then confirm against the current files.";
   get message(): string {
-    return `Adoption target changed after preview: ${this.path}`;
+    return `The folder to manage changed after preview: ${this.path}`;
   }
 }
 
-/** The observed target is not the exact retained Skill selected by the Adoption plan. */
-export class AdoptionContentMismatch
-  extends Data.TaggedError("AdoptionContentMismatch")<{
+/** The observed target is not the exact retained Skill selected by the managing plan. */
+export class ManageContentMismatch
+  extends Data.TaggedError("ManageContentMismatch")<{
     path: string;
   }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview the adoption again, then confirm it against the current files.";
+  readonly remediation = "Preview again, then confirm against the current files.";
   get message(): string {
-    return `Adoption target does not match the retained Skill: ${this.path}`;
+    return `The folder to manage does not match the retained Skill: ${this.path}`;
   }
 }
 
@@ -554,7 +554,7 @@ export class RetainedContentInvalid
 }
 
 /**
- * An installed skill could not be retired because it no longer matches its recorded custody.
+ * An installed skill could not be retired because it no longer matches its recorded ownership.
  *
  * The caller supplies the sentence, because only it knows whether this was a disable, a removal
  * or a rematerialization. The condition is the same one either way, and naming it means callers

@@ -13,7 +13,7 @@ export const InstallDestination = Schema.Literals(["agents", "claude"]);
 export type InstallDestination = typeof InstallDestination.Type;
 /**
  * A recorded installed skill's target. `legacy` marks a copy at a former per-Harness directory; it is
- * never desired, so reconciliation retires it under the ordinary custody checks.
+ * never desired, so reconciliation retires it under the ordinary ownership checks.
  */
 export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);
 export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;

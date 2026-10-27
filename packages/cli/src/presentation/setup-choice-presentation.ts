@@ -147,7 +147,7 @@ export function setupPlanLines(input: {
         ]
       : []),
     ...setupDuplicatePlanLines(summary.duplicates),
-    ...(summary.custodyCount ? [`Take custody: ${summary.custodyCount}`] : []),
+    ...(summary.custodyCount ? [`Manage existing: ${summary.custodyCount}`] : []),
     ...summary.authoritativeCopies.flatMap((selection) => [
       `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
       "  Other copies stay in place unless explicitly marked Remove.",
@@ -165,7 +165,7 @@ export function setupPlanLines(input: {
       : []),
     ...(summary.repositoryCopiesRemain
       ? [
-          "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
+          "Repository copies stay in place. To have SKIT manage it later, remove the repository copy and run `skit enable`.",
         ]
       : []),
   ];
@@ -200,7 +200,7 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
   },
 );
 
-/** The application has already supplied eligible alternatives and custody facts. */
+/** The application has already supplied eligible alternatives and ownership facts. */
 export const chooseSetupVersions = Effect.fn("CLI.setup.chooseVersions")(function* (
   alternatives: readonly SetupVersionChoice[],
   facts: readonly SetupReconciliationFact[],

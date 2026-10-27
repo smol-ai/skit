@@ -9,7 +9,7 @@ import {
   type SkitFailure,
 } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../failures.js";
-import { captureLocalAdoptionAliases, type LocalAdoptionOptions } from "./local-adoption.js";
+import { captureManageLinks, type ManageOptions } from "./manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup-apply.js";
 import type { SetupOptions } from "./setup.js";
 import type {
@@ -66,10 +66,10 @@ export class SetupDuplicateDecisionRequired
 export const openSetupReview = Effect.fn("Setup.openReview")(function* (
   options: SetupOptions,
   observation: SetupResult,
-  adoption: LocalAdoptionOptions,
+  manage: ManageOptions,
 ) {
   const setup = structuredClone(options);
-  const localCustody = structuredClone(adoption);
+  const manageOptions = structuredClone(manage);
   const observed = structuredClone(observation);
   const configured = yield* MachineSettings.read(setup.libraryHome);
   const previous = new Map(configured.repositories.map((item) => [item.path, item.status]));
@@ -210,7 +210,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       decisions.push({
         ...copy,
         duplicateAction: action,
-        approvedAliases: yield* captureLocalAdoptionAliases(
+        approvedAliases: yield* captureManageLinks(
           copy.sourcePath,
           copy.conflict.duplicates,
           decision.approvedAliases,
@@ -253,7 +253,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       persistRoots,
       imports,
       bindings: decisions.filter((copy) => copy.operation === "bind"),
-      custody: decisions.filter((copy) => copy.operation === "add"),
+      ownership: decisions.filter((copy) => copy.operation === "add"),
       removals: yield* planSetupRemovals(setup, observed, removals, removablePaths),
       versionChoices: structuredClone(versionChoices),
       reconciliation: structuredClone(
@@ -266,7 +266,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         ),
       ),
     };
-    const repositoryCopies = approval.custody.filter((copy) =>
+    const repositoryCopies = approval.ownership.filter((copy) =>
       observed.instances.some(
         (instance) =>
           instance.path === copy.sourcePath &&
@@ -284,7 +284,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       persistRoots,
       repositoryDecisions,
       createsMachineIdentity:
-        (imports.length > 0 || approval.custody.length > 0) && !observed.machineConfig.machineId,
+        (imports.length > 0 || approval.ownership.length > 0) && !observed.machineConfig.machineId,
       sources: [...new Set(imports.map((item) => item.groupKey))].map((key) => {
         const source = sources.get(key)?.candidates[0];
         return {
@@ -339,12 +339,12 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
           kind: "directory" as const,
         })),
       ]),
-      additions: approval.custody.map(displayCopy),
-      custodyCount: approval.custody.filter(
+      additions: approval.ownership.map(displayCopy),
+      custodyCount: approval.ownership.filter(
         (copy) => !repositoryCopies.includes(copy) && copy.duplicateAction !== "retain-only",
       ).length,
       repositoryCopiesRemain: repositoryCopies.length > 0,
-      authoritativeCopies: approval.custody
+      authoritativeCopies: approval.ownership
         .filter((copy) =>
           observed.onboarding.candidates.some(
             (candidate) =>
@@ -384,7 +384,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       setup: structuredClone(setup),
       imports: structuredClone(imports),
       bindings: structuredClone(approval.bindings),
-      custody: structuredClone(approval.custody),
+      custody: structuredClone(approval.ownership),
     };
     return {
       canApply: !unresolvedSetupReconciliation(approval.reconciliation ?? [], versionChoices)
@@ -409,7 +409,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         unresolvedSetupReconciliation(approval.reconciliation ?? [], versionChoices).length > 0,
       summary: structuredClone(summary),
       apply: (withStatus: SetupApplyOptions["withStatus"]) =>
-        applySetupPlan({ adoption: localCustody, withStatus }, approved),
+        applySetupPlan({ manage: manageOptions, withStatus }, approved),
     };
   });
   const recommended = observed.onboarding.recommended;

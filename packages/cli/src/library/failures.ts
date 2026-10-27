@@ -1,6 +1,6 @@
 // Named failures for Library workflows.
 //
-// Twenty-two SkitError sites, most of them CONFLICT. Custody is the subject of nearly all of
+// Twenty-two SkitError sites, most of them CONFLICT. Ownership is the subject of nearly all of
 // them, and "conflict" was not enough to tell an operator whether a directory is already
 // retained, whether its identity moved, or whether the acquired bytes disagree with the Registry.
 

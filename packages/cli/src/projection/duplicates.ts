@@ -224,7 +224,7 @@ export const findDuplicates = Effect.fn("Projection.findDuplicates")(function* (
     .filter(
       (instance) =>
         instance.aliases.length > 0 &&
-        // A copy already at a destination is SKIT's to adopt, not a duplicate of itself; it still
+        // A copy already at a destination is SKIT's to manage, not a duplicate of itself; it still
         // counts when another destination links to it, as skills.sh links `.claude` to `.agents`.
         (!canonicalDestinations.has(instance.canonicalPath) || instance.aliases.some(isEntryLink)),
     );

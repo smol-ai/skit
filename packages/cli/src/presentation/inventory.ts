@@ -170,10 +170,10 @@ export function renderMachineSkills(
     );
     const custodyGroups = new Map<string, typeof instances>();
     for (const instance of instances) {
-      const custody = ownerLabel(instance.owner);
-      custodyGroups.set(custody, [...(custodyGroups.get(custody) ?? []), instance]);
+      const ownership = ownerLabel(instance.owner);
+      custodyGroups.set(ownership, [...(custodyGroups.get(ownership) ?? []), instance]);
     }
-    for (const [custody, custodyInstances] of custodyGroups) {
+    for (const [ownership, custodyInstances] of custodyGroups) {
       const bySkill = new Map<string, { name: string; instances: typeof custodyInstances }>();
       for (const instance of custodyInstances) {
         const key = `${explicitCollectionKey(instance) ?? "standalone"}\0${instance.name}`;
@@ -184,7 +184,7 @@ export function renderMachineSkills(
       const skillCount = bySkill.size;
       lines.push(
         "",
-        `  ${custody} · ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` · ${instanceCount} instances`}`,
+        `  ${ownership} · ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` · ${instanceCount} instances`}`,
       );
       const cohorts = new Map<
         string,
@@ -271,10 +271,10 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
 const inventoryFindings = (state: LibraryInventory): string[] => {
   const lines: string[] = [];
   if (state.custodyIssues?.length) {
-    lines.push(`Custody issues · ${state.custodyIssues.length}`);
+    lines.push(`Ownership issues · ${state.custodyIssues.length}`);
     for (const issue of state.custodyIssues)
       lines.push(
-        `  ${conditionHeadline(issue.code, "Local custody issue")}`,
+        `  ${conditionHeadline(issue.code, "Local ownership issue")}`,
         `    Path: ${compactHomePath(issue.path)}`,
       );
     lines.push("  Run skit doctor for details.");

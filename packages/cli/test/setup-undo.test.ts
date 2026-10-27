@@ -10,7 +10,7 @@ import {
   prepareInstalledSkillRebuild,
   skitLayer,
 } from "@smolai/skit-core";
-import { checkSetupGlobalContent } from "../src/library-application/setup-content-custody.js";
+import { checkSetupGlobalContent } from "../src/library-application/setup-external-ownership.js";
 import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { setupResultActions } from "../src/commands/setup-actions.js";
@@ -51,7 +51,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     options,
     workDirFlag: root,
     ...(removeOnly ? { selection: { sourceIds: [], copyPaths: [], removePaths: [source] } } : {}),
-    localCustody: { bindings: home.bindings },
+    manageOptions: { bindings: home.bindings },
     planId: observed.onboarding.planId,
   };
   const applied = yield* home.owned(
@@ -203,7 +203,7 @@ it.effect("an inverse receipt must save before any copy or intent changes", () =
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("a symlink replacing setup's marker never grants custody of its target", () =>
+it.effect("a symlink replacing setup's marker never grants ownership of its target", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.home.owned(
@@ -320,7 +320,7 @@ it.effect(
 );
 
 it.effect(
-  "full undo releases adopted custody, preserves new installed copies, restores intent and discovery, and keeps retained artifacts",
+  "full undo releases managed ownership, preserves new installed copies, restores intent and discovery, and keeps retained artifacts",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -391,7 +391,7 @@ it.effect(
 );
 
 it.effect(
-  "a changed adopted original blocks the entire inverse and keeps bindings and settings",
+  "a changed managed original blocks the entire inverse and keeps bindings and settings",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();

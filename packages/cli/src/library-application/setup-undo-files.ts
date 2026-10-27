@@ -19,14 +19,14 @@ import {
 import { PlanIsStale } from "../library/failures.js";
 import { inspectSetupOperation, captureSetupFile } from "./setup-operation.js";
 import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "./recovery-moves.js";
-import { checkSetupGlobalContent } from "./setup-content-custody.js";
+import { checkSetupGlobalContent } from "./setup-external-ownership.js";
 import { recoveryFingerprint, RecoveryInvalid } from "./recovery-evidence.js";
 
 type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["operation"];
 type File = Operation["files"][number];
 type CapturedFile = Effect.Success<ReturnType<typeof captureSetupFile>>;
 
-/** Scan timestamps are evidence, not a change to desired installed-skill custody. */
+/** Scan timestamps are evidence, not a change to desired installed-skill ownership. */
 export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
   projection === undefined
     ? null
@@ -152,7 +152,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       operation.projectionPaths === undefined || operation.projectionPaths.includes(file.path);
     const claim = possibleClaim && approvedPath && confirmedProjectionPaths.has(file.path);
     if (!saved.length && !changedProjection && possibleClaim && approvedPath && !claim) {
-      conflicts.push(`Setup custody claim is not confirmed: ${file.path}`);
+      conflicts.push(`Setup's ownership claim is not confirmed: ${file.path}`);
       continue;
     }
     if (!saved.length && !claim && !changedProjection) continue;
@@ -236,7 +236,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       observed.entry.ino === file.entry.ino &&
       observed.entry.unstampedHash !== file.entry.unstampedHash
     ) {
-      conflicts.push(`Adopted original was edited: ${file.path}`);
+      conflicts.push(`Managed original was edited: ${file.path}`);
       continue;
     }
     if (observed.entry && !owned) {

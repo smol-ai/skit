@@ -167,14 +167,14 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
       ),
   };
 });
-/** Unmanaged copies never acquire authority to move a custody marker. */
+/** Unmanaged copies never acquire authority to move an ownership marker. */
 export const prepareRecoveryMoves = (
   home: string,
   requests: readonly RecoveryMoveRequest[],
   operationDirectory = recoveryOperationDirectory(home),
 ) => prepareMoves(home, requests, operationDirectory);
 
-/** Preserve exactly reviewed, registered installed skills; marker text alone never grants custody. */
+/** Preserve exactly reviewed, registered installed skills; marker text alone never grants ownership. */
 export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
   requests: readonly { name: string; projection: InstalledSkill }[],
   operationDirectory?: string,

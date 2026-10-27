@@ -261,7 +261,7 @@ const twoScopeProposal = (scopeCount = 2) =>
     return { home, proposed };
   });
 
-/** A change from outside the confirming action: it toggles whether custody issues were recorded. */
+/** A change from outside the confirming action: it toggles whether ownership issues were recorded. */
 const unplanned = (state: LibraryState): LibraryState => {
   if (state.custodyIssues === undefined) return { ...state, custodyIssues: [] };
   const { custodyIssues: _custodyIssues, ...rest } = state;

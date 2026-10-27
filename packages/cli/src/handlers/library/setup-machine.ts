@@ -5,7 +5,7 @@ import { Renderer } from "../../presentation/renderer.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { runSetup, SetupPlanStale, type SetupOptions } from "../../workflows/library/setup.js";
 import { openSetupReview } from "../../workflows/library/setup-review.js";
-import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
+import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import type { SetupDuplicateAction as SetupDuplicateActionType } from "../../workflows/library/setup-decisions.js";
 import type { SetupApplied } from "../../workflows/library/setup-contract.js";
 import type { SetupCommandSelection } from "../../commands/setup-actions.js";
@@ -20,7 +20,7 @@ import { setupReconciliationOutcomes } from "../../workflows/library/setup-recon
  */
 export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody: LocalAdoptionOptions;
+  readonly manageOptions: ManageOptions;
   readonly workDirFlag?: string;
   readonly planId: string;
   readonly duplicates?: SetupDuplicateActionType;
@@ -46,7 +46,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
   const review = yield* openSetupReview(
     { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
     observed,
-    input.localCustody,
+    input.manageOptions,
   );
   return { observed, review, planId: planId.value };
 });

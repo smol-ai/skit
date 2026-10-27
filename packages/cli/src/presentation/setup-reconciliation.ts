@@ -11,12 +11,12 @@ export function renderSetupReconciliation(
 ) {
   const label = {
     unchanged: fact.metadataChanged
-      ? "Align custody with the selected version"
+      ? "Align the installed copy with the selected version"
       : "Already matches Library",
     "incoming-update": "Update untouched copy from Library",
     "local-only": "Keep local edits active",
     competing: "Local and Library both changed; choose the active version",
-    protected: `Resolve custody: ${fact.reason ?? "ownership is uncertain"}`,
+    protected: `Resolve ownership: ${fact.reason ?? "ownership is uncertain"}`,
     "native-delete": "Keep native deletion",
   }[fact.status];
   return `${terminalData(fact.name)} · ${terminalData(label)} · ${terminalData(displayPath(fact.path))}`;

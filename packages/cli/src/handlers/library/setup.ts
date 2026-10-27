@@ -25,7 +25,7 @@ import {
 } from "../../presentation/setup-steps.js";
 import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
 import { openSetupReview, type SetupReview } from "../../workflows/library/setup-review.js";
-import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
+import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import { result } from "../contracts.js";
 import {
   setupDiscoveryOutput,
@@ -115,7 +115,7 @@ const duplicatesFlag = Flag.Literals("duplicates", SetupDuplicateAction.literals
 
 export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody?: LocalAdoptionOptions;
+  readonly manageOptions?: ManageOptions;
   readonly interactive: boolean;
   readonly dryRun: boolean;
   readonly workDirFlag?: string;
@@ -128,7 +128,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots: false,
   };
   const renderer = yield* Renderer;
-  const guided = input.interactive && !input.dryRun && input.localCustody !== undefined;
+  const guided = input.interactive && !input.dryRun && input.manageOptions !== undefined;
   const steps = setupStepPlan({ scanRepositories: roots.length > 0 });
   if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
   const observe = (options: SetupOptions) =>
@@ -138,7 +138,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     const review = yield* openSetupReview(
       { ...setupOptions, persistRoots: true },
       observed,
-      input.localCustody ?? { bindings: setupOptions.inventory },
+      input.manageOptions ?? { bindings: setupOptions.inventory },
     );
     // The explicit work-dir flag approves only this settings change, not skill enablement.
     const plan = yield* review.prepare({
@@ -155,7 +155,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       operationId: applied.operationId,
     };
   }
-  if (!guided || !input.localCustody) return observed;
+  if (!guided || !input.manageOptions) return observed;
   const discoveredRepositories = observed.repositories;
   const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
   const displayRoots = roots.map(displayPath).join(", ");
@@ -196,7 +196,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const review = yield* openSetupReview(
     { ...setupOptions, persistRoots },
     observed,
-    input.localCustody,
+    input.manageOptions,
   );
   const sources = yield* chooseKnownSources(steps, review);
   const copies = yield* chooseDiscoveredSkills(steps, review, input.options.inventory.home);
@@ -425,7 +425,7 @@ export const setupCliCommand = Command.make(
                 probePath: process.env.PATH,
                 skillsStateHome: paths.xdgStateHome,
               };
-              const localCustody = { bindings: configuration.pull.bindings };
+              const manageOptions = { bindings: configuration.pull.bindings };
               if (
                 [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||
                 (apply !== undefined && input.dryRun)
@@ -449,7 +449,7 @@ export const setupCliCommand = Command.make(
                 });
               const selected = {
                 options,
-                localCustody,
+                manageOptions,
                 ...(workDir === undefined ? {} : { workDirFlag: workDir }),
                 ...choice,
               };
@@ -534,7 +534,7 @@ export const setupCliCommand = Command.make(
                 interactive,
                 dryRun: input.dryRun || input.json,
                 options,
-                localCustody,
+                manageOptions,
               });
               if (interactive) return undefined;
               const setup = {
@@ -542,7 +542,7 @@ export const setupCliCommand = Command.make(
                 repositoryRoots: workDir ? [resolve(workDir)] : [],
                 persistRoots: false,
               };
-              const review = yield* openSetupReview(setup, value, localCustody);
+              const review = yield* openSetupReview(setup, value, manageOptions);
               return result("setup", setupDiscoveryOutput(value, review, context));
             }),
           );

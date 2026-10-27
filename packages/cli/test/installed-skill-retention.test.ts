@@ -209,7 +209,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("adopts identical edited copies into one retained Version", () =>
+it.effect("manages identical edited copies into one retained Version", () =>
   Effect.gen(function* () {
     const f = yield* projectionFixture;
     yield* f.fs.writeFileString(

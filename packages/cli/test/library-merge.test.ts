@@ -13,7 +13,7 @@ import {
   LibraryManifest,
   LibraryState,
   makeInstalledSkillId,
-  restoreCustodyConflicts,
+  strandedByRestore,
 } from "@smolai/skit-core";
 import {
   normalizeLibraryManifest,
@@ -476,7 +476,7 @@ it.effect(
       assert.deepEqual(local, original);
       const device = merged.device;
       assert.deepEqual(
-        restoreCustodyConflicts(device, { ...merged.manifest, bindings: state.global_bindings }),
+        strandedByRestore(device, { ...merged.manifest, bindings: state.global_bindings }),
         [],
       );
       assert.strictEqual(device.projections[0]?.skill_version_id, second);

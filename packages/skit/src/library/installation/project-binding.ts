@@ -4,9 +4,9 @@ import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
 import {
   inspectOwnershipMarker,
-  installedSkillCustody,
+  inspectInstalledSkill,
   withInstalledSkillMutation,
-  type InstalledSkillAdoption,
+  type ManageApproval,
 } from "../../projection/mutation.js";
 import { pathIsWithin, installDestinationPathIdentity } from "../../platform/path-identity.js";
 import { InstalledSkillRetireConflict } from "../../failures.js";
@@ -44,10 +44,10 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
     string,
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
-  /** The existing copies the operator chose to take custody of, as previewed. */
-  adoption?: InstalledSkillAdoption;
-  /** Adopt unmanaged copies that already hold exactly the bytes SKIT would install. */
-  adoptIdentical?: boolean;
+  /** The existing copies the operator chose to manage, as previewed. */
+  manage?: ManageApproval;
+  /** Manage unmanaged copies that already hold exactly the bytes SKIT would install. */
+  manageIdentical?: boolean;
   restoreNativeDeletedSkills?: readonly string[];
   /** Bound selection, pruning and relocation to the explicitly reviewed Skills. */
   onlySkillIds?: readonly SkillId[];
@@ -119,7 +119,7 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
     `Refusing to relocate modified Skill from ${projection.path}`;
   // Refuse an edited former copy before creating another installation or removing any old copy.
   for (const projection of former) {
-    if ((yield* installedSkillCustody(projection)).kind === "conflicted")
+    if ((yield* inspectInstalledSkill(projection)).kind === "conflicted")
       return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(projection) });
   }
   const result = yield* withInstalledSkillMutation(
@@ -199,8 +199,8 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
                     ...options.acceptedObservations.get(projectionId)!,
                   },
                 }),
-            ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
-            ...(options.adoptIdentical ? { adoptIdentical: true } : {}),
+            ...(options.manage === undefined ? {} : { manage: options.manage }),
+            ...(options.manageIdentical ? { manageIdentical: true } : {}),
             restoreNativeDeletion:
               options.restoreNativeDeletedSkills?.includes(item.skill.skill_id) ?? false,
             projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -214,7 +214,7 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
         }
         // Finish the whole installation batch before removing any former working copy.
         for (const old of toRetire) {
-          if ((yield* installedSkillCustody(old)).kind === "conflicted")
+          if ((yield* inspectInstalledSkill(old)).kind === "conflicted")
             return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(old) });
         }
         for (const old of toRetire) {

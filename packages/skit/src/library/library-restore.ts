@@ -402,7 +402,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
 });
 
 /** Preview device facts that replacement of portable Library state would strand. */
-export function restoreCustodyConflicts(current: LibraryState, manifest: LibraryManifest) {
+export function strandedByRestore(current: LibraryState, manifest: LibraryManifest) {
   const skillIds = new Set(manifest.skills.map((item) => item.skill_id));
   const versionIds = new Set(
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
@@ -432,7 +432,7 @@ export function restoreCustodyConflicts(current: LibraryState, manifest: Library
   return [...new Set(conflicts)].sort();
 }
 
-/** Keep current device custody while replacing the portable Library fields. */
+/** Keep current device ownership while replacing the portable Library fields. */
 export const blendRestoredState = Effect.fn("Library.blendRestoredState")(function* (
   current: LibraryState,
   restored: LibraryState,
@@ -447,8 +447,8 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
       ({ invocation_policies: _policies, ...binding }) => binding,
     ),
   });
-  const custody = restoreCustodyConflicts(current, manifest);
-  if (custody.length > 0) return yield* new RestoreInvalid({ detail: custody.join(", ") });
+  const ownership = strandedByRestore(current, manifest);
+  if (ownership.length > 0) return yield* new RestoreInvalid({ detail: ownership.join(", ") });
   const localPolicies = current.global_bindings[0]?.invocation_policies;
   return yield* LibraryState.makeEffect({
     ...current,
@@ -463,7 +463,7 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
     Effect.mapError(
       () =>
         new RestoreInvalid({
-          detail: "merged Library conflicts with device Bindings or custody",
+          detail: "merged Library conflicts with device Bindings or ownership",
         }),
     ),
   );

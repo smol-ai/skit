@@ -31,7 +31,7 @@ import {
   HarnessName,
   inspectNormalizedTree,
   inspectOwnershipMarker,
-  installedSkillCustody,
+  inspectInstalledSkill,
   LibraryStore,
   LinkStat,
   hasHarnessProfile,
@@ -53,14 +53,14 @@ import {
 } from "../../library-application/retain-source.js";
 import type { InstalledSkillOptions } from "./installed-skill-options.js";
 
-const LocalAdoptionTarget = Schema.Struct({
+const ManageTarget = Schema.Struct({
   path: Schema.String,
   harness: HarnessName,
   scope: SkitBindingScope,
 });
-interface LocalAdoptionTarget extends Schema.Schema.Type<typeof LocalAdoptionTarget> {}
+interface ManageTarget extends Schema.Schema.Type<typeof ManageTarget> {}
 
-const LocalAdoptionBlockerReason = Schema.Literals([
+const ManageBlocker = Schema.Literals([
   "empty-selection",
   "multiple-skills",
   "not-projection-target",
@@ -70,28 +70,28 @@ const LocalAdoptionBlockerReason = Schema.Literals([
   "would-discard-control-entry",
   "would-normalize-path",
 ]);
-type LocalAdoptionBlockerReason = typeof LocalAdoptionBlockerReason.Type;
+type ManageBlocker = typeof ManageBlocker.Type;
 
-const LocalAdoptionPlannedTarget = Schema.Union([
+const PlannedManageTarget = Schema.Union([
   Schema.Struct({
-    ...LocalAdoptionTarget.fields,
+    ...ManageTarget.fields,
     status: Schema.Literal("adoptable"),
     observedHash: DigestSchema,
   }),
   Schema.Struct({
-    ...LocalAdoptionTarget.fields,
+    ...ManageTarget.fields,
     status: Schema.Literal("already-managed"),
     observedHash: DigestSchema,
   }),
   Schema.Struct({
-    ...LocalAdoptionTarget.fields,
+    ...ManageTarget.fields,
     status: Schema.Literal("blocked"),
     observedHash: Schema.optionalKey(DigestSchema),
   }),
 ]);
-type LocalAdoptionPlannedTarget = typeof LocalAdoptionPlannedTarget.Type;
+type PlannedManageTarget = typeof PlannedManageTarget.Type;
 
-const LocalAdoptionPlan = Schema.Struct({
+const ManagePlan = Schema.Struct({
   revision: Schema.String,
   sourcePath: Schema.optionalKey(Schema.String),
   snapshotDigest: Schema.optionalKey(DigestSchema),
@@ -101,25 +101,21 @@ const LocalAdoptionPlan = Schema.Struct({
       validationDigest: DigestSchema,
     }),
   ),
-  targets: Schema.Array(LocalAdoptionPlannedTarget),
-  blockers: Schema.Array(
-    Schema.Struct({ path: Schema.String, reason: LocalAdoptionBlockerReason }),
-  ),
+  targets: Schema.Array(PlannedManageTarget),
+  blockers: Schema.Array(Schema.Struct({ path: Schema.String, reason: ManageBlocker })),
   applicable: Schema.Boolean,
 });
-interface LocalAdoptionPlan extends Schema.Schema.Type<typeof LocalAdoptionPlan> {}
+interface ManagePlan extends Schema.Schema.Type<typeof ManagePlan> {}
 
-export interface LocalAdoptionOptions {
+export interface ManageOptions {
   readonly bindings: InstalledSkillOptions;
   readonly recoveryOperationDirectory?: string;
 }
 
-const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(function* (
-  root: string,
-) {
+const manageBlockers = Effect.fn("Library.manageBlockers")(function* (root: string) {
   const normalized = yield* inspectNormalizedTree(root);
   const verbatim = yield* walkTree(root, "verbatim");
-  const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = normalized.excluded
+  const blockers: Array<{ path: string; reason: ManageBlocker }> = normalized.excluded
     .filter(
       (entry) =>
         entry.reason === "normalized-control-exclusion" &&
@@ -138,16 +134,16 @@ const losslessAdoptionBlockers = Effect.fn("Library.inspectLosslessAdoption")(fu
   return { blockers, contentHash: yield* deterministicTreeHash(root) };
 });
 
-/** Plan exact-content Custody transfer without retaining, projecting, or saving state. */
-const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
-  selected: readonly LocalAdoptionTarget[],
+/** Plan exact-content managing without retaining, projecting, or saving state. */
+const planManage = Effect.fn("Library.planManage")(function* (
+  selected: readonly ManageTarget[],
   nominatedSourcePath?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const state = yield* (yield* LibraryStore).load;
   const revision = createHash("sha256").update(canonicalJson(state)).digest("hex");
   if (!selected.length) {
-    const plan: LocalAdoptionPlan = {
+    const plan: ManagePlan = {
       revision,
       targets: [],
       blockers: [{ path: "", reason: "empty-selection" }],
@@ -161,7 +157,7 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
   );
   const sourcePath = resolve(nominatedSourcePath ?? selected[0]!.path);
   const preview = yield* inspectLibrarySource(sourcePath);
-  const blockers: Array<{ path: string; reason: LocalAdoptionBlockerReason }> = [];
+  const blockers: Array<{ path: string; reason: ManageBlocker }> = [];
   const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
   const sourceContentHash = yield* deterministicTreeHash(sourcePath);
   const existingAcquisitionIds = new Set(
@@ -194,7 +190,7 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
     : undefined;
   if (!skill) blockers.push({ path: sourcePath, reason: "multiple-skills" });
 
-  const observedTargets: LocalAdoptionPlannedTarget[] = [];
+  const observedTargets: PlannedManageTarget[] = [];
   for (const target of targets) {
     const path = resolve(target.path);
     const expectedPath = resolve(join(dirname(path), previewSkill?.name ?? ""));
@@ -207,7 +203,7 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
       observedTargets.push({ ...target, path, status: "blocked" });
       continue;
     }
-    const lossless = yield* losslessAdoptionBlockers(path);
+    const lossless = yield* manageBlockers(path);
     const observedHash = lossless.contentHash;
     let blocked = false;
     if (observedHash !== skill.validationDigest) {
@@ -240,7 +236,7 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
     });
   }
 
-  const plan: LocalAdoptionPlan = {
+  const plan: ManagePlan = {
     revision,
     sourcePath,
     snapshotDigest: preview.snapshot_digest,
@@ -252,7 +248,7 @@ const planLocalAdoption = Effect.fn("Library.planLocalAdoption")(function* (
   return plan;
 });
 
-const localAdoptionPlanIdentity = (plan: LocalAdoptionPlan) =>
+const managePlanId = (plan: ManagePlan) =>
   createHash("sha256")
     .update(
       canonicalJson({
@@ -267,8 +263,8 @@ const localAdoptionPlanIdentity = (plan: LocalAdoptionPlan) =>
     )
     .digest("hex");
 
-export class LocalAdoptionInvalid
-  extends Schema.TaggedError<LocalAdoptionInvalid>()("LocalAdoptionInvalid", {
+export class ManageInvalid
+  extends Schema.TaggedError<ManageInvalid>()("ManageInvalid", {
     name: Schema.String,
     reason: Schema.Literals(["source-not-candidate", "machine-identity-required"]),
   })
@@ -278,29 +274,29 @@ export class LocalAdoptionInvalid
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Run `skit setup` again and review the current plan.";
   get message() {
-    return `Cannot take custody of ${this.name}: ${this.reason}`;
+    return `Cannot manage ${this.name}: ${this.reason}`;
   }
 }
 
-/** Setup selects eligibility; adoption owns retaining or reusing content and taking custody. */
-export type LocalAdoptionRequest =
+/** Setup selects eligibility; managing owns retaining or reusing content and taking ownership. */
+export type ManageRequest =
   | { readonly kind: "existing"; readonly subjectId: string; readonly observedHash: Digest }
   | {
       readonly kind: "retain";
       readonly observedHash: Digest | undefined;
-      readonly custody?: {
+      readonly ownership?: {
         readonly harnesses: readonly HarnessNameType[];
         readonly machineId: MachineId | undefined;
       };
       /**
        * Other copies setup observed with exactly these bytes. Where one sits at a target's
-       * destination it is adopted in place, rather than left for that target to conflict with.
+       * destination it is managed in place, rather than left for that target to conflict with.
        */
       readonly equalCopies?: readonly string[];
     };
 
 /** Validate every duplicate decision before applying any of the selected copies. */
-export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function* <E>(
+export const approveManage = Effect.fn("Manage.approve")(function* <E>(
   selection: SetupCopySelection,
   conflict: SetupCopyConflict,
   invalid: (
@@ -342,7 +338,7 @@ export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function*
   return {
     ...selection,
     duplicateAction: selection.duplicateAction,
-    approvedAliases: yield* captureLocalAdoptionAliases(
+    approvedAliases: yield* captureManageLinks(
       selection.sourcePath,
       conflict.duplicates,
       selection.approvedAliases,
@@ -350,11 +346,11 @@ export const approveLocalAdoption = Effect.fn("LocalAdoption.approve")(function*
   };
 });
 
-/** Prepare without changing custody. Apply revalidates content under the same Library writer. */
-export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function* (
-  options: LocalAdoptionOptions,
-  approved: Effect.Success<ReturnType<typeof approveLocalAdoption>>,
-  requestInput: LocalAdoptionRequest,
+/** Prepare without changing ownership. Apply revalidates content under the same Library writer. */
+export const prepareManage = Effect.fn("Manage.prepare")(function* (
+  options: ManageOptions,
+  approved: Effect.Success<ReturnType<typeof approveManage>>,
+  requestInput: ManageRequest,
 ) {
   const home = (yield* LibraryStore).home;
   const operationDirectory = options.recoveryOperationDirectory;
@@ -367,9 +363,9 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
   };
   const binding =
     selection.duplicateAction !== "retain-only" &&
-    (request.kind === "existing" || request.custody !== undefined);
+    (request.kind === "existing" || request.ownership !== undefined);
   return {
-    apply: Effect.fn("LocalAdoption.apply")(function* () {
+    apply: Effect.fn("Manage.apply")(function* () {
       if ((yield* LibraryStore).home !== home) return yield* new PlanIsStale();
       const empty = {
         result: undefined,
@@ -390,7 +386,7 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
       if (request.kind === "retain" && !binding) {
         const retained = yield* retainLibrarySource(selection.sourcePath);
         if (retained.collection_id === undefined)
-          return yield* new LocalAdoptionInvalid({
+          return yield* new ManageInvalid({
             name: selection.name,
             reason: "source-not-candidate",
           });
@@ -399,113 +395,110 @@ export const prepareLocalAdoption = Effect.fn("LocalAdoption.prepare")(function*
       const equalPaths = request.kind === "retain" ? (request.equalCopies ?? []) : [];
       for (const path of equalPaths)
         if ((yield* deterministicTreeHash(path)) !== observedHash) return yield* new PlanIsStale();
-      const adoption = { path: selection.sourcePath, equalPaths, observedHash };
+      const manage = { path: selection.sourcePath, equalPaths, observedHash };
       let subjectId: string;
       if (request.kind === "existing") subjectId = request.subjectId;
       else {
-        const targets = (request.custody?.harnesses ?? []).map((harness) => ({
+        const targets = (request.ownership?.harnesses ?? []).map((harness) => ({
           path: selection.sourcePath,
           harness,
           scope: { kind: "global" as const },
         }));
-        const plan = yield* planLocalAdoption(targets, selection.sourcePath);
+        const plan = yield* planManage(targets, selection.sourcePath);
         if (
           plan.targets.some((target) => target.status === "adoptable") &&
-          !request.custody?.machineId
+          !request.ownership?.machineId
         )
-          return yield* new LocalAdoptionInvalid({
+          return yield* new ManageInvalid({
             name: selection.name,
             reason: "machine-identity-required",
           });
         if (!plan.applicable || !plan.sourcePath || !plan.skill)
-          return yield* new LocalAdoptionInvalid({
+          return yield* new ManageInvalid({
             name: selection.name,
             reason: "source-not-candidate",
           });
-        const refreshed = yield* planLocalAdoption(plan.targets, plan.sourcePath);
-        if (localAdoptionPlanIdentity(refreshed) !== localAdoptionPlanIdentity(plan))
-          return yield* new PlanIsStale();
+        const refreshed = yield* planManage(plan.targets, plan.sourcePath);
+        if (managePlanId(refreshed) !== managePlanId(plan)) return yield* new PlanIsStale();
         const retained = yield* retainLibrarySource(plan.sourcePath);
         if (retained.collection_id === undefined)
-          return yield* new LocalAdoptionInvalid({
+          return yield* new ManageInvalid({
             name: selection.name,
             reason: "source-not-candidate",
           });
         subjectId = retained.collection_id;
-        adoption.path = plan.sourcePath;
-        adoption.observedHash = plan.skill.validationDigest;
+        manage.path = plan.sourcePath;
+        manage.observedHash = plan.skill.validationDigest;
       }
-      return yield* bindCopy(bindings, selection, subjectId, adoption, retirement);
+      return yield* bindCopy(bindings, selection, subjectId, manage, retirement);
     }, withLibraryWriter),
   };
 });
 
-/** Capture duplicate preservation before adoption or binding. */
-const prepareDuplicatePreservation = Effect.fn("LocalAdoption.prepareDuplicatePreservation")(
-  function* (
-    roots: InventoryRootOptions,
-    selection: Effect.Success<ReturnType<typeof approveLocalAdoption>>,
-    operationDirectory?: string,
-  ) {
-    if (selection.duplicateAction === "preserve-duplicates") {
-      const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
-      const copies = yield* captureSetupCopies(
-        selection.sourcePath,
-        duplicates,
-        selection.approvedCopies,
-      );
-      const store = yield* LibraryStore;
-      const moves = yield* prepareRecoveryMoves(
-        store.home,
-        copies.map((copy) => ({
-          name: selection.name,
-          path: copy.path,
-          observedHash: copy.observedHash,
-        })),
-        operationDirectory,
-      );
-      return {
-        moves: {
-          ...moves,
-          apply: () =>
-            Effect.gen(function* () {
-              yield* captureSetupCopies(selection.sourcePath, duplicates, copies);
-              yield* moves.apply();
-            }),
-        },
-        aliases: [] as readonly SetupApprovedAlias[],
-        harnesses: [
-          ...new Set(duplicates.map((duplicate) => duplicate.harness).filter(hasHarnessProfile)),
-        ],
-      };
-    }
-    if (selection.duplicateAction !== "retire-aliases") return undefined;
-    const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
+/** Capture duplicate preservation before managing or binding. */
+const prepareDuplicatePreservation = Effect.fn("Manage.prepareDuplicatePreservation")(function* (
+  roots: InventoryRootOptions,
+  selection: Effect.Success<ReturnType<typeof approveManage>>,
+  operationDirectory?: string,
+) {
+  if (selection.duplicateAction === "preserve-duplicates") {
     const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
-    // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
-    // root's backups; moving it afterwards would find the new copy there instead.
-    const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
-      join(bindingRoot(target, { kind: "global" }, roots), selection.name),
-    );
-    const store = yield* LibraryStore;
-    return yield* planAliasRetirement(
-      store.home,
-      selection.name,
+    const copies = yield* captureSetupCopies(
       selection.sourcePath,
       duplicates,
-      approvedAliases,
-      destinations,
+      selection.approvedCopies,
+    );
+    const store = yield* LibraryStore;
+    const moves = yield* prepareRecoveryMoves(
+      store.home,
+      copies.map((copy) => ({
+        name: selection.name,
+        path: copy.path,
+        observedHash: copy.observedHash,
+      })),
       operationDirectory,
     );
-  },
-);
+    return {
+      moves: {
+        ...moves,
+        apply: () =>
+          Effect.gen(function* () {
+            yield* captureSetupCopies(selection.sourcePath, duplicates, copies);
+            yield* moves.apply();
+          }),
+      },
+      aliases: [] as readonly SetupApprovedAlias[],
+      harnesses: [
+        ...new Set(duplicates.map((duplicate) => duplicate.harness).filter(hasHarnessProfile)),
+      ],
+    };
+  }
+  if (selection.duplicateAction !== "retire-aliases") return undefined;
+  const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
+  const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
+  // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
+  // root's backups; moving it afterwards would find the new copy there instead.
+  const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
+    join(bindingRoot(target, { kind: "global" }, roots), selection.name),
+  );
+  const store = yield* LibraryStore;
+  return yield* planAliasRetirement(
+    store.home,
+    selection.name,
+    selection.sourcePath,
+    duplicates,
+    approvedAliases,
+    destinations,
+    operationDirectory,
+  );
+});
 
-/** Bind before preserving any displaced entry, using approval captured before adoption. */
-const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
+/** Bind before preserving any displaced entry, using approval captured before managing. */
+const bindCopy = Effect.fn("Manage.bindCopy")(function* (
   roots: InventoryRootOptions,
   selection: SetupCopySelection,
   subjectId: string,
-  adoption: NonNullable<BindingChangeRequest["adoption"]>,
+  manage: NonNullable<BindingChangeRequest["manage"]>,
   retirement?: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
 ) {
   const plan = yield* previewBindingChanges(
@@ -528,7 +521,7 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
         selectedSkills: [selection.name],
         scope: { kind: "global" },
         enabled: true,
-        adoption,
+        manage,
       },
     ],
     roots,
@@ -566,52 +559,48 @@ const bindCopy = Effect.fn("LocalAdoption.bindCopy")(function* (
 });
 
 /** Bind observed aliases to filesystem identities before approval, and verify that consent later. */
-export const captureLocalAdoptionAliases = Effect.fn("LocalAdoption.captureAliasApproval")(
-  function* (
-    sourcePath: string,
-    duplicates: readonly DuplicateCopy[],
-    approved?: readonly SetupApprovedAlias[],
-  ) {
-    const paths = retirableDuplicateLinks(sourcePath, duplicates);
-    if (!paths.length) return yield* new PlanIsStale();
-    const links = yield* LinkStat;
-    const fs = yield* FileSystem.FileSystem;
-    const aliases = yield* Effect.forEach(paths, (path) =>
-      Effect.gen(function* () {
-        yield* leavePnpmSkill(path);
-        const info = yield* links.identity.lstat(path);
-        if (info.type !== "SymbolicLink") return yield* new PlanIsStale();
-        const canonicalPath = yield* fs.realPath(path);
-        const linkTarget = yield* fs.readLink(path);
-        if (
-          canonicalPath !== sourcePath ||
-          duplicates.some((duplicate) =>
-            duplicate.aliases.some(
-              (alias) => alias.path === path && alias.linkTarget !== linkTarget,
-            ),
-          )
+export const captureManageLinks = Effect.fn("Manage.captureAliasApproval")(function* (
+  sourcePath: string,
+  duplicates: readonly DuplicateCopy[],
+  approved?: readonly SetupApprovedAlias[],
+) {
+  const paths = retirableDuplicateLinks(sourcePath, duplicates);
+  if (!paths.length) return yield* new PlanIsStale();
+  const links = yield* LinkStat;
+  const fs = yield* FileSystem.FileSystem;
+  const aliases = yield* Effect.forEach(paths, (path) =>
+    Effect.gen(function* () {
+      yield* leavePnpmSkill(path);
+      const info = yield* links.identity.lstat(path);
+      if (info.type !== "SymbolicLink") return yield* new PlanIsStale();
+      const canonicalPath = yield* fs.realPath(path);
+      const linkTarget = yield* fs.readLink(path);
+      if (
+        canonicalPath !== sourcePath ||
+        duplicates.some((duplicate) =>
+          duplicate.aliases.some((alias) => alias.path === path && alias.linkTarget !== linkTarget),
         )
-          return yield* new PlanIsStale();
-        return { path, canonicalPath, linkTarget, dev: info.dev, ino: info.ino };
-      }).pipe(
-        Effect.catchTag("PlatformError", (error) =>
-          Effect.fail(error.reason._tag === "NotFound" ? new PlanIsStale() : error),
-        ),
-      ),
-    );
-    if (
-      approved &&
-      !Schema.toEquivalence(Schema.Array(SetupApprovedAlias))(
-        [...approved].sort((left, right) => left.path.localeCompare(right.path)),
-        [...aliases].sort((left, right) => left.path.localeCompare(right.path)),
       )
+        return yield* new PlanIsStale();
+      return { path, canonicalPath, linkTarget, dev: info.dev, ino: info.ino };
+    }).pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        Effect.fail(error.reason._tag === "NotFound" ? new PlanIsStale() : error),
+      ),
+    ),
+  );
+  if (
+    approved &&
+    !Schema.toEquivalence(Schema.Array(SetupApprovedAlias))(
+      [...approved].sort((left, right) => left.path.localeCompare(right.path)),
+      [...aliases].sort((left, right) => left.path.localeCompare(right.path)),
     )
-      return yield* new PlanIsStale();
-    return aliases;
-  },
-);
+  )
+    return yield* new PlanIsStale();
+  return aliases;
+});
 
-const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(function* (
+const planAliasRetirement = Effect.fn("Manage.planAliasRetirement")(function* (
   libraryHome: string,
   name: string,
   sourcePath: string,
@@ -620,7 +609,7 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
   destinations: readonly string[],
   operationDirectory?: string,
 ) {
-  const aliases = yield* captureLocalAdoptionAliases(sourcePath, duplicates, approvedAliases);
+  const aliases = yield* captureManageLinks(sourcePath, duplicates, approvedAliases);
   const moves = yield* prepareRecoveryMoves(
     libraryHome,
     aliases
@@ -639,65 +628,62 @@ const planAliasRetirement = Effect.fn("LocalAdoption.planAliasRetirement")(funct
 });
 
 /** Existing entries stay active until every affected reader has a verified replacement. */
-const preserveAfterInstalledSkill = Effect.fn("LocalAdoption.preserveCopiesAfterInstall")(
-  function* (
-    roots: InventoryRootOptions,
-    subjectId: string,
-    name: string,
-    retirement: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
-  ) {
-    const fs = yield* FileSystem.FileSystem;
-    const state = yield* (yield* LibraryStore).load;
-    const subject = yield* resolveLibrarySubject(state, subjectId);
-    const skill = subject.skills.find((item) => item.name === name);
-    const canonical = (path: string) =>
-      fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
-    const readableRoots = yield* Effect.forEach(
-      readableSkillsDirectories(roots, { kind: "global" }).filter((root) =>
-        retirement.harnesses.includes(root.harness),
-      ),
-      (root) => canonical(root.root),
+const preserveAfterInstalledSkill = Effect.fn("Manage.preserveCopiesAfterInstall")(function* (
+  roots: InventoryRootOptions,
+  subjectId: string,
+  name: string,
+  retirement: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const state = yield* (yield* LibraryStore).load;
+  const subject = yield* resolveLibrarySubject(state, subjectId);
+  const skill = subject.skills.find((item) => item.name === name);
+  const canonical = (path: string) =>
+    fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
+  const readableRoots = yield* Effect.forEach(
+    readableSkillsDirectories(roots, { kind: "global" }).filter((root) =>
+      retirement.harnesses.includes(root.harness),
+    ),
+    (root) => canonical(root.root),
+  );
+  let required = 0;
+  for (const target of yield* activeInstallDestinationsEffect(roots)) {
+    const root = bindingRoot(target, { kind: "global" }, roots);
+    if (!readableRoots.includes(yield* canonical(root))) continue;
+    required++;
+    const path = join(root, name);
+    const expectedPath = yield* canonical(path);
+    const candidates = state.projections.filter(
+      (projection) => projection.skill_id === skill?.skill_id && projection.status === "installed",
     );
-    let required = 0;
-    for (const target of yield* activeInstallDestinationsEffect(roots)) {
-      const root = bindingRoot(target, { kind: "global" }, roots);
-      if (!readableRoots.includes(yield* canonical(root))) continue;
-      required++;
-      const path = join(root, name);
-      const expectedPath = yield* canonical(path);
-      const candidates = state.projections.filter(
-        (projection) =>
-          projection.skill_id === skill?.skill_id && projection.status === "installed",
-      );
-      const installedPaths = yield* Effect.forEach(candidates, (projection) =>
-        canonical(projection.path),
-      );
-      if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
-        return {
-          kind: "preserved" as const,
-          message: `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
-        };
-      const projection = candidates.find((candidate) => candidate.path === path);
-      const custody = projection ? yield* installedSkillCustody(projection) : undefined;
-      if (
-        !projection ||
-        custody?.kind !== "intact" ||
-        custody.observed !== projection.expected_digest ||
-        custody.marker.expected_digest !== projection.expected_digest ||
-        custody.marker.skill_version_id !== projection.skill_version_id ||
-        (yield* (yield* LinkStat).lstat(path)).type !== "Directory"
-      )
-        return {
-          kind: "preserved" as const,
-          message: `Bound ${name}; existing copies remain because the replacement at ${path} changed before preservation.`,
-        };
-    }
-    if (!required)
+    const installedPaths = yield* Effect.forEach(candidates, (projection) =>
+      canonical(projection.path),
+    );
+    if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
       return {
         kind: "preserved" as const,
-        message: `Bound ${name}; existing copies were left in place because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
+        message: `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
       };
-    yield* retirement.moves.apply();
-    return { kind: "retired" as const };
-  },
-);
+    const projection = candidates.find((candidate) => candidate.path === path);
+    const ownership = projection ? yield* inspectInstalledSkill(projection) : undefined;
+    if (
+      !projection ||
+      ownership?.kind !== "intact" ||
+      ownership.observed !== projection.expected_digest ||
+      ownership.marker.expected_digest !== projection.expected_digest ||
+      ownership.marker.skill_version_id !== projection.skill_version_id ||
+      (yield* (yield* LinkStat).lstat(path)).type !== "Directory"
+    )
+      return {
+        kind: "preserved" as const,
+        message: `Bound ${name}; existing copies remain because the replacement at ${path} changed before preservation.`,
+      };
+  }
+  if (!required)
+    return {
+      kind: "preserved" as const,
+      message: `Bound ${name}; existing copies were left in place because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
+    };
+  yield* retirement.moves.apply();
+  return { kind: "retired" as const };
+});

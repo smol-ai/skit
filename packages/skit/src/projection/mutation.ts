@@ -22,8 +22,8 @@ import type { HarnessInvocationWriteFailure } from "../harnesses/projection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import {
-  AdoptionContentMismatch,
-  AdoptionTargetChanged,
+  ManageContentMismatch,
+  ManageTargetChanged,
   NoSkillsDirectory,
   OwnershipMarkerDisagrees,
   InstalledSkillRetireConflict,
@@ -61,7 +61,7 @@ export type RetireInstalledSkillResult =
   | { kind: "retired"; observed: Digest };
 
 export interface MaterializeInstalledSkillRequest {
-  /** Installed-skill custody coordinate and retained root, without a save contract. */
+  /** Installed-skill ownership coordinate and retained root, without a save contract. */
   installation: { readonly libraryPath: string };
   skill: {
     readonly skillId: SkillIdType;
@@ -77,13 +77,13 @@ export interface MaterializeInstalledSkillRequest {
   declaredInvocation?: InvocationPolicy;
   invocationIntent: InvocationIntent;
   previous?: InstalledSkill;
-  /** Exact preview evidence authorizing Custody transfer of this unmanaged target. */
-  adoption?: InstalledSkillAdoption;
+  /** Exact preview evidence authorizing managing of this unmanaged target. */
+  manage?: ManageApproval;
   /**
-   * Take custody of an unmanaged directory at the destination when it already holds exactly the
+   * Take ownership of an unmanaged directory at the destination when it already holds exactly the
    * bytes this install would write. Adopting it adds SKIT's marker and changes nothing else.
    */
-  adoptIdentical?: boolean;
+  manageIdentical?: boolean;
   /** Exact preview evidence authorizing a changed managed installed skill as the selected Version. */
   replacement?: {
     projectionId: InstalledSkillIdType;
@@ -224,7 +224,7 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
 
 const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_digest;
 
-// Custody is the installed skill and Skill; a new selected Version is an ordinary rewrite, and the
+// Ownership is the installed skill and Skill; a new selected Version is an ordinary rewrite, and the
 // expected-digest check below is what detects local edits.
 const markerMatches = (
   marker: OwnershipMarker,
@@ -340,7 +340,7 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
       };
       const settled = () => projection;
       /**
-       * Commit custody of the selected Version and verify it. `marker` stamps equal bytes in place,
+       * Commit ownership of the selected Version and verify it. `marker` stamps equal bytes in place,
        * keeping whatever the hash leaves out; `replace` first moves the owned original into a
        * pending backup; `install` refuses a destination that appeared since it was observed.
        */
@@ -400,8 +400,8 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
         const realDestination = yield* fs
           .realPath(destination)
           .pipe(Effect.orElseSucceed(() => resolve(destination)));
-        const adoptionPaths = request.adoption
-          ? [request.adoption.path, ...(request.adoption.equalPaths ?? [])]
+        const adoptionPaths = request.manage
+          ? [request.manage.path, ...(request.manage.equalPaths ?? [])]
           : [];
         let adoptionMatchesDestination = false;
         for (const path of adoptionPaths)
@@ -417,22 +417,18 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
           sameMarker(marker, request.replacement.marker);
         if (replacementMatches) return yield* commit("marker", "replacement");
         if (!marker || !markerMatches(marker, request)) {
-          if (
-            markerInspection.kind === "absent" &&
-            request.adoption &&
-            adoptionMatchesDestination
-          ) {
-            if (observed !== request.adoption.observedHash)
-              return yield* new AdoptionTargetChanged({ path: destination });
+          if (markerInspection.kind === "absent" && request.manage && adoptionMatchesDestination) {
+            if (observed !== request.manage.observedHash)
+              return yield* new ManageTargetChanged({ path: destination });
             if (observed !== desiredHash)
-              return yield* new AdoptionContentMismatch({ path: destination });
-            // Equal content is adopted in place, keeping every entry the hash leaves out.
+              return yield* new ManageContentMismatch({ path: destination });
+            // Equal content is managed in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
           }
           // A destination inside a checkout is repository-owned even when `.git` is above the
           // skill directory (including worktrees, whose `.git` is a file).
           let repositoryOwned = false;
-          if (request.adoptIdentical) {
+          if (request.manageIdentical) {
             let directory = realDestination;
             while (true) {
               if (yield* exists(join(directory, ".git"))) {
@@ -444,12 +440,12 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
               directory = parent;
             }
           }
-          // Unasked adoption only takes a folder that is nothing more than the copy: the hash
+          // Unasked managing only takes a folder that is nothing more than the copy: the hash
           // leaves out `.git`, so a checkout with the same files, and its history, would
           // otherwise become SKIT's to move aside on disable.
           if (
             markerInspection.kind === "absent" &&
-            request.adoptIdentical &&
+            request.manageIdentical &&
             !repositoryOwned &&
             observed === desiredHash &&
             (yield* (yield* LinkStat).lstat(destination)).type === "Directory" &&
@@ -502,11 +498,11 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
 /**
  * Whether a recorded installed skill is still the one SKIT wrote.
  *
- * This is the custody question `retire` asks immediately before displacing anything, separated so
+ * This is the ownership question `retire` asks immediately before displacing anything, separated so
  * a caller can also ask it *first*. A batch may use that to refuse before changing any derived
  * directory.
  */
-export const installedSkillCustody = Effect.fn("Projection.custody")(function* (
+export const inspectInstalledSkill = Effect.fn("Projection.inspectInstalledSkill")(function* (
   projection: InstalledSkill,
 ): Effect.fn.Return<
   | { kind: "absent" }
@@ -543,13 +539,14 @@ const retireInstalledSkill = Effect.fn("Projection.retire")(function* (
   | PlatformError,
   TreeRequirements | TreeHasher
 > {
-  const custody = yield* installedSkillCustody(projection);
-  if (custody.kind === "absent") return { kind: "absent" as const };
-  if (custody.kind === "conflicted") {
-    if (onConflict === "report") return { kind: "conflicted" as const, observed: custody.observed };
+  const ownership = yield* inspectInstalledSkill(projection);
+  if (ownership.kind === "absent") return { kind: "absent" as const };
+  if (ownership.kind === "conflicted") {
+    if (onConflict === "report")
+      return { kind: "conflicted" as const, observed: ownership.observed };
     return yield* new InstalledSkillRetireConflict({ detail: conflictMessage });
   }
-  const { observed } = custody;
+  const { observed } = ownership;
   yield* backUp(projection, "retire");
   return {
     kind: "retired" as const,
@@ -632,19 +629,19 @@ const reproducible = Effect.fn("Projection.reproducible")(function* (
   return false;
 });
 /**
- * Unmanaged copies the operator approved taking custody of in place: the selected copy, and any
- * copies with identical bytes already at another target's destination. Each is adopted only while
- * its content still hashes to `observedHash`, so adopting one adds SKIT's marker and nothing else.
+ * Unmanaged copies the operator approved managing in place: the selected copy, and any
+ * copies with identical bytes already at another target's destination. Each is managed only while
+ * its content still hashes to `observedHash`, so managing one adds SKIT's marker and nothing else.
  */
-export interface InstalledSkillAdoption {
+export interface ManageApproval {
   readonly path: string;
   readonly equalPaths?: readonly string[];
   readonly observedHash: Digest;
 }
 
 export type InstalledSkillMutationError =
-  | AdoptionContentMismatch
-  | AdoptionTargetChanged
+  | ManageContentMismatch
+  | ManageTargetChanged
   | InstalledSkillFailure
   | NoSkillsDirectory
   | SkillsDirectoryNotWritable

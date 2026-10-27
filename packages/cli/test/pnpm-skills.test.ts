@@ -16,7 +16,7 @@ import { runSetup } from "../src/workflows/library/setup.js";
 import { SetupResult } from "../src/workflows/library/setup-contract.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import { setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
-import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
+import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
 import {
   retainLibrarySource,
   inspectLibrarySource,
@@ -385,7 +385,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
     const takeover = yield* Effect.result(
       home.owned(
-        applySetupLocalCustody({ bindings: home.bindings }, observed, [
+        manageSetupCopies({ bindings: home.bindings }, observed, [
           { name: "demo-guide", sourcePath: f.skill },
         ]),
       ),

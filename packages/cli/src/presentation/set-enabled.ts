@@ -47,7 +47,7 @@ export function renderSetEnabled(
     : "";
   const unmanaged = applied ? [] : (data.unmanaged_destinations ?? []);
   const unmanagedLines = unmanaged.length
-    ? `\nA folder SKIT does not manage is already there; enable adopts it only if it is identical, otherwise it is left in place:\n${unmanaged.map((folder) => `  ${folder.target} · ${folder.path}`).join("\n")}`
+    ? `\nA folder SKIT does not manage is already there; enable manages it only if it is identical, otherwise it is left in place:\n${unmanaged.map((folder) => `  ${folder.target} · ${folder.path}`).join("\n")}`
     : "";
   const completion = incomplete
     ? `\nInstalled copies need attention. ${application.failure?.message ?? "Reconciliation did not complete."}\n${application.failure?.remediation ?? "Inspect the copies, then preview and retry."}\nSaved Library revision: ${application.revision}`

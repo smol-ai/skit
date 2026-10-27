@@ -188,7 +188,7 @@ describe("experimental capability audit", () => {
       }).pipe(Effect.provide(testPlatformLayer)),
   );
 
-  it.effect("reports unretained and invalid ownership markers as custody findings", () =>
+  it.effect("reports unretained and invalid ownership markers as ownership findings", () =>
     Effect.gen(function* () {
       const root = yield* scratch("skit-audit-custody-");
       const home = join(root, "home");

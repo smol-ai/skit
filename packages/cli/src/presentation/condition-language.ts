@@ -16,7 +16,7 @@ export function conditionHeadline(code: string, fallback: string): string {
 /** What resolves a condition, where the resolution does not depend on the user's intent alone. */
 const conditionNextSteps: Readonly<Record<string, string>> = {
   PROJECTION_CONFLICT:
-    "A folder SKIT does not manage is where this skill's copy belongs. `skit enable <skill>` takes custody of it if its content matches; otherwise move it aside and enable again, or `skit disable <skill>` to leave it and drop SKIT's record.",
+    "A folder SKIT does not manage is where this skill's copy belongs. `skit enable <skill>` starts managing it if its content matches; otherwise move it aside and enable again, or `skit disable <skill>` to leave it and drop SKIT's record.",
 };
 
 export function conditionNextStep(code: string): string | undefined {

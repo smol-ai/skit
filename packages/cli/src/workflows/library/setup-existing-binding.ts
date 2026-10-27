@@ -1,8 +1,4 @@
-import {
-  approveLocalAdoption,
-  prepareLocalAdoption,
-  type LocalAdoptionOptions,
-} from "./local-adoption.js";
+import { approveManage, prepareManage, type ManageOptions } from "./manage-existing.js";
 import { Data, Effect } from "effect";
 import type { SetupResult } from "./setup-contract.js";
 
@@ -33,14 +29,14 @@ export class SetupExistingBindingInvalid
   }
 }
 
-/** Take custody using an exact existing Library Artifact, from the approved setup observation. */
+/** Take ownership using an exact existing Library Artifact, from the approved setup observation. */
 export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings")(function* (
-  options: LocalAdoptionOptions,
+  options: ManageOptions,
   current: SetupResult,
   selectedCopies: readonly SetupCopySelection[],
 ) {
   const selections = yield* Effect.forEach(selectedCopies, (selection) =>
-    approveLocalAdoption(
+    approveManage(
       selection,
       copyConflict(current, selection),
       (reason) => new SetupExistingBindingInvalid({ name: selection.name, reason }),
@@ -73,12 +69,12 @@ export const applySetupExistingBindings = Effect.fn("Setup.applyExistingBindings
     if (instance.scope !== "global" || !instance.harnesses.length)
       return yield* new SetupExistingBindingInvalid({ name, reason: "path-not-projection-target" });
 
-    const adoption = yield* prepareLocalAdoption(options, selection, {
+    const manage = yield* prepareManage(options, selection, {
       kind: "existing",
       subjectId: candidate.subjectId,
       observedHash,
     });
-    const bound = yield* adoption.apply();
+    const bound = yield* manage.apply();
     if (bound.result !== undefined) results.push(bound.result);
     recoveryDirectories.push(...bound.recoveryDirectories);
     warnings.push(...bound.warnings);

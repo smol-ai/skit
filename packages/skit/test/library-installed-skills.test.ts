@@ -117,7 +117,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
 const boundCollection = boundCollectionWith();
 
 it.effect(
-  "projects bound retained bytes, preserves a foreign target, and retires unbound custody",
+  "projects bound retained bytes, preserves a foreign target, and retires unbound ownership",
   () =>
     Effect.gen(function* () {
       const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
@@ -528,7 +528,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(storeLayer),
     );
-    // The copy already written at the new root is recorded, so a retry keeps its custody.
+    // The copy already written at the new root is recorded, so a retry keeps its ownership.
     assert.deepStrictEqual(after.projections.slice(0, 2), before.projections);
     assert.deepStrictEqual(
       after.projections.slice(2).map((projection) => [projection.path, projection.status]),
@@ -735,27 +735,29 @@ const divergingOn = (path: string, nth: number) => {
   });
 };
 
-it.effect("adopts equal content in place, keeping its excluded entries and empty directories", () =>
-  Effect.gen(function* () {
-    const { fs, targetRoot, load, project } = yield* projectionFixture();
-    const target = join(targetRoot, "review");
-    yield* fs.makeDirectory(join(target, ".git"), { recursive: true });
-    yield* fs.makeDirectory(join(target, "notes"));
-    yield* fs.writeFileString(join(target, ".git", "HEAD"), "ref: refs/heads/main\n");
-    yield* fs.writeFileString(join(target, "SKILL.md"), "raw Skill bytes\n");
-    yield* project({
-      root: targetRoot,
-      adoption: { path: target, observedHash: yield* deterministicTreeHash(target) },
-    });
-    assert.strictEqual(
-      yield* fs.readFileString(join(target, ".git", "HEAD")),
-      "ref: refs/heads/main\n",
-    );
-    assert.strictEqual((yield* fs.stat(join(target, "notes"))).type, "Directory");
-    assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
-    assert.strictEqual((yield* load).projections[0]?.status, "installed");
-    assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "manages equal content in place, keeping its excluded entries and empty directories",
+  () =>
+    Effect.gen(function* () {
+      const { fs, targetRoot, load, project } = yield* projectionFixture();
+      const target = join(targetRoot, "review");
+      yield* fs.makeDirectory(join(target, ".git"), { recursive: true });
+      yield* fs.makeDirectory(join(target, "notes"));
+      yield* fs.writeFileString(join(target, ".git", "HEAD"), "ref: refs/heads/main\n");
+      yield* fs.writeFileString(join(target, "SKILL.md"), "raw Skill bytes\n");
+      yield* project({
+        root: targetRoot,
+        manage: { path: target, observedHash: yield* deterministicTreeHash(target) },
+      });
+      assert.strictEqual(
+        yield* fs.readFileString(join(target, ".git", "HEAD")),
+        "ref: refs/heads/main\n",
+      );
+      assert.strictEqual((yield* fs.stat(join(target, "notes"))).type, "Directory");
+      assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
+      assert.strictEqual((yield* load).projections[0]?.status, "installed");
+      assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect(

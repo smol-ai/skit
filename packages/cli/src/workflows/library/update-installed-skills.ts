@@ -7,7 +7,7 @@ import {
   type DeviceBinding,
   type RepositoryBinding,
   type InstallDestination,
-  type InstalledSkillAdoption,
+  type ManageApproval,
   type SkillId,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
@@ -24,9 +24,9 @@ export interface UpdateInstalledSkillsOptions {
   readonly rootFor?: (target: InstallDestination) => string | undefined;
   readonly variantsPath: string;
   readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
-  readonly adoption?: InstalledSkillAdoption;
-  /** Adopt unmanaged copies that already hold exactly the bytes SKIT would install. */
-  readonly adoptIdentical?: boolean;
+  readonly manage?: ManageApproval;
+  /** Manage unmanaged copies that already hold exactly the bytes SKIT would install. */
+  readonly manageIdentical?: boolean;
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
   readonly includeRepositoryBindings?: boolean;
@@ -80,8 +80,8 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstall
         variantsPath: options.variantsPath,
         restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
         onlySkillIds: options.onlySkillIds,
-        ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
-        ...(options.adoptIdentical ? { adoptIdentical: true } : {}),
+        ...(options.manage === undefined ? {} : { manage: options.manage }),
+        ...(options.manageIdentical ? { manageIdentical: true } : {}),
       });
       outcomes.push({ target, scope: binding.scope });
     }

@@ -44,7 +44,7 @@ const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
   const interaction = yield* makeScriptedInteraction([]);
   const apply = setupApplyCommand({
     options,
-    localCustody: { bindings: home.bindings },
+    manageOptions: { bindings: home.bindings },
     planId: observed.onboarding.planId,
   }).pipe(Effect.provide(interaction.layer));
   return { fs, root, source, home, apply };
@@ -60,7 +60,7 @@ const refuse = (path: string) =>
   );
 
 it.effect(
-  "real setup persists each typed inverse before saving and captures original file custody",
+  "real setup persists each typed inverse before saving and captures original file ownership",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();

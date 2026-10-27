@@ -83,7 +83,7 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
         home.owned(
           setupApplyCommand({
             options,
-            localCustody: { bindings: home.bindings },
+            manageOptions: { bindings: home.bindings },
             ...apply,
           }).pipe(Effect.provide(interaction.layer)),
         ),
@@ -201,7 +201,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("applying the reviewed plan ID takes custody of every recommended copy", () =>
+it.effect("applying the reviewed plan ID starts managing every recommended copy", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ alias: false });
     const reviewed = yield* f.review;
@@ -291,7 +291,7 @@ it.effect("retiring aliases reports where the symlinks and their receipts were s
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("identical copies at each target are adopted in place, not left to conflict", () =>
+it.effect("identical copies at each target are managed in place, not left to conflict", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ alias: false, identical: true });
     const reviewed = yield* f.review;

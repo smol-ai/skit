@@ -358,7 +358,7 @@
         "check"
       ],
       "stability": "stable",
-      "summary": "Check retained Library custody or verified source changes.",
+      "summary": "Check retained Library files or verified source changes.",
       "effects": {
         "capabilities": [
           "filesystem.read",

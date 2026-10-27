@@ -30,7 +30,7 @@ import {
   type SetupOptions,
 } from "../src/workflows/library/setup.js";
 import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
-import { custodyAt, collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
+import { ownershipAt, collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
 
 const skillDocument = (name: string) =>
   `---\nname: ${name}\ndescription: ${name} skill\n---\n\n# ${name}\n`;
@@ -151,9 +151,9 @@ it.effect(
       expect(missing.instances.find((instance) => instance.aliases.includes(copy))?.owner).toEqual({
         kind: "unknown",
       });
-      expect(yield* custodyAt(copy)).toEqual({ custody: "unmanaged" });
+      expect(yield* ownershipAt(copy)).toEqual({ ownership: "unmanaged" });
       yield* f.fs.makeDirectory(join(copy, ".skit-ownership.json"));
-      expect(yield* Effect.result(custodyAt(copy))).toMatchObject({
+      expect(yield* Effect.result(ownershipAt(copy))).toMatchObject({
         _tag: "Failure",
         failure: { _tag: "PlatformError" },
       });
@@ -620,7 +620,7 @@ it.effect("plans equivalent loose installed skills and blocks divergent copies",
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("offers equivalent Codex native and shared-root installations for custody", () =>
+it.effect("offers equivalent Codex native and shared-root installations for ownership", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const source = join(f.root, ".codex", "skills", "shared");

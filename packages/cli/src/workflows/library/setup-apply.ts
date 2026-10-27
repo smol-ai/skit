@@ -12,7 +12,7 @@ import {
   type SkillId,
 } from "@smolai/skit-core";
 import { activeInstallDestinationsEffect, bindingRoot } from "../../projection/roots.js";
-import type { LocalAdoptionOptions } from "./local-adoption.js";
+import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
   SetupKnownSourceSelection,
@@ -22,7 +22,7 @@ import type {
 } from "./setup-contract.js";
 import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
 import { applySetupExistingBindings } from "./setup-existing-binding.js";
-import { applySetupLocalCustody } from "./setup-local-custody.js";
+import { manageSetupCopies } from "./setup-manage.js";
 import { importSetupCollections } from "./setup-import.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
 import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
@@ -43,14 +43,14 @@ export interface SetupApproval {
   readonly persistRoots: boolean;
   readonly imports: readonly SetupKnownSourceSelection[];
   readonly bindings: readonly SetupCopySelection[];
-  readonly custody: readonly SetupCopySelection[];
+  readonly ownership: readonly SetupCopySelection[];
   readonly removals: PreparedRecoveryMoves;
   readonly versionChoices?: readonly SetupVersionChoice[];
   readonly reconciliation?: readonly SetupReconciliationFact[];
 }
 
 export interface SetupApplyOptions {
-  readonly adoption: LocalAdoptionOptions;
+  readonly manage: ManageOptions;
   /** Runs each stage under its progress message. */
   readonly withStatus: <A, E, R>(
     message: string,
@@ -109,7 +109,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     // Only enabled global copies install into this device's skills directories. Prove those roots
     // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
     // read-only) fails the apply whole instead of leaving a Library with no copies behind.
-    const projectedCopies = [...approval.bindings, ...approval.custody].filter(
+    const projectedCopies = [...approval.bindings, ...approval.ownership].filter(
       (copy) =>
         copy.duplicateAction !== "retain-only" &&
         isSetupInstallDestination(
@@ -150,14 +150,14 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     const warnings: { name: string; message: string }[] = [];
     const recoveryDirectories: string[] = [];
     const reconciliationOutcomes: SetupReconciliationOutcome[] = [];
-    const adoption = {
-      ...options.adoption,
+    const manage = {
+      ...options.manage,
       recoveryOperationDirectory: approval.removals.operationDirectory,
     };
     yield* Effect.gen(function* () {
       if (
         approval.persistRoots ||
-        ((approval.imports.length || approval.custody.length) && !current.machineConfig.machineId)
+        ((approval.imports.length || approval.ownership.length) && !current.machineConfig.machineId)
       ) {
         const saved = yield* options.withStatus(
           current.machineConfig.machineId
@@ -194,19 +194,19 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           reconnects
             ? `Reconnecting ${reconnects} existing Library match${reconnects === 1 ? "" : "es"}`
             : "Keeping existing Library matches without enabling",
-          applySetupExistingBindings(adoption, current, approval.bindings),
+          applySetupExistingBindings(manage, current, approval.bindings),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
       }
-      if (approval.custody.length) {
+      if (approval.ownership.length) {
         const names =
-          approval.custody.length <= 5
-            ? `: ${approval.custody.map((selection) => selection.name).join(", ")}`
+          approval.ownership.length <= 5
+            ? `: ${approval.ownership.map((selection) => selection.name).join(", ")}`
             : "";
         const applied = yield* options.withStatus(
-          `Taking custody of ${approval.custody.length} local Skill${approval.custody.length === 1 ? "" : "s"}${names}`,
-          applySetupLocalCustody(adoption, current, approval.custody),
+          `Managing ${approval.ownership.length} existing local Skill${approval.ownership.length === 1 ? "" : "s"}${names}`,
+          manageSetupCopies(manage, current, approval.ownership),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);

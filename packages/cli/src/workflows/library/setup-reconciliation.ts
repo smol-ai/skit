@@ -29,7 +29,7 @@ import type {
   SetupVersionChoice,
   SetupReconciliationOutcome,
 } from "./setup-contract.js";
-import { checkSetupGlobalContent } from "../../library-application/setup-content-custody.js";
+import { checkSetupGlobalContent } from "../../library-application/setup-external-ownership.js";
 import { PlanIsStale } from "../../library/failures.js";
 
 export class SetupReconciliationRequired
@@ -87,7 +87,7 @@ export const setupReconciliationOutcomes = (
             : ("unchanged" as const),
   }));
 
-/** Compare the same byte owner used for writes with corroborated last-written custody. */
+/** Compare the same byte owner used for writes with corroborated last-written ownership. */
 export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(function* (
   state: LibraryState,
   roots: InventoryRootOptions,
@@ -163,7 +163,7 @@ export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(f
     }
     if (before.entry.type !== "Directory" || before.entry.markerType !== "File") {
       facts.push(
-        protect("The copy or its custody marker is no longer an independent regular entry"),
+        protect("The copy or its ownership marker is no longer an independent regular entry"),
       );
       continue;
     }
@@ -182,7 +182,7 @@ export const checkSetupReconciliation = Effect.fn("Setup.checkReconciliation")(f
       instance.owner.membership.kind !== "retained" ||
       instance.owner.membership.projectionId !== projection.projection_id
     ) {
-      facts.push(protect("Global reader scope and Library custody are not fully corroborated"));
+      facts.push(protect("Global reader scope and Library ownership are not fully corroborated"));
       continue;
     }
     if ((yield* Effect.result(checkSetupGlobalContent(projection.path)))._tag === "Failure") {

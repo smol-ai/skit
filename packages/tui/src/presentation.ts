@@ -515,7 +515,7 @@ export function detailPresentation(
           ? item.findingCodes?.some((code) =>
               ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
             )
-            ? "Inspect custody evidence; this legacy marker does not authorize removal"
+            ? "Inspect ownership evidence; this legacy marker does not authorize removal"
             : "Disable the installed skill and inspect its content"
           : "Inspect the warnings listed above",
   };

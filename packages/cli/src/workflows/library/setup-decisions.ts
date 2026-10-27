@@ -64,7 +64,7 @@ export type SetupCopyConflict =
       readonly replacesLink: boolean;
     };
 
-/** Eligible global copies have harness readers and no repository custody. */
+/** Eligible global copies have harness readers and no repository ownership. */
 export const isSetupInstallDestination = (
   instance: SetupSkillInstance | undefined,
 ): instance is SetupSkillInstance & { readonly scope: "global" } =>

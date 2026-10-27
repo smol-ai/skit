@@ -847,25 +847,30 @@ it.effect(
 
 // `skit add ~/.claude/skills/x` then `skit enable x` is how an agent improvises setup: the
 // destination already holds the user's own copy of the skill.
-it.effect("enabling adopts an unmanaged copy that already holds the bytes SKIT would install", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
-    yield* f.fs.writeFileString(join(f.destination, "alpha", "SKILL.md"), "# alpha\n");
-    const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
+it.effect(
+  "enabling manages an unmanaged copy that already holds the bytes SKIT would install",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
+      yield* f.fs.writeFileString(join(f.destination, "alpha", "SKILL.md"), "# alpha\n");
+      const plan = yield* f.home.owned(previewBindingChanges([f.request], f.home.bindings));
 
-    const [outcome] = yield* f.home.owned(applyBindingChanges(plan));
+      const [outcome] = yield* f.home.owned(applyBindingChanges(plan));
 
-    assert.deepStrictEqual(
-      outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
-      ["installed"],
-    );
-    assert.strictEqual((yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind, "valid");
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      assert.deepStrictEqual(
+        outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+        ["installed"],
+      );
+      assert.strictEqual(
+        (yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind,
+        "valid",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
-  "enabling never adopts a git checkout, even one holding the bytes SKIT would install",
+  "enabling never manages a git checkout, even one holding the bytes SKIT would install",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;

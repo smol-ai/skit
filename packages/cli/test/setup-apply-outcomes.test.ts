@@ -89,7 +89,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
             interactive: flags.interactive ?? true,
             dryRun: flags.dryRun ?? false,
             ...(flags.workDirFlag ? { workDirFlag: flags.workDirFlag } : {}),
-            localCustody: { bindings: home.bindings },
+            manageOptions: { bindings: home.bindings },
           }).pipe(
             Effect.provideServiceEffect(
               Prompter,
@@ -310,7 +310,7 @@ it.effect("a selected file changed after approval fails stale before any effect"
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// One scan after approval however many stages run: here machine identity, custody and a removal.
+// One scan after approval however many stages run: here machine identity, ownership and a removal.
 // The stages work from that scan and never observe again.
 it.effect("an approved apply scans once after approval, whatever stages it runs", () =>
   Effect.gen(function* () {
@@ -328,7 +328,7 @@ it.effect("an approved apply scans once after approval, whatever stages it runs"
 );
 
 // No stage observes again, so a selected copy changed after the apply-time scan, here while machine
-// identity is written ahead of custody, cannot pass as approved: custody checks its bytes first.
+// identity is written ahead of ownership, cannot pass as approved: ownership checks its bytes first.
 it.effect("bytes changed between the apply-time scan and a later stage fail stale", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
@@ -403,7 +403,7 @@ it.effect("a failed additive stage leaves every selected removal in place", () =
 );
 
 // Codex's default sandbox keeps `.agents` read-only inside its writable workspace. Setup must refuse
-// whole rather than adopt a copy into a Library whose installed skills it cannot then write.
+// whole rather than manage a copy into a Library whose installed skills it cannot then write.
 it.effect("an unwritable skills directory fails the apply before any stage writes", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
@@ -437,9 +437,9 @@ it.effect("a removal selection edited after the first additive stage stays in pl
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// A custody marker leaves the tree hash unchanged, so removal checks custody on its own: a copy
+// An ownership marker leaves the tree hash unchanged, so removal checks ownership on its own: a copy
 // that gains a marker after the apply-time scan, even an invalid one, is no longer removable.
-it.effect("a removal selection that gains a custody marker after the scan stays in place", () =>
+it.effect("a removal selection that gains an ownership marker after the scan stays in place", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const marker = join(f.path("gamma"), ".skit-ownership.json");

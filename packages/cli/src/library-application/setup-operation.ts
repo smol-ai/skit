@@ -190,7 +190,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     );
     const names = new Set([
       ...initial.skills.filter((skill) => boundIds.has(skill.skill_id)).map((skill) => skill.name),
-      ...[...approval.bindings, ...approval.custody]
+      ...[...approval.bindings, ...approval.ownership]
         .filter((copy) => copy.duplicateAction !== "retain-only")
         .map((copy) => copy.name),
     ]);
@@ -198,7 +198,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     for (const target of possibleTargets)
       for (const name of names)
         paths.add(join(bindingRoot(target, { kind: "global" }, approval.setup.inventory), name));
-    for (const copy of [...approval.bindings, ...approval.custody]) {
+    for (const copy of [...approval.bindings, ...approval.ownership]) {
       if (copy.duplicateAction === "retain-only") continue;
       paths.add(resolve(copy.sourcePath));
       for (const alias of copy.approvedAliases ?? []) paths.add(resolve(alias.path));

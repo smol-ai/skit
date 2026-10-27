@@ -159,7 +159,7 @@ function resolveConformance(
  * The author's intent for one Skill, per Harness, as the artifact states it.
  *
  * The SKIT declaration is the intent; native metadata is read only where none exists, which is how
- * a Skill adopted from the Agent Skills ecosystem still reports an author default. Read this from
+ * a Skill taken from the Agent Skills ecosystem still reports an author default. Read this from
  * the Library's retained copy, never an installed skill: a locally edited installed skill is not author intent.
  */
 export function resolveDeclaredInvocation(

@@ -13,7 +13,7 @@ import {
   bindingSkillIds,
   currentSkillVersion,
   mergeGlobalBindings,
-  installedSkillCustody,
+  inspectInstalledSkill,
   installedSkillName,
   installDestinationPathIdentity,
   repositorySelectsInstalledSkill,
@@ -227,8 +227,8 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
       relocating ||
       (selected !== undefined && selected.skill_version_id !== projection.skill_version_id);
     if (changing) {
-      const custody = yield* installedSkillCustody(original);
-      if (custody.kind === "conflicted") {
+      const ownership = yield* inspectInstalledSkill(original);
+      if (ownership.kind === "conflicted") {
         if (
           deferDeviceConflicts &&
           removing &&
@@ -247,7 +247,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
           projections.push({
             ...projection,
             status: "conflicted",
-            observed_digest: custody.observed,
+            observed_digest: ownership.observed,
           });
           continue;
         }
@@ -267,7 +267,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               ? { skill_version_id: selected.skill_version_id }
               : {}),
             status: "conflicted",
-            observed_digest: custody.observed,
+            observed_digest: ownership.observed,
           });
           continue;
         }

@@ -178,7 +178,7 @@ test("audit rows associate findings with their entries and partition plugins by 
   expect(report.skills[0]).not.toHaveProperty("findingCount");
 });
 
-test("details retain MCP launch evidence and custody-specific action guidance", () => {
+test("details retain MCP launch evidence and ownership-specific action guidance", () => {
   const model = auditPresentation(report);
   const mcp = model.sections.find((section) => section.key === "mcps")!.items[0]!;
   const details = detailPresentation(mcp, false);

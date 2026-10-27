@@ -402,11 +402,11 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
   if (hasCollisions)
     lines.push(
       "  Inspect the listed copies and their ownership before disabling or removing one.",
-      `  ${color.cyan("skit inventory")} ${color.dim("· inspect discovered copies and custody")}`,
+      `  ${color.cyan("skit inventory")} ${color.dim("· inspect discovered copies and ownership")}`,
     );
   else if (data.issues.length)
     lines.push(
-      `  ${color.cyan("skit inventory")} ${color.dim("· inspect affected paths and custody")}`,
+      `  ${color.cyan("skit inventory")} ${color.dim("· inspect affected paths and ownership")}`,
     );
   lines.push(
     `  ${color.cyan("skit doctor --json")} ${color.dim("· full lists, paths and native diagnostics")}`,

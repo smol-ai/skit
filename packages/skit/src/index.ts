@@ -35,7 +35,7 @@ export * from "./projection/policy.js";
 export {
   InstalledSkillFailure,
   inspectOwnershipMarker,
-  installedSkillCustody,
+  inspectInstalledSkill,
   installedSkillDisplaced,
   installedSkillName,
   withInstalledSkillMutation,
@@ -43,7 +43,7 @@ export {
   type InstalledSkillMutation,
   type NativeInstalledSkillContext,
   type InstalledSkillMutationError,
-  type InstalledSkillAdoption,
+  type ManageApproval,
 } from "./projection/mutation.js";
 export { inspectInstalledSkillBackups } from "./projection/backups.js";
 export { copyLocalTree } from "./platform/copy-tree.js";

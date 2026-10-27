@@ -28,7 +28,7 @@ export {
   SkillAssessmentAcceptance,
   SkitValidationDiagnostic,
 };
-export type { HarnessInstallStatus, CustodyIssue } from "./library/store/state-schema.js";
+export type { HarnessInstallStatus, OwnershipIssue } from "./library/store/state-schema.js";
 export {
   SKILL_EXAMPLE_SCHEMA_VERSION,
   SKIT_DESCRIPTOR_VERSION,
@@ -125,7 +125,7 @@ export const OwnershipMarker = Schema.Struct({
 });
 export type OwnershipMarker = typeof OwnershipMarker.Type;
 
-// Older markers named the Harness a copy was written for; custody never depended on it.
+// Older markers named the Harness a copy was written for; ownership never depended on it.
 const OwnershipMarkerFromV3 = OwnershipMarkerV3.pipe(
   Schema.decodeTo(OwnershipMarker, {
     decode: SchemaGetter.transform(({ harness: _harness, ...marker }) => ({

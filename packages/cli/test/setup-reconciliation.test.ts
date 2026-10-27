@@ -58,7 +58,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
   yield* home.owned(
     setupApplyCommand({
       options,
-      localCustody: { bindings: home.bindings },
+      manageOptions: { bindings: home.bindings },
       planId: initial.onboarding.planId,
     }).pipe(Effect.provide(interaction.layer)),
   );
@@ -90,7 +90,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
     return yield* home.owned(
       setupApplyCommand({
         options,
-        localCustody: { bindings: home.bindings },
+        manageOptions: { bindings: home.bindings },
         planId: observation.onboarding.planId,
       }).pipe(Effect.provide(interaction.layer)),
     );
@@ -207,7 +207,7 @@ it.effect(
 );
 
 it.effect(
-  "local-only edits stay active without a question, version change or custody rewrite",
+  "local-only edits stay active without a question, version change or ownership rewrite",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -256,7 +256,7 @@ it.effect("an explicit empty selection leaves existing pending updates untouched
     const observed = yield* f.observe;
     const input = {
       options: f.options,
-      localCustody: { bindings: f.home.bindings },
+      manageOptions: { bindings: f.home.bindings },
       planId: observed.onboarding.planId,
       selection: { sourceIds: [], copyPaths: [], removePaths: [] },
     };
@@ -293,7 +293,7 @@ it.effect("an explicit empty selection leaves existing pending updates untouched
 );
 
 it.effect(
-  "enabling one explicit setup selection cannot rewrite an unrelated copy with disputed custody",
+  "enabling one explicit setup selection cannot rewrite an unrelated copy with disputed ownership",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -318,7 +318,7 @@ it.effect(
       const before = (yield* f.home.durable).projections.find((item) => item.path === f.copy);
       const input = {
         options: f.options,
-        localCustody: { bindings: f.home.bindings },
+        manageOptions: { bindings: f.home.bindings },
         planId: observed.onboarding.planId,
         selection: { sourceIds: [], copyPaths: [newCopy], removePaths: [] },
       };
@@ -411,7 +411,7 @@ it.effect("a changed marker cannot redefine the Library baseline", () =>
 );
 
 it.effect(
-  "native deletion remains absent and a leaf symlink never grants custody of its target",
+  "native deletion remains absent and a leaf symlink never grants ownership of its target",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -557,7 +557,7 @@ for (const chosen of ["retained", "local"] as const) {
         expect(fact.status).toBe("competing");
         const input = {
           options: f.options,
-          localCustody: { bindings: f.home.bindings },
+          manageOptions: { bindings: f.home.bindings },
           planId: observed.onboarding.planId,
           selection: {
             sourceIds: [],
@@ -642,7 +642,7 @@ it.effect("a local version choice keeps a native-deleted sibling absent", () =>
     const observed = yield* f.observe;
     const input = {
       options: f.options,
-      localCustody: { bindings: f.home.bindings },
+      manageOptions: { bindings: f.home.bindings },
       planId: observed.onboarding.planId,
       selection: { sourceIds: [], copyPaths: [], removePaths: [], useCopyPaths: [f.copy] },
     };
@@ -678,7 +678,7 @@ it.effect(
       const observed = yield* f.observe;
       const input = {
         options: f.options,
-        localCustody: { bindings: f.home.bindings },
+        manageOptions: { bindings: f.home.bindings },
         planId: observed.onboarding.planId,
         selection: { sourceIds: [], copyPaths: [], removePaths: [], useCopyPaths: [f.copy] },
       };
@@ -748,7 +748,7 @@ it.effect("a settings-only work-dir call never applies pending installed updates
     const applied = yield* f.home.owned(
       setupCommand({
         options: f.options,
-        localCustody: { bindings: f.home.bindings },
+        manageOptions: { bindings: f.home.bindings },
         workDirFlag: work,
         interactive: false,
         dryRun: false,
@@ -849,7 +849,7 @@ it.effect(
       yield* f.home.owned(
         setupCommand({
           options: f.options,
-          localCustody: { bindings: f.home.bindings },
+          manageOptions: { bindings: f.home.bindings },
           interactive: true,
           dryRun: false,
         }).pipe(Effect.provide(interaction.layer)),

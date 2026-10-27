@@ -1,18 +1,14 @@
 import { Effect, Schema } from "effect";
 import { LibraryStore, FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data } from "effect";
-import {
-  approveLocalAdoption,
-  prepareLocalAdoption,
-  type LocalAdoptionOptions,
-} from "./local-adoption.js";
+import { approveManage, prepareManage, type ManageOptions } from "./manage-existing.js";
 import { SetupCopySelection, copyConflict, isSetupInstallDestination } from "./setup-decisions.js";
 import type { SetupResult } from "./setup-contract.js";
 
-const SetupLocalCustodySelections = Schema.Array(SetupCopySelection);
+const SetupManageSelections = Schema.Array(SetupCopySelection);
 
-export class SetupLocalCustodySelectionInvalid
-  extends Data.TaggedError("SetupLocalCustodySelectionInvalid")<{
+export class SetupManageSelectionInvalid
+  extends Data.TaggedError("SetupManageSelectionInvalid")<{
     name: string;
     reason:
       | "duplicate-selection"
@@ -35,20 +31,20 @@ export class SetupLocalCustodySelectionInvalid
   }
 }
 
-/** Apply each explicitly selected local-custody candidate from the approved setup observation. */
-export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
+/** Apply each explicitly selected local-ownership candidate from the approved setup observation. */
+export const manageSetupCopies = Effect.fn("Setup.manageCopies")(
   function* (
-    options: LocalAdoptionOptions,
+    options: ManageOptions,
     current: SetupResult,
     selectionInput: readonly SetupCopySelection[],
   ) {
-    const decoded = yield* Schema.decodeUnknownEffect(SetupLocalCustodySelections)(selectionInput);
+    const decoded = yield* Schema.decodeUnknownEffect(SetupManageSelections)(selectionInput);
     yield* (yield* LibraryStore).load;
     const selections = yield* Effect.forEach(decoded, (selection) =>
-      approveLocalAdoption(
+      approveManage(
         selection,
         copyConflict(current, selection),
-        (reason) => new SetupLocalCustodySelectionInvalid({ name: selection.name, reason }),
+        (reason) => new SetupManageSelectionInvalid({ name: selection.name, reason }),
       ),
     );
     const selectedCandidates = new Set<string>();
@@ -57,7 +53,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
     for (const selection of selections) {
       const selectionKey = `${selection.name}\0${selection.sourcePath}`;
       if (selectedCandidates.has(selectionKey))
-        return yield* new SetupLocalCustodySelectionInvalid({
+        return yield* new SetupManageSelectionInvalid({
           name: selection.name,
           reason: "duplicate-selection",
         });
@@ -66,7 +62,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
         (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
       );
       if (!candidate)
-        return yield* new SetupLocalCustodySelectionInvalid({
+        return yield* new SetupManageSelectionInvalid({
           name: selection.name,
           reason: "candidate-not-found",
         });
@@ -77,7 +73,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
         candidate.action !== "leave-alone" &&
         !(candidate.action === "blocked" && candidate.reason === "divergent-copies")
       )
-        return yield* new SetupLocalCustodySelectionInvalid({
+        return yield* new SetupManageSelectionInvalid({
           name: selection.name,
           reason: "candidate-not-manageable",
         });
@@ -85,7 +81,7 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
         (instance) => instance.path === selection.sourcePath,
       );
       if (!selectedInstance)
-        return yield* new SetupLocalCustodySelectionInvalid({
+        return yield* new SetupManageSelectionInvalid({
           name: selection.name,
           reason: "source-not-candidate",
         });
@@ -100,20 +96,20 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
             isSetupInstallDestination(instance),
         )
         .map((instance) => instance.path);
-      const adoption = yield* prepareLocalAdoption(options, selection, {
+      const manage = yield* prepareManage(options, selection, {
         kind: "retain",
         observedHash,
         ...(equalCopies.length ? { equalCopies } : {}),
         ...(candidate.action === "repository-owned" || !isSetupInstallDestination(selectedInstance)
           ? {}
           : {
-              custody: {
+              ownership: {
                 harnesses: selectedInstance.harnesses,
                 machineId: current.machineConfig.machineId,
               },
             }),
       });
-      const bound = yield* adoption.apply();
+      const bound = yield* manage.apply();
       recoveryDirectories.push(...bound.recoveryDirectories);
       warnings.push(...bound.warnings);
     }
@@ -121,10 +117,8 @@ export const applySetupLocalCustody = Effect.fn("Setup.applyLocalCustody")(
   },
   (effect) =>
     effect.pipe(
-      Effect.catchTag("LocalAdoptionInvalid", (error) =>
-        Effect.fail(
-          new SetupLocalCustodySelectionInvalid({ name: error.name, reason: error.reason }),
-        ),
+      Effect.catchTag("ManageInvalid", (error) =>
+        Effect.fail(new SetupManageSelectionInvalid({ name: error.name, reason: error.reason })),
       ),
     ),
 );

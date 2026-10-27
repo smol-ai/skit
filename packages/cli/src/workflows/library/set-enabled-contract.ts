@@ -29,7 +29,7 @@ export const SetEnabledPlan = Schema.Struct({
   repair: Schema.optionalKey(Schema.Boolean),
   shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /**
-   * Folders SKIT does not manage, already at destinations it would write. Enable adopts one only
+   * Folders SKIT does not manage, already at destinations it would write. Enable manages one only
    * when it holds exactly SKIT's copy; otherwise it leaves it in place, reports it `conflicted`,
    * and exits 12.
    */

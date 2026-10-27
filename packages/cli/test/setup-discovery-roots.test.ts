@@ -69,7 +69,7 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
           options,
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: home.bindings },
+          manageOptions: { bindings: home.bindings },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
