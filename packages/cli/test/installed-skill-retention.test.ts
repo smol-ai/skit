@@ -5,7 +5,7 @@ import {
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  projectBinding,
+  installEnabledSkills,
   skitLayer,
 } from "@smolai/skit-core";
 import { prepareInstalledSkillRetention } from "../src/workflows/library/installed-skill-retention.js";
@@ -69,7 +69,7 @@ const projectionFixture = Effect.gen(function* () {
   for (const target of ["agents", "claude"] as const)
     yield* writingTo(
       home,
-      projectBinding({
+      installEnabledSkills({
         target,
         root: rootByTarget[target],
         variantsPath: join(home, "variants"),

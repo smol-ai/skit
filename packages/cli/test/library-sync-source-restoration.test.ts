@@ -9,7 +9,7 @@ import {
   LibraryStore,
   libraryStoreLayer,
   retainedTreePath,
-  projectBinding,
+  installEnabledSkills,
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
@@ -143,7 +143,7 @@ it.effect(
             },
             restored,
           );
-          yield* projectBinding({
+          yield* installEnabledSkills({
             target: "agents",
             root: targetRoot,
             variantsPath: join(f.freshHome, "variants"),

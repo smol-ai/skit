@@ -25,7 +25,7 @@ export const SetupProbe = Schema.Struct({
 });
 export type SetupProbe = typeof SetupProbe.Type;
 
-export const SetupGitPreservation = Schema.Struct({
+export const SetupGitStatus = Schema.Struct({
   status: Schema.Literals([
     "committed",
     "modified",
@@ -38,7 +38,7 @@ export const SetupGitPreservation = Schema.Struct({
   ]),
   repository: Schema.optionalKey(Schema.String),
 });
-export type SetupGitPreservation = typeof SetupGitPreservation.Type;
+export type SetupGitStatus = typeof SetupGitStatus.Type;
 
 export const SetupSkillsLockEntry = Schema.Struct({
   name: Schema.String,
@@ -139,7 +139,7 @@ export const SetupSkillInstance = Schema.Struct({
   harnesses: Schema.Array(HarnessName),
   owner: SetupInstanceOwner,
   contentIdentity: SetupContentIdentity,
-  git: SetupGitPreservation,
+  git: SetupGitStatus,
   locks: Schema.Array(SetupLockMatch),
 });
 export type SetupSkillInstance = typeof SetupSkillInstance.Type;

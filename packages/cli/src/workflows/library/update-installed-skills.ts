@@ -1,8 +1,9 @@
 import {
   LibraryStore,
   deviceInstallationIntent,
-  projectBinding,
-  retireUnboundGlobalInstalledSkills,
+  installEnabledSkills,
+  leftoverSkills,
+  uninstallSkills,
   withLibraryWriter,
   type DeviceBinding,
   type RepositoryBinding,
@@ -35,24 +36,32 @@ export interface UpdateInstalledSkillsOptions {
 
 const targets = ["agents", "claude"] as const satisfies readonly InstallDestination[];
 
-const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstalledSkillsOptions) {
-  // Without routing this device's targets are unknown, not inactive: retire nothing for that.
+/**
+ * Bring every active install destination in line with what is enabled: uninstall the leftover
+ * global copies, then install each enabled setting's skills. Holds the Library writer.
+ */
+export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(function* (
+  options: UpdateInstalledSkillsOptions,
+) {
+  // Without routing this device's destinations are unknown, not inactive: uninstall nothing for that.
   const activeTargets =
     options.rootFor !== undefined
       ? targets.filter((target) => options.rootFor!(target) !== undefined)
       : options.roots !== undefined
         ? yield* activeInstallDestinationsEffect(options.roots)
         : targets;
-  // Copies at a former or inactive target are never wanted, whichever Bindings changed.
+  // Copies at a former or inactive destination are never wanted, whichever settings changed.
   const state = yield* (yield* LibraryStore).load;
   const intent = deviceInstallationIntent(state);
-  const retired = yield* retireUnboundGlobalInstalledSkills({
-    variantsPath: options.variantsPath,
-    activeTargets,
-    desiredBindings: intent.bindings,
-    inactiveOnly: options.onlyBindings !== undefined,
-    onlySkillIds: options.onlySkillIds,
-  });
+  const retired = yield* uninstallSkills(
+    leftoverSkills(state, {
+      activeDestinations: activeTargets,
+      enabled: intent.bindings,
+      inactiveOnly: options.onlyBindings !== undefined,
+      ...(options.onlySkillIds === undefined ? {} : { onlySkillIds: options.onlySkillIds }),
+    }),
+    { variantsPath: options.variantsPath, activeDestinations: activeTargets },
+  );
 
   let projected = 0;
   const bindings = options.includeRepositoryBindings
@@ -73,7 +82,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstall
               : undefined
             : bindingRoot(target, binding.scope, options.roots);
       if (root === undefined) continue;
-      projected += yield* projectBinding({
+      projected += yield* installEnabledSkills({
         target,
         scope: binding.scope,
         root,
@@ -87,11 +96,4 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (options: UpdateInstall
     }
   }
   return { projected, retired, outcomes };
-});
-
-/** Bring every active install destination in line with current Binding intent under write authority. */
-export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(function* (
-  options: UpdateInstalledSkillsOptions,
-) {
-  return yield* withLibraryWriter(reconcileWithinWrite(options));
-});
+}, withLibraryWriter);

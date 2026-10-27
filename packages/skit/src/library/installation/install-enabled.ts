@@ -9,8 +9,8 @@ import {
   type ManageApproval,
 } from "../../projection/mutation.js";
 import { pathIsWithin, installDestinationPathIdentity } from "../../platform/path-identity.js";
-import { InstalledSkillRetireConflict } from "../../failures.js";
-import { repositorySelectsInstalledSkill } from "./retire-unbound.js";
+import { UninstallConflict } from "../../failures.js";
+import { repositorySelectsInstalledSkill } from "./uninstall.js";
 import { installedSkillSource } from "./installed-skill-source.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { Digest, InstallDestination } from "../../vocabulary.js";
@@ -34,8 +34,8 @@ export class InstalledSkillInvalid
   }
 }
 
-/** Reconcile one Binding; return the number of Skill copies written. Caller owns the writer lock. */
-export const projectBinding = Effect.fn("Library.projectBinding")(function* (options: {
+/** Install every skill one enabled setting turns on into one install destination; return the copies written. Caller owns the writer lock. */
+export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(function* (options: {
   target: InstallDestination;
   scope?: { kind: "global" } | { kind: "repository"; root: string };
   root: string;
@@ -120,7 +120,7 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
   // Refuse an edited former copy before creating another installation or removing any old copy.
   for (const projection of former) {
     if ((yield* inspectInstalledSkill(projection)).kind === "conflicted")
-      return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(projection) });
+      return yield* new UninstallConflict({ detail: retirementMessage(projection) });
   }
   const result = yield* withInstalledSkillMutation(
     state,
@@ -141,7 +141,7 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
           // tried to install (a conflict). Disabling drops SKIT's record and leaves it in place. A
           // managed copy edited since SKIT wrote it is refused, so no edit is lost.
           const marker = yield* inspectOwnershipMarker(existing.path);
-          yield* mutation.retire(
+          yield* mutation.uninstall(
             existing,
             marker.kind === "absent" ? "report" : "throw",
             `Refusing to disable ${skill.name}: ${existing.path} was edited after SKIT wrote it`,
@@ -215,10 +215,10 @@ export const projectBinding = Effect.fn("Library.projectBinding")(function* (opt
         // Finish the whole installation batch before removing any former working copy.
         for (const old of toRetire) {
           if ((yield* inspectInstalledSkill(old)).kind === "conflicted")
-            return yield* new InstalledSkillRetireConflict({ detail: retirementMessage(old) });
+            return yield* new UninstallConflict({ detail: retirementMessage(old) });
         }
         for (const old of toRetire) {
-          yield* mutation.retire(old, "throw", retirementMessage(old));
+          yield* mutation.uninstall(old, "throw", retirementMessage(old));
           const index = mutation.state.projections.findIndex(
             (candidate) => candidate.projection_id === old.projection_id,
           );

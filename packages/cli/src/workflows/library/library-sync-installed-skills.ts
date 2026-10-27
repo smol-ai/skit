@@ -322,7 +322,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
  * Keep old references durable until portable state and ancestry can be saved together.
  * Saves only onto `current`, the state sync planned from, and returns the state it saved.
  */
-const retireSyncInstalledSkills = Effect.fn("Library.sync.retireInstalledSkills")(function* (
+const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
   plan: SyncInstalledSkillPlan,
   current: LibraryState,
 ) {
@@ -342,7 +342,7 @@ const retireSyncInstalledSkills = Effect.fn("Library.sync.retireInstalledSkills"
         for (const id of plan.retire) {
           const projection = mutation.state.projections.find((item) => item.projection_id === id);
           if (projection === undefined) continue;
-          const outcome = yield* mutation.retire(
+          const outcome = yield* mutation.uninstall(
             projection,
             "throw",
             `Refusing to remove modified Skill at ${projection.path}`,
@@ -403,7 +403,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
             const retirement =
               plan === undefined
                 ? { retired: 0, state: baseline }
-                : yield* retireSyncInstalledSkills(plan, baseline);
+                : yield* uninstallForSync(plan, baseline);
             const blended = yield* blendRestoredState(
               { ...aligned, projections: [...(plan?.projections ?? [])] },
               restored,

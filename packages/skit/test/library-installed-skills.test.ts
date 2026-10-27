@@ -8,9 +8,9 @@ import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { retainedTreePath } from "../src/library/retention/retain-tree.js";
-import { projectBinding } from "../src/library/installation/project-binding.js";
+import { installEnabledSkills } from "../src/library/installation/install-enabled.js";
 import { removeCollection } from "../src/library/installation/remove.js";
-import { retireUnboundGlobalInstalledSkills } from "../src/library/installation/retire-unbound.js";
+import { leftoverSkills, uninstallSkills } from "../src/library/installation/uninstall.js";
 import { retainChangedInstalledSkill, importCollection } from "../src/library/import-collection.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Digest } from "../src/vocabulary.js";
@@ -29,6 +29,27 @@ import {
   installedSkillWorkDirectory,
 } from "../src/projection/backups.js";
 import { inspectOwnershipMarker, withInstalledSkillMutation } from "../src/projection/mutation.js";
+
+/** Uninstall the leftover global copies, as updating installed skills does. */
+const uninstallLeftovers = (options: {
+  variantsPath: string;
+  activeTargets: Parameters<typeof leftoverSkills>[1]["activeDestinations"];
+  desiredBindings?: Parameters<typeof leftoverSkills>[1]["enabled"];
+  inactiveOnly?: boolean;
+  onlySkillIds?: Parameters<typeof leftoverSkills>[1]["onlySkillIds"];
+}) =>
+  Effect.gen(function* () {
+    const state = yield* (yield* LibraryStore).load;
+    return yield* uninstallSkills(
+      leftoverSkills(state, {
+        activeDestinations: options.activeTargets,
+        ...(options.desiredBindings === undefined ? {} : { enabled: options.desiredBindings }),
+        ...(options.inactiveOnly === undefined ? {} : { inactiveOnly: options.inactiveOnly }),
+        ...(options.onlySkillIds === undefined ? {} : { onlySkillIds: options.onlySkillIds }),
+      }),
+      { variantsPath: options.variantsPath, activeDestinations: options.activeTargets },
+    );
+  });
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -125,7 +146,7 @@ it.effect(
       const target = join(targetRoot, "review");
       yield* fs.makeDirectory(target);
       yield* fs.writeFileString(join(target, "SKILL.md"), "foreign\n");
-      const project = projectBinding({
+      const project = installEnabledSkills({
         target: "agents",
         root: targetRoot,
         variantsPath: join(home, "variants"),
@@ -164,7 +185,7 @@ it.effect(
           ),
         ).pipe(Effect.provide(storeLayer)),
       );
-      const retire = retireUnboundGlobalInstalledSkills({
+      const retire = uninstallLeftovers({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents", "claude"],
       }).pipe(Effect.provide(storeLayer));
@@ -187,7 +208,7 @@ it.effect(
       });
       const projected = yield* withLibraryWriterLock(
         home,
-        projectBinding({
+        installEnabledSkills({
           target: "agents",
           root: targetRoot,
           variantsPath: join(home, "variants"),
@@ -207,7 +228,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
   Effect.gen(function* () {
     const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
     const target = join(targetRoot, "review");
-    const project = projectBinding({
+    const project = installEnabledSkills({
       target: "agents",
       root: targetRoot,
       variantsPath: join(home, "variants"),
@@ -294,7 +315,7 @@ it.effect("retires intact former roots when a globally bound Skill moves to a ne
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBinding({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
+        installEnabledSkills({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -325,7 +346,7 @@ for (const changed of ["bytes", "ownership"] as const)
         const project = (root: string) =>
           withLibraryWriterLock(
             home,
-            projectBinding({
+            installEnabledSkills({
               target: "agents",
               root,
               variantsPath: join(home, "variants"),
@@ -341,8 +362,8 @@ for (const changed of ["bytes", "ownership"] as const)
         const result = yield* project(newRoot).pipe(Effect.result);
         assert.strictEqual(Result.isFailure(result), true);
         if (Result.isFailure(result)) {
-          assert.strictEqual(result.failure._tag, "InstalledSkillRetireConflict");
-          if (result.failure._tag === "InstalledSkillRetireConflict")
+          assert.strictEqual(result.failure._tag, "UninstallConflict");
+          if (result.failure._tag === "UninstallConflict")
             assert.include(result.failure.detail, path);
         }
         assert.strictEqual(yield* fs.exists(join(newRoot, "review")), false);
@@ -392,7 +413,7 @@ for (const alias of [false, true])
         ) =>
           withLibraryWriterLock(
             home,
-            projectBinding({
+            installEnabledSkills({
               target,
               root,
               scope,
@@ -430,7 +451,7 @@ it.effect(
       const project = (root: string) =>
         withLibraryWriterLock(
           home,
-          projectBinding({
+          installEnabledSkills({
             target: "agents",
             root,
             variantsPath: join(home, "variants"),
@@ -466,7 +487,7 @@ it.effect("treats symlink aliases of the same root as one target without retirin
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBinding({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
+        installEnabledSkills({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -490,7 +511,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     const project = (root: string) =>
       withLibraryWriterLock(
         home,
-        projectBinding({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
+        installEnabledSkills({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -548,13 +569,13 @@ it.effect("retires a bound Skill's copies at a target that is no longer active",
     ] as const)
       yield* withLibraryWriterLock(
         home,
-        projectBinding({ target, root, variantsPath: join(home, "variants") }).pipe(
+        installEnabledSkills({ target, root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
     const retired = yield* withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkills({
+      uninstallLeftovers({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
       }).pipe(Effect.provide(storeLayer)),
@@ -582,7 +603,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     ] as const)
       yield* withLibraryWriterLock(
         home,
-        projectBinding({ target, root, variantsPath: join(home, "variants") }).pipe(
+        installEnabledSkills({ target, root, variantsPath: join(home, "variants") }).pipe(
           Effect.provide(storeLayer),
         ),
       );
@@ -598,7 +619,7 @@ it.effect("a targeted reconcile retires only copies at inactive targets", () =>
     );
     const retired = yield* withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkills({
+      uninstallLeftovers({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
         inactiveOnly: true,
@@ -616,7 +637,7 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
     const claudeRoot = join(home, "claude", "skills");
     yield* withLibraryWriterLock(
       home,
-      projectBinding({
+      installEnabledSkills({
         target: "claude",
         root: claudeRoot,
         variantsPath: join(home, "variants"),
@@ -626,7 +647,7 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
     yield* fs.writeFileString(edited, "my edit\n");
     const retire = withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkills({
+      uninstallLeftovers({
         variantsPath: join(home, "variants"),
         activeTargets: ["agents"],
         inactiveOnly: true,
@@ -665,19 +686,19 @@ const projectionFixture = (second = false, emptyDirectories: readonly string[] =
         ).pipe(Effect.provide(storeLayer)),
       );
     const project = (
-      options: Omit<Parameters<typeof projectBinding>[0], "target" | "variantsPath"> = {
+      options: Omit<Parameters<typeof installEnabledSkills>[0], "target" | "variantsPath"> = {
         root: targetRoot,
       },
     ) =>
       withLibraryWriterLock(
         home,
-        projectBinding({ target: "agents", variantsPath, ...options }).pipe(
+        installEnabledSkills({ target: "agents", variantsPath, ...options }).pipe(
           Effect.provide(storeLayer),
         ),
       );
     const retire = withLibraryWriterLock(
       home,
-      retireUnboundGlobalInstalledSkills({ variantsPath, activeTargets: ["agents"] }).pipe(
+      uninstallLeftovers({ variantsPath, activeTargets: ["agents"] }).pipe(
         Effect.asVoid,
         Effect.provide(storeLayer),
       ),
@@ -949,7 +970,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
         }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
     );
 
-for (const batch of ["retire-unbound", "remove-collection"] as const)
+for (const batch of ["uninstall", "remove-collection"] as const)
   it.effect(
     `records the copies a failed ${batch} batch already retired, so none reads as a native deletion`,
     () =>
@@ -960,10 +981,8 @@ for (const batch of ["retire-unbound", "remove-collection"] as const)
         const [first, second] = state.projections;
         assert.ok(first && second);
         yield* fs.writeFileString(join(second.path, "SKILL.md"), "my edit\n");
-        if (batch === "retire-unbound") yield* edit(unbound);
-        const failed = yield* (batch === "retire-unbound" ? retire : remove(state)).pipe(
-          Effect.result,
-        );
+        if (batch === "uninstall") yield* edit(unbound);
+        const failed = yield* (batch === "uninstall" ? retire : remove(state)).pipe(Effect.result);
         assert.strictEqual(Result.isFailure(failed), true);
         // A failed removal keeps the Collection; only the copy it moved aside is recorded.
         assert.deepStrictEqual((yield* load).collections, state.collections);
@@ -1069,7 +1088,7 @@ it.effect("a batch that changes nothing on disk or in state saves nothing", () =
     const { counter, layer } = countingStore(storeLayer);
     yield* withLibraryWriterLock(
       home,
-      projectBinding({ target: "agents", variantsPath, root: targetRoot }).pipe(
+      installEnabledSkills({ target: "agents", variantsPath, root: targetRoot }).pipe(
         Effect.provide(layer),
       ),
     );
@@ -1090,7 +1109,7 @@ it.effect("an unchanged batch still saves onto its loaded state before settling 
     const { counter, layer } = countingStore(storeLayer);
     yield* withLibraryWriterLock(
       home,
-      projectBinding({ target: "agents", variantsPath, root: targetRoot }).pipe(
+      installEnabledSkills({ target: "agents", variantsPath, root: targetRoot }).pipe(
         Effect.provide(layer),
       ),
     );
@@ -1121,7 +1140,7 @@ it.effect("a backup is never settled against a state the Library has moved on fr
             originalsPath: store.originalsPath,
             save: store.save,
           },
-          (mutation) => mutation.retire(projection, "report", "unexpected conflict"),
+          (mutation) => mutation.uninstall(projection, "report", "unexpected conflict"),
         ),
       ).pipe(Effect.provide(storeLayer), Effect.flip),
     );
@@ -1138,7 +1157,7 @@ it.effect("the last published state stays the Library's across unchanged and cha
     const { targetRoot, storeLayer, variantsPath, load, project } = yield* projectionFixture();
     yield* project();
     const initial = yield* load;
-    const projectAgain = projectBinding({ target: "agents", variantsPath, root: targetRoot });
+    const projectAgain = installEnabledSkills({ target: "agents", variantsPath, root: targetRoot });
     yield* withLibraryWriter(
       Effect.gen(function* () {
         const store = yield* LibraryStore;
@@ -1161,7 +1180,7 @@ it.effect("the last published state stays the Library's across unchanged and cha
         assert.deepStrictEqual(yield* expected, changed);
         yield* current;
         yield* store.save(unbound(yield* expected), yield* expected);
-        yield* retireUnboundGlobalInstalledSkills({
+        yield* uninstallLeftovers({
           variantsPath,
           activeTargets: ["agents"],
         });

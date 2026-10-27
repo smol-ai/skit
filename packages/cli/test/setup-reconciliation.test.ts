@@ -4,7 +4,12 @@ import { Clock, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LibraryStore, libraryStateRevision, projectBinding, skitLayer } from "@smolai/skit-core";
+import {
+  LibraryStore,
+  libraryStateRevision,
+  installEnabledSkills,
+  skitLayer,
+} from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
@@ -144,7 +149,7 @@ it.effect(
               },
               state,
             );
-            yield* projectBinding({
+            yield* installEnabledSkills({
               target: "agents",
               root: f.agents,
               variantsPath: store.variantsPath,

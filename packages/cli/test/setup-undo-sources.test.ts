@@ -12,7 +12,7 @@ import {
   currentSkillVersion,
   libraryManifestFromLocalState,
   LibraryStore,
-  projectBinding,
+  installEnabledSkills,
   MachineSettings,
   retainedTreePath,
   sourceImports,
@@ -113,7 +113,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     yield* home.owned(
       writingTo(
         home.home,
-        projectBinding({
+        installEnabledSkills({
           target: "agents",
           root: bindingRoot("agents", { kind: "global" }, home.inventory),
           variantsPath: home.variantsPath,

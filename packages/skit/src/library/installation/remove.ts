@@ -76,7 +76,7 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
         )) {
           const skill = mutation.state.skills.find((item) => item.skill_id === projection.skill_id);
           if (skill === undefined) continue;
-          const outcome = yield* mutation.retire(
+          const outcome = yield* mutation.uninstall(
             projection,
             "throw",
             `Refusing to remove modified ${skill.name} at ${projection.path}`,

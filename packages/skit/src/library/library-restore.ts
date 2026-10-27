@@ -22,7 +22,7 @@ import {
   type LibraryManifest,
   type SnapshotArchive,
 } from "./library-contracts.js";
-import { repositorySelectsInstalledSkill } from "./installation/retire-unbound.js";
+import { repositorySelectsInstalledSkill } from "./installation/uninstall.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class RestoreInvalid

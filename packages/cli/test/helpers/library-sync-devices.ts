@@ -9,7 +9,7 @@ import {
   deterministicTreeHash,
   libraryStoreLayer,
   makeMachineId,
-  projectBinding,
+  installEnabledSkills,
   removeCollection,
   importCollection,
   withLibraryWriter,
@@ -199,7 +199,7 @@ export const devices = Effect.gen(function* () {
         scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
         projectionRoot = root,
       ) =>
-        projectBinding({
+        installEnabledSkills({
           target: "agents",
           scope,
           root: projectionRoot,

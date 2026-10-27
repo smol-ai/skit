@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { projectBinding } from "../src/library/installation/project-binding.js";
+import { installEnabledSkills } from "../src/library/installation/install-enabled.js";
 import { removeCollection } from "../src/library/installation/remove.js";
 import type { BindingEntry } from "../src/library/library-contracts.js";
 import { importCollection } from "../src/library/import-collection.js";
@@ -75,7 +75,7 @@ const upstream = Effect.gen(function* () {
     });
   const project = withLibraryWriterLock(
     home,
-    projectBinding({
+    installEnabledSkills({
       target: "agents",
       root,
       variantsPath: join(home, "variants"),

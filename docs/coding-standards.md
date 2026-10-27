@@ -36,6 +36,12 @@ that shape: let the producer build the final value through one constructor that
 does the checking. Two names for one thing ("entry" and "record", "observation"
 and "evidence") are a sign that one of them should not exist.
 
+Say one or many in the noun. A function acting on one thing takes the singular
+(`uninstallSkill(copy)`), one acting on several things it is given takes the
+plural (`uninstallSkills(copies)`), and one that also decides which things names
+its rule (`leftoverSkills(state)`, `installEnabledSkills(...)`). Prefer separating
+choosing from acting when the choice is useful on its own.
+
 Do not encode the type in the name. An Effect-returning function is not named
 `...Effect`; a schema is not named `...Schema` unless a plain value of the same
 name also exists.

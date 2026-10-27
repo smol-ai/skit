@@ -26,7 +26,7 @@ import {
   ManageTargetChanged,
   NoSkillsDirectory,
   OwnershipMarkerDisagrees,
-  InstalledSkillRetireConflict,
+  UninstallConflict,
   SkillsDirectoryNotWritable,
   UnsafeInstalledSkillBackups,
   UnsafeInstalledSkillName,
@@ -55,7 +55,7 @@ import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 
-export type RetireInstalledSkillResult =
+export type UninstallResult =
   | { kind: "absent" }
   | { kind: "conflicted"; observed: Digest }
   | { kind: "retired"; observed: Digest };
@@ -525,14 +525,14 @@ export const inspectInstalledSkill = Effect.fn("Projection.inspectInstalledSkill
   return { kind: "intact" as const, observed, marker };
 });
 
-const retireInstalledSkill = Effect.fn("Projection.retire")(function* (
+const uninstallSkill = Effect.fn("Projection.uninstall")(function* (
   projection: InstalledSkill,
   onConflict: "throw" | "report",
   conflictMessage: string,
   backUp: BackUp,
 ): Effect.fn.Return<
-  RetireInstalledSkillResult,
-  | InstalledSkillRetireConflict
+  UninstallResult,
+  | UninstallConflict
   | OwnershipMarkerDisagrees
   | UnsafeInstalledSkillBackups
   | TreeError
@@ -544,7 +544,7 @@ const retireInstalledSkill = Effect.fn("Projection.retire")(function* (
   if (ownership.kind === "conflicted") {
     if (onConflict === "report")
       return { kind: "conflicted" as const, observed: ownership.observed };
-    return yield* new InstalledSkillRetireConflict({ detail: conflictMessage });
+    return yield* new UninstallConflict({ detail: conflictMessage });
   }
   const { observed } = ownership;
   yield* backUp(projection, "retire");
@@ -647,7 +647,7 @@ export type InstalledSkillMutationError =
   | SkillsDirectoryNotWritable
   | UnsafeInstalledSkillName
   | OwnershipMarkerDisagrees
-  | InstalledSkillRetireConflict
+  | UninstallConflict
   | UnsafeInstalledSkillBackups
   | HarnessInvocationWriteFailure
   | TreeError
@@ -667,13 +667,12 @@ export interface InstalledSkillMutation<S extends InstalledSkillState = Installe
   readonly project: (
     request: Omit<MaterializeInstalledSkillRequest, "state">,
   ) => Effect.Effect<InstalledSkill, InstalledSkillMutationError, TreeRequirements | TreeHasher>;
-  readonly retire: (
+  readonly uninstall: (
     projection: InstalledSkill,
     onConflict: "throw" | "report",
     conflictMessage: string,
   ) => Effect.Effect<
-    | Exclude<RetireInstalledSkillResult, { kind: "retired" }>
-    | { kind: "retired"; observed: Digest },
+    Exclude<UninstallResult, { kind: "retired" }> | { kind: "retired"; observed: Digest },
     InstalledSkillMutationError,
     TreeRequirements | TreeHasher
   >;
@@ -745,9 +744,9 @@ export const withInstalledSkillMutation = Effect.fn("Projection.mutate")(functio
       }
       return result.projection;
     }),
-    retire: Effect.fn("Projection.retire")(function* (projection, onConflict, message) {
+    uninstall: Effect.fn("Projection.uninstall")(function* (projection, onConflict, message) {
       touched.set(projection.projection_id, projection);
-      const result = yield* retireInstalledSkill(projection, onConflict, message, backUp);
+      const result = yield* uninstallSkill(projection, onConflict, message, backUp);
       return result.kind === "retired"
         ? { kind: "retired" as const, observed: result.observed }
         : result;

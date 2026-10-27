@@ -7,7 +7,7 @@ import {
   hashParts,
   LibraryStore,
   prepareInstalledSkillRebuild,
-  projectBinding,
+  installEnabledSkills,
   retainChangedInstalledSkill,
   scopeBinding,
 } from "@smolai/skit-core";
@@ -130,7 +130,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const projection = retained.projections.find(
       (item) => item.projection_id === fact.projectionId,
     )!;
-    yield* projectBinding({
+    yield* installEnabledSkills({
       target: fact.target,
       scope: { kind: "global" },
       root: projection.root,

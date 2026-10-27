@@ -26,7 +26,7 @@ import type { SetupOptions } from "./setup.js";
 import type {
   SetupBrokenLink,
   SetupAuthoredCollection,
-  SetupGitPreservation,
+  SetupGitStatus,
   SetupRepositoryConfig,
   SetupSuppressed,
 } from "./setup-contract.js";
@@ -82,7 +82,7 @@ export interface SkillHit {
   readonly realPath: string;
   readonly name: string;
   readonly repository?: string;
-  readonly git: SetupGitPreservation;
+  readonly git: SetupGitStatus;
 }
 
 interface WalkResult {
@@ -303,12 +303,12 @@ const gitStatusRecords = (output: string) => {
   return records;
 };
 
-const preservationStatus = (
+const folderGitStatus = (
   repository: string,
   directory: string,
   tracked: ReadonlySet<string>,
   changed: readonly { code: string; path: string }[],
-): SetupGitPreservation => {
+): SetupGitStatus => {
   const document = posix.join(directory, "SKILL.md");
   const codes = changed
     .filter(
@@ -325,7 +325,7 @@ const preservationStatus = (
   const staged = codes.some((code) => ![" ", "?", "!"].includes(code[0] ?? " "));
   const modified = codes.some((code) => ![" ", "?", "!"].includes(code[1] ?? " "));
   const kinds = [hasTracked, ignored, untracked, staged, modified].filter(Boolean).length;
-  const status: SetupGitPreservation["status"] =
+  const status: SetupGitStatus["status"] =
     kinds > 1 && (ignored || untracked)
       ? "mixed"
       : staged
@@ -398,7 +398,7 @@ const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
       name: yield* skillNameAt(path),
       repository,
       git: Result.isSuccess(statusResult)
-        ? preservationStatus(repository, posix.dirname(document), tracked, changed)
+        ? folderGitStatus(repository, posix.dirname(document), tracked, changed)
         : { status: "unavailable", repository },
     });
   }

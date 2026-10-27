@@ -8,7 +8,7 @@ import {
   effectiveGlobalBindings,
   currentSkillVersion,
   prepareImport,
-  projectBinding,
+  installEnabledSkills,
   retainChangedInstalledSkill,
   retainedTreePath,
   versionBacking,
@@ -260,7 +260,7 @@ const applyPreparedInstalledSkillRetention = Effect.fn("Library.applyInstalledSk
           const coordinate = `${projection.target}\0${canonicalJson(binding.scope)}\0${projection.root}`;
           if (reconciled.has(coordinate)) continue;
           reconciled.add(coordinate);
-          yield* projectBinding({
+          yield* installEnabledSkills({
             target: projection.target,
             scope: binding.scope,
             root: projection.root,

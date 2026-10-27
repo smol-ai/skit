@@ -560,8 +560,8 @@ export class RetainedContentInvalid
  * or a rematerialization. The condition is the same one either way, and naming it means callers
  * match on that rather than on a shared CONFLICT code.
  */
-export class InstalledSkillRetireConflict
-  extends Data.TaggedError("InstalledSkillRetireConflict")<{
+export class UninstallConflict
+  extends Data.TaggedError("UninstallConflict")<{
     detail: string;
   }>
   implements SkitFailure

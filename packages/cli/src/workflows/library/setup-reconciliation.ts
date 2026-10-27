@@ -12,7 +12,7 @@ import {
   installedSkillDisplaced,
   repositorySelectsInstalledSkill,
   scopeBinding,
-  projectBinding,
+  installEnabledSkills,
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
@@ -301,7 +301,7 @@ export const applyRoutineSetupReconciliation = Effect.fn("Setup.applyRoutineReco
       const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
       if (evidence !== fact.evidence || current !== fact.currentHash)
         return yield* new PlanIsStale();
-      yield* projectBinding({
+      yield* installEnabledSkills({
         target: fact.target,
         scope: { kind: "global" },
         root: projection.root,

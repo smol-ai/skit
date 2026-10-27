@@ -26,34 +26,47 @@ export const repositorySelectsInstalledSkill = (state: LibraryState, projection:
   );
 
 /**
- * Retire owned installed skills nothing wants any more: their Skill lost its Binding, or their target
- * is inactive on this device or a former per-Harness root. Caller owns the writer lock.
+ * The global copies SKIT installed that no current setting asks for any more: their skill is no
+ * longer enabled, or their install destination is inactive on this device or a former per-Harness
+ * directory. Changes nothing.
  */
-export const retireUnboundGlobalInstalledSkills = Effect.fn(
-  "Library.retireUnboundGlobalProjections",
-)(function* (options: {
-  variantsPath: string;
-  activeTargets: readonly InstallDestination[];
-  desiredBindings?: readonly Binding[];
-  /** Retire only copies at inactive or former targets, leaving Binding changes to the caller. */
-  inactiveOnly?: boolean;
-  onlySkillIds?: readonly SkillId[];
-}) {
-  const store = yield* LibraryStore;
-  const loaded = yield* store.load;
-  const targets = loaded.projections.filter(
+export const leftoverSkills = (
+  state: LibraryState,
+  options: {
+    activeDestinations: readonly InstallDestination[];
+    /** The enabled settings to compare against; the state's own when omitted. */
+    enabled?: readonly Binding[];
+    /** Only copies at inactive or former destinations, leaving enable changes to the caller. */
+    inactiveOnly?: boolean;
+    onlySkillIds?: readonly SkillId[];
+  },
+): InstalledSkill[] =>
+  state.projections.filter(
     (projection) =>
       (options.onlySkillIds === undefined ||
         (options.onlySkillIds.includes(projection.skill_id) &&
-          !repositorySelectsInstalledSkill(loaded, projection))) &&
-      (!(options.activeTargets as readonly string[]).includes(projection.target) ||
+          !repositorySelectsInstalledSkill(state, projection))) &&
+      (!(options.activeDestinations as readonly string[]).includes(projection.target) ||
         (!options.inactiveOnly &&
-          !(options.desiredBindings ?? effectiveGlobalBindings(loaded)).some((binding) =>
-            bindingSkillIds(loaded, binding).includes(projection.skill_id),
+          !(options.enabled ?? effectiveGlobalBindings(state)).some((binding) =>
+            bindingSkillIds(state, binding).includes(projection.skill_id),
           ) &&
-          !repositorySelectsInstalledSkill(loaded, projection))),
+          !repositorySelectsInstalledSkill(state, projection))),
   );
-  if (targets.length === 0) return 0;
+
+/**
+ * Uninstall these installed skills: each copy SKIT still owns is backed up and its record removed.
+ * An edited copy at an active destination is refused; at an inactive or former destination it is
+ * kept and reported instead, so it cannot block every later update. Returns how many were
+ * uninstalled. Caller owns the writer lock.
+ */
+export const uninstallSkills = Effect.fn("Library.uninstallSkills")(function* (
+  copies: readonly InstalledSkill[],
+  options: { variantsPath: string; activeDestinations: readonly InstallDestination[] },
+) {
+  if (copies.length === 0) return 0;
+  const store = yield* LibraryStore;
+  const loaded = yield* store.load;
   const result = yield* withInstalledSkillMutation(
     loaded,
     {
@@ -64,35 +77,33 @@ export const retireUnboundGlobalInstalledSkills = Effect.fn(
     },
     (mutation) =>
       Effect.gen(function* () {
-        let retiredCount = 0;
-        for (const target of targets) {
+        let uninstalled = 0;
+        for (const copy of copies) {
           const projection = mutation.state.projections.find(
-            (item) => item.projection_id === target.projection_id,
+            (item) => item.projection_id === copy.projection_id,
           );
-          const skill = mutation.state.skills.find((item) => item.skill_id === target.skill_id);
+          const skill = mutation.state.skills.find((item) => item.skill_id === copy.skill_id);
           if (projection === undefined || skill === undefined) continue;
-          // An edited copy at an inactive or former target is kept and reported, not removed.
-          // Throwing would block every later reconciliation until someone edits the filesystem.
-          const inactive = !(options.activeTargets as readonly string[]).includes(
+          const inactive = !(options.activeDestinations as readonly string[]).includes(
             projection.target,
           );
-          const retired = yield* mutation.retire(
+          const outcome = yield* mutation.uninstall(
             projection,
             inactive ? "report" : "throw",
             `Refusing to remove modified ${skill.name} at ${projection.path}`,
           );
-          if (retired.kind === "conflicted") {
+          if (outcome.kind === "conflicted") {
             projection.status = "conflicted";
-            projection.observed_digest = retired.observed;
+            projection.observed_digest = outcome.observed;
             continue;
           }
-          if (retired.kind === "retired") retiredCount++;
+          if (outcome.kind === "retired") uninstalled++;
           const index = mutation.state.projections.findIndex(
             (item) => item.projection_id === projection.projection_id,
           );
           if (index >= 0) mutation.state.projections.splice(index, 1);
         }
-        return retiredCount;
+        return uninstalled;
       }),
   );
   return result.value;

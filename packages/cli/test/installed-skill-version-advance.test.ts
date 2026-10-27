@@ -7,7 +7,7 @@ import {
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  projectBinding,
+  installEnabledSkills,
   refreshLibraryInventory,
 } from "@smolai/skit-core";
 import { setLibraryBindings } from "./helpers/binding-changes.js";
@@ -71,7 +71,7 @@ const boundRawReview = Effect.gen(function* () {
   );
   const project = writingTo(
     home,
-    projectBinding({
+    installEnabledSkills({
       target: "agents",
       root: roots.codexRoot,
       variantsPath: join(home, "variants"),
