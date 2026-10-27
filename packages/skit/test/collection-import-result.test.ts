@@ -11,109 +11,104 @@ import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary } from "./helpers/library-store.js";
 
 for (const kind of ["observed", "authored"] as const) {
-  it.effect(
-    `${kind} retention returns a durable receipt on creation, no-op, and content reuse`,
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-retention-receipt-" });
-        const home = join(root, "library");
-        const source = join(root, "source");
-        const memberPath = "skills/review";
-        yield* fs.makeDirectory(join(source, memberPath), { recursive: true });
-        const bytes = "---\nname: review\ndescription: Review carefully\n---\nReview.\n";
-        yield* fs.writeFileString(join(source, memberPath, "SKILL.md"), bytes);
-        if (kind === "authored") {
-          yield* fs.writeFileString(
-            join(source, "skit.json"),
-            JSON.stringify({ slug: "tools", skills: [{ name: "review", path: memberPath }] }),
-          );
-          yield* fs.writeFileString(
-            join(source, "README.md"),
-            "Retain package documentation too.\n",
-          );
-        }
-        const machineId = makeMachineId();
-        const retain = Effect.fn("Test.retainWithReceipt")(function* (
-          path: string,
-          retainedAt: string,
-        ) {
-          const request = {
-            machineId,
-            source: { type: "local" as const, path },
-            input: path,
-            retainedAt,
-          };
-          return yield* Effect.scoped(
-            withLibraryWriter(
-              kind === "authored"
-                ? importAuthoredCollection({ ...request, root: path })
-                : importCollection({
-                    ...request,
-                    skills: [
-                      {
-                        name: "review",
-                        sourcePath: join(path, memberPath),
-                        relativePath: memberPath,
-                        observedHash: yield* deterministicTreeHash(join(path, memberPath)),
-                      },
-                    ],
-                    observations: [],
-                  }),
-            ).pipe(inLibrary(home)),
-          );
-        });
-
-        // Preparation has already finalized when the caller consumes this receipt.
-        const receipt = yield* retain(source, "2026-10-16T00:00:00.000Z");
-        const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
-        const state = yield* store.load;
-        const copy = state.retained_copies.find(
-          (candidate) => candidate.retained_copy_id === receipt.retainedCopyId,
+  it.effect(`${kind} import returns a durable result on creation, no-op, and content reuse`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-import-result-" });
+      const home = join(root, "library");
+      const source = join(root, "source");
+      const memberPath = "skills/review";
+      yield* fs.makeDirectory(join(source, memberPath), { recursive: true });
+      const bytes = "---\nname: review\ndescription: Review carefully\n---\nReview.\n";
+      yield* fs.writeFileString(join(source, memberPath, "SKILL.md"), bytes);
+      if (kind === "authored") {
+        yield* fs.writeFileString(
+          join(source, "skit.json"),
+          JSON.stringify({ slug: "tools", skills: [{ name: "review", path: memberPath }] }),
         );
-        assert.ok(copy);
-        assert.strictEqual(copy.digest, receipt.snapshotDigest);
-        assert.strictEqual(state.acquisitions[0]?.retained_copy_id, receipt.retainedCopyId);
-        assert.strictEqual(state.skills[0]?.skill_id, receipt.skills[0]?.skill_id);
-        const retainedRoot = collectionVersionPath(store.originalsPath, receipt.snapshotDigest);
-        assert.strictEqual(yield* originalTreeHash(retainedRoot), receipt.snapshotDigest);
-        const member = receipt.members[0];
-        assert.ok(member);
-        assert.strictEqual(member.name, "review");
-        assert.strictEqual(member.sourcePath, memberPath);
-        assert.strictEqual(copy.members[0]?.artifact_digest, member.artifactDigest);
+        yield* fs.writeFileString(join(source, "README.md"), "Retain package documentation too.\n");
+      }
+      const machineId = makeMachineId();
+      const retain = Effect.fn("Test.importWithResult")(function* (
+        path: string,
+        retainedAt: string,
+      ) {
+        const request = {
+          machineId,
+          source: { type: "local" as const, path },
+          input: path,
+          retainedAt,
+        };
+        return yield* Effect.scoped(
+          withLibraryWriter(
+            kind === "authored"
+              ? importAuthoredCollection({ ...request, root: path })
+              : importCollection({
+                  ...request,
+                  skills: [
+                    {
+                      name: "review",
+                      sourcePath: join(path, memberPath),
+                      relativePath: memberPath,
+                      observedHash: yield* deterministicTreeHash(join(path, memberPath)),
+                    },
+                  ],
+                  observations: [],
+                }),
+          ).pipe(inLibrary(home)),
+        );
+      });
+
+      // Preparation has already finalized when the caller consumes this result.
+      const imported = yield* retain(source, "2026-10-16T00:00:00.000Z");
+      const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
+      const state = yield* store.load;
+      const copy = state.retained_copies.find(
+        (candidate) => candidate.retained_copy_id === imported.retainedCopyId,
+      );
+      assert.ok(copy);
+      assert.strictEqual(copy.digest, imported.snapshotDigest);
+      assert.strictEqual(state.acquisitions[0]?.retained_copy_id, imported.retainedCopyId);
+      assert.strictEqual(state.skills[0]?.skill_id, imported.skills[0]?.skill_id);
+      const retainedRoot = collectionVersionPath(store.originalsPath, imported.snapshotDigest);
+      assert.strictEqual(yield* originalTreeHash(retainedRoot), imported.snapshotDigest);
+      const member = imported.members[0];
+      assert.ok(member);
+      assert.strictEqual(member.name, "review");
+      assert.strictEqual(member.sourcePath, memberPath);
+      assert.strictEqual(copy.members[0]?.artifact_digest, member.artifactDigest);
+      assert.strictEqual(
+        yield* originalTreeHash(join(retainedRoot, member.sourcePath)),
+        member.sourceDigest,
+      );
+      assert.strictEqual(
+        yield* fs.readFileString(join(retainedRoot, member.sourcePath, "SKILL.md")),
+        bytes,
+      );
+      if (kind === "authored")
         assert.strictEqual(
-          yield* originalTreeHash(join(retainedRoot, member.sourcePath)),
-          member.sourceDigest,
+          yield* fs.readFileString(join(retainedRoot, "README.md")),
+          "Retain package documentation too.\n",
         );
-        assert.strictEqual(
-          yield* fs.readFileString(join(retainedRoot, member.sourcePath, "SKILL.md")),
-          bytes,
-        );
-        if (kind === "authored")
-          assert.strictEqual(
-            yield* fs.readFileString(join(retainedRoot, "README.md")),
-            "Retain package documentation too.\n",
-          );
 
-        const before = yield* fs.readFileString(join(home, "state.json"));
-        const repeated = yield* retain(source, "2026-10-16T01:00:00.000Z");
-        assert.strictEqual(receipt.action, "added");
-        assert.deepStrictEqual(repeated, { ...receipt, action: "unchanged" });
-        assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
+      const before = yield* fs.readFileString(join(home, "state.json"));
+      const repeated = yield* retain(source, "2026-10-16T01:00:00.000Z");
+      assert.strictEqual(imported.action, "added");
+      assert.deepStrictEqual(repeated, { ...imported, action: "unchanged" });
+      assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
 
-        const otherSource = join(root, "other-source");
-        yield* fs.copy(source, otherSource);
-        const reused = yield* retain(otherSource, "2026-10-16T02:00:00.000Z");
-        assert.strictEqual(reused.action, "added");
-        assert.strictEqual(reused.retainedCopyId, receipt.retainedCopyId);
-        assert.strictEqual(reused.snapshotDigest, receipt.snapshotDigest);
-        assert.notStrictEqual(reused.collection.collection_id, receipt.collection.collection_id);
-        const final = yield* store.load;
-        assert.strictEqual(final.retained_copies.length, 1);
-        assert.strictEqual(final.collections.length, 2);
-        assert.strictEqual(final.acquisitions.length, 2);
-      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      const otherSource = join(root, "other-source");
+      yield* fs.copy(source, otherSource);
+      const reused = yield* retain(otherSource, "2026-10-16T02:00:00.000Z");
+      assert.strictEqual(reused.action, "added");
+      assert.strictEqual(reused.retainedCopyId, imported.retainedCopyId);
+      assert.strictEqual(reused.snapshotDigest, imported.snapshotDigest);
+      assert.notStrictEqual(reused.collection.collection_id, imported.collection.collection_id);
+      const final = yield* store.load;
+      assert.strictEqual(final.retained_copies.length, 1);
+      assert.strictEqual(final.collections.length, 2);
+      assert.strictEqual(final.acquisitions.length, 2);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 }
 

@@ -234,7 +234,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("competing changes fail usefully before any update or inverse receipt is written", () =>
+it.effect("competing changes fail usefully before any update or inverse record is written", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.update;

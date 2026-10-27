@@ -238,7 +238,7 @@ export class InstalledSkillWouldReplaceLink
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
   readonly remediation =
-    "Remove the link and enable again, or run `skit setup` and choose `--duplicates retire-aliases` to replace it with a recovery receipt.";
+    "Remove the link and enable again, or run `skit setup` and choose `--duplicates retire-aliases` to back it up with a move record.";
   get message() {
     return `Enabling would replace the link at ${this.links.join(", ")} with SKIT's copy, so both cannot be kept`;
   }

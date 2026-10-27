@@ -134,7 +134,7 @@ it.effect(
         /^[a-f0-9-]{36}$/.test(name),
       );
       const recovery = join(removed, directories[0], batch);
-      const receipt = yield* Schema.decodeUnknownEffect(
+      const moveRecord = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(
           Schema.Struct({
             entries: Schema.Array(
@@ -147,13 +147,13 @@ it.effect(
           }),
         ),
       )(yield* f.fs.readFileString(join(recovery, "receipt.json")));
-      const directory = receipt.entries.find((entry) => entry.type === "Directory")!;
+      const directory = moveRecord.entries.find((entry) => entry.type === "Directory")!;
       expect(yield* f.fs.readDirectory(directory.recoveryPath)).toContain("empty");
       expect(yield* f.fs.readFileString(join(directory.recoveryPath, ".DS_Store"))).toBe(
         "incidental bytes",
       );
       expect((yield* f.home.durable).collections).toHaveLength(0);
-      for (const entry of receipt.entries) yield* f.fs.rename(entry.recoveryPath, entry.path);
+      for (const entry of moveRecord.entries) yield* f.fs.rename(entry.recoveryPath, entry.path);
       expect(yield* f.fs.readLink(f.link)).toBe(f.source);
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toContain("Copy contents");
     }).pipe(Effect.provide(skitLayer)),

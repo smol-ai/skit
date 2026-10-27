@@ -38,7 +38,7 @@ const RecoveryEntry = Schema.Struct({
 });
 interface RecoveryEntry extends Schema.Schema.Type<typeof RecoveryEntry> {}
 const LegacyEntry = Schema.Struct({ ...EntryFields, moved: Schema.Boolean });
-const Receipt = Schema.Union([
+const MoveRecord = Schema.Union([
   Schema.Struct({ schemaVersion: Schema.Literal(1), entries: Schema.Array(LegacyEntry) }),
   Schema.Struct({ schemaVersion: Schema.Literal(2), entries: Schema.Array(RecoveryEntry) }),
 ]);
@@ -299,7 +299,7 @@ const missingStat = Effect.fn("Recovery.stat")(function* (path: string) {
     );
 });
 
-/** No symlink may redirect a receipt or archive container; the configured home may be an alias. */
+/** No symlink may redirect a move record or archive container; the configured home may be an alias. */
 const checkedDirectory = Effect.fn("Recovery.directory")(function* (path: string) {
   const links = yield* LinkStat;
   if ((yield* links.identity.lstat(path)).type !== "Directory")
@@ -350,23 +350,23 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   yield* checkedDirectory(removed);
   const directory = join(removed, operationId);
   yield* checkedDirectory(directory);
-  const legacyReceipt = yield* missingStat(join(directory, "receipt.json"));
+  const legacyMoveRecord = yield* missingStat(join(directory, "receipt.json"));
   const metadata: string[] = [];
-  const names = legacyReceipt ? [] : (yield* fs.readDirectory(directory)).sort();
+  const names = legacyMoveRecord ? [] : (yield* fs.readDirectory(directory)).sort();
   for (const name of names.filter((name) => name === "setup.json" || name === "complete.json")) {
     const path = join(directory, name);
     if ((yield* links.identity.lstat(path)).type !== "File")
       return yield* new RecoveryInvalid({ detail: `Redirected setup evidence at ${path}` });
     metadata.push(yield* fs.readFileString(path));
   }
-  const batches = legacyReceipt
+  const batches = legacyMoveRecord
     ? [directory]
     : names
         .filter((name) => name !== "setup.json" && name !== "complete.json")
         .map((id) => join(directory, id));
   const facts: (typeof RecoveryFact.Type)[] = [];
   const witnesses: string[] = [];
-  const receipts: string[] = [...metadata];
+  const moveRecords: string[] = [...metadata];
   const content: { original: string | undefined; saved: string | undefined }[] = [];
   const evidence: unknown[] = [...metadata];
   let legacy = false;
@@ -374,23 +374,27 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   for (const batch of batches) {
     yield* checkedDirectory(batch);
     evidence.push({ batch, identity: yield* links.identity.lstat(batch) });
-    const receiptPath = join(batch, "receipt.json");
-    // A crash before receipt publication left no authorized moves in this batch.
-    if (!(yield* missingStat(receiptPath))) continue;
-    if ((yield* links.identity.lstat(receiptPath)).type !== "File")
+    const moveRecordPath = join(batch, "receipt.json");
+    // A crash before the move record was written left no authorized moves in this batch.
+    if (!(yield* missingStat(moveRecordPath))) continue;
+    if ((yield* links.identity.lstat(moveRecordPath)).type !== "File")
       return yield* new RecoveryInvalid({
-        detail: `Receipt is not a regular file: ${receiptPath}`,
+        detail: `Move record is not a regular file: ${moveRecordPath}`,
       });
-    const raw = yield* fs.readFileString(receiptPath);
-    const receipt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Receipt))(raw).pipe(
-      Effect.mapError(() => new RecoveryInvalid({ detail: `Invalid receipt: ${receiptPath}` })),
+    const raw = yield* fs.readFileString(moveRecordPath);
+    const moveRecord = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MoveRecord))(
+      raw,
+    ).pipe(
+      Effect.mapError(
+        () => new RecoveryInvalid({ detail: `Invalid move record: ${moveRecordPath}` }),
+      ),
     );
     evidence.push(raw);
-    receipts.push(raw);
-    legacy ||= receipt.schemaVersion === 1;
-    for (const [index, storedEntry] of receipt.entries.entries()) {
+    moveRecords.push(raw);
+    legacy ||= moveRecord.schemaVersion === 1;
+    for (const [index, storedEntry] of moveRecord.entries.entries()) {
       const expectedArchive = join(batch, `${index + 1}-${basename(storedEntry.path)}`);
-      const logicalBatch = legacyReceipt
+      const logicalBatch = legacyMoveRecord
         ? join(resolve(home), "removed", operationId)
         : join(resolve(home), "removed", operationId, basename(batch));
       if (
@@ -398,7 +402,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         storedEntry.recoveryPath !==
           join(logicalBatch, `${index + 1}-${basename(storedEntry.path)}`)
       )
-        return yield* new RecoveryInvalid({ detail: `Unsafe archive path in ${receiptPath}` });
+        return yield* new RecoveryInvalid({ detail: `Unsafe archive path in ${moveRecordPath}` });
       const entry = { ...storedEntry, recoveryPath: expectedArchive };
       if (
         !isAbsolute(entry.path) ||
@@ -413,7 +417,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         (entry.type === "Directory" && entry.observedHash === undefined)
       )
         return yield* new RecoveryInvalid({
-          detail: `Unsafe or incomplete entry in ${receiptPath}`,
+          detail: `Unsafe or incomplete entry in ${moveRecordPath}`,
         });
       paths.add(entry.path);
       const parentStat = yield* missingStat(dirname(entry.path));
@@ -474,7 +478,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
               ? "Neither original nor saved entry exists"
               : original.exists && saved.matches
                 ? "Original destination is occupied; preserve both entries"
-                : "Saved or original entry differs from the receipt";
+                : "Saved or original entry differs from its move record";
       facts.push({
         name: entry.name,
         path: entry.path,
@@ -498,7 +502,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   return {
     inspection: { operationId, directory, planId, entries: facts, legacy },
     witnesses,
-    receipts,
+    moveRecords,
     content,
   };
 });
@@ -541,7 +545,7 @@ export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(funct
           yield* fs.rename(fact.recoveryPath, fact.path);
           const after = yield* readRecoveryOperation(home, operationId);
           if (
-            JSON.stringify(after.receipts) !== JSON.stringify(current.receipts) ||
+            JSON.stringify(after.moveRecords) !== JSON.stringify(current.moveRecords) ||
             after.witnesses.length !== current.witnesses.length ||
             after.witnesses.some((witness, i) => i !== index && witness !== current.witnesses[i]) ||
             after.inspection.entries[index]?.status !== "at-original" ||

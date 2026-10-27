@@ -271,7 +271,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("retiring aliases reports where the symlinks and their receipts were saved", () =>
+it.effect("retiring aliases reports where the symlinks and their move records were saved", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const f = yield* fixture({ alias: true });

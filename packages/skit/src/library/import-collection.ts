@@ -218,7 +218,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   const retainedCopyId = retainedCopy?.retained_copy_id ?? makeCollectionVersionId();
   // Return the identity and facts of this retained copy, including on an unchanged import.
   // These contain no scoped paths, so callers can consume them after preparation closes.
-  const receipt = {
+  const imported = {
     retainedCopyId,
     snapshotDigest: request.retainedDigest,
     members: request.facts,
@@ -250,7 +250,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     }) &&
     unchangedSkills.every((skill) => skill !== undefined)
   )
-    return { action: "unchanged" as const, collection, skills: unchangedSkills, ...receipt };
+    return { action: "unchanged" as const, collection, skills: unchangedSkills, ...imported };
   const previousCopy = state.retained_copies.find(
     (copy) => copy.retained_copy_id === previous?.retained_copy_id,
   );
@@ -325,10 +325,10 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ? ("updated" as const)
       : ("unchanged" as const);
   yield* store.save(successor, base);
-  return { action, collection, skills, ...receipt };
+  return { action, collection, skills, ...imported };
 });
 
-/** Retain observed bytes and return their receipt while the caller holds Library write authority. */
+/** Import scanned bytes and return what was imported while the caller holds Library write authority. */
 export const importCollection = Effect.fn("Library.importCollection")(function* (
   request: ImportRequest,
 ) {

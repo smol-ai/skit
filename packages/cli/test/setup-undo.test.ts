@@ -93,29 +93,27 @@ it.effect(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "undo of an explicit removal restores the original inode and recovery receipt state",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(true);
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const links = yield* LinkStat;
-          const receipt = yield* inspectRecoveryOperation(f.home.home, f.operationId);
-          expect(receipt.entries[0].status).toBe("saved");
-          const identity = yield* links.identity.lstat(receipt.entries[0].recoveryPath);
-          const preview = yield* prepareSetupUndo(f.operationId);
-          expect(preview.summary.conflicts).toEqual([]);
-          expect(preview.summary.files).toEqual([{ path: f.source, kind: "restore" }]);
-          expect((yield* preview.apply()).status).toBe("undone");
-          expect(yield* links.identity.lstat(f.source)).toEqual(identity);
-          expect(
-            (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
-          ).toBe("at-original");
-          expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer)),
+it.effect("undo of an explicit removal restores the original inode and move record state", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture(true);
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const links = yield* LinkStat;
+        const recovery = yield* inspectRecoveryOperation(f.home.home, f.operationId);
+        expect(recovery.entries[0].status).toBe("saved");
+        const identity = yield* links.identity.lstat(recovery.entries[0].recoveryPath);
+        const preview = yield* prepareSetupUndo(f.operationId);
+        expect(preview.summary.conflicts).toEqual([]);
+        expect(preview.summary.files).toEqual([{ path: f.source, kind: "restore" }]);
+        expect((yield* preview.apply()).status).toBe("undone");
+        expect(yield* links.identity.lstat(f.source)).toEqual(identity);
+        expect(
+          (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
+        ).toBe("at-original");
+        expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("undo refuses an occupied removal destination and redirected original parent", () =>
@@ -175,7 +173,7 @@ const refusedPublication = (path: string) =>
     }),
   );
 
-it.effect("an inverse receipt must save before any copy or intent changes", () =>
+it.effect("an inverse record must save before any copy or intent changes", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.home.owned(

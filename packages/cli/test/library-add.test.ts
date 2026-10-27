@@ -117,7 +117,7 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
 it.effect("reports the retained package when its source disappears after publication", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-add-receipt-" });
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-add-result-" });
     const source = join(root, "source");
     const home = join(root, "home");
     const memberPath = "skills/review";

@@ -57,7 +57,7 @@ import {
   readListingBudgets,
   type ListingBudget,
 } from "@smolai/skit-core";
-import { budgetReceipt } from "./budget/receipt";
+import { budgetDetails } from "./budget/details";
 import { createLibraryHost } from "./library-host";
 import { createRenderer, writeFrame } from "./snapshot";
 import { createInteractionController, type Overlay, type ScrollKey } from "./interaction";
@@ -70,7 +70,7 @@ import {
   listColors,
   panelColors,
   panelTitle,
-  receipt,
+  detailsBlock,
   sep,
   surface,
   tone,
@@ -87,7 +87,7 @@ import {
   type InventoryItem,
   type LibraryCollectionRow,
   type SkillNavigation,
-  type ReceiptField,
+  type DetailField,
 } from "./presentation";
 
 let libraryCollectionId: string | undefined;
@@ -236,8 +236,8 @@ function statusColor(status: AuditItem["status"]): string {
   }[status];
 }
 
-function receiptFields(fields: readonly ReceiptField[]) {
-  return receipt(
+function detailFields(fields: readonly DetailField[]) {
+  return detailsBlock(
     fields.map((field) =>
       kv(
         field.label,
@@ -547,7 +547,7 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
   } else {
     details.add(text("detail-name", item.name, { fg: statusColor(item.status) }));
     details.add(
-      new TextRenderable(renderer, { id: "detail-receipt", content: receiptFields(model.fields) }),
+      new TextRenderable(renderer, { id: "detail-fields", content: detailFields(model.fields) }),
     );
   }
   details.add(text("detail-summary", item.summary));
@@ -558,7 +558,7 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
     details.add(
       new TextRenderable(renderer, {
         id: "harness-listing-budget",
-        content: budgetReceipt(model.budget),
+        content: budgetDetails(model.budget),
       }),
     );
   }
@@ -934,11 +934,11 @@ function openConfirm(): void {
     contentOptions: { gap: 1, flexShrink: 0 },
   });
   scroll.add(text("library-confirm-summary", model.summary, { fg: ink.strong }));
-  const confirmReceipt = new TextRenderable(renderer, {
-    id: "library-confirm-receipt",
-    content: receiptFields(model.fields),
+  const confirmDetails = new TextRenderable(renderer, {
+    id: "library-confirm-details",
+    content: detailFields(model.fields),
   });
-  scroll.add(confirmReceipt);
+  scroll.add(confirmDetails);
   overlay.add(scroll);
   const confirmHelp = text("library-confirm-help", model.help, {
     fg: ink.faint,
@@ -953,7 +953,7 @@ function openConfirm(): void {
       scroll: (key) => scrollOverlay(scroll, key),
       update: (showSkills) => {
         const next = confirmationPresentation(pending, showSkills, isCompact());
-        confirmReceipt.content = receiptFields(next.fields);
+        confirmDetails.content = detailFields(next.fields);
         confirmHelp.content = next.help;
       },
     },

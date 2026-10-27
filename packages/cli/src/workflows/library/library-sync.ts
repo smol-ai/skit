@@ -160,12 +160,12 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
     // State and the base it was reconciled with are always saved together, never apart.
     const ancestryAt = (
-      receipt: { library_id: string; revision_id: string },
+      remote: { library_id: string; revision_id: string },
       reconciled: LibraryManifest,
     ) => ({
       origin: options.origin,
-      library_id: receipt.library_id,
-      revision_id: receipt.revision_id,
+      library_id: remote.library_id,
+      revision_id: remote.revision_id,
       base_manifest: normalizeLibraryManifest(reconciled),
     });
 

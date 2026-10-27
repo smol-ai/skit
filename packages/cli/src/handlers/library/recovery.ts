@@ -71,7 +71,7 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Inspect receipts and actual original/saved files without changing them.",
+    "Inspect the move records and the original and saved files without changing them.",
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },

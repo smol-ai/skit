@@ -113,7 +113,7 @@ it.effect("refuses a literal skit.library.v8 head as written by a newer SKIT", (
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("refuses a literal skit.library.v8 write receipt as written by a newer SKIT", () =>
+it.effect("refuses a literal skit.library.v8 write response as written by a newer SKIT", () =>
   Effect.gen(function* () {
     const current = yield* wire("portable-v7.json");
     const head = yield* wire("portable-v8.json");
@@ -151,7 +151,7 @@ it.effect("reads a missing, foreign or malformed manifest schema as an invalid r
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("writes the supported request body and decodes the literal receipt", () =>
+it.effect("writes the supported request body and decodes the literal response", () =>
   Effect.gen(function* () {
     const head = yield* wire("portable-v7.json");
     const { result, sent } = yield* exchange(

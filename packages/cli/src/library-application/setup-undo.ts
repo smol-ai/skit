@@ -72,25 +72,25 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         return yield* new RecoveryInvalid({ detail: "Unexpected setup undo evidence" });
       const path = join(undoDirectory, name);
       if ((yield* links.identity.lstat(path)).type !== "File")
-        return yield* new RecoveryInvalid({ detail: "Redirected setup undo receipt" });
+        return yield* new RecoveryInvalid({ detail: "Redirected setup undo record" });
       const raw = yield* fs.readFileString(path);
       attempts.push(raw);
       if (name.endsWith(".done.json")) {
         const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Done))(raw).pipe(
           Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo completion" })),
         );
-        const receiptPath = join(undoDirectory, name.replace(".done.json", ".json"));
-        if ((yield* links.identity.lstat(receiptPath)).type !== "File")
-          return yield* new RecoveryInvalid({ detail: "Missing undo receipt" });
-        const receipt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Attempt))(
-          yield* fs.readFileString(receiptPath),
-        ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo receipt" })));
-        if (receipt.planId !== value.planId)
-          return yield* new RecoveryInvalid({ detail: "Undo completion differs from its receipt" });
+        const attemptPath = join(undoDirectory, name.replace(".done.json", ".json"));
+        if ((yield* links.identity.lstat(attemptPath)).type !== "File")
+          return yield* new RecoveryInvalid({ detail: "Missing undo record" });
+        const attempt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Attempt))(
+          yield* fs.readFileString(attemptPath),
+        ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo record" })));
+        if (attempt.planId !== value.planId)
+          return yield* new RecoveryInvalid({ detail: "Undo completion differs from its record" });
         done = true;
       } else {
         const attempt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Attempt))(raw).pipe(
-          Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo receipt" })),
+          Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo record" })),
         );
         priorPreservations.push(attempt.preservationId);
       }

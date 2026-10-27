@@ -56,4 +56,4 @@ export function kv(label: string, value: string | TextChunk, width = 12): TextCh
   ];
 }
 
-export const receipt = (rows: TextChunk[][]): StyledText => new StyledText(rows.flat());
+export const detailsBlock = (rows: TextChunk[][]): StyledText => new StyledText(rows.flat());

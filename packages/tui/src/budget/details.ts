@@ -4,7 +4,7 @@ import type { ListingBudget } from "@smolai/skit-core";
 
 const amount = (value: number) => value.toLocaleString("en-US");
 
-export function budgetReceipt(budget: ListingBudget): StyledText {
+export function budgetDetails(budget: ListingBudget): StyledText {
   if (budget._tag === "Unavailable")
     return new StyledText([fg(tone.warning)("Unavailable\n"), fg(ink.muted)(budget.detail)]);
   const unit = budget.unit === "characters" ? "characters" : "budget tokens";

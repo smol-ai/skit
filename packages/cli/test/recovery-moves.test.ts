@@ -81,8 +81,8 @@ it.effect(
       const f = yield* recoveryFixture();
       expect(yield* f.fs.exists(f.plan.operationDirectory)).toBe(false);
       yield* f.plan.apply();
-      const receipt = yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"));
-      expect(receipt).not.toContain('"moved"');
+      const moveRecord = yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"));
+      expect(moveRecord).not.toContain('"moved"');
       const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
       expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
       // Only the link text belongs to the saved inventory; its target is independently writable.
@@ -96,7 +96,7 @@ it.effect(
       expect(yield* f.fs.readLink(f.alias)).toBe("review");
       expect(yield* f.fs.readFileString(f.external)).toBe("new external edit");
       expect(yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"))).toBe(
-        receipt,
+        moveRecord,
       );
       const repeated = yield* prepareRecoveryRestore(f.home, f.operationId);
       expect((yield* repeated.apply()).planId).toBe(restored.planId);
@@ -138,26 +138,30 @@ it.effect.each(["move", "restore"] as const)(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("interruption after the receipt is written moves nothing and permits inspection", () =>
-  Effect.gen(function* () {
-    const f = yield* recoveryFixture();
-    const exit = yield* Effect.exit(
-      f.plan.apply().pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...f.fs,
-          link: (from, to) =>
-            f.fs
-              .link(from, to)
-              .pipe(Effect.andThen(to.endsWith("receipt.json") ? Effect.interrupt : Effect.void)),
-        }),
-      ),
-    );
-    expect(exit._tag).toBe("Failure");
-    expect(
-      (yield* inspectRecoveryOperation(f.home, f.operationId)).entries.map((entry) => entry.status),
-    ).toEqual(["at-original", "at-original"]);
-    expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
-  }).pipe(Effect.provide(skitLayer)),
+it.effect(
+  "interruption after the move record is written moves nothing and permits inspection",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* recoveryFixture();
+      const exit = yield* Effect.exit(
+        f.plan.apply().pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            link: (from, to) =>
+              f.fs
+                .link(from, to)
+                .pipe(Effect.andThen(to.endsWith("receipt.json") ? Effect.interrupt : Effect.void)),
+          }),
+        ),
+      );
+      expect(exit._tag).toBe("Failure");
+      expect(
+        (yield* inspectRecoveryOperation(f.home, f.operationId)).entries.map(
+          (entry) => entry.status,
+        ),
+      ).toEqual(["at-original", "at-original"]);
+      expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
+    }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect.each(["directory", "dangling-link"] as const)(
@@ -272,50 +276,52 @@ it.effect("EXDEV refuses without copy/delete fallback and leaves saved source in
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("legacy moved flags are ignored and receipts remain unchanged after restoration", () =>
-  Effect.gen(function* () {
-    const f = yield* recoveryFixture();
-    const links = yield* LinkStat;
-    const directory = join(f.home, "removed", "legacy-operation");
-    yield* f.fs.makeDirectory(directory, { recursive: true });
-    const info = yield* links.identity.lstat(f.source);
-    const recoveryPath = join(directory, "1-review");
-    const receipt = JSON.stringify({
-      schemaVersion: 1,
-      entries: [
-        {
-          name: "review",
-          path: f.source,
-          recoveryPath,
-          type: "Directory",
-          dev: info.dev,
-          ino: info.ino,
-          observedHash: yield* deterministicTreeHash(f.source),
-          moved: false,
-        },
-      ],
-    });
-    yield* f.fs.writeFileString(join(directory, "receipt.json"), receipt);
-    yield* f.fs.rename(f.source, recoveryPath);
-    const preview = yield* prepareRecoveryRestore(f.home, "legacy-operation");
-    expect(preview.summary.legacy).toBe(true);
-    expect(preview.summary.entries[0].status).toBe("saved");
-    expect((yield* preview.apply()).entries[0].status).toBe("at-original");
-    expect(yield* f.fs.readFileString(join(directory, "receipt.json"))).toBe(receipt);
-  }).pipe(Effect.provide(skitLayer)),
+it.effect(
+  "legacy moved flags are ignored and move records remain unchanged after restoration",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* recoveryFixture();
+      const links = yield* LinkStat;
+      const directory = join(f.home, "removed", "legacy-operation");
+      yield* f.fs.makeDirectory(directory, { recursive: true });
+      const info = yield* links.identity.lstat(f.source);
+      const recoveryPath = join(directory, "1-review");
+      const moveRecord = JSON.stringify({
+        schemaVersion: 1,
+        entries: [
+          {
+            name: "review",
+            path: f.source,
+            recoveryPath,
+            type: "Directory",
+            dev: info.dev,
+            ino: info.ino,
+            observedHash: yield* deterministicTreeHash(f.source),
+            moved: false,
+          },
+        ],
+      });
+      yield* f.fs.writeFileString(join(directory, "receipt.json"), moveRecord);
+      yield* f.fs.rename(f.source, recoveryPath);
+      const preview = yield* prepareRecoveryRestore(f.home, "legacy-operation");
+      expect(preview.summary.legacy).toBe(true);
+      expect(preview.summary.entries[0].status).toBe("saved");
+      expect((yield* preview.apply()).entries[0].status).toBe("at-original");
+      expect(yield* f.fs.readFileString(join(directory, "receipt.json"))).toBe(moveRecord);
+    }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect.each(["receipt", "archive-directory", "missing"] as const)(
+it.effect.each(["move-record", "archive-directory", "missing"] as const)(
   "detects %s tampering without restoring anything unsafe",
   (change) =>
     Effect.gen(function* () {
       const f = yield* recoveryFixture();
       yield* f.plan.apply();
       const initial = yield* inspectRecoveryOperation(f.home, f.operationId);
-      if (change === "receipt") {
-        const receiptPath = join(f.plan.recoveryDirectory, "receipt.json");
-        const raw = yield* f.fs.readFileString(receiptPath);
-        yield* f.fs.writeFileString(receiptPath, raw.replace("1-review", "../escaped"));
+      if (change === "move-record") {
+        const moveRecordPath = join(f.plan.recoveryDirectory, "receipt.json");
+        const raw = yield* f.fs.readFileString(moveRecordPath);
+        yield* f.fs.writeFileString(moveRecordPath, raw.replace("1-review", "../escaped"));
       } else if (change === "archive-directory") {
         yield* f.fs.rename(f.plan.recoveryDirectory, `${f.plan.recoveryDirectory}-original`);
         yield* f.fs.symlink(`${f.plan.recoveryDirectory}-original`, f.plan.recoveryDirectory);
@@ -334,7 +340,7 @@ it.effect.each(["receipt", "archive-directory", "missing"] as const)(
 );
 
 it.effect(
-  "multiple batches share one operation, deduplicate physical aliases, and never republish a receipt",
+  "multiple batches share one operation, deduplicate physical aliases, and never rewrite a move record",
   () =>
     Effect.gen(function* () {
       const f = yield* recoveryFixture();

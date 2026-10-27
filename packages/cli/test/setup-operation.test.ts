@@ -143,7 +143,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("a refused inverse receipt prevents the settings and Library effects it describes", () =>
+it.effect("a refused inverse record prevents the settings and Library effects it describes", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const failure = yield* Effect.flip(

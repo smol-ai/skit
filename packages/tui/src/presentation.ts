@@ -406,12 +406,12 @@ function inventoryDescription(item: InventoryItem): string {
       : `${(item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind).toUpperCase()}  ${findingLabel(item).toLowerCase()}`;
 }
 
-export interface ReceiptField {
+export interface DetailField {
   readonly label: string;
   readonly value: string;
   readonly status?: AuditItem["status"];
 }
-const field = (label: string, value: string): ReceiptField => ({ label, value });
+const field = (label: string, value: string): DetailField => ({ label, value });
 
 export function detailPresentation(
   item: Exclude<InventoryItem, LibraryRow>,
@@ -429,7 +429,7 @@ export function detailPresentation(
     "well-known": "Well-known endpoint",
   };
   const collection = item.kind === "library-collection";
-  const fields: ReceiptField[] = collection
+  const fields: DetailField[] = collection
     ? []
     : [
         field(
@@ -526,7 +526,7 @@ export function confirmationPresentation(
   showSkills: boolean,
   compact: boolean,
 ) {
-  const fields = pending.facts.flatMap((fact, index): ReceiptField[] => [
+  const fields = pending.facts.flatMap((fact, index): DetailField[] => [
     ...(fact.collectionLabel === undefined
       ? [field("skills", fact.skills.join(", "))]
       : [

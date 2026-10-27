@@ -399,7 +399,7 @@ export const SetupApplied = Schema.Struct({
     }),
   ),
   /**
-   * With `--duplicates retire-aliases`: where each retired symlink and its restoration receipt
+   * With `--duplicates retire-aliases`: where each backed-up symlink and its move record
    * were saved, and any symlink kept because it could not be retired safely.
    */
   aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),

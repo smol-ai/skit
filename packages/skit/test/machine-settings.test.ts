@@ -234,11 +234,11 @@ it.effect("saves no settings when pre-save inverse evidence fails", () =>
           assert.deepStrictEqual(before.discoveryRoots, ["/before"]);
           assert.deepStrictEqual(after.discoveryRoots, ["/after"]);
           assert.strictEqual(yield* fs.readFileString(path), bytes);
-          return yield* Effect.fail("receipt-refused");
+          return yield* Effect.fail("inverse-refused");
         }),
       ),
     );
-    assert.strictEqual(failure, "receipt-refused");
+    assert.strictEqual(failure, "inverse-refused");
     assert.strictEqual(yield* fs.readFileString(path), bytes);
     assert.isFalse(yield* fs.exists(join(home, ".lock")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

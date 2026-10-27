@@ -596,13 +596,13 @@ export const currentLibraryManifest = (
   fields: Omit<LibraryManifest, "schema">,
 ): LibraryManifest => ({ ...fields, schema: CURRENT_PORTABLE_LIBRARY_SCHEMA });
 
-export const LibraryReceipt = Schema.Struct({
+export const RemoteLibrary = Schema.Struct({
   library_id: Schema.String,
   revision_id: Schema.String,
   manifest: LibraryManifest,
 });
-export interface LibraryReceipt extends Schema.Schema.Type<typeof LibraryReceipt> {}
-export const LibraryResponse = Schema.Struct({ library: LibraryReceipt });
+export interface RemoteLibrary extends Schema.Schema.Type<typeof RemoteLibrary> {}
+export const LibraryResponse = Schema.Struct({ library: RemoteLibrary });
 export const LibraryWriteRequest = Schema.Struct({
   expected_revision_id: Schema.NullOr(Schema.String),
   manifest: LibraryManifest,

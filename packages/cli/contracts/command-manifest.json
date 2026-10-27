@@ -1000,7 +1000,7 @@
         "inspect"
       ],
       "stability": "stable",
-      "summary": "Inspect receipts and actual original/saved files without changing them.",
+      "summary": "Inspect the move records and the original and saved files without changing them.",
       "effects": {
         "capabilities": [
           "filesystem.read"

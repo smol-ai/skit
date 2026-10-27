@@ -180,7 +180,7 @@ function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
       return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
     if (action === "preserve-duplicates")
       return `Preserve existing copies: ${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples} · replacements verified before moving originals to recovery`;
-    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; recovery receipts saved`;
+    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; move records saved`;
   });
 }
 
@@ -194,7 +194,7 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
       yield* renderer.note(warning.message, `${warning.name}: existing copy kept`);
     if (applied.recoveryDirectories.length)
       yield* renderer.note(
-        `Sources stay in place. Symlinks and restoration receipts are saved in:\n${applied.recoveryDirectories.join("\n")}`,
+        `Sources stay in place. Symlinks and their move records are saved in:\n${applied.recoveryDirectories.join("\n")}`,
         `Redundant symlinks retired for ${skillCount(applied.recoveryDirectories.length)}${applied.warnings.length ? ` · ${skillCount(applied.warnings.length)} preserved` : ""}`,
       );
   },

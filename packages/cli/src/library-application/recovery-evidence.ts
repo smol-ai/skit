@@ -13,7 +13,7 @@ export class RecoveryInvalid
     return `Recovery cannot proceed: ${this.detail}`;
   }
   readonly remediation =
-    "Inspect the saved files and receipt; preserve both before resolving the conflict.";
+    "Inspect the saved files and their move record; keep both before resolving the conflict.";
 }
 
 /** Includes control files, empty directories and link text; never follows symlinks. */

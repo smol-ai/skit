@@ -192,22 +192,22 @@ const refuseRename = (path: string) =>
     }),
   );
 
-const Receipt = Schema.fromJsonString(
+const MoveRecord = Schema.fromJsonString(
   Schema.Struct({
     entries: Schema.Array(Schema.Struct({ path: Schema.String, recoveryPath: Schema.String })),
   }),
 );
 
-const readReceipt = Effect.fn("Test.readSetupReceipt")(function* (home: string) {
+const readMoveRecord = Effect.fn("Test.readSetupMoveRecord")(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
   const [directory] = yield* fs.readDirectory(join(home, "removed"));
   for (const batch of yield* fs.readDirectory(join(home, "removed", directory!))) {
     if ((yield* fs.stat(join(home, "removed", directory!, batch))).type !== "Directory") continue;
     const path = join(home, "removed", directory!, batch, "receipt.json");
     if (yield* fs.exists(path))
-      return yield* Schema.decodeUnknownEffect(Receipt)(yield* fs.readFileString(path));
+      return yield* Schema.decodeUnknownEffect(MoveRecord)(yield* fs.readFileString(path));
   }
-  return yield* Effect.die(new Error("No removal receipt was published"));
+  return yield* Effect.die(new Error("No removal move record was written"));
 });
 
 const holds = (changes: DiskDiff, bytes: string) =>
@@ -484,7 +484,7 @@ it.effect(
 );
 
 // Each entry is checked again immediately before its own move, so a later entry replaced while an
-// earlier one moves is left alone; the earlier move stays, recorded in the receipt.
+// earlier one moves is left alone; the earlier move stays, recorded in the move record.
 it.effect("a removal entry replaced during an earlier move stays untouched", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
@@ -505,14 +505,14 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
           : Effect.void,
     });
     assert.instanceOf(failure(exit), PlanIsStale);
-    const receipt = yield* readReceipt(f.home.home);
+    const moveRecord = yield* readMoveRecord(f.home.home);
     const [operation] = yield* listRecoveryOperations(f.home.home);
     const inspection = yield* inspectRecoveryOperation(f.home.home, operation!);
     assert.deepStrictEqual(
       inspection.entries.map((entry) => entry.status),
       ["saved", "conflict"],
     );
-    const [moved, kept] = receipt.entries;
+    const [moved, kept] = moveRecord.entries;
     assert.strictEqual(
       yield* f.fs.readFileString(join(moved!.recoveryPath, "SKILL.md")),
       skillBytes(basename(moved!.path)),
@@ -526,7 +526,7 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a failed removal move leaves a moved prefix, the rest in place, and a receipt", () =>
+it.effect("a failed removal move leaves a moved prefix, the rest in place, and a move record", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const before = yield* captureDisk(f.disk);
@@ -536,7 +536,7 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
         from.startsWith(f.path("")) && ++moves === 2 ? refuseRename(from) : Effect.void,
     });
     assert.instanceOf(failure(exit), PlatformError);
-    const receipt = yield* readReceipt(f.home.home);
+    const moveRecord = yield* readMoveRecord(f.home.home);
     assert.deepStrictEqual(
       (yield* inspectRecoveryOperation(
         f.home.home,
@@ -544,7 +544,7 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
       )).entries.map((entry) => entry.status),
       ["saved", "at-original"],
     );
-    const [moved, kept] = receipt.entries;
+    const [moved, kept] = moveRecord.entries;
     const paths = changedPaths(f.root, yield* diskChanges(before));
     assert.deepStrictEqual(paths.changed, []);
     assert.deepStrictEqual(paths.deleted, [
@@ -559,18 +559,20 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// A receipt is no longer rewritten after moves; an injected second-write failure is unreachable.
-it.effect("removal writes one immutable receipt before moving files", () =>
+// A move record is no longer rewritten after moves; an injected second-write failure is unreachable.
+it.effect("removal writes one immutable move record before moving files", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
-    let receiptRenames = 0;
+    let moveRecordRenames = 0;
     const { exit } = yield* f.setup([["remove\0gamma"], true], {
       rename: (from, to) =>
-        basename(to) === "receipt.json" && ++receiptRenames > 0 ? refuseRename(from) : Effect.void,
+        basename(to) === "receipt.json" && ++moveRecordRenames > 0
+          ? refuseRename(from)
+          : Effect.void,
     });
     assert.isTrue(Exit.isSuccess(exit));
-    assert.strictEqual(receiptRenames, 0); // exclusive publication uses link, not replacement
-    const [entry] = (yield* readReceipt(f.home.home)).entries;
+    assert.strictEqual(moveRecordRenames, 0); // exclusive publication uses link, not replacement
+    const [entry] = (yield* readMoveRecord(f.home.home)).entries;
     assert.isFalse(yield* f.fs.exists(entry!.path));
     assert.strictEqual(
       yield* f.fs.readFileString(join(entry!.recoveryPath, "SKILL.md")),

@@ -246,10 +246,10 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
   );
   const markSaved = Effect.fn("SetupOperation.markSaved")(
-    function* (receipt: { sequence: number; digest: Digest }) {
+    function* (changeRecord: { sequence: number; digest: Digest }) {
       yield* writeJsonExclusive(
-        join(changes, `${String(receipt.sequence).padStart(8, "0")}.published.json`),
-        { schemaVersion: 1, sequence: receipt.sequence, digest: receipt.digest },
+        join(changes, `${String(changeRecord.sequence).padStart(8, "0")}.published.json`),
+        { schemaVersion: 1, sequence: changeRecord.sequence, digest: changeRecord.digest },
       );
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
@@ -275,13 +275,13 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       )
         return yield* new LibraryChanged({ path: before.path });
       const changed = setupDiscoverySettings(after);
-      const receipt = yield* writeChange({
+      const changeRecord = yield* writeChange({
         kind: "settings",
         before: setupDiscoverySettings(before),
         after: changed,
         machineId: after.machineId ?? null,
       });
-      pendingSettings = { ...receipt, after: changed, machineId: after.machineId };
+      pendingSettings = { ...changeRecord, after: changed, machineId: after.machineId };
     }),
     settingsSaved: Effect.fn("SetupOperation.settingsSaved")(function* () {
       if (pendingSettings) {
@@ -298,7 +298,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       const changed =
         canonicalJson(before) !== canonicalJson(after) ||
         canonicalJson(base.projections) !== canonicalJson(next.projections);
-      const receipt = changed
+      const changeRecord = changed
         ? yield* writeChange({
             kind: "library",
             beforeRevision: libraryStateRevision(base),
@@ -310,7 +310,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
           })
         : undefined;
       yield* store.save(next, base);
-      if (receipt) yield* markSaved(receipt);
+      if (changeRecord) yield* markSaved(changeRecord);
       expectedIntent = after;
       expectedProjections = projectionsAfter;
     }),

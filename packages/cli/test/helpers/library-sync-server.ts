@@ -6,7 +6,7 @@ import {
   InvalidRequestResponse,
   LibraryManifest,
   LibraryNotFoundResponse,
-  LibraryReceipt,
+  RemoteLibrary,
   LibraryResponse,
   LibraryWriteRequest,
   RevisionConflictResponse,
@@ -74,7 +74,7 @@ const reply = <A, I>(schema: Schema.Codec<A, I>, value: A) =>
  * names as its base.
  */
 export function librarySyncServer(faults = faultQueue(), events: string[] = []) {
-  let head: LibraryReceipt | null = null;
+  let head: RemoteLibrary | null = null;
   const snapshots = new Map<string, SnapshotArchive>();
   const revisions: { revision_id: string; parent_revision_id: string | null }[] = [];
   let libraryId = "library_test";

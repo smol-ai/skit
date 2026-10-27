@@ -811,7 +811,7 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v2">): s
   if (data.aliasRecoveryDirectories?.length)
     lines.push(
       "",
-      "Preserved copies and their restoration receipts are saved in",
+      "Backed-up copies and their move records are saved in",
       ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
     );
   const preservationWarnings = data.preservationWarnings ?? data.aliasesKept;
@@ -1062,7 +1062,7 @@ const contractPresenters: ContractPresenters = {
       ),
       ...(data.legacy
         ? [
-            "Legacy receipt: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
+            "Legacy move record: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
           ]
         : []),
       ...(data.failure ? [data.failure] : []),
