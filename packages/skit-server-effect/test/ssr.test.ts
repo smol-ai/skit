@@ -179,6 +179,29 @@ describe("Foldkit server rendering", () => {
     }),
   );
 
+  it.effect("asks for the CLI's code on the device page and records the decision", () =>
+    Effect.gen(function* () {
+      const flags = yield* flagsForRequest(
+        new Request("https://registry.example/device?user_code=ABCD-EFGH"),
+        (request) =>
+          new URL(request.url).pathname === "/api/onboarding/username"
+            ? Promise.resolve(Response.json({ username: "tim" }))
+            : handler(request),
+      );
+      expect(flags).toMatchObject({ page: "device", username: "tim" });
+      // A link cannot fill in the code; the user types it from their terminal.
+      expect(init(flags).model.userCode).toBe("");
+
+      const decided = (action: "approve" | "deny") =>
+        update(
+          init(flags).model,
+          Message.ActionFinished({ action, ok: true, message: "", redirect: "" }),
+        ).model.deviceResult;
+      expect(decided("approve")).toBe("approved");
+      expect(decided("deny")).toBe("denied");
+    }),
+  );
+
   it("explains a signup username that is already claimed", () => {
     const flags: Flags = {
       page: "home",

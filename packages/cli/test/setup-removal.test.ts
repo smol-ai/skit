@@ -176,7 +176,8 @@ it.effect("declining removal or using dry run leaves copies and Library unchange
 it.effect("can add one skill and remove another in the same approved setup plan", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    yield* f.setup([["remove\0copied", "linked"], true]);
+    // linked sits at SKIT's destination as a symlink, so setup asks before replacing it.
+    yield* f.setup([["remove\0copied", "linked"], "retire-aliases", true]);
     expect(yield* f.fs.exists(f.copy)).toBe(false);
     expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
     expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["linked"]);

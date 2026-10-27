@@ -136,7 +136,7 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
   const invalidResponse = (operation: string) => new LibraryApiInvalidResponse({ operation });
   const mapGeneratedFailure = (operation: string, error: unknown) => {
     if (isRegistryTransportError(error)) return transportFailure(error);
-    if (Schema.is(UnauthorizedResponse)(error)) return new AuthenticationRequired({});
+    if (Schema.is(UnauthorizedResponse)(error)) return new AuthenticationRequired({ origin });
     if (Schema.is(InsufficientScopeResponse)(error))
       return new CredentialLacksScope({ scope: "library:sync" });
     if (isSuccessfulResponseDecodeFailure(error, [200])) return invalidResponse(operation);

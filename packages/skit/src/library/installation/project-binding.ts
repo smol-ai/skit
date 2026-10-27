@@ -3,8 +3,10 @@ import { resolve } from "node:path";
 import type { OwnershipMarker } from "../../contracts.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
 import {
+  inspectOwnershipMarkerEffect,
   projectionCustodyEffect,
   withProjectionMutationEffect,
+  type ProjectionAdoption,
 } from "../../projection/mutation.js";
 import { pathIsWithin, projectionTargetPathIdentityEffect } from "../../platform/path-identity.js";
 import { ProjectionRetireConflict } from "../../failures.js";
@@ -41,8 +43,10 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
     string,
     { readonly observedHash: Digest; readonly marker: OwnershipMarker }
   >;
-  /** The one existing copy the operator chose to take custody of, as previewed. */
-  adoption?: { readonly path: string; readonly observedHash: Digest };
+  /** The existing copies the operator chose to take custody of, as previewed. */
+  adoption?: ProjectionAdoption;
+  /** Adopt unmanaged copies that already hold exactly the projected bytes. */
+  adoptIdentical?: boolean;
   restoreNativeDeletedSkills?: readonly string[];
 }) {
   const store = yield* LibraryStore;
@@ -126,12 +130,15 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
         )) {
           const skill = mutation.state.skills.find((item) => item.skill_id === existing.skill_id);
           if (skill === undefined) continue;
-          const retired = yield* mutation.retire(
+          // A copy without SKIT's marker was never SKIT's to remove: it was already there when SKIT
+          // tried to project (a conflict). Disabling drops SKIT's record and leaves it in place. A
+          // managed copy edited since SKIT wrote it is refused, so no edit is lost.
+          const marker = yield* inspectOwnershipMarkerEffect(existing.path);
+          yield* mutation.retire(
             existing,
-            "throw",
-            `Refusing to disable modified ${skill.name} at ${existing.path}`,
+            marker.kind === "absent" ? "report" : "throw",
+            `Refusing to disable ${skill.name}: ${existing.path} was edited after SKIT wrote it`,
           );
-          void retired;
         }
         mutation.state.projections.splice(
           0,
@@ -186,6 +193,7 @@ export const projectBindingEffect = Effect.fn("Library.projectBinding")(function
                   },
                 }),
             ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
+            ...(options.adoptIdentical ? { adoptIdentical: true } : {}),
             restoreNativeDeletion:
               options.restoreNativeDeletedSkills?.includes(item.skill.skill_id) ?? false,
             projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),

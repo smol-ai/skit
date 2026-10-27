@@ -206,6 +206,8 @@ export type SetupProjection = typeof SetupProjection.Type;
 
 const SetupOnboardingBase = {
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
+  destinationLinks: Schema.optionalKey(Schema.Array(Schema.String)),
   name: Schema.String,
   paths: Schema.Array(Schema.String),
   owner: SetupInstanceOwner,
@@ -287,6 +289,8 @@ export const SetupResult = Schema.Struct({
     ),
     persisted: Schema.Boolean,
   }),
+  /** Common folders holding Git repositories, reported when no repository root is configured. */
+  suggestedRepositoryRoots: Schema.Array(Schema.String),
   probes: Schema.Array(SetupProbe),
   scan: Schema.Struct({
     complete: Schema.Boolean,
@@ -301,6 +305,20 @@ export const SetupResult = Schema.Struct({
   onboarding: Schema.Struct({
     planId: Digest,
     candidates: Schema.Array(SetupOnboardingCandidate),
+    /** The command that applies the recommendation, with absolute paths; absent when empty. */
+    applyCommand: Schema.optionalKey(Schema.String),
+    /** Exactly what `skit setup --apply <planId>` imports and takes custody of. */
+    recommended: Schema.Struct({
+      sources: Schema.Array(
+        Schema.Struct({
+          /** Identifies the lockfile claim; display `source` and `names` instead. */
+          groupKey: Schema.String,
+          source: Schema.String,
+          names: Schema.Array(Schema.String),
+        }),
+      ),
+      copies: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
+    }),
   }),
   locks: Schema.Array(SetupSkillsLock),
   instances: Schema.Array(SetupSkillInstance),
@@ -308,3 +326,38 @@ export const SetupResult = Schema.Struct({
   suppressed: Schema.Array(SetupSuppressed),
 });
 export type SetupResult = typeof SetupResult.Type;
+
+/** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
+ * every other observed skill was left alone. */
+export const SetupApplied = Schema.Struct({
+  planId: Digest,
+  imported: Schema.Array(
+    Schema.Struct({ source: Schema.String, names: Schema.Array(Schema.String) }),
+  ),
+  added: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
+  reconnected: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
+  projections: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      target: Schema.String,
+      path: Schema.String,
+      status: Schema.String,
+    }),
+  ),
+  leftAlone: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      paths: Schema.Array(Schema.String),
+      reason: Schema.String,
+    }),
+  ),
+  /**
+   * With `--duplicates retire-aliases`: where each retired symlink and its restoration receipt
+   * were saved, and any symlink kept because it could not be retired safely.
+   */
+  aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
+  aliasesKept: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
+  ),
+});
+export type SetupApplied = typeof SetupApplied.Type;

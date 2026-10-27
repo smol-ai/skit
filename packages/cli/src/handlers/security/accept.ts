@@ -49,6 +49,7 @@ export const securityAcceptCommand = Effect.fn("CLI.securityAccept")(function* <
     return yield* new MissingRequirement({
       command: "security accept",
       requires: "--finding, --principal, and --rationale",
+      hint: "`skit security review <skill> --json` lists each finding's fingerprint.",
     });
   const fingerprintInput = options.fingerprint;
   const fingerprint = yield* Schema.decodeUnknownEffect(FindingFingerprint)(fingerprintInput).pipe(
@@ -110,7 +111,7 @@ export const securityAcceptCliCommand = Command.make(
     },
   ]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.write"] },
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.securityAccept],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

@@ -1,4 +1,6 @@
 import { betterAuth } from "better-auth";
+import { bearer } from "better-auth/plugins/bearer";
+import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { APIError } from "better-auth/api";
 import { D1Client } from "@effect/sql-d1";
 import { Context, Effect, Layer, Option, Schema } from "effect";
@@ -18,6 +20,13 @@ import { passwordCallbacks } from "./password.js";
 import { provisionPrincipal } from "./provisioning.js";
 
 export const AUTH_BASE_PATH = "/api/auth";
+// Read a Bearer session token as the session cookie, but drop the plugin's response hook: it copies
+// every new session token into a `set-auth-token` header that page scripts can read, which would
+// undo the HttpOnly cookie.
+const { hooks: bearerHooks, ...bearerPlugin } = bearer({ requireSignature: false });
+const bearerRequestsOnly = { ...bearerPlugin, hooks: { before: bearerHooks.before } };
+/** The only device-authorization client: `skit auth login`. */
+export const CLI_DEVICE_CLIENT_ID = "skit-cli";
 const MAX_USERNAME_REQUEST_BYTES = 4 * 1024;
 const UsernameClaimInput = Schema.Struct({ username: Schema.String });
 const ProvisioningRow = Schema.Struct({
@@ -147,6 +156,18 @@ export const layer = (configuration: BetterAuthConfiguration) =>
         database: bindings.database,
         trustedOrigins: [configuration.publicAppOrigin],
         telemetry: { enabled: false },
+        plugins: [
+          // `skit auth login` shows a code; the user approves it here in a signed-in browser, with any
+          // sign-in method, and the CLI's poll then receives a session to create its token with.
+          deviceAuthorization({
+            expiresIn: "10m",
+            interval: "5s",
+            verificationUri: `${configuration.publicAppOrigin}/device`,
+            validateClient: (clientId) => clientId === CLI_DEVICE_CLIENT_ID,
+          }),
+          // The token the CLI's poll receives is that session's token, sent as a Bearer credential.
+          bearerRequestsOnly,
+        ],
         advanced: {
           cookiePrefix: "skit-auth",
           useSecureCookies: configuration.publicAppOrigin.startsWith("https://"),
@@ -459,6 +480,7 @@ export const handleRequest = Effect.fn("BetterAuthHttp.handleRequest")(function*
       "/api/auth/sign-up/email",
       "/api/auth/sign-in/email",
       "/api/auth/send-verification-email",
+      "/api/auth/device/code",
     ].includes(pathname)
   ) {
     const clientIp = webRequest.headers.get("cf-connecting-ip") ?? "unknown";

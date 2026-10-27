@@ -8,7 +8,11 @@ import {
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../../workflows/failures.js";
-import { CommandMetadata } from "../../commands/metadata.js";
+import {
+  CommandMetadata,
+  credentialStoreReadSubprocesses,
+  sourceAcquisitionSubprocesses,
+} from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -65,7 +69,11 @@ export const addCliCommand = Command.make(
               });
         const selectedSource = locator?.input ?? source;
         if (!selectedSource)
-          return yield* new MissingRequirement({ command: "add", requires: "<source>" });
+          return yield* new MissingRequirement({
+            command: "add",
+            requires: "<source>",
+            hint: "A source is `owner/repo`, a Git or GitHub URL, or a local path; `--list` previews it without adding.",
+          });
         yield* rejectDedicatedInstallerSourceEffect(selectedSource);
         if (input.preview) {
           const value = yield* renderer.withStatus(
@@ -118,6 +126,10 @@ export const addCliCommand = Command.make(
     { command: "skit add ./my-tools --list" },
   ]),
   Command.annotate(CommandMetadata, {
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
+      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+    },
     outputSchemas: [outputContracts.add, outputContracts.addPreview],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

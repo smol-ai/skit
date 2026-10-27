@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.plan.v7",
+  "$id": "skit.enable.v8",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -115,6 +115,29 @@
           "canonicalPath",
           "aliases",
           "documentDigest"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "unmanaged_destinations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "path"
         ],
         "additionalProperties": true
       }
@@ -310,6 +333,33 @@
           }
         ]
       }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
@@ -318,7 +368,8 @@
     "scope",
     "enabled",
     "changed",
-    "bindings"
+    "bindings",
+    "projections"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

@@ -1,14 +1,27 @@
 import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
 import { withConfigurationWriter } from "../configuration-writer.js";
-import { Clock, Config, Effect, FileSystem, Redacted, Result, Schema } from "effect";
+import {
+  Clock,
+  Config,
+  Duration,
+  Effect,
+  FileSystem,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
+import { ChildProcessSpawner } from "effect/process";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import { hostname } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { isErrno } from "../platform/errno.js";
 import {
   CredentialsUnusable,
+  DeviceLoginEnded,
+  DeviceLoginUnavailable,
   NoStoredCredentials,
   RegistryAliasNotFound,
   RegistryOriginInvalid,
@@ -22,6 +35,12 @@ import {
   TooManyAuthAttempts,
 } from "./failures.js";
 import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
+import {
+  osTokenStorage,
+  readStoredToken,
+  removeStoredToken,
+  writeStoredToken,
+} from "./credential-store.js";
 import { Renderer } from "../presentation/renderer.js";
 import { serverDiscoverySchema } from "@smolai/skit-core";
 import {
@@ -77,7 +96,8 @@ export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
   return (yield* configurationForHome(home)).authPath;
 });
 
-export function readConfigEffect(home?: string) {
+/** auth.json exactly as written: tokens kept in an OS store are absent. */
+function readAuthDocument(home?: string) {
   return Effect.gen(function* () {
     const path = yield* authPath(home);
     const fs = yield* FileSystem.FileSystem;
@@ -100,18 +120,68 @@ export function readConfigEffect(home?: string) {
   });
 }
 
+/**
+ * The account configuration with each stored token in place, wherever it is kept. A token the OS
+ * store cannot supply is left absent; requests then go unauthenticated and ask the user to log in
+ * again, rather than every command failing on a locked keychain.
+ */
+export function readConfigEffect(home?: string) {
+  return Effect.gen(function* () {
+    const path = yield* authPath(home);
+    const config = yield* readAuthDocument(home);
+    const servers: Record<string, StoredCredential> = {};
+    for (const [origin, credential] of Object.entries(config.servers)) {
+      const token =
+        credential.token === undefined && credential.tokenStorage !== undefined
+          ? yield* readStoredToken(credential.tokenStorage, path, origin)
+          : undefined;
+      servers[origin] = token === undefined ? credential : { ...credential, token };
+    }
+    return { ...config, servers };
+  });
+}
+
+/**
+ * Write the account configuration, keeping each token in the OS store when one accepts it and in
+ * this 0600 file otherwise. Store items are written before the file names them and removed only
+ * after the file stops naming them, so an interruption never leaves the file pointing at nothing.
+ */
 const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
   config: AuthConfig,
   home?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* authPath(home);
+  const previous = yield* Effect.option(readAuthDocument(home));
+  const storage = osTokenStorage();
+  const servers: Record<string, StoredCredential> = {};
+  for (const [origin, credential] of Object.entries(config.servers)) {
+    // A token this run could not read stays wherever it already is.
+    if (credential.token === undefined) {
+      servers[origin] = credential;
+      continue;
+    }
+    const { token, tokenStorage: _previous, ...metadata } = credential;
+    servers[origin] =
+      storage !== undefined && (yield* writeStoredToken(storage, path, origin, token))
+        ? { ...metadata, tokenStorage: storage }
+        : { ...metadata, token };
+  }
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.tmp-${process.pid}`;
-  yield* fs.writeFileString(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  yield* fs.writeFileString(temporary, `${JSON.stringify({ ...config, servers }, null, 2)}\n`, {
+    mode: 0o600,
+  });
   // The write mode is subject to umask; credentials get the permission set explicitly.
   yield* fs.chmod(temporary, 0o600);
   yield* fs.rename(temporary, path);
+  if (Option.isNone(previous)) return;
+  for (const [origin, credential] of Object.entries(previous.value.servers))
+    if (
+      credential.tokenStorage !== undefined &&
+      servers[origin]?.tokenStorage !== credential.tokenStorage
+    )
+      yield* removeStoredToken(credential.tokenStorage, path, origin);
 });
 
 export const resolveAuthEffect = Effect.fnUntraced(function* (
@@ -122,7 +192,7 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   ResolvedAuth,
   RegistryConfigurationError,
-  FileSystem.FileSystem | SkitConfiguration
+  FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
 > {
   const accounts = yield* readAccounts(home);
   return yield* accounts.credential(
@@ -194,7 +264,7 @@ export function resolveAuthForOriginEffect(
 ): Effect.Effect<
   ResolvedAuth,
   RegistryOriginInvalid | CredentialsUnusable | Config.ConfigError,
-  FileSystem.FileSystem | SkitConfiguration
+  FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
 > {
   return Effect.gen(function* () {
     const origin = yield* parseOrigin(originInput);
@@ -267,6 +337,225 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
   return yield* accounts.status(selectedRegistry, yield* Clock.currentTimeMillis);
 });
 
+/** The Registry's own words for a rejected request, in the shape every branch reported. */
+const rejected = Effect.fn("Auth.rejected")(function* (
+  response: HttpClientResponse,
+  context: string,
+) {
+  const body = yield* response.json.pipe(
+    Effect.catchTag("HttpClientError", () => Effect.succeed({})),
+  );
+  if (response.status === 401) return yield* new SignInRejected({ context });
+  if (response.status === 429) return yield* new TooManyAuthAttempts();
+  const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
+    Effect.map(({ error }) => error),
+    Effect.orElseSucceed(() => "unknown_error"),
+  );
+  return yield* new SignInFailed({
+    message: `${context} failed (${response.status}): ${detail}`,
+  });
+});
+
+/** A Registry's transport and discovery document, checked to offer every requested scope. */
+const openExchange = Effect.fn("Auth.openExchange")(function* (
+  origin: string,
+  scopes: readonly AuthScope[],
+) {
+  const http = yield* (yield* RegistryHttp).client;
+  const send = (
+    url: URL,
+    init: {
+      readonly method?: "GET" | "POST" | "PUT" | "DELETE";
+      readonly headers?: Readonly<Record<string, string>>;
+      readonly body?: string;
+    } = {},
+  ): Effect.Effect<HttpClientResponse, RegistryUnreachable> => {
+    let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
+    if (init.body !== undefined)
+      request = HttpClientRequest.bodyText(request, init.body, "application/json");
+    return http
+      .execute(request)
+      .pipe(Effect.mapError((error) => new RegistryUnreachable({ origin, cause: error.cause })));
+  };
+
+  const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
+  if (!ok(discoveryResponse))
+    return yield* new SignInFailed({
+      message: `Registry discovery failed (${discoveryResponse.status})`,
+    });
+  const discovery = yield* discoveryResponse.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
+    Effect.mapError(
+      (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
+    ),
+  );
+  const unsupportedScopes = scopes.filter((scope) => !discovery.scopes.includes(scope));
+  if (unsupportedScopes.length > 0)
+    return yield* new SignInFailed({
+      message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
+    });
+  // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than acting as
+  // a security boundary. Browser requests still receive real origin enforcement.
+  const json = { "content-type": "application/json", origin };
+  return { http, send, discovery, json };
+});
+type Exchange = Effect.Success<ReturnType<typeof openExchange>>;
+
+/** The only device-authorization client the Registry accepts. */
+const CLI_DEVICE_CLIENT_ID = "skit-cli";
+const DeviceCodeResponse = Schema.Struct({
+  device_code: Schema.String,
+  user_code: Schema.String,
+  verification_uri: Schema.String,
+  expires_in: Schema.Number,
+  interval: Schema.Number,
+});
+const DeviceTokenResponse = Schema.Struct({ access_token: Schema.String });
+const DeviceTokenError = Schema.Struct({ error: Schema.String });
+
+/**
+ * A browser login waiting for the user to approve its code. A run that cannot wait for the user
+ * saves it, and the next `skit auth login` for the same Registry polls with it.
+ */
+export const PendingDeviceLogin = Schema.Struct({
+  origin: Schema.String,
+  deviceCode: Schema.String,
+  userCode: Schema.String,
+  verificationUri: Schema.String,
+  interval: Schema.Number,
+  expiresAt: Schema.String,
+});
+export type PendingDeviceLogin = typeof PendingDeviceLogin.Type;
+
+const requestDeviceCode = Effect.fn("Auth.requestDeviceCode")(function* (
+  exchange: Exchange,
+  origin: string,
+) {
+  const { discovery, send, json } = exchange;
+  if (discovery.deviceAuthorization === undefined || discovery.deviceToken === undefined)
+    return yield* new DeviceLoginUnavailable({ origin });
+  const started = yield* send(new URL(discovery.deviceAuthorization, origin), {
+    method: "POST",
+    headers: json,
+    body: JSON.stringify({ client_id: CLI_DEVICE_CLIENT_ID }),
+  });
+  if (!ok(started)) return yield* rejected(started, "Device authorization");
+  const code = yield* started.json.pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(DeviceCodeResponse)),
+    Effect.mapError(
+      (error) => new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+    ),
+  );
+  return {
+    origin,
+    deviceCode: code.device_code,
+    userCode: code.user_code,
+    verificationUri: code.verification_uri,
+    interval: code.interval,
+    expiresAt: new Date((yield* Clock.currentTimeMillis) + code.expires_in * 1_000).toISOString(),
+  } satisfies PendingDeviceLogin;
+});
+
+/** Where a started browser login waits for its next run: beside auth.json, as private. */
+const pendingLoginPath = (home?: string) =>
+  Effect.map(authPath(home), (path) => join(dirname(path), "login-pending.json"));
+
+/** The browser login waiting on `origin`, unless none was started, it expired, or it is unreadable. */
+export const readPendingLogin = Effect.fn("Auth.readPendingLogin")(function* (
+  origin: string,
+  home?: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const pending = yield* fs
+    .readFileString(yield* pendingLoginPath(home))
+    .pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(PendingDeviceLogin))),
+      Effect.option,
+    );
+  if (Option.isNone(pending) || pending.value.origin !== origin) return undefined;
+  return Date.parse(pending.value.expiresAt) > (yield* Clock.currentTimeMillis)
+    ? pending.value
+    : undefined;
+});
+
+export const savePendingLogin = Effect.fn("Auth.savePendingLogin")(function* (
+  pending: PendingDeviceLogin,
+  home?: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* pendingLoginPath(home);
+  yield* fs.makeDirectory(dirname(path), { recursive: true });
+  yield* fs.writeFileString(path, `${JSON.stringify(pending, null, 2)}\n`, { mode: 0o600 });
+  yield* fs.chmod(path, 0o600);
+});
+
+export const clearPendingLogin = Effect.fn("Auth.clearPendingLogin")(function* (home?: string) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove(yield* pendingLoginPath(home), { force: true });
+});
+
+/** Start a browser login without waiting for it, for a caller that cannot wait for the user. */
+export const startDeviceLoginEffect = Effect.fn("Auth.startDeviceLogin")(function* (input: {
+  origin: string;
+  scopes: readonly AuthScope[];
+}) {
+  const origin = yield* validateAuthenticationOrigin(input.origin);
+  return yield* requestDeviceCode(yield* openExchange(origin, input.scopes), origin);
+});
+
+/**
+ * Poll until the user approves `pending`, returning the approved session's token. Runs outside the
+ * configuration writer: waiting on a person must not hold the lock every Library write needs.
+ */
+export const awaitDeviceApprovalEffect = Effect.fn("Auth.awaitDeviceApproval")(function* (
+  pending: PendingDeviceLogin,
+  scopes: readonly AuthScope[],
+) {
+  const { discovery, send, json } = yield* openExchange(pending.origin, scopes);
+  if (discovery.deviceToken === undefined)
+    return yield* new DeviceLoginUnavailable({ origin: pending.origin });
+  const deadline = Date.parse(pending.expiresAt);
+  // RFC 8628 §3.5: wait the interval between polls, and five seconds longer after slow_down.
+  let interval = pending.interval;
+  while (true) {
+    if ((yield* Clock.currentTimeMillis) >= deadline)
+      return yield* new DeviceLoginEnded({ reason: "expired" });
+    yield* Effect.sleep(Duration.seconds(interval));
+    const polled = yield* send(new URL(discovery.deviceToken, pending.origin), {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        device_code: pending.deviceCode,
+        client_id: CLI_DEVICE_CLIENT_ID,
+      }),
+    });
+    if (ok(polled)) {
+      const granted = yield* polled.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenResponse)),
+        Effect.mapError(
+          (error) =>
+            new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
+        ),
+      );
+      return granted.access_token;
+    }
+    const error = yield* polled.json.pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(DeviceTokenError)),
+      Effect.map((body) => body.error),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (error === "authorization_pending") continue;
+    if (error === "slow_down") {
+      interval += 5;
+      continue;
+    }
+    if (error === "access_denied") return yield* new DeviceLoginEnded({ reason: "denied" });
+    if (error === "expired_token") return yield* new DeviceLoginEnded({ reason: "expired" });
+    return yield* rejected(polled, "Device authorization");
+  }
+});
+
 /**
  * Sign in, mint a CLI credential, and end the temporary session that minted it.
  *
@@ -280,8 +569,11 @@ export const authStatusCommand = Effect.fn("CLI.authStatus")(function* (
 export const loginEffect = Effect.fn("Auth.login")(
   function* (input: {
     origin: string;
-    email: string;
-    password: string;
+    /** Sign in with these. */
+    email?: string;
+    password?: string;
+    /** Or the session a browser login was approved with (see `awaitDeviceApprovalEffect`). */
+    approvedSessionToken?: string;
     scopes: AuthScope[];
     alias?: string;
     home?: string;
@@ -290,71 +582,30 @@ export const loginEffect = Effect.fn("Auth.login")(
     const accounts = yield* readAccounts(input.home);
     yield* accounts.checkLoginAlias(origin, input.alias);
     const existing = accounts.stored(origin);
-    const http = yield* (yield* RegistryHttp).client;
-    const send = (
-      url: URL,
-      init: {
-        readonly method?: "GET" | "POST" | "PUT" | "DELETE";
-        readonly headers?: Readonly<Record<string, string>>;
-        readonly body?: string;
-      } = {},
-    ): Effect.Effect<HttpClientResponse, RegistryUnreachable> => {
-      let request = HttpClientRequest.make(init.method ?? "GET")(url, { headers: init.headers });
-      if (init.body !== undefined)
-        request = HttpClientRequest.bodyText(request, init.body, "application/json");
-      return http
-        .execute(request)
-        .pipe(Effect.mapError((error) => new RegistryUnreachable({ origin, cause: error.cause })));
-    };
-
-    const discoveryResponse = yield* send(new URL("/.well-known/skit", origin), { method: "GET" });
-    if (!ok(discoveryResponse))
-      return yield* new SignInFailed({
-        message: `Registry discovery failed (${discoveryResponse.status})`,
-      });
-    const discovery = yield* discoveryResponse.json.pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(serverDiscoverySchema)),
-      Effect.mapError(
-        (error) => new SignInFailed({ message: `Registry discovery is invalid: ${error.message}` }),
-      ),
-    );
-    const unsupportedScopes = input.scopes.filter((scope) => !discovery.scopes.includes(scope));
-    if (unsupportedScopes.length > 0)
-      return yield* new SignInFailed({
-        message: `Registry does not support requested scopes: ${unsupportedScopes.join(", ")}`,
-      });
-    /** The Registry's own words for a rejected request, in the shape every branch reported. */
-    const rejected = Effect.fn("Auth.rejected")(function* (
-      response: HttpClientResponse,
-      context: string,
-    ) {
-      const body = yield* response.json.pipe(
-        Effect.catchTag("HttpClientError", () => Effect.succeed({})),
-      );
-      if (response.status === 401) return yield* new SignInRejected({ context });
-      if (response.status === 429) return yield* new TooManyAuthAttempts();
-      const detail = yield* Schema.decodeUnknownEffect(ApiErrorBody)(body).pipe(
-        Effect.map(({ error }) => error),
-        Effect.orElseSucceed(() => "unknown_error"),
-      );
-      return yield* new SignInFailed({
-        message: `${context} failed (${response.status}): ${detail}`,
-      });
+    const exchange = yield* openExchange(origin, input.scopes);
+    const { http, send, json } = exchange;
+    /** The temporary session's credential, as request headers. */
+    const session: Readonly<Record<string, string>> = yield* Effect.gen(function* () {
+      if (input.email !== undefined && input.password !== undefined) {
+        const signIn = yield* send(new URL("/api/auth/sign-in/email", origin), {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({ email: input.email, password: input.password }),
+        });
+        if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
+        const cookie = Cookies.toCookieHeader(signIn.cookies);
+        if (!cookie)
+          return yield* new SignInFailed({ message: "Sign in did not establish a session" });
+        return { ...json, cookie };
+      }
+      if (input.approvedSessionToken === undefined)
+        return yield* new SignInFailed({ message: "No sign-in method was given" });
+      return { ...json, authorization: `Bearer ${input.approvedSessionToken}` };
     });
-    const signIn = yield* send(new URL("/api/auth/sign-in/email", origin), {
-      method: "POST",
-      // A CLI can self-assert Origin; this preserves Better Auth compatibility rather than
-      // acting as a security boundary. Browser requests still receive real origin enforcement.
-      headers: { "content-type": "application/json", origin },
-      body: JSON.stringify({ email: input.email, password: input.password }),
-    });
-    if (!ok(signIn)) return yield* rejected(signIn, "Sign in");
-    const cookie = Cookies.toCookieHeader(signIn.cookies);
-    if (!cookie) return yield* new SignInFailed({ message: "Sign in did not establish a session" });
     const sessionClient = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
       httpClient: http,
       baseUrl: origin,
-    }).pipe(Effect.provide(sessionApiMiddleware(cookie, origin)));
+    }).pipe(Effect.provide(sessionApiMiddleware(session)));
     const revoke = (credential: StoredCredential) =>
       HttpApiClient.makeWith(ConsumerAuthenticatedApi, { httpClient: http, baseUrl: origin }).pipe(
         Effect.provide(authenticatedApiMiddleware(credential.token)),
@@ -374,7 +625,7 @@ export const loginEffect = Effect.fn("Auth.login")(
     const signOutRequest = () =>
       send(new URL("/api/auth/sign-out", origin), {
         method: "POST",
-        headers: { cookie, origin, "content-type": "application/json" },
+        headers: session,
         body: "{}",
       });
     // The temporary session and an unsaved credential are resources from here on, not steps.

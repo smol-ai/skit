@@ -10,6 +10,7 @@ import {
   renderResultFrame,
 } from "./output-frame.js";
 import { terminalColors, terminalColorEnabled } from "./terminal-style.js";
+import { automationMarker } from "./interactivity.js";
 
 export interface RendererShape {
   /** A command's successful payload: JSON or rendered text, plus any declared exit code. */
@@ -25,6 +26,12 @@ export interface RendererShape {
     title: string,
     options?: { readonly renderBody: (color: boolean) => string },
   ) => Effect.Effect<void>;
+  /**
+   * Something the user must do outside this command while it waits, such as approving a login in
+   * a browser. Written to stderr even when the caller asked for JSON: without it the command waits
+   * on nobody.
+   */
+  readonly instruction: (body: string, title: string) => Effect.Effect<void>;
   /** One numbered step of a guided flow, announced before its question. Suppressed like a note. */
   readonly step: (
     step: { readonly index: number; readonly total: number; readonly title: string },
@@ -68,8 +75,8 @@ export function consoleRenderer(json: boolean): RendererShape {
     return write(process.stderr, CLEAR_STATUS_LINE);
   });
 
-  const note = (body: string, title: string) => {
-    const frame = renderNoteFrame(body, title, format);
+  const note = (body: string, title: string, frameFormat: typeof format = format) => {
+    const frame = renderNoteFrame(body, title, frameFormat);
     return Effect.suspend(() => {
       if (!frame.stderr) return Effect.void;
       const resumeStatus = statusVisible;
@@ -109,6 +116,10 @@ export function consoleRenderer(json: boolean): RendererShape {
         color.cyan(color.bold(terminalText(title))),
       );
     },
+    instruction: (body, title) => {
+      const color = terminalColors();
+      return note(terminalText(body), color.cyan(color.bold(terminalText(title))), "human");
+    },
     step: ({ index, total, title }, body) => {
       const color = terminalColors();
       return note(
@@ -123,7 +134,8 @@ export function consoleRenderer(json: boolean): RendererShape {
     withStatus: (status, operation) => {
       if (json) return operation;
       const timed = typeof status !== "string" && status.persist === "timed";
-      const interactive = Boolean(process.stderr.isTTY);
+      // An agent reads the whole transcript, so spinner frames are noise there even on a terminal.
+      const interactive = Boolean(process.stderr.isTTY) && automationMarker() === undefined;
       if (!interactive && !timed) return operation;
       return Effect.scoped(
         Effect.gen(function* () {

@@ -202,3 +202,18 @@ it.effect("v4 reads stay read-only and preserve an initialized empty repository 
     assert.deepStrictEqual(updated.repositories, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+// Non-interactive `skit setup --work-dir` saves a root without deciding about any repository. If
+// that marked decisions initialized, inventory would inspect only watched repositories: none.
+it.effect("saving discovery roots alone leaves repository decisions undecided", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-machine-roots-" });
+    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/work"] });
+    assert.strictEqual((yield* MachineSettings.read(home)).repositoryDecisionsInitialized, false);
+    yield* MachineSettings.updateDiscovery(home, {
+      repositories: [{ path: "/work/app", status: "watched" }],
+    });
+    assert.strictEqual((yield* MachineSettings.read(home)).repositoryDecisionsInitialized, true);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

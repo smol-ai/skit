@@ -16,7 +16,7 @@ const handlerFor = (env: RuntimeEnv) => {
 const isPageRequest = (request: Request): boolean => {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   const pathname = new URL(request.url).pathname;
-  return pathname === "/" || pathname === "/setup";
+  return pathname === "/" || pathname === "/setup" || pathname === "/device";
 };
 
 const renderResponse = async (

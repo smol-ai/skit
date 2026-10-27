@@ -24,6 +24,7 @@ import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 import { runSetup } from "../../workflows/library/setup.js";
 import { inspectNativeDiscovery } from "../../workflows/library/doctor-harnesses.js";
+import { promptsAllowed } from "../../presentation/interactivity.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 
@@ -118,12 +119,6 @@ export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInve
   return { ...report, ...native };
 });
 
-const localInventoryMetadata = {
-  effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-  exitCodes: [0, 65],
-  interactive: false,
-} as const;
-
 const machineInventoryMetadata = {
   effects: {
     capabilities: ["filesystem.read", "filesystem.write", "process.execute"],
@@ -136,7 +131,7 @@ const machineInventoryMetadata = {
       "devin --version",
     ],
   },
-  exitCodes: [0, 65],
+  exitCodes: [0, 12, 64, 65],
   interactive: false,
 } as const;
 
@@ -206,7 +201,7 @@ export const doctorCliCommand = Command.make(
           const renderer = yield* Renderer;
           const value = yield* doctorCommand(options);
           yield* renderer.result(result("doctor", value, value.ok ? undefined : 12));
-          if (!input.json && !input.reportOnly && process.stdin.isTTY && process.stderr.isTTY) {
+          if (!input.reportOnly && promptsAllowed({ json: input.json })) {
             const changed = yield* presentDoctorCleanup(
               value.listing_budgets,
               options,
@@ -230,7 +225,6 @@ export const doctorCliCommand = Command.make(
   ),
   Command.withExamples([{ command: "skit doctor" }]),
   Command.annotate(CommandMetadata, {
-    ...localInventoryMetadata,
     interactive: true,
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "process.execute"],

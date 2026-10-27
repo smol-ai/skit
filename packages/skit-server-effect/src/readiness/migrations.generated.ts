@@ -8,4 +8,5 @@ export const expectedMigrations = [
   "0005_author_inventory.sql",
   "0006_snapshot_adoption.sql",
   "0007_library_snapshots.sql",
+  "0008_device_authorization.sql",
 ] as const;

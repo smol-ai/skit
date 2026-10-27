@@ -301,6 +301,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         repositoryDecisions: [],
         persisted: false,
       },
+      suggestedRepositoryRoots: [],
       probes: [
         { harness: "claude-code", status: "installed", command: "claude" },
         { harness: "codex", status: "missing", command: "codex" },
@@ -324,6 +325,10 @@ export const outputStories: ReadonlyArray<OutputStory> = [
             sourcePath: "/home/story/.claude/skills/review",
           },
         ],
+        recommended: {
+          sources: [],
+          copies: [{ name: "review", sourcePath: "/home/story/.claude/skills/review" }],
+        },
       },
       locks: [],
       instances: [
@@ -341,6 +346,37 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       ],
       brokenLinks: [],
       suppressed: [],
+    }),
+  ),
+  resultStory(
+    "setup",
+    "applied",
+    result("setupApplied", {
+      planId: `sha256:${"0".repeat(64)}`,
+      imported: [],
+      added: [{ name: "review", sourcePath: "/home/story/.claude/skills/review" }],
+      reconnected: [],
+      projections: [
+        {
+          name: "review",
+          target: "agents",
+          path: "/home/story/.agents/skills/review",
+          status: "installed",
+        },
+        {
+          name: "review",
+          target: "claude",
+          path: "/home/story/.claude/skills/review",
+          status: "installed",
+        },
+      ],
+      leftAlone: [
+        {
+          name: "commit",
+          paths: ["/home/story/.agents/skills/commit", "/home/story/.claude/skills/commit"],
+          reason: "divergent-copies",
+        },
+      ],
     }),
   ),
   resultStory(
@@ -609,6 +645,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           expired: false,
           isDefault: true,
           source: "stored",
+          storage: "keychain",
         },
       ],
     }),
@@ -775,7 +812,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       enabled: true,
       changed: true,
       bindings: [binding],
-      projections: [{ target: "agents" }],
+      projections: [
+        { target: "agents", path: "/home/story/.agents/skills/review", status: "installed" },
+      ],
     }),
   ),
   resultStory(
@@ -800,7 +839,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       enabled: false,
       changed: true,
       bindings: [],
-      projections: [{ target: "agents" }],
+      projections: [],
     }),
   ),
   resultStory(
@@ -877,6 +916,17 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       tokenPrefix: "sk_live_…",
       scopes: ["publish", "draft:write"],
       expiresAt: "2027-01-01T00:00:00Z",
+    }),
+  ),
+  resultStory(
+    "auth-login",
+    "pending-approval",
+    result("authLoginPending", {
+      origin: "https://registry.example",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://registry.example/device",
+      expiresAt: "2027-01-01T00:10:00.000Z",
+      next: "skit auth login",
     }),
   ),
   resultStory(

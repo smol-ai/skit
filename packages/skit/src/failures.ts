@@ -374,6 +374,25 @@ export class NoProjectionRoot
   }
 }
 
+/**
+ * The operating system refused a write SKIT needs in order to place copies under a Skill root.
+ * Agent sandboxes do this routinely: Codex's default sandbox keeps `.agents` read-only even inside
+ * its writable workspace, so the remediation names that case before ordinary permissions.
+ */
+export class ProjectionRootNotWritable
+  extends Data.TaggedError("ProjectionRootNotWritable")<{ root: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get remediation(): string {
+    return `If an agent sandbox is running SKIT, re-run this command with write access to ${this.root} (for example, approve running it outside the sandbox). Otherwise check that directory's permissions.`;
+  }
+  get message(): string {
+    return `SKIT cannot write to ${this.root}: permission denied`;
+  }
+}
+
 /** A Projection was modified or is conflicted, so custody will not be given up silently. */
 export class OwnershipMarkerDisagrees
   extends Data.TaggedError("OwnershipMarkerDisagrees")<{

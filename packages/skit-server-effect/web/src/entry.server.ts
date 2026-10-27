@@ -49,7 +49,8 @@ export const flagsForRequest = (
 ): Effect.Effect<Flags, Error> =>
   Effect.gen(function* () {
     const url = new URL(request.url);
-    const page = url.pathname === "/setup" ? "setup" : "home";
+    const page =
+      url.pathname === "/setup" ? "setup" : url.pathname === "/device" ? "device" : "home";
     const [configuration, session] = yield* Effect.all([
       requestJson(handler, requestFor(request, "/api/ui/config"), UiConfiguration),
       requestJson(handler, requestFor(request, "/api/auth/get-session"), Session).pipe(

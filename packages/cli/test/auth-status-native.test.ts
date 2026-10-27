@@ -41,6 +41,7 @@ it.effect("returns every stored authentication record", () =>
           origin: "https://one.example",
           scopes: ["authoring:write"],
           source: "stored",
+          storage: "file",
           tokenPrefix: "secret-one",
         },
         {
@@ -51,6 +52,7 @@ it.effect("returns every stored authentication record", () =>
           origin: "https://two.example",
           scopes: ["library:sync"],
           source: "stored",
+          storage: "file",
           tokenPrefix: "secret-two",
         },
       ],

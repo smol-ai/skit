@@ -31,5 +31,16 @@ export function renderSetEnabled(
   const warnings = data.warnings
     ?.map((warning) => `Could not inspect ${warning.path}: ${warning.message}`)
     .join("\n");
-  return `${verb} ${skills}${destination}${change}${warning}${warnings ? `\n${warnings}` : ""}`;
+  const notInstalled =
+    "projections" in data && data.enabled
+      ? data.projections.filter((projection) => projection.status !== "installed")
+      : [];
+  const notInstalledLines = notInstalled.length
+    ? `\nNot installed (a folder SKIT does not manage is already there):\n${notInstalled.map((projection) => `  ${projection.target} · ${projection.status} · ${projection.path}`).join("\n")}`
+    : "";
+  const unmanaged = applied ? [] : (data.unmanaged_destinations ?? []);
+  const unmanagedLines = unmanaged.length
+    ? `\nA folder SKIT does not manage is already there; enable adopts it only if it is identical, otherwise it is left in place:\n${unmanaged.map((folder) => `  ${folder.target} · ${folder.path}`).join("\n")}`
+    : "";
+  return `${verb} ${skills}${destination}${change}${warning}${unmanagedLines}${notInstalledLines}${warnings ? `\n${warnings}` : ""}`;
 }

@@ -130,7 +130,7 @@ describe("saved login reuse", () => {
             ),
           ),
         );
-        expect(value.alreadyAuthenticated).toBe(true);
+        expect(value).toMatchObject({ alreadyAuthenticated: true });
         expect(yield* interaction.prompts).toEqual([]);
       }).pipe(Effect.provide(testPlatformLayer)),
     );
@@ -294,12 +294,10 @@ function successfulServer(observed: Array<{ url: string; init?: RequestInit }>):
 }
 
 describe("CLI authentication journey", () => {
-  it.effect("requires an explicit Registry when no default is configured", () =>
+  it.effect("signs in to the hosted Registry when no Registry is configured", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      expect(yield* Effect.flip(resolveLoginTargetEffect(undefined, home))).toMatchObject({
-        _tag: "DefaultRegistryNotConfigured",
-      });
+      expect(yield* resolveLoginTargetEffect(undefined, home)).toBe("https://skit.smol.ai");
       expect(yield* Effect.flip(resolveLoginTargetEffect("missing", home))).toMatchObject({
         _tag: "RegistryAliasNotFound",
         name: "missing",

@@ -183,21 +183,6 @@ export class RegistryAliasNotFound
   }
 }
 
-export class DefaultRegistryNotConfigured
-  extends Data.TaggedError("DefaultRegistryNotConfigured")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation =
-    "For the simplest setup, run `skit auth login https://skit.smol.ai` to use our hosted reference server. " +
-    "You can also self-host the server: https://github.com/smol-ai/skit/tree/main/packages/skit-server-effect. " +
-    "Pass your own Registry URL or set a configured default with `skit registry default <name>`.";
-  get message() {
-    return "No default Registry is configured. SKIT leaves the server choice to you, including self-hosting.";
-  }
-}
-
 export class RegistrySelectionConflict
   extends Data.TaggedError("RegistrySelectionConflict")<{
     locator: string;
@@ -399,14 +384,14 @@ export class AuthenticationRequired
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
+  readonly code = "AUTHENTICATION_REQUIRED" as const;
   get remediation(): string {
     const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
-    return `Run \`skit auth login ${this.origin ?? "<origin>"}${scopes}\`, then retry.`;
+    return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\`, then retry.`;
   }
   get message(): string {
     const scopes = this.scopes ? ` --scopes ${this.scopes}` : "";
-    return `Authentication is required; run \`skit auth login ${this.origin ?? "<origin>"}${scopes}\``;
+    return `Authentication is required; run \`skit auth login${this.origin ? ` ${this.origin}` : ""}${scopes}\``;
   }
 }
 
@@ -419,12 +404,12 @@ export class CredentialLacksScope
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
+  readonly code = "AUTHENTICATION_REQUIRED" as const;
   get remediation(): string {
-    return `Run \`skit auth login ${this.origin ?? "<origin>"} --scopes ${this.scopes ?? this.scope}\`, then retry.`;
+    return `Run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\`, then retry.`;
   }
   get message(): string {
-    return `The active credential lacks ${this.scope}; run \`skit auth login ${this.origin ?? "<origin>"} --scopes ${this.scopes ?? this.scope}\``;
+    return `The active credential lacks ${this.scope}; run \`skit auth login${this.origin ? ` ${this.origin}` : ""} --scopes ${this.scopes ?? this.scope}\``;
   }
 }
 
@@ -455,7 +440,7 @@ export class CredentialsUnusable
   get remediation(): string {
     return this.reason === "unreadable"
       ? `Fix the permissions on ${this.path}, then retry.`
-      : `Move ${this.path} aside, then run \`skit auth login <origin>\` again.`;
+      : `Move ${this.path} aside, then run \`skit auth login\` again.`;
   }
   get message(): string {
     return this.reason === "unreadable"
@@ -471,14 +456,15 @@ export class SignInRejected
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
   get remediation(): string {
+    // The Registry does not say why, so as not to reveal which accounts exist or how they sign in.
     return this.context === "Sign in"
-      ? "Check the email and password, then retry."
-      : "Run `skit auth login <origin>` again.";
+      ? "Check the email and password, then retry. An account created with GitHub sign-in has no password, so it cannot sign in from the CLI yet."
+      : "Run `skit auth login` again.";
   }
   get message(): string {
     return this.context === "Sign in"
       ? "Email or password is incorrect"
-      : `${this.context} was unauthorized; run \`skit auth login <origin>\` again`;
+      : `${this.context} was unauthorized; run \`skit auth login\` again`;
   }
 }
 
@@ -490,7 +476,34 @@ export class InteractiveLoginUnavailable
   readonly code = "INVALID_ARGUMENT" as const;
   readonly remediation = "Run `skit auth login` in a terminal, or set SKIT_TOKEN.";
   get message(): string {
-    return "Interactive login requires a terminal; set SKIT_TOKEN to use an existing credential";
+    return "Login needs a person to sign in; set SKIT_TOKEN to use an existing credential";
+  }
+}
+
+/** The Registry predates browser approval, so only email and password sign-in remain. */
+export class DeviceLoginUnavailable
+  extends Data.TaggedError("DeviceLoginUnavailable")<{ origin: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation = "Run `skit auth login` in a terminal to sign in with email and password.";
+  get message(): string {
+    return `${this.origin} does not offer browser approval for CLI login`;
+  }
+}
+
+export class DeviceLoginEnded
+  extends Data.TaggedError("DeviceLoginEnded")<{ reason: "denied" | "expired" }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Run `skit auth login` again for a new code.";
+  get message(): string {
+    return this.reason === "denied"
+      ? "The login was denied in the browser"
+      : "The login code expired before it was approved";
   }
 }
 
@@ -612,12 +625,12 @@ export class DestinationFormInvalid
   get remediation(): string {
     return this.form === "canonical"
       ? "Pass the destination as skit://host/namespace/skit."
-      : "Run `skit auth login <origin>`, or pass a full destination.";
+      : "Run `skit auth login`, or pass a full destination.";
   }
   get message(): string {
     return this.form === "canonical"
       ? "Canonical SKIT destination must be skit://host/namespace/skit"
-      : "A relative author destination requires an active Registry; run `skit auth login <origin>`";
+      : "A relative author destination requires an active Registry; run `skit auth login`";
   }
 }
 

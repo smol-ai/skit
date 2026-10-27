@@ -1,0 +1,30 @@
+{
+  "$id": "skit.auth.login.pending.v1",
+  "type": "object",
+  "properties": {
+    "origin": {
+      "type": "string"
+    },
+    "userCode": {
+      "type": "string"
+    },
+    "verificationUri": {
+      "type": "string"
+    },
+    "expiresAt": {
+      "type": "string"
+    },
+    "next": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "origin",
+    "userCode",
+    "verificationUri",
+    "expiresAt",
+    "next"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

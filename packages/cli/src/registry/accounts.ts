@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect";
 import {
-  DefaultRegistryNotConfigured,
   InsecureOrigin,
   RegistryAliasConflict,
   RegistryAliasInvalid,
@@ -15,7 +14,9 @@ import {
  * about must not render the whole credential file unusable.
  */
 export const StoredCredential = Schema.Struct({
-  token: Schema.String,
+  /** Absent when the token lives in the OS store named by `tokenStorage`. */
+  token: Schema.optionalKey(Schema.String),
+  tokenStorage: Schema.optionalKey(Schema.Literals(["keychain", "secret-service"])),
   tokenId: Schema.String,
   tokenPrefix: Schema.String,
   scopes: Schema.Array(Schema.String),
@@ -55,6 +56,7 @@ type AuthStatusCredential = {
   expired: boolean;
   isDefault: boolean;
   source: "stored" | "environment";
+  storage: "keychain" | "secret-service" | "file" | "environment";
 };
 
 // URL syntax errors retain their generic command classification; programming defects do not.
@@ -77,6 +79,13 @@ export const validateAuthenticationOrigin = Effect.fnUntraced(function* (input: 
 });
 
 export type AccountEnvironment = { readonly origin?: string; readonly token?: string };
+
+/**
+ * smol.ai's hosted SKIT Registry: where `skit auth login` signs in, and where `skit:` shorthand
+ * resolves, when nothing else is configured. An argument, `SKIT_SERVER_URL` or a configured default
+ * Registry always takes precedence, so self-hosting needs no change.
+ */
+export const officialRegistryOrigin = "https://skit.smol.ai";
 
 /** Environment credentials may be used even when the credential file is unusable. */
 export const environmentCredential = Effect.fn("RegistryAccounts.environmentCredential")(function* (
@@ -170,10 +179,10 @@ export class RegistryAccounts {
     selector?: string,
   ) {
     if (selector?.includes("://")) return yield* validateAuthenticationOrigin(selector);
-    const name = selector ?? this.defaultRegistry;
-    if (!name) return yield* new DefaultRegistryNotConfigured();
-    if (!selector && !this.defaultOrigin) return yield* new DefaultRegistryNotConfigured();
-    return yield* validateAuthenticationOrigin(yield* this.alias(name));
+    if (selector) return yield* validateAuthenticationOrigin(yield* this.alias(selector));
+    // The same precedence as ambient selection: the environment, then the configured default.
+    const configured = this.environment.origin ?? this.defaultOrigin;
+    return yield* validateAuthenticationOrigin(configured ?? officialRegistryOrigin);
   });
 
   credential = Effect.fn("RegistryAccounts.credential")(function* (
@@ -213,6 +222,7 @@ export class RegistryAccounts {
         expired: credential.expiresAt ? Date.parse(credential.expiresAt) <= now : false,
         isDefault: this.defaultOrigin === origin,
         source: "stored",
+        storage: credential.tokenStorage ?? "file",
       }));
     const origin = this.environment.origin
       ? yield* parseOrigin(this.environment.origin)
@@ -228,6 +238,7 @@ export class RegistryAccounts {
         expired: false,
         isDefault: this.defaultOrigin === origin,
         source: "environment",
+        storage: "environment",
       });
     return { credentials };
   });
@@ -246,7 +257,8 @@ export class RegistryAccounts {
   private allocateAlias(origin: string) {
     const existing = this.aliasesOf(origin)[0];
     if (existing) return existing;
-    let name = "default";
+    let name =
+      origin === officialRegistryOrigin && !this.config.registryAliases?.smol ? "smol" : "default";
     for (
       let suffix = 2;
       this.config.registryAliases?.[name] && !this.hasAlias(name, origin);

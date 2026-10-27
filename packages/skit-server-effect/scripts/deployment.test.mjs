@@ -173,7 +173,7 @@ describe("server deployment configuration", () => {
     ]);
     assert.equal(configuration.assets.binding, "ASSETS");
     assert.equal(configuration.assets.directory, "web/dist/client");
-    assert.deepEqual(configuration.assets.run_worker_first.slice(0, 2), ["/", "/setup"]);
+    assert.deepEqual(configuration.assets.run_worker_first.slice(0, 3), ["/", "/setup", "/device"]);
   });
 
   it("reads targets from Wrangler's versioned structured deployment output", () => {
@@ -313,7 +313,7 @@ describe("server deployment execution", () => {
     await deploy(
       {},
       {
-        read: async () => configuration,
+        read: async () => ({ ...configuration, account_id: "account-1" }),
         write: rejectWrite,
         build: async () => {
           calls.push("build");
@@ -325,9 +325,12 @@ describe("server deployment execution", () => {
     );
     assert.equal(calls[0], "build");
     assert.deepEqual(calls[1].args, ["d1", "migrations", "apply", "DB", "--remote"]);
+    // wrangler d1 ignores the configured account when the login reaches several.
+    const env = { CLOUDFLARE_ACCOUNT_ID: "account-1" };
+    assert.deepEqual(calls[1].options, { env });
     assert.deepEqual(calls[2], {
       args: ["deploy"],
-      options: { configPath: "built-wrangler.json" },
+      options: { configPath: "built-wrangler.json", env },
     });
     assert.match(calls[3], /0.2.0.*release.*abc123.*build-1/);
   });

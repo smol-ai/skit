@@ -164,7 +164,9 @@ export const layer = (supportedScopes: ReadonlySet<Scope>) =>
 
       const authenticate = Effect.fn("Authentication.authenticate")(function* (request: Request) {
         const authorization = request.headers.get("authorization");
-        if (authorization?.startsWith("Bearer "))
+        // Any other Bearer value is a session token from device authorization (`skit auth login`),
+        // which Better Auth's bearer plugin reads as the session cookie.
+        if (authorization?.startsWith("Bearer skit_pat_"))
           return yield* authenticatePat(authorization.slice("Bearer ".length));
         const session = yield* betterAuth.getSession(request.headers);
         if (session === undefined) return undefined;

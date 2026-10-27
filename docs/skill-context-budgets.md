@@ -16,8 +16,8 @@ It lists skills whose pre-budget-trimming listing cost is strictly greater than 
 harness's allowance, including when the overall listing fits. Costs include row metadata;
 they are not measurements of the description alone.
 
-Use `--detail full` for source provenance, coverage notes, and paths. JSON output uses
-`skit.doctor.v6` and exposes the shared results in `listing_budgets`. Codex budget and
+Use `skit doctor --json` for the full skill lists, coverage notes, and paths. JSON output uses
+`skit.doctor.v7` and exposes the shared results in `listing_budgets`. Codex budget and
 native-discovery diagnostics reuse one app-server process; Claude budget discovery reads
 filesystem metadata and settings.
 

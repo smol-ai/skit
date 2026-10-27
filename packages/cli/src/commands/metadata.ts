@@ -1,16 +1,50 @@
 import { Context } from "effect";
 import type { AnyOutputContract } from "./output-contracts.js";
 
+/** The side effects a command may have, published so callers can decide whether to run it. */
+export type CommandCapability =
+  | "filesystem.read"
+  | "filesystem.write"
+  | "network.read"
+  | "network.write"
+  | "process.execute"
+  | "browser.open";
+
 export interface CommandMetadataShape {
   readonly stability?: "stable" | "experimental";
   readonly effects?: {
-    readonly capabilities: readonly string[];
+    readonly capabilities: readonly CommandCapability[];
     readonly subprocesses?: readonly string[];
   };
   readonly outputSchemas: readonly AnyOutputContract[];
   readonly exitCodes: readonly number[];
   readonly interactive: boolean;
 }
+
+/** Git commands Source acquisition runs when it retains or restores a Git or GitHub Source. */
+export const sourceAcquisitionSubprocesses = [
+  "git clone --filter=blob:none --no-checkout",
+  "git fetch --filter=blob:none",
+  "git checkout --detach",
+  "git rev-parse",
+  "git ls-files",
+  "git check-ignore",
+] as const;
+
+/** Commands the OS credential store is read through when stored Registry tokens are loaded. */
+export const credentialStoreReadSubprocesses = [
+  "/usr/bin/security find-generic-password",
+  "secret-tool lookup",
+] as const;
+
+/** Commands the OS credential store is read, written, and cleared through. */
+export const credentialStoreSubprocesses = [
+  ...credentialStoreReadSubprocesses,
+  "/usr/bin/security -i (add-generic-password)",
+  "/usr/bin/security delete-generic-password",
+  "secret-tool store",
+  "secret-tool clear",
+] as const;
 
 /** Metadata that belongs to SKIT's public contract rather than Effect's CLI grammar. */
 export const CommandMetadata = Context.Service<never, CommandMetadataShape>(

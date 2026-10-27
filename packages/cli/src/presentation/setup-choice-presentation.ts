@@ -91,11 +91,16 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
           ? "Retain all in Library without enabling"
           : "Retain in Library without enabling",
       },
-      {
-        value: "keep-both",
-        label: bulk ? "Keep both copies and enable all" : "Keep both copies and enable",
-        hint: "The agent may discover duplicate skills",
-      },
+      // A link where SKIT writes its copy is replaced, so both copies cannot stay.
+      ...(group.some((copy) => copy.conflict.kind !== "none" && copy.conflict.replacesLink)
+        ? []
+        : [
+            {
+              value: "keep-both" as const,
+              label: bulk ? "Keep both copies and enable all" : "Keep both copies and enable",
+              hint: "The agent may discover duplicate skills",
+            },
+          ]),
       ...(bulk ? [{ value: "individual" as const, label: "Choose individually" }] : []),
     ];
     const action = yield* prompter.select(

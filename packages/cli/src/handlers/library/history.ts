@@ -28,8 +28,9 @@ export const libraryHistoryCliCommand = Command.make(
     { command: "skit library history --json" },
   ]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.libraryHistory],
-    exitCodes: [0, 65],
+    exitCodes: [0, 64],
     interactive: false,
   }),
 );

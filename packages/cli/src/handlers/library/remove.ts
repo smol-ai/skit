@@ -41,6 +41,7 @@ export const removeCliCommand = Command.make(
   Command.withDescription("Remove a retained Collection and its owned Projections."),
   Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [outputContracts.remove, outputContracts.removePlan],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

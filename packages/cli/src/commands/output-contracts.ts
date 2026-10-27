@@ -24,7 +24,11 @@ import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.j
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
-import { RepositoryPolicyResult, SetupResult } from "../workflows/library/setup-contract.js";
+import {
+  RepositoryPolicyResult,
+  SetupApplied,
+  SetupResult,
+} from "../workflows/library/setup-contract.js";
 import {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
@@ -120,10 +124,10 @@ export const outputContracts = {
   ),
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),
-  enable: effectOutput("skit.enable.v7", SetEnabledResult),
-  enablePlan: effectOutput("skit.enable.plan.v7", SetEnabledPlan),
-  disable: effectOutput("skit.disable.v7", SetEnabledResult),
-  disablePlan: effectOutput("skit.disable.plan.v7", SetEnabledPlan),
+  enable: effectOutput("skit.enable.v8", SetEnabledResult),
+  enablePlan: effectOutput("skit.enable.plan.v8", SetEnabledPlan),
+  disable: effectOutput("skit.disable.v8", SetEnabledResult),
+  disablePlan: effectOutput("skit.disable.plan.v8", SetEnabledPlan),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
   librarySync: effectOutput("skit.library.sync.v10", SyncResult),
@@ -131,7 +135,8 @@ export const outputContracts = {
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
-  setup: effectOutput("skit.setup.v7", SetupResult),
+  setup: effectOutput("skit.setup.v8", SetupResult),
+  setupApplied: effectOutput("skit.setup.applied.v1", SetupApplied),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
@@ -154,8 +159,20 @@ export const outputContracts = {
       credentialPath: Schema.optionalKey(Schema.String),
     }),
   ),
+  authLoginPending: effectOutput(
+    "skit.auth.login.pending.v1",
+    Schema.Struct({
+      origin: Schema.String,
+      /** The code the user enters at `verificationUri`. */
+      userCode: Schema.String,
+      verificationUri: Schema.String,
+      expiresAt: Schema.String,
+      /** Run once the user has approved the code; it waits for approval if they have not yet. */
+      next: Schema.String,
+    }),
+  ),
   authStatus: effectOutput(
-    "skit.auth.status.v2",
+    "skit.auth.status.v3",
     Schema.Struct({
       credentials: Schema.Array(
         Schema.Struct({
@@ -168,6 +185,8 @@ export const outputContracts = {
           expired: Schema.Boolean,
           isDefault: Schema.Boolean,
           source: Schema.Literals(["environment", "stored"]),
+          /** Where the token is kept: an OS store, the 0600 credential file, or the environment. */
+          storage: Schema.Literals(["keychain", "secret-service", "file", "environment"]),
         }),
       ),
     }),

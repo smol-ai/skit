@@ -28,6 +28,14 @@ export const SetEnabledPlan = Schema.Struct({
   /** An unchanged Binding whose copies are missing, edited, or left behind and will be repaired. */
   repair: Schema.optionalKey(Schema.Boolean),
   shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  /**
+   * Folders SKIT does not manage, already at destinations it would write. Enable adopts one only
+   * when it holds exactly SKIT's copy; otherwise it leaves it in place, reports it `conflicted`,
+   * and exits 12.
+   */
+  unmanaged_destinations: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ target: ProjectionTarget, path: Schema.String })),
+  ),
   warnings: Schema.optionalKey(Schema.Array(ShadowObservationError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
 });
@@ -35,8 +43,17 @@ export type SetEnabledPlan = typeof SetEnabledPlan.Type;
 
 export const SetEnabledResult = SetEnabledPlan.pipe(
   Schema.fieldsAssign({
-    /** Each target this change materialized; `.claude` appears only when Claude Code is present. */
-    projections: Schema.Array(Schema.Struct({ target: ProjectionTarget })),
+    /**
+     * Every copy of the changed skills at this scope after the change, with its status. A
+     * `conflicted` copy is a folder SKIT found at its destination and did not overwrite.
+     */
+    projections: Schema.Array(
+      Schema.Struct({
+        target: ProjectionTarget,
+        path: Schema.String,
+        status: Schema.String,
+      }),
+    ),
   }),
 );
 export type SetEnabledResult = typeof SetEnabledResult.Type;

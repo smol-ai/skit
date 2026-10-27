@@ -22,7 +22,11 @@ export const securityReviewCommand = Effect.fn("CLI.securityReview")(function* <
   ReviewServices,
 >(library: SecurityReviewLibrary<Review, ReviewError, ReviewServices>, query?: string) {
   if (!query)
-    return yield* new MissingRequirement({ command: "security review", requires: "<skill>" });
+    return yield* new MissingRequirement({
+      command: "security review",
+      requires: "<skill>",
+      hint: "`skit list --json` lists retained skills.",
+    });
   return yield* library.securityReviewEffect(query);
 });
 
@@ -43,6 +47,7 @@ export const securityReviewCliCommand = Command.make(
   Command.withDescription("Review security findings for an exact retained Skill Artifact."),
   Command.withExamples([{ command: "skit security review owner/tools:review --json" }]),
   Command.annotate(CommandMetadata, {
+    effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.securityReview],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,

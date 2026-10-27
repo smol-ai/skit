@@ -2,6 +2,7 @@ import { Data, Effect, Option } from "effect";
 import { CliOutput, Command } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { skitCliConfigLayer } from "./parameters.js";
 
 export class HelpDocumentMissing
   extends Data.TaggedError("CLI.HelpDocumentMissing")<{
@@ -40,6 +41,7 @@ export function helpDocument<Name extends string, Input, ContextInput, E, R>(
     "--help",
   ]).pipe(
     Effect.provideService(CliOutput.Formatter, formatter),
+    Effect.provide(skitCliConfigLayer),
     Effect.catchTag("ShowHelp", () => Effect.void),
     Effect.andThen(
       Effect.suspend(() =>

@@ -1,8 +1,13 @@
+import { join } from "node:path";
 import {
   bindingSkillIds,
   bindingShadowCheckSkills,
   LinkStat,
   deterministicTreeHashEffect,
+  ensureProjectionRootWritable,
+  inspectOwnershipMarkerEffect,
+  projectionNameEffect,
+  type ProjectionTarget,
   replaceScopeBinding,
   pruneEmptyBindings,
   lastPublishedLibraryState,
@@ -12,17 +17,20 @@ import {
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
-  type Digest,
+  type ProjectionAdoption,
+  type SkitBindingScope,
 } from "@smolai/skit-core";
-import { Data, Effect, FileSystem } from "effect";
+import { Data, Effect, FileSystem, Option } from "effect";
 import {
   activeProjectionTargetsEffect,
   bindingRoot,
   type InventoryRootOptions,
 } from "../projection/roots.js";
 import {
+  isEntryLink,
   observeHarnessShadows,
   ProjectionWouldDuplicate,
+  ProjectionWouldReplaceLink,
   type ShadowObservationError,
 } from "../projection/harness-shadows.js";
 import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
@@ -49,7 +57,7 @@ export interface BindingChangeRequest extends BindingSelection {
     readonly ino: number;
     readonly linkTarget?: string;
   }[];
-  readonly adoption?: { readonly path: string; readonly observedHash: Digest };
+  readonly adoption?: ProjectionAdoption;
 }
 
 export type BindingChangeConfiguration = InventoryRootOptions;
@@ -101,6 +109,24 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   const shadows = namesToCheck.length
     ? yield* observeHarnessShadows(configuration, scope, namesToCheck, warnings)
     : [];
+  // Apply settles these only once it has staged SKIT's copy to compare; a preview can say they
+  // are there. A link at a destination is a shadow, reported above.
+  const unmanaged: Array<{ target: ProjectionTarget; path: string }> = [];
+  if (options.enabled) {
+    const fs = yield* FileSystem.FileSystem;
+    for (const target of yield* activeProjectionTargetsEffect(configuration)) {
+      const root = bindingRoot(target, scope, configuration);
+      for (const skillId of skillIds) {
+        const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
+        if (skill === undefined) continue;
+        const path = join(root, yield* projectionNameEffect(skill.name));
+        if (!(yield* fs.exists(path))) continue;
+        if (Option.isSome(yield* Effect.option(fs.readLink(path)))) continue;
+        if ((yield* inspectOwnershipMarkerEffect(path)).kind === "valid") continue;
+        unmanaged.push({ target, path });
+      }
+    }
+  }
   // An unchanged Binding still repairs its copies when they are missing, edited, or left behind.
   let repair = false;
   if (!changed) {
@@ -129,6 +155,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   return {
     ...plan,
     ...(shadows.length ? { shadows } : {}),
+    ...(unmanaged.length ? { unmanaged_destinations: unmanaged } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...(repair ? { repair } : {}),
   };
@@ -254,6 +281,23 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     }
     if (remaining.length) return yield* new ProjectionWouldDuplicate({ shadows: remaining });
   }
+  if (options.enabled && options.allowDuplicate) {
+    const destinations: string[] = [];
+    for (const target of yield* activeProjectionTargetsEffect(configuration))
+      for (const skill of plan.skills)
+        destinations.push(join(bindingRoot(target, plan.scope, configuration), skill));
+    const links = shadows.flatMap((shadow) =>
+      shadow.aliases
+        .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
+        .map((alias) => alias.path),
+    );
+    if (links.length) return yield* new ProjectionWouldReplaceLink({ links });
+  }
+  // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
+  // published, so enabling never records intent its copies cannot follow.
+  if (options.enabled)
+    for (const target of yield* activeProjectionTargetsEffect(configuration))
+      yield* ensureProjectionRootWritable(bindingRoot(target, plan.scope, configuration));
   if (plan.changed) {
     let next = current;
     for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);
@@ -268,6 +312,9 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     onlyBindings: plan.bindings,
     restoreNativeDeletedSkills: options.enabled ? skillIds : [],
     ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
+    // Enabling a skill the user already installed by hand takes custody of an identical copy
+    // instead of recording a conflict with it.
+    adoptIdentical: options.enabled,
   });
   let result = {
     ...plan,
@@ -289,9 +336,27 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     kind: "applied" as const,
     value: {
       ...result,
-      projections: reconciled.outcomes.map(({ target }) => ({ target })),
+      projections: yield* changedProjections(configuration, plan.scope, skillIds),
     },
   };
+});
+
+/** Every copy of the changed skills at this scope after reconciling, as recorded. */
+const changedProjections = Effect.fn("LibraryBindings.changedProjections")(function* (
+  configuration: BindingChangeConfiguration,
+  scope: SkitBindingScope,
+  skillIds: readonly string[],
+) {
+  const store = yield* LibraryStore;
+  const state = yield* store.load;
+  const roots: string[] = [];
+  for (const target of yield* activeProjectionTargetsEffect(configuration))
+    roots.push(bindingRoot(target, scope, configuration));
+  return state.projections.flatMap(({ target, root, path, status, skill_id }) =>
+    target !== "legacy" && skillIds.includes(skill_id) && roots.includes(root)
+      ? [{ target, path, status }]
+      : [],
+  );
 });
 
 /** Revalidate and apply the prepared requests in order under one recording writer. */

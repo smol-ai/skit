@@ -27,6 +27,7 @@ import {
   NoProjectionRoot,
   OwnershipMarkerDisagrees,
   ProjectionRetireConflict,
+  ProjectionRootNotWritable,
   UnsafeProjectionBackups,
   UnsafeProjectionName,
 } from "../failures.js";
@@ -49,6 +50,7 @@ import {
   pendingProjectionBackupsEffect,
   projectionWorkDirectoryEffect,
 } from "./backups.js";
+import { ensureProjectionRootWritable } from "./writable.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
@@ -76,7 +78,12 @@ export interface MaterializeProjectionRequest {
   invocationIntent: InvocationIntent;
   previous?: ManagedProjection;
   /** Exact preview evidence authorizing Custody transfer of this unmanaged target. */
-  adoption?: { path: string; observedHash: Digest };
+  adoption?: ProjectionAdoption;
+  /**
+   * Take custody of an unmanaged directory at the destination when it already holds exactly the
+   * bytes this projection would write. Adopting it adds SKIT's marker and changes nothing else.
+   */
+  adoptIdentical?: boolean;
   /** Exact preview evidence authorizing a changed managed Projection as the selected Version. */
   replacement?: {
     projectionId: ProjectionIdType;
@@ -261,7 +268,7 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
   const { installation, skill, target, previous } = request;
   const root = request.root ?? context.rootFor(target);
   if (!root) return yield* Effect.fail(new NoProjectionRoot({ target }));
-  yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
+  yield* ensureProjectionRootWritable(root);
   const destination = join(root, yield* projectionNameEffect(skill.name));
   const projectionId = request.identity.projectionId;
   const prior = previous?.projection_id === projectionId ? previous : undefined;
@@ -350,13 +357,17 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
         const markerInspection = yield* inspectOwnershipMarkerEffect(destination);
         const marker = markerInspection.kind === "valid" ? markerInspection.marker : null;
         const observed = yield* hasher.hash(destination);
-        const adoptionPath = request.adoption?.path;
-        const adoptionMatchesDestination = adoptionPath
-          ? (yield* fs
-              .realPath(adoptionPath)
-              .pipe(Effect.orElseSucceed(() => resolve(adoptionPath)))) ===
-            (yield* fs.realPath(destination).pipe(Effect.orElseSucceed(() => resolve(destination))))
-          : false;
+        const realDestination = yield* fs
+          .realPath(destination)
+          .pipe(Effect.orElseSucceed(() => resolve(destination)));
+        const adoptionPaths = request.adoption
+          ? [request.adoption.path, ...(request.adoption.equalPaths ?? [])]
+          : [];
+        let adoptionMatchesDestination = false;
+        for (const path of adoptionPaths)
+          adoptionMatchesDestination ||=
+            (yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)))) ===
+            realDestination;
         const replacementMatches =
           request.replacement !== undefined &&
           request.replacement.projectionId === projectionId &&
@@ -378,6 +389,18 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             // Equal content is adopted in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
           }
+          // Unasked adoption only takes a folder that is nothing more than the copy: the hash
+          // leaves out `.git`, so a checkout with the same files, and its history, would
+          // otherwise become SKIT's to move aside on disable.
+          if (
+            markerInspection.kind === "absent" &&
+            request.adoptIdentical &&
+            observed === desiredHash &&
+            (yield* (yield* LinkStat).lstat(destination)).type === "Directory" &&
+            !(yield* exists(join(destination, ".git"))) &&
+            !(yield* exists(join(destination, "skit.remote.json")))
+          )
+            return yield* commit("marker", "adoption");
           projection.status = "conflicted";
           projection.observed_digest = observed;
           return settled();
@@ -552,11 +575,23 @@ const reproducibleEffect = Effect.fn("Projection.reproducible")(function* (
   }
   return false;
 });
+/**
+ * Unmanaged copies the operator approved taking custody of in place: the selected copy, and any
+ * copies with identical bytes already at another target's destination. Each is adopted only while
+ * its content still hashes to `observedHash`, so adopting one adds SKIT's marker and nothing else.
+ */
+export interface ProjectionAdoption {
+  readonly path: string;
+  readonly equalPaths?: readonly string[];
+  readonly observedHash: Digest;
+}
+
 export type ProjectionMutationError =
   | AdoptionContentMismatch
   | AdoptionTargetChanged
   | ProjectionFailure
   | NoProjectionRoot
+  | ProjectionRootNotWritable
   | UnsafeProjectionName
   | OwnershipMarkerDisagrees
   | ProjectionRetireConflict

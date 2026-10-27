@@ -2,7 +2,13 @@ import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
-import { InvalidLibraryState, LibraryStore, skitLayer } from "@smolai/skit-core";
+import {
+  InvalidLibraryState,
+  LibraryStore,
+  ProjectionRootNotWritable,
+  skitLayer,
+} from "@smolai/skit-core";
+import { withSandboxDenying } from "./helpers/sandbox.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import {
@@ -361,6 +367,22 @@ it.effect("a failed additive stage leaves every selected removal in place", () =
     );
     assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
     assert.isFalse(yield* f.fs.exists(f.home.statePath));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// Codex's default sandbox keeps `.agents` read-only inside its writable workspace. Setup must refuse
+// whole rather than adopt a copy into a Library whose Projections it cannot then write.
+it.effect("an unwritable projection root fails the apply before any stage writes", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: false });
+    const before = yield* captureDisk(f.disk);
+    const { exit } = yield* f
+      .setup([["alpha", "remove\0gamma"], true])
+      .pipe(withSandboxDenying(join(f.root, ".codex")));
+    const error = failure(exit);
+    assert.instanceOf(error, ProjectionRootNotWritable);
+    assert.strictEqual(error.root, join(f.root, ".codex", "skills"));
+    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

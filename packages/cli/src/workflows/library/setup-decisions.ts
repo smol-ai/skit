@@ -6,7 +6,7 @@ import type {
   SetupOnboardingCandidate,
 } from "./setup-contract.js";
 
-import { setupInstanceGroupKey } from "./setup-onboarding.js";
+import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "./setup-onboarding.js";
 
 export const SetupDuplicateAction = Schema.Literals(["retain-only", "retire-aliases", "keep-both"]);
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
@@ -43,6 +43,11 @@ export type SetupCopyConflict =
       readonly kind: "retirable" | "preserve-copies";
       readonly shadows: readonly HarnessShadow[];
       readonly aliases: readonly string[];
+      /**
+       * A link sits where SKIT writes this skill's copy. Enabling replaces it, so the copies cannot
+       * be kept side by side: `keep-both` is not a choice.
+       */
+      readonly replacesLink: boolean;
     };
 
 /** Eligible global copies have harness readers and no repository custody. */
@@ -68,7 +73,12 @@ export function copyConflict(
   )
     return { kind: "none" };
   const aliases = retirableShadowAliases(selection.sourcePath, shadows);
-  return { kind: aliases.length ? "retirable" : "preserve-copies", shadows, aliases };
+  return {
+    kind: aliases.length ? "retirable" : "preserve-copies",
+    shadows,
+    aliases,
+    replacesLink: (candidate?.destinationLinks?.length ?? 0) > 0,
+  };
 }
 
 export const SetupCopySelection = Schema.Struct({
@@ -146,3 +156,87 @@ export const setupReviewCopies = (
       };
     });
 export type SetupReviewCopy = ReturnType<typeof setupReviewCopies>[number];
+
+export interface SetupRecommendation {
+  /** Every installed skills.sh Collection setup can import, with the skills it brings. */
+  readonly sources: readonly {
+    readonly groupKey: string;
+    readonly source: string;
+    readonly names: readonly string[];
+  }[];
+  /** One copy per skill: user-owned, global, unambiguous, and outside Codex's own skills. */
+  readonly copies: readonly { readonly name: string; readonly sourcePath: string }[];
+}
+
+/**
+ * What setup recommends from one observation: the selection guided setup starts from and the one
+ * `skit setup --apply` takes. It is a function of the observation alone, so the plan ID that
+ * covers the observation also covers the recommendation. Copies whose content differs from a
+ * sibling are never recommended; choosing between them needs a person.
+ */
+export function recommendedSetupSelection(
+  instances: readonly SetupSkillInstance[],
+  candidates: readonly SetupOnboardingCandidate[],
+  home: string,
+): SetupRecommendation {
+  const imports = new Map<string, { groupKey: string; source: string; names: string[] }>();
+  for (const candidate of candidates) {
+    if (candidate.action !== "import-observed-collection") continue;
+    const entry = imports.get(candidate.groupKey) ?? {
+      groupKey: candidate.groupKey,
+      source: candidate.source,
+      names: [],
+    };
+    entry.names.push(candidate.name);
+    imports.set(candidate.groupKey, entry);
+  }
+  const sources = [...imports.values()]
+    .map((entry) => ({ ...entry, names: entry.names.sort() }))
+    .sort((left, right) => left.groupKey.localeCompare(right.groupKey));
+  const chosenGroups = new Set<string>();
+  const copies: { name: string; sourcePath: string }[] = [];
+  const reviewable = setupReviewCopies(instances, candidates).sort((left, right) =>
+    left.instance.path.localeCompare(right.instance.path),
+  );
+  for (const { instance, selectable, siblings, groupKey } of reviewable) {
+    const differs = siblings.some(
+      (sibling) =>
+        instance.contentIdentity.observedHash === undefined ||
+        sibling.contentIdentity.observedHash !== instance.contentIdentity.observedHash,
+    );
+    if (
+      !selectable ||
+      differs ||
+      chosenGroups.has(groupKey) ||
+      instance.owner.kind !== "unknown" ||
+      instance.git.repository !== undefined ||
+      isSetupCandidateFromCodex([instance.path, ...instance.aliases], home)
+    )
+      continue;
+    chosenGroups.add(groupKey);
+    copies.push({ name: instance.name, sourcePath: instance.path });
+  }
+  return { sources, copies };
+}
+
+/**
+ * The exact command that applies a recommended plan, for a person or agent to copy. Paths are the
+ * resolved absolute roots, never `~`: agent harnesses match commands against allow rules only when
+ * every word is literal, and Codex treats a word containing `~` or `$` as possibly expanded.
+ */
+export function setupApplyCommandLine(input: {
+  readonly planId: string;
+  readonly repositoryRoots: readonly string[];
+  readonly needsDuplicateDecision: boolean;
+}): string {
+  const quote = (word: string) =>
+    /^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+  return [
+    "skit setup --apply",
+    input.planId,
+    ...input.repositoryRoots.flatMap((root) => ["--work-dir", quote(root)]),
+    ...(input.needsDuplicateDecision
+      ? ["--duplicates", "<retain-only|keep-both|retire-aliases>"]
+      : []),
+  ].join(" ");
+}

@@ -49,7 +49,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
     Command.annotate(CommandMetadata, {
       effects: { capabilities: ["filesystem.read", "filesystem.write"] },
       outputSchemas: [outputContracts.repositoryPolicy],
-      exitCodes: [0, 64],
+      exitCodes: [0, 12, 64],
       interactive: false,
     }),
   );
@@ -78,7 +78,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.repositoryPolicy],
-    exitCodes: [0],
+    exitCodes: [0, 64],
     interactive: false,
   }),
 );

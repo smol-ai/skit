@@ -145,6 +145,31 @@ describe("CLI contracts", () => {
     );
   });
 
+  // Effect's wizard printed a prompt and exited 0 without running anything when no one could
+  // answer it, which reads as success to an agent. SKIT does not offer it.
+  test("rejects the wizard flag instead of silently doing nothing", () => {
+    const result = spawnSync(process.execPath, [bin, "enable", "--wizard", "--json"], {
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(64);
+    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stderr).error).toEqual(
+      expect.objectContaining({ code: "INVALID_ARGUMENT" }),
+    );
+  });
+
+  test("enable takes one scope: --global or --repo", () => {
+    const result = spawnSync(
+      process.execPath,
+      [bin, "enable", "review", "--global", "--repo", ".", "--json"],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(64);
+    expect(JSON.parse(result.stderr).error).toEqual(
+      expect.objectContaining({ code: "INVALID_ARGUMENT" }),
+    );
+  });
+
   test("authentication status never prints credential material", async () => {
     const home = await mkdtemp(join(tmpdir(), "skit-auth-status-"));
     const status = spawnSync(process.execPath, [bin, "auth", "status", "--home", home, "--json"], {
@@ -158,7 +183,7 @@ describe("CLI contracts", () => {
     expect(status.status).toBe(0);
     const statusBody = JSON.parse(status.stdout);
     expect(statusBody).toMatchObject({
-      schema: "skit.auth.status.v2",
+      schema: "skit.auth.status.v3",
       data: {
         credentials: [
           {
@@ -172,16 +197,14 @@ describe("CLI contracts", () => {
     expect(statusBody.data.credentials[0]).not.toHaveProperty("token");
   });
 
-  test("login requires a terminal and never accepts a password option", () => {
-    const nonInteractive = spawnSync(
+  test("login needs a person to approve it and never accepts a password option", () => {
+    const nobodyToApprove = spawnSync(
       process.execPath,
       [bin, "auth", "login", "https://registry.test", "--json"],
-      { encoding: "utf8" },
+      { encoding: "utf8", env: { ...process.env, SKIT_NO_INPUT: "1" } },
     );
-    expect(nonInteractive.status).toBe(64);
-    expect(JSON.parse(nonInteractive.stderr).error.message).toContain(
-      "Interactive login requires a terminal",
-    );
+    expect(nobodyToApprove.status).toBe(64);
+    expect(JSON.parse(nobodyToApprove.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
 
     const passwordFlag = spawnSync(
       process.execPath,
@@ -192,29 +215,19 @@ describe("CLI contracts", () => {
     expect(JSON.parse(passwordFlag.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 
-  test("missing server guidance explains the hosted and self-hosted options", async () => {
+  // With no Registry configured, login targets the hosted Registry; there is no server to choose.
+  // Under SKIT_NO_INPUT it stops before any network request: there is no one to approve it.
+  test("login needs no server choice and fails with nobody to approve before any request", async () => {
     const home = await mkdtemp(join(tmpdir(), "skit-no-registry-"));
     try {
-      const env = { ...process.env, SKIT_SERVER_URL: "", SKIT_TOKEN: "" };
-      for (const args of [["auth", "login"], ["sync"], ["add", "skit:example/skill"]]) {
-        for (const json of [false, true]) {
-          const result = spawnSync(
-            process.execPath,
-            [bin, ...args, "--home", home, ...(json ? ["--json"] : [])],
-            { encoding: "utf8", env, timeout: 10_000 },
-          );
-          expect(result.status).not.toBe(0);
-          const output = json
-            ? Object.values(JSON.parse(result.stderr).error).join(" ")
-            : result.stderr;
-          expect(output).toContain("skit auth login https://skit.smol.ai");
-          expect(output).toContain("hosted reference server");
-          expect(output).toContain("self-host");
-          expect(output).toContain(
-            "https://github.com/smol-ai/skit/tree/main/packages/skit-server-effect",
-          );
-        }
-      }
+      const env = { ...process.env, SKIT_SERVER_URL: "", SKIT_TOKEN: "", SKIT_NO_INPUT: "1" };
+      const result = spawnSync(process.execPath, [bin, "auth", "login", "--home", home, "--json"], {
+        encoding: "utf8",
+        env,
+        timeout: 10_000,
+      });
+      expect(result.status).toBe(64);
+      expect(JSON.parse(result.stderr).error).toMatchObject({ code: "INVALID_ARGUMENT" });
       expect(existsSync(join(home, "auth.json"))).toBe(false);
     } finally {
       await rm(home, { recursive: true, force: true });
@@ -382,7 +395,7 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v7",
+        schema: "skit.enable.v8",
         data: expect.objectContaining({ enabled: true }),
       }),
     );
@@ -588,7 +601,7 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v7");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v8");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),

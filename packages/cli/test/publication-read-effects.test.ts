@@ -1,3 +1,4 @@
+import { ChildProcessSpawner } from "effect/process";
 import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { Cause, Config, Deferred, Effect, Fiber, FileSystem } from "effect";
@@ -22,7 +23,7 @@ it.effect.each(["remote", "config"] as const)(
       const operation: Effect.Effect<
         void,
         AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem | SkitConfiguration
+        FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
       > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       // The effect signals readiness through an unsafe completion so the whole test can stay
       // inside one runtime instead of awaiting a raw Promise from outside it.
@@ -72,7 +73,7 @@ it.effect.each(["remote", "config"] as const)(
       const operation: Effect.Effect<
         void,
         AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem | SkitConfiguration
+        FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
       > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       for (const input of [
         Effect.succeed("null"),

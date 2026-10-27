@@ -75,7 +75,7 @@ export const usageCliCommand = Command.make(
     stability: "experimental",
     effects: { capabilities: ["filesystem.read"] },
     outputSchemas: [outputContracts.usage],
-    exitCodes: [0, 64],
+    exitCodes: [0, 12, 64, 65],
     interactive: false,
   }),
 );

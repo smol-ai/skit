@@ -183,7 +183,7 @@ export const authorDeleteCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.authorDelete],
-    exitCodes: [0, 11, 12, 64, 65],
+    exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );

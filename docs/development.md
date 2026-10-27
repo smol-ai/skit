@@ -12,9 +12,8 @@ Install pnpm with `npx get-pnpm`, `corepack`, or a system package manager such a
 ## Setup
 
 ```sh
-git clone <repository-url> skit
+git clone https://github.com/smol-ai/skit.git
 cd skit
-git switch dev
 pnpm install
 pnpm build
 pnpm verify
@@ -32,14 +31,14 @@ Core owns authoritative local-library state. CLI code should request core mutati
 
 ## Running the CLI locally
 
-Operator first-run discovery is `skit setup`, documented in the [README](../README.md#getting-started). This section is contributor linking and isolated testing.
+Operator first-run discovery is `skit setup`, documented in the [README](../README.md#setup). This section is contributor linking and isolated testing.
 
 Build and run the executable directly without changing `PATH`:
 
 ```sh
 pnpm build
 node packages/cli/bin/skit.js --help
-node packages/cli/bin/skit.js add tim/dad-joke --home "$(mktemp -d)"
+node packages/cli/bin/skit.js add ./skills/skit --home "$(mktemp -d)"
 ```
 
 To use `skit` as a command, link **`packages/cli`**. The workspace root
@@ -96,17 +95,19 @@ SKIT can write Projections into Harness directories. Use isolated storage and ex
 ```sh
 skit_test_home=$(mktemp -d)
 codex_test_root=$(mktemp -d)
+claude_test_root=$(mktemp -d)
 
-skit add tim/dad-joke --home "$skit_test_home"
+skit add ./skills/skit --home "$skit_test_home"
 skit list --home "$skit_test_home" --json
-skit enable tim/dad-joke \
+skit enable skit \
   --home "$skit_test_home" \
-  --codex-root "$codex_test_root"
+  --codex-root "$codex_test_root" \
+  --claude-root "$claude_test_root"
 
-find "$codex_test_root" -type f
+find "$codex_test_root" "$claude_test_root" -type f
 ```
 
-`SKIT_HOME` isolates the whole local library. The CLI also accepts `--home`, `--codex-root`, `--claude-root`, `--opencode-root`, and `--devin-root` overrides.
+`SKIT_HOME` isolates the whole local library, not Harness roots: without `--codex-root` and `--claude-root`, SKIT writes into the real `~/.agents/skills` and, when Claude Code is installed, `~/.claude/skills`. The CLI also accepts `--home`, `--codex-root`, `--claude-root`, `--opencode-root`, and `--devin-root` overrides.
 
 ## Quality checks
 
@@ -209,8 +210,13 @@ The Effect server package keeps its deployment entry points at its root and its 
 For a new closed-registration server, run the guided bootstrap after the first deployment:
 
 ```sh
-pnpm skit server bootstrap
+pnpm skit server bootstrap \
+  --url <origin-printed-by-deploy:setup> \
+  --config packages/skit-server-effect/wrangler.jsonc \
+  --wrangler packages/skit-server-effect/node_modules/.bin/wrangler
 ```
+
+Without `--config` it reads `wrangler.jsonc` from the current directory, which is the repository root under `pnpm skit`.
 
 The command opens the setup form and attempts to remove its one-time Worker secret after completion, failure, or interruption. If cleanup fails before setup completes, follow the printed `wrangler secret delete` command immediately; only a completed permanent D1 claim makes the capability inert independently of secret cleanup. See [Self-hosting skit-server](./self-hosting.md) for the complete security and recovery contract.
 
@@ -220,7 +226,7 @@ migrations, R2, and bootstrap state. It is not part of the public onboarding jou
 self-hosting guide distinguishes this infrastructure diagnostic from the portable Library
 synchronization acceptance journey.
 
-For normal CLI operations, use `skit auth login [alias-or-origin]` rather than copying a session cookie. The target may be omitted when a default Registry is configured. The login command creates an expiring, scoped PAT and immediately signs out its temporary browser-style session. The deployment verifier remains session-only because readiness is an operator capability, not a PAT capability.
+For normal CLI operations, use `skit auth login [alias-or-origin]` rather than copying a session cookie. Without a target it uses `SKIT_SERVER_URL`, then the configured default Registry, then `https://skit.smol.ai`. The login command has the user approve a device code in the browser, creates an expiring, scoped PAT with the session that approval grants, and immediately signs that session out. The deployment verifier remains session-only because readiness is an operator capability, not a PAT capability.
 
 For local development:
 

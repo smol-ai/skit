@@ -599,6 +599,131 @@ describe("Better Auth adapter", () => {
     }).pipe(Effect.provide(bindingsLayer)),
   );
 
+  it.effect("lets a signed-in browser approve a CLI device code that then mints a token", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const json = { "content-type": "application/json", origin: "https://registry.test" };
+      expect(
+        (yield* request("/api/bootstrap", {
+          method: "POST",
+          headers: { ...json, "cf-connecting-ip": "192.0.2.80" },
+          body: JSON.stringify({
+            token: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+            username: "operator",
+            email: "operator@example.test",
+            password: "correct horse battery staple",
+          }),
+        })).status,
+      ).toBe(201);
+      const signIn = yield* request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { ...json, "cf-connecting-ip": "192.0.2.81" },
+        body: JSON.stringify({
+          email: "operator@example.test",
+          password: "correct horse battery staple",
+        }),
+      });
+      const cookie = (signIn.headers.get("set-cookie") ?? "").split(";", 1)[0];
+      // Accepting Bearer session tokens must not expose the HttpOnly session to page scripts.
+      expect(signIn.headers.get("set-auth-token")).toBeNull();
+
+      const DeviceCode = Schema.Struct({
+        device_code: Schema.String,
+        user_code: Schema.String,
+        verification_uri: Schema.String,
+        verification_uri_complete: Schema.String,
+        interval: Schema.Number,
+      });
+      expect(
+        (yield* request("/api/auth/device/code", {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({ client_id: "other-client" }),
+        })).status,
+      ).toBe(400);
+      const started = yield* request("/api/auth/device/code", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ client_id: "skit-cli" }),
+      });
+      expect(started.status).toBe(200);
+      const code = Schema.decodeUnknownSync(DeviceCode)(yield* webPromise(() => started.json()));
+      expect(code.verification_uri).toBe("https://registry.test/device");
+      expect(code.verification_uri_complete).toBe(
+        `https://registry.test/device?user_code=${code.user_code}`,
+      );
+
+      const poll = () =>
+        request("/api/auth/device/token", {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: code.device_code,
+            client_id: "skit-cli",
+          }),
+        });
+      const pending = yield* poll();
+      expect(pending.status).toBe(400);
+      expect(yield* webPromise(() => pending.json())).toMatchObject({
+        error: "authorization_pending",
+      });
+
+      expect(
+        (yield* request("/api/auth/device/approve", {
+          method: "POST",
+          headers: json,
+          body: JSON.stringify({ userCode: code.user_code }),
+        })).status,
+      ).toBe(401);
+      // Opening the verification page signed in claims the code for that user.
+      const claimed = yield* request(`/api/auth/device?user_code=${code.user_code}`, {
+        headers: { cookie },
+      });
+      expect(claimed.status).toBe(200);
+      expect(yield* webPromise(() => claimed.json())).toMatchObject({ status: "pending" });
+      const approved = yield* request("/api/auth/device/approve", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ userCode: code.user_code }),
+      });
+      expect(approved.status).toBe(200);
+
+      // RFC 8628 slow_down: wait out the polling interval before asking again.
+      vi.useFakeTimers({ now: Date.now() + 6_000, toFake: ["Date"] });
+      const granted = yield* poll().pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())));
+      expect(granted.status).toBe(200);
+      const { access_token } = Schema.decodeUnknownSync(
+        Schema.Struct({ access_token: Schema.String }),
+      )(yield* webPromise(() => granted.json()));
+
+      const bearer = { ...json, authorization: `Bearer ${access_token}` };
+      const created = yield* request("/api/tokens", {
+        method: "POST",
+        headers: bearer,
+        body: JSON.stringify({ name: "skit CLI", scopes: ["library:sync"] }),
+      });
+      expect(created.status).toBe(201);
+      expect(yield* webPromise(() => created.json())).toMatchObject({
+        token: expect.stringMatching(/^skit_pat_/),
+      });
+
+      expect(
+        (yield* request("/api/auth/sign-out", { method: "POST", headers: bearer, body: "{}" }))
+          .status,
+      ).toBe(200);
+      expect(
+        (yield* request("/api/tokens", {
+          method: "POST",
+          headers: bearer,
+          body: JSON.stringify({ name: "again", scopes: ["library:sync"] }),
+        })).status,
+      ).toBe(401);
+      // A code is redeemed once.
+      expect((yield* poll()).status).toBe(400);
+    }),
+  );
+
   it.effect("signs in the bootstrapped operator with a host-only secure session", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;

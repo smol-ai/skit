@@ -33,6 +33,10 @@ export const makeServerDiscovery = (capabilities: ServerCapabilities) =>
         }
       : {}),
     ...(capabilities.publication ? { publish: "/api/skits/{owner}/{slug}/releases" } : {}),
+    // A CLI credential is worth minting only when some scope is on offer.
+    ...(capabilities.library || capabilities.authoring || capabilities.publication
+      ? { deviceAuthorization: "/api/auth/device/code", deviceToken: "/api/auth/device/token" }
+      : {}),
   });
 
 export const serverDiscovery = makeServerDiscovery({

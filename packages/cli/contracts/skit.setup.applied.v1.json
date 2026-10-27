@@ -1,0 +1,158 @@
+{
+  "$id": "skit.setup.applied.v1",
+  "type": "object",
+  "properties": {
+    "planId": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "imported": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "names"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sourcePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sourcePath"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "reconnected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sourcePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sourcePath"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "target",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "leftAlone": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "paths",
+          "reason"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "aliasRecoveryDirectories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "aliasesKept": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "planId",
+    "imported",
+    "added",
+    "reconnected",
+    "projections",
+    "leftAlone"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

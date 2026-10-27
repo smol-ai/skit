@@ -1,3 +1,4 @@
+import { officialRegistryOrigin } from "../registry/accounts.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
   deterministicTreeHashEffect,
@@ -95,8 +96,13 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
   }) => Effect.Effect<A, E, R>,
 ) {
   const auth = yield* RegistryAuth;
-  const registry = yield* auth.resolve();
+  const resolvedRegistry = yield* auth.resolve();
   const parsed = typeof input === "string" ? yield* parseSkitSourceEffect(input) : input;
+  // `skit:` shorthand with no Registry configured means the hosted Registry, read anonymously.
+  const registry =
+    resolvedRegistry.origin === undefined && parsed.type === "registry"
+      ? { ...resolvedRegistry, origin: officialRegistryOrigin }
+      : resolvedRegistry;
   if (parsed.type === "local") yield* leavePnpmSkillEffect(parsed.path);
   if (parsed.type === "registry" && registry.configurationError)
     return yield* Effect.fail(registry.configurationError);

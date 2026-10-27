@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v7",
+  "$id": "skit.setup.v8",
   "type": "object",
   "properties": {
     "machineConfig": {
@@ -55,6 +55,12 @@
         "persisted"
       ],
       "additionalProperties": true
+    },
+    "suggestedRepositoryRoots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "probes": {
       "type": "array",
@@ -395,6 +401,12 @@
                         "documentDigest"
                       ],
                       "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "name": {
@@ -748,6 +760,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1083,6 +1101,12 @@
                         "documentDigest"
                       ],
                       "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "name": {
@@ -1422,6 +1446,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -1755,6 +1785,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -2081,6 +2117,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -2405,6 +2447,12 @@
                         "documentDigest"
                       ],
                       "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   },
                   "name": {
@@ -2745,6 +2793,12 @@
                       "additionalProperties": true
                     }
                   },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "name": {
                     "type": "string"
                   },
@@ -3012,11 +3066,70 @@
               }
             ]
           }
+        },
+        "applyCommand": {
+          "type": "string"
+        },
+        "recommended": {
+          "type": "object",
+          "properties": {
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "groupKey": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "groupKey",
+                  "source",
+                  "names"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "copies": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "sourcePath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sourcePath"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "sources",
+            "copies"
+          ],
+          "additionalProperties": true
         }
       },
       "required": [
         "planId",
-        "candidates"
+        "candidates",
+        "recommended"
       ],
       "additionalProperties": true
     },
@@ -3654,6 +3767,7 @@
   },
   "required": [
     "machineConfig",
+    "suggestedRepositoryRoots",
     "probes",
     "scan",
     "repositories",

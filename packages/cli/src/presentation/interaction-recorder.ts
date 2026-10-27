@@ -181,6 +181,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
     help: (text) => record(InteractionEvent.Help({ text })),
     note: (body, title, options) =>
       record(InteractionEvent.Note({ title, body, ...(options === undefined ? {} : options) })),
+    instruction: (body, title) => record(InteractionEvent.Note({ title, body })),
     step: (step, body) => record(InteractionEvent.Step({ ...step, body })),
     updateStatus: (message) => record(InteractionEvent.StatusUpdated({ message })),
     withStatus: (status, operation) =>

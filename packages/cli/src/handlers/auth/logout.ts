@@ -6,7 +6,7 @@ import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
 import { authLogoutCommand } from "../../registry/auth.js";
-import { CommandMetadata } from "../../commands/metadata.js";
+import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -37,7 +37,10 @@ export const authLogoutCliCommand = Command.make(
     { command: "skit auth logout https://skit.example.com" },
   ]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["network.write", "filesystem.write"] },
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "network.write", "process.execute"],
+      subprocesses: credentialStoreSubprocesses,
+    },
     outputSchemas: [outputContracts.authLogout],
     exitCodes: [0, 11, 12, 64],
     interactive: false,

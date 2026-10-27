@@ -14,6 +14,8 @@ export type FailureCode =
   | "INVALID_ARGUMENT"
   | "VALIDATION_FAILED"
   | "TARGET_COLLISION"
+  /** The request needs a credential the user does not have; `skit auth login` provides it. */
+  | "AUTHENTICATION_REQUIRED"
   | "OPERATION_FAILED";
 
 export const FailureTypeId = "~@smolai/skit-core/Failure";

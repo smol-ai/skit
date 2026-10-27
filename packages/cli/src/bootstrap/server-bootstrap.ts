@@ -468,14 +468,20 @@ export const serverBootstrapCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     effects: {
-      capabilities: ["network.write", "process.execute", "browser.open"],
+      capabilities: [
+        "filesystem.read",
+        "network.read",
+        "network.write",
+        "process.execute",
+        "browser.open",
+      ],
       subprocesses: [
         "wrangler secret put SKIT_BOOTSTRAP_SECRET",
         "wrangler secret delete SKIT_BOOTSTRAP_SECRET",
       ],
     },
     outputSchemas: [outputContracts.serverBootstrap],
-    exitCodes: [0],
+    exitCodes: [0, 64],
     interactive: true,
   }),
 );

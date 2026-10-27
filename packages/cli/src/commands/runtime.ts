@@ -1,6 +1,7 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data, Console, Effect } from "effect";
 import { CliError, CliOutput, Command } from "effect/cli";
+import { skitCliConfigLayer } from "./parameters.js";
 import type { HelpDoc } from "effect/cli";
 import { renderCommandFailures } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";
@@ -65,6 +66,7 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
     const renderer = yield* Renderer;
     yield* Command.runWith(command, { version, renderErrors: false })(argv).pipe(
       Effect.provideService(CliOutput.Formatter, formatter),
+      Effect.provide(skitCliConfigLayer),
       Effect.provideService(Console.Console, quietConsole),
       Effect.catchIf(
         (error): error is CliError.ShowHelp =>

@@ -16,7 +16,7 @@ import { renderCheck } from "./check.js";
 import { renderLibrarySync } from "./library-sync.js";
 import { renderLibraryList } from "./library-list.js";
 import { renderAuditV1Alpha4 } from "./audit.js";
-import { conditionHeadline, severityHeadline } from "./condition-language.js";
+import { conditionHeadline, conditionNextStep, severityHeadline } from "./condition-language.js";
 import { terminalData } from "./terminal-text.js";
 import { createColors } from "picocolors";
 
@@ -239,6 +239,8 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
+    const next = conditionNextStep(issue.code);
+    if (next) findings.push(`      ${color.dim(`Next: ${next}`)}`);
   }
   for (const finding of data.codex.findings) {
     findings.push(
@@ -449,7 +451,7 @@ function renderAuthExpiry(expiresAt: string | undefined): string {
 }
 
 function renderAuthStatus(
-  data: ContractDataForId<"skit.auth.status.v2">,
+  data: ContractDataForId<"skit.auth.status.v3">,
   context: RenderContext,
 ): string {
   if (!data.credentials.length) return "No credentials configured; run `skit auth login`";
@@ -465,6 +467,14 @@ function renderAuthStatus(
         ...(credential.aliases.length ? [`Registry: ${credential.origin}`] : []),
         `Access: ${renderAuthAccess(credential.scopes)}`,
         `Expires: ${renderAuthExpiry(credential.expiresAt)}${credential.expired ? " (expired)" : ""}`,
+        `Stored in: ${
+          {
+            keychain: "macOS Keychain",
+            "secret-service": "the system secret store",
+            file: "the credential file (no system secret store was available)",
+            environment: "SKIT_TOKEN",
+          }[credential.storage]
+        }`,
         ...(context.detail === "full" ? [`Credential: ${credential.tokenPrefix}`] : []),
       ].join("\n");
     })
@@ -533,7 +543,7 @@ const setupGitStateOrder = [
 ] as const;
 const setupExpandedSkillLimit = 5;
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -638,7 +648,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v7">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v7">["projections"],
+  projections: ContractDataForId<"skit.setup.v8">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -665,7 +675,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v7">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -685,7 +695,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v7">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v7">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -727,7 +737,78 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v7">): st
   return lines;
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
+/** What `skit setup --apply` would do, and the exact command that does it. */
+function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): string[] {
+  const { candidates, recommended } = data.onboarding;
+  if (!recommended.sources.length && !recommended.copies.length) return [];
+  const duplicates = recommended.copies.filter((copy) =>
+    candidates.some(
+      (candidate) => candidate.paths.includes(copy.sourcePath) && candidate.shadows?.length,
+    ),
+  );
+  return [
+    "",
+    "Recommended plan",
+    ...recommended.sources.map(
+      ({ source, names }) => `  Import skills.sh Collection ${source}: ${names.join(", ")}`,
+    ),
+    ...(recommended.copies.length
+      ? [`  Add to Library: ${recommended.copies.map((copy) => copy.name).join(", ")}`]
+      : []),
+    ...(duplicates.length
+      ? [
+          `  Already visible to agents elsewhere: ${duplicates.map((copy) => copy.name).join(", ")} (choose --duplicates retain-only, keep-both or retire-aliases)`,
+        ]
+      : []),
+    ...(data.onboarding.applyCommand === undefined
+      ? []
+      : ["Apply it without prompts:", `  ${data.onboarding.applyCommand}`]),
+  ];
+}
+
+/** What `skit setup --apply` did, then why the rest was left alone. */
+function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): string {
+  const lines = [
+    ...data.imported.map(({ source, names }) => `Imported ${source}: ${names.join(", ")}`),
+    ...(data.added.length
+      ? [`Added to Library: ${data.added.map((copy) => copy.name).join(", ")}`]
+      : []),
+    ...(data.reconnected.length
+      ? [`Reconnected: ${data.reconnected.map((copy) => copy.name).join(", ")}`]
+      : []),
+  ];
+  if (!lines.length) lines.push("Nothing to apply; the plan recommended no changes.");
+  if (data.projections.length)
+    lines.push(
+      "",
+      "Copies",
+      ...data.projections.map(
+        (projection) =>
+          `  ${projection.name} · ${projection.target} · ${projection.status} · ${projection.path}`,
+      ),
+    );
+  if (data.leftAlone.length)
+    lines.push(
+      "",
+      "Left alone",
+      ...data.leftAlone.map((skill) => `  ${skill.name} · ${skill.reason}`),
+    );
+  if (data.aliasRecoveryDirectories?.length)
+    lines.push(
+      "",
+      "Retired symlinks and their restoration receipts are saved in",
+      ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
+    );
+  if (data.aliasesKept?.length)
+    lines.push(
+      "",
+      "Symlinks kept",
+      ...data.aliasesKept.map((kept) => `  ${kept.name} · ${kept.message}`),
+    );
+  return lines.join("\n");
+}
+
+function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -787,10 +868,7 @@ function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
     ] as const) {
       const candidates = actions.get(action);
       if (!candidates) continue;
-      const recommended = action !== "blocked";
-      lines.push(
-        `  ${action} · ${candidates.length} skill${candidates.length === 1 ? "" : "s"}${recommended ? " · recommended" : ""}`,
-      );
+      lines.push(`  ${action} · ${candidates.length} skill${candidates.length === 1 ? "" : "s"}`);
       if (candidates.length <= 5)
         for (const candidate of candidates)
           lines.push(
@@ -805,6 +883,13 @@ function renderSetup(data: ContractDataForId<"skit.setup.v7">): string {
       }
     }
   }
+  lines.push(...renderSetupRecommendation(data));
+  if (data.suggestedRepositoryRoots.length)
+    lines.push(
+      "",
+      `Repositories under ${data.suggestedRepositoryRoots.join(", ")} were not scanned. To include their skills:`,
+      ...data.suggestedRepositoryRoots.map((root) => `  skit setup --work-dir ${root}`),
+    );
   const collections = renderSetupCollections(data);
   if (collections.length) lines.push("", "Skill collections", ...collections);
   if (data.instances.length) {
@@ -921,6 +1006,7 @@ const contractPresenters: ContractPresenters = {
   usage: (data) => renderUsage(data),
   inventory: (data, context) => renderInventory(data, data.machine, createColors(context.color)),
   setup: renderSetup,
+  setupApplied: renderSetupApplied,
   repositoryPolicy: (data) =>
     data.action === "list"
       ? data.repositories.length
@@ -932,6 +1018,12 @@ const contractPresenters: ContractPresenters = {
   authLogout: (data) => `Logged out from ${data.origin}`,
   authStatus: renderAuthStatus,
   authLogin: renderAuthLogin,
+  authLoginPending: (data) =>
+    [
+      `Open ${data.verificationUri} and enter the code ${data.userCode} to approve this login.`,
+      `The code expires at ${data.expiresAt}.`,
+      `Next: ${data.next} once it is approved.`,
+    ].join("\n"),
   registryRemote: renderRegistryChange,
   registryList: renderRegistryList,
   serverBootstrap: (data) =>

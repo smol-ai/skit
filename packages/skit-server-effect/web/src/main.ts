@@ -8,7 +8,7 @@ import { input } from "./components/ui/input.js";
 import { landingView, sourceUrl } from "./landing.js";
 
 export const Model = S.Struct({
-  page: S.Literals(["home", "setup"]),
+  page: S.Literals(["home", "setup", "device"]),
   origin: S.String,
   github: S.Boolean,
   emailEnabled: S.Boolean,
@@ -24,6 +24,8 @@ export const Model = S.Struct({
   signUpPassword: S.String,
   authMode: S.Literals(["sign-in", "sign-up"]),
   setupNeeded: S.Boolean,
+  userCode: S.String,
+  deviceResult: S.Literals(["", "approved", "denied"]),
   bootstrapToken: S.String,
   setupUsername: S.String,
   setupEmail: S.String,
@@ -40,7 +42,7 @@ export const Model = S.Struct({
 export type Model = typeof Model.Type;
 
 export const Flags = S.Struct({
-  page: S.Literals(["home", "setup"]),
+  page: S.Literals(["home", "setup", "device"]),
   origin: S.String,
   github: S.Boolean,
   emailEnabled: S.Boolean,
@@ -65,6 +67,7 @@ export const Message = defineMessageUnion({
   SetupUsernameChanged: { value: S.String },
   SetupEmailChanged: { value: S.String },
   SetupPasswordChanged: { value: S.String },
+  UserCodeChanged: { value: S.String },
   PasswordVisibilityToggled: { field: S.Literals(["token", "setup", "signIn", "signUp"]) },
   GitHubSignIn: {},
   EmailSignIn: {},
@@ -72,8 +75,19 @@ export const Message = defineMessageUnion({
   ResendVerification: {},
   ClaimUsername: {},
   SubmitSetup: {},
+  ApproveDevice: {},
+  DenyDevice: {},
   ActionFinished: {
-    action: S.Literals(["email", "signup", "verification", "github", "claim", "setup"]),
+    action: S.Literals([
+      "email",
+      "signup",
+      "verification",
+      "github",
+      "claim",
+      "setup",
+      "approve",
+      "deny",
+    ]),
     ok: S.Boolean,
     message: S.String,
     redirect: S.String,
@@ -139,7 +153,7 @@ const navigate = (destination: string): Command.Command<Message> => ({
 });
 
 const finish = (
-  action: "email" | "signup" | "verification" | "github" | "claim" | "setup",
+  action: "email" | "signup" | "verification" | "github" | "claim" | "setup" | "approve" | "deny",
   effect: Effect.Effect<string, string>,
 ) => ({
   name: action,
@@ -150,6 +164,14 @@ const finish = (
     }),
   ),
 });
+
+// Opening a code while signed in claims it for this account; only the claiming account can then
+// approve or deny it, so the claim waits for the user's decision rather than the page load.
+const decideDevice = (decision: "approve" | "deny", userCode: string) =>
+  request(`/api/auth/device?user_code=${encodeURIComponent(userCode)}`, S.Unknown).pipe(
+    Effect.andThen(jsonRequest(`/api/auth/device/${decision}`, S.Unknown, { userCode })),
+    Effect.as(""),
+  );
 
 type Update = Readonly<{ model: Model; commands?: ReadonlyArray<Command.Command<Message>> }>;
 
@@ -171,6 +193,7 @@ export const update = (model: Model, message: Message): Update =>
       SetupUsernameChanged: ({ value }) => ({ model: { ...model, setupUsername: value } }),
       SetupEmailChanged: ({ value }) => ({ model: { ...model, setupEmail: value } }),
       SetupPasswordChanged: ({ value }) => ({ model: { ...model, setupPassword: value } }),
+      UserCodeChanged: ({ value }) => ({ model: { ...model, userCode: value } }),
       PasswordVisibilityToggled: ({ field }) => ({
         model: {
           ...model,
@@ -187,7 +210,7 @@ export const update = (model: Model, message: Message): Update =>
             "github",
             jsonRequest("/api/auth/sign-in/social", S.Struct({ url: S.String }), {
               provider: "github",
-              callbackURL: model.origin,
+              callbackURL: model.page === "device" ? `${model.origin}/device` : model.origin,
             }).pipe(Effect.map(({ url }) => url)),
           ),
         ],
@@ -267,6 +290,14 @@ export const update = (model: Model, message: Message): Update =>
           },
         ],
       }),
+      ApproveDevice: () => ({
+        model: { ...model, pending: true, message: "" },
+        commands: [finish("approve", decideDevice("approve", model.userCode))],
+      }),
+      DenyDevice: () => ({
+        model: { ...model, pending: true, message: "" },
+        commands: [finish("deny", decideDevice("deny", model.userCode))],
+      }),
       ActionFinished: ({ action, ok, message, redirect }) => {
         if (ok && redirect)
           return { model: { ...model, pending: false }, commands: [navigate(redirect)] };
@@ -292,6 +323,29 @@ export const update = (model: Model, message: Message): Update =>
               ...model,
               pending: false,
               message: "Check your email to verify your account, then sign in.",
+            },
+          };
+        if (ok && (action === "approve" || action === "deny"))
+          return {
+            model: {
+              ...model,
+              pending: false,
+              deviceResult: action === "approve" ? "approved" : "denied",
+            },
+          };
+        if (action === "approve" || action === "deny")
+          return {
+            model: {
+              ...model,
+              pending: false,
+              message:
+                message === "expired_token"
+                  ? "This code has expired. Run skit auth login again for a new one."
+                  : message === "access_denied"
+                    ? "Another account is already confirming this code."
+                    : message === "unauthorized"
+                      ? "Sign in again, then retry."
+                      : "That code is not valid or was already used. Check it against your terminal.",
             },
           };
         if (ok && action === "verification")
@@ -326,12 +380,16 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = (flags) => {
   const model: Model = {
     ...flags,
     claimUsername: flags.suggestedUsername,
+    // Typed, never taken from the link: a link with the code filled in is what a phishing message
+    // would send, while typing it makes the user read it from their own terminal.
+    userCode: "",
     signInEmail: "",
     signInPassword: "",
     signUpUsername: "",
     signUpEmail: "",
     signUpPassword: "",
     authMode: "sign-in",
+    deviceResult: "",
     bootstrapToken: "",
     setupUsername: "",
     setupEmail: "",
@@ -592,7 +650,7 @@ const homeCard = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.p(
             [h.Class("text-xs leading-5 text-muted-foreground")],
             [
-              "The CLI reuses saved authentication. If a new login is needed, it asks for your email and password and saves a scoped credential in ~/.skit/auth.json (or your configured SKIT home). Already logged in from the CLI? Start at skit sync to preview, then skit sync --apply to apply.",
+              "The CLI reuses saved authentication. If a new login is needed, it shows a code to approve here in your browser and saves a scoped credential in your system keychain, or ~/.skit/auth.json without one. Already logged in from the CLI? Start at skit sync to preview, then skit sync --apply to apply.",
             ],
           ),
         ],
@@ -778,8 +836,70 @@ const homeCard = (model: Model, h: HtmlBuilder<Message>): Html => {
   );
 };
 
+const deviceCard = (model: Model, h: HtmlBuilder<Message>): Html => {
+  if (model.deviceResult !== "")
+    return card(
+      model.deviceResult === "approved" ? "CLI connected" : "Request denied",
+      model.deviceResult === "approved"
+        ? "Return to your terminal. skit auth login finishes on its own."
+        : "The terminal that requested this code was not given access.",
+      h.p([h.Class("text-sm leading-6 text-muted-foreground")], ["You can close this page."]),
+      h,
+    );
+  return card(
+    "Connect the SKIT CLI",
+    `Approving gives the terminal that showed this code access to your account, ${model.username}.`,
+    h.form(
+      [h.OnSubmit(Message.ApproveDevice()), h.Class("grid gap-4")],
+      [
+        field(
+          "Code",
+          "user-code",
+          model.userCode,
+          (value) => Message.UserCodeChanged({ value }),
+          h,
+          { placeholder: "ABCD-EFGH", maxlength: 16 },
+        ),
+        h.p(
+          [h.Class("text-xs leading-5 text-muted-foreground")],
+          [
+            "Only approve a code you just started with skit auth login, and check that it matches your terminal.",
+          ],
+        ),
+        messageView(model, h),
+        h.div(
+          [h.Class("grid grid-cols-2 gap-2")],
+          [
+            button<Message>(
+              {
+                type: "button",
+                variant: "outline",
+                isDisabled: model.pending || !model.userCode,
+                onClick: Message.DenyDevice(),
+              },
+              "Deny",
+              h,
+            ),
+            button<Message>(
+              { type: "submit", isDisabled: model.pending || !model.userCode },
+              model.pending ? "Approving…" : "Approve",
+              h,
+            ),
+          ],
+        ),
+      ],
+    ),
+    h,
+  );
+};
+
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: model.page === "setup" ? "Set up SKIT Server" : "SKIT",
+  title:
+    model.page === "setup"
+      ? "Set up SKIT Server"
+      : model.page === "device"
+        ? "Connect the SKIT CLI"
+        : "SKIT",
   body: h.div(
     [h.Class("min-h-screen bg-background text-foreground")],
     [
@@ -816,16 +936,26 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             ],
             [setupView(model, h)],
           )
-        : !model.signedIn
-          ? landingView(model.origin, homeCard(model, h), h)
-          : h.main(
+        : model.page === "device"
+          ? h.main(
               [
                 h.Class(
                   "flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-muted/40 px-5 py-16",
                 ),
               ],
-              [homeCard(model, h)],
-            ),
+              // Signing in or claiming a username reloads this page, code included.
+              [model.signedIn && model.username ? deviceCard(model, h) : homeCard(model, h)],
+            )
+          : !model.signedIn
+            ? landingView(model.origin, homeCard(model, h), h)
+            : h.main(
+                [
+                  h.Class(
+                    "flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-muted/40 px-5 py-16",
+                  ),
+                ],
+                [homeCard(model, h)],
+              ),
     ],
   ),
 });
