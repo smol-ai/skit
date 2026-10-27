@@ -1,3 +1,5 @@
+We make SKIT exceptional by making its correctness easy to understand.
+
 # Coding standards
 
 Follow [docs/coding-standards.md](docs/coding-standards.md). Before substantial
