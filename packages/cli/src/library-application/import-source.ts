@@ -175,7 +175,7 @@ export const previewLibrarySource = Effect.fn("Library.previewSource")(function*
 });
 
 /** Own the retention transaction, including partial commits and temporary-source cleanup. */
-export const retainLibrarySource = Effect.fn("Library.addSource")(function* (
+export const importSource = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
   version?: string,
   previousSkillPaths?: readonly string[],

@@ -3,7 +3,7 @@ import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
 import { checkSubjects } from "../src/workflows/library/check.js";
-import { retainLibrarySource } from "../src/library-application/retain-source.js";
+import { importSource } from "../src/library-application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
 it.effect("checks retained files without treating an observed local copy as an upstream", () =>
@@ -15,9 +15,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const retained = yield* retainLibrarySource(source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const retained = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );

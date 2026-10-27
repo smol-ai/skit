@@ -9,7 +9,7 @@ import {
   type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
-import { retainLibrarySource } from "../src/library-application/retain-source.js";
+import { importSource } from "../src/library-application/import-source.js";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -132,9 +132,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A😀é"\n---\n',
       );
-      const first = yield* retainLibrarySource(source).pipe(
-        Effect.provide(libraryStoreLayer({ home })),
-      );
+      const first = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
       const firstState = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
@@ -143,7 +141,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A much longer new description"\n---\n',
       );
-      yield* retainLibrarySource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+      yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );

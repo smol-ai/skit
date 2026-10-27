@@ -9,7 +9,7 @@ import {
   retainedTreePath,
   skitLayer,
 } from "@smolai/skit-core";
-import { retainLibrarySource } from "../src/library-application/retain-source.js";
+import { importSource } from "../src/library-application/import-source.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupStepTitles } from "../src/presentation/setup-steps.js";
@@ -296,7 +296,7 @@ it.effect(
         writingTo(
           home.home,
           Effect.gen(function* () {
-            yield* retainLibrarySource(source);
+            yield* importSource(source);
             yield* setupCommand({
               options: {
                 libraryHome: home.home,

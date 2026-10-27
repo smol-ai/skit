@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { inspectLibrarySource } from "../src/library-application/retain-source.js";
+import { inspectLibrarySource } from "../src/library-application/import-source.js";
 import { RegistryAccounts, officialRegistryOrigin } from "../src/registry/accounts.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";

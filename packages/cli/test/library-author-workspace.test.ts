@@ -9,7 +9,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
-import { retainLibrarySource } from "../src/library-application/retain-source.js";
+import { importSource } from "../src/library-application/import-source.js";
 import { executeRemove } from "../src/workflows/library/remove.js";
 import { systemError } from "effect/PlatformError";
 import {
@@ -222,7 +222,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
-      yield* f.home.owned(retainLibrarySource(f.source));
+      yield* f.home.owned(importSource(f.source));
       const before = yield* captureDisk([f.source, f.home.home], { identity: true });
       const failure = yield* Effect.flip(f.ensure({ scaffold: true }));
       assert.strictEqual(failure._tag, "DirectoryAlreadyRetained");

@@ -18,14 +18,14 @@ export const SetupDuplicateAction = Schema.Literals([
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
 
 /** Evidence authorizing these individual links, independently of later setup stages. */
-export const SetupApprovedAlias = Schema.Struct({
+export const ApprovedSymlink = Schema.Struct({
   path: Schema.String,
   canonicalPath: Schema.String,
   linkTarget: Schema.String,
   dev: Schema.Number,
   ino: Schema.Number,
 });
-export interface SetupApprovedAlias extends Schema.Schema.Type<typeof SetupApprovedAlias> {}
+export interface ApprovedSymlink extends Schema.Schema.Type<typeof ApprovedSymlink> {}
 
 export const SetupApprovedCopy = Schema.Struct({
   path: Schema.String,
@@ -36,7 +36,10 @@ export const SetupApprovedCopy = Schema.Struct({
 export interface SetupApprovedCopy extends Schema.Schema.Type<typeof SetupApprovedCopy> {}
 
 /** Every relevant alias must be an individual link to the selected canonical source. */
-export function retirableDuplicateLinks(sourcePath: string, duplicates: readonly DuplicateCopy[]) {
+export function duplicateSymlinksToBackUp(
+  sourcePath: string,
+  duplicates: readonly DuplicateCopy[],
+) {
   if (
     !duplicates.length ||
     duplicates.some(
@@ -88,7 +91,7 @@ export function copyConflict(
     candidate?.action === "repository-owned"
   )
     return { kind: "none" };
-  const aliases = retirableDuplicateLinks(selection.sourcePath, duplicates);
+  const aliases = duplicateSymlinksToBackUp(selection.sourcePath, duplicates);
   const selectedHash = instance?.contentIdentity.observedHash;
   const preservable =
     selectedHash !== undefined &&
@@ -150,7 +153,7 @@ export const SetupCopySelection = Schema.Struct({
   name: Schema.String,
   sourcePath: Schema.String,
   duplicateAction: Schema.optionalKey(SetupDuplicateAction),
-  approvedAliases: Schema.optionalKey(Schema.Array(SetupApprovedAlias)),
+  approvedSymlinks: Schema.optionalKey(Schema.Array(ApprovedSymlink)),
   approvedCopies: Schema.optionalKey(Schema.Array(SetupApprovedCopy)),
 });
 export interface SetupCopySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
@@ -166,30 +169,30 @@ export type SetupCopyDecision = SetupSelectedCopy &
   (
     | {
         readonly duplicateAction?: never;
-        readonly approvedAliases?: never;
+        readonly approvedSymlinks?: never;
         readonly approvedCopies?: never;
       }
     | {
         readonly duplicateAction: "retain-only" | "keep-both";
-        readonly approvedAliases?: never;
+        readonly approvedSymlinks?: never;
         readonly approvedCopies?: never;
       }
     | {
         readonly duplicateAction: "retire-aliases";
-        readonly approvedAliases: readonly SetupApprovedAlias[];
+        readonly approvedSymlinks: readonly ApprovedSymlink[];
         readonly approvedCopies?: never;
       }
     | {
         readonly duplicateAction: "preserve-duplicates";
         readonly approvedCopies: readonly SetupApprovedCopy[];
-        readonly approvedAliases?: never;
+        readonly approvedSymlinks?: never;
       }
   );
 
 /** Front ends submit intent; the application captures and validates filesystem evidence. */
 export type SetupCopyChoice = SetupSelectedCopy & {
   readonly duplicateAction?: SetupDuplicateAction;
-  readonly approvedAliases?: readonly SetupApprovedAlias[];
+  readonly approvedSymlinks?: readonly ApprovedSymlink[];
   readonly approvedCopies?: readonly SetupApprovedCopy[];
 };
 

@@ -14,13 +14,13 @@ import {
   type BindingChangeRequest,
 } from "../../library-application/binding-changes.js";
 import { PlanIsStale } from "../../library/failures.js";
-import { captureSetupCopies } from "./setup-copy-preservation.js";
+import { recordSetupCopies } from "./setup-copy-backup.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
 import { leavePnpmSkill } from "../../projection/pnpm-skills.js";
 import {
-  retirableDuplicateLinks,
-  SetupApprovedAlias,
+  duplicateSymlinksToBackUp,
+  ApprovedSymlink,
   type SetupCopySelection,
   type SetupCopyConflict,
 } from "./setup-decisions.js";
@@ -47,10 +47,7 @@ import {
 import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import {
-  retainLibrarySource,
-  inspectLibrarySource,
-} from "../../library-application/retain-source.js";
+import { importSource, inspectLibrarySource } from "../../library-application/import-source.js";
 import type { InstalledSkillOptions } from "./installed-skill-options.js";
 
 const ManageTarget = Schema.Struct({
@@ -248,21 +245,6 @@ const planManage = Effect.fn("Library.planManage")(function* (
   return plan;
 });
 
-const managePlanId = (plan: ManagePlan) =>
-  createHash("sha256")
-    .update(
-      canonicalJson({
-        revision: plan.revision,
-        sourcePath: plan.sourcePath,
-        snapshotDigest: plan.snapshotDigest,
-        skill: plan.skill,
-        targets: plan.targets,
-        blockers: plan.blockers,
-        applicable: plan.applicable,
-      }),
-    )
-    .digest("hex");
-
 export class ManageInvalid
   extends Schema.TaggedError<ManageInvalid>()("ManageInvalid", {
     name: Schema.String,
@@ -295,8 +277,11 @@ export type ManageRequest =
       readonly equalCopies?: readonly string[];
     };
 
-/** Validate every duplicate decision before applying any of the selected copies. */
-export const approveManage = Effect.fn("Manage.approve")(function* <E>(
+/**
+ * Check one selection's duplicate decision against the scan, and record the exact duplicate
+ * copies or symlinks it approves. Setup checks every selection before managing any of them.
+ */
+export const checkManageSelection = Effect.fn("Manage.checkSelection")(function* <E>(
   selection: SetupCopySelection,
   conflict: SetupCopyConflict,
   invalid: (
@@ -322,7 +307,7 @@ export const approveManage = Effect.fn("Manage.approve")(function* <E>(
     return {
       ...selection,
       duplicateAction: selection.duplicateAction,
-      approvedCopies: yield* captureSetupCopies(
+      approvedCopies: yield* recordSetupCopies(
         selection.sourcePath,
         conflict.duplicates,
         selection.approvedCopies,
@@ -333,117 +318,98 @@ export const approveManage = Effect.fn("Manage.approve")(function* <E>(
     return { ...selection, duplicateAction: selection.duplicateAction };
   if (conflict.kind !== "retirable")
     return yield* Effect.fail(
-      selection.approvedAliases ? new PlanIsStale() : invalid("aliases-not-retirable"),
+      selection.approvedSymlinks ? new PlanIsStale() : invalid("aliases-not-retirable"),
     );
   return {
     ...selection,
     duplicateAction: selection.duplicateAction,
-    approvedAliases: yield* captureManageLinks(
+    approvedSymlinks: yield* recordDuplicateSymlinks(
       selection.sourcePath,
       conflict.duplicates,
-      selection.approvedAliases,
+      selection.approvedSymlinks,
     ),
   };
 });
 
-/** Prepare without changing ownership. Apply revalidates content under the same Library writer. */
-export const prepareManage = Effect.fn("Manage.prepare")(function* (
+/**
+ * Manage one existing copy under the Library writer: check it still matches the scan, import its
+ * files (a new copy only), install it, then back up its duplicates once every agent can read the
+ * new copy.
+ */
+export const manageCopy = Effect.fn("Manage.copy")(function* (
   options: ManageOptions,
-  approved: Effect.Success<ReturnType<typeof approveManage>>,
-  requestInput: ManageRequest,
+  selection: Effect.Success<ReturnType<typeof checkManageSelection>>,
+  request: ManageRequest,
 ) {
-  const home = (yield* LibraryStore).home;
-  const operationDirectory = options.recoveryOperationDirectory;
-  const selection = structuredClone(approved);
-  const request = structuredClone(requestInput);
-  const bindings = {
-    home: options.bindings.home,
-    configHome: options.bindings.configHome,
-    overrides: structuredClone(options.bindings.overrides),
+  const empty = {
+    result: undefined,
+    recoveryDirectories: [] as string[],
+    warnings: [] as { name: string; message: string }[],
   };
-  const binding =
+  const installing =
     selection.duplicateAction !== "retain-only" &&
     (request.kind === "existing" || request.ownership !== undefined);
-  return {
-    apply: Effect.fn("Manage.apply")(function* () {
-      if ((yield* LibraryStore).home !== home) return yield* new PlanIsStale();
-      const empty = {
-        result: undefined,
-        recoveryDirectories: [] as string[],
-        warnings: [] as { name: string; message: string }[],
-      };
-      if (request.kind === "existing" && !binding) return empty;
-      const observedHash = request.observedHash;
-      if (
-        observedHash === undefined ||
-        (request.kind === "retain" &&
-          (yield* deterministicTreeHash(selection.sourcePath)) !== observedHash)
-      )
-        return yield* new PlanIsStale();
-      const retirement = binding
-        ? yield* prepareDuplicatePreservation(bindings, selection, operationDirectory)
-        : undefined;
-      if (request.kind === "retain" && !binding) {
-        const retained = yield* retainLibrarySource(selection.sourcePath);
-        if (retained.collection_id === undefined)
-          return yield* new ManageInvalid({
-            name: selection.name,
-            reason: "source-not-candidate",
-          });
-        return empty;
-      }
-      const equalPaths = request.kind === "retain" ? (request.equalCopies ?? []) : [];
-      for (const path of equalPaths)
-        if ((yield* deterministicTreeHash(path)) !== observedHash) return yield* new PlanIsStale();
-      const manage = { path: selection.sourcePath, equalPaths, observedHash };
-      let subjectId: string;
-      if (request.kind === "existing") subjectId = request.subjectId;
-      else {
-        const targets = (request.ownership?.harnesses ?? []).map((harness) => ({
-          path: selection.sourcePath,
-          harness,
-          scope: { kind: "global" as const },
-        }));
-        const plan = yield* planManage(targets, selection.sourcePath);
-        if (
-          plan.targets.some((target) => target.status === "adoptable") &&
-          !request.ownership?.machineId
-        )
-          return yield* new ManageInvalid({
-            name: selection.name,
-            reason: "machine-identity-required",
-          });
-        if (!plan.applicable || !plan.sourcePath || !plan.skill)
-          return yield* new ManageInvalid({
-            name: selection.name,
-            reason: "source-not-candidate",
-          });
-        const refreshed = yield* planManage(plan.targets, plan.sourcePath);
-        if (managePlanId(refreshed) !== managePlanId(plan)) return yield* new PlanIsStale();
-        const retained = yield* retainLibrarySource(plan.sourcePath);
-        if (retained.collection_id === undefined)
-          return yield* new ManageInvalid({
-            name: selection.name,
-            reason: "source-not-candidate",
-          });
-        subjectId = retained.collection_id;
-        manage.path = plan.sourcePath;
-        manage.observedHash = plan.skill.validationDigest;
-      }
-      return yield* bindCopy(bindings, selection, subjectId, manage, retirement);
-    }, withLibraryWriter),
-  };
-});
+  if (request.kind === "existing" && !installing) return empty;
+  // Check: the copy, and every equal copy it brings along, still has the scanned bytes.
+  const observedHash = request.observedHash;
+  if (
+    observedHash === undefined ||
+    (request.kind === "retain" &&
+      (yield* deterministicTreeHash(selection.sourcePath)) !== observedHash)
+  )
+    return yield* new PlanIsStale();
+  const backup = installing
+    ? yield* planDuplicateBackup(options.bindings, selection, options.recoveryOperationDirectory)
+    : undefined;
+  if (request.kind === "retain" && !installing) {
+    const imported = yield* importSource(selection.sourcePath);
+    if (imported.collection_id === undefined)
+      return yield* new ManageInvalid({ name: selection.name, reason: "source-not-candidate" });
+    return empty;
+  }
+  const equalPaths = request.kind === "retain" ? (request.equalCopies ?? []) : [];
+  for (const path of equalPaths)
+    if ((yield* deterministicTreeHash(path)) !== observedHash) return yield* new PlanIsStale();
+  const manage = { path: selection.sourcePath, equalPaths, observedHash };
+  let subjectId: string;
+  if (request.kind === "existing") subjectId = request.subjectId;
+  else {
+    // Import: a new copy's files enter the Library before it is installed.
+    const targets = (request.ownership?.harnesses ?? []).map((harness) => ({
+      path: selection.sourcePath,
+      harness,
+      scope: { kind: "global" as const },
+    }));
+    const plan = yield* planManage(targets, selection.sourcePath);
+    if (
+      plan.targets.some((target) => target.status === "adoptable") &&
+      !request.ownership?.machineId
+    )
+      return yield* new ManageInvalid({
+        name: selection.name,
+        reason: "machine-identity-required",
+      });
+    if (!plan.applicable || !plan.sourcePath || !plan.skill)
+      return yield* new ManageInvalid({ name: selection.name, reason: "source-not-candidate" });
+    const imported = yield* importSource(plan.sourcePath);
+    if (imported.collection_id === undefined)
+      return yield* new ManageInvalid({ name: selection.name, reason: "source-not-candidate" });
+    subjectId = imported.collection_id;
+    manage.path = plan.sourcePath;
+    manage.observedHash = plan.skill.validationDigest;
+  }
+  return yield* installCopy(options.bindings, selection, subjectId, manage, backup);
+}, withLibraryWriter);
 
 /** Capture duplicate preservation before managing or binding. */
-const prepareDuplicatePreservation = Effect.fn("Manage.prepareDuplicatePreservation")(function* (
+const planDuplicateBackup = Effect.fn("Manage.planDuplicateBackup")(function* (
   roots: InventoryRootOptions,
-  selection: Effect.Success<ReturnType<typeof approveManage>>,
+  selection: Effect.Success<ReturnType<typeof checkManageSelection>>,
   operationDirectory?: string,
 ) {
   if (selection.duplicateAction === "preserve-duplicates") {
     const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
-    const copies = yield* captureSetupCopies(
+    const copies = yield* recordSetupCopies(
       selection.sourcePath,
       duplicates,
       selection.approvedCopies,
@@ -463,18 +429,18 @@ const prepareDuplicatePreservation = Effect.fn("Manage.prepareDuplicatePreservat
         ...moves,
         apply: () =>
           Effect.gen(function* () {
-            yield* captureSetupCopies(selection.sourcePath, duplicates, copies);
+            yield* recordSetupCopies(selection.sourcePath, duplicates, copies);
             yield* moves.apply();
           }),
       },
-      aliases: [] as readonly SetupApprovedAlias[],
+      symlinks: [] as readonly ApprovedSymlink[],
       harnesses: [
         ...new Set(duplicates.map((duplicate) => duplicate.harness).filter(hasHarnessProfile)),
       ],
     };
   }
   if (selection.duplicateAction !== "retire-aliases") return undefined;
-  const approvedAliases: readonly SetupApprovedAlias[] = selection.approvedAliases;
+  const approvedSymlinks: readonly ApprovedSymlink[] = selection.approvedSymlinks;
   const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
   // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
   // root's backups; moving it afterwards would find the new copy there instead.
@@ -482,24 +448,24 @@ const prepareDuplicatePreservation = Effect.fn("Manage.prepareDuplicatePreservat
     join(bindingRoot(target, { kind: "global" }, roots), selection.name),
   );
   const store = yield* LibraryStore;
-  return yield* planAliasRetirement(
+  return yield* planSymlinkBackup(
     store.home,
     selection.name,
     selection.sourcePath,
     duplicates,
-    approvedAliases,
+    approvedSymlinks,
     destinations,
     operationDirectory,
   );
 });
 
-/** Bind before preserving any displaced entry, using approval captured before managing. */
-const bindCopy = Effect.fn("Manage.bindCopy")(function* (
+/** Install the copy, then back up its duplicates using the approval recorded before. */
+const installCopy = Effect.fn("Manage.installCopy")(function* (
   roots: InventoryRootOptions,
   selection: SetupCopySelection,
   subjectId: string,
   manage: NonNullable<BindingChangeRequest["manage"]>,
-  retirement?: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
+  backup?: NonNullable<Effect.Success<ReturnType<typeof planDuplicateBackup>>>,
 ) {
   const plan = yield* previewBindingChanges(
     [
@@ -510,9 +476,9 @@ const bindCopy = Effect.fn("Manage.bindCopy")(function* (
         allowDuplicate:
           selection.duplicateAction === "keep-both" ||
           selection.duplicateAction === "preserve-duplicates",
-        ...(retirement
+        ...(backup
           ? {
-              allowedDuplicateLinks: retirement.aliases.map((entry) => ({
+              allowedDuplicateSymlinks: backup.symlinks.map((entry) => ({
                 ...entry,
                 canonicalPath: selection.sourcePath,
               })),
@@ -540,14 +506,14 @@ const bindCopy = Effect.fn("Manage.bindCopy")(function* (
     ),
   );
   const [result] = applied.results;
-  const outcome = retirement
-    ? yield* preserveAfterInstalledSkill(roots, subjectId, selection.name, retirement)
+  const outcome = backup
+    ? yield* backUpDuplicates(roots, subjectId, selection.name, backup)
     : undefined;
   return {
     result,
     recoveryDirectories:
-      retirement && outcome?.kind === "retired" && retirement.moves.entries.length
-        ? [retirement.moves.recoveryDirectory]
+      backup && outcome?.kind === "retired" && backup.moves.entries.length
+        ? [backup.moves.recoveryDirectory]
         : [],
     warnings: [
       ...applied.warnings,
@@ -558,17 +524,17 @@ const bindCopy = Effect.fn("Manage.bindCopy")(function* (
   };
 });
 
-/** Bind observed aliases to filesystem identities before approval, and verify that consent later. */
-export const captureManageLinks = Effect.fn("Manage.captureAliasApproval")(function* (
+/** Bind observed symlinks to filesystem identities before approval, and verify that consent later. */
+export const recordDuplicateSymlinks = Effect.fn("Manage.recordDuplicateSymlinks")(function* (
   sourcePath: string,
   duplicates: readonly DuplicateCopy[],
-  approved?: readonly SetupApprovedAlias[],
+  approved?: readonly ApprovedSymlink[],
 ) {
-  const paths = retirableDuplicateLinks(sourcePath, duplicates);
+  const paths = duplicateSymlinksToBackUp(sourcePath, duplicates);
   if (!paths.length) return yield* new PlanIsStale();
   const links = yield* LinkStat;
   const fs = yield* FileSystem.FileSystem;
-  const aliases = yield* Effect.forEach(paths, (path) =>
+  const symlinks = yield* Effect.forEach(paths, (path) =>
     Effect.gen(function* () {
       yield* leavePnpmSkill(path);
       const info = yield* links.identity.lstat(path);
@@ -591,48 +557,48 @@ export const captureManageLinks = Effect.fn("Manage.captureAliasApproval")(funct
   );
   if (
     approved &&
-    !Schema.toEquivalence(Schema.Array(SetupApprovedAlias))(
+    !Schema.toEquivalence(Schema.Array(ApprovedSymlink))(
       [...approved].sort((left, right) => left.path.localeCompare(right.path)),
-      [...aliases].sort((left, right) => left.path.localeCompare(right.path)),
+      [...symlinks].sort((left, right) => left.path.localeCompare(right.path)),
     )
   )
     return yield* new PlanIsStale();
-  return aliases;
+  return symlinks;
 });
 
-const planAliasRetirement = Effect.fn("Manage.planAliasRetirement")(function* (
+const planSymlinkBackup = Effect.fn("Manage.planSymlinkBackup")(function* (
   libraryHome: string,
   name: string,
   sourcePath: string,
   duplicates: readonly DuplicateCopy[],
-  approvedAliases: readonly SetupApprovedAlias[] | undefined,
+  approvedSymlinks: readonly ApprovedSymlink[] | undefined,
   destinations: readonly string[],
   operationDirectory?: string,
 ) {
-  const aliases = yield* captureManageLinks(sourcePath, duplicates, approvedAliases);
+  const symlinks = yield* recordDuplicateSymlinks(sourcePath, duplicates, approvedSymlinks);
   const moves = yield* prepareRecoveryMoves(
     libraryHome,
-    aliases
-      .filter((alias) => !destinations.includes(alias.path))
-      .map((alias) => ({
+    symlinks
+      .filter((symlink) => !destinations.includes(symlink.path))
+      .map((symlink) => ({
         name,
-        path: alias.path,
-        approvedLink: alias,
+        path: symlink.path,
+        approvedLink: symlink,
       })),
     operationDirectory,
   );
   const harnesses = [
     ...new Set(duplicates.map((duplicate) => duplicate.harness).filter(hasHarnessProfile)),
   ];
-  return { moves, aliases, harnesses };
+  return { moves, symlinks, harnesses };
 });
 
 /** Existing entries stay active until every affected reader has a verified replacement. */
-const preserveAfterInstalledSkill = Effect.fn("Manage.preserveCopiesAfterInstall")(function* (
+const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
   roots: InventoryRootOptions,
   subjectId: string,
   name: string,
-  retirement: NonNullable<Effect.Success<ReturnType<typeof prepareDuplicatePreservation>>>,
+  backup: NonNullable<Effect.Success<ReturnType<typeof planDuplicateBackup>>>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const state = yield* (yield* LibraryStore).load;
@@ -642,7 +608,7 @@ const preserveAfterInstalledSkill = Effect.fn("Manage.preserveCopiesAfterInstall
     fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
   const readableRoots = yield* Effect.forEach(
     readableSkillsDirectories(roots, { kind: "global" }).filter((root) =>
-      retirement.harnesses.includes(root.harness),
+      backup.harnesses.includes(root.harness),
     ),
     (root) => canonical(root.root),
   );
@@ -684,6 +650,6 @@ const preserveAfterInstalledSkill = Effect.fn("Manage.preserveCopiesAfterInstall
       kind: "preserved" as const,
       message: `Bound ${name}; existing copies were left in place because no active replacement is readable by their harness. Run skit doctor to inspect the conflict.`,
     };
-  yield* retirement.moves.apply();
+  yield* backup.moves.apply();
   return { kind: "retired" as const };
 });

@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "@smolai/skit-core";
-import { previewLibrarySource } from "../src/library-application/retain-source.js";
+import { previewLibrarySource } from "../src/library-application/import-source.js";
 import { assertCollectionImport, gitBlobHash } from "./helpers/collection-import.js";
 import manifest from "./fixtures/collections/manifest.json" with { type: "json" };
 

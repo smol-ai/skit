@@ -14,7 +14,7 @@ import {
   type LibraryProgressEvent,
 } from "../src/library-application/progress.js";
 import { updateSubjects } from "../src/library-application/update.js";
-import { retainLibrarySource } from "../src/library-application/retain-source.js";
+import { importSource } from "../src/library-application/import-source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>
@@ -39,9 +39,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
           }),
         ),
     });
-    yield* home.owned(
-      retainLibrarySource({ type: "archive", url: "https://fixtures.test/source.zip" }),
-    );
+    yield* home.owned(importSource({ type: "archive", url: "https://fixtures.test/source.zip" }));
     const before = yield* home.durable;
     const events: LibraryProgressEvent[] = [];
     const history = home.owned(LibraryAuditLog.use((log) => log.list()));

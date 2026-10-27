@@ -13,7 +13,7 @@ interface BindingOptions {
   readonly all: boolean;
   readonly selectedSkills?: readonly string[];
   readonly allowDuplicate?: boolean;
-  readonly allowedDuplicateLinks?: BindingChangeRequest["allowedDuplicateLinks"];
+  readonly allowedDuplicateSymlinks?: BindingChangeRequest["allowedDuplicateSymlinks"];
   readonly manage?: BindingChangeRequest["manage"];
   readonly roots: InventoryRootOptions;
   readonly variantsPath: string;
@@ -32,7 +32,7 @@ export const previewTestBindings = (options: BindingOptions) => {
     all: options.all,
     selectedSkills: options.selectedSkills,
     allowDuplicate: options.allowDuplicate,
-    allowedDuplicateLinks: options.allowedDuplicateLinks,
+    allowedDuplicateSymlinks: options.allowedDuplicateSymlinks,
     manage: options.manage,
     scope: options.invocation.scope,
     enabled: options.invocation.enabled,

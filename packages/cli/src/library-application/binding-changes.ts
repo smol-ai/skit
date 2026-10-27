@@ -52,7 +52,7 @@ export interface BindingChangeRequest extends BindingSelection {
   readonly preserveUnselectedProjections?: boolean;
   readonly allowDuplicate?: boolean;
   /** Setup consent applies only to these exact symlinks, until installing succeeds. */
-  readonly allowedDuplicateLinks?: readonly {
+  readonly allowedDuplicateSymlinks?: readonly {
     readonly path: string;
     readonly canonicalPath: string;
     readonly dev: number;
@@ -315,7 +315,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     for (const duplicate of duplicates) {
       const aliases = [];
       for (const alias of duplicate.aliases) {
-        const approved = options.allowedDuplicateLinks?.find(
+        const approved = options.allowedDuplicateSymlinks?.find(
           (item) => item.path === alias.path && item.canonicalPath === duplicate.canonicalPath,
         );
         if (approved) {

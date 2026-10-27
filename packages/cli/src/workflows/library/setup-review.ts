@@ -9,7 +9,7 @@ import {
   type SkitFailure,
 } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../failures.js";
-import { captureManageLinks, type ManageOptions } from "./manage-existing.js";
+import { recordDuplicateSymlinks, type ManageOptions } from "./manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup-apply.js";
 import type { SetupOptions } from "./setup.js";
 import type {
@@ -33,7 +33,7 @@ import {
 } from "./setup-decisions.js";
 import { setupVersionAlternatives } from "./setup-version-choice.js";
 import { planSetupRemovals, setupRemovablePaths } from "./setup-removal.js";
-import { captureSetupCopies } from "./setup-copy-preservation.js";
+import { recordSetupCopies } from "./setup-copy-backup.js";
 import {
   setupReconciliationChanges,
   unresolvedSetupReconciliation,
@@ -86,7 +86,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     });
     if (conflict.kind === "preservable") {
       const checked = yield* Effect.result(
-        captureSetupCopies(copy.instance.path, conflict.duplicates),
+        recordSetupCopies(copy.instance.path, conflict.duplicates),
       );
       if (checked._tag === "Failure") conflict = { ...conflict, kind: "preserve-copies" };
     }
@@ -193,7 +193,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         decisions.push({
           ...copy,
           duplicateAction: action,
-          approvedCopies: yield* captureSetupCopies(
+          approvedCopies: yield* recordSetupCopies(
             copy.sourcePath,
             copy.conflict.duplicates,
             decision.approvedCopies,
@@ -210,10 +210,10 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       decisions.push({
         ...copy,
         duplicateAction: action,
-        approvedAliases: yield* captureManageLinks(
+        approvedSymlinks: yield* recordDuplicateSymlinks(
           copy.sourcePath,
           copy.conflict.duplicates,
-          decision.approvedAliases,
+          decision.approvedSymlinks,
         ),
       });
     }
@@ -328,7 +328,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         .filter((copy) => copy.duplicateAction !== "retain-only")
         .map(displayCopy),
       preserves: decisions.flatMap((copy) => [
-        ...(copy.approvedAliases ?? []).map((alias) => ({
+        ...(copy.approvedSymlinks ?? []).map((alias) => ({
           name: copy.name,
           path: alias.path,
           kind: "symlink" as const,
@@ -365,7 +365,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
                 names: selected.map((copy) => copy.name),
                 aliasCount: new Set(
                   selected.flatMap((copy) => [
-                    ...(copy.approvedAliases?.map((alias) => alias.path) ?? []),
+                    ...(copy.approvedSymlinks?.map((alias) => alias.path) ?? []),
                     ...(copy.approvedCopies?.map((entry) => entry.path) ?? []),
                   ]),
                 ).size,

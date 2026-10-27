@@ -7,7 +7,7 @@ import { PlanIsStale } from "../../library/failures.js";
 import { SetupApprovedCopy } from "./setup-decisions.js";
 
 /** Only direct, equal global copies approved by review can enter automatic preservation. */
-export const captureSetupCopies = Effect.fn("Setup.captureCopies")(function* (
+export const recordSetupCopies = Effect.fn("Setup.captureCopies")(function* (
   sourcePath: string,
   duplicates: readonly DuplicateCopy[],
   approved?: readonly SetupApprovedCopy[],

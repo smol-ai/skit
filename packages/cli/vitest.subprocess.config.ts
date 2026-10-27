@@ -16,7 +16,7 @@ export default defineConfig({
       "test/native-probes.test.ts",
       "test/server-bootstrap-process.test.ts",
       "test/single-machine-journey.test.ts",
-      "test/retain-source.test.ts",
+      "test/import-source.test.ts",
     ],
     setupFiles: ["../../vitest.isolated-home.ts"],
     testTimeout: 30_000,

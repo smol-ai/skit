@@ -37,9 +37,9 @@ Preview runs without the Library writer lock. On approval, `applySetupPlan` runs
 | S2 | The one apply-time scan, held to the approved plan ID | `setup-apply.ts`; `workflows/library/setup.ts` `revalidateSetupPlan` |
 | S2a | Capture the original filesystem and desired-intent evidence in a setup operation, after approved-plan revalidation and projection-root preflight | `library-application/setup-operation.ts` |
 | S3 | If the plan saves roots, or imports or adds without a machine identity: write `machine.json`, without scanning | `setup-apply.ts`; `setup-discovery.ts` `saveSetupMachineConfig` |
-| S4 | Observed-source imports, one Collection group at a time, each retained and published before the next; each lockfile's hash is checked first | `setup-observed-collections.ts` |
-| S5 | Existing-entry binds: per selection bind and project against the approved content hash, then retire aliases | `setup-existing-binding.ts`; `setup-manage.ts` `bindSetupCopy` |
-| S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `retainLibrarySource`, bind and project, then retire aliases | `setup-manage.ts` |
+| S4 | Observed-source imports, one Collection group at a time, each retained and published before the next; each lockfile's hash is checked first | `setup-import.ts` |
+| S5 | Existing-entry binds: per selection bind and project against the approved content hash, then retire aliases | `setup-manage.ts` `manageSetupCopies(…, "existing")` → `manage-existing.ts` `manageCopy` |
+| S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `importSource`, bind and project, then retire aliases | `setup-manage.ts` `manageSetupCopies(…, "new")` → `manage-existing.ts` `manageCopy` |
 | S7 | Explicit removals, last: check the Library is still at the apply's revision, preflight every entry (identity and link target; for a directory also its approved content hash and no new custody marker), create checked recovery containers, publish the immutable receipt exclusively, then for each entry check it again and rename it | `setup-apply.ts`; `setup-removal.ts` |
 | S8 | Outside the writer: offer a skills.sh update check, which loads the Library and may prompt | handler `offerSkillsShUpdateCheck` |
 
@@ -102,7 +102,7 @@ by `setup-reconciliation.test.ts`; see `setup-recovery-refactor.md` for the comp
 requirement mapping and remaining deliberate custody boundaries.
 
 Automatic preservation now has final-state proof in
-`setup-duplicate-preservation.test.ts`: equal direct global directories move only
+`setup-duplicate-backup.test.ts`: equal direct global directories move only
 after every affected reader has a verified replacement, complete original bytes
 remain recoverable, and full undo returns the original inode. Authored controls,
 new repository ownership and changed replacements keep the old copy in place.

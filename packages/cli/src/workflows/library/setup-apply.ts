@@ -21,7 +21,6 @@ import type {
   SetupReconciliationOutcome,
 } from "./setup-contract.js";
 import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
-import { applySetupExistingBindings } from "./setup-existing-binding.js";
 import { manageSetupCopies } from "./setup-manage.js";
 import { importSetupCollections } from "./setup-import.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
@@ -194,7 +193,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           reconnects
             ? `Reconnecting ${reconnects} existing Library match${reconnects === 1 ? "" : "es"}`
             : "Keeping existing Library matches without enabling",
-          applySetupExistingBindings(manage, current, approval.bindings),
+          manageSetupCopies(manage, current, approval.bindings, "existing"),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
@@ -206,7 +205,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             : "";
         const applied = yield* options.withStatus(
           `Managing ${approval.ownership.length} existing local Skill${approval.ownership.length === 1 ? "" : "s"}${names}`,
-          manageSetupCopies(manage, current, approval.ownership),
+          manageSetupCopies(manage, current, approval.ownership, "new"),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);

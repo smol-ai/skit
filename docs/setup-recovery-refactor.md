@@ -346,7 +346,7 @@ repository marker before cleanup invalidates the operation rather than moving
 the checkout. `preservationWarnings` is the current JSON field; legacy alias-only
 fields remain compatibility views.
 
-`setup-duplicate-preservation.test.ts` checks complete saved bytes, excluded Finder
+`setup-duplicate-backup.test.ts` checks complete saved bytes, excluded Finder
 metadata, empty directories, original inode restoration by full undo, stale
 choices, authored controls, later repository ownership and later replacement
 edits. The generic client in `setup-actions.test.ts` follows discovery -> review
@@ -505,7 +505,7 @@ after setup cannot turn retained marker lineage into permission to move its file
 | Changed independent projections, exact saved-directory restoration, adopted originals, newer edits, protected owners and redirected paths, interrupted inverse | `setup-undo.test.ts`, `setup-reconciliation.test.ts` |
 | Baseline/current/desired classification, passive scoped rendering, local-only drift/native deletion preserved, marker disagreement protected, routine updates and marker-only alignment | `setup-reconciliation.test.ts` |
 | Competing edits require a concrete retained/local active-version choice; both versions discoverable, exact originals saved before projection; partial choice undo | `setup-reconciliation.test.ts` through domain apply, literal CLI actions and guided renderer |
-| Automatic equal global duplicate/link preservation after explicit enablement; replacements verified per reader before cleanup | `setup-duplicate-preservation.test.ts`, `setup-actions.test.ts`, `setup-manage.test.ts` |
+| Automatic equal global duplicate/link preservation after explicit enablement; replacements verified per reader before cleanup | `setup-duplicate-backup.test.ts`, `setup-actions.test.ts`, `setup-manage.test.ts` |
 | Native binding/projection default behavior retained; setup limits selection/pruning/relocation/retirement to chosen Skills | `binding-changes.test.ts`, core `library-projection.test.ts`, `library-binding-entries.test.ts`, `projection-policy.test.ts` |
 
 No new placement is inferred from a missing registered installation: native deletion

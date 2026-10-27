@@ -17,10 +17,7 @@ import { SetupResult } from "../src/workflows/library/setup-contract.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import { setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
 import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
-import {
-  retainLibrarySource,
-  inspectLibrarySource,
-} from "../src/library-application/retain-source.js";
+import { importSource, inspectLibrarySource } from "../src/library-application/import-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
@@ -242,7 +239,7 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
       for (const input of [f.pkg, join(f.pkg, "skills")]) {
         const results = yield* Effect.all([
           Effect.result(home.owned(inspectLibrarySource(input))),
-          Effect.result(home.owned(writingTo(home.home, retainLibrarySource(input)))),
+          Effect.result(home.owned(writingTo(home.home, importSource(input)))),
         ]);
         for (const result of results) {
           expect(result._tag).toBe("Failure");
@@ -307,7 +304,7 @@ it.effect("keeps an authored workspace source distinct from pnpm's recorded alia
     expect(installed?.owner.kind).toBe("pnpm");
     expect(observed.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
     expect((yield* setupRemovablePaths(options, observed)).has(f.alias)).toBe(false);
-    const retained = yield* home.owned(writingTo(home.home, retainLibrarySource(skill)));
+    const retained = yield* home.owned(writingTo(home.home, importSource(skill)));
     expect(retained.skills.map((item) => item.name)).toEqual(["demo-guide"]);
     expect(yield* f.fs.readLink(f.alias)).toBe(skill);
   }).pipe(Effect.provide(skitLayer)),
@@ -380,14 +377,17 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     expect(row?.choice.disabled).toBe(true);
     expect(row?.details).toContain("Managed by pnpm · left in place");
     expect((yield* setupRemovablePaths(options, observed)).has(f.skill)).toBe(false);
-    const add = yield* Effect.result(home.owned(retainLibrarySource(f.alias)));
+    const add = yield* Effect.result(home.owned(importSource(f.alias)));
     expect(add._tag).toBe("Failure");
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
     const takeover = yield* Effect.result(
       home.owned(
-        manageSetupCopies({ bindings: home.bindings }, observed, [
-          { name: "demo-guide", sourcePath: f.skill },
-        ]),
+        manageSetupCopies(
+          { bindings: home.bindings },
+          observed,
+          [{ name: "demo-guide", sourcePath: f.skill }],
+          "new",
+        ),
       ),
     );
     expect(takeover._tag).toBe("Failure");

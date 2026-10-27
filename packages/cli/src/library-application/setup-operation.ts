@@ -201,7 +201,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     for (const copy of [...approval.bindings, ...approval.ownership]) {
       if (copy.duplicateAction === "retain-only") continue;
       paths.add(resolve(copy.sourcePath));
-      for (const alias of copy.approvedAliases ?? []) paths.add(resolve(alias.path));
+      for (const alias of copy.approvedSymlinks ?? []) paths.add(resolve(alias.path));
       for (const entry of copy.approvedCopies ?? []) paths.add(resolve(entry.path));
     }
   }
