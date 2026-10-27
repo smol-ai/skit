@@ -20,7 +20,8 @@ export class SetupExistingBindingInvalid
       | "content-identity-missing"
       | "duplicate-action-required"
       | "keep-both-replaces-link"
-      | "aliases-not-retirable";
+      | "aliases-not-retirable"
+      | "copies-not-preservable";
   }>
   implements SkitFailure
 {

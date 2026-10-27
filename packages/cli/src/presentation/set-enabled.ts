@@ -7,13 +7,19 @@ export function renderSetEnabled(
   data: SetEnabledPlan | SetEnabledResult,
   applied: boolean,
 ): string {
-  const verb = applied
-    ? data.enabled
-      ? "Enabled"
-      : "Disabled"
-    : data.enabled
-      ? "Would enable"
-      : "Would disable";
+  const application = "application" in data ? data.application : undefined;
+  const incomplete = applied && application?.status === "incomplete";
+  const verb = incomplete
+    ? application.intent === "saved"
+      ? "Library choice saved for"
+      : "Library choice unchanged for"
+    : applied
+      ? data.enabled
+        ? "Enabled"
+        : "Disabled"
+      : data.enabled
+        ? "Would enable"
+        : "Would disable";
   const skills =
     data.skills.length > 3
       ? `${data.skills.length} skills`
@@ -21,9 +27,10 @@ export function renderSetEnabled(
         ? data.skills.join(", ")
         : "no skills";
   const destination = data.scope.kind === "global" ? "" : ` in ${data.scope.root}`;
-  const change = data.changed
-    ? ""
-    : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
+  const change =
+    incomplete || data.changed
+      ? ""
+      : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
   const shadows = data.shadows ?? [];
   const warning = shadows.length
     ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
@@ -36,11 +43,14 @@ export function renderSetEnabled(
       ? data.projections.filter((projection) => projection.status !== "installed")
       : [];
   const notInstalledLines = notInstalled.length
-    ? `\nNot installed (a folder SKIT does not manage is already there):\n${notInstalled.map((projection) => `  ${projection.target} · ${projection.status} · ${projection.path}`).join("\n")}`
+    ? `\nDestinations not recorded installed:\n${notInstalled.map((projection) => `  ${projection.target} · ${projection.status} · ${projection.path}`).join("\n")}`
     : "";
   const unmanaged = applied ? [] : (data.unmanaged_destinations ?? []);
   const unmanagedLines = unmanaged.length
     ? `\nA folder SKIT does not manage is already there; enable adopts it only if it is identical, otherwise it is left in place:\n${unmanaged.map((folder) => `  ${folder.target} · ${folder.path}`).join("\n")}`
     : "";
-  return `${verb} ${skills}${destination}${change}${warning}${unmanagedLines}${notInstalledLines}${warnings ? `\n${warnings}` : ""}`;
+  const completion = incomplete
+    ? `\nInstalled copies need attention. ${application.failure?.message ?? "Reconciliation did not complete."}\n${application.failure?.remediation ?? "Inspect the copies, then preview and retry."}\nSaved Library revision: ${application.revision}`
+    : "";
+  return `${verb} ${skills}${destination}${change}${warning}${unmanagedLines}${notInstalledLines}${warnings ? `\n${warnings}` : ""}${completion}`;
 }

@@ -161,6 +161,46 @@ const copySkill = Effect.fn("Projection.copySkill")(function* (
   );
 });
 
+/** Rebuild one former copy into caller-owned staging, using the same byte owner as projection. */
+export const prepareProjectionRebuildEffect = Effect.fn("Projection.prepareRebuild")(function* (
+  state: LibraryState,
+  originalsPath: string,
+  projection: ManagedProjection,
+  invocationIntent: InvocationIntent,
+) {
+  const target = projection.target;
+  if (target === "legacy")
+    return yield* new ProjectionFailure({
+      message: "Legacy projections require their original saved bytes",
+    });
+  const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
+  const version = skill?.versions.find(
+    (item) => item.skill_version_id === projection.skill_version_id,
+  );
+  if (!skill || !version)
+    return yield* new ProjectionFailure({
+      message: "Former projection has no retained Skill Version",
+    });
+  const source = yield* projectionSourceEffect(state, originalsPath, skill, version);
+  if (source.kind !== "source") return yield* new ProjectionFailure({ message: source.detail });
+  return {
+    retainedRoot: source.libraryPath,
+    build: Effect.fn("Projection.rebuildBytes")(function* (destination: string) {
+      // Retained bytes may have changed since review; validate them again before reading.
+      const current = yield* projectionSourceEffect(state, originalsPath, skill, version);
+      if (current.kind !== "source")
+        return yield* new ProjectionFailure({ message: current.detail });
+      yield* copySkill({
+        ...current,
+        libraryPath: current.libraryPath,
+        destination,
+        target,
+        invocationIntent,
+      });
+    }),
+  };
+});
+
 export function readOwnershipMarkerEffect(
   path: string,
 ): Effect.Effect<OwnershipMarker | null, PlatformError, FileSystem.FileSystem> {
@@ -389,12 +429,28 @@ const materializeProjectionEffect = Effect.fn("Projection.materialize")(function
             // Equal content is adopted in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
           }
+          // A destination inside a checkout is repository-owned even when `.git` is above the
+          // skill directory (including worktrees, whose `.git` is a file).
+          let repositoryOwned = false;
+          if (request.adoptIdentical) {
+            let directory = realDestination;
+            while (true) {
+              if (yield* exists(join(directory, ".git"))) {
+                repositoryOwned = true;
+                break;
+              }
+              const parent = dirname(directory);
+              if (parent === directory) break;
+              directory = parent;
+            }
+          }
           // Unasked adoption only takes a folder that is nothing more than the copy: the hash
           // leaves out `.git`, so a checkout with the same files, and its history, would
           // otherwise become SKIT's to move aside on disable.
           if (
             markerInspection.kind === "absent" &&
             request.adoptIdentical &&
+            !repositoryOwned &&
             observed === desiredHash &&
             (yield* (yield* LinkStat).lstat(destination)).type === "Directory" &&
             !(yield* exists(join(destination, ".git"))) &&

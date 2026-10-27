@@ -1,9 +1,20 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Effect, Result, Schema } from "effect";
+import {
+  LibraryState,
+  currentSkillVersion,
+  versionBacking,
+  retainedTreePath,
+  originalTreeHashEffect,
+  observeInventory,
+  skitLayer,
+} from "@smolai/skit-core";
 import type { CodexOutcome, Permissions } from "./codex.ts";
 import {
   checkUserFiles,
   checkUserLinks,
+  sha256,
   relativeToHome,
   type Fixture,
   type UserFileCheck,
@@ -20,6 +31,7 @@ export interface ShellCommand {
 /** What the Library looks like after the trial, read from skit's own state rather than its output. */
 export interface LibraryObservation {
   readonly exists: boolean;
+  readonly problems: readonly string[];
   readonly skills: readonly string[];
   readonly projections: readonly { target: string; path: string; status: string }[];
 }
@@ -64,7 +76,7 @@ export interface TrialReport {
 const outputLimit = 4_000;
 
 /** Read the final state of the fake machine. Shared by agent trials and the no-agent control. */
-export function observe(home: string, fixture: Fixture): Observation {
+export async function observe(home: string, fixture: Fixture): Promise<Observation> {
   const machine = readJson<{ discoveryRoots?: string[] }>(join(home, ".skit", "machine.json"));
   const pending = readJson<{ userCode?: string; verificationUri?: string }>(
     join(home, ".skit", "login-pending.json"),
@@ -72,7 +84,7 @@ export function observe(home: string, fixture: Fixture): Observation {
   return {
     userFiles: checkUserFiles(home, fixture),
     userLinks: checkUserLinks(home, fixture),
-    library: observeLibrary(home),
+    library: await observeLibrary(home, fixture),
     repositoryRoots: (machine?.discoveryRoots ?? []).map((root) => relativeToHome(home, root)),
     skillFolders: [".agents/skills", ".claude/skills"].flatMap((root) =>
       existsSync(join(home, root))
@@ -99,6 +111,7 @@ export function preservationFailures(observation: Observation): string[] {
     ...observation.userFiles.map((file) => file.path.split("/").slice(0, 3).join("/")),
   ]);
   return [
+    ...observation.library.problems,
     ...observation.userFiles
       .filter((file) => file.status !== "intact")
       .map((file) => `user file ${file.status}: ${file.path}`),
@@ -115,21 +128,53 @@ function readJson<T>(path: string): T | undefined {
   return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : undefined;
 }
 
-function observeLibrary(home: string): LibraryObservation {
-  const state = readJson<{
-    skills?: Array<{ name?: string }>;
-    projections?: Array<{ target?: string; path?: string; status?: string }>;
-  }>(join(home, ".skit", "state.json"));
-  if (!state) return { exists: false, skills: [], projections: [] };
-  return {
-    exists: true,
-    skills: (state.skills ?? []).map((skill) => skill.name ?? "?"),
-    projections: (state.projections ?? []).map((projection) => ({
-      target: projection.target ?? "?",
-      path: relativeToHome(home, projection.path ?? ""),
-      status: projection.status ?? "?",
-    })),
-  };
+async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryObservation> {
+  const state = readJson<unknown>(join(home, ".skit", "state.json"));
+  if (!state) return { exists: false, skills: [], projections: [], problems: [] };
+  const decoded = Schema.decodeUnknownResult(LibraryState)(state);
+  if (Result.isFailure(decoded))
+    return { exists: true, skills: [], projections: [], problems: ["invalid Library state"] };
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      // Observe a private snapshot: this verifies projection bytes and markers without repairing
+      // anything or publishing refreshed statuses to the machine being judged.
+      const observed = yield* observeInventory(decoded.success, []);
+      const problems: string[] = [];
+      for (const skill of observed.skills) {
+        const version = currentSkillVersion(observed, skill);
+        const backing = version && versionBacking(observed, skill, version);
+        if (!version || !backing) {
+          problems.push(`no retained backing for ${skill.name}`);
+          continue;
+        }
+        const root = retainedTreePath(join(home, ".skit", "originals"), backing.copy.digest);
+        const path = join(root, backing.member.source_path);
+        const hash = yield* originalTreeHashEffect(path).pipe(Effect.option);
+        if (hash._tag === "None" || hash.value !== version.source_digest)
+          problems.push(`retained content missing or changed: ${skill.name}`);
+        const originals = fixture.userFiles.filter((file) =>
+          file.path.endsWith(`/${skill.name}/SKILL.md`),
+        );
+        const document = join(path, "SKILL.md");
+        if (
+          originals.length &&
+          (!existsSync(document) ||
+            !originals.some((file) => file.sha256 === sha256(readFileSync(document))))
+        )
+          problems.push(`retained skill differs from fixture: ${skill.name}`);
+      }
+      return {
+        exists: true,
+        skills: observed.skills.map((skill) => skill.name),
+        projections: observed.projections.map((projection) => ({
+          target: projection.target,
+          path: relativeToHome(home, projection.path),
+          status: projection.status,
+        })),
+        problems,
+      };
+    }).pipe(Effect.provide(skitLayer)),
+  );
 }
 
 function listFiles(home: string, dir: string): string[] {
@@ -140,7 +185,7 @@ function listFiles(home: string, dir: string): string[] {
   });
 }
 
-export function buildReport(input: {
+export async function buildReport(input: {
   run: RunRoot;
   caseId: string;
   prompt: string;
@@ -152,7 +197,7 @@ export function buildReport(input: {
   skitTarballSha256: string;
   skitGitHead: string;
   skitGitDirty: boolean;
-}): TrialReport {
+}): Promise<TrialReport> {
   const { run, outcome } = input;
   const commands: ShellCommand[] = [];
   const messages: string[] = [];
@@ -176,7 +221,7 @@ export function buildReport(input: {
     }
   }
 
-  const observation = observe(run.home, input.fixture);
+  const observation = await observe(run.home, input.fixture);
   const finalMessage = messages.at(-1) ?? null;
   const failures = [
     ...(outcome.timedOut ? ["agent timed out"] : []),

@@ -217,3 +217,61 @@ it.effect("saving discovery roots alone leaves repository decisions undecided", 
     assert.strictEqual((yield* MachineSettings.read(home)).repositoryDecisionsInitialized, true);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect("publishes no settings when pre-publication inverse evidence fails", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-evidence-" });
+    yield* MachineSettings.updateDiscovery(home, {
+      discoveryRoots: ["/before"],
+      displayName: "Prior name",
+    });
+    const path = join(home, "machine.json");
+    const bytes = yield* fs.readFileString(path);
+    const failure = yield* Effect.flip(
+      MachineSettings.updateDiscovery(home, { discoveryRoots: ["/after"] }, (before, after) =>
+        Effect.gen(function* () {
+          assert.deepStrictEqual(before.discoveryRoots, ["/before"]);
+          assert.deepStrictEqual(after.discoveryRoots, ["/after"]);
+          assert.strictEqual(yield* fs.readFileString(path), bytes);
+          return yield* Effect.fail("receipt-refused");
+        }),
+      ),
+    );
+    assert.strictEqual(failure, "receipt-refused");
+    assert.strictEqual(yield* fs.readFileString(path), bytes);
+    assert.isFalse(yield* fs.exists(join(home, ".lock")));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "evidence callbacks cannot redirect validated settings and inverse writes guard the reviewed settings",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-inverse-" });
+      const before = yield* MachineSettings.updateDiscovery(home, {
+        discoveryRoots: ["/before"],
+        repositories: [{ path: "/original", status: "watched" }],
+        displayName: "Original name",
+      });
+      const after = yield* MachineSettings.updateDiscovery(
+        home,
+        { discoveryRoots: ["/after"] },
+        (_prior, next) =>
+          Effect.sync(() => {
+            // Callback inputs are evidence copies, not writable references to the publication.
+            Object.assign(next, { discoveryRoots: [], path: join(home, "redirected.json") });
+          }),
+      );
+      assert.deepStrictEqual(after.discoveryRoots, ["/after"]);
+      const restored = yield* MachineSettings.restoreDiscovery(home, after, before);
+      assert.deepStrictEqual(restored.discoveryRoots, ["/before"]);
+      assert.strictEqual(restored.machineId, before.machineId);
+      assert.deepStrictEqual(restored.repositories, [{ path: "/original", status: "watched" }]);
+      yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/newer"] });
+      const stale = yield* Effect.flip(MachineSettings.restoreDiscovery(home, after, before));
+      assert.strictEqual(stale._tag, "LibraryChanged");
+      assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/newer"]);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

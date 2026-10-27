@@ -133,7 +133,12 @@ export function readConfigEffect(home?: string) {
     for (const [origin, credential] of Object.entries(config.servers)) {
       const token =
         credential.token === undefined && credential.tokenStorage !== undefined
-          ? yield* readStoredToken(credential.tokenStorage, path, origin)
+          ? yield* readStoredToken(
+              credential.tokenStorage,
+              path,
+              origin,
+              credential.tokenStorageKey,
+            )
           : undefined;
       servers[origin] = token === undefined ? credential : { ...credential, token };
     }
@@ -155,16 +160,41 @@ const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
   const previous = yield* Effect.option(readAuthDocument(home));
   const storage = osTokenStorage();
   const servers: Record<string, StoredCredential> = {};
+  // Replacement items never overwrite the item the current auth document still names.
+  const staged: Array<{
+    storage: NonNullable<StoredCredential["tokenStorage"]>;
+    origin: string;
+    key: string;
+  }> = [];
+  let published = false;
+  yield* Effect.addFinalizer(() =>
+    Effect.forEach(staged, (item) =>
+      published &&
+      servers[item.origin]?.tokenStorage === item.storage &&
+      servers[item.origin]?.tokenStorageKey === item.key
+        ? Effect.void
+        : removeStoredToken(item.storage, path, item.origin, item.key),
+    ),
+  );
   for (const [origin, credential] of Object.entries(config.servers)) {
     // A token this run could not read stays wherever it already is.
     if (credential.token === undefined) {
       servers[origin] = credential;
       continue;
     }
-    const { token, tokenStorage: _previous, ...metadata } = credential;
+    const {
+      token,
+      tokenStorage: _previous,
+      tokenStorageKey: _previousKey,
+      ...metadata
+    } = credential;
+    const key = credential.tokenId;
+    const prior = Option.isSome(previous) ? previous.value.servers[origin] : undefined;
+    if (storage !== undefined && (prior?.tokenStorage !== storage || prior.tokenStorageKey !== key))
+      staged.push({ storage, origin, key });
     servers[origin] =
-      storage !== undefined && (yield* writeStoredToken(storage, path, origin, token))
-        ? { ...metadata, tokenStorage: storage }
+      storage !== undefined && (yield* writeStoredToken(storage, path, origin, token, key))
+        ? { ...metadata, tokenStorage: storage, tokenStorageKey: key }
         : { ...metadata, token };
   }
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
@@ -174,15 +204,23 @@ const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
   });
   // The write mode is subject to umask; credentials get the permission set explicitly.
   yield* fs.chmod(temporary, 0o600);
-  yield* fs.rename(temporary, path);
+  yield* fs.rename(temporary, path).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        published = true;
+      }),
+    ),
+    Effect.uninterruptible,
+  );
   if (Option.isNone(previous)) return;
   for (const [origin, credential] of Object.entries(previous.value.servers))
     if (
       credential.tokenStorage !== undefined &&
-      servers[origin]?.tokenStorage !== credential.tokenStorage
+      (servers[origin]?.tokenStorage !== credential.tokenStorage ||
+        servers[origin]?.tokenStorageKey !== credential.tokenStorageKey)
     )
-      yield* removeStoredToken(credential.tokenStorage, path, origin);
-});
+      yield* removeStoredToken(credential.tokenStorage, path, origin, credential.tokenStorageKey);
+}, Effect.scoped);
 
 export const resolveAuthEffect = Effect.fnUntraced(function* (
   home?: string,
@@ -552,6 +590,7 @@ export const awaitDeviceApprovalEffect = Effect.fn("Auth.awaitDeviceApproval")(f
     }
     if (error === "access_denied") return yield* new DeviceLoginEnded({ reason: "denied" });
     if (error === "expired_token") return yield* new DeviceLoginEnded({ reason: "expired" });
+    if (error === "invalid_grant") return yield* new DeviceLoginEnded({ reason: "invalid" });
     return yield* rejected(polled, "Device authorization");
   }
 });

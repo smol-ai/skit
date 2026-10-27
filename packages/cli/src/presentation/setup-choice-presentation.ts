@@ -1,13 +1,19 @@
 import { Effect } from "effect";
-import { captureLocalAdoptionAliases } from "../workflows/library/local-adoption.js";
+import type {
+  SetupReconciliationFact,
+  SetupVersionChoice,
+} from "../workflows/library/setup-contract.js";
 import type { SetupReviewSummary } from "../workflows/library/setup-review.js";
 import {
-  type SetupCopyDecision,
+  setupDuplicateActions,
+  setupDuplicateChoiceRequired,
+  type SetupCopyChoice,
   type SetupDuplicateAction,
   type SetupSelectedCopy,
 } from "../workflows/library/setup-decisions.js";
 import { Prompter, type Choice } from "./prompter.js";
 import { Renderer } from "./renderer.js";
+import { renderSetupVersionChoice, renderReviewedReconciliation } from "./setup-reconciliation.js";
 
 const skillCount = (count: number) => `${count} skill${count === 1 ? "" : "s"}`;
 
@@ -18,22 +24,6 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
 ) {
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
-  const captureDecision = Effect.fn("CLI.setup.captureDecision")(function* (
-    copy: SetupSelectedCopy,
-    action: SetupDuplicateAction | undefined,
-  ): Effect.fn.Return<
-    SetupCopyDecision,
-    Effect.Error<ReturnType<typeof captureLocalAdoptionAliases>>,
-    Effect.Services<ReturnType<typeof captureLocalAdoptionAliases>>
-  > {
-    if (action === undefined) return copy;
-    if (action !== "retire-aliases") return { ...copy, duplicateAction: action };
-    const approvedAliases = yield* captureLocalAdoptionAliases(
-      copy.sourcePath,
-      copy.conflict.kind === "none" ? [] : copy.conflict.shadows,
-    );
-    return { ...copy, duplicateAction: action, approvedAliases };
-  });
   const actions = new Map<SetupSelectedCopy, SetupDuplicateAction>();
   const prompt = Effect.fn("CLI.setup.promptCopies")(function* (
     group: readonly SetupSelectedCopy[],
@@ -41,10 +31,7 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
     const first = group[0];
     if (!first || first.conflict.kind === "none") return;
     const bulk = group.length > 1;
-    const retirable = first.conflict.kind === "retirable";
-    const aliases = new Set(
-      group.flatMap((copy) => (copy.conflict.kind === "none" ? [] : copy.conflict.aliases)),
-    );
+    const alternatives = setupDuplicateActions(group);
     const examples = [
       ...new Set(
         group.flatMap((copy) =>
@@ -61,7 +48,7 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
     ];
     yield* renderer.note(
       [
-        ...(bulk && !retirable
+        ...(bulk
           ? [
               "These locations are not all individual symlinks to the selected source. Retain without enabling to avoid another agent copy.",
             ]
@@ -72,19 +59,6 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
       `${bulk ? `${group.length} skills` : first.name}: enabling would create another agent copy`,
     );
     const choices: Choice<SetupDuplicateAction | "individual">[] = [
-      ...(retirable
-        ? [
-            {
-              value: "retire-aliases" as const,
-              label: bulk
-                ? `Retire redundant symlinks for all ${group.length} skills (${aliases.size} symlinks)`
-                : "Manage with SKIT and retire redundant symlinks",
-              hint: bulk
-                ? "Source directories stay; recovery receipts saved"
-                : "Source stays in place; links saved with a recovery receipt",
-            },
-          ]
-        : []),
       {
         value: "retain-only",
         label: bulk
@@ -92,7 +66,7 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
           : "Retain in Library without enabling",
       },
       // A link where SKIT writes its copy is replaced, so both copies cannot stay.
-      ...(group.some((copy) => copy.conflict.kind !== "none" && copy.conflict.replacesLink)
+      ...(!alternatives.includes("keep-both")
         ? []
         : [
             {
@@ -109,13 +83,13 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
     );
     if (action !== "individual") for (const copy of group) actions.set(copy, action);
   });
-  for (const kind of ["retirable", "preserve-copies"] as const) {
-    const group = copies.filter((copy) => copy.conflict.kind === kind);
-    if (group.length > 1) yield* prompt(group);
-  }
-  for (const copy of copies)
-    if (copy.conflict.kind !== "none" && !actions.has(copy)) yield* prompt([copy]);
-  return yield* Effect.forEach(copies, (copy) => captureDecision(copy, actions.get(copy)));
+  const unresolved = copies.filter(setupDuplicateChoiceRequired);
+  if (unresolved.length > 1) yield* prompt(unresolved);
+  for (const copy of unresolved) if (!actions.has(copy)) yield* prompt([copy]);
+  return copies.map((copy): SetupCopyChoice => ({
+    ...copy,
+    ...(actions.has(copy) ? { duplicateAction: actions.get(copy)! } : {}),
+  }));
 });
 
 /** The changes guided setup asks the user to approve, one line per effect. */
@@ -126,6 +100,17 @@ export function setupPlanLines(input: {
 }) {
   const { summary, displayPath } = input;
   return [
+    ...(summary.sourceUpdateMayNeedReview
+      ? [
+          "Source imports that change an existing active version require a fresh setup review before those copies are updated.",
+        ]
+      : []),
+    ...summary.versionChoices.map((choice) =>
+      renderSetupVersionChoice(choice, summary.reconciliation, displayPath),
+    ),
+    ...summary.reconciliation.map((fact) =>
+      renderReviewedReconciliation(fact, summary.versionChoices, displayPath),
+    ),
     ...(summary.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),
     ...summary.repositoryDecisions.map(
       (decision) =>
@@ -193,6 +178,8 @@ function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
       return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or Projection`;
     if (action === "keep-both")
       return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
+    if (action === "preserve-duplicates")
+      return `Preserve existing copies: ${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples} · replacements verified before moving originals to recovery`;
     return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; recovery receipts saved`;
   });
 }
@@ -204,7 +191,7 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
   }) {
     const renderer = yield* Renderer;
     for (const warning of applied.warnings)
-      yield* renderer.note(warning.message, `${warning.name}: alias preserved`);
+      yield* renderer.note(warning.message, `${warning.name}: existing copy kept`);
     if (applied.recoveryDirectories.length)
       yield* renderer.note(
         `Sources stay in place. Symlinks and restoration receipts are saved in:\n${applied.recoveryDirectories.join("\n")}`,
@@ -212,3 +199,30 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
       );
   },
 );
+
+/** The application has already supplied eligible alternatives and custody facts. */
+export const chooseSetupVersions = Effect.fn("CLI.setup.chooseVersions")(function* (
+  alternatives: readonly SetupVersionChoice[],
+  facts: readonly SetupReconciliationFact[],
+  displayPath: (path: string) => string,
+) {
+  const prompter = yield* Prompter;
+  const selected: SetupVersionChoice[] = [];
+  for (const skillId of new Set(alternatives.map((choice) => choice.skillId))) {
+    const choices = alternatives.filter((choice) => choice.skillId === skillId);
+    const name = facts.find((fact) => fact.skillId === skillId)?.name ?? skillId;
+    const value = yield* prompter.select(
+      `Which version of ${name} should agents use?`,
+      choices.map((choice, index) => ({
+        value: String(index),
+        label:
+          choice.version === "retained"
+            ? "Use the retained Library version"
+            : `Use current copy at ${displayPath(choice.path!)}`,
+        hint: "Existing copies will be preserved in recovery",
+      })),
+    );
+    selected.push(choices[Number(value)]!);
+  }
+  return selected;
+});

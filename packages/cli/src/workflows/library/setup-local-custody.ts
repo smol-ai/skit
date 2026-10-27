@@ -22,7 +22,8 @@ export class SetupLocalCustodySelectionInvalid
       | "machine-identity-required"
       | "duplicate-action-required"
       | "keep-both-replaces-link"
-      | "aliases-not-retirable";
+      | "aliases-not-retirable"
+      | "copies-not-preservable";
   }>
   implements SkitFailure
 {

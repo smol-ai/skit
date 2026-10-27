@@ -128,6 +128,9 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
           const approvedSessionToken = yield* Effect.scoped(
             awaitDeviceApprovalEffect(started, scopes),
           );
+          // Redemption consumes the device code. Later credential failures must start a fresh
+          // login instead of retrying a code the Registry can no longer accept.
+          yield* clearPendingLogin(options.home);
           return yield* login({ approvedSessionToken });
         }),
       );
@@ -143,7 +146,6 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
     const pending = yield* readPendingLogin(origin, options.home);
     if (pending)
       return yield* deviceLogin(pending).pipe(
-        Effect.tap(() => clearPendingLogin(options.home)),
         Effect.catchTag("DeviceLoginEnded", (ended) =>
           clearPendingLogin(options.home).pipe(Effect.andThen(Effect.fail(ended))),
         ),

@@ -29,7 +29,7 @@ export async function runTrial(
       timeoutMs: options.timeoutMs,
       model: options.model,
     });
-    const report = buildReport({
+    const report = await buildReport({
       run,
       caseId: evalCase.id,
       prompt,

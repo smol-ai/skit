@@ -18,6 +18,12 @@ import { renderLibraryList } from "./library-list.js";
 import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, conditionNextStep, severityHeadline } from "./condition-language.js";
 import { terminalData } from "./terminal-text.js";
+import {
+  renderSetupReconciliation,
+  renderSetupReconciliationOutcome,
+  renderSetupVersionChoice,
+  renderReviewedReconciliation,
+} from "./setup-reconciliation.js";
 import { createColors } from "picocolors";
 
 export interface RenderContext {
@@ -543,7 +549,7 @@ const setupGitStateOrder = [
 ] as const;
 const setupExpandedSkillLimit = 5;
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v9">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -648,7 +654,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v8">): strin
 }
 
 function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v8">["projections"],
+  projections: ContractDataForId<"skit.setup.v9">["projections"],
 ): string[] {
   const collections = new Map<string, (typeof projections)[number][]>();
   for (const projection of projections) {
@@ -675,7 +681,7 @@ function renderSetupProjections(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v8">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v9">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const projections = data.projections.filter(
       (projection) => projection.collectionId === collection.collectionId,
@@ -695,7 +701,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v8">
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v9">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -738,7 +744,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v8">): st
 }
 
 /** What `skit setup --apply` would do, and the exact command that does it. */
-function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): string[] {
+function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v9">): string[] {
   const { candidates, recommended } = data.onboarding;
   if (!recommended.sources.length && !recommended.copies.length) return [];
   const duplicates = recommended.copies.filter((copy) =>
@@ -767,7 +773,7 @@ function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v8">): st
 }
 
 /** What `skit setup --apply` did, then why the rest was left alone. */
-function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): string {
+function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v2">): string {
   const lines = [
     ...data.imported.map(({ source, names }) => `Imported ${source}: ${names.join(", ")}`),
     ...(data.added.length
@@ -777,7 +783,14 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): s
       ? [`Reconnected: ${data.reconnected.map((copy) => copy.name).join(", ")}`]
       : []),
   ];
-  if (!lines.length) lines.push("Nothing to apply; the plan recommended no changes.");
+  if (!lines.length)
+    lines.push(
+      data.reconciliation?.some((outcome) => outcome.status === "updated")
+        ? "Updated existing managed copies."
+        : data.reconciliation?.some((outcome) => outcome.status === "pending")
+          ? "Existing managed copies need a fresh review."
+          : "Nothing to apply; the plan recommended no changes.",
+    );
   if (data.projections.length)
     lines.push(
       "",
@@ -786,6 +799,12 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): s
         (projection) =>
           `  ${projection.name} · ${projection.target} · ${projection.status} · ${projection.path}`,
       ),
+    );
+  if (data.reconciliation?.length)
+    lines.push(
+      "",
+      "Existing managed copies",
+      ...data.reconciliation.map(renderSetupReconciliationOutcome),
     );
   if (data.leftAlone.length)
     lines.push(
@@ -796,19 +815,20 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v1">): s
   if (data.aliasRecoveryDirectories?.length)
     lines.push(
       "",
-      "Retired symlinks and their restoration receipts are saved in",
+      "Preserved copies and their restoration receipts are saved in",
       ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
     );
-  if (data.aliasesKept?.length)
+  const preservationWarnings = data.preservationWarnings ?? data.aliasesKept;
+  if (preservationWarnings?.length)
     lines.push(
       "",
-      "Symlinks kept",
-      ...data.aliasesKept.map((kept) => `  ${kept.name} · ${kept.message}`),
+      "Existing copies left in place",
+      ...preservationWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
     );
   return lines.join("\n");
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v9">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -848,6 +868,12 @@ function renderSetup(data: ContractDataForId<"skit.setup.v8">): string {
   );
   if (externalProjections.length)
     lines.push("", "Existing SKIT projections", ...renderSetupProjections(externalProjections));
+  if (data.reconciliation?.length)
+    lines.push(
+      "",
+      "Existing copy reconciliation",
+      ...data.reconciliation.map((fact) => renderSetupReconciliation(fact)),
+    );
   const contentMatches = renderSetupContentMatches(data);
   if (contentMatches.length) lines.push("", ...contentMatches);
   if (data.onboarding.candidates.length) {
@@ -1005,6 +1031,98 @@ const contractPresenters: ContractPresenters = {
   doctor: renderDoctor,
   usage: (data) => renderUsage(data),
   inventory: (data, context) => renderInventory(data, data.machine, createColors(context.color)),
+  setupUndo: (data) =>
+    [
+      `Setup undo: ${data.status}`,
+      `Operation: ${data.operationId}`,
+      ...data.files.map((file) => `${file.kind}: ${terminalData(file.path)}`),
+      ...data.sourceSelections.map(
+        (source) =>
+          `Restore Collection ${terminalData(source.label)}: ${source.fromSnapshot} → ${source.toSnapshot}`,
+      ),
+      ...(data.intentChanged ? ["Restore prior enablement, versions and invocation choices"] : []),
+      ...(data.settingsChanged ? ["Restore prior discovery roots and repository decisions"] : []),
+      ...data.conflicts.map((conflict) => `Conflict: ${terminalData(conflict)}`),
+      ...(data.failure ? [terminalData(data.failure)] : []),
+      "Retained Library artifacts remain available.",
+      ...data.actions.map(
+        (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
+      ),
+    ].join("\n"),
+  recoveryList: (data) =>
+    data.operations.length
+      ? data.operations.map((operation) => operation.operationId).join("\n")
+      : "No saved-file recovery operations.",
+  recovery: (data) =>
+    [
+      `File recovery: ${data.phase} (Library bindings and settings are unchanged)`,
+      ...data.entries.map(
+        (entry) =>
+          `${entry.name} · ${entry.status} · ${entry.path}\n  ${entry.reason}\n  Saved: ${entry.recoveryPath}`,
+      ),
+      ...(data.legacy
+        ? [
+            "Legacy receipt: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
+          ]
+        : []),
+      ...(data.failure ? [data.failure] : []),
+      ...data.actions.map(
+        (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
+      ),
+    ].join("\n"),
+  setupComparison: (data) =>
+    [
+      ...data.copies.map(
+        (copy) =>
+          `${copy.name} · ${copy.path}\n${copy.observedHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
+      ),
+      ...data.actions.map(
+        (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
+      ),
+    ].join("\n\n"),
+  setupReview: (data) =>
+    [
+      !data.canApply
+        ? "Resolve existing copy choices before applying"
+        : data.hasChanges
+          ? "Review setup changes"
+          : "Nothing to apply",
+      ...(data.summary.sourceUpdateMayNeedReview
+        ? [
+            "Source imports that change an existing active version require a fresh setup review before those copies are updated.",
+          ]
+        : []),
+      ...data.summary.versionChoices.map((choice) =>
+        renderSetupVersionChoice(choice, data.summary.reconciliation),
+      ),
+      ...data.summary.reconciliation.map((fact) =>
+        renderReviewedReconciliation(fact, data.summary.versionChoices),
+      ),
+      ...data.summary.sources.map(
+        (source) => `Import ${source.source}: ${source.names.join(", ")}`,
+      ),
+      ...data.summary.enables.map((copy) => `Enable ${copy.name} from ${copy.path}`),
+      ...data.summary.retains.map((copy) => `Retain ${copy.name} from ${copy.path}`),
+      ...data.summary.preserves.map(
+        (copy) => `Preserve ${copy.kind} ${copy.name} from ${copy.path} in recovery`,
+      ),
+      ...data.summary.removals.map((copy) => `Save ${copy.name} from ${copy.path} in recovery`),
+      ...(data.summary.savesMachineSettings
+        ? ["Save the selected machine discovery settings"]
+        : []),
+      `Review: ${data.reviewId}`,
+      ...data.actions.map(
+        (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
+      ),
+    ].join("\n"),
+  setupFailed: (data) =>
+    [
+      data.message,
+      data.remediation,
+      ...data.actions.map(
+        (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
+      ),
+    ].join("\n"),
   setup: renderSetup,
   setupApplied: renderSetupApplied,
   repositoryPolicy: (data) =>

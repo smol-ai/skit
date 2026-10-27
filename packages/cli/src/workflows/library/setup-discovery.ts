@@ -573,17 +573,22 @@ const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Setting
 };
 
 /** Save the roots and repository decisions setup observes, creating this machine's identity. */
-export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* (
-  options: SetupOptions,
-) {
-  return yield* MachineSettings.updateDiscovery(options.libraryHome, {
-    // An empty selection narrows this scan; it never clears saved discovery roots.
-    ...(options.repositoryRoots?.length ? { discoveryRoots: options.repositoryRoots } : {}),
-    repositories: options.repositoryDecisions,
-    ...(options.machineDisplayName === undefined
-      ? {}
-      : { displayName: options.machineDisplayName }),
-  });
+export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* <
+  E = never,
+  R = never,
+>(options: SetupOptions, beforePublish?: MachineSettings.BeforePublish<E, R>) {
+  return yield* MachineSettings.updateDiscovery(
+    options.libraryHome,
+    {
+      // An empty selection narrows this scan; it never clears saved discovery roots.
+      ...(options.repositoryRoots?.length ? { discoveryRoots: options.repositoryRoots } : {}),
+      repositories: options.repositoryDecisions,
+      ...(options.machineDisplayName === undefined
+        ? {}
+        : { displayName: options.machineDisplayName }),
+    },
+    beforePublish,
+  );
 });
 
 export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (

@@ -1,6 +1,15 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync } from "node:fs";
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
 import { userInfo } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { Permissions } from "./codex.ts";
 import type { TrialReport } from "./observe.ts";
 import type { RunRoot } from "./run-root.ts";
@@ -41,7 +50,30 @@ export function archiveRun(run: RunRoot, report: TrialReport): string {
   const destination = join(archiveDir, "runs", run.id);
   mkdirSync(destination, { recursive: true });
   cpSync(run.evidence, join(destination, "evidence"), { recursive: true });
-  cpSync(run.home, join(destination, "home"), { recursive: true, verbatimSymlinks: true });
+  const archivedHome = join(destination, "home");
+  cpSync(run.home, archivedHome, { recursive: true, verbatimSymlinks: true });
+  // Keep internal absolute links usable after the live run is removed. Relative and external
+  // links retain their targets; the report records every original fixture link verbatim.
+  const relocateLinks = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) relocateLinks(path);
+      else if (entry.isSymbolicLink()) {
+        const target = readlinkSync(path);
+        const withinHome = relative(run.home, target);
+        if (
+          isAbsolute(target) &&
+          withinHome !== ".." &&
+          !withinHome.startsWith(`..${sep}`) &&
+          !isAbsolute(withinHome)
+        ) {
+          unlinkSync(path);
+          symlinkSync(relative(dirname(path), join(archivedHome, withinHome)) || ".", path);
+        }
+      }
+    }
+  };
+  relocateLinks(archivedHome);
   const sessions = join(run.codexHome, "sessions");
   if (existsSync(sessions))
     cpSync(sessions, join(destination, "codex-sessions"), { recursive: true });

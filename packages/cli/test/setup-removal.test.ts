@@ -130,7 +130,10 @@ it.effect(
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
       const removed = join(f.home.home, "removed");
       const directories = yield* f.fs.readDirectory(removed);
-      const recovery = join(removed, directories[0]);
+      const [batch] = (yield* f.fs.readDirectory(join(removed, directories[0]))).filter((name) =>
+        /^[a-f0-9-]{36}$/.test(name),
+      );
+      const recovery = join(removed, directories[0], batch);
       const receipt = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(
           Schema.Struct({
@@ -138,14 +141,12 @@ it.effect(
               Schema.Struct({
                 path: Schema.String,
                 recoveryPath: Schema.String,
-                moved: Schema.Boolean,
                 type: Schema.String,
               }),
             ),
           }),
         ),
       )(yield* f.fs.readFileString(join(recovery, "receipt.json")));
-      expect(receipt.entries.every((entry) => entry.moved)).toBe(true);
       const directory = receipt.entries.find((entry) => entry.type === "Directory")!;
       expect(yield* f.fs.readDirectory(directory.recoveryPath)).toContain("empty");
       expect(yield* f.fs.readFileString(join(directory.recoveryPath, ".DS_Store"))).toBe(
@@ -176,8 +177,8 @@ it.effect("declining removal or using dry run leaves copies and Library unchange
 it.effect("can add one skill and remove another in the same approved setup plan", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    // linked sits at SKIT's destination as a symlink, so setup asks before replacing it.
-    yield* f.setup([["remove\0copied", "linked"], "retire-aliases", true]);
+    // The selected skill's source alias is preserved without a housekeeping question.
+    yield* f.setup([["remove\0copied", "linked"], true]);
     expect(yield* f.fs.exists(f.copy)).toBe(false);
     expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
     expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["linked"]);

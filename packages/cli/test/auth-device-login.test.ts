@@ -324,3 +324,72 @@ it.live("waiting for approval leaves the configuration writer free for other com
     expect(yield* Fiber.join(waiting)).toMatchObject({ origin, alreadyAuthenticated: false });
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+it.live("a credential failure after redemption discards the consumed code", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-consumed-" });
+    const server = deviceServer([Response.json({ access_token: "session-token" })]);
+    const run = Effect.gen(function* () {
+      const interaction = yield* makeScriptedInteraction([]);
+      return yield* authLoginCommand({
+        registry: origin,
+        home,
+        scopes: ["library:sync"],
+        interactive: false,
+        browserApproval: true,
+      }).pipe(Effect.provide(interaction.layer));
+    }).pipe(
+      Effect.provide(
+        registryHttpLayer(
+          testHttpClientLayer((request, url, signal) =>
+            url.pathname === "/api/tokens"
+              ? Effect.succeed(Response.json({ error: "unauthorized" }, { status: 401 }))
+              : server.handler(request, url, signal),
+          ),
+        ),
+      ),
+    );
+    yield* run;
+    expect(
+      yield* readPendingLogin(origin, home).pipe(Effect.provide(skitConfigurationLayer(home))),
+    ).toBeDefined();
+    expect((yield* Effect.result(run))._tag).toBe("Failure");
+    expect(
+      yield* readPendingLogin(origin, home).pipe(Effect.provide(skitConfigurationLayer(home))),
+    ).toBeUndefined();
+    const restarted = yield* run;
+    expect("verificationUri" in restarted).toBe(true);
+    expect(server.seen.filter((request) => request.path === "/api/auth/device/code")).toHaveLength(
+      2,
+    );
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("an invalid saved device code is cleared so the next login can start again", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-invalid-" });
+    const server = deviceServer([Response.json({ error: "invalid_grant" }, { status: 400 })]);
+    const run = Effect.gen(function* () {
+      const interaction = yield* makeScriptedInteraction([]);
+      return yield* authLoginCommand({
+        registry: origin,
+        home,
+        scopes: ["library:sync"],
+        interactive: false,
+        browserApproval: true,
+      }).pipe(Effect.provide(interaction.layer));
+    }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))));
+    yield* run;
+    const failure = yield* Effect.result(run);
+    expect(failure).toMatchObject({
+      _tag: "Failure",
+      failure: { _tag: "DeviceLoginEnded", reason: "invalid" },
+    });
+    expect(
+      yield* readPendingLogin(origin, home).pipe(Effect.provide(skitConfigurationLayer(home))),
+    ).toBeUndefined();
+    expect("verificationUri" in (yield* run)).toBe(true);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

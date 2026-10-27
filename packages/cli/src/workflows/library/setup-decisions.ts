@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Digest, hashParts } from "@smolai/skit-core";
 import type { HarnessShadow } from "../../projection/harness-shadows.js";
 import type {
   SetupResult,
@@ -8,7 +9,12 @@ import type {
 
 import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "./setup-onboarding.js";
 
-export const SetupDuplicateAction = Schema.Literals(["retain-only", "retire-aliases", "keep-both"]);
+export const SetupDuplicateAction = Schema.Literals([
+  "retain-only",
+  "retire-aliases",
+  "keep-both",
+  "preserve-duplicates",
+]);
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
 
 /** Evidence authorizing these individual links, independently of later setup stages. */
@@ -20,6 +26,14 @@ export const SetupApprovedAlias = Schema.Struct({
   ino: Schema.Number,
 });
 export interface SetupApprovedAlias extends Schema.Schema.Type<typeof SetupApprovedAlias> {}
+
+export const SetupApprovedCopy = Schema.Struct({
+  path: Schema.String,
+  observedHash: Digest,
+  dev: Schema.Number,
+  ino: Schema.Number,
+});
+export interface SetupApprovedCopy extends Schema.Schema.Type<typeof SetupApprovedCopy> {}
 
 /** Every relevant alias must be an individual link to the selected canonical source. */
 export function retirableShadowAliases(sourcePath: string, shadows: readonly HarnessShadow[]) {
@@ -40,7 +54,7 @@ export function retirableShadowAliases(sourcePath: string, shadows: readonly Har
 export type SetupCopyConflict =
   | { readonly kind: "none" }
   | {
-      readonly kind: "retirable" | "preserve-copies";
+      readonly kind: "retirable" | "preservable" | "preserve-copies";
       readonly shadows: readonly HarnessShadow[];
       readonly aliases: readonly string[];
       /**
@@ -58,7 +72,9 @@ export const isSetupProjectionTarget = (
 
 /** Shared applicability and allowed actions for prompting and both mutation validators. */
 export function copyConflict(
-  observed: SetupResult,
+  observed: Pick<SetupResult, "instances"> & {
+    readonly onboarding: Pick<SetupResult["onboarding"], "candidates">;
+  },
   selection: { readonly name: string; readonly sourcePath: string },
 ): SetupCopyConflict {
   const candidate = observed.onboarding.candidates.find(
@@ -73,12 +89,61 @@ export function copyConflict(
   )
     return { kind: "none" };
   const aliases = retirableShadowAliases(selection.sourcePath, shadows);
+  const selectedHash = instance?.contentIdentity.observedHash;
+  const preservable =
+    selectedHash !== undefined &&
+    shadows.every((shadow) =>
+      shadow.aliases.every((alias) => {
+        const copy = observed.instances.find((item) => item.path === alias.path);
+        return (
+          alias.via === "directory" &&
+          alias.path === shadow.canonicalPath &&
+          copy !== undefined &&
+          isSetupProjectionTarget(copy) &&
+          !copy.git.repository &&
+          (copy.owner.kind === "unknown" || copy.owner.kind === "skills-sh") &&
+          copy.contentIdentity.observedHash === selectedHash
+        );
+      }),
+    );
   return {
-    kind: aliases.length ? "retirable" : "preserve-copies",
+    kind: aliases.length ? "retirable" : preservable ? "preservable" : "preserve-copies",
     shadows,
     aliases,
     replacesLink: (candidate?.destinationLinks?.length ?? 0) > 0,
   };
+}
+
+/** Stable public source choice identity; internal lock keys contain NUL separators. */
+export const setupSourceChoiceId = (key: string) => hashParts([key]);
+
+/** Alternatives valid for every selected copy. An absent conflict needs no duplicate decision. */
+export function setupDuplicateActions(
+  copies: readonly SetupSelectedCopy[],
+): SetupDuplicateAction[] {
+  const conflicts = copies.filter((copy) => copy.conflict.kind !== "none");
+  if (!copies.some(setupDuplicateChoiceRequired)) return [];
+  return SetupDuplicateAction.literals.filter(
+    (action) =>
+      action === "retain-only" ||
+      (action === "retire-aliases" &&
+        conflicts.every((copy) => copy.conflict.kind === "retirable")) ||
+      (action === "keep-both" &&
+        conflicts.every((copy) => copy.conflict.kind !== "none" && !copy.conflict.replacesLink)),
+  );
+}
+
+/** Verified individual aliases are housekeeping after enablement has been selected. */
+export const setupDuplicateChoiceRequired = (copy: Pick<SetupSelectedCopy, "conflict">) =>
+  copy.conflict.kind === "preserve-copies";
+
+export interface SetupExplicitSelection {
+  readonly reconcileSkillIds?: readonly string[];
+  readonly useRetainedSkillIds?: readonly string[];
+  readonly useCopyPaths?: readonly string[];
+  readonly sourceIds: readonly string[];
+  readonly copyPaths: readonly string[];
+  readonly removePaths: readonly string[];
 }
 
 export const SetupCopySelection = Schema.Struct({
@@ -86,6 +151,7 @@ export const SetupCopySelection = Schema.Struct({
   sourcePath: Schema.String,
   duplicateAction: Schema.optionalKey(SetupDuplicateAction),
   approvedAliases: Schema.optionalKey(Schema.Array(SetupApprovedAlias)),
+  approvedCopies: Schema.optionalKey(Schema.Array(SetupApprovedCopy)),
 });
 export interface SetupCopySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
 
@@ -98,13 +164,34 @@ export interface SetupSelectedCopy {
 
 export type SetupCopyDecision = SetupSelectedCopy &
   (
-    | { readonly duplicateAction?: never; readonly approvedAliases?: never }
-    | { readonly duplicateAction: "retain-only" | "keep-both"; readonly approvedAliases?: never }
+    | {
+        readonly duplicateAction?: never;
+        readonly approvedAliases?: never;
+        readonly approvedCopies?: never;
+      }
+    | {
+        readonly duplicateAction: "retain-only" | "keep-both";
+        readonly approvedAliases?: never;
+        readonly approvedCopies?: never;
+      }
     | {
         readonly duplicateAction: "retire-aliases";
         readonly approvedAliases: readonly SetupApprovedAlias[];
+        readonly approvedCopies?: never;
+      }
+    | {
+        readonly duplicateAction: "preserve-duplicates";
+        readonly approvedCopies: readonly SetupApprovedCopy[];
+        readonly approvedAliases?: never;
       }
   );
+
+/** Front ends submit intent; the application captures and validates filesystem evidence. */
+export type SetupCopyChoice = SetupSelectedCopy & {
+  readonly duplicateAction?: SetupDuplicateAction;
+  readonly approvedAliases?: readonly SetupApprovedAlias[];
+  readonly approvedCopies?: readonly SetupApprovedCopy[];
+};
 
 export function setupSelectedCopies(
   observed: SetupResult,

@@ -9,7 +9,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
-import { outputContracts } from "../src/commands/output-contracts.js";
+import { SetupResult } from "../src/workflows/library/setup-contract.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import {
   makeScriptedInteraction,
@@ -17,6 +17,10 @@ import {
 } from "../src/presentation/interaction-recorder.js";
 import { Prompter } from "../src/presentation/prompter.js";
 import { setupPrompts } from "../src/presentation/setup-steps.js";
+import {
+  inspectRecoveryOperation,
+  listRecoveryOperations,
+} from "../src/library-application/recovery-moves.js";
 import { PlanIsStale } from "../src/library/failures.js";
 import { SetupDiscovery, SetupPlanStale } from "../src/workflows/library/setup.js";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
@@ -145,7 +149,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
           ),
         ),
       );
-      if (Exit.isSuccess(exit)) assert.isTrue(Schema.is(outputContracts.setup.schema)(exit.value));
+      if (Exit.isSuccess(exit)) assert.isTrue(Schema.is(SetupResult)(exit.value));
       return {
         exit,
         scans,
@@ -190,18 +194,20 @@ const refuseRename = (path: string) =>
 
 const Receipt = Schema.fromJsonString(
   Schema.Struct({
-    entries: Schema.Array(
-      Schema.Struct({ path: Schema.String, recoveryPath: Schema.String, moved: Schema.Boolean }),
-    ),
+    entries: Schema.Array(Schema.Struct({ path: Schema.String, recoveryPath: Schema.String })),
   }),
 );
 
 const readReceipt = Effect.fn("Test.readSetupReceipt")(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
   const [directory] = yield* fs.readDirectory(join(home, "removed"));
-  return yield* Schema.decodeUnknownEffect(Receipt)(
-    yield* fs.readFileString(join(home, "removed", directory!, "receipt.json")),
-  );
+  for (const batch of yield* fs.readDirectory(join(home, "removed", directory!))) {
+    if ((yield* fs.stat(join(home, "removed", directory!, batch))).type !== "Directory") continue;
+    const path = join(home, "removed", directory!, batch, "receipt.json");
+    if (yield* fs.exists(path))
+      return yield* Schema.decodeUnknownEffect(Receipt)(yield* fs.readFileString(path));
+  }
+  return yield* Effect.die(new Error("No removal receipt was published"));
 });
 
 const holds = (changes: DiskDiff, bytes: string) =>
@@ -227,29 +233,35 @@ it.effect("declining or previewing the plan applies nothing after one scan", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("declining over a legacy Library writes only the loader's backed-up migration", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ machine: true });
-    const legacy = yield* f.fs.readFileString(
-      join(import.meta.dirname, "../../skit/test/fixtures/library-state/v4-well-known-subset.json"),
-    );
-    yield* f.fs.writeFileString(f.home.statePath, legacy);
-    const before = yield* captureDisk(f.disk);
-    const { exit } = yield* f.setup([["alpha"], false]);
-    assert.isTrue(Exit.isSuccess(exit));
-    const paths = changedPaths(f.root, yield* diskChanges(before));
-    assert.deepStrictEqual(paths.deleted, []);
-    assert.deepStrictEqual(paths.changed, ["library/state.json"]);
-    assert.strictEqual(paths.created.length, 1);
-    assert.match(paths.created[0]!, /^library\/state\.json\.v4\.backup-/);
-    assert.deepStrictEqual(
-      JSON.parse(yield* f.fs.readFileString(join(f.root, paths.created[0]!))),
-      JSON.parse(legacy),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "protected foreign projections refuse setup after only the loader's backed-up migration",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ machine: true });
+      const legacy = yield* f.fs.readFileString(
+        join(
+          import.meta.dirname,
+          "../../skit/test/fixtures/library-state/v4-well-known-subset.json",
+        ),
+      );
+      yield* f.fs.writeFileString(f.home.statePath, legacy);
+      const before = yield* captureDisk(f.disk);
+      const { exit } = yield* f.setup([["alpha"]]);
+      assert.isTrue(Exit.isFailure(exit));
+      if (Exit.isFailure(exit)) assert.match(String(exit.cause), /SetupReconciliationRequired/);
+      const paths = changedPaths(f.root, yield* diskChanges(before));
+      assert.deepStrictEqual(paths.deleted, []);
+      assert.deepStrictEqual(paths.changed, ["library/state.json"]);
+      assert.strictEqual(paths.created.length, 1);
+      assert.match(paths.created[0]!, /^library\/state\.json\.v4\.backup-/);
+      assert.deepStrictEqual(
+        JSON.parse(yield* f.fs.readFileString(join(f.root, paths.created[0]!))),
+        JSON.parse(legacy),
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("non-interactive setup with a work dir saves machine configuration while observing", () =>
+it.effect("non-interactive setup with a work dir records a guarded settings-only operation", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const work = join(f.root, "work");
@@ -262,11 +274,19 @@ it.effect("non-interactive setup with a work dir saves machine configuration whi
       assert.deepStrictEqual(exit.value.machineConfig.repositoryRoots, [work]);
     }
     assert.deepStrictEqual(changedPaths(f.root, yield* diskChanges(before)), {
-      created: [],
+      created: [
+        "library/removed",
+        "library/removed/*",
+        "library/removed/*/changes",
+        "library/removed/*/changes/00000001.json",
+        "library/removed/*/changes/00000001.published.json",
+        "library/removed/*/complete.json",
+        "library/removed/*/setup.json",
+      ],
       deleted: [],
       changed: ["library/machine.json"],
     });
-    assert.strictEqual(scans, 1);
+    assert.strictEqual(scans, 3);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -325,7 +345,15 @@ it.effect("bytes changed between the apply-time scan and a later stage fail stal
     const changes = yield* diskChanges(before);
     assert.isFalse(holds(changes, changed));
     assert.deepStrictEqual(changedPaths(f.root, changes), {
-      created: ["library/machine.json"],
+      created: [
+        "library/machine.json",
+        "library/removed",
+        "library/removed/*",
+        "library/removed/*/changes",
+        "library/removed/*/changes/00000001.json",
+        "library/removed/*/changes/00000001.published.json",
+        "library/removed/*/setup.json",
+      ],
       deleted: [],
       changed: [".codex/skills/alpha/SKILL.md"],
     });
@@ -363,9 +391,13 @@ it.effect("a failed additive stage leaves every selected removal in place", () =
     assert.deepStrictEqual(paths.deleted, []);
     assert.deepStrictEqual(
       [...new Set(paths.created.map((path) => path.split("/").slice(0, 2).join("/")))],
-      ["library/machine.json", "library/originals"],
+      ["library/machine.json", "library/originals", "library/removed"],
     );
-    assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+    for (const operationId of yield* listRecoveryOperations(f.home.home))
+      assert.deepStrictEqual(
+        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
+        [],
+      );
     assert.isFalse(yield* f.fs.exists(f.home.statePath));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -397,7 +429,11 @@ it.effect("a removal selection edited after the first additive stage stays in pl
     });
     assert.instanceOf(failure(exit), PlanIsStale);
     assert.strictEqual(yield* f.fs.readFileString(join(f.path("gamma"), "SKILL.md")), changed);
-    assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+    for (const operationId of yield* listRecoveryOperations(f.home.home))
+      assert.deepStrictEqual(
+        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
+        [],
+      );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -416,7 +452,11 @@ it.effect("a removal selection that gains a custody marker after the scan stays 
       skillBytes("gamma"),
     );
     assert.strictEqual(yield* f.fs.readFileString(marker), "{}");
-    assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+    for (const operationId of yield* listRecoveryOperations(f.home.home))
+      assert.deepStrictEqual(
+        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
+        [],
+      );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -435,7 +475,11 @@ it.effect(
       });
       assert.instanceOf(failure(exit), PlanIsStale);
       assert.deepStrictEqual(yield* captureDisk([copy], { identity: true }), before);
-      assert.isFalse(yield* f.fs.exists(join(f.home.home, "removed")));
+      for (const operationId of yield* listRecoveryOperations(f.home.home))
+        assert.deepStrictEqual(
+          (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
+          [],
+        );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -462,12 +506,11 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
     });
     assert.instanceOf(failure(exit), PlanIsStale);
     const receipt = yield* readReceipt(f.home.home);
+    const [operation] = yield* listRecoveryOperations(f.home.home);
+    const inspection = yield* inspectRecoveryOperation(f.home.home, operation!);
     assert.deepStrictEqual(
-      receipt.entries.map((entry) => [entry.path === replaced, entry.moved]),
-      [
-        [false, true],
-        [true, false],
-      ],
+      inspection.entries.map((entry) => entry.status),
+      ["saved", "conflict"],
     );
     const [moved, kept] = receipt.entries;
     assert.strictEqual(
@@ -495,8 +538,11 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
     assert.instanceOf(failure(exit), PlatformError);
     const receipt = yield* readReceipt(f.home.home);
     assert.deepStrictEqual(
-      receipt.entries.map((entry) => entry.moved),
-      [true, false],
+      (yield* inspectRecoveryOperation(
+        f.home.home,
+        (yield* listRecoveryOperations(f.home.home))[0]!,
+      )).entries.map((entry) => entry.status),
+      ["saved", "at-original"],
     );
     const [moved, kept] = receipt.entries;
     const paths = changedPaths(f.root, yield* diskChanges(before));
@@ -513,21 +559,18 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// Recovery-evidence characterization: the receipt is rewritten after each move, so a failed rewrite
-// leaves a moved copy recorded as `moved: false`. No bytes are lost: the copy is whole at its
-// recovery path. Nothing reads the receipt back, so a manual recovery must inspect both the
-// original and recovery paths of every entry rather than trust `moved`.
-it.effect("a failed receipt rewrite leaves a moved copy recorded as not moved, bytes intact", () =>
+// A receipt is no longer rewritten after moves; an injected second-write failure is unreachable.
+it.effect("removal publishes one immutable receipt before moving files", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
-    let receipts = 0;
+    let receiptRenames = 0;
     const { exit } = yield* f.setup([["remove\0gamma"], true], {
       rename: (from, to) =>
-        basename(to) === "receipt.json" && ++receipts === 2 ? refuseRename(from) : Effect.void,
+        basename(to) === "receipt.json" && ++receiptRenames > 0 ? refuseRename(from) : Effect.void,
     });
-    assert.instanceOf(failure(exit), PlatformError);
+    assert.isTrue(Exit.isSuccess(exit));
+    assert.strictEqual(receiptRenames, 0); // exclusive publication uses link, not replacement
     const [entry] = (yield* readReceipt(f.home.home)).entries;
-    assert.isFalse(entry!.moved);
     assert.isFalse(yield* f.fs.exists(entry!.path));
     assert.strictEqual(
       yield* f.fs.readFileString(join(entry!.recoveryPath, "SKILL.md")),

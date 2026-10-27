@@ -1,16 +1,18 @@
+import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./setup-machine.js";
+export { setupApplyCommand } from "./setup-machine.js";
 import {
   SkitConfiguration,
   skitConfigurationLayer,
 } from "../../configuration/skit-configuration.js";
 import { skillModificationTime } from "../../library-application/skill-metadata.js";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Cause, Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";
-import { handleSourceCommand } from "../../application.js";
+import { commandFailure, handleSourceCommand } from "../../application.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags, optionalString } from "../../commands/parameters.js";
+import { inventoryRootOptions, localFlags, optionalString } from "../../commands/parameters.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 import { compactHomePath } from "../../presentation/home-path.js";
@@ -25,20 +27,26 @@ import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
 import { openSetupReview, type SetupReview } from "../../workflows/library/setup-review.js";
 import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
 import { result } from "../contracts.js";
-import { Digest, LibraryStore } from "@smolai/skit-core";
-import type { SetupApplied } from "../../workflows/library/setup-contract.js";
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { SetupPlanStale } from "../../workflows/library/setup.js";
 import {
-  SetupDuplicateAction,
-  type SetupDuplicateAction as SetupDuplicateActionType,
-} from "../../workflows/library/setup-decisions.js";
+  setupDiscoveryOutput,
+  setupObserveAction,
+  setupRecoveryListAction,
+  setupResultActions,
+  setupReviewAction,
+  setupApplyAction,
+  setupReviewSummary,
+} from "../../commands/setup-actions.js";
+import { LibraryStore } from "@smolai/skit-core";
+import { OptionCombinationInvalid } from "../../workflows/failures.js";
+import { SetupDuplicateAction } from "../../workflows/library/setup-decisions.js";
 import { checkSubjectsEffect } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupReviewSkillChoices } from "../../presentation/setup-skills.js";
 
+import { renderSetupReconciliationOutcome } from "../../presentation/setup-reconciliation.js";
 import {
   chooseSetupCopyDecisions,
+  chooseSetupVersions,
   setupPlanLines,
   renderSetupAliasRecovery,
 } from "../../presentation/setup-choice-presentation.js";
@@ -53,11 +61,54 @@ const dryRun = Flag.Boolean("dry-run").pipe(
 );
 const applyFlag = optionalString(
   "apply",
-  "Apply the recommended plan with this planId (from `skit setup --json`) without prompting.",
+  "Apply this observed planId without prompting; explicit selections also need --reviewed.",
 );
+const reviewFlag = optionalString(
+  "review",
+  "Preview explicit or recommended choices against this observed planId without applying.",
+);
+const compareFlag = optionalString(
+  "compare",
+  "Compare observed copies of the selected skill paths against this planId.",
+);
+const reviewedFlag = optionalString(
+  "reviewed",
+  "The reviewId returned by --review; required when applying explicit selections.",
+);
+const repeated = (name: string, description: string) =>
+  Flag.String(name).pipe(Flag.withDescription(description), Flag.atLeast(0));
+const selectionFlags = {
+  useRetained: repeated(
+    "use-retained",
+    "Use the retained active version for this competing Skill identifier.",
+  ),
+  useCopy: repeated(
+    "use-copy",
+    "Use this current copy as the active version of its competing Skill.",
+  ),
+  reconcileSkill: repeated(
+    "reconcile-skill",
+    "Review this already-enabled Skill without selecting unrelated sources; repeat to choose more.",
+  ),
+  onlySelected: Flag.Boolean("only-selected").pipe(
+    Flag.withDescription(
+      "Use only the explicitly selected sources/copies/removals, including an empty selection.",
+    ),
+    Flag.withDefault(false),
+  ),
+  selectPath: repeated("select-path", "Choose this observed copy path; repeat to choose more."),
+  selectSource: repeated(
+    "select-source",
+    "Choose this public source identifier from setup JSON; repeat to choose more.",
+  ),
+  removePath: repeated(
+    "remove-path",
+    "Preserve this eligible installed copy in recovery; repeat to choose more.",
+  ),
+};
 const duplicatesFlag = Flag.Literals("duplicates", SetupDuplicateAction.literals).pipe(
   Flag.withDescription(
-    "With --apply, how to handle skills agents already see elsewhere: retain-only keeps them in the Library without enabling, keep-both enables them anyway, retire-aliases replaces redundant symlinks.",
+    "Override automatic preservation for selected skills: retain-only keeps Library artifacts without enabling; keep-both keeps existing copies active; retire-aliases preserves individual links; preserve-duplicates preserves eligible equal global directories.",
   ),
   Flag.optional,
 );
@@ -74,7 +125,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   let setupOptions: SetupOptions = {
     ...input.options,
     repositoryRoots: roots,
-    persistRoots: !input.interactive && persistRoots,
+    persistRoots: false,
   };
   const renderer = yield* Renderer;
   const guided = input.interactive && !input.dryRun && input.localCustody !== undefined;
@@ -83,6 +134,27 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const observe = (options: SetupOptions) =>
     renderer.withStatus("Observing local skills", runSetup(options));
   let observed = yield* observe(setupOptions);
+  if (!input.interactive && persistRoots) {
+    const review = yield* openSetupReview(
+      { ...setupOptions, persistRoots: true },
+      observed,
+      input.localCustody ?? { bindings: setupOptions.inventory },
+    );
+    // The explicit work-dir flag approves only this settings change, not skill enablement.
+    const plan = yield* review.prepare({
+      sources: [],
+      copies: [],
+      decisions: [],
+      reconcileExisting: false,
+    });
+    const applied = yield* plan.apply(renderer.withStatus);
+    const refreshed = yield* observe(setupOptions);
+    return {
+      ...refreshed,
+      machineConfig: { ...refreshed.machineConfig, persisted: true },
+      operationId: applied.operationId,
+    };
+  }
   if (!guided || !input.localCustody) return observed;
   const discoveredRepositories = observed.repositories;
   const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
@@ -132,7 +204,13 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     yield* review.selectedCopies(copies),
     displayPath,
   );
-  const plan = yield* review.prepare({ sources, copies, decisions });
+  const versionChoices = yield* chooseSetupVersions(
+    review.versionAlternatives,
+    observed.reconciliation ?? [],
+    displayPath,
+  );
+  const plan = yield* review.prepare({ sources, copies, decisions, versionChoices });
+  if (!plan.canApply) return yield* plan.apply(renderer.withStatus).pipe(Effect.as(observed));
   if (!plan.hasChanges) {
     yield* renderer.step(
       steps.step("confirm"),
@@ -158,84 +236,19 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   yield* renderSetupAliasRecovery(applied);
   if (plan.summary.removals.entries.length)
     yield* renderer.note(
-      `Removed installed locations are saved at ${plan.summary.removals.recoveryDirectory}. Move each entry back to its original path recorded in receipt.json to restore it.`,
+      `Removed installed locations are saved at ${plan.summary.removals.recoveryDirectory}. Inspect them with skit library recovery list --home ${JSON.stringify(input.options.libraryHome)}. File recovery does not undo setup bindings or settings.`,
       "Removed copies saved",
     );
-  yield* renderer.note("Selected setup changes were applied.", "Setup complete");
+  yield* renderer.note(
+    [
+      "Selected setup changes were applied.",
+      ...applied.reconciliation.map((outcome) => renderSetupReconciliationOutcome(outcome)),
+      `Setup operation: ${applied.operationId}. Preview full undo with skit library undo ${applied.operationId} using the same --home.`,
+    ].join("\n"),
+    "Setup complete",
+  );
   yield* offerSkillsShUpdateCheck();
   return applied.observed;
-});
-
-/**
- * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must
- * match a fresh observation, and the recommendation it covers is applied through the same review
- * and apply as guided setup. Duplicate copies need an explicit `--duplicates`; removals are never
- * applied. The result says what was applied and why everything else was left alone, so a caller
- * never has to re-observe to find out whether the apply happened.
- */
-export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (input: {
-  readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody: LocalAdoptionOptions;
-  readonly workDirFlag?: string;
-  readonly planId: string;
-  readonly duplicates?: SetupDuplicateActionType;
-}) {
-  const renderer = yield* Renderer;
-  const planId = Schema.decodeUnknownOption(Digest)(input.planId);
-  if (Option.isNone(planId))
-    return yield* new OptionCombinationInvalid({
-      detail: "--apply takes the full planId that `skit setup` prints",
-    });
-  const setupOptions: SetupOptions = {
-    ...input.options,
-    repositoryRoots: input.workDirFlag ? [resolve(input.workDirFlag)] : [],
-    persistRoots: false,
-  };
-  const observed = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
-  if (observed.onboarding.planId !== planId.value)
-    return yield* new SetupPlanStale({
-      approvedPlanId: planId.value,
-      currentPlanId: observed.onboarding.planId,
-    });
-  const review = yield* openSetupReview(
-    { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
-    observed,
-    input.localCustody,
-  );
-  const plan = yield* review.prepareRecommended(input.duplicates);
-  const applied = plan.hasChanges ? yield* plan.apply(renderer.withStatus) : undefined;
-  const { sources, additions, reconnects } = plan.summary;
-  const taken = new Set([
-    ...sources.flatMap((source) => source.names),
-    ...additions.map((copy) => copy.name),
-    ...reconnects.map((copy) => copy.name),
-  ]);
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
-  const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
-  return {
-    planId: planId.value,
-    imported: sources.map(({ source, names }) => ({ source, names })),
-    added: additions,
-    reconnected: reconnects,
-    projections: state.projections.flatMap((projection) => {
-      const name = names.get(projection.skill_id);
-      return name !== undefined && taken.has(name)
-        ? [{ name, target: projection.target, path: projection.path, status: projection.status }]
-        : [];
-    }),
-    leftAlone: observed.onboarding.candidates
-      .filter((candidate) => !taken.has(candidate.name))
-      .map((candidate) => ({
-        name: candidate.name,
-        paths: candidate.paths,
-        reason: candidate.action === "blocked" ? candidate.reason : candidate.action,
-      })),
-    ...(applied?.recoveryDirectories.length
-      ? { aliasRecoveryDirectories: applied.recoveryDirectories }
-      : {}),
-    ...(applied?.warnings.length ? { aliasesKept: applied.warnings } : {}),
-  } satisfies SetupApplied;
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
@@ -345,58 +358,210 @@ const chooseDiscoveredSkills = Effect.fn("CLI.setup.chooseDiscoveredSkills")(fun
 
 export const setupCliCommand = Command.make(
   "setup",
-  { workDir: workDirFlag, dryRun, apply: applyFlag, duplicates: duplicatesFlag, ...localFlags },
+  {
+    workDir: workDirFlag,
+    dryRun,
+    apply: applyFlag,
+    review: reviewFlag,
+    compare: compareFlag,
+    reviewed: reviewedFlag,
+    duplicates: duplicatesFlag,
+    ...selectionFlags,
+    ...localFlags,
+  },
   (input) =>
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
-
       const selectedHome = paths.skitHome;
       const apply = Option.getOrUndefined(input.apply);
+      const reviewId = Option.getOrUndefined(input.review);
+      const compare = Option.getOrUndefined(input.compare);
+      const reviewedPlanId = Option.getOrUndefined(input.reviewed);
       const duplicates = Option.getOrUndefined(input.duplicates);
+      const workDir = Option.getOrUndefined(input.workDir);
+      const explicit =
+        input.onlySelected ||
+        input.selectPath.length > 0 ||
+        input.selectSource.length > 0 ||
+        input.removePath.length > 0 ||
+        input.reconcileSkill.length > 0 ||
+        input.useRetained.length > 0 ||
+        input.useCopy.length > 0;
+      const choice = {
+        ...(explicit
+          ? {
+              selection: {
+                reconcileSkillIds: input.reconcileSkill,
+                useRetainedSkillIds: input.useRetained,
+                useCopyPaths: input.useCopy.map((path) => resolve(path)),
+                sourceIds: input.selectSource,
+                copyPaths: input.selectPath.map((path) => resolve(path)),
+                removePaths: input.removePath.map((path) => resolve(path)),
+              },
+            }
+          : {}),
+        ...(duplicates === undefined ? {} : { duplicates }),
+      };
       const interactive =
         apply === undefined &&
+        reviewId === undefined &&
+        compare === undefined &&
         !input.dryRun &&
         promptsAllowed({ json: input.json, needsStdout: true });
       return yield* handleSourceCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          if (apply !== undefined && input.dryRun)
-            return yield* new OptionCombinationInvalid({
-              detail: "--apply applies a plan; preview it with `skit setup --json` instead",
-            });
-          if (duplicates !== undefined && apply === undefined)
-            return yield* new OptionCombinationInvalid({ detail: "--duplicates requires --apply" });
-          const configuration = yield* libraryCommandConfiguration(input);
-          const workDirFlag = Option.getOrUndefined(input.workDir);
-          const options = {
-            libraryHome: selectedHome,
-            inventory: configuration.inventory,
-            probePath: process.env.PATH,
-            skillsStateHome: paths.xdgStateHome,
+          const context = {
+            home: selectedHome,
+            inventory: inventoryRootOptions(input, paths),
+            ...(workDir === undefined ? {} : { workDir }),
           };
-          const localCustody = { bindings: configuration.pull.bindings };
-          if (apply !== undefined)
+          const execution = yield* Effect.result(
+            Effect.gen(function* () {
+              const configuration = yield* libraryCommandConfiguration(input);
+              const options = {
+                libraryHome: selectedHome,
+                inventory: configuration.inventory,
+                probePath: process.env.PATH,
+                skillsStateHome: paths.xdgStateHome,
+              };
+              const localCustody = { bindings: configuration.pull.bindings };
+              if (
+                [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||
+                (apply !== undefined && input.dryRun)
+              )
+                return yield* new OptionCombinationInvalid({
+                  detail: "Use --review to preview or --apply to apply, one at a time",
+                });
+              if (
+                (duplicates !== undefined || explicit) &&
+                apply === undefined &&
+                reviewId === undefined &&
+                compare === undefined
+              )
+                return yield* new OptionCombinationInvalid({
+                  detail:
+                    "Selections require --review, --compare or --apply; duplicate decisions apply to review/apply",
+                });
+              if (reviewedPlanId !== undefined && apply === undefined)
+                return yield* new OptionCombinationInvalid({
+                  detail: "--reviewed requires --apply",
+                });
+              const selected = {
+                options,
+                localCustody,
+                ...(workDir === undefined ? {} : { workDirFlag: workDir }),
+                ...choice,
+              };
+              if (compare !== undefined) {
+                if (
+                  duplicates !== undefined ||
+                  input.selectSource.length ||
+                  input.reconcileSkill.length ||
+                  input.useRetained.length ||
+                  input.useCopy.length ||
+                  input.removePath.length ||
+                  input.onlySelected
+                )
+                  return yield* new OptionCombinationInvalid({
+                    detail: "--compare accepts --select-path choices only",
+                  });
+                const opened = yield* openSetupCommandReview({ ...selected, planId: compare });
+                const copies = yield* opened.review.compareCopies(
+                  choice.selection?.copyPaths ?? [],
+                );
+                const discovery = setupDiscoveryOutput(opened.observed, opened.review, context);
+                return result("setupComparison", {
+                  planId: opened.planId,
+                  copies,
+                  actions: [
+                    setupObserveAction(context),
+                    ...discovery.choices
+                      .filter(
+                        (item) =>
+                          (item.kind === "copy" &&
+                            copies.some((copy) => copy.path === item.path)) ||
+                          (item.kind === "version" &&
+                            opened.observed.reconciliation?.some(
+                              (fact) =>
+                                fact.skillId === item.skillId &&
+                                copies.some((copy) => copy.name === fact.name),
+                            )),
+                      )
+                      .flatMap((item) => item.actions.filter((action) => action.rel === "review")),
+                  ],
+                });
+              }
+              if (reviewId !== undefined) {
+                const prepared = yield* prepareSetupCommand({ ...selected, planId: reviewId });
+                return result("setupReview", {
+                  planId: prepared.planId,
+                  reviewId: prepared.plan.reviewId,
+                  hasChanges: prepared.plan.hasChanges,
+                  canApply: prepared.plan.canApply,
+                  summary: setupReviewSummary(prepared.plan.summary),
+                  actions: [
+                    setupObserveAction(context),
+                    setupReviewAction(context, prepared.planId, choice),
+                    ...setupDiscoveryOutput(prepared.observed, prepared.review, context)
+                      .choices.filter(
+                        (item) =>
+                          item.kind === "version" &&
+                          prepared.plan.summary.reconciliation.some(
+                            (fact) => fact.skillId === item.skillId,
+                          ),
+                      )
+                      .flatMap((item) => item.actions),
+                    ...(prepared.plan.canApply
+                      ? [setupApplyAction(context, prepared.planId, prepared.plan.reviewId, choice)]
+                      : []),
+                  ],
+                });
+              }
+              if (apply !== undefined) {
+                const applied = yield* setupApplyCommand({
+                  ...selected,
+                  planId: apply,
+                  ...(reviewedPlanId === undefined ? {} : { reviewedPlanId }),
+                });
+                return result("setupApplied", {
+                  ...applied,
+                  actions: setupResultActions(context, applied),
+                });
+              }
+              const value = yield* setupCommand({
+                ...(workDir === undefined ? {} : { workDirFlag: workDir }),
+                interactive,
+                dryRun: input.dryRun || input.json,
+                options,
+                localCustody,
+              });
+              if (interactive) return undefined;
+              const setup = {
+                ...options,
+                repositoryRoots: workDir ? [resolve(workDir)] : [],
+                persistRoots: false,
+              };
+              const review = yield* openSetupReview(setup, value, localCustody);
+              return result("setup", setupDiscoveryOutput(value, review, context));
+            }),
+          );
+          if (execution._tag === "Failure") {
+            const failed = commandFailure(Cause.fail(execution.failure));
             return yield* renderer.result(
               result(
-                "setupApplied",
-                yield* setupApplyCommand({
-                  options,
-                  localCustody,
-                  planId: apply,
-                  ...(workDirFlag === undefined ? {} : { workDirFlag }),
-                  ...(duplicates === undefined ? {} : { duplicates }),
-                }),
+                "setupFailed",
+                {
+                  code: failed.code,
+                  message: failed.message,
+                  remediation: failed.remediation,
+                  actions: [setupObserveAction(context), setupRecoveryListAction(selectedHome)],
+                },
+                failed.exitCode,
               ),
             );
-          const value = yield* setupCommand({
-            ...(workDirFlag === undefined ? {} : { workDirFlag }),
-            interactive,
-            // JSON output observes only; it never reaches the guided apply.
-            dryRun: input.dryRun || input.json,
-            options,
-            localCustody,
-          });
-          if (!interactive) yield* renderer.result(result("setup", value));
+          }
+          if (execution.success) yield* renderer.result(execution.success);
         }).pipe(Effect.provide(terminalPrompterLayer)),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
@@ -428,7 +593,13 @@ export const setupCliCommand = Command.make(
         "devin --version",
       ],
     },
-    outputSchemas: [outputContracts.setup, outputContracts.setupApplied],
+    outputSchemas: [
+      outputContracts.setup,
+      outputContracts.setupApplied,
+      outputContracts.setupReview,
+      outputContracts.setupFailed,
+      outputContracts.setupComparison,
+    ],
     exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: true,
   }),

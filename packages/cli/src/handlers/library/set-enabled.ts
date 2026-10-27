@@ -17,9 +17,11 @@ import { scopeChoices } from "../../library-application/read-model.js";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
+import { failureExitCodes } from "../../failure-classification.js";
 import { result } from "../contracts.js";
 import {
   applyBindingChanges,
+  BindingChangeIncomplete,
   openBindingChangeSelection,
   type BindingChangeIntent,
   type BindingPlacement,
@@ -122,7 +124,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
       outputSchemas: enabled
         ? [outputContracts.enable, outputContracts.enablePlan]
         : [outputContracts.disable, outputContracts.disablePlan],
-      exitCodes: [0, 11, 12, 64, 65],
+      exitCodes: [0, 1, 11, 12, 64, 65],
       interactive: true,
     }),
   );
@@ -362,10 +364,19 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       const plan = yield* selection.preview(intent, input.configuration.inventory);
       return input.dryRun
         ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
-        : yield* applyBindingChanges(plan);
+        : yield* applyBindingChanges(plan).pipe(
+            Effect.catchTag("Library.BindingChangeIncomplete", (failure) =>
+              Effect.succeed(failure),
+            ),
+          );
     }),
   );
-  for (const outcome of outcomes) {
+  const incomplete = outcomes instanceof BindingChangeIncomplete ? outcomes : undefined;
+  const reported =
+    outcomes instanceof BindingChangeIncomplete
+      ? outcomes.results.map((value) => ({ kind: "applied" as const, value }))
+      : outcomes;
+  for (const outcome of reported) {
     if (input.enabled) {
       const warning = largeCollectionWarning(view.listingSizeAfter(outcome.value));
       if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
@@ -376,17 +387,27 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           ? result("enablePlan", outcome.value)
           : result("disablePlan", outcome.value)
         : input.enabled
-          ? // A copy left conflicted means the skill is not where agents look; say so in the status.
+          ? // Completion is decided by the application; the CLI maps its classification to an exit.
             result(
               "enable",
               outcome.value,
-              outcome.value.projections.some((projection) => projection.status === "conflicted")
-                ? 12
+              outcome.value.application.status === "incomplete" && incomplete
+                ? failureExitCodes[incomplete.code]
                 : undefined,
             )
-          : result("disable", outcome.value),
+          : result(
+              "disable",
+              outcome.value,
+              outcome.value.application.status === "incomplete" && incomplete
+                ? failureExitCodes[incomplete.code]
+                : undefined,
+            ),
     );
   }
+  // A later scope can refuse before accepting intent. Keep the earlier results and
+  // report that refusal separately instead of mislabelling a completed scope.
+  if (incomplete && !incomplete.results.some((value) => value.application.status === "incomplete"))
+    return yield* incomplete;
 });
 
 export const enableCliCommand = setEnabledCliCommand(true);

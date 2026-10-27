@@ -1,0 +1,57 @@
+{
+  "$id": "skit.recovery.list.v1",
+  "type": "object",
+  "properties": {
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rel": {
+                  "type": "string"
+                },
+                "argv": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write"
+                  ]
+                }
+              },
+              "required": [
+                "rel",
+                "argv",
+                "effect"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "operationId",
+          "actions"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "operations"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

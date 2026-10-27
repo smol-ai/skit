@@ -75,8 +75,9 @@ export const backUpProjectionEffect = Effect.fn("Projection.backUp")(function* (
 });
 
 /** Pending backups of one Projection, wherever its root's device placed them. */
-export const pendingProjectionBackupsEffect = Effect.fn("Projection.pendingBackups")(function* (
+const projectionBackups = Effect.fn("Projection.backups")(function* (
   projection: Pick<ManagedProjection, "root" | "projection_id">,
+  includeKept: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
@@ -98,12 +99,26 @@ export const pendingProjectionBackupsEffect = Effect.fn("Projection.pendingBacku
     const names = yield* fs.readDirectory(backups);
     pending.push(
       ...names
-        .filter((name) => name.startsWith(`pending-${projection.projection_id}-`))
+        .filter(
+          (name) =>
+            name.startsWith(`pending-${projection.projection_id}-`) ||
+            (includeKept && name.startsWith(`kept-${projection.projection_id}-`)),
+        )
         .map((name) => join(backups, name)),
     );
   }
   return pending;
 });
+
+/** Unsettled backups retain their existing narrow protocol. */
+export const pendingProjectionBackupsEffect = (
+  projection: Pick<ManagedProjection, "root" | "projection_id">,
+) => projectionBackups(projection, false);
+
+/** Inspect both kept and pending predecessors without following a redirected backup directory. */
+export const inspectProjectionBackupsEffect = (
+  projection: Pick<ManagedProjection, "root" | "projection_id">,
+) => projectionBackups(projection, true);
 
 /** A kept backup may hold bytes nothing else does. It stays until an operator removes it. */
 export const keepProjectionBackupEffect = Effect.fn("Projection.keepBackup")(function* (

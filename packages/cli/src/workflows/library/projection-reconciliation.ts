@@ -8,6 +8,7 @@ import {
   type RepositoryBinding,
   type ProjectionTarget,
   type ProjectionAdoption,
+  type SkillId,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
@@ -29,6 +30,7 @@ export interface LibraryProjectionReconciliationOptions {
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
   readonly includeRepositoryBindings?: boolean;
+  readonly onlySkillIds?: readonly SkillId[];
 }
 
 const targets = ["agents", "claude"] as const satisfies readonly ProjectionTarget[];
@@ -51,6 +53,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
     activeTargets,
     desiredBindings: intent.bindings,
     inactiveOnly: options.onlyBindings !== undefined,
+    onlySkillIds: options.onlySkillIds,
   });
 
   let projected = 0;
@@ -78,6 +81,7 @@ const reconcileWithinWrite = Effect.fnUntraced(function* (
         root,
         variantsPath: options.variantsPath,
         restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
+        onlySkillIds: options.onlySkillIds,
         ...(options.adoption === undefined ? {} : { adoption: options.adoption }),
         ...(options.adoptIdentical ? { adoptIdentical: true } : {}),
       });

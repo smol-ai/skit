@@ -43,6 +43,18 @@ export type SetEnabledPlan = typeof SetEnabledPlan.Type;
 
 export const SetEnabledResult = SetEnabledPlan.pipe(
   Schema.fieldsAssign({
+    application: Schema.Struct({
+      intent: Schema.Literals(["saved", "unchanged"]),
+      revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+      status: Schema.Literals(["complete", "incomplete"]),
+      failure: Schema.optionalKey(
+        Schema.Struct({
+          code: Schema.String,
+          message: Schema.String,
+          remediation: Schema.String,
+        }),
+      ),
+    }),
     /**
      * Every copy of the changed skills at this scope after the change, with its status. A
      * `conflicted` copy is a folder SKIT found at its destination and did not overwrite.

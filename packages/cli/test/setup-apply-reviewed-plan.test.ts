@@ -12,7 +12,8 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 import { SetupPlanStale } from "../src/workflows/library/setup.js";
 import { OptionCombinationInvalid } from "../src/workflows/failures.js";
 import type { SetupDuplicateAction } from "../src/workflows/library/setup-decisions.js";
-import { SetupDuplicateDecisionRequired } from "../src/workflows/library/setup-review.js";
+import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
+import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -239,26 +240,35 @@ it.effect("a plan ID that no longer matches the machine applies nothing", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a copy agents already see needs an explicit duplicates decision", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ alias: true });
-    const reviewed = yield* f.review;
-    const before = yield* captureDisk(f.disk);
-
-    const refused = yield* f.run({ planId: reviewed.onboarding.planId });
-
-    const error = failure(refused);
-    assert.instanceOf(error, SetupDuplicateDecisionRequired);
-    assert.deepStrictEqual(error.names, ["alpha"]);
-    assert.isTrue(error.retirable);
-    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
-
-    const applied = yield* f.run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" });
-
-    assert.isTrue(Exit.isSuccess(applied));
-    const state = yield* f.home.durable;
-    assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "selected enablement automatically preserves redundant aliases and can be fully undone",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const f = yield* fixture({ alias: true });
+      const reviewed = yield* f.review;
+      const alias = join(f.root, "config", "devin", "skills", "alpha");
+      const source = join(f.root, "Work", "skills", "alpha");
+      const originalLink = yield* fs.readLink(alias);
+      const applied = yield* f.run({ planId: reviewed.onboarding.planId });
+      assert.isTrue(Exit.isSuccess(applied));
+      if (!Exit.isSuccess(applied) || !applied.value.operationId)
+        return yield* Effect.die(new Error("Missing applied setup operation"));
+      const operationId = applied.value.operationId;
+      assert.isFalse(yield* fs.exists(alias));
+      assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
+      const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+      const saved = recovery.entries.find((entry) => entry.path === alias);
+      assert.strictEqual(saved?.status, "saved");
+      assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
+      const state = yield* f.home.durable;
+      assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
+      assert.isTrue(state.projections.every((projection) => projection.status === "installed"));
+      yield* f.home.owned((yield* f.home.owned(prepareSetupUndo(operationId))).apply());
+      assert.strictEqual(yield* fs.readLink(alias), originalLink);
+      assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+      assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("retiring aliases reports where the symlinks and their receipts were saved", () =>
@@ -303,42 +313,44 @@ it.effect("identical copies at each target are adopted in place, not left to con
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// A link at SKIT's own destination is the user's choice about where the skill lives. Projecting
-// would replace it, so it needs the same decision as any other copy an agent already sees.
-it.effect("a skill linked into a destination is replaced only on an explicit retire-aliases", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
-    const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
+it.effect(
+  "selected enablement preserves destination links automatically and retain-only remains an override",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
+      const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
 
-    const undecided = yield* fixture({ alias: false, linked: true });
-    const before = yield* captureDisk(undecided.disk);
-    const planId = (yield* undecided.review).onboarding.planId;
-    const refused = failure(yield* undecided.run({ planId }));
-    assert.instanceOf(refused, SetupDuplicateDecisionRequired);
-    assert.deepStrictEqual(refused.names, ["delta"]);
-    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+      const retained = yield* fixture({ alias: false, linked: true });
+      const retainedPlan = (yield* retained.review).onboarding.planId;
+      const kept = yield* retained.run({ planId: retainedPlan, duplicates: "retain-only" });
+      assert.isTrue(Exit.isSuccess(kept));
+      assert.strictEqual(yield* fs.readLink(link(retained)), source(retained));
+      assert.include(
+        (yield* retained.home.durable).skills.map((skill) => skill.name),
+        "delta",
+      );
 
-    const retained = yield* fixture({ alias: false, linked: true });
-    const retainedPlan = (yield* retained.review).onboarding.planId;
-    const kept = yield* retained.run({ planId: retainedPlan, duplicates: "retain-only" });
-    assert.isTrue(Exit.isSuccess(kept));
-    assert.strictEqual(yield* fs.readLink(link(retained)), source(retained));
-    assert.include(
-      (yield* retained.home.durable).skills.map((skill) => skill.name),
-      "delta",
-    );
-
-    const retired = yield* fixture({ alias: false, linked: true });
-    const retiredPlan = (yield* retired.review).onboarding.planId;
-    const replaced = yield* retired.run({ planId: retiredPlan, duplicates: "retire-aliases" });
-    assert.isTrue(Exit.isSuccess(replaced));
-    assert.strictEqual((yield* inspectOwnershipMarkerEffect(link(retired))).kind, "valid");
-    const backups = join(retired.root, ".claude", ".skit-backups");
-    const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
-    assert.lengthOf(saved, 1);
-    assert.strictEqual(yield* fs.readLink(join(backups, saved[0]!)), source(retired));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      const retired = yield* fixture({ alias: false, linked: true });
+      const retiredPlan = (yield* retired.review).onboarding.planId;
+      const replaced = yield* retired.run({ planId: retiredPlan });
+      assert.isTrue(Exit.isSuccess(replaced));
+      assert.strictEqual((yield* inspectOwnershipMarkerEffect(link(retired))).kind, "valid");
+      const backups = join(retired.root, ".claude", ".skit-backups");
+      const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
+      assert.lengthOf(saved, 1);
+      assert.strictEqual(yield* fs.readLink(join(backups, saved[0]!)), source(retired));
+      if (!Exit.isSuccess(replaced) || !replaced.value.operationId)
+        return yield* Effect.die(new Error("Missing setup operation"));
+      const inverse = yield* retired.home.owned(prepareSetupUndo(replaced.value.operationId));
+      assert.deepStrictEqual(inverse.summary.conflicts, []);
+      yield* retired.home.owned(inverse.apply());
+      assert.strictEqual(yield* fs.readLink(link(retired)), source(retired));
+      assert.strictEqual(
+        yield* fs.readFileString(join(source(retired), "SKILL.md")),
+        skillBytes("delta"),
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("keep-both is refused for a linked skill before anything is written", () =>
@@ -354,26 +366,24 @@ it.effect("keep-both is refused for a linked skill before anything is written", 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a skills.sh link from Claude's root to the shared root needs a decision", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const f = yield* fixture({ alias: false, skillsSh: true });
-    const reviewed = yield* f.review;
-    assert.deepStrictEqual(
-      reviewed.onboarding.candidates.find((candidate) => candidate.name === "eps")
-        ?.destinationLinks,
-      [join(f.root, ".claude", "skills", "eps")],
-    );
+it.effect(
+  "a skills.sh destination alias can be retained explicitly or preserved automatically",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const f = yield* fixture({ alias: false, skillsSh: true });
+      const reviewed = yield* f.review;
+      assert.deepStrictEqual(
+        reviewed.onboarding.candidates.find((candidate) => candidate.name === "eps")
+          ?.destinationLinks,
+        [join(f.root, ".claude", "skills", "eps")],
+      );
 
-    const refused = failure(yield* f.run({ planId: reviewed.onboarding.planId }));
-    assert.instanceOf(refused, SetupDuplicateDecisionRequired);
-    assert.include(refused.names, "eps");
-
-    const kept = yield* f.run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" });
-    assert.isTrue(Exit.isSuccess(kept));
-    assert.strictEqual(
-      yield* fs.readLink(join(f.root, ".claude", "skills", "eps")),
-      join(f.root, ".agents", "skills", "eps"),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      const kept = yield* f.run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" });
+      assert.isTrue(Exit.isSuccess(kept));
+      assert.strictEqual(
+        yield* fs.readLink(join(f.root, ".claude", "skills", "eps")),
+        join(f.root, ".agents", "skills", "eps"),
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

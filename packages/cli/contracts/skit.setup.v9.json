@@ -1,7 +1,10 @@
 {
-  "$id": "skit.setup.v8",
+  "$id": "skit.setup.v9",
   "type": "object",
   "properties": {
+    "operationId": {
+      "type": "string"
+    },
     "machineConfig": {
       "type": "object",
       "properties": {
@@ -327,6 +330,81 @@
           "name",
           "harnesses",
           "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "reconciliation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "projectionId": {
+            "type": "string"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "baselineHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "currentHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "desiredHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "desiredVersionId": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unchanged",
+              "incoming-update",
+              "local-only",
+              "competing",
+              "protected",
+              "native-delete"
+            ]
+          },
+          "metadataChanged": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectionId",
+          "skillId",
+          "name",
+          "path",
+          "target",
+          "baselineHash",
+          "evidence",
+          "status",
+          "metadataChanged"
         ],
         "additionalProperties": true
       }
@@ -3763,6 +3841,116 @@
         ],
         "additionalProperties": true
       }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rel": {
+            "type": "string"
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "required": [
+          "rel",
+          "argv",
+          "effect"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "copy",
+              "source",
+              "removal",
+              "existing",
+              "version"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "duplicateActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "retain-only",
+                "retire-aliases",
+                "keep-both",
+                "preserve-duplicates"
+              ]
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rel": {
+                  "type": "string"
+                },
+                "argv": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write"
+                  ]
+                }
+              },
+              "required": [
+                "rel",
+                "argv",
+                "effect"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "duplicateActions",
+          "actions"
+        ],
+        "additionalProperties": true
+      }
     }
   },
   "required": [
@@ -3778,7 +3966,9 @@
     "locks",
     "instances",
     "brokenLinks",
-    "suppressed"
+    "suppressed",
+    "actions",
+    "choices"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

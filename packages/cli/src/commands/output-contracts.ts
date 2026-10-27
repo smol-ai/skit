@@ -13,6 +13,15 @@ import {
   SkitValidationDiagnostic,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
+import {
+  SetupOutput,
+  SetupComparisonOutput,
+  SetupAppliedOutput,
+  SetupReviewOutput,
+  SetupFailureOutput,
+} from "./setup-actions.js";
+import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
+import { SetupUndoOutput } from "./setup-undo-contract.js";
 import { AuditReportV1Alpha4 } from "../audit/schema.js";
 import { HarnessProbeReport } from "../harness/probe.js";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
@@ -24,11 +33,7 @@ import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.j
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
-import {
-  RepositoryPolicyResult,
-  SetupApplied,
-  SetupResult,
-} from "../workflows/library/setup-contract.js";
+import { RepositoryPolicyResult } from "../workflows/library/setup-contract.js";
 import {
   ProjectionRetentionPlan,
   ProjectionRetentionResult,
@@ -58,6 +63,12 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
+  setupUndo: effectOutput("skit.setup.undo.v1", SetupUndoOutput),
+  setupComparison: effectOutput("skit.setup.comparison.v1", SetupComparisonOutput),
+  setupReview: effectOutput("skit.setup.review.v1", SetupReviewOutput),
+  setupFailed: effectOutput("skit.setup.failed.v1", SetupFailureOutput),
+  recoveryList: effectOutput("skit.recovery.list.v1", RecoveryList),
+  recovery: effectOutput("skit.recovery.v1", RecoveryOutput),
   usage: effectOutput("skit.usage.v3", UsageReport),
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
@@ -124,9 +135,9 @@ export const outputContracts = {
   ),
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),
-  enable: effectOutput("skit.enable.v8", SetEnabledResult),
+  enable: effectOutput("skit.enable.v9", SetEnabledResult),
   enablePlan: effectOutput("skit.enable.plan.v8", SetEnabledPlan),
-  disable: effectOutput("skit.disable.v8", SetEnabledResult),
+  disable: effectOutput("skit.disable.v9", SetEnabledResult),
   disablePlan: effectOutput("skit.disable.plan.v8", SetEnabledPlan),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
@@ -135,8 +146,8 @@ export const outputContracts = {
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
   ),
-  setup: effectOutput("skit.setup.v8", SetupResult),
-  setupApplied: effectOutput("skit.setup.applied.v1", SetupApplied),
+  setup: effectOutput("skit.setup.v9", SetupOutput),
+  setupApplied: effectOutput("skit.setup.applied.v2", SetupAppliedOutput),
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
