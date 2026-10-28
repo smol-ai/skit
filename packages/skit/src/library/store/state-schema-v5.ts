@@ -1,6 +1,5 @@
 import { Schema, SchemaGetter } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { CollectionVersion } from "../library-contracts.js";
 import { AbsoluteDevicePath } from "../library-state.js";
 import { HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
@@ -10,8 +9,9 @@ import {
   migrateLibraryEntitiesFromV5,
   SkillV5,
 } from "./manifest-v5.js";
-import { LibraryDeviceStateFields } from "./state-schema.js";
+import { CollectionVersionV7 } from "./manifest-v7.js";
 import { LibraryStateFromV6, LibraryStateV6 } from "./state-schema-v6.js";
+import { LibraryDeviceStateFieldsV9 } from "./state-schema-v9.js";
 
 const DeviceBindingV5 = Schema.Struct({
   ...BindingV5.fields,
@@ -25,11 +25,11 @@ const RepositoryBindingV5 = Schema.Struct({
 });
 
 export const LibraryStateV5 = Schema.Struct({
-  ...LibraryDeviceStateFields,
+  ...LibraryDeviceStateFieldsV9,
   schemaVersion: Schema.Literal(5),
   collections: Schema.Array(CollectionV5),
   skills: Schema.Array(SkillV5),
-  retained_copies: Schema.Array(CollectionVersion),
+  retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(AcquisitionV5),
   global_bindings: Schema.Array(DeviceBindingV5),
   local_bindings: Schema.Array(RepositoryBindingV5),

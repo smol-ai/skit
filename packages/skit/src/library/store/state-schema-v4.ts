@@ -17,8 +17,9 @@ import {
   SkillV4,
   migrateLibraryEntitiesFromV4,
 } from "./manifest-v4.js";
-import { HarnessInstallStatus, LibraryDeviceStateFields } from "./state-schema.js";
+import { HarnessInstallStatus } from "./state-schema.js";
 import { LibraryStateFromV5, type LibraryStateV5 } from "./state-schema-v5.js";
+import { LibraryDeviceStateFieldsV9 } from "./state-schema-v9.js";
 
 const SkillAssessmentAcceptanceV4 = Schema.Struct({
   fingerprint: Digest,
@@ -68,7 +69,7 @@ const AdoptionReceiptV4 = Schema.Struct({
 });
 
 export const LibraryStateV4 = Schema.Struct({
-  ...LibraryDeviceStateFields,
+  ...LibraryDeviceStateFieldsV9,
   assessmentAcceptances: Schema.mutableKey(
     Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptanceV4))),
   ),
