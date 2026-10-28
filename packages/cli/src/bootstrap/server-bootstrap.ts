@@ -36,6 +36,18 @@ import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 const SECRET_NAME = "SKIT_BOOTSTRAP_SECRET";
 
+/** The Worker a Wrangler command acts on: a config file and, optionally, one of its environments. */
+export interface WranglerTarget {
+  readonly configPath: string;
+  readonly environment?: string;
+}
+
+const wranglerTargetArgs = (target: WranglerTarget) => [
+  "--config",
+  target.configPath,
+  ...(target.environment === undefined ? [] : ["--env", target.environment]),
+];
+
 export interface BootstrapResult {
   readonly origin: string;
   readonly setupUrl?: string;
@@ -103,7 +115,7 @@ export class BootstrapTimedOut
 }
 export class BootstrapCleanupFailed
   extends Data.TaggedError("BootstrapCleanupFailed")<{
-    readonly configPath: string;
+    readonly target: WranglerTarget;
     readonly cleanup: BootstrapExternalFailure;
     readonly original?: BootstrapPrimaryFailure;
   }>
@@ -122,9 +134,9 @@ export class BootstrapCleanupFailed
       this.original?._tag === "BootstrapExternalFailure" &&
       this.original.operation === "install-secret"
     )
-      return `Bootstrap secret installation failed: ${this.original.message}. Cleanup could not be confirmed: ${this.cleanup.message}. If the secret was installed, remove it manually with: wrangler secret delete ${SECRET_NAME} --config ${this.configPath}`;
+      return `Bootstrap secret installation failed: ${this.original.message}. Cleanup could not be confirmed: ${this.cleanup.message}. If the secret was installed, remove it manually with: wrangler secret delete ${SECRET_NAME} ${wranglerTargetArgs(this.target).join(" ")}`;
     const original: string = this.original ? ` Original error: ${this.original.message}.` : "";
-    return `Bootstrap secret cleanup failed: ${this.cleanup.message}.${original} Remove it manually with: wrangler secret delete ${SECRET_NAME} --config ${this.configPath}`;
+    return `Bootstrap secret cleanup failed: ${this.cleanup.message}.${original} Remove it manually with: wrangler secret delete ${SECRET_NAME} ${wranglerTargetArgs(this.target).join(" ")}`;
   }
 }
 
@@ -140,9 +152,9 @@ export interface BootstrapOperationsShape {
   createSecret: Effect.Effect<string>;
   installSecret: (
     secret: string,
-    configPath: string,
+    target: WranglerTarget,
   ) => Effect.Effect<void, BootstrapExternalFailure>;
-  removeSecret: (configPath: string) => Effect.Effect<void, BootstrapExternalFailure>;
+  removeSecret: (target: WranglerTarget) => Effect.Effect<void, BootstrapExternalFailure>;
   openBrowser: (url: URL) => Effect.Effect<void, BootstrapExternalFailure>;
   bootstrapNeeded: (
     origin: URL,
@@ -217,8 +229,8 @@ function run(
   );
 }
 
-export const removeBootstrapSecretInvocation = (configPath: string) => ({
-  args: ["secret", "delete", SECRET_NAME, "--config", configPath] as const,
+export const removeBootstrapSecretInvocation = (target: WranglerTarget) => ({
+  args: ["secret", "delete", SECRET_NAME, ...wranglerTargetArgs(target)],
   input: "y\n",
 });
 
@@ -236,17 +248,17 @@ export function bootstrapOperationsLayer(wranglerCommand = "wrangler") {
       ) => run(spawner, operation, wranglerCommand, args, { input, stdio: "capture" });
       return BootstrapOperations.of({
         createSecret: Effect.sync(() => randomBytes(32).toString("base64url")),
-        installSecret: (secret, configPath) =>
+        installSecret: (secret, target) =>
           renderer.withStatus(
             "Adding temporary bootstrap secret",
             wrangler(
               "install-secret",
-              ["secret", "put", SECRET_NAME, "--config", configPath],
+              ["secret", "put", SECRET_NAME, ...wranglerTargetArgs(target)],
               secret,
             ),
           ),
-        removeSecret: (configPath) => {
-          const invocation = removeBootstrapSecretInvocation(configPath);
+        removeSecret: (target) => {
+          const invocation = removeBootstrapSecretInvocation(target);
           return renderer.withStatus(
             "Removing temporary bootstrap secret",
             wrangler("remove-secret", invocation.args, invocation.input),
@@ -305,17 +317,20 @@ export function bootstrapOperationsLayer(wranglerCommand = "wrangler") {
   );
 }
 
+const WranglerVars = Schema.optionalKey(
+  Schema.Struct({ PUBLIC_APP_ORIGIN: Schema.optionalKey(Schema.String) }),
+);
 const WranglerConfig = Schema.Struct({
-  vars: Schema.optionalKey(Schema.Struct({ PUBLIC_APP_ORIGIN: Schema.optionalKey(Schema.String) })),
-  env: Schema.optionalKey(Schema.Unknown),
+  vars: WranglerVars,
+  env: Schema.optionalKey(Schema.Record(Schema.String, Schema.Struct({ vars: WranglerVars }))),
 });
 const decodeWranglerConfig = Schema.decodeUnknownEffect(WranglerConfig);
 
 export const originFromWranglerConfig = Effect.fn("Bootstrap.origin")(function* (
-  configPath: string,
+  target: WranglerTarget,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const source = yield* fs.readFileString(configPath).pipe(
+  const source = yield* fs.readFileString(target.configPath).pipe(
     Effect.mapError(
       (error) =>
         new BootstrapConfigInvalid({
@@ -332,10 +347,24 @@ export const originFromWranglerConfig = Effect.fn("Bootstrap.origin")(function* 
   const config = yield* decodeWranglerConfig(document).pipe(
     Effect.mapError(() => new BootstrapConfigInvalid({ message: "Wrangler config is invalid" })),
   );
+  if (target.environment !== undefined) {
+    const environment = config.env?.[target.environment];
+    if (environment === undefined)
+      return yield* new BootstrapConfigInvalid({
+        message: `The Wrangler config has no env.${target.environment}`,
+      });
+    if (environment.vars?.PUBLIC_APP_ORIGIN === undefined)
+      return yield* new BootstrapConfigInvalid({
+        message: `PUBLIC_APP_ORIGIN is missing from env.${target.environment}.vars; pass --url explicitly`,
+      });
+    return environment.vars.PUBLIC_APP_ORIGIN;
+  }
+  // Which Worker is meant is ambiguous, and the secret must not land on the wrong one.
   if (config.env !== undefined)
     return yield* Effect.fail(
       new BootstrapConfigInvalid({
-        message: "Wrangler environments require an explicit --url for server bootstrap",
+        message:
+          "The Wrangler config has environments; pass --env <name>, or --url to bootstrap the top-level Worker",
       }),
     );
   if (config.vars?.PUBLIC_APP_ORIGIN === undefined)
@@ -369,6 +398,7 @@ const waitForBootstrapStatus = Effect.fn("Bootstrap.waitForStatus")(function* (
 export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
   options: {
     readonly configPath?: string;
+    readonly environment?: string;
     readonly origin?: string;
     readonly open?: boolean;
     readonly pollIntervalMs?: number;
@@ -376,8 +406,11 @@ export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
   } = {},
 ) {
   const operations = yield* BootstrapOperations;
-  const configPath = resolve(options.configPath ?? "wrangler.jsonc");
-  const configuredOrigin = options.origin ?? (yield* originFromWranglerConfig(configPath));
+  const target: WranglerTarget = {
+    configPath: resolve(options.configPath ?? "wrangler.jsonc"),
+    ...(options.environment === undefined ? {} : { environment: options.environment }),
+  };
+  const configuredOrigin = options.origin ?? (yield* originFromWranglerConfig(target));
   const origin = yield* parseOrigin(configuredOrigin);
   const secret = yield* operations.createSecret;
   const setupUrl = new URL(`/setup#token=${encodeURIComponent(secret)}`, origin);
@@ -396,7 +429,7 @@ export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
   return yield* Effect.uninterruptibleMask((restore) =>
     Effect.flatMap(
       Effect.exit(
-        secretOperation("install-secret", operations.installSecret(secret, configPath)).pipe(
+        secretOperation("install-secret", operations.installSecret(secret, target)).pipe(
           Effect.andThen(
             restore(
               provision.pipe(
@@ -412,7 +445,7 @@ export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
       (exit) =>
         Effect.flatMap(
           // Even a failed install may have reached Cloudflare before Wrangler failed locally.
-          Effect.exit(secretOperation("remove-secret", operations.removeSecret(configPath))),
+          Effect.exit(secretOperation("remove-secret", operations.removeSecret(target))),
           (removed): Effect.Effect<BootstrapResult, BootstrapFailure> => {
             if (Exit.isFailure(removed)) {
               const cleanup = Cause.findError(removed.cause);
@@ -420,7 +453,7 @@ export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
                 const original = Exit.isFailure(exit) ? Cause.findError(exit.cause) : undefined;
                 return Effect.fail(
                   new BootstrapCleanupFailed({
-                    configPath,
+                    target,
                     cleanup: cleanup.success,
                     ...(original && Result.isSuccess(original)
                       ? { original: original.success }
@@ -439,17 +472,22 @@ export const bootstrapServer = Effect.fn("Bootstrap.server")(function* (
 
 const config = optionalString("config", "Use this Wrangler configuration file.");
 const url = optionalString("url", "Override PUBLIC_APP_ORIGIN from the Wrangler configuration.");
+const environment = optionalString(
+  "env",
+  "Bootstrap this environment of the Wrangler configuration, reading its PUBLIC_APP_ORIGIN.",
+);
 const wrangler = optionalString("wrangler", "Use this Wrangler executable.");
 
 export const serverBootstrapCliCommand = Command.make(
   "bootstrap",
-  { config, url, wrangler, json: jsonFlag },
-  ({ config, url, wrangler }) =>
+  { config, env: environment, url, wrangler, json: jsonFlag },
+  ({ config, env, url, wrangler }) =>
     handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* bootstrapServer({
           configPath: Option.getOrUndefined(config),
+          environment: Option.getOrUndefined(env),
           origin: Option.getOrUndefined(url),
         });
         yield* renderer.result(
@@ -465,6 +503,7 @@ export const serverBootstrapCliCommand = Command.make(
   Command.withExamples([
     { command: "skit server bootstrap" },
     { command: "skit server bootstrap --config wrangler.jsonc" },
+    { command: "skit server bootstrap --config wrangler.jsonc --env test" },
   ]),
   Command.annotate(CommandMetadata, {
     effects: {

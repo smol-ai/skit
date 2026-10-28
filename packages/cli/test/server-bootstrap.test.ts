@@ -15,24 +15,29 @@ import {
   originFromWranglerConfig,
   removeBootstrapSecretInvocation,
   type BootstrapOperationsShape,
+  type WranglerTarget,
 } from "../src/bootstrap/server-bootstrap.js";
 
 function operations(statuses: Array<boolean | BootstrapExternalFailure | BootstrapStatusInvalid>) {
   const observed: {
     installedSecret?: string;
+    installTarget?: WranglerTarget;
+    removeTarget?: WranglerTarget;
     openedUrl?: string;
     secretRemoved: boolean;
     statusChecks: number;
   } = { secretRemoved: false, statusChecks: 0 };
   const value: BootstrapOperationsShape = {
     createSecret: Effect.succeed("one-time-secret"),
-    installSecret: (secret) =>
+    installSecret: (secret, target) =>
       Effect.sync(() => {
         observed.installedSecret = secret;
+        observed.installTarget = target;
       }),
-    removeSecret: () =>
+    removeSecret: (target) =>
       Effect.sync(() => {
         observed.secretRemoved = true;
+        observed.removeTarget = target;
       }),
     openBrowser: (url) =>
       Effect.sync(() => {
@@ -67,10 +72,29 @@ describe("server bootstrap journey", () => {
   });
 
   it("confirms bootstrap secret deletion non-interactively", () => {
-    assert.deepStrictEqual(removeBootstrapSecretInvocation("/server/wrangler.jsonc"), {
-      args: ["secret", "delete", "SKIT_BOOTSTRAP_SECRET", "--config", "/server/wrangler.jsonc"],
-      input: "y\n",
-    });
+    assert.deepStrictEqual(
+      removeBootstrapSecretInvocation({ configPath: "/server/wrangler.jsonc" }),
+      {
+        args: ["secret", "delete", "SKIT_BOOTSTRAP_SECRET", "--config", "/server/wrangler.jsonc"],
+        input: "y\n",
+      },
+    );
+  });
+
+  it("deletes the bootstrap secret from the selected Wrangler environment's Worker", () => {
+    assert.deepStrictEqual(
+      removeBootstrapSecretInvocation({ configPath: "/server/wrangler.jsonc", environment: "test" })
+        .args,
+      [
+        "secret",
+        "delete",
+        "SKIT_BOOTSTRAP_SECRET",
+        "--config",
+        "/server/wrangler.jsonc",
+        "--env",
+        "test",
+      ],
+    );
   });
 
   it.effect("owns installation, setup, polling and cleanup", () => {
@@ -90,6 +114,20 @@ describe("server bootstrap journey", () => {
       assert.strictEqual(observed.openedUrl, "https://skit.example/setup#token=one-time-secret");
       assert.strictEqual(observed.statusChecks, 2);
       assert.isTrue(observed.secretRemoved);
+    }).pipe(Effect.provide(Layer.merge(layer, skitLayer)));
+  });
+
+  it.effect("adds and removes the secret on the selected environment's Worker", () => {
+    const { observed, layer } = operations([false]);
+    return Effect.gen(function* () {
+      yield* bootstrapServer({
+        configPath: "/server/wrangler.jsonc",
+        environment: "test",
+        origin: "https://skit-test.example",
+      });
+      const target = { configPath: "/server/wrangler.jsonc", environment: "test" };
+      assert.deepStrictEqual(observed.installTarget, target);
+      assert.deepStrictEqual(observed.removeTarget, target);
     }).pipe(Effect.provide(Layer.merge(layer, skitLayer)));
   });
 
@@ -411,7 +449,7 @@ describe("server bootstrap journey", () => {
     });
   });
 
-  it.effect("decodes the top-level JSONC origin and rejects environments", () =>
+  it.effect("decodes the top-level JSONC origin and refuses to guess between environments", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -423,14 +461,49 @@ describe("server bootstrap journey", () => {
           "vars": { "PUBLIC_APP_ORIGIN": "https://right.example", },
         }`,
         );
-        assert.strictEqual(yield* originFromWranglerConfig(config), "https://right.example");
+        assert.strictEqual(
+          yield* originFromWranglerConfig({ configPath: config }),
+          "https://right.example",
+        );
         yield* fs.writeFileString(
           config,
           `{ "vars": { "PUBLIC_APP_ORIGIN": "https://right.example" }, "env": { "production": {} } }`,
         );
-        const failure = yield* Effect.flip(originFromWranglerConfig(config));
+        const failure = yield* Effect.flip(originFromWranglerConfig({ configPath: config }));
         assert.instanceOf(failure, BootstrapConfigInvalid);
-        assert.match(failure.message, /explicit --url/);
+        assert.match(failure.message, /--env <name>/);
+      }),
+    ).pipe(Effect.provide(skitLayer)),
+  );
+
+  it.effect("reads the selected environment's origin, never the top level's", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-bootstrap-config-" });
+        const config = `${root}/wrangler.jsonc`;
+        yield* fs.writeFileString(
+          config,
+          `{
+            "vars": { "PUBLIC_APP_ORIGIN": "https://production.example" },
+            "env": {
+              "test": { "vars": { "PUBLIC_APP_ORIGIN": "https://test.example" } },
+              "bare": {},
+            },
+          }`,
+        );
+        assert.strictEqual(
+          yield* originFromWranglerConfig({ configPath: config, environment: "test" }),
+          "https://test.example",
+        );
+        const missingOrigin = yield* Effect.flip(
+          originFromWranglerConfig({ configPath: config, environment: "bare" }),
+        );
+        assert.match(missingOrigin.message, /env\.bare\.vars/);
+        const missingEnvironment = yield* Effect.flip(
+          originFromWranglerConfig({ configPath: config, environment: "staging" }),
+        );
+        assert.match(missingEnvironment.message, /no env\.staging/);
       }),
     ).pipe(Effect.provide(skitLayer)),
   );

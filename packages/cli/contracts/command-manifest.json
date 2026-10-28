@@ -2190,7 +2190,8 @@
       "interactive": true,
       "examples": [
         "skit server bootstrap",
-        "skit server bootstrap --config wrangler.jsonc"
+        "skit server bootstrap --config wrangler.jsonc",
+        "skit server bootstrap --config wrangler.jsonc --env test"
       ],
       "positionals": [],
       "flags": {
@@ -2198,6 +2199,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Use this Wrangler configuration file."
+        },
+        "env": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Bootstrap this environment of the Wrangler configuration, reading its PUBLIC_APP_ORIGIN."
         },
         "url": {
           "type": "string",
