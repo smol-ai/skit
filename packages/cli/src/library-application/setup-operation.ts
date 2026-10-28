@@ -19,7 +19,7 @@ import {
   writeJsonExclusive,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
-import { activeInstallDestinationsEffect, bindingRoot } from "../projection/roots.js";
+import { activeInstallDestinations, bindingRoot } from "../projection/roots.js";
 import type { SetupApproval } from "../workflows/library/setup-apply.js";
 import { ensureRecoveryOperation, recoveryOperationPath } from "./recovery-moves.js";
 import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
@@ -162,9 +162,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   const links = yield* LinkStat;
   const settings = yield* MachineSettings.read(store.home);
   const directory = approval.removals.operationDirectory;
-  const targets = projecting
-    ? yield* activeInstallDestinationsEffect(approval.setup.inventory)
-    : [];
+  const targets = projecting ? yield* activeInstallDestinations(approval.setup.inventory) : [];
   const possibleTargets = projecting ? (["agents", "claude"] as const) : [];
   const projectionPaths = new Set(
     (approval.reconciliation ?? [])

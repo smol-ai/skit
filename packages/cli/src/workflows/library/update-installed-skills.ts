@@ -13,7 +13,7 @@ import {
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
-  activeInstallDestinationsEffect,
+  activeInstallDestinations,
   bindingRoot,
   existingRepositorySkillsDirectory,
 } from "../../projection/roots.js";
@@ -48,7 +48,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
     options.rootFor !== undefined
       ? targets.filter((target) => options.rootFor!(target) !== undefined)
       : options.roots !== undefined
-        ? yield* activeInstallDestinationsEffect(options.roots)
+        ? yield* activeInstallDestinations(options.roots)
         : targets;
   // Copies at a former or inactive destination are never wanted, whichever settings changed.
   const state = yield* (yield* LibraryStore).load;

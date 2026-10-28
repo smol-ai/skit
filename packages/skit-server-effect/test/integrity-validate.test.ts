@@ -130,6 +130,30 @@ describe("Integrity draft validation", () => {
     }).pipe(Effect.provide(BrowserCrypto.layer)),
   );
 
+  it.effect("translates conflicting invocation declarations at the Worker boundary", () =>
+    Effect.gen(function* () {
+      const config = yield* file(
+        "skit.json",
+        JSON.stringify({
+          slug: "tools",
+          skills: [
+            {
+              name: "review",
+              path: "skills/review",
+              invocation: "explicit",
+              trigger_modes: ["implicit"],
+            },
+          ],
+        }),
+      );
+      const failure = yield* Effect.flip(validateArtifactBundle("alice", "tools", {}, [config]));
+      expect(failure).toMatchObject({
+        _tag: "Integrity.Error",
+        code: "CONFLICTING_INVOCATION_DECLARATIONS",
+      });
+    }).pipe(Effect.provide(BrowserCrypto.layer)),
+  );
+
   it.effect("rejects descriptor payload drift", () =>
     Effect.gen(function* () {
       const bundle = yield* validBundle;

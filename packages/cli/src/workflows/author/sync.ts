@@ -124,50 +124,6 @@ function remotePath(root: string) {
   return join(root, "skit.remote.json");
 }
 
-function normalizeRemote(value: Omit<AuthorRemoteHome, "schema">): AuthorRemoteHome {
-  const origin = new URL(value.origin).origin;
-  if (
-    !origin.startsWith("https://") &&
-    !/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin)
-  )
-    throw new InsecureOrigin({ purpose: "author remote" });
-  const namespace = normalizeRegistryNamespace(value.namespace);
-  const skit = normalizeRegistrySkitSlug(value.skit);
-  if (!namespace || !skit) throw new AuthorDestinationInvalid({ form: "bare" });
-  return { schema: "skit.remote.v1", origin, namespace, skit };
-}
-
-export function parseAuthorDestination(input: string, registryOrigin?: string): AuthorRemoteHome {
-  if (input.startsWith("skit://")) {
-    const url = new URL(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || url.search || url.hash)
-      throw new DestinationFormInvalid({ form: "canonical" });
-    return normalizeRemote({
-      origin: `https://${url.host}`,
-      namespace: decodeURIComponent(parts[0]),
-      skit: decodeURIComponent(parts[1]),
-    });
-  }
-  if (/^https?:\/\//.test(input)) {
-    const url = new URL(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || url.search || url.hash)
-      throw new AuthorDestinationInvalid({ form: "https" });
-    return normalizeRemote({
-      origin: url.origin,
-      namespace: decodeURIComponent(parts[0]),
-      skit: decodeURIComponent(parts[1]),
-    });
-  }
-  const parts = input.split("/");
-  if (parts.length !== 2 || !registryOrigin)
-    throw registryOrigin
-      ? new AuthorDestinationInvalid({ form: "bare" })
-      : new DestinationFormInvalid({ form: "relative-without-registry" });
-  return normalizeRemote({ origin: registryOrigin, namespace: parts[0], skit: parts[1] });
-}
-
 const decodeUrl = (input: string) =>
   Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
     Effect.mapError(() => new AuthorDestinationMalformed({ message: "Invalid URL" })),
@@ -178,7 +134,7 @@ const decodeAuthorSegment = (input: string) =>
     Effect.mapError(() => new AuthorDestinationMalformed({ message: "URI malformed" })),
   );
 
-const normalizeRemoteEffect = Effect.fn("Author.normalizeRemote")(function* (
+const normalizeRemote = Effect.fn("Author.normalizeRemote")(function* (
   value: Omit<AuthorRemoteHome, "schema">,
 ) {
   const origin = (yield* decodeUrl(value.origin)).origin;
@@ -193,7 +149,7 @@ const normalizeRemoteEffect = Effect.fn("Author.normalizeRemote")(function* (
   return { schema: "skit.remote.v1" as const, origin, namespace, skit };
 });
 
-export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")(function* (
+export const parseAuthorDestination = Effect.fn("Author.parseDestination")(function* (
   input: string,
   registryOrigin?: string,
 ) {
@@ -202,7 +158,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
     const parts = url.pathname.split("/").filter(Boolean);
     if (parts.length !== 2 || url.search || url.hash)
       return yield* new DestinationFormInvalid({ form: "canonical" });
-    return yield* normalizeRemoteEffect({
+    return yield* normalizeRemote({
       origin: `https://${url.host}`,
       namespace: yield* decodeAuthorSegment(parts[0]),
       skit: yield* decodeAuthorSegment(parts[1]),
@@ -213,7 +169,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
     const parts = url.pathname.split("/").filter(Boolean);
     if (parts.length !== 2 || url.search || url.hash)
       return yield* new AuthorDestinationInvalid({ form: "https" });
-    return yield* normalizeRemoteEffect({
+    return yield* normalizeRemote({
       origin: url.origin,
       namespace: yield* decodeAuthorSegment(parts[0]),
       skit: yield* decodeAuthorSegment(parts[1]),
@@ -224,7 +180,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
     return yield* registryOrigin
       ? new AuthorDestinationInvalid({ form: "bare" })
       : new DestinationFormInvalid({ form: "relative-without-registry" });
-  return yield* normalizeRemoteEffect({
+  return yield* normalizeRemote({
     origin: registryOrigin,
     namespace: parts[0],
     skit: parts[1],
@@ -254,7 +210,7 @@ export function readAuthorRemote(
     // Metadata parsing classifies all malformed remote values as a conflict.
     const invalid = () => new AuthorRemoteMetadataInvalid({ path: remotePath(root) });
     const document = yield* decodeAuthorRemote(text).pipe(Effect.mapError(invalid));
-    const normalized = yield* normalizeRemoteEffect(document).pipe(
+    const normalized = yield* normalizeRemote(document).pipe(
       Effect.catchTags({
         AuthorDestinationInvalid: () => Effect.fail(invalid()),
         AuthorDestinationMalformed: () => Effect.fail(invalid()),
@@ -386,7 +342,7 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
     return yield* new SyncBlockedByValidation({ stage: "local" });
   const remote =
     storedRemote ??
-    (options.to ? yield* parseAuthorDestinationEffect(options.to, configuredBase) : undefined);
+    (options.to ? yield* parseAuthorDestination(options.to, configuredBase) : undefined);
   if (!remote) return yield* new NoAuthorRemote();
   const base = remote.origin;
   const owner = remote.namespace;

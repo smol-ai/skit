@@ -4,7 +4,7 @@ import { Data, Effect } from "effect";
 import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
 import { isEntryLink, findDuplicates } from "../../projection/duplicates.js";
 import {
-  activeInstallDestinationsEffect,
+  activeInstallDestinations,
   bindingRoot,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
@@ -104,9 +104,7 @@ const scanForSetup = Effect.fn("Library.setup")(
     const duplicates = globalNames.length
       ? yield* findDuplicates(options.inventory, { kind: "global" }, globalNames)
       : [];
-    const targets = duplicates.length
-      ? yield* activeInstallDestinationsEffect(options.inventory)
-      : [];
+    const targets = duplicates.length ? yield* activeInstallDestinations(options.inventory) : [];
     const onboarding = candidates.map((candidate) => {
       const matches = duplicates.filter((duplicate) => duplicate.name === candidate.name);
       if (!matches.length) return candidate;

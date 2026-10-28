@@ -6,7 +6,6 @@
  */
 export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
 
-export { detectInstalledHarnessesEffect } from "./harness/catalog.js";
 export { errorMessage } from "./failure-classification.js";
 export { auditLocalCapabilitiesV1Alpha4 } from "./audit/local.js";
 export type {

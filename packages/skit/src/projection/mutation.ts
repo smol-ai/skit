@@ -48,7 +48,7 @@ import {
   keepInstalledSkillBackup,
   losslessTree,
   pendingInstalledSkillBackups,
-  installedSkillWorkDirectoryEffect,
+  installedSkillWorkDirectory,
 } from "./backups.js";
 import { ensureSkillsDirectoryWritable } from "./writable.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
@@ -312,7 +312,7 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
   const destination = join(root, yield* installedSkillName(skill.name));
   const projectionId = request.identity.projectionId;
   const prior = previous?.projection_id === projectionId ? previous : undefined;
-  const workDirectory = yield* installedSkillWorkDirectoryEffect(root);
+  const workDirectory = yield* installedSkillWorkDirectory(root);
   return yield* Effect.scoped(
     Effect.gen(function* () {
       // Staged on the root's own device, so installing it is a rename even through a symlink.

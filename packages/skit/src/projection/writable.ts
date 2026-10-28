@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Predicate } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { SkillsDirectoryNotWritable } from "../failures.js";
-import { installedSkillWorkDirectoryEffect } from "./backups.js";
+import { installedSkillWorkDirectory } from "./backups.js";
 
 /**
  * Whether the operating system refused access. Node's EACCES arrives as `PermissionDenied`, but a
@@ -25,7 +25,7 @@ export const ensureSkillsDirectoryWritable = Effect.fn("Projection.ensureSkillsD
   function* (root: string) {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
-    for (const directory of new Set([root, yield* installedSkillWorkDirectoryEffect(root)])) {
+    for (const directory of new Set([root, yield* installedSkillWorkDirectory(root)])) {
       const probe = yield* fs.makeTempDirectory({ directory, prefix: ".skit-write-check-" });
       yield* fs.remove(probe, { recursive: true });
     }

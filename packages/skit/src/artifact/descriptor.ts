@@ -80,58 +80,6 @@ function normalizeContainedSkill(skill: ParsedSkill): SkitDescriptor["skills"][n
   } as SkitDescriptor["skills"][number];
 }
 
-export function parseSkitReadme(text: string): SkitDescriptor {
-  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!match) throw new ReadmeFrontmatterMissing();
-  const input = parseYaml(match[1]);
-  // Generated Agent Skills wrappers used these sentinel IDs before Descriptor
-  // identity moved to `slug`. Retained artifacts are immutable, so normalize
-  // only the two values SKIT itself emitted rather than accepting legacy IDs
-  // in authored Descriptors generally.
-  if (input && typeof input === "object") {
-    const descriptor = input as DescriptorObject;
-    if (
-      !("slug" in descriptor) &&
-      (descriptor.id === "internal/normalized" || descriptor.id === "local/internal-normalized")
-    ) {
-      descriptor.slug = "internal-normalized";
-      delete descriptor.id;
-    }
-  }
-  const parsed = Schema.decodeUnknownSync(skitDescriptorSchema, {
-    onExcessProperty: "error",
-  })(input);
-  const descriptor: SkitDescriptor = {
-    ...parsed,
-    skills: parsed.skills.map(normalizeContainedSkill),
-  };
-  if (new Set(descriptor.skills.map((skill) => skill.name)).size !== descriptor.skills.length)
-    throw new DuplicateSkillNames();
-  if (new Set(descriptor.skills.map((skill) => skill.path)).size !== descriptor.skills.length)
-    throw new DuplicateSkillPaths();
-  return descriptor;
-}
-
-export function parseSkitConfig(text: string): SkitDescriptor {
-  const config = Schema.decodeUnknownSync(skitConfigSchema, {
-    onExcessProperty: "error",
-  })(JSON.parse(text));
-  const descriptor: SkitDescriptor = {
-    skit: 1,
-    slug: config.slug,
-    ...(config.sameAs ? { sameAs: config.sameAs } : {}),
-    ...(config.author ? { author: config.author } : {}),
-    skills: config.skills.map((skill) =>
-      normalizeContainedSkill({ ...skill, default_enabled: skill.default_enabled ?? true }),
-    ),
-  };
-  if (new Set(descriptor.skills.map((skill) => skill.name)).size !== descriptor.skills.length)
-    throw new DuplicateSkillNames();
-  if (new Set(descriptor.skills.map((skill) => skill.path)).size !== descriptor.skills.length)
-    throw new DuplicateSkillPaths();
-  return descriptor;
-}
-
 const malformed = (format: "json" | "yaml", detail: string) =>
   new DescriptorMalformed({ format, detail });
 
@@ -165,13 +113,17 @@ const validateDescriptor = Effect.fn("Descriptor.validate")(function* (
   return descriptor;
 });
 
-export const parseSkitReadmeEffect = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
+export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match) return yield* new ReadmeFrontmatterMissing();
   const input = yield* Effect.try({
     try: () => parseYaml(match[1]) as unknown,
     catch: (error) => malformed("yaml", String(error)),
   });
+  // Generated Agent Skills wrappers used these sentinel IDs before Descriptor
+  // identity moved to `slug`. Retained artifacts are immutable, so normalize
+  // only the two values SKIT itself emitted rather than accepting legacy IDs
+  // in authored Descriptors generally.
   if (input && typeof input === "object") {
     const descriptor = input as DescriptorObject;
     if (
@@ -185,7 +137,7 @@ export const parseSkitReadmeEffect = Effect.fn("Descriptor.parseReadme")(functio
   return yield* validateDescriptor(input, "yaml");
 });
 
-export const parseSkitConfigEffect = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
+export const parseSkitConfig = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
   const input = yield* Schema.decodeUnknownEffect(JsonDocument)(text).pipe(
     Effect.mapError((error) => malformed("json", error.message)),
   );

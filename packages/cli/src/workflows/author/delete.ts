@@ -19,7 +19,7 @@ import {
   type SkitFailure,
 } from "@smolai/skit-core";
 import type { AuthorRemoteHome } from "./sync.js";
-import { parseAuthorDestinationEffect } from "./sync.js";
+import { parseAuthorDestination } from "./sync.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
@@ -137,7 +137,7 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
 ) {
   const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(destination);
   const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
-  const remote = yield* parseAuthorDestinationEffect(destination, startup?.origin);
+  const remote = yield* parseAuthorDestination(destination, startup?.origin);
   const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(

@@ -176,17 +176,10 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
     Effect.gen(function* () {
       const value = yield* readStateValue(path);
       const current =
-        value === undefined
-          ? yield* emptyLibraryStateEffect(path)
-          : yield* decodeCurrentState(path, value);
+        value === undefined ? emptyLibraryState() : yield* decodeCurrentState(path, value);
       if (libraryStateRevision(current) !== libraryStateRevision(base))
         return yield* new LibraryChanged({ path });
       yield* writeRawAtomic(path, `${text}\n`);
     }),
   );
 });
-
-export const emptyLibraryStateEffect = (path: string) =>
-  LibraryState.makeEffect(emptyLibraryState()).pipe(
-    Effect.mapError((error) => new InvalidLibraryState({ path, detail: String(error) })),
-  );

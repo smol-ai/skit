@@ -59,83 +59,93 @@ it.effect("validates independent valid and invalid descriptors", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-test("normalizes legacy Forge declarations without retaining unenforceable claims", () => {
-  const descriptor = parseSkitConfig(
-    JSON.stringify({
-      slug: "tools",
-      skills: [
-        {
-          name: "review",
-          path: "skills/review",
-          trigger_modes: ["explicit"],
-          mutation_scopes: ["repository"],
-          capabilities: ["filesystem_read"],
-          approval: "always",
-          expected_outputs: ["review"],
-        },
-      ],
-    }),
-  );
-
-  expect(descriptor.skills).toEqual([
-    {
-      name: "review",
-      path: "skills/review",
-      default_enabled: true,
-      invocation: "explicit",
-      capabilities: ["filesystem_read"],
-    },
-  ]);
-});
-
-test.each(["internal/normalized", "local/internal-normalized"])(
-  "reads retained Agent Skills wrappers with legacy sentinel %s",
-  (id) => {
-    const descriptor = parseSkitReadme(
-      `---\nskit: 1\nid: ${id}\nskills:\n  - name: review\n    path: skills/review\n    default_enabled: true\n---\n`,
-    );
-
-    expect(descriptor.slug).toBe("internal-normalized");
-    expect(descriptor).not.toHaveProperty("id");
-  },
-);
-
-test("does not accept arbitrary legacy Descriptor IDs", () => {
-  expect(() =>
-    parseSkitReadme(
-      "---\nskit: 1\nid: somebody/tools\nskills:\n  - name: review\n    path: skills/review\n    default_enabled: true\n---\n",
-    ),
-  ).toThrow();
-});
-
-test("rejects conflicting legacy and current invocation declarations", () => {
-  expect(() =>
-    parseSkitConfig(
+it.effect("normalizes legacy Forge declarations without retaining unenforceable claims", () =>
+  Effect.gen(function* () {
+    const descriptor = yield* parseSkitConfig(
       JSON.stringify({
         slug: "tools",
         skills: [
           {
             name: "review",
             path: "skills/review",
-            invocation: "explicit",
-            trigger_modes: ["implicit"],
+            trigger_modes: ["explicit"],
+            mutation_scopes: ["repository"],
+            capabilities: ["filesystem_read"],
+            approval: "always",
+            expected_outputs: ["review"],
           },
         ],
       }),
-    ),
-  ).toThrow(/conflicting invocation and trigger_modes/);
-});
+    );
 
-test("omits an empty capability claim from the canonical descriptor", () => {
-  expect(
-    parseSkitConfig(
+    expect(descriptor.skills).toEqual([
+      {
+        name: "review",
+        path: "skills/review",
+        default_enabled: true,
+        invocation: "explicit",
+        capabilities: ["filesystem_read"],
+      },
+    ]);
+  }),
+);
+
+it.effect.each(["internal/normalized", "local/internal-normalized"])(
+  "reads retained Agent Skills wrappers with legacy sentinel %s",
+  (id) =>
+    Effect.gen(function* () {
+      const descriptor = yield* parseSkitReadme(
+        `---\nskit: 1\nid: ${id}\nskills:\n  - name: review\n    path: skills/review\n    default_enabled: true\n---\n`,
+      );
+
+      expect(descriptor.slug).toBe("internal-normalized");
+      expect(descriptor).not.toHaveProperty("id");
+    }),
+);
+
+it.effect("does not accept arbitrary legacy Descriptor IDs", () =>
+  Effect.gen(function* () {
+    const failure = yield* Effect.flip(
+      parseSkitReadme(
+        "---\nskit: 1\nid: somebody/tools\nskills:\n  - name: review\n    path: skills/review\n    default_enabled: true\n---\n",
+      ),
+    );
+    expect(failure._tag).toBe("DescriptorMalformed");
+  }),
+);
+
+it.effect("rejects conflicting legacy and current invocation declarations", () =>
+  Effect.gen(function* () {
+    const failure = yield* Effect.flip(
+      parseSkitConfig(
+        JSON.stringify({
+          slug: "tools",
+          skills: [
+            {
+              name: "review",
+              path: "skills/review",
+              invocation: "explicit",
+              trigger_modes: ["implicit"],
+            },
+          ],
+        }),
+      ),
+    );
+    expect(failure._tag).toBe("ConflictingInvocationDeclaration");
+  }),
+);
+
+it.effect("omits an empty capability claim from the canonical descriptor", () =>
+  Effect.gen(function* () {
+    const descriptor = yield* parseSkitConfig(
       JSON.stringify({
         slug: "tools",
         skills: [{ name: "review", path: "skills/review", capabilities: [] }],
       }),
-    ).skills[0],
-  ).not.toHaveProperty("capabilities");
-});
+    );
+    expect(descriptor.skills[0]).not.toHaveProperty("capabilities");
+  }),
+);
 
 it.effect("preserves structured Skill assessment separately from validation diagnostics", () =>
   Effect.gen(function* () {

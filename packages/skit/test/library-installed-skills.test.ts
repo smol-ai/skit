@@ -1376,13 +1376,29 @@ for (const location of ["beside", "inside"] as const)
         }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
     );
 
-it("works beside a root on its parent's device, and inside a root mounted from another", () => {
-  assert.strictEqual(
-    installedSkillWorkDirectory("/home/me/.claude/skills", 1, 1),
-    "/home/me/.claude",
-  );
-  assert.strictEqual(
-    installedSkillWorkDirectory("/home/me/.claude/skills", 2, 1),
-    "/home/me/.claude/skills",
-  );
-});
+it.effect(
+  "works beside a root on its parent's device, and inside a root mounted from another",
+  () =>
+    Effect.gen(function* () {
+      const devices = (root: number, parent: number) =>
+        FileSystem.layerNoop({
+          realPath: (path) => Effect.succeed(path),
+          stat: (path) =>
+            Effect.succeed({
+              dev: path === "/home/me/.claude/skills" ? root : parent,
+            } as FileSystem.File.Info),
+        });
+      assert.strictEqual(
+        yield* installedSkillWorkDirectory("/home/me/.claude/skills").pipe(
+          Effect.provide(devices(1, 1)),
+        ),
+        "/home/me/.claude",
+      );
+      assert.strictEqual(
+        yield* installedSkillWorkDirectory("/home/me/.claude/skills").pipe(
+          Effect.provide(devices(2, 1)),
+        ),
+        "/home/me/.claude/skills",
+      );
+    }),
+);

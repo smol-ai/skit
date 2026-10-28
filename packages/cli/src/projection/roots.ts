@@ -16,7 +16,7 @@ import {
   type InventoryScanRoot,
   type RepositoryBinding,
 } from "@smolai/skit-core";
-import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
+import { detectInstalledHarnesses } from "../harness/catalog.js";
 export interface InventoryRootOptions {
   readonly home: string;
   readonly configHome: string;
@@ -61,18 +61,18 @@ export function bindingRoot(
 }
 
 /** The targets this device materializes into: `.agents` always, `.claude` only with Claude Code. */
-export const activeInstallDestinationsEffect = Effect.fn("Projection.activeInstallDestinations")(
+export const activeInstallDestinations = Effect.fn("Projection.activeInstallDestinations")(
   function* (options: InventoryRootOptions) {
-    const detected = yield* detectInstalledHarnessesEffect({
+    const detected = yield* detectInstalledHarnesses({
       home: options.home,
       configHome: options.configHome,
       overrides: options.overrides,
     });
-    return activeInstallDestinations(detected);
+    return installDestinationsFor(detected);
   },
 );
 
-export const activeInstallDestinations = (
+export const installDestinationsFor = (
   detected: readonly HarnessName[],
 ): readonly InstallDestination[] =>
   detected.includes("claude-code") ? ["agents", "claude"] : ["agents"];

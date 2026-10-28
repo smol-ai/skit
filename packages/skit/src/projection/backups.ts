@@ -15,22 +15,14 @@ const IGNORE_EVERYTHING = "*\n";
  * sees them; but a root mounted from another device shares that device only with its own entries,
  * and a rename is the only lossless move, so there they live hidden inside the root instead.
  */
-export const installedSkillWorkDirectory = (
-  realRoot: string,
-  rootDevice: number,
-  parentDevice: number,
-) => (rootDevice === parentDevice ? dirname(realRoot) : realRoot);
-
-export const installedSkillWorkDirectoryEffect = Effect.fn("Projection.workDirectory")(function* (
+export const installedSkillWorkDirectory = Effect.fn("Projection.workDirectory")(function* (
   root: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const realRoot = yield* fs.realPath(root);
-  return installedSkillWorkDirectory(
-    realRoot,
-    (yield* fs.stat(realRoot)).dev,
-    (yield* fs.stat(dirname(realRoot))).dev,
-  );
+  const rootDevice = (yield* fs.stat(realRoot)).dev;
+  const parentDevice = (yield* fs.stat(dirname(realRoot))).dev;
+  return rootDevice === parentDevice ? dirname(realRoot) : realRoot;
 });
 
 /**
@@ -43,10 +35,7 @@ export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const backups = join(
-    yield* installedSkillWorkDirectoryEffect(projection.root),
-    BACKUPS_DIRECTORY,
-  );
+  const backups = join(yield* installedSkillWorkDirectory(projection.root), BACKUPS_DIRECTORY);
   yield* fs.makeDirectory(backups, { recursive: true, mode: 0o700 });
   // A repository can commit its own `.skit-backups`, so never follow a link planted there.
   if ((yield* links.lstat(backups)).type !== "Directory")

@@ -4,6 +4,8 @@ import {
   canonicalJson,
   describeInvocationConformanceIssue,
   evaluateSkillAudit,
+  parseSkitConfig,
+  parseSkitReadme,
   type RegistrySkitDescriptor,
 } from "@smolai/skit-core/universal/consumer";
 import type { IntegrityErrorCode } from "@smolai/skit-core/universal/api";
@@ -15,10 +17,9 @@ import { Effect } from "effect";
 import { type ArtifactFile, IntegrityError, type ValidationDiagnostic } from "./contracts.js";
 import { projectionLimitExceeded } from "./projection-limits.js";
 import {
+  descriptorError,
   hashProjectedSkillFiles,
   normalizeDescriptorDeclarations,
-  parseSkitConfig,
-  parseSkitReadme,
   projectSkillFiles,
 } from "./descriptor.js";
 
@@ -47,9 +48,13 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
   const config = files.find(({ path }) => path === "skit.json");
   const readme = files.find(({ path }) => path === "README.md");
   const localDescriptor = config
-    ? yield* parseSkitConfig(new TextDecoder().decode(config.bytes))
+    ? yield* parseSkitConfig(new TextDecoder().decode(config.bytes)).pipe(
+        Effect.mapError(descriptorError),
+      )
     : readme
-      ? yield* parseSkitReadme(new TextDecoder().decode(readme.bytes))
+      ? yield* parseSkitReadme(new TextDecoder().decode(readme.bytes)).pipe(
+          Effect.mapError(descriptorError),
+        )
       : yield* fail("DESCRIPTOR_MISSING");
   if (localDescriptor.slug !== slug) return yield* fail("INVALID_DESCRIPTOR_ID");
   const descriptor: RegistrySkitDescriptor = { ...localDescriptor, id: `${owner}/${slug}` };

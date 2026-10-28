@@ -19,7 +19,7 @@ import {
 } from "@smolai/skit-core";
 import { captureSetupFile } from "../../library-application/setup-operation.js";
 import {
-  activeInstallDestinationsEffect,
+  activeInstallDestinations,
   bindingRoot,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
@@ -98,7 +98,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
   const binding = scopeBinding(state, { kind: "global" });
   if (!binding) return [];
   const selected = new Set(bindingSkillIds(state, binding));
-  const targets = yield* activeInstallDestinationsEffect(roots);
+  const targets = yield* activeInstallDestinations(roots);
   const facts: InstalledSkillChange[] = [];
   for (const projection of state.projections) {
     const target = projection.target;

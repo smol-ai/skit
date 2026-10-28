@@ -223,17 +223,17 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
 );
 
 it.effect("author destinations are Registry-qualified", () =>
-  Effect.sync(() => {
-    expect(parseAuthorDestination("tim/tools", "https://registry.example/path")).toEqual({
+  Effect.gen(function* () {
+    expect(yield* parseAuthorDestination("tim/tools", "https://registry.example/path")).toEqual({
       schema: "skit.remote.v1",
       origin: "https://registry.example",
       namespace: "tim",
       skit: "tools",
     });
-    expect(parseAuthorDestination("skit://other.example/tim/tools")).toMatchObject({
+    expect(yield* parseAuthorDestination("skit://other.example/tim/tools")).toMatchObject({
       origin: "https://other.example",
     });
-    expect(parseAuthorDestination("https://other.example/tim/tools")).toMatchObject({
+    expect(yield* parseAuthorDestination("https://other.example/tim/tools")).toMatchObject({
       origin: "https://other.example",
     });
   }),

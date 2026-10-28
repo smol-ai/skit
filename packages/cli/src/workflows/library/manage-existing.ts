@@ -1,5 +1,5 @@
 import {
-  activeInstallDestinationsEffect,
+  activeInstallDestinations,
   bindingRoot,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
@@ -444,7 +444,7 @@ const planDuplicateBackup = Effect.fn("Manage.planDuplicateBackup")(function* (
   const duplicates = yield* findDuplicates(roots, { kind: "global" }, [selection.name]);
   // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
   // root's backups; moving it afterwards would find the new copy there instead.
-  const destinations = (yield* activeInstallDestinationsEffect(roots)).map((target) =>
+  const destinations = (yield* activeInstallDestinations(roots)).map((target) =>
     join(bindingRoot(target, { kind: "global" }, roots), selection.name),
   );
   const store = yield* LibraryStore;
@@ -613,7 +613,7 @@ const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
     (root) => canonical(root.root),
   );
   let required = 0;
-  for (const target of yield* activeInstallDestinationsEffect(roots)) {
+  for (const target of yield* activeInstallDestinations(roots)) {
     const root = bindingRoot(target, { kind: "global" }, roots);
     if (!readableRoots.includes(yield* canonical(root))) continue;
     required++;

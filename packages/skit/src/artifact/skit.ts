@@ -25,8 +25,8 @@ import {
   hashParts,
   hashProjectedSkillFiles,
   parseSkillExample,
-  parseSkitConfigEffect,
-  parseSkitReadmeEffect,
+  parseSkitConfig,
+  parseSkitReadme,
 } from "./descriptor.js";
 import {
   type DescriptorFailure,
@@ -48,9 +48,9 @@ export function readSkitDescriptor(
           error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
         ),
       );
-    if (config !== undefined) return yield* parseSkitConfigEffect(config);
+    if (config !== undefined) return yield* parseSkitConfig(config);
     const readme = yield* fs.readFileString(resolve(root, "README.md"));
-    return yield* parseSkitReadmeEffect(readme);
+    return yield* parseSkitReadme(readme);
   });
 }
 

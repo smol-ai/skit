@@ -21,7 +21,7 @@ import {
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import {
-  activeInstallDestinationsEffect,
+  activeInstallDestinations,
   bindingRoot,
   type InventoryRootOptions,
 } from "../projection/roots.js";
@@ -216,7 +216,7 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
     overrides: structuredClone(configuration.overrides),
   };
   const captured = structuredClone(requests);
-  const targets = yield* activeInstallDestinationsEffect(routing);
+  const targets = yield* activeInstallDestinations(routing);
   let projected = current;
   const changes = [];
   for (const request of captured) {
@@ -284,7 +284,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   repair: boolean,
   activeTargets: readonly InstallDestination[],
 ) {
-  const currentTargets = yield* activeInstallDestinationsEffect(configuration);
+  const currentTargets = yield* activeInstallDestinations(configuration);
   if (
     currentTargets.length !== activeTargets.length ||
     currentTargets.some((target, index) => target !== activeTargets[index])

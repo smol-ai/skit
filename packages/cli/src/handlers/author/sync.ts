@@ -9,7 +9,7 @@ import { resolveAuthForOrigin } from "../../registry/auth.js";
 import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
-  parseAuthorDestinationEffect,
+  parseAuthorDestination,
   readAuthorRemote,
   syncDraft,
   type AuthorVisibility,
@@ -36,7 +36,7 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   if (options.to) {
     const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(options.to);
     const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
-    const destination = yield* parseAuthorDestinationEffect(options.to, startup?.origin);
+    const destination = yield* parseAuthorDestination(options.to, startup?.origin);
     credentials = yield* resolveAuthForOrigin(destination.origin, options.home);
     if (!credentials.token)
       return yield* new AuthenticationRequired({

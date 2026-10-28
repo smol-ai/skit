@@ -1,8 +1,6 @@
 import {
   encodeHashParts,
   normalizeDescriptorDeclarations as normalizeDescriptor,
-  parseSkitConfigEffect,
-  parseSkitReadmeEffect,
   projectedSkillHashParts,
   projectSkillFiles as projectFiles,
   sha256Digest,
@@ -16,7 +14,7 @@ interface SharedFailure {
   readonly message?: string;
 }
 
-const descriptorError = (cause: SharedFailure) =>
+export const descriptorError = (cause: SharedFailure) =>
   new IntegrityError({
     code:
       cause._tag === "ConflictingInvocationDeclaration"
@@ -33,12 +31,6 @@ export const normalizeDescriptorDeclarations = Effect.fn(
     catch: (cause) => descriptorError(cause as SharedFailure),
   }),
 );
-
-export const parseSkitReadme = (text: string) =>
-  parseSkitReadmeEffect(text).pipe(Effect.mapError(descriptorError));
-
-export const parseSkitConfig = (text: string) =>
-  parseSkitConfigEffect(text).pipe(Effect.mapError(descriptorError));
 
 export interface ProjectedFile {
   readonly path: string;

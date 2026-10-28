@@ -10,11 +10,7 @@ import {
   resolveSkillsDirectory,
   type SkitBindingScope,
 } from "@smolai/skit-core";
-import {
-  activeInstallDestinationsEffect,
-  bindingRoot,
-  type InventoryRootOptions,
-} from "./roots.js";
+import { activeInstallDestinations, bindingRoot, type InventoryRootOptions } from "./roots.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export const SkillAlias = Schema.Struct({
@@ -176,7 +172,7 @@ export const findDuplicates = Effect.fn("Projection.findDuplicates")(function* (
   errors?: DuplicateScanError[],
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const targets = yield* activeInstallDestinationsEffect(options);
+  const targets = yield* activeInstallDestinations(options);
   const roots = readableSkillsDirectories(options, scope);
   const destinations = targets.flatMap((target) =>
     names.map((name) => join(bindingRoot(target, scope, options), name)),

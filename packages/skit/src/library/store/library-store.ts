@@ -2,9 +2,8 @@ import { Context, DateTime, Effect, FileSystem, Layer } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
-import type { LibraryState } from "../library-state.js";
+import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import {
-  emptyLibraryStateEffect,
   inspectLocalLibraryState,
   saveLibraryState,
   type InspectedLibraryState,
@@ -65,8 +64,8 @@ export function libraryStoreLayer(options: { home: string }) {
       const inspect = inspectLocalLibraryState(home).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       );
-      const load = Effect.flatMap(inspect, (inspected) =>
-        inspected.present ? Effect.succeed(inspected.state) : emptyLibraryStateEffect(path),
+      const load = Effect.map(inspect, (inspected) =>
+        inspected.present ? inspected.state : emptyLibraryState(),
       );
       const save = Effect.fn("LibraryStore.save")(function* (
         next: LibraryState,

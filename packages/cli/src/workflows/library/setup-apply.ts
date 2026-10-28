@@ -11,7 +11,7 @@ import {
   type Digest,
   type SkillId,
 } from "@smolai/skit-core";
-import { activeInstallDestinationsEffect, bindingRoot } from "../../projection/roots.js";
+import { activeInstallDestinations, bindingRoot } from "../../projection/roots.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
@@ -122,7 +122,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     const enablingCopies = projectedCopies.length > 0;
     const projects = enablingCopies || hasChangesToApply(reconciliation, versionChoices);
     if (projects)
-      for (const target of yield* activeInstallDestinationsEffect(approval.setup.inventory))
+      for (const target of yield* activeInstallDestinations(approval.setup.inventory))
         if (
           enablingCopies ||
           reconciliation.some(
