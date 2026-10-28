@@ -11,7 +11,7 @@ import {
 import { LibraryManifest } from "../src/library/library-contracts.js";
 import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
 
-const digest = `sha256:${"a".repeat(64)}`;
+const hash = `sha256:${"a".repeat(64)}`;
 const collectionId = makeCollectionId();
 const skillId = makeSkillId();
 const otherSkillId = makeSkillId();
@@ -28,20 +28,20 @@ const sourceIdentity = {
 };
 const collectionVersion = {
   retained_copy_id: collectionVersionId,
-  digest,
+  digest: hash,
   copy_profile: "verbatim/v1",
   members: ["review", "lint"].map((source_path) => ({
     source_path,
-    source_digest: digest,
-    artifact_digest: digest,
+    source_digest: hash,
+    artifact_digest: hash,
     materialization_profile: "plain-skill/v1",
   })),
 };
 const version = (skill_version_id: string) => ({
   skill_version_id,
-  source_digest: digest,
-  artifact_digest: digest,
-  validation_identity_digest: digest,
+  source_digest: hash,
+  artifact_digest: hash,
+  validation_identity_digest: hash,
   materialization_profile: "plain-skill/v1",
 });
 
@@ -90,7 +90,7 @@ it("migrates a v5 manifest through v6 to the current model", () => {
         observations: [],
       },
     ],
-    snapshot_digests: [digest],
+    snapshot_digests: [hash],
     bindings: [
       { harness: "codex", scope: { kind: "global" }, skills: [skillId, otherSkillId] },
       { harness: "claude-code", scope: { kind: "global" }, skills: [skillId] },
@@ -153,7 +153,7 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
         observations: [],
       },
     ],
-    snapshot_digests: [digest],
+    snapshot_digests: [hash],
     bindings: [
       {
         harness: "codex",
@@ -233,7 +233,7 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
         observations: [],
       },
     ],
-    snapshot_digests: [digest],
+    snapshot_digests: [hash],
     bindings: [
       {
         scope: { kind: "global" },

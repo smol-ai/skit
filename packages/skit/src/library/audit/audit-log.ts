@@ -1,7 +1,7 @@
 import { Data, Context, Effect, FileSystem, Layer, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join } from "node:path";
-import { Digest } from "../../contracts.js";
+import { Hash } from "../../contracts.js";
 import { OperationId, makeOperationId } from "../entity-ids.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
@@ -20,7 +20,7 @@ export const LibraryAuditChange = Schema.Struct({
   before: Schema.optionalKey(Schema.String),
   after: Schema.optionalKey(Schema.String),
   path: Schema.optionalKey(Schema.String),
-  digest: Schema.optionalKey(Digest),
+  digest: Schema.optionalKey(Hash),
 });
 export interface LibraryAuditChange extends Schema.Schema.Type<typeof LibraryAuditChange> {}
 

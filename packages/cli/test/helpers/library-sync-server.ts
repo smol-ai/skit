@@ -18,7 +18,7 @@ import {
 /** Every one-shot failure a sync test can inject, each consumed at the boundary it targets. */
 export type Fault =
   | { readonly _tag: "FailUpload" }
-  | { readonly _tag: "FailDownload"; readonly digest: string }
+  | { readonly _tag: "FailDownload"; readonly hash: string }
   | { readonly _tag: "RejectWrite" }
   /** Another home commits this manifest just before the next write is evaluated. */
   | { readonly _tag: "CompetingWrite"; readonly manifest: LibraryManifest }
@@ -86,7 +86,7 @@ export function librarySyncServer(faults = faultQueue(), events: string[] = []) 
     // The Worker treats a write whose manifest JSON matches the current head as already applied.
     if (head !== null && JSON.stringify(head.manifest) === JSON.stringify(request.manifest))
       return reply(LibraryResponse, { library: head });
-    if (request.manifest.snapshot_digests.some((digest) => !snapshots.has(digest)))
+    if (request.manifest.snapshot_digests.some((hash) => !snapshots.has(hash)))
       return reply(InvalidRequestResponse, { error: "invalid_request" });
     revisions.push({
       revision_id: `revision_${revisions.length + 1}`,
@@ -103,10 +103,10 @@ export function librarySyncServer(faults = faultQueue(), events: string[] = []) 
   const respond = (method: string, path: string, payload?: unknown): Response => {
     if (method !== "GET") writeRequests++;
     if (method === "GET" && path.startsWith("/api/libraries/")) {
-      const digest = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
-      if (faults.take("FailDownload", (fault) => fault.digest === digest))
+      const hash = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
+      if (faults.take("FailDownload", (fault) => fault.hash === hash))
         return reply(StorageFailureResponse, { error: "storage_failure" });
-      const archive = snapshots.get(digest);
+      const archive = snapshots.get(hash);
       return archive === undefined
         ? reply(LibraryNotFoundResponse, { error: "library_not_found" })
         : reply(SnapshotArchive, archive);

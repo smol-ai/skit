@@ -5,10 +5,10 @@ import { Effect, FileSystem } from "effect";
 import { walkTree } from "../artifact/tree.js";
 import { ContentAddressCollision } from "../failures.js";
 import { deterministicTreeHash } from "../artifact/skit.js";
-import type { Digest } from "../contracts.js";
+import type { Hash } from "../contracts.js";
 
-export const collectionVersionPath = (objectsPath: string, digest: Digest) =>
-  join(objectsPath, digest.slice(7, 9), digest.slice(7));
+export const collectionVersionPath = (objectsPath: string, hash: Hash) =>
+  join(objectsPath, hash.slice(7, 9), hash.slice(7));
 
 /** Materialize exactly the normalized inventory; excluded source residue never enters an object. */
 const copyNormalizedTree = Effect.fn("CollectionVersion.copyNormalizedTree")(function* (
@@ -43,14 +43,14 @@ export const originalTreeHash = Effect.fn("CollectionVersion.originalHash")(func
       append(entry.bytes);
     } else if (entry.kind === "symlink") append(entry.target);
   }
-  return `sha256:${hash.digest("hex")}` as Digest;
+  return `sha256:${hash.digest("hex")}` as Hash;
 });
 
 /** Saved immutable objects are never rollback-owned, even when this call created them. */
 export const writeCollectionVersion = Effect.fn("CollectionVersion.write")(function* (
   root: string,
   objectsPath: string,
-  expected: Digest,
+  expected: Hash,
   verbatim: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;

@@ -6,7 +6,7 @@ import {
   MAX_ARTIFACT_CONTENT_BYTES,
   MAX_ARTIFACT_FILES,
 } from "@smolai/skit-core/universal/authoring";
-import { Digest, sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { IntegrityError } from "../integrity/contracts.js";
 import { validateArtifactBundle } from "../integrity/validate.js";
 
@@ -127,7 +127,7 @@ export const readArchive = Effect.fn("Integrity.readArchive")(function* (archive
 
 const DraftFileRow = Schema.Struct({
   path: Schema.String,
-  blob_digest: Digest,
+  blob_digest: Hash,
   byte_length: Schema.Int,
   media_type: Schema.String,
   executable: Schema.Int,
@@ -163,7 +163,7 @@ export const verifyReleaseArchive = Effect.fn("Integrity.verifyReleaseArchive")(
     if (
       !bytes ||
       bytes.byteLength !== row.byte_length ||
-      (yield* sha256Digest(bytes)) !== row.blob_digest
+      (yield* sha256Hash(bytes)) !== row.blob_digest
     )
       return yield* manifestMismatch();
   }

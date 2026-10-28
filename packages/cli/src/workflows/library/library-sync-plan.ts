@@ -79,7 +79,7 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
     const skills_added = [...skillsAfter.keys()].filter((name) => !skillsBefore.has(name)).sort();
     const skills_removed = [...skillsBefore.keys()].filter((name) => !skillsAfter.has(name)).sort();
     const skills_changed = [...skillsAfter.entries()]
-      .filter(([name, digest]) => skillsBefore.has(name) && skillsBefore.get(name) !== digest)
+      .filter(([name, hash]) => skillsBefore.has(name) && skillsBefore.get(name) !== hash)
       .map(([name]) => name)
       .sort();
     return [

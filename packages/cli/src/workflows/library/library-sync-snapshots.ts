@@ -49,8 +49,8 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
           ...(remote === null
             ? {}
             : {
-                download: (digest: SnapshotArchive["digest"]) =>
-                  api.download(remote.library_id, digest),
+                download: (hash: SnapshotArchive["digest"]) =>
+                  api.download(remote.library_id, hash),
               }),
           registryBaseUrl: options.origin,
           ...(options.token === undefined ? {} : { registryToken: options.token }),

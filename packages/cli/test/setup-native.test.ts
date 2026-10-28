@@ -6,7 +6,7 @@ import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import {
-  type Digest,
+  type Hash,
   deterministicTreeHash,
   LibraryStore,
   LibraryState,
@@ -95,7 +95,7 @@ const scanForSetup = (options: SetupOptions) =>
     ),
   );
 
-const revalidateSetup = (options: SetupOptions, planId: Digest) =>
+const revalidateSetup = (options: SetupOptions, planId: Hash) =>
   revalidateSetupPlan(options, planId).pipe(
     Effect.provide(
       libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),

@@ -7,7 +7,7 @@ import {
   LibraryStateDocument,
 } from "../library-state.js";
 import {
-  Digest,
+  Hash,
   HarnessName,
   InvocationPolicy,
   RecordedInstallDestination,
@@ -35,7 +35,7 @@ import {
 const { artifactContentHash: _contentHash, ...acceptanceFields } = SkillAssessmentAcceptance.fields;
 const SkillAssessmentAcceptanceV9 = Schema.Struct({
   ...acceptanceFields,
-  artifactContentDigest: Digest,
+  artifactContentDigest: Hash,
 });
 
 // Frozen v9 state. Every older state migrates through these shapes, so they stay as v9 defined
@@ -48,8 +48,8 @@ export const InstalledSkillV9 = Schema.Struct({
   target: RecordedInstallDestination,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
-  expected_digest: Digest,
-  observed_digest: Schema.optional(Digest),
+  expected_digest: Hash,
+  observed_digest: Schema.optional(Hash),
   status: HarnessInstallStatus,
   suppression_reason: Schema.optional(Schema.Literal("native_delete")),
   suppressed_at: Schema.optional(Schema.String),
@@ -72,12 +72,12 @@ const OwnershipIssueV9 = Schema.Struct({
   path: Schema.String,
   canonicalPath: Schema.String,
   harnesses: Schema.Array(HarnessName),
-  observedHash: Digest,
+  observedHash: Hash,
   detail: Schema.optional(Schema.String),
   collectionId: Schema.optional(CollectionId),
   skillId: Schema.optional(SkillId),
   projectionId: Schema.optional(InstalledSkillId),
-  expectedHash: Schema.optional(Digest),
+  expectedHash: Schema.optional(Hash),
   matchesExpectedHash: Schema.optional(Schema.Boolean),
 });
 
@@ -89,8 +89,8 @@ export const LibraryDeviceStateFieldsV9 = {
       harnesses: Schema.optional(Schema.Array(HarnessName)),
       path: Schema.String,
       paths: Schema.optional(Schema.Array(Schema.String)),
-      observedHash: Digest,
-      lastObservedHash: Schema.optional(Digest),
+      observedHash: Hash,
+      lastObservedHash: Schema.optional(Hash),
     }),
   ),
   custodyIssues: Schema.optional(Schema.Array(OwnershipIssueV9)),

@@ -16,7 +16,7 @@ import {
   SourceRelativePath,
   SourceTracking,
 } from "../library-contracts.js";
-import { Digest, HarnessName } from "../../vocabulary.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 import { LibraryManifestFromV6, type LibraryManifestV6 } from "./manifest-v6.js";
 import {
   type BindingEntryV7,
@@ -57,9 +57,9 @@ export type CollectionV5 = typeof CollectionV5.Type;
 
 export const SkillVersionV5 = Schema.Struct({
   skill_version_id: SkillVersionId,
-  source_digest: Digest,
-  artifact_digest: Digest,
-  validation_identity_digest: Digest,
+  source_digest: Hash,
+  artifact_digest: Hash,
+  validation_identity_digest: Hash,
   materialization_profile: MaterializationProfile,
   origins: Schema.Array(
     Schema.Struct({ acquisition_id: ImportId, source_path: CollectionRelativePath }),
@@ -101,7 +101,7 @@ export const LibraryManifestV5 = Schema.Struct({
   skills: Schema.Array(SkillV5),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(AcquisitionV5),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV5),
 });
 export type LibraryManifestV5 = typeof LibraryManifestV5.Type;

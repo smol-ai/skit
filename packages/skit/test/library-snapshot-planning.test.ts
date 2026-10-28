@@ -105,12 +105,12 @@ it("keeps unpinned, local, and edit imports snapshot-backed", () => {
   );
 });
 
-const sourceDigest = `sha256:${"b".repeat(64)}`;
+const sourceHash = `sha256:${"b".repeat(64)}`;
 const sourceCopyId = makeCollectionVersionId();
 const sourceCopy: CollectionVersion = {
   ...copy,
   collection_version_id: sourceCopyId,
-  hash: sourceDigest,
+  hash: sourceHash,
 };
 const { revision: _unpinnedRevision, ...unpinnedImport } = sourceImport({});
 const mixedManifest: LibraryManifest = {
@@ -196,7 +196,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
 
 it("rejects a Skill Version that no import of its Collection backs", () => {
   const versionId = makeSkillVersionId();
-  const otherDigest = `sha256:${"c".repeat(64)}`;
+  const otherHash = `sha256:${"c".repeat(64)}`;
   assert.throws(() =>
     Schema.decodeUnknownSync(StoredLibraryManifest)({
       ...mixedManifest,
@@ -209,9 +209,9 @@ it("rejects a Skill Version that no import of its Collection backs", () => {
           versions: [
             {
               skill_version_id: versionId,
-              source_digest: otherDigest,
-              artifact_digest: otherDigest,
-              validation_identity_digest: otherDigest,
+              source_digest: otherHash,
+              artifact_digest: otherHash,
+              validation_identity_digest: otherHash,
               materialization_profile: "plain-skill/v1",
             },
           ],

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
-import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
+import { canonicalJson, Hash, hashParts, libraryStateRevision } from "@smolai/skit-core";
 import { isEntryLink, findDuplicates } from "../../install/duplicates.js";
 import {
   activeInstallDestinations,
@@ -35,8 +35,8 @@ export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.
 export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
 export class SetupPlanStale
   extends Data.TaggedError("SetupPlanStale")<{
-    approvedPlanId: typeof Digest.Type;
-    currentPlanId: typeof Digest.Type;
+    approvedPlanId: typeof Hash.Type;
+    currentPlanId: typeof Hash.Type;
   }>
   implements SkitFailure
 {
@@ -246,7 +246,7 @@ export const runSetup = (options: SetupOptions) =>
 /** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,
-  approvedPlanId: typeof Digest.Type,
+  approvedPlanId: typeof Hash.Type,
 ) {
   const current = yield* scanForSetup({ ...options, persistRoots: false });
   if (current.scan.onboarding.planId !== approvedPlanId)

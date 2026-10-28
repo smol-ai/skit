@@ -500,7 +500,7 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       const base = "https://skills.example";
       const skill = "---\nname: review\ndescription: Review code.\n---\n\n# Review\n";
-      const digest = `sha256:${createHash("sha256").update(skill).digest("hex")}`;
+      const hash = `sha256:${createHash("sha256").update(skill).digest("hex")}`;
       const index = JSON.stringify({
         $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
         skills: [
@@ -509,7 +509,7 @@ describe("source contracts", () => {
             description: "Review code.",
             type: "skill-md",
             url: "/review/SKILL.md",
-            digest,
+            digest: hash,
           },
         ],
       });
@@ -644,7 +644,7 @@ describe("source contracts", () => {
         execFileSync("zip", ["-q", "-", "SKILL.md", "references/guide.md"], { cwd: root }),
       );
       const base = "https://archive.example";
-      const digest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
+      const hash = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
       const index = JSON.stringify({
         $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
         skills: [
@@ -653,7 +653,7 @@ describe("source contracts", () => {
             description: "Review code.",
             type: "archive",
             url: "/review.zip",
-            digest,
+            digest: hash,
           },
           {
             name: "other",

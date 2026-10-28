@@ -1,4 +1,4 @@
-import { Digest, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
+import { Hash, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
 import { Schema } from "effect";
 
 const AddSkill = Schema.Struct({
@@ -18,7 +18,7 @@ export const AddResult = Schema.Struct({
   collection_id: Schema.optionalKey(Schema.String),
   skill_ids: Schema.Array(Schema.String),
   collection_version_id: Schema.String,
-  snapshot_digest: Digest,
+  snapshot_digest: Hash,
   skills: Schema.Array(AddSkill),
   diagnostics: Schema.optionalKey(Schema.Array(SourceDiscoveryDiagnostic)),
 });

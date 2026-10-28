@@ -3,7 +3,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
 import type {
-  Digest,
+  Hash,
   SkillAssessmentContext,
   SkillAssessmentAcceptance,
   SkillExampleRecord,
@@ -56,11 +56,11 @@ export function readSkitDescriptor(
 
 export function deterministicTreeHash(
   root: string,
-): Effect.Effect<Digest, TreeError | PlatformError, TreeRequirements> {
+): Effect.Effect<Hash, TreeError | PlatformError, TreeRequirements> {
   return walkTree(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
 }
 
-export function hashNormalizedEntries(entries: readonly TreeEntry[]): Digest {
+export function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
   return hashParts(
     entries.flatMap((entry) =>
       entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
@@ -72,7 +72,7 @@ function releaseIdentityFromEntries(
   descriptor: SkitDescriptor,
   tree: TreeEntry[],
   release: string,
-  releaseContentHash?: Digest,
+  releaseContentHash?: Hash,
 ): Result.Result<SkitReleaseIdentity, SharedTargetCollision | InstalledPathCollision> {
   const files = tree.flatMap((entry) =>
     entry.kind === "file"
@@ -126,7 +126,7 @@ function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
     return [
       {
         path: entry.path,
-        digest: `sha256:${createHash("sha256").update(entry.bytes).digest("hex")}` as Digest,
+        hash: `sha256:${createHash("sha256").update(entry.bytes).digest("hex")}` as Hash,
         bytes: entry.bytes.byteLength,
         mediaType: MIME[extension] ?? "application/octet-stream",
         executable: entry.mode === 0o755,

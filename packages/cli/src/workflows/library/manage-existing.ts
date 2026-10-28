@@ -27,7 +27,7 @@ import {
 import {
   canonicalJson,
   deterministicTreeHash,
-  Digest as DigestSchema,
+  Hash as HashSchema,
   HarnessName,
   inspectNormalizedTree,
   inspectOwnershipMarker,
@@ -36,7 +36,7 @@ import {
   LinkStat,
   hasHarnessProfile,
   withLibraryWriter,
-  type Digest,
+  type Hash,
   type MachineId,
   type HarnessName as HarnessNameType,
   FailureTypeId,
@@ -73,17 +73,17 @@ const PlannedManageTarget = Schema.Union([
   Schema.Struct({
     ...ManageTarget.fields,
     status: Schema.Literal("adoptable"),
-    currentHash: DigestSchema,
+    currentHash: HashSchema,
   }),
   Schema.Struct({
     ...ManageTarget.fields,
     status: Schema.Literal("already-managed"),
-    currentHash: DigestSchema,
+    currentHash: HashSchema,
   }),
   Schema.Struct({
     ...ManageTarget.fields,
     status: Schema.Literal("blocked"),
-    currentHash: Schema.optionalKey(DigestSchema),
+    currentHash: Schema.optionalKey(HashSchema),
   }),
 ]);
 type PlannedManageTarget = typeof PlannedManageTarget.Type;
@@ -91,11 +91,11 @@ type PlannedManageTarget = typeof PlannedManageTarget.Type;
 const ManagePlan = Schema.Struct({
   revision: Schema.String,
   sourcePath: Schema.optionalKey(Schema.String),
-  snapshotDigest: Schema.optionalKey(DigestSchema),
+  snapshotDigest: Schema.optionalKey(HashSchema),
   skill: Schema.optionalKey(
     Schema.Struct({
       name: Schema.String,
-      validationHash: DigestSchema,
+      validationHash: HashSchema,
     }),
   ),
   targets: Schema.Array(PlannedManageTarget),
@@ -262,10 +262,10 @@ export class ManageInvalid
 
 /** Setup selects eligibility; managing owns retaining or reusing content and taking ownership. */
 export type ManageRequest =
-  | { readonly kind: "existing"; readonly subjectId: string; readonly currentHash: Digest }
+  | { readonly kind: "existing"; readonly subjectId: string; readonly currentHash: Hash }
   | {
       readonly kind: "retain";
-      readonly currentHash: Digest | undefined;
+      readonly currentHash: Hash | undefined;
       readonly ownership?: {
         readonly harnesses: readonly HarnessNameType[];
         readonly machineId: MachineId | undefined;

@@ -1,6 +1,6 @@
 import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { RestoreProgress, RestorePhase } from "./restore-progress.js";
-import type { Digest } from "../contracts.js";
+import type { Hash } from "../contracts.js";
 import { ContentAddressCollision } from "../failures.js";
 import { collectionVersionPath } from "./collection-version.js";
 import { resolveSkitSource } from "../sources/resolve.js";
@@ -48,7 +48,7 @@ export interface RestoreOptions {
 /** Preserve the existing diagnostic tag as source restoration moves behind the core boundary. */
 export class SourceRestoreInvalid
   extends Data.TaggedError("Library.SyncSourceRestoreInvalid")<{
-    digest: string;
+    hash: string;
     detail: string;
   }>
   implements SkitFailure
@@ -99,10 +99,10 @@ const restorableSource = (sourceImport: Import): SkitSource | undefined => {
 
 const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function* (
   manifest: LibraryManifest,
-  digest: string,
+  hash: string,
   options: RestoreOptions,
 ) {
-  const copy = manifest.collection_versions.find((candidate) => candidate.hash === digest);
+  const copy = manifest.collection_versions.find((candidate) => candidate.hash === hash);
   const sourceImport = manifest.imports.find(
     (candidate) =>
       candidate.collection_version_id === copy?.collection_version_id &&
@@ -110,7 +110,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   );
   if (copy === undefined || sourceImport === undefined)
     return yield* new SourceRestoreInvalid({
-      digest,
+      hash,
       detail: "manifest has no exact source-restoration acquisition",
     });
   const archive = yield* Effect.scoped(
@@ -121,19 +121,19 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
       const commit = gitSource ? sourceImport.revision : undefined;
       if (gitSource && commit === undefined)
         return yield* new SourceRestoreInvalid({
-          digest,
+          hash,
           detail: "pinned Git acquisition has no commit",
         });
       const source = restorableSource(sourceImport);
       if (source === undefined)
         return yield* new SourceRestoreInvalid({
-          digest,
+          hash,
           detail: "acquisition has no restorable source identity",
         });
       const profiles = new Set(copy.members.map((member) => member.materialization_profile));
       if (profiles.size !== 1)
         return yield* new SourceRestoreInvalid({
-          digest,
+          hash,
           detail: "retained copy has no single materialization profile",
         });
       const resolved = yield* resolveSkitSource(source, {
@@ -147,7 +147,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
       if (profiles.has("declared-skit-skill/v1")) {
         if (resolved.descriptorKind !== "declared")
           return yield* new SourceRestoreInvalid({
-            digest,
+            hash,
             detail: "declared retained copy source has no declared Descriptor",
           });
         return yield* readSnapshotArchive(resolved.root);
@@ -171,10 +171,10 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
       return yield* readSnapshotArchive(prepared.staged);
     }),
   );
-  if (archive.digest !== digest)
+  if (archive.digest !== hash)
     return yield* new SourceRestoreInvalid({
-      digest,
-      detail: `source returned ${archive.digest}; expected ${digest}`,
+      hash,
+      detail: `source returned ${archive.digest}; expected ${hash}`,
     });
   return archive;
 });
@@ -195,18 +195,18 @@ const invalidPlan = (
     manifest.collection_versions.map((copy) => [copy.collection_version_id, copy]),
   );
   const snapshots = new Set(manifest.snapshot_digests);
-  const covered = new Set<Digest>();
-  for (const digest of [
+  const covered = new Set<Hash>();
+  for (const hash of [
     ...plan.localArchives.map((archive) => archive.digest),
     ...plan.reusable,
     ...plan.download,
   ]) {
-    if (!required.has(digest)) return `plan references foreign retained copy ${digest}`;
-    covered.add(digest);
+    if (!required.has(hash)) return `plan references foreign retained copy ${hash}`;
+    covered.add(hash);
   }
-  for (const digest of plan.download) {
-    if (!snapshots.has(digest))
-      return `plan requests a private download for source-backed retained copy ${digest}`;
+  for (const hash of plan.download) {
+    if (!snapshots.has(hash))
+      return `plan requests a private download for source-backed retained copy ${hash}`;
   }
   for (const id of plan.reacquire) {
     const copy = copies.get(id);
@@ -215,8 +215,8 @@ const invalidPlan = (
       return `snapshot-backed retained copy ${copy.hash} cannot be reacquired from source`;
     covered.add(copy.hash);
   }
-  for (const digest of required) {
-    if (!covered.has(digest)) return `retained copy ${digest} not downloaded`;
+  for (const hash of required) {
+    if (!covered.has(hash)) return `retained copy ${hash} not downloaded`;
   }
   if (plan.download.length && !hasDownload)
     return `snapshot-backed retained copy ${plan.download[0]} not downloaded: no download transport`;
@@ -230,7 +230,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
   manifest: LibraryManifest,
   plan: CollectionVersionPlan,
   options: RestoreOptions & {
-    readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
+    readonly download?: (hash: Hash) => Effect.Effect<SnapshotArchive, E, R>;
   },
 ) {
   const invalid = invalidPlan(manifest, plan, options.download !== undefined);
@@ -244,22 +244,21 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
     yield* progress.around(
       phase,
       Effect.gen(function* () {
-        for (const [index, digest] of plan.reusable.entries()) {
-          const path = collectionVersionPath(options.originalsPath, digest);
-          const copy = manifest.collection_versions.find((candidate) => candidate.hash === digest);
+        for (const [index, hash] of plan.reusable.entries()) {
+          const path = collectionVersionPath(options.originalsPath, hash);
+          const copy = manifest.collection_versions.find((candidate) => candidate.hash === hash);
           const subject =
             manifest.imports.find(
               (candidate) => candidate.collection_version_id === copy?.collection_version_id,
-            )?.input.value ?? digest;
+            )?.input.value ?? hash;
           yield* progress.tick({ phase, completed: index, subject });
           // Replan on retry rather than silently adding an unplanned transfer.
           if (!(yield* fs.exists(path)))
             return yield* new RestoreInvalid({
-              detail: `retained copy ${digest} disappeared after planning`,
+              detail: `retained copy ${hash} disappeared after planning`,
             });
-          if ((yield* originalTreeHash(path)) !== digest)
-            return yield* new ContentAddressCollision();
-          existingPaths.set(digest, path);
+          if ((yield* originalTreeHash(path)) !== hash) return yield* new ContentAddressCollision();
+          existingPaths.set(hash, path);
           yield* progress.tick({ phase, completed: index + 1, subject });
         }
       }),
@@ -274,16 +273,16 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
         yield* progress.tick({ phase, completed: 0 });
         return yield* Effect.forEach(
           plan.download,
-          (digest) =>
+          (hash) =>
             Effect.gen(function* () {
               if (options.download === undefined)
                 return yield* new RestoreInvalid({
-                  detail: `snapshot-backed retained copy ${digest} not downloaded`,
+                  detail: `snapshot-backed retained copy ${hash} not downloaded`,
                 });
-              const archive = yield* options.download(digest);
-              if (archive.digest !== digest)
+              const archive = yield* options.download(hash);
+              if (archive.digest !== hash)
                 return yield* new RestoreInvalid({
-                  detail: `download returned ${archive.digest}; expected ${digest}`,
+                  detail: `download returned ${archive.digest}; expected ${hash}`,
                 });
               yield* progress.tick({ phase, completed: ++completed });
               return archive;
@@ -330,7 +329,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
   manifest: LibraryManifest,
   plan: CollectionVersionPlan,
   options: RestoreOptions & {
-    readonly download?: (digest: Digest) => Effect.Effect<SnapshotArchive, E, R>;
+    readonly download?: (hash: Hash) => Effect.Effect<SnapshotArchive, E, R>;
   },
 ) {
   const progress = options.progress ?? silentRestoreProgress;

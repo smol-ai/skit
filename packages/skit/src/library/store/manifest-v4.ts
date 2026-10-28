@@ -13,13 +13,13 @@ import {
   UpstreamV5,
 } from "./manifest-v5.js";
 import { CollectionVersionV7 } from "./manifest-v7.js";
-import { Digest, HarnessName } from "../../vocabulary.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 
 export const RetainedCopyV4 = Schema.Struct({
   ...CollectionVersionV7.fields,
   v3_normalized_tree: Schema.optionalKey(
     Schema.Struct({
-      digest: Digest,
+      digest: Hash,
       profile: Schema.NonEmptyString,
       source_updated_at: Schema.optionalKey(Schema.String),
     }),
@@ -69,7 +69,7 @@ export const LibraryManifestV4 = Schema.Struct({
   skills: Schema.Array(SkillV4),
   retained_copies: Schema.Array(RetainedCopyV4),
   acquisitions: Schema.Array(AcquisitionV4),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV4),
 });
 export type LibraryManifestV4 = typeof LibraryManifestV4.Type;

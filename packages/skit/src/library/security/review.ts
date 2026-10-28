@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import type { Digest, SkillAssessmentAcceptance, SkillSecurityReview } from "../../contracts.js";
+import type { Hash, SkillAssessmentAcceptance, SkillSecurityReview } from "../../contracts.js";
 import {
   AcceptanceIncomplete,
   SecurityFindingAbsent,
@@ -103,7 +103,7 @@ export const acceptSecurityFindingFromState = Effect.fn("Library.acceptSecurityF
     state: LibraryState,
     query: string,
     input: {
-      readonly fingerprint: Digest;
+      readonly fingerprint: Hash;
       readonly principal: string;
       readonly rationale: string;
       readonly expiresAt?: string;

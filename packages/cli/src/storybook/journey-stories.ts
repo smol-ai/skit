@@ -34,7 +34,7 @@ export interface JourneyStory<A, E, R> {
   readonly finalState: (result: A) => string;
 }
 
-const digest = `sha256:${"0".repeat(64)}`;
+const hash = `sha256:${"0".repeat(64)}`;
 const collectionId = makeCollectionId();
 const collectionVersionId = makeCollectionVersionId();
 const skillVersionId = makeSkillVersionId();
@@ -58,9 +58,9 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       versions: [
         {
           skill_version_id: skillVersionId,
-          source_hash: digest,
-          artifact_hash: digest,
-          validation_identity_hash: digest,
+          source_hash: hash,
+          artifact_hash: hash,
+          validation_identity_hash: hash,
           materialization_profile: "plain-skill/v1",
         },
       ],
@@ -69,13 +69,13 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
   collection_versions: [
     {
       collection_version_id: collectionVersionId,
-      hash: digest,
+      hash: hash,
       copy_profile: "verbatim/v1",
       members: [
         {
           source_path: ".",
-          source_hash: digest,
-          artifact_hash: digest,
+          source_hash: hash,
+          artifact_hash: hash,
           materialization_profile: "plain-skill/v1",
         },
       ],
@@ -165,8 +165,8 @@ const previewDoctorCleanup = Effect.scoped(
               destination: "agents",
               root: skillsRoot,
               path,
-              expected_hash: digest,
-              current_hash: digest,
+              expected_hash: hash,
+              current_hash: hash,
               status: "installed",
               installed_at: "2026-10-18T00:00:00.000Z",
             },

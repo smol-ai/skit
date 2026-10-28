@@ -1,7 +1,7 @@
 import { DuplicateCopy } from "../../install/duplicates.js";
 import {
   CollectionId,
-  Digest,
+  Hash,
   HarnessName,
   MachineId,
   InstalledSkillId,
@@ -61,7 +61,7 @@ export const SetupSkillsLock = Schema.Struct({
   path: Schema.String,
   status: Schema.Literals(["valid", "malformed", "unsupported"]),
   version: Schema.optionalKey(Schema.Number),
-  contentHash: Schema.optionalKey(Digest),
+  contentHash: Schema.optionalKey(Hash),
   entries: Schema.Array(SetupSkillsLockEntry),
 });
 export type SetupSkillsLock = typeof SetupSkillsLock.Type;
@@ -70,7 +70,7 @@ export const SetupLockMatch = Schema.Struct({
   scope: Schema.Literals(["project", "global"]),
   lockPath: Schema.String,
   lockVersion: Schema.Number,
-  lockContentHash: Digest,
+  lockContentHash: Hash,
   content: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
   entry: SetupSkillsLockEntry,
 });
@@ -78,7 +78,7 @@ export type SetupLockMatch = typeof SetupLockMatch.Type;
 
 export const SetupContentIdentity = Schema.Struct({
   status: Schema.Literals(["exact", "ambiguous", "none", "unhashable"]),
-  currentHash: Schema.optionalKey(Digest),
+  currentHash: Schema.optionalKey(Hash),
   libraryMatches: Schema.Array(
     Schema.Struct({
       subjectId: Schema.String,
@@ -217,11 +217,11 @@ export const InstalledSkillChange = Schema.Struct({
   name: Schema.String,
   path: Schema.String,
   destination: Schema.Literals(["agents", "claude"]),
-  baselineHash: Digest,
-  currentHash: Schema.optionalKey(Digest),
-  desiredHash: Schema.optionalKey(Digest),
+  baselineHash: Hash,
+  currentHash: Schema.optionalKey(Hash),
+  desiredHash: Schema.optionalKey(Hash),
   desiredVersionId: Schema.optionalKey(SkillVersionId),
-  evidence: Digest,
+  evidence: Hash,
   status: Schema.Literals([
     "unchanged",
     "incoming-update",
@@ -258,7 +258,7 @@ export const SetupOnboardingCandidate = Schema.Union([
     action: Schema.tag("import-observed-collection"),
     groupKey: Schema.String,
     source: Schema.String,
-    lockContentHash: Digest,
+    lockContentHash: Hash,
     contentAgreement: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
     skillPath: Schema.optionalKey(Schema.String),
   }),
@@ -344,7 +344,7 @@ export const SetupResult = Schema.Struct({
   installedSkills: Schema.Array(SetupInstalledSkill),
   changes: Schema.optionalKey(Schema.Array(InstalledSkillChange)),
   onboarding: Schema.Struct({
-    planId: Digest,
+    planId: Hash,
     candidates: Schema.Array(SetupOnboardingCandidate),
     /** The command that applies the recommendation, with absolute paths; absent when empty. */
     applyCommand: Schema.optionalKey(Schema.String),
@@ -377,7 +377,7 @@ export const SetupApplied = Schema.Struct({
     Schema.Array(Schema.Struct({ name: Schema.String, path: Schema.String })),
   ),
   recoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
-  planId: Digest,
+  planId: Hash,
   imported: Schema.Array(
     Schema.Struct({ source: Schema.String, names: Schema.Array(Schema.String) }),
   ),

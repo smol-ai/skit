@@ -29,13 +29,13 @@ import {
 } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
 import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
-import { installedSkillDigest } from "./installed-skill-digest.js";
+import { installedSkillHash } from "./installed-skill-hash.js";
 import {
   collectionLabelFromSource,
   sourceIdentityFromSource,
   type SourceDeclaration,
 } from "./source-identity.js";
-import type { Digest } from "../vocabulary.js";
+import type { Hash } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class ImportRequestInvalid
@@ -57,7 +57,7 @@ export interface ImportRequestSkill {
   readonly name: string;
   readonly sourcePath: string;
   readonly relativePath: string;
-  readonly currentHash: Digest;
+  readonly currentHash: Hash;
 }
 export interface ImportRequest {
   readonly machineId?: MachineId;
@@ -82,9 +82,9 @@ const safeRelative = (path: string) =>
 export interface ImportedSkillFact {
   readonly name: string;
   readonly sourcePath: string;
-  readonly sourceDigest: Digest;
-  readonly artifactDigest: Digest;
-  readonly validationHash: Digest;
+  readonly sourceHash: Hash;
+  readonly artifactHash: Hash;
+  readonly validationHash: Hash;
   readonly materializationProfile: MaterializationProfile;
 }
 
@@ -143,21 +143,21 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
     facts.push({
       name: skill.name,
       sourcePath: skill.relativePath,
-      sourceDigest: yield* originalTreeHash(path),
-      artifactDigest: yield* Effect.scoped(
-        installedSkillDigest({ collectionVersionPath: staged, sourcePath: skill.relativePath }),
+      sourceHash: yield* originalTreeHash(path),
+      artifactHash: yield* Effect.scoped(
+        installedSkillHash({ collectionVersionPath: staged, sourcePath: skill.relativePath }),
       ),
       validationHash: skill.currentHash,
       materializationProfile: "plain-skill/v1",
     });
   }
-  return { staged, facts, digest: yield* originalTreeHash(staged) };
+  return { staged, facts, hash: yield* originalTreeHash(staged) };
 });
 
 const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
 interface PersistPreparedRequest extends ImportRequest {
-  readonly collectionVersionDigest: Digest;
+  readonly collectionVersionHash: Hash;
   readonly facts: readonly ImportedSkillFact[];
   readonly sourceIdentity?: SourceIdentity;
   readonly label?: string;
@@ -213,14 +213,14 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   }
   const collectionId = collection.collection_id;
   const collectionVersion = state.collection_versions.find(
-    (candidate) => candidate.hash === request.collectionVersionDigest,
+    (candidate) => candidate.hash === request.collectionVersionHash,
   );
   const collectionVersionId = collectionVersion?.collection_version_id ?? makeCollectionVersionId();
   // Return the identity and facts of this retained copy, including on an unchanged import.
   // These contain no scoped paths, so callers can consume them after preparation closes.
   const imported = {
     collectionVersionId,
-    snapshotDigest: request.collectionVersionDigest,
+    snapshotDigest: request.collectionVersionHash,
     members: request.facts,
   };
   const sourceImport: Import = {
@@ -273,11 +273,11 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       state.skills.push(skill);
     }
     persistedSkills.push(skill);
-    if (!skill.versions.some((candidate) => candidate.artifact_hash === fact.artifactDigest))
+    if (!skill.versions.some((candidate) => candidate.artifact_hash === fact.artifactHash))
       skill.versions.push({
         skill_version_id: makeSkillVersionId(),
-        source_hash: fact.sourceDigest,
-        artifact_hash: fact.artifactDigest,
+        source_hash: fact.sourceHash,
+        artifact_hash: fact.artifactHash,
         validation_identity_hash: fact.validationHash,
         materialization_profile: fact.materializationProfile,
       });
@@ -285,7 +285,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     const previousMember = previousCopy?.members.find(
       (member) => member.source_path === fact.sourcePath,
     );
-    if (previousMember?.artifact_hash !== fact.artifactDigest) {
+    if (previousMember?.artifact_hash !== fact.artifactHash) {
       delete skill.local_version_id;
       versionsChanged = true;
     }
@@ -293,12 +293,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   if (collectionVersion === undefined)
     state.collection_versions.push({
       collection_version_id: collectionVersionId,
-      hash: request.collectionVersionDigest,
+      hash: request.collectionVersionHash,
       copy_profile: "verbatim/v1",
       members: request.facts.map((fact) => ({
         source_path: fact.sourcePath,
-        source_hash: fact.sourceDigest,
-        artifact_hash: fact.artifactDigest,
+        source_hash: fact.sourceHash,
+        artifact_hash: fact.artifactHash,
         materialization_profile: fact.materializationProfile,
       })),
     });
@@ -337,10 +337,10 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
 ) {
   const store = yield* LibraryStore;
   const prepared = yield* prepareImport(request.skills);
-  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
+  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.hash, true);
   return yield* persistPrepared({
     ...request,
-    collectionVersionDigest: prepared.digest,
+    collectionVersionHash: prepared.hash,
     facts: prepared.facts,
   });
 });
@@ -367,7 +367,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   readonly skillId: LibraryState["skills"][number]["skill_id"];
   readonly installedSkillId: LibraryState["installed_skills"][number]["installed_skill_id"];
   readonly path: string;
-  readonly currentHash: Digest;
+  readonly currentHash: Hash;
   readonly importedAt: string;
 }) {
   const store = yield* LibraryStore;
@@ -402,32 +402,32 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
       Effect.fail(new InstalledSkillChanged({ path: request.path })),
     ),
   );
-  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
+  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.hash, true);
   const fact = prepared.facts[0]!;
   const machineId = yield* MachineSettings.ensureIdentity(store.home);
   const collectionVersion = state.collection_versions.find(
-    (candidate) => candidate.hash === prepared.digest,
+    (candidate) => candidate.hash === prepared.hash,
   );
   const collectionVersionId = collectionVersion?.collection_version_id ?? makeCollectionVersionId();
   const version = skill.versions.find(
-    (candidate) => candidate.artifact_hash === fact.artifactDigest,
+    (candidate) => candidate.artifact_hash === fact.artifactHash,
   ) ?? {
     skill_version_id: makeSkillVersionId(),
-    source_hash: fact.sourceDigest,
-    artifact_hash: fact.artifactDigest,
+    source_hash: fact.sourceHash,
+    artifact_hash: fact.artifactHash,
     validation_identity_hash: fact.validationHash,
     materialization_profile: fact.materializationProfile,
   };
   if (collectionVersion === undefined)
     state.collection_versions.push({
       collection_version_id: collectionVersionId,
-      hash: prepared.digest,
+      hash: prepared.hash,
       copy_profile: "verbatim/v1",
       members: [
         {
           source_path: ".",
-          source_hash: fact.sourceDigest,
-          artifact_hash: fact.artifactDigest,
+          source_hash: fact.sourceHash,
+          artifact_hash: fact.artifactHash,
           materialization_profile: fact.materializationProfile,
         },
       ],
@@ -462,8 +462,8 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   return {
     skillVersionId: version.skill_version_id,
     collectionVersionId,
-    snapshotDigest: prepared.digest,
-    artifactDigest: fact.artifactDigest,
+    snapshotDigest: prepared.hash,
+    artifactHash: fact.artifactHash,
   };
 });
 
@@ -489,11 +489,11 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
         reason: "authored Descriptor or Skill content is invalid",
       });
     const store = yield* LibraryStore;
-    const collectionVersionDigest = yield* originalTreeHash(request.root);
+    const collectionVersionHash = yield* originalTreeHash(request.root);
     const collectionVersionPath = yield* writeCollectionVersion(
       request.root,
       store.originalsPath,
-      collectionVersionDigest,
+      collectionVersionHash,
       true,
     );
     const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
@@ -507,9 +507,9 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       facts.push({
         name: member.name,
         sourcePath: member.path,
-        sourceDigest: yield* originalTreeHash(join(collectionVersionPath, member.path)),
-        artifactDigest: yield* Effect.scoped(
-          installedSkillDigest({
+        sourceHash: yield* originalTreeHash(join(collectionVersionPath, member.path)),
+        artifactHash: yield* Effect.scoped(
+          installedSkillHash({
             collectionVersionPath,
             sourcePath: member.path,
             shared: member.shared,
@@ -523,7 +523,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       ...request,
       skills: [],
       lockFileEntries: [],
-      collectionVersionDigest,
+      collectionVersionHash,
       facts,
     });
   },

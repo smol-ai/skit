@@ -84,8 +84,8 @@ export const syncJourney = (failDownload: boolean) =>
               if (request.method === "GET" && path === "/api/library/portable") {
                 response = Response.json(Schema.encodeSync(LibraryResponse)({ library: remote }));
               } else if (request.method === "GET" && path.startsWith("/api/libraries/")) {
-                const digest = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
-                const archive = seeded.archives.find((candidate) => candidate.digest === digest);
+                const hash = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
+                const archive = seeded.archives.find((candidate) => candidate.digest === hash);
                 downloads++;
                 response =
                   failDownload && downloads === 2

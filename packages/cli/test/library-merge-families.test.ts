@@ -29,7 +29,7 @@ import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js
 // merge to the union of their outcomes. No case is classified by running the merge.
 
 const machineId = makeMachineId();
-const digest = (text: string) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
+const hash = (text: string) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
 
 /** One side's records for one family. */
 interface Side {
@@ -69,9 +69,9 @@ const fixture = (paths: readonly string[]) => {
     if (existing !== undefined) return existing;
     const created: SkillVersion = {
       skill_version_id: makeSkillVersionId(),
-      source_hash: digest(`source:${source}`),
-      artifact_hash: digest(`artifact:${bytes}`),
-      validation_identity_hash: digest(`artifact:${bytes}`),
+      source_hash: hash(`source:${source}`),
+      artifact_hash: hash(`artifact:${bytes}`),
+      validation_identity_hash: hash(`artifact:${bytes}`),
       materialization_profile: "plain-skill/v1",
     };
     versions.set(key, created);
@@ -85,7 +85,7 @@ const fixture = (paths: readonly string[]) => {
     const retained_copy_id = makeCollectionVersionId();
     const copy: CollectionVersion = {
       collection_version_id: retained_copy_id,
-      hash: digest(canonicalJson(members)),
+      hash: hash(canonicalJson(members)),
       copy_profile: "verbatim/v1",
       members: Object.entries(members).map(([path, item]) => ({
         source_path: kind === "source" ? path : ".",

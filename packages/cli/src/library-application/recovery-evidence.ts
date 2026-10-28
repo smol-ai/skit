@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
-import { Digest, FailureTypeId, LinkStat, type SkitFailure } from "@smolai/skit-core";
+import { Hash, FailureTypeId, LinkStat, type SkitFailure } from "@smolai/skit-core";
 
 export class RecoveryInvalid
   extends Schema.TaggedError<RecoveryInvalid>()("RecoveryInvalid", { detail: Schema.String })
@@ -49,5 +49,5 @@ export const recoveryFingerprint = Effect.fn("Recovery.fingerprint")(function* (
       } else return yield* new RecoveryInvalid({ detail: `Unsupported file type at ${path}` });
     });
   yield* visit(root, "");
-  return Digest.make(`sha256:${hash.digest("hex")}`);
+  return Hash.make(`sha256:${hash.digest("hex")}`);
 });

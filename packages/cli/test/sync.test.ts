@@ -42,7 +42,7 @@ const makeDir = (path: string) =>
   Effect.flatMap(fs, (fs) => fs.makeDirectory(path, { recursive: true }));
 const exists = (path: string) => Effect.flatMap(fs, (fs) => fs.exists(path));
 
-const digest = `sha256:${"a".repeat(64)}`;
+const hash = `sha256:${"a".repeat(64)}`;
 
 /**
  * The request payload, as the client encoded it.
@@ -108,8 +108,8 @@ it.effect("first sync previews then records one remote home without publishing i
             draft: {
               skit_id: "tim/tools",
               revision_id: "draft_first",
-              manifest_digest: digest,
-              bundle_digest: digest,
+              manifest_digest: hash,
+              bundle_digest: hash,
               files: [],
               diagnostics: [],
             },
@@ -282,8 +282,8 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
               draft: {
                 skit_id: "test/tools",
                 revision_id: "draft_1",
-                manifest_digest: digest,
-                bundle_digest: digest,
+                manifest_digest: hash,
+                bundle_digest: hash,
                 files: [],
                 diagnostics: [],
               },
@@ -297,8 +297,8 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
             draft: {
               skit_id: "test/tools",
               revision_id: "draft_2",
-              manifest_digest: digest,
-              bundle_digest: digest,
+              manifest_digest: hash,
+              bundle_digest: hash,
               files: [],
               diagnostics: [],
             },
@@ -307,7 +307,7 @@ it.effect("sync apply reads identity and Skill declarations from a merged skit.j
         return Response.json({
           draft: {
             revision_id: "draft_1",
-            bundle_digest: digest,
+            bundle_digest: hash,
             title: "tools",
             visibility: "private",
             descriptor: {

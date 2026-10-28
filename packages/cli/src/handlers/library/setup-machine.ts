@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
-import { Digest, LibraryStore } from "@smolai/skit-core";
+import { Hash, LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { runSetup, SetupPlanStale, type SetupOptions } from "../../workflows/library/setup.js";
@@ -27,7 +27,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
   readonly selection?: SetupCommandSelection["selection"];
 }) {
   const renderer = yield* Renderer;
-  const planId = Schema.decodeUnknownOption(Digest)(input.planId);
+  const planId = Schema.decodeUnknownOption(Hash)(input.planId);
   if (Option.isNone(planId))
     return yield* new OptionCombinationInvalid({
       detail: "--apply takes the full planId that `skit setup` prints",

@@ -1,13 +1,13 @@
 import { Effect, FileSystem } from "effect";
-import type { Digest } from "../contracts.js";
+import type { Hash } from "../contracts.js";
 import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
 import { collectionVersionPath } from "./collection-version.js";
 
 /** Captured local archives plus availability observations. Preparation verifies bytes before use. */
 export interface CollectionVersionPlan {
   readonly localArchives: readonly SnapshotArchive[];
-  readonly reusable: readonly Digest[];
-  readonly download: readonly Digest[];
+  readonly reusable: readonly Hash[];
+  readonly download: readonly Hash[];
   readonly reacquire: readonly LibraryManifest["collection_versions"][number]["collection_version_id"][];
 }
 
@@ -18,10 +18,10 @@ export const planCollectionVersions = Effect.fn("Library.planCollectionVersions"
 ) {
   const fs = yield* FileSystem.FileSystem;
   const available = new Set(options.localArchives.map((archive) => archive.digest));
-  const seen = new Set<Digest>();
+  const seen = new Set<Hash>();
   const snapshots = new Set(manifest.snapshot_digests);
-  const reusable: Digest[] = [];
-  const download: Digest[] = [];
+  const reusable: Hash[] = [];
+  const download: Hash[] = [];
   const reacquire: LibraryManifest["collection_versions"][number]["collection_version_id"][] = [];
   for (const copy of manifest.collection_versions) {
     if (seen.has(copy.hash)) continue;

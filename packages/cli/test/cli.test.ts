@@ -811,7 +811,7 @@ describe("CLI contracts", () => {
     ]);
 
     const partialState = JSON.parse(await readFile(join(home, "state.json"), "utf8"));
-    const selectedDigest = preview.data.current_hash;
+    const selectedHash = preview.data.current_hash;
     const marker = JSON.parse(markerBefore.claude);
     await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
     const installedSkill = partialState.installed_skills.find(
@@ -819,7 +819,7 @@ describe("CLI contracts", () => {
     );
     installedSkill.skill_version_id = marker.skill_version_id;
     installedSkill.expected_hash = marker.expected_hash;
-    installedSkill.current_hash = selectedDigest;
+    installedSkill.current_hash = selectedHash;
     installedSkill.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(

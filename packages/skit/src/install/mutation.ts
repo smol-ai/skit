@@ -6,7 +6,7 @@ import {
   type OwnershipMarker,
   StoredOwnershipMarker,
   type InstallDestination,
-  type Digest,
+  type Hash,
   type InvocationPolicy,
 } from "../contracts.js";
 import { LinkStat } from "../platform/link-stat.js";
@@ -57,8 +57,8 @@ const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 
 export type UninstallResult =
   | { kind: "absent" }
-  | { kind: "conflicted"; observed: Digest }
-  | { kind: "uninstalled"; observed: Digest };
+  | { kind: "conflicted"; observed: Hash }
+  | { kind: "uninstalled"; observed: Hash };
 
 export interface WriteInstalledSkillRequest {
   /** Installed-skill ownership coordinate and retained root, without a save contract. */
@@ -67,7 +67,7 @@ export interface WriteInstalledSkillRequest {
     readonly skillId: SkillIdType;
     readonly skillVersionId: SkillVersionIdType;
     readonly name: string;
-    readonly contentHash: Digest;
+    readonly contentHash: Hash;
   };
   target: InstallDestination;
   /** An enclosing native batch can declare distinct roots on one target. */
@@ -87,7 +87,7 @@ export interface WriteInstalledSkillRequest {
   /** Exact preview evidence authorizing a changed managed installed skill as the selected Version. */
   replacement?: {
     installedSkillId: InstalledSkillIdType;
-    currentHash: Digest;
+    currentHash: Hash;
     marker: OwnershipMarker;
   };
   state: InstalledSkillState;
@@ -222,7 +222,7 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
   return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
 }
 
-const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_hash;
+const markerExpectedHash = (marker: OwnershipMarker): Hash => marker.expected_hash;
 
 // Ownership is the installed skill and Skill; a new selected Version is an ordinary rewrite, and the
 // expected-digest check below is what detects local edits.
@@ -242,7 +242,7 @@ const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
 const ownershipMarker = (
   request: WriteInstalledSkillRequest,
   installedSkillId: InstalledSkillIdType,
-  expectedHash: Digest,
+  expectedHash: Hash,
 ): OwnershipMarker => ({
   schemaVersion: 5,
   installed_skill_id: request.identity.installedSkillId,
@@ -276,7 +276,7 @@ export function inspectOwnershipMarker(
 export function expectedInstalledSkillHashResult(
   installedSkill: InstalledSkill,
   marker: OwnershipMarker | null,
-): Result.Result<Digest, OwnershipMarkerDisagrees> {
+): Result.Result<Hash, OwnershipMarkerDisagrees> {
   if (marker && installedSkill.expected_hash !== markerExpectedHash(marker))
     return Result.fail(
       new OwnershipMarkerDisagrees({
@@ -505,8 +505,8 @@ export const inspectInstalledSkill = Effect.fn("Install.inspectInstalledSkill")(
   installedSkill: InstalledSkill,
 ): Effect.fn.Return<
   | { kind: "absent" }
-  | { kind: "intact"; observed: Digest; marker: OwnershipMarker }
-  | { kind: "conflicted"; observed: Digest },
+  | { kind: "intact"; observed: Hash; marker: OwnershipMarker }
+  | { kind: "conflicted"; observed: Hash },
   OwnershipMarkerDisagrees | TreeError | PlatformError,
   TreeRequirements | TreeHasher
 > {
@@ -637,7 +637,7 @@ const reproducible = Effect.fn("Install.reproducible")(function* (
 export interface ManageApproval {
   readonly path: string;
   readonly equalPaths?: readonly string[];
-  readonly currentHash: Digest;
+  readonly currentHash: Hash;
 }
 
 export type InstalledSkillMutationError =
@@ -673,7 +673,7 @@ export interface InstalledSkillMutation<S extends InstalledSkillState = Installe
     onConflict: "throw" | "report",
     conflictMessage: string,
   ) => Effect.Effect<
-    Exclude<UninstallResult, { kind: "uninstalled" }> | { kind: "uninstalled"; observed: Digest },
+    Exclude<UninstallResult, { kind: "uninstalled" }> | { kind: "uninstalled"; observed: Hash },
     InstalledSkillMutationError,
     TreeRequirements | TreeHasher
   >;

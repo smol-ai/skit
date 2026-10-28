@@ -6,8 +6,8 @@ import { Effect, Result, Schema } from "effect";
 // Hashing is deterministic computation, not IO, so it stays on node:crypto.
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
-import { encodeHashParts } from "../shared/digest.js";
-import type { Digest, SkillExampleManifest, SkitDescriptor } from "../contracts.js";
+import { encodeHashParts } from "../shared/hash.js";
+import type { Hash, SkillExampleManifest, SkitDescriptor } from "../contracts.js";
 import {
   containedSkillSchema,
   skillExampleSchema,
@@ -166,7 +166,7 @@ export function parseSkillExample(text: string): SkillExampleManifest {
   );
 }
 
-export function hashParts(parts: Array<string | Uint8Array>): Digest {
+export function hashParts(parts: Array<string | Uint8Array>): Hash {
   return `sha256:${createHash("sha256").update(encodeHashParts(parts)).digest("hex")}`;
 }
 
@@ -273,7 +273,7 @@ export function hashInstalledSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Digest, SharedTargetCollision | InstalledPathCollision> {
+): Result.Result<Hash, SharedTargetCollision | InstalledPathCollision> {
   return Result.map(installedSkillHashParts(files, skillPath, shared), hashParts);
 }
 

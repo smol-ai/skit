@@ -41,23 +41,20 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   yield* libraryManifestFromLocalState(state);
   const ancestry = state.sync_ancestry;
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
-  for (const digest of new Set([
-    ...imported,
-    ...state.collection_versions.map((copy) => copy.hash),
-  ]))
+  for (const hash of new Set([...imported, ...state.collection_versions.map((copy) => copy.hash)]))
     assert.strictEqual(
-      (yield* readSnapshotArchive(collectionVersionPath(join(device.home, "originals"), digest)))
+      (yield* readSnapshotArchive(collectionVersionPath(join(device.home, "originals"), hash)))
         .digest,
-      digest,
+      hash,
     );
   const head = server.remote;
   if (head === null) return;
   assert.isTrue(Schema.is(LibraryManifest)(head.manifest));
-  const stored = new Set(server.stored.snapshots.map(([digest]) => digest));
+  const stored = new Set(server.stored.snapshots.map(([hash]) => hash));
   for (const copy of head.manifest.collection_versions) assert.isTrue(stored.has(copy.hash));
 });
 
-const collectionVersionDigests = (device: Device) =>
+const collectionVersionHashes = (device: Device) =>
   Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.hash));
 
 /** Raw state text, so retired handles are checked without going through the loader. */
@@ -94,7 +91,7 @@ it.effect(
       }));
       yield* b.project();
       const before = yield* b.state;
-      const imported = yield* collectionVersionDigests(b);
+      const imported = yield* collectionVersionHashes(b);
       const installedSkillId = before.installed_skills[0]!.installed_skill_id;
       assert.strictEqual((yield* a.sync()).status, "pushed");
       assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
@@ -185,7 +182,7 @@ it.effect("distinct upstreams with identical bytes keep separate identities", ()
       first.skills[0]!.versions[0]!.artifact_hash,
       second.skills[0]!.versions[0]!.artifact_hash,
     );
-    const imported = yield* collectionVersionDigests(b);
+    const imported = yield* collectionVersionHashes(b);
     assert.strictEqual((yield* a.sync()).status, "pushed");
     assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
     assert.strictEqual((yield* a.sync()).status, "merged");
@@ -262,7 +259,7 @@ it.effect(
       const remoteV2 = server.remote!.manifest.skills[0]!.versions.find(
         (item) => item.skill_version_id !== v1,
       )!.skill_version_id;
-      const imported = yield* collectionVersionDigests(b);
+      const imported = yield* collectionVersionHashes(b);
       const localImports = ids((yield* b.state).imports, (item) => item.import_id);
       const remoteImports = ids(server.remote!.manifest.imports, (item) => item.import_id);
 
@@ -306,7 +303,7 @@ it.effect("many independent imports of one upstream converge on one published id
     yield* c.importSource("same");
     const imports = [];
     for (const device of [a, b, c]) imports.push(...(yield* device.state).imports);
-    const imported = yield* collectionVersionDigests(c);
+    const imported = yield* collectionVersionHashes(c);
     assert.strictEqual((yield* a.sync()).status, "pushed");
     assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
     assert.strictEqual((yield* c.sync({ adopt: true })).status, "merged");
@@ -358,7 +355,7 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     assert.ok(aEdit);
     assert.ok(bEdit);
     assert.notStrictEqual(aEdit, bEdit);
-    const imported = yield* collectionVersionDigests(b);
+    const imported = yield* collectionVersionHashes(b);
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* b.sync()).status, "merged");
 
@@ -417,7 +414,7 @@ it.effect(
       yield* b.project();
       yield* a.sync();
       const before = yield* b.state;
-      const imported = yield* collectionVersionDigests(b);
+      const imported = yield* collectionVersionHashes(b);
       const key = `collection:${published.collection.collection_id}`;
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
@@ -473,7 +470,7 @@ it.effect(
       const published = yield* a.importSource("same", { bytes: "published\n" });
       yield* b.importSource("same", { bytes: "local\n" });
       yield* a.sync();
-      const imported = yield* collectionVersionDigests(b);
+      const imported = yield* collectionVersionHashes(b);
       const key = `collection:${published.collection.collection_id}`;
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;

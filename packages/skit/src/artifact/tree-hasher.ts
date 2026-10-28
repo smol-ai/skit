@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import type { Digest } from "../contracts.js";
+import type { Hash } from "../contracts.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import { deterministicTreeHash } from "./skit.js";
@@ -16,7 +16,7 @@ export class TreeHasher extends Context.Service<
   {
     readonly hash: (
       path: string,
-    ) => Effect.Effect<Digest, TreeError | PlatformError, TreeRequirements>;
+    ) => Effect.Effect<Hash, TreeError | PlatformError, TreeRequirements>;
   }
 >()("skit/artifact/TreeHasher") {}
 

@@ -82,7 +82,7 @@ describe("declared exit codes", () => {
       new NoStoredCredentials(),
       new RegistryUnreachable({ origin: "https://registry.example", cause: new Error("offline") }),
       new SourceRestoreInvalid({
-        digest: `sha256:${"a".repeat(64)}`,
+        hash: `sha256:${"a".repeat(64)}`,
         detail: "pinned Git acquisition has no commit",
       }),
     ])

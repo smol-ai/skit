@@ -209,7 +209,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     const updated = "---\nname: review\ndescription: Review.\n---\n\n# Updated\n";
     let artifact = original;
     const client = HttpClient.make((request) => {
-      const digest = `sha256:${createHash("sha256").update(artifact).digest("hex")}`;
+      const hash = `sha256:${createHash("sha256").update(artifact).digest("hex")}`;
       const index = JSON.stringify({
         $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
         skills: [
@@ -218,7 +218,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
             description: "Review.",
             type: "skill-md",
             url: "/review/SKILL.md",
-            digest,
+            digest: hash,
           },
         ],
       });

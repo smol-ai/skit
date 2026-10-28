@@ -1,5 +1,5 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import type { Digest } from "@smolai/skit-core";
+import type { Hash } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -21,7 +21,7 @@ export interface SecurityAcceptLibrary<Review, AcceptError, AcceptServices> {
   readonly acceptSecurityFindingEffect: (
     query: string,
     input: {
-      fingerprint: Digest;
+      fingerprint: Hash;
       principal: string;
       rationale: string;
       expiresAt?: string;

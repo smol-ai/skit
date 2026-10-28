@@ -1,4 +1,4 @@
-import { sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { r2Body } from "../platform/cloudflare.js";
@@ -32,7 +32,7 @@ export const indexResponse = Effect.gen(function* () {
   // One archive at a time: each is hashed and released before the next is built.
   const indexed = yield* Effect.forEach(skills, (skill) =>
     skillArtifact(skill).pipe(
-      Effect.flatMap(sha256Digest),
+      Effect.flatMap(sha256Hash),
       Effect.map((digest) => ({ ...skill, digest })),
     ),
   );

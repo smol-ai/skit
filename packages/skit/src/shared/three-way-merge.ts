@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { Digest, SyncFileVersion, SyncPlan } from "../contracts.js";
+import type { Hash, SyncFileVersion, SyncPlan } from "../contracts.js";
 
-function digest(bytes: Uint8Array): Digest {
+function hash(bytes: Uint8Array): Hash {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
@@ -125,7 +125,7 @@ export function planThreeWaySync(
       continue;
     }
     const bytes = new TextEncoder().encode(merged);
-    files[path] = { bytes, digest: digest(bytes), mediaType: localFile.mediaType };
+    files[path] = { bytes, digest: hash(bytes), mediaType: localFile.mediaType };
     changedPaths.push(path);
   }
   return { files, conflicts, changedPaths };

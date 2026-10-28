@@ -37,7 +37,7 @@ export type { AuthorVisibility } from "./sync-contract.js";
 import {
   draftCreateRequestSchema,
   draftUpdateRequestSchema,
-  Digest,
+  Hash,
   parseContract,
   planThreeWaySync,
   normalizeRegistryNamespace,
@@ -73,16 +73,16 @@ export class SyncRejected
   readonly remediation = "Check the Registry's reason, then sync again.";
 }
 
-type StoredFile = { digest: Digest; mediaType: string; contentBase64: string };
+type StoredFile = { digest: Hash; mediaType: string; contentBase64: string };
 type SyncBinding = {
   skitId: string;
   revisionId: string;
-  bundleDigest: Digest;
+  bundleDigest: Hash;
   baseFiles: Record<string, StoredFile>;
 };
 type SyncState = Record<string, SyncBinding>;
 const StoredFileSchema = Schema.Struct({
-  digest: Digest,
+  digest: Hash,
   mediaType: Schema.String,
   contentBase64: Schema.String,
 });
@@ -92,7 +92,7 @@ const SyncStateDocument = Schema.fromJsonString(
     Schema.Struct({
       skitId: Schema.String,
       revisionId: Schema.String,
-      bundleDigest: Digest,
+      bundleDigest: Hash,
       baseFiles: Schema.Record(Schema.String, StoredFileSchema),
     }),
   ),
@@ -238,7 +238,7 @@ const writeRemote = Effect.fn("Sync.writeRemote")(function* (
   yield* fs.rename(temporary, path);
 });
 
-function hash(bytes: Uint8Array): Digest {
+function hash(bytes: Uint8Array): Hash {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 function fromBase64(contentBase64: string, mediaType: string): SyncFileVersion {

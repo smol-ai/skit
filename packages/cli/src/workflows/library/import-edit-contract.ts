@@ -1,5 +1,5 @@
 import {
-  Digest,
+  Hash,
   InstalledSkillId,
   RecordedInstallDestination,
   SkillId,
@@ -11,7 +11,7 @@ const EditCandidate = Schema.Struct({
   installed_skill_id: InstalledSkillId,
   destination: RecordedInstallDestination,
   path: Schema.String,
-  current_hash: Digest,
+  current_hash: Hash,
   agreement: Schema.Literals(["selected", "identical", "different"]),
 });
 
@@ -21,8 +21,8 @@ export const EditImportPlan = Schema.Struct({
   skill_name: Schema.String,
   previous_skill_version_id: SkillVersionId,
   selected_installed_skill_id: InstalledSkillId,
-  current_hash: Digest,
-  snapshot_digest: Digest,
+  current_hash: Hash,
+  snapshot_digest: Hash,
   original_path: Schema.String,
   import_required: Schema.Boolean,
   installed_skills: Schema.Array(EditCandidate),
@@ -35,7 +35,7 @@ export const EditImportResult = Schema.Struct({
   previous_skill_version_id: SkillVersionId,
   imported_skill_version_id: SkillVersionId,
   collection_version_id: Schema.String,
-  snapshot_digest: Digest,
+  snapshot_digest: Hash,
   imported: Schema.Boolean,
   installed_skills: Schema.Array(
     Schema.Struct({

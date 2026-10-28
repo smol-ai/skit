@@ -1,4 +1,4 @@
-import { Digest, safePathSchema } from "@smolai/skit-core/universal/consumer";
+import { Hash, safePathSchema } from "@smolai/skit-core/universal/consumer";
 import { IntegrityErrorCode } from "@smolai/skit-core/universal/api";
 import { Schema } from "effect";
 
@@ -7,7 +7,7 @@ const NonEmptyString = Schema.String.check(Schema.isMinLength(1));
 export const ArtifactFile = Schema.Struct({
   path: safePathSchema,
   bytes: Schema.Uint8Array,
-  digest: Digest,
+  digest: Hash,
   media_type: NonEmptyString,
   executable: Schema.Boolean,
 });

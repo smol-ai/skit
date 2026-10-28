@@ -17,7 +17,7 @@ export class SkillMaterializationInvalid
 }
 
 /** Build the self-contained Skill artifact whose digest defines a Skill Version. */
-export const installedSkillDigest = Effect.fn("Library.materializedSkillDigest")(function* (input: {
+export const installedSkillHash = Effect.fn("Library.installedSkillHash")(function* (input: {
   collectionVersionPath: string;
   sourcePath: string;
   shared?: readonly { from: string; to: string }[];

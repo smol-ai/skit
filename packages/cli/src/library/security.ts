@@ -3,7 +3,7 @@ import {
   acceptSecurityFindingFromState,
   LibraryStore,
   securityReviewFromState,
-  type Digest,
+  type Hash,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 
@@ -15,7 +15,7 @@ export const reviewLibrarySecurity = Effect.fn("Library.reviewSecurity")(functio
 export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(function* (
   query: string,
   input: {
-    readonly fingerprint: Digest;
+    readonly fingerprint: Hash;
     readonly principal: string;
     readonly rationale: string;
     readonly expiresAt?: string;

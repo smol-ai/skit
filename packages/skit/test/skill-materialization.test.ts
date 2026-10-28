@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { installedSkillDigest } from "../src/library/installed-skill-digest.js";
+import { installedSkillHash } from "../src/library/installed-skill-hash.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("includes declared shared files in Skill Version artifact identity", () =>
@@ -13,10 +13,10 @@ it.effect("includes declared shared files in Skill Version artifact identity", (
     yield* fs.writeFileString(join(skill, "SKILL.md"), "review\n");
     yield* fs.writeFileString(join(root, "README.md"), "first\n");
     const plain = yield* Effect.scoped(
-      installedSkillDigest({ collectionVersionPath: root, sourcePath: "skills/review" }),
+      installedSkillHash({ collectionVersionPath: root, sourcePath: "skills/review" }),
     );
     const first = yield* Effect.scoped(
-      installedSkillDigest({
+      installedSkillHash({
         collectionVersionPath: root,
         sourcePath: "skills/review",
         shared: [{ from: "README.md", to: "context/README.md" }],
@@ -24,7 +24,7 @@ it.effect("includes declared shared files in Skill Version artifact identity", (
     );
     yield* fs.writeFileString(join(root, "README.md"), "second\n");
     const second = yield* Effect.scoped(
-      installedSkillDigest({
+      installedSkillHash({
         collectionVersionPath: root,
         sourcePath: "skills/review",
         shared: [{ from: "README.md", to: "context/README.md" }],

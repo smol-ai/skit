@@ -3,7 +3,7 @@ import {
   normalizeDescriptorDeclarations as normalizeDescriptor,
   installedSkillHashParts,
   projectSkillFiles as projectFiles,
-  sha256Digest,
+  sha256Hash,
   type SharedMapping,
 } from "@smolai/skit-core/universal/consumer";
 import { Effect } from "effect";
@@ -65,5 +65,5 @@ export const hashInstalledSkillFiles = Effect.fn("Integrity.hashProjectedSkillFi
   const parts = yield* Effect.fromResult(
     installedSkillHashParts([...files], skillPath, [...shared]),
   ).pipe(Effect.mapError(projectionError));
-  return yield* sha256Digest(encodeHashParts(parts));
+  return yield* sha256Hash(encodeHashParts(parts));
 });

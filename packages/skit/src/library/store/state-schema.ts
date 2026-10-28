@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
-import { Digest, HarnessName } from "../../vocabulary.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
@@ -26,8 +26,8 @@ export const InventoryScanIssue = Schema.Union([
 ]);
 export type InventoryScanIssue = typeof InventoryScanIssue.Type;
 export const SkillAssessmentAcceptance = Schema.Struct({
-  fingerprint: Digest,
-  artifactContentHash: Digest,
+  fingerprint: Hash,
+  artifactContentHash: Hash,
   skill_version_id: SkillVersionId,
   context: Schema.Literal("project"),
   principal: Schema.String,
@@ -50,12 +50,12 @@ export const OwnershipIssue = Schema.Struct({
   path: Schema.String,
   canonicalPath: Schema.String,
   harnesses: Schema.mutable(Schema.Array(HarnessName)),
-  currentHash: Digest,
+  currentHash: Hash,
   detail: Schema.optional(Schema.String),
   collectionId: Schema.optional(CollectionId),
   skillId: Schema.optional(SkillId),
   installedSkillId: Schema.optional(InstalledSkillId),
-  expectedHash: Schema.optional(Digest),
+  expectedHash: Schema.optional(Hash),
   matchesExpectedHash: Schema.optional(Schema.Boolean),
 });
 export type OwnershipIssue = typeof OwnershipIssue.Type;
@@ -69,8 +69,8 @@ export const LibraryDeviceStateFields = {
           harnesses: Schema.optional(Schema.mutable(Schema.Array(HarnessName))),
           path: Schema.String,
           paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-          currentHash: Digest,
-          lastHash: Schema.optional(Digest),
+          currentHash: Hash,
+          lastHash: Schema.optional(Hash),
         }),
       ),
     ),

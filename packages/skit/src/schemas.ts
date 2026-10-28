@@ -3,7 +3,7 @@ import {
   normalizeRegistryNamespace,
   normalizeRegistrySkitSlug,
 } from "./distribution/registry-identity.js";
-import { Digest, InvocationPolicy } from "./vocabulary.js";
+import { Hash, InvocationPolicy } from "./vocabulary.js";
 
 export const SKIT_DESCRIPTOR_VERSION = 1 as const;
 export const SKILL_EXAMPLE_SCHEMA_VERSION = "skit.skill-example/v1" as const;
@@ -27,7 +27,7 @@ const isoTimestamp = Schema.String.check(
   ),
 );
 
-export const digestSchema = Digest;
+export const hashSchema = Hash;
 export const safePathSchema = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1_024),

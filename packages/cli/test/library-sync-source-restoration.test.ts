@@ -106,7 +106,7 @@ const fixture = Effect.gen(function* () {
       assert.strictEqual(result.exitCode, 0);
       release = yield* fs.readFile(archive);
     }),
-    root: (digest: string) => collectionVersionPath(join(freshHome, "originals"), digest),
+    root: (hash: string) => collectionVersionPath(join(freshHome, "originals"), hash),
   };
 });
 
@@ -121,10 +121,10 @@ it.effect(
         (yield* f.load(f.freshHome)).collection_versions,
         state.collection_versions,
       );
-      const digest = state.collection_versions[0]!.hash;
-      assert.strictEqual((yield* readSnapshotArchive(f.root(digest))).digest, digest);
+      const hash = state.collection_versions[0]!.hash;
+      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
       for (const [path, bytes] of Object.entries(f.files))
-        assert.strictEqual(yield* f.fs.readFileString(join(f.root(digest), path)), bytes);
+        assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
       yield* writingTo(
         f.freshHome,
@@ -166,12 +166,12 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     yield* f.repack;
     const state = yield* f.seed(registrySource);
     yield* f.sync();
-    const digest = state.collection_versions[0]!.hash;
-    assert.strictEqual((yield* readSnapshotArchive(f.root(digest))).digest, digest);
-    assert.isFalse(yield* f.fs.exists(join(f.root(digest), "README.md")));
-    assert.isFalse(yield* f.fs.exists(join(f.root(digest), "skills/.gitkeep")));
+    const hash = state.collection_versions[0]!.hash;
+    assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+    assert.isFalse(yield* f.fs.exists(join(f.root(hash), "README.md")));
+    assert.isFalse(yield* f.fs.exists(join(f.root(hash), "skills/.gitkeep")));
     assert.strictEqual(
-      yield* f.fs.readFileString(join(f.root(digest), "skills/review/SKILL.md")),
+      yield* f.fs.readFileString(join(f.root(hash), "skills/review/SKILL.md")),
       f.files["skills/review/SKILL.md"],
     );
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -187,7 +187,7 @@ it.effect("changed declared source bytes fail before saving a fresh Library", ()
     const error = yield* f.sync().pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
-      assert.strictEqual(error.digest, state.collection_versions[0]!.hash);
+      assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
       assert.include(error.detail, "source returned");
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
@@ -260,16 +260,16 @@ it.effect.each(["git", "github"] as const)(
         ),
       );
       yield* f.sync().pipe(Effect.provide(localGit));
-      const digest = state.collection_versions[0]!.hash;
-      assert.strictEqual((yield* readSnapshotArchive(f.root(digest))).digest, digest);
+      const hash = state.collection_versions[0]!.hash;
+      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
       assert.strictEqual(
-        yield* f.fs.readFileString(join(f.root(digest), "skit.json")),
+        yield* f.fs.readFileString(join(f.root(hash), "skit.json")),
         f.files["skit.json"],
       );
       assert.strictEqual(
-        yield* f.fs.readFileString(join(f.root(digest), "README.md")),
+        yield* f.fs.readFileString(join(f.root(hash), "README.md")),
         f.files["README.md"],
       );
-      assert.isFalse(yield* f.fs.exists(join(f.root(digest), "outside.txt")));
+      assert.isFalse(yield* f.fs.exists(join(f.root(hash), "outside.txt")));
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

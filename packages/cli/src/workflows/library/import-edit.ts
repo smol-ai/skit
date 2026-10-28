@@ -15,7 +15,7 @@ import {
   withLibraryWriter,
   type LibraryState,
   type InstalledSkill,
-  type Digest,
+  type Hash,
   type OwnershipMarker,
   type InstallScope,
   type InstalledSkillId,
@@ -126,16 +126,16 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
   );
   const installedSkills: Array<EditImportPlan["installed_skills"][number]> = [];
   for (const installedSkill of candidates) {
-    const digest = yield* deterministicTreeHash(installedSkill.path);
+    const hash = yield* deterministicTreeHash(installedSkill.path);
     installedSkills.push({
       installed_skill_id: installedSkill.installed_skill_id,
       destination: installedSkill.destination,
       path: installedSkill.path,
-      current_hash: digest,
+      current_hash: hash,
       agreement:
         installedSkill.installed_skill_id === selected.installed_skill_id
           ? "selected"
-          : digest === currentHash
+          : hash === currentHash
             ? "identical"
             : "different",
     });
@@ -147,8 +147,8 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     previous_skill_version_id: previousVersion.skill_version_id,
     selected_installed_skill_id: selected.installed_skill_id,
     current_hash: currentHash,
-    snapshot_digest: prepared.digest,
-    original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
+    snapshot_digest: prepared.hash,
+    original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.hash),
     import_required: previousVersion.artifact_hash !== currentHash,
     installed_skills: installedSkills,
   } satisfies EditImportPlan;
@@ -238,7 +238,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           });
       const accepted = new Map<
         InstalledSkillId,
-        { readonly currentHash: Digest; readonly marker: OwnershipMarker }
+        { readonly currentHash: Hash; readonly marker: OwnershipMarker }
       >();
       for (const installedSkill of preview.installed_skills) {
         if (installedSkill.current_hash !== preview.current_hash) continue;

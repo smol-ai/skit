@@ -13,7 +13,7 @@ import { UninstallConflict } from "../../failures.js";
 import { repositorySelectsInstalledSkill } from "./uninstall.js";
 import { installedSkillSource } from "./installed-skill-source.js";
 import { LibraryStore } from "../store/library-store.js";
-import type { Digest, InstallDestination } from "../../vocabulary.js";
+import type { Hash, InstallDestination } from "../../vocabulary.js";
 import { enabledAt, type InstalledSkill } from "../library-state.js";
 import { makeInstalledSkillId } from "../entity-ids.js";
 import type { SkillId } from "../entity-ids.js";
@@ -42,7 +42,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
   variantsPath: string;
   acceptedCopies?: ReadonlyMap<
     string,
-    { readonly currentHash: Digest; readonly marker: OwnershipMarker }
+    { readonly currentHash: Hash; readonly marker: OwnershipMarker }
   >;
   /** The existing copies the operator chose to manage, as previewed. */
   manage?: ManageApproval;

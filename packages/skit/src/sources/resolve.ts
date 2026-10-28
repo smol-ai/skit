@@ -39,7 +39,7 @@ const MAX_ARCHIVE_FILES = 1_000;
 const MAX_EXTRACTED_BYTES = 25 * 1024 * 1024;
 const DISCOVERY_SCHEMA_V2 = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
 const discoveryName = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const discoveryDigest = /^sha256:[a-f0-9]{64}$/;
+const discoveryHash = /^sha256:[a-f0-9]{64}$/;
 const discoveryV2Entry = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
@@ -874,7 +874,7 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     importedDirectories.push(directory);
     if (item.version === "0.2.0") {
       const artifact = item.entry;
-      if (!discoveryDigest.test(artifact.digest))
+      if (!discoveryHash.test(artifact.digest))
         return yield* invalidSource(`Invalid discovery digest for ${entry.name}`);
       const artifactUrl = URL.parse(artifact.url, selected.indexUrl);
       if (
@@ -892,8 +892,8 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
       downloadedBytes += bytes.byteLength;
       if (downloadedBytes > 256 * 1024 * 1024)
         return yield* sourceLimitExceeded("Discovery downloads exceed 256 MiB limit");
-      const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-      if (digest !== artifact.digest)
+      const hash = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+      if (hash !== artifact.digest)
         return yield* sourcePinMismatch(`Discovery artifact digest disagrees for ${entry.name}`);
       if (artifact.type === "skill-md") {
         regularBytes += bytes.byteLength;

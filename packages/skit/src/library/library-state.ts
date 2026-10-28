@@ -13,7 +13,7 @@ import {
   librarySnapshotDigests,
 } from "./library-contracts.js";
 import { HarnessInstallStatus, LibraryDeviceStateFields } from "./store/state-schema.js";
-import { Digest, InvocationPolicy, RecordedInstallDestination } from "../vocabulary.js";
+import { Hash, InvocationPolicy, RecordedInstallDestination } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
@@ -40,8 +40,8 @@ export const InstalledSkill = Schema.Struct({
   destination: RecordedInstallDestination,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
-  expected_hash: Digest,
-  current_hash: Schema.mutableKey(Schema.optional(Digest)),
+  expected_hash: Hash,
+  current_hash: Schema.mutableKey(Schema.optional(Hash)),
   status: Schema.mutableKey(HarnessInstallStatus),
   suppression_reason: Schema.mutableKey(Schema.optional(Schema.Literal("native_delete"))),
   suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),

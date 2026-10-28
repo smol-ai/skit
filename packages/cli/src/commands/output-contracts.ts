@@ -3,7 +3,7 @@ import { VersionReport } from "../releases/checker.js";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
-  Digest,
+  Hash,
   InvocationMetadataGeneration,
   LibraryAuditEvent,
   releasePublishResponseSchema,
@@ -51,8 +51,8 @@ const effectValidation = Schema.Struct({
   identity: Schema.Struct({
     slug: Schema.String,
     release: Schema.String,
-    releaseContentHash: Digest,
-    skills: Schema.Array(Schema.Struct({ name: Schema.String, contentHash: Digest })),
+    releaseContentHash: Hash,
+    skills: Schema.Array(Schema.Struct({ name: Schema.String, contentHash: Hash })),
   }),
   diagnostics: Schema.Array(SkitValidationDiagnostic),
   audits: Schema.Record(Schema.String, SkillAudit),

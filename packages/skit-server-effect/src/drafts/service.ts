@@ -8,7 +8,7 @@ import {
   skitDescriptorRequestSchema,
   skitValidationDiagnosticSchema,
 } from "@smolai/skit-core/universal/authoring";
-import { sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
 import type { CloudflareBindings } from "../platform/cloudflare.js";
 import {
@@ -126,7 +126,7 @@ export const layer = Layer.effect(
               Uint8Array.from(atob(file.content_base64), (character) => character.charCodeAt(0)),
             catch: (cause) => new DraftEncodingError({ path: file.path, cause }),
           });
-          const blobDigest = yield* sha256Digest(bytes).pipe(
+          const blobDigest = yield* sha256Hash(bytes).pipe(
             Effect.provideService(Crypto.Crypto, crypto),
           );
           return {
@@ -152,7 +152,7 @@ export const layer = Layer.effect(
         )
         .sort()
         .join("\n");
-      const bundleDigest = yield* sha256Digest(new TextEncoder().encode(manifest)).pipe(
+      const bundleDigest = yield* sha256Hash(new TextEncoder().encode(manifest)).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
       const revisionId = `draft_${(yield* crypto.randomUUIDv4()).replaceAll("-", "")}`;
@@ -206,7 +206,7 @@ export const layer = Layer.effect(
       return {
         skit_id: `${input.owner}/${input.slug}`,
         revision_id: revisionId,
-        manifest_digest: yield* sha256Digest(new TextEncoder().encode(manifest)).pipe(
+        manifest_digest: yield* sha256Hash(new TextEncoder().encode(manifest)).pipe(
           Effect.provideService(Crypto.Crypto, crypto),
         ),
         bundle_digest: bundleDigest,

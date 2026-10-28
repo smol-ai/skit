@@ -345,7 +345,7 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
 const collisionFixture = () => {
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
-  const digest = `sha256:${"a".repeat(64)}`;
+  const hash = `sha256:${"a".repeat(64)}`;
   const state = currentLibraryState({
     collections: [],
     skills: [],
@@ -361,8 +361,8 @@ const collisionFixture = () => {
       destination: target,
       root: `/home/.${target}/skills`,
       path: `/home/.${target}/skills/review`,
-      expected_hash: digest,
-      current_hash: digest,
+      expected_hash: hash,
+      current_hash: hash,
       status: "installed" as const,
       installed_at: "2026-10-01T00:00:00.000Z",
     })),
@@ -422,11 +422,11 @@ test("doctor accepts intact target-specific invocation renderings of the same Ve
   const { state, check } = collisionFixture();
   const claude = state.installed_skills[1];
   if (!claude) throw new Error("Missing fixture installed skill");
-  const claudeDigest = `sha256:${"b".repeat(64)}`;
+  const claudeHash = `sha256:${"b".repeat(64)}`;
   state.installed_skills[1] = {
     ...claude,
-    expected_hash: claudeDigest,
-    current_hash: claudeDigest,
+    expected_hash: claudeHash,
+    current_hash: claudeHash,
   };
   expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
 });

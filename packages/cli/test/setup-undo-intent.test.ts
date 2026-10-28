@@ -8,7 +8,7 @@ import {
   MachineSettings,
   skitLayer,
   type LibraryState,
-  type Digest,
+  type Hash,
 } from "@smolai/skit-core";
 import {
   reverseSetupDiscovery,
@@ -81,7 +81,7 @@ it.effect(
         name: string;
         sourcePath: string;
         relativePath: string;
-        currentHash: Digest;
+        currentHash: Hash;
       }[] = [];
       for (const name of ["existing", "introduced"]) {
         const path = join(root, name);

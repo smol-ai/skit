@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Digest } from "@smolai/skit-core";
+import { Hash } from "@smolai/skit-core";
 
 const SkillsShMemberCheck = Schema.Struct({
   skill_name: Schema.String,
@@ -30,14 +30,14 @@ export const CheckResult = Schema.Array(
     collection_versions: Schema.Array(
       Schema.Struct({
         collection_version_id: Schema.String,
-        hash: Digest,
+        hash: Hash,
         original_intact: Schema.Boolean,
       }),
     ),
     unresolved_skill_selections: Schema.Number,
     source_status: Schema.Literals(["current", "changed", "unverified", "not-applicable"]),
-    current_snapshot_digest: Schema.optionalKey(Digest),
-    available_snapshot_digest: Schema.optionalKey(Digest),
+    current_snapshot_digest: Schema.optionalKey(Hash),
+    available_snapshot_digest: Schema.optionalKey(Hash),
     has_imports: Schema.Boolean,
     skills_sh: Schema.optionalKey(
       Schema.Struct({

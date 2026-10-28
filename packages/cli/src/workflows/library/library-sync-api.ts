@@ -187,11 +187,11 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
   });
   const download = Effect.fn("Library.librarySyncApi.download")(function* (
     libraryId: string,
-    digest: string,
+    hash: string,
   ) {
     return yield* client.librarySnapshots
       .download({
-        params: { library_id: libraryId, digest },
+        params: { library_id: libraryId, digest: hash },
       })
       .pipe(Effect.mapError((error) => mapGeneratedFailure("download private snapshot", error)));
   });

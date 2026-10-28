@@ -13,7 +13,7 @@ import { removeCollection } from "../src/library/installation/remove.js";
 import { leftoverSkills, uninstallSkills } from "../src/library/installation/uninstall.js";
 import { importEdit, importCollection } from "../src/library/import-collection.js";
 import type { LibraryState } from "../src/library/library-state.js";
-import { Digest } from "../src/vocabulary.js";
+import { Hash } from "../src/vocabulary.js";
 import {
   LibraryStore,
   lastSavedLibraryState,
@@ -196,7 +196,7 @@ it.effect(
     Effect.gen(function* () {
       const { home, targetRoot, storeLayer } = yield* boundCollection;
       const diverged = Layer.succeed(TreeHasher)({
-        hash: () => Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`)),
+        hash: () => Effect.succeed(Schema.decodeUnknownSync(Hash)(`sha256:${"0".repeat(64)}`)),
       });
       const installed = yield* withLibraryWriterLock(
         home,
@@ -746,7 +746,7 @@ const divergingOn = (path: string, nth: number) => {
   return Layer.succeed(TreeHasher)({
     hash: (candidate) =>
       candidate === path && ++calls === nth
-        ? Effect.succeed(Schema.decodeUnknownSync(Digest)(`sha256:${"0".repeat(64)}`))
+        ? Effect.succeed(Schema.decodeUnknownSync(Hash)(`sha256:${"0".repeat(64)}`))
         : deterministicTreeHash(candidate),
   });
 };

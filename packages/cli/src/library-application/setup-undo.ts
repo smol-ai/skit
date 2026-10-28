@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import {
   canonicalJson,
-  Digest,
+  Hash,
   hashParts,
   libraryStateRevision,
   LibraryStore,
@@ -30,7 +30,7 @@ import {
 } from "./setup-undo-intent.js";
 
 const AttemptFields = {
-  planId: Digest,
+  planId: Hash,
   settingsBefore: SetupDiscoverySettings,
   settingsAfter: SetupDiscoverySettings,
 };
@@ -43,7 +43,7 @@ const Attempt = Schema.Struct({
   after: SetupIntent,
 });
 const StoredAttempt = Attempt;
-const Done = Schema.Struct({ schemaVersion: Schema.Literal(1), planId: Digest });
+const Done = Schema.Struct({ schemaVersion: Schema.Literal(1), planId: Hash });
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
 const readUndo = Effect.fn("SetupUndo.read")(function* (

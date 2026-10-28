@@ -9,7 +9,7 @@ import {
 } from "./schemas.js";
 import { SkillAssessmentAcceptance } from "./library/store/state-schema.js";
 import {
-  Digest,
+  Hash,
   HarnessName,
   InvocationPolicy,
   InstallDestination,
@@ -19,7 +19,7 @@ import {
 } from "./vocabulary.js";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./library/entity-ids.js";
 export {
-  Digest,
+  Hash,
   HarnessName,
   InvocationPolicy,
   InstallDestination,
@@ -45,14 +45,14 @@ export type RegistrySkitDescriptor = SkitDescriptor & { readonly id: string };
 
 export interface SkitFileRecord {
   path: string;
-  digest: Digest;
+  hash: Hash;
   bytes: number;
   mediaType: string;
   executable: boolean;
 }
 
 export interface SyncFileVersion {
-  digest: Digest;
+  digest: Hash;
   bytes: Uint8Array;
   mediaType: string;
 }
@@ -86,10 +86,10 @@ export interface ValidatedSkit {
 export interface SkitReleaseIdentity {
   slug: string;
   release: string;
-  releaseContentHash: Digest;
+  releaseContentHash: Hash;
   skills: Array<{
     name: string;
-    contentHash: Digest;
+    contentHash: Hash;
     enabled: boolean;
   }>;
 }
@@ -101,7 +101,7 @@ const OwnershipMarkerV2 = Schema.Struct({
   collection_id: CollectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_digest: Hash,
   harness: HarnessName,
 });
 
@@ -111,7 +111,7 @@ const OwnershipMarkerV3 = Schema.Struct({
   projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_digest: Hash,
   harness: HarnessName,
 });
 
@@ -121,7 +121,7 @@ const OwnershipMarkerV4 = Schema.Struct({
   projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_digest: Hash,
 });
 
 export const OwnershipMarker = Schema.Struct({
@@ -129,7 +129,7 @@ export const OwnershipMarker = Schema.Struct({
   installed_skill_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_hash: Digest,
+  expected_hash: Hash,
 });
 export type OwnershipMarker = typeof OwnershipMarker.Type;
 
@@ -181,13 +181,13 @@ export const StoredOwnershipMarker = Schema.Union([
 ]);
 
 export const SkillAuditFinding = Schema.Struct({
-  fingerprint: Schema.optionalKey(Digest),
+  fingerprint: Schema.optionalKey(Hash),
   analysisProfile: Schema.Struct({
     id: Schema.Literal("skit/finding/v1"),
     scope: Schema.Literals(["skill_artifact", "audited_file"]),
     acceptanceEligible: Schema.Boolean,
   }),
-  artifactContentHash: Digest,
+  artifactContentHash: Hash,
   ruleId: Schema.String,
   evidence: Schema.Literals([
     "declared",
@@ -245,7 +245,7 @@ export const SkillAcceptanceReviewRecord = Schema.Struct({
 export type SkillAcceptanceReviewRecord = typeof SkillAcceptanceReviewRecord.Type;
 
 export const SkillFindingDecision = Schema.Struct({
-  fingerprint: Digest,
+  fingerprint: Hash,
   ruleId: Schema.String,
   disposition: Schema.Literals(["unresolved", "accepted"]),
   acceptance: Schema.optionalKey(SkillAssessmentAcceptance),
@@ -262,7 +262,7 @@ export type SkillAssessmentDecision = typeof SkillAssessmentDecision.Type;
 
 export const SkillSecurityReview = Schema.Struct({
   skill_version_id: SkillVersionId,
-  artifactContentHash: Digest,
+  artifactContentHash: Hash,
   audit: SkillAudit,
   assessment: SkillAssessmentDecision,
   acceptances: Schema.mutableKey(Schema.mutable(Schema.Array(SkillAcceptanceReviewRecord))),

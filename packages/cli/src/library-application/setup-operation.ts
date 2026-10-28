@@ -5,7 +5,7 @@ import {
   enabledSkillIds,
   canonicalJson,
   deviceInstallationIntent,
-  Digest,
+  Hash,
   hashParts,
   LibraryState,
   LibraryChanged,
@@ -43,8 +43,8 @@ const FileEvidence = Schema.Struct({
     Schema.Struct({
       ...Identity.fields,
       type: Schema.String,
-      hash: Digest,
-      unstampedHash: Digest,
+      hash: Hash,
+      unstampedHash: Hash,
       marker: Schema.NullOr(Schema.String),
       markerType: Schema.optionalKey(Schema.NullOr(Schema.String)),
       markerMode: Schema.optionalKey(Schema.NullOr(Schema.Number)),
@@ -54,7 +54,7 @@ const FileEvidence = Schema.Struct({
 });
 const OperationFields = {
   kind: Schema.Literal("setup"),
-  planId: Digest,
+  planId: Hash,
   settings: SetupDiscoverySettings,
   machineId: Schema.NullOr(MachineId),
   targets: Schema.Array(Schema.Struct({ target: InstallDestination, root: DevicePath })),
@@ -92,7 +92,7 @@ const SettingsChange = Schema.Struct({
 const SaveConfirmation = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   sequence: Schema.Int,
-  hash: Digest,
+  hash: Hash,
 });
 const Completion = Schema.Struct({
   schemaVersion: Schema.Literal(2),
@@ -261,7 +261,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
   );
   const markSaved = Effect.fn("SetupOperation.markSaved")(
-    function* (changeRecord: { sequence: number; hash: Digest }) {
+    function* (changeRecord: { sequence: number; hash: Hash }) {
       yield* writeJsonExclusive(
         join(changes, `${String(changeRecord.sequence).padStart(8, "0")}.published.json`),
         { schemaVersion: 1, sequence: changeRecord.sequence, hash: changeRecord.hash },
@@ -272,7 +272,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   let pendingSettings:
     | {
         sequence: number;
-        hash: Digest;
+        hash: Hash;
         after: SetupDiscoverySettings;
         machineId: MachineId | undefined;
       }

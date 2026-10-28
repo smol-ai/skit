@@ -1,4 +1,4 @@
-import { Digest, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
+import { Hash, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
 import { Schema } from "effect";
 
 /** What a refresh means for the Skills this device enables. */
@@ -42,7 +42,7 @@ export const UpdateResult = Schema.Array(
       subject_kind: Schema.Literals(["collection", "skill"]),
       previous_collection_version_id: Schema.String,
       selected_collection_version_id: Schema.String,
-      snapshot_digest: Digest,
+      snapshot_digest: Hash,
       changed: Schema.Boolean,
       installed: Schema.Number,
       ...SkillChanges,
@@ -55,8 +55,8 @@ export const UpdatePlan = Schema.Array(
   Schema.Struct({
     subject_id: Schema.String,
     subject_kind: Schema.Literals(["collection", "skill"]),
-    current_snapshot_digest: Digest,
-    available_snapshot_digest: Digest,
+    current_snapshot_digest: Hash,
+    available_snapshot_digest: Hash,
     changed: Schema.Boolean,
     ...SkillChanges,
   }),

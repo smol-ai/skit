@@ -21,7 +21,7 @@ import {
 const machineId = makeMachineId();
 /** A fixed pool of one-Skill Collections; every side of a merge is drawn from the same records. */
 const pool = Array.from({ length: 4 }, (_, index) => {
-  const digest = `sha256:${String(index).repeat(64)}`;
+  const hash = `sha256:${String(index).repeat(64)}`;
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
   const collectionVersionId = makeCollectionVersionId();
@@ -40,22 +40,22 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       versions: [
         {
           skill_version_id: makeSkillVersionId(),
-          source_hash: digest,
-          artifact_hash: digest,
-          validation_identity_hash: digest,
+          source_hash: hash,
+          artifact_hash: hash,
+          validation_identity_hash: hash,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
     },
     collectionVersion: {
       collection_version_id: collectionVersionId,
-      hash: digest,
+      hash: hash,
       copy_profile: "verbatim/v1" as const,
       members: [
         {
           source_path: "." as const,
-          source_hash: digest,
-          artifact_hash: digest,
+          source_hash: hash,
+          artifact_hash: hash,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],

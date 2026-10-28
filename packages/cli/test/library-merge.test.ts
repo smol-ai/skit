@@ -24,9 +24,9 @@ import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 
 import { alignLibrary, aliasManifest } from "../src/workflows/library/library-alignment.js";
 
-const digest = `sha256:${"a".repeat(64)}`;
-const digestB = `sha256:${"b".repeat(64)}`;
-const digestC = `sha256:${"c".repeat(64)}`;
+const hash = `sha256:${"a".repeat(64)}`;
+const hashB = `sha256:${"b".repeat(64)}`;
+const hashC = `sha256:${"c".repeat(64)}`;
 const decode = Schema.decodeUnknownEffect(LibraryManifest);
 const skillId = makeSkillId();
 const versionId = makeSkillVersionId();
@@ -52,23 +52,23 @@ const skill = {
   versions: [
     {
       skill_version_id: versionId,
-      source_hash: digest,
-      artifact_hash: digest,
-      validation_identity_hash: digest,
+      source_hash: hash,
+      artifact_hash: hash,
+      validation_identity_hash: hash,
       materialization_profile: "plain-skill/v1" as const,
     },
     {
       skill_version_id: second,
-      source_hash: digestB,
-      artifact_hash: digestB,
-      validation_identity_hash: digestB,
+      source_hash: hashB,
+      artifact_hash: hashB,
+      validation_identity_hash: hashB,
       materialization_profile: "plain-skill/v1" as const,
     },
     {
       skill_version_id: third,
-      source_hash: digestC,
-      artifact_hash: digestC,
-      validation_identity_hash: digestC,
+      source_hash: hashC,
+      artifact_hash: hashC,
+      validation_identity_hash: hashC,
       materialization_profile: "plain-skill/v1" as const,
     },
   ],
@@ -80,20 +80,20 @@ const manifest = (enabled: unknown[] = []) => ({
   collection_versions: [
     {
       collection_version_id: collectionVersionId,
-      hash: digest,
+      hash: hash,
       copy_profile: "verbatim/v1" as const,
       members: [
         {
           source_path: "." as const,
-          source_hash: digest,
-          artifact_hash: digest,
+          source_hash: hash,
+          artifact_hash: hash,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
     },
     ...[
-      [copyB, digestB],
-      [copyC, digestC],
+      [copyB, hashB],
+      [copyC, hashC],
     ].map(([collection_version_id, value]) => ({
       collection_version_id,
       hash: value,
@@ -144,7 +144,7 @@ const manifest = (enabled: unknown[] = []) => ({
       lock_file_entries: [],
     })),
   ],
-  snapshot_digests: [digest, digestB, digestC],
+  snapshot_digests: [hash, hashB, hashC],
   enabled,
 });
 
@@ -166,7 +166,7 @@ it.effect(
       });
       const extra = makeSkillId();
       const copy = makeCollectionVersionId();
-      const latestDigest = `sha256:${"d".repeat(64)}`;
+      const latestHash = `sha256:${"d".repeat(64)}`;
       const local = yield* decode({
         ...remote,
         skills: [
@@ -184,7 +184,7 @@ it.effect(
           {
             ...manifest().collection_versions[0],
             collection_version_id: copy,
-            hash: latestDigest,
+            hash: latestHash,
             members: [
               ...remote.collection_versions[0].members,
               { ...manifest().collection_versions[0].members[0], source_path: "extra" },
@@ -200,7 +200,7 @@ it.effect(
             imported_at: "2026-02-01T00:00:00Z",
           },
         ],
-        snapshot_digests: [...manifest().snapshot_digests, latestDigest],
+        snapshot_digests: [...manifest().snapshot_digests, latestHash],
       });
       const empty = yield* decode({
         schema: "skit.library.v8",
@@ -216,7 +216,7 @@ it.effect(
       assert.deepEqual(merged.unresolvable, [`collection:${collectionId}`]);
       const pinned = yield* decode({
         ...local,
-        snapshot_digests: local.snapshot_digests.filter((value) => value !== latestDigest),
+        snapshot_digests: local.snapshot_digests.filter((value) => value !== latestHash),
         imports: local.imports.map((item) =>
           item.collection_version_id === copy
             ? {
@@ -434,13 +434,13 @@ it.effect(
             destination: "agents",
             root: "/tmp/skills",
             path: "/tmp/skills/review",
-            expected_hash: digestB,
+            expected_hash: hashB,
             status: "installed",
             installed_at: "2026-01-01T00:00:00.000Z",
           },
         ],
-        assessmentAcceptances: [digestB, digestC].map((artifactContentHash) => ({
-          fingerprint: digest,
+        assessmentAcceptances: [hashB, hashC].map((artifactContentHash) => ({
+          fingerprint: hash,
           artifactContentHash,
           skill_version_id: localId,
           context: "project",
@@ -460,7 +460,7 @@ it.effect(
         [],
       );
       assert.strictEqual(device.installed_skills[0]?.skill_version_id, second);
-      assert.strictEqual(device.installed_skills[0]?.expected_hash, digestB);
+      assert.strictEqual(device.installed_skills[0]?.expected_hash, hashB);
       assert.strictEqual(device.assessmentAcceptances?.[0]?.skill_version_id, second);
       assert.strictEqual(device.assessmentAcceptances?.[1]?.skill_version_id, localId);
       assert.strictEqual(state.installed_skills[0]?.skill_version_id, localId);
@@ -553,7 +553,7 @@ it.effect("does not alias different validation metadata or another Skill's versi
               ? {
                   ...version,
                   skill_version_id: makeSkillVersionId(),
-                  validation_identity_hash: digestC,
+                  validation_identity_hash: hashC,
                 }
               : version,
           ),
@@ -629,15 +629,15 @@ it.effect("aligns only observed base IDs and preserves pruning decisions", () =>
 // A Collection with two Skills, `alpha` and `beta`, observed by one source import.
 const pairCollection = makeCollectionId();
 const pairCopy = makeCollectionVersionId();
-const pairDigest = `sha256:${"d".repeat(64)}`;
+const pairHash = `sha256:${"d".repeat(64)}`;
 const alpha = makeSkillId();
 const beta = makeSkillId();
 const pairManifest = (entries: unknown[]) => ({
   schema: "skit.library.v8",
   collections: [{ collection_id: pairCollection, label: "fixture/pair" }],
   skills: [
-    [alpha, "alpha", digestB],
-    [beta, "beta", digestC],
+    [alpha, "alpha", hashB],
+    [beta, "beta", hashC],
   ].map(([skill_id, name, value]) => ({
     skill_id,
     collection_id: pairCollection,
@@ -656,11 +656,11 @@ const pairManifest = (entries: unknown[]) => ({
   collection_versions: [
     {
       collection_version_id: pairCopy,
-      hash: pairDigest,
+      hash: pairHash,
       copy_profile: "verbatim/v1" as const,
       members: [
-        ["alpha", digestB],
-        ["beta", digestC],
+        ["alpha", hashB],
+        ["beta", hashC],
       ].map(([source_path, value]) => ({
         source_path,
         source_hash: value,
@@ -682,7 +682,7 @@ const pairManifest = (entries: unknown[]) => ({
       lock_file_entries: [],
     },
   ],
-  snapshot_digests: [pairDigest],
+  snapshot_digests: [pairHash],
   enabled: entries,
 });
 

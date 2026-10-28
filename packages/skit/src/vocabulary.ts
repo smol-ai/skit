@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 
 // Domain vocabulary shared by the Library store, the wire contracts, and Harness code.
-export const Digest = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
-export type Digest = typeof Digest.Type;
+export const Hash = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
+export type Hash = typeof Hash.Type;
 export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
 export type HarnessName = typeof HarnessName.Type;
 /**

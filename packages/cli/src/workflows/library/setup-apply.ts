@@ -8,7 +8,7 @@ import {
   ensureSkillsDirectoryWritable,
   libraryStateRevision,
   withLibraryWriter,
-  type Digest,
+  type Hash,
   type SkillId,
 } from "@smolai/skit-core";
 import { activeInstallDestinations, skillsDirectoryFor } from "../../install/roots.js";
@@ -37,7 +37,7 @@ import { PlanIsStale } from "../../library/failures.js";
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
 export interface SetupApproval {
   readonly setup: SetupOptions;
-  readonly planId: Digest;
+  readonly planId: Hash;
   /** Save the discovery roots and repository decisions this setup observes. */
   readonly persistRoots: boolean;
   readonly imports: readonly SetupKnownSourceSelection[];

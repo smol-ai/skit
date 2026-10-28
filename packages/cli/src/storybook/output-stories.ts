@@ -27,7 +27,7 @@ const resultStory = (group: string, name: string, result: CommandResult): Output
 const failureStory = (name: string, failure: CommandFailure): OutputStory =>
   OutputStory.Failure({ group: "failure", name, failure });
 
-const digest = `sha256:${"0".repeat(64)}`;
+const hash = `sha256:${"0".repeat(64)}`;
 const collectionId = makeCollectionId();
 const versionId = makeCollectionVersionId();
 const otherVersionId = makeCollectionVersionId();
@@ -135,7 +135,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     result("validate", {
       valid: true,
       status: "valid",
-      identity: { slug: "review-tools", release: "1.2.0", releaseContentHash: digest, skills: [] },
+      identity: { slug: "review-tools", release: "1.2.0", releaseContentHash: hash, skills: [] },
       diagnostics: [],
       audits: {},
       assessments: {},
@@ -147,7 +147,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     result("validate", {
       valid: true,
       status: "valid-with-warnings",
-      identity: { slug: "review-tools", release: "1.2.0", releaseContentHash: digest, skills: [] },
+      identity: { slug: "review-tools", release: "1.2.0", releaseContentHash: hash, skills: [] },
       diagnostics: [
         {
           code: "UNDOCUMENTED_CAPABILITY",
@@ -222,7 +222,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         collection_id: collectionId,
         skill_ids: [skillId],
         collection_version_id: versionId,
-        snapshot_digest: digest,
+        snapshot_digest: hash,
         skills: [{ name: "review", verbatim_path: "." }],
       }),
     ),
@@ -254,7 +254,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
               name: "review",
               skill_id: skillId,
               selected_skill_version_id: skillVersionId,
-              versions: [{ skill_version_id: skillVersionId, artifact_hash: digest }],
+              versions: [{ skill_version_id: skillVersionId, artifact_hash: hash }],
             },
           ],
         },
@@ -268,7 +268,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "clean",
     result("securityReview", {
       skill_version_id: skillVersionId,
-      artifactContentHash: digest,
+      artifactContentHash: hash,
       audit: emptyAudit,
       assessment: emptyAssessment,
       acceptances: [],
@@ -279,7 +279,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "clean",
     result("securityAccept", {
       skill_version_id: skillVersionId,
-      artifactContentHash: digest,
+      artifactContentHash: hash,
       audit: emptyAudit,
       assessment: emptyAssessment,
       acceptances: [],
@@ -380,8 +380,8 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "setup",
     "review",
     result("setupReview", {
-      planId: digest,
-      reviewId: digest,
+      planId: hash,
+      reviewId: hash,
       hasChanges: true,
       canApply: true,
       summary: {
@@ -403,12 +403,12 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "setup",
     "comparison",
     result("setupComparison", {
-      planId: digest,
+      planId: hash,
       copies: [
         {
           name: "review",
           path: "/home/story/.claude/skills/review",
-          currentHash: digest,
+          currentHash: hash,
           markdown: "---\nname: review\ndescription: Review code\n---\nReview code.\n",
           truncated: false,
         },
@@ -431,7 +431,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "undo-preview",
     result("setupUndo", {
       operationId: "story-operation",
-      planId: digest,
+      planId: hash,
       status: "ready",
       phase: "preview",
       conflicts: [],
@@ -439,7 +439,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       intentChanged: true,
       settingsChanged: false,
       sourceSelections: [],
-      actions: setupUndoActions("/home/story/.skit", "story-operation", digest),
+      actions: setupUndoActions("/home/story/.skit", "story-operation", hash),
     }),
   ),
   resultStory(
@@ -460,7 +460,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     result("recovery", {
       operationId: "story-operation",
       directory: "/home/story/.skit/removed/story-operation",
-      planId: digest,
+      planId: hash,
       entries: [
         {
           name: "review",
@@ -625,7 +625,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
             canonicalPath: "/home/story/.agents/skills/review/SKILL.md",
             scope: "user",
             skitManaged: true,
-            documentHash: digest,
+            documentHash: hash,
           },
           {
             name: "review",
@@ -634,7 +634,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
             canonicalPath: "/home/story/Work/skills/review/SKILL.md",
             scope: "user",
             skitManaged: false,
-            documentHash: digest,
+            documentHash: hash,
           },
         ],
         findings: [
@@ -650,7 +650,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
                 canonicalPath: "/home/story/.agents/skills/review/SKILL.md",
                 scope: "user",
                 skitManaged: true,
-                documentHash: digest,
+                documentHash: hash,
               },
               {
                 name: "review",
@@ -659,7 +659,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
                 canonicalPath: "/home/story/Work/skills/review/SKILL.md",
                 scope: "user",
                 skitManaged: false,
-                documentHash: digest,
+                documentHash: hash,
               },
             ],
           },
@@ -767,7 +767,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         subject_kind: "collection",
         label: "review-tools",
         collection_versions: [
-          { collection_version_id: collectionVersionId, hash: digest, original_intact: true },
+          { collection_version_id: collectionVersionId, hash: hash, original_intact: true },
         ],
         unresolved_skill_selections: 0,
         source_status: "unverified",
@@ -782,7 +782,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       {
         subject_id: collectionId,
         subject_kind: "collection",
-        current_snapshot_digest: digest,
+        current_snapshot_digest: hash,
         available_snapshot_digest: `sha256:${"1".repeat(64)}`,
         changed: true,
         label: "review-tools",
@@ -824,16 +824,16 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       skill_name: "review",
       previous_skill_version_id: skillVersionId,
       selected_installed_skill_id: installedSkillId,
-      current_hash: digest,
-      snapshot_digest: digest,
-      original_path: `/home/story/.skit/originals/${digest}`,
+      current_hash: hash,
+      snapshot_digest: hash,
+      original_path: `/home/story/.skit/originals/${hash}`,
       import_required: true,
       installed_skills: [
         {
           installed_skill_id: installedSkillId,
           destination: "agents",
           path: "/home/story/.agents/skills/review",
-          current_hash: digest,
+          current_hash: hash,
           agreement: "selected",
         },
       ],
@@ -848,7 +848,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       previous_skill_version_id: skillVersionId,
       imported_skill_version_id: makeSkillVersionId(),
       collection_version_id: collectionVersionId,
-      snapshot_digest: digest,
+      snapshot_digest: hash,
       imported: true,
       installed_skills: [
         {
@@ -949,7 +949,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         release_id: "release-1",
         version: "1.2.0",
         revision_id: "draft-7",
-        archive_digest: digest,
+        archive_digest: hash,
         download_path: "/api/skits/smol-ai/review-tools/releases/1.2.0",
       },
     }),

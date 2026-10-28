@@ -1,5 +1,5 @@
 import { Data, Effect, Schema } from "effect";
-import { encodeHashParts, sha256Digest } from "../shared/digest.js";
+import { encodeHashParts, sha256Hash } from "../shared/hash.js";
 import { SnapshotArchive } from "./library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
@@ -100,7 +100,7 @@ export const verifySnapshotArchive = Effect.fn("Library.verifySnapshotArchive")(
     }
     if (entry.kind === "symlink") parts.push(entry.target);
   }
-  if ((yield* sha256Digest(encodeHashParts(parts))) !== archive.digest)
+  if ((yield* sha256Hash(encodeHashParts(parts))) !== archive.digest)
     return yield* new SnapshotArchiveInvalid({ reason: "snapshot digest mismatch" });
   return { archive, entries: ordered, files: decodedFiles };
 });

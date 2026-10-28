@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Digest, hashParts } from "@smolai/skit-core";
+import { Hash, hashParts } from "@smolai/skit-core";
 import type { DuplicateCopy } from "../../install/duplicates.js";
 import type {
   SetupResult,
@@ -29,7 +29,7 @@ export interface ApprovedSymlink extends Schema.Schema.Type<typeof ApprovedSymli
 
 export const SetupApprovedCopy = Schema.Struct({
   path: Schema.String,
-  currentHash: Digest,
+  currentHash: Hash,
   dev: Schema.Number,
   ino: Schema.Number,
 });

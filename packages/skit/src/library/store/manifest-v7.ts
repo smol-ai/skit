@@ -21,7 +21,7 @@ import {
   SkillsShLockFileEntry,
   SourceIdentity,
 } from "../library-contracts.js";
-import { Digest } from "../../vocabulary.js";
+import { Hash } from "../../vocabulary.js";
 
 // Frozen `skit.library.v7`. Every older manifest and Library state migrates through these shapes,
 // so they and the helpers below stay as v7 defined them while the current model moves on.
@@ -29,9 +29,9 @@ import { Digest } from "../../vocabulary.js";
 /** A Skill Version as v7 stored it: its hashes were called digests. */
 export const SkillVersionV7 = Schema.Struct({
   skill_version_id: SkillVersionId,
-  source_digest: Digest,
-  artifact_digest: Digest,
-  validation_identity_digest: Digest,
+  source_digest: Hash,
+  artifact_digest: Hash,
+  validation_identity_digest: Hash,
   materialization_profile: MaterializationProfile,
 });
 export const SkillV7 = Schema.Struct({
@@ -41,14 +41,14 @@ export const SkillV7 = Schema.Struct({
 export type SkillV7 = typeof SkillV7.Type;
 export const CollectionVersionSkillV7 = Schema.Struct({
   source_path: CollectionRelativePath,
-  source_digest: Digest,
-  artifact_digest: Digest,
+  source_digest: Hash,
+  artifact_digest: Hash,
   materialization_profile: MaterializationProfile,
 });
 
 export const CollectionVersionV7 = Schema.Struct({
   retained_copy_id: CollectionVersionId,
-  digest: Digest,
+  digest: Hash,
   copy_profile: Schema.Literal("verbatim/v1"),
   members: Schema.Array(CollectionVersionSkillV7),
 });
@@ -64,7 +64,7 @@ const {
 export const SkillsShLockFileEntryV7 = Schema.Struct({
   ...lockEntryFields,
   observed_at: Schema.String,
-  original_entry_digest: Digest,
+  original_entry_digest: Hash,
   well_known_digest: Schema.optionalKey(Schema.String),
 });
 
@@ -100,7 +100,7 @@ export const LibraryManifestV7 = Schema.Struct({
   skills: Schema.Array(SkillV7),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(ImportV7),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV7),
 });
 export type LibraryManifestV7 = typeof LibraryManifestV7.Type;

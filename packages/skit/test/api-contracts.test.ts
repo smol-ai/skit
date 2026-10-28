@@ -9,7 +9,7 @@ import {
   semver,
   skitDescriptorRequestSchema,
 } from "../src/protocol/api-contracts.js";
-import { Digest } from "../src/vocabulary.js";
+import { Hash } from "../src/vocabulary.js";
 import { kebabNameSchema } from "../src/schemas.js";
 
 const ExampleContract = Schema.Struct({
@@ -60,7 +60,7 @@ it.effect("exported JSON schemas retain the name, digest, and version constraint
   Effect.sync(() => {
     for (const [schema, pattern] of [
       [kebabNameSchema, "^[a-z0-9]+(?:-[a-z0-9]+)*$"],
-      [Digest, "^sha256:[a-f0-9]{64}$"],
+      [Hash, "^sha256:[a-f0-9]{64}$"],
       [semver, apiSemverPattern.source],
     ] as const) {
       const document = JsonSchema.toDocumentDraft07(Schema.toJsonSchemaDocument(schema));

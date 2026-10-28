@@ -240,7 +240,7 @@ it.effect("changed historical source bytes fail before retaining available priva
     const error = yield* f.restore().pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
-      assert.strictEqual(error.digest, f.source.snapshotDigest);
+      assert.strictEqual(error.hash, f.source.snapshotDigest);
       assert.include(error.detail, "source returned");
     }
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);

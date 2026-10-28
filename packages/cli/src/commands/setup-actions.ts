@@ -1,6 +1,6 @@
 import { basename, dirname, resolve } from "node:path";
 import { Schema } from "effect";
-import { Digest, SkillId } from "@smolai/skit-core";
+import { Hash, SkillId } from "@smolai/skit-core";
 import {
   SetupApplied,
   SetupResult,
@@ -19,7 +19,7 @@ const Choice = Schema.Struct({
   kind: Schema.Literals(["copy", "source", "removal", "existing", "version"]),
   label: Schema.String,
   path: Schema.optionalKey(Schema.String),
-  sourceId: Schema.optionalKey(Digest),
+  sourceId: Schema.optionalKey(Hash),
   skillId: Schema.optionalKey(SkillId),
   duplicateActions: Schema.Array(SetupDuplicateAction),
   actions: Schema.Array(CommandAction),
@@ -34,8 +34,8 @@ export const SetupAppliedOutput = Schema.Struct({
   actions: Schema.Array(CommandAction),
 });
 export const SetupReviewOutput = Schema.Struct({
-  planId: Digest,
-  reviewId: Digest,
+  planId: Hash,
+  reviewId: Hash,
   hasChanges: Schema.Boolean,
   canApply: Schema.Boolean,
   summary: Schema.Struct({
@@ -67,12 +67,12 @@ export const SetupReviewOutput = Schema.Struct({
   actions: Schema.Array(CommandAction),
 });
 export const SetupComparisonOutput = Schema.Struct({
-  planId: Digest,
+  planId: Hash,
   copies: Schema.Array(
     Schema.Struct({
       name: Schema.String,
       path: Schema.String,
-      currentHash: Digest,
+      currentHash: Hash,
       markdown: Schema.String,
       truncated: Schema.Boolean,
     }),

@@ -8,7 +8,7 @@ import {
   SkillId,
   SkillVersionId,
 } from "./entity-ids.js";
-import { Digest } from "../vocabulary.js";
+import { Hash } from "../vocabulary.js";
 
 export const SourceRelativePath = Schema.String.check(
   Schema.makeFilter(
@@ -134,7 +134,7 @@ export const SkillsShLockFileEntry = Schema.Struct({
   lock_path: HistoricalLocator,
   lock_version: Schema.Number,
   lock_scope: Schema.Literals(["project", "global"]),
-  lock_content_hash: Digest,
+  lock_content_hash: Hash,
   source: Schema.String,
   source_type: Schema.String,
   source_url: Schema.optionalKey(Schema.String),
@@ -146,7 +146,7 @@ export const SkillsShLockFileEntry = Schema.Struct({
   skill_folder_hash: Schema.optionalKey(Schema.String),
   well_known_hash: Schema.optionalKey(Schema.String),
   content_agreement: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
-  original_entry_hash: Digest,
+  original_entry_hash: Hash,
   original_entry: BoundedOriginalEntry,
   upstream_baseline: Schema.optionalKey(
     Schema.Struct({
@@ -168,9 +168,9 @@ export type MaterializationProfile = typeof MaterializationProfile.Type;
 
 export const SkillVersion = Schema.Struct({
   skill_version_id: SkillVersionId,
-  source_hash: Digest,
-  artifact_hash: Digest,
-  validation_identity_hash: Digest,
+  source_hash: Hash,
+  artifact_hash: Hash,
+  validation_identity_hash: Hash,
   materialization_profile: MaterializationProfile,
 });
 export interface SkillVersion extends Schema.Schema.Type<typeof SkillVersion> {}
@@ -195,15 +195,15 @@ export interface Collection extends Schema.Schema.Type<typeof Collection> {}
 
 export const CollectionVersionSkill = Schema.Struct({
   source_path: CollectionRelativePath,
-  source_hash: Digest,
-  artifact_hash: Digest,
+  source_hash: Hash,
+  artifact_hash: Hash,
   materialization_profile: MaterializationProfile,
 });
 export type CollectionVersionSkill = typeof CollectionVersionSkill.Type;
 
 export const CollectionVersion = Schema.Struct({
   collection_version_id: CollectionVersionId,
-  hash: Digest,
+  hash: Hash,
   copy_profile: Schema.Literal("verbatim/v1"),
   members: Schema.Array(CollectionVersionSkill),
 });
@@ -417,7 +417,7 @@ export const LibraryManifest = Schema.Struct({
   skills: Schema.Array(Skill),
   collection_versions: Schema.Array(CollectionVersion),
   imports: Schema.Array(Import),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   /** What the account enables for every project. */
   enabled: Schema.Array(Enabled),
 }).check(
@@ -587,7 +587,7 @@ export const LibraryWriteRequest = Schema.Struct({
 });
 export const SnapshotUploadResponse = Schema.Struct({
   library_id: Schema.String,
-  snapshot_digest: Digest,
+  snapshot_digest: Hash,
   reused: Schema.Boolean,
 });
 
@@ -609,7 +609,7 @@ export type SnapshotArchiveEntry = Schema.Schema.Type<typeof SnapshotArchiveEntr
 
 export const SnapshotArchive = Schema.Struct({
   profile: Schema.Literal("verbatim/v1"),
-  digest: Digest,
+  digest: Hash,
   entries: Schema.Array(SnapshotArchiveEntry),
 });
 export interface SnapshotArchive extends Schema.Schema.Type<typeof SnapshotArchive> {}

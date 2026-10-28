@@ -1,7 +1,7 @@
 import { Schema, SchemaGetter } from "effect";
 import { Collection } from "../library-contracts.js";
 import { SkillV7 } from "./manifest-v7.js";
-import { Digest, HarnessName } from "../../vocabulary.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 import {
   BindingEntryV7,
   CollectionVersionV7,
@@ -24,7 +24,7 @@ export const LibraryManifestV6 = Schema.Struct({
   skills: Schema.Array(SkillV7),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(ImportV7),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV6),
 });
 export type LibraryManifestV6 = typeof LibraryManifestV6.Type;

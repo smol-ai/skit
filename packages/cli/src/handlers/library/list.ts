@@ -32,7 +32,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
         ...(skill.versionId === undefined ? {} : { selected_skill_version_id: skill.versionId }),
         versions: skill.versions.map((version) => ({
           skill_version_id: version.id,
-          artifact_hash: version.digest,
+          artifact_hash: version.hash,
         })),
       })),
     })),

@@ -76,12 +76,12 @@ export const selectPluginMembers = Effect.fn("Source.selectPluginMembers")(funct
   );
   const selected: { path: string; name: string }[] = [];
   const byName = new Map<string, { path: string; name: string }>();
-  const digests = new Map<string, string>();
-  const digest = Effect.fn("Source.pluginMirrorDigest")(function* (path: string) {
-    let value = digests.get(path);
+  const hashes = new Map<string, string>();
+  const hash = Effect.fn("Source.pluginMirrorHash")(function* (path: string) {
+    let value = hashes.get(path);
     if (value === undefined) {
       value = yield* deterministicTreeHash(yield* fs.realPath(path));
-      digests.set(path, value);
+      hashes.set(path, value);
     }
     return value;
   });
@@ -113,7 +113,7 @@ export const selectPluginMembers = Effect.fn("Source.selectPluginMembers")(funct
       (left.length === 0 && right.length > 0) ||
       (left.length > 0 && right.length === 0) ||
       sameUnit;
-    if (mirror && (yield* digest(duplicate.path)) === (yield* digest(path))) continue;
+    if (mirror && (yield* hash(duplicate.path)) === (yield* hash(path))) continue;
     if (previous.has(duplicate.path) && !previous.has(path)) {
       diagnostics.push({
         code: "plugin-member-held",

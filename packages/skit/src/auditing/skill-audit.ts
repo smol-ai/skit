@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
-  Digest,
+  Hash,
   SkillAssessmentAcceptance,
   SkillAssessmentContext,
   SkillAssessmentDecision,
@@ -98,7 +98,7 @@ export interface AuditSkillOptions {
   declaredCapabilities?: string[];
   path?: string;
   fingerprintPath?: string;
-  artifactContentHash?: Digest;
+  artifactContentHash?: Hash;
 }
 
 export function skillFindingFingerprint(input: {
@@ -108,7 +108,7 @@ export function skillFindingFingerprint(input: {
   line: number;
   column: number;
   matchedText: string;
-}): Digest {
+}): Hash {
   const hash = createHash("sha256");
   for (const component of [
     "skit/finding/v1",
@@ -165,7 +165,7 @@ function locationAt(text: string, index: number, matchText: string, path?: strin
 export function auditSkill(text: string, options: AuditSkillOptions = {}): SkillAudit {
   const artifactContentHash =
     options.artifactContentHash ??
-    (`sha256:${createHash("sha256").update(text).digest("hex")}` as Digest);
+    (`sha256:${createHash("sha256").update(text).digest("hex")}` as Hash);
   const allMatches = RULES.flatMap((rule) => {
     const pattern = new RegExp(rule.pattern.source, `${rule.pattern.flags.replace("g", "")}g`);
     return [...text.matchAll(pattern)].map((match) => ({
@@ -290,7 +290,7 @@ type EvaluateSkillAuditOptions =
   | { context: SkillAssessmentContext }
   | {
       context: SkillAssessmentContext;
-      artifactContentHash: Digest;
+      artifactContentHash: Hash;
       acceptances: readonly SkillAssessmentAcceptance[];
       evaluatedAt: string;
     };

@@ -8,7 +8,7 @@ import {
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-  Digest,
+  Hash,
   AbsoluteDevicePath,
 } from "../src/index.js";
 import {
@@ -191,7 +191,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
             destination: "agents" as const,
             root: AbsoluteDevicePath.make(f.root),
             path: AbsoluteDevicePath.make(join(f.root, "projection")),
-            expected_hash: Digest.make(`sha256:${"a".repeat(64)}`),
+            expected_hash: Hash.make(`sha256:${"a".repeat(64)}`),
             status: "installed" as const,
             installed_at: "2026-10-06T00:00:00Z",
           },

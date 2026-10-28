@@ -1,5 +1,5 @@
 import { Crypto, Effect } from "effect";
-import type { Digest } from "../vocabulary.js";
+import type { Hash } from "../vocabulary.js";
 
 /**
  * Length-framed digest input: each part is `<byte length>:<bytes>\0`, so `["ab", "c"]` and
@@ -22,7 +22,7 @@ export function encodeHashParts(parts: readonly (string | Uint8Array)[]): Uint8A
 }
 
 /** SHA-256 through Effect's Crypto service, so it runs unchanged on Node and the Worker. */
-export const sha256Digest = Effect.fn("Digest.sha256")(function* (bytes: Uint8Array) {
-  const digest = yield* (yield* Crypto.Crypto).digest("SHA-256", bytes);
-  return `sha256:${Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("")}` as const satisfies Digest;
+export const sha256Hash = Effect.fn("Hash.sha256")(function* (bytes: Uint8Array) {
+  const hash = yield* (yield* Crypto.Crypto).digest("SHA-256", bytes);
+  return `sha256:${Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("")}` as const satisfies Hash;
 });

@@ -1,7 +1,7 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { validateArtifactBundle } from "../src/integrity/validate.js";
 
 const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
@@ -9,7 +9,7 @@ const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
   return {
     path,
     bytes,
-    digest: yield* sha256Digest(bytes),
+    digest: yield* sha256Hash(bytes),
     media_type: "text/plain",
     executable: false,
   };

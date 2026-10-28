@@ -100,7 +100,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const skill = imported.skills.find((item) => item.skill_id === fact.skillId)!;
     const version = currentSkillVersion(imported, skill)!;
     const policy = globalEnabled(imported).invocation_policies?.[fact.skillId];
-    const digest = yield* Effect.scoped(
+    const hash = yield* Effect.scoped(
       Effect.gen(function* () {
         const renderer = yield* prepareInstalledSkillRebuild(
           imported,
@@ -114,7 +114,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
         return yield* deterministicTreeHash(path);
       }),
     );
-    desired.set(fact.installedSkillId, digest);
+    desired.set(fact.installedSkillId, hash);
   }
   const backup = yield* prepareOwnedRecoveryMoves(
     live.map((fact) => ({

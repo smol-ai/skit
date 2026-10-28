@@ -832,7 +832,7 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
     yield* a.importSource("second");
     yield* a.sync();
     const before = server.stored;
-    inject({ _tag: "FailDownload", digest: server.remote!.manifest.snapshot_digests[1]! });
+    inject({ _tag: "FailDownload", hash: server.remote!.manifest.snapshot_digests[1]! });
     const progress: string[] = [];
     const failure = yield* Effect.flip(
       b.sync({
@@ -890,11 +890,11 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
     const { a, b, c, fs, inject, server } = yield* devices;
     yield* a.importSource("first");
     yield* a.sync();
-    const digest = server.remote!.manifest.snapshot_digests[0]!;
-    const destination = collectionVersionPath(join(b.home, "originals"), digest);
+    const hash = server.remote!.manifest.snapshot_digests[0]!;
+    const destination = collectionVersionPath(join(b.home, "originals"), hash);
     yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
-    yield* fs.copy(collectionVersionPath(join(a.home, "originals"), digest), destination);
-    inject({ _tag: "FailDownload", digest });
+    yield* fs.copy(collectionVersionPath(join(a.home, "originals"), hash), destination);
+    inject({ _tag: "FailDownload", hash });
     const before = yield* captureDisk(b.disk);
     const preview = yield* b.sync({ apply: false });
     assert.strictEqual(preview.status, "pull_ready");

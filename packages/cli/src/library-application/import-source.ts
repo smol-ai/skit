@@ -146,7 +146,7 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
       return {
         kind: "plain" as const,
         ...diagnostics,
-        snapshot_digest: prepared.digest,
+        snapshot_digest: prepared.hash,
         skills: prepared.facts.map((skill) => ({
           name: skill.name,
           verbatim_path: skill.sourcePath,
@@ -154,7 +154,7 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
         /** Per-Skill bytes, so a refresh preview can tell which Skills changed. */
         members: prepared.facts.map((skill) => ({
           source_path: skill.sourcePath,
-          artifact_hash: skill.artifactDigest,
+          artifact_hash: skill.artifactHash,
         })),
       };
     }),

@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
 import {
   deterministicTreeHash,
-  Digest,
+  Hash,
   LinkStat,
   LibraryStore,
   canonicalJson,
@@ -32,7 +32,7 @@ const EntryFields = {
 };
 const RecoveryEntry = Schema.Struct({
   ...EntryFields,
-  contentHash: Digest,
+  contentHash: Hash,
   approvedMarker: Schema.optionalKey(Schema.String),
   parent: Identity,
 });
@@ -68,7 +68,7 @@ export const RecoveryFact = Schema.Struct({
 export const RecoveryInspection = Schema.Struct({
   operationId: Schema.String,
   directory: Schema.String,
-  planId: Digest,
+  planId: Hash,
   entries: Schema.Array(RecoveryFact),
   legacy: Schema.Boolean,
 });
@@ -508,7 +508,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
       });
     }
   }
-  const planId = Digest.make(
+  const planId = Hash.make(
     `sha256:${createHash("sha256")
       .update(JSON.stringify([operationId, evidence, facts]))
       .digest("hex")}`,
