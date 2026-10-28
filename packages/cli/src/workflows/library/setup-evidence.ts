@@ -22,19 +22,19 @@ export const indexSetupOnboardingEvidence = (
   const library = imported?.library;
   const importedByLockEvidence = new Map<string, Set<string>>();
   if (library && imported?.machineId)
-    for (const acquisition of library.imports) {
-      const observations = acquisition.lock_file_entries.filter(
+    for (const sourceImport of library.imports) {
+      const observations = sourceImport.lock_file_entries.filter(
         (observation) => observation.machine_id === imported.machineId,
       );
       if (!observations.length) continue;
       const members = library.collection_versions
-        .filter((copy) => copy.collection_version_id === acquisition.collection_version_id)
+        .filter((copy) => copy.collection_version_id === sourceImport.collection_version_id)
         .flatMap((copy) => copy.members);
       for (const skill of library.skills.filter(
-        (skill) => skill.collection_id === acquisition.collection_id,
+        (skill) => skill.collection_id === sourceImport.collection_id,
       ))
         for (const version of skill.versions) {
-          const path = acquisition.kind === "source" ? skill.path : ".";
+          const path = sourceImport.kind === "source" ? skill.path : ".";
           if (
             !members.some(
               (member) =>

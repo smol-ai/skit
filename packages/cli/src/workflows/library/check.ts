@@ -37,21 +37,21 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
           display_name: subject.collection.label,
         });
       const skills = subject.skills;
-      const acquisitionIds = subjectImportIds(state, subject);
+      const importIds = subjectImportIds(state, subject);
       const copyIds = new Set(
         state.imports
-          .filter((acquisition) => acquisitionIds.has(acquisition.import_id))
-          .map((acquisition) => acquisition.collection_version_id),
+          .filter((sourceImport) => importIds.has(sourceImport.import_id))
+          .map((sourceImport) => sourceImport.collection_version_id),
       );
       const copies = state.collection_versions.filter((copy) =>
         copyIds.has(copy.collection_version_id),
       );
-      const acquisition = latestSourceImport(state, subject);
+      const sourceImport = latestSourceImport(state, subject);
       const currentCopy =
-        acquisition === undefined
+        sourceImport === undefined
           ? undefined
           : state.collection_versions.find(
-              (copy) => copy.collection_version_id === acquisition.collection_version_id,
+              (copy) => copy.collection_version_id === sourceImport.collection_version_id,
             );
       const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
@@ -66,7 +66,7 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
             copy.digest,
         });
       }
-      const skillsSh = yield* checkSkillsShSubject(subject, acquisition, currentCopy);
+      const skillsSh = yield* checkSkillsShSubject(subject, sourceImport, currentCopy);
       return {
         subject_id: subject.subjectId,
         subject_kind: subject.kind,
@@ -87,7 +87,7 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
         ...(inspected === undefined
           ? {}
           : { available_snapshot_digest: inspected.snapshot_digest }),
-        has_imports: state.imports.some((acquisition) => acquisitionIds.has(acquisition.import_id)),
+        has_imports: state.imports.some((sourceImport) => importIds.has(sourceImport.import_id)),
         ...(skillsSh ? { skills_sh: skillsSh } : {}),
       };
     }),

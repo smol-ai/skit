@@ -117,20 +117,20 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
 ) {
-  const acquisition = latestSourceImport(state, subject);
+  const sourceImport = latestSourceImport(state, subject);
   const priorTree =
-    acquisition === undefined
+    sourceImport === undefined
       ? undefined
       : state.collection_versions.find(
-          (tree) => tree.collection_version_id === acquisition.collection_version_id,
+          (tree) => tree.collection_version_id === sourceImport.collection_version_id,
         );
-  if (acquisition === undefined || priorTree === undefined)
+  if (sourceImport === undefined || priorTree === undefined)
     return yield* new CollectionNotUpdatable({
       subject_id: subject.subjectId,
       label: subject.label,
     });
-  const input = yield* subjectSource(subject, acquisition.input.value);
-  return { acquisition, priorTree, input };
+  const input = yield* subjectSource(subject, sourceImport.input.value);
+  return { acquisition: sourceImport, priorTree, input };
 });
 
 /** Observe one Collection without retaining content or reconciling installed skills. */
@@ -138,7 +138,11 @@ export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdat
   state: LibraryState,
   subject: LibrarySubject,
 ) {
-  const { acquisition, priorTree: tree, input } = yield* resolveUpdate(state, subject);
+  const {
+    acquisition: sourceImport,
+    priorTree: tree,
+    input,
+  } = yield* resolveUpdate(state, subject);
   const inspected = yield* inspectLibrarySource(
     input,
     undefined,
@@ -157,7 +161,7 @@ export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdat
       : {}),
     ...skillChanges(
       state,
-      acquisition.collection_id,
+      sourceImport.collection_id,
       tree.members,
       inspected.skills.map((skill) => ({
         source_path: skill.verbatim_path,

@@ -120,8 +120,8 @@ export const subjectImportIds = (
 ): ReadonlySet<string> =>
   new Set(
     state.imports
-      .filter((acquisition) => acquisition.collection_id === subjectCollectionId(subject))
-      .map((acquisition) => acquisition.import_id),
+      .filter((sourceImport) => sourceImport.collection_id === subjectCollectionId(subject))
+      .map((sourceImport) => sourceImport.import_id),
   );
 
 export const owningCollectionSubject = (

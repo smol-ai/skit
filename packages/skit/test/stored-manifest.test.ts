@@ -17,7 +17,7 @@ const skillId = makeSkillId();
 const otherSkillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const otherVersionId = makeSkillVersionId();
-const acquisitionId = makeImportId();
+const importId = makeImportId();
 const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const sourceIdentity = {
@@ -56,7 +56,7 @@ it("migrates a v5 manifest through v6 to the current model", () => {
           source_identity: sourceIdentity,
           tracking: { kind: "default" },
           selection: { kind: "full-tree" },
-          last_acquisition_id: acquisitionId,
+          last_acquisition_id: importId,
         },
       },
     ],
@@ -72,14 +72,14 @@ it("migrates a v5 manifest through v6 to the current model", () => {
       versions: [
         {
           ...version(skill_version_id!),
-          origins: [{ acquisition_id: acquisitionId, source_path: name }],
+          origins: [{ acquisition_id: importId, source_path: name }],
         },
       ],
     })),
     retained_copies: [collectionVersion],
     acquisitions: [
       {
-        acquisition_id: acquisitionId,
+        acquisition_id: importId,
         retained_copy_id: collectionVersionId,
         source_identity: sourceIdentity,
         tracking: { kind: "default" },
@@ -142,7 +142,7 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
     retained_copies: [{ ...collectionVersion, members: [collectionVersion.members[0]] }],
     acquisitions: [
       {
-        acquisition_id: acquisitionId,
+        acquisition_id: importId,
         collection_id: collectionId,
         kind: "source",
         retained_copy_id: collectionVersionId,
@@ -211,7 +211,7 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
     retained_copies: [{ ...collectionVersion, members: [collectionVersion.members[0]] }],
     acquisitions: [
       {
-        acquisition_id: acquisitionId,
+        acquisition_id: importId,
         collection_id: collectionId,
         kind: "source",
         retained_copy_id: collectionVersionId,
@@ -259,7 +259,7 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
       item.lock_file_entries,
     ]),
     [
-      [acquisitionId, "source", collectionVersionId, "2026-09-20T00:00:00.000Z", []],
+      [importId, "source", collectionVersionId, "2026-09-20T00:00:00.000Z", []],
       [editId, "edit", collectionVersionId, "2026-09-21T00:00:00.000Z", []],
     ],
   );

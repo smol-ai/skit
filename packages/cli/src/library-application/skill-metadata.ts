@@ -63,15 +63,15 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
   for (const skill of state.skills) {
     const selected = currentSkillVersion(state, skill);
     const backing = selected === undefined ? undefined : versionBacking(state, skill, selected);
-    const acquisition = backing?.acquisition;
+    const sourceImport = backing?.acquisition;
     const source =
-      acquisition?.source_identity ??
+      sourceImport?.source_identity ??
       state.collections.find((collection) => collection.collection_id === skill.collection_id)
         ?.upstream?.source_identity;
     let sourceUpdated: string | null = null;
     // Lock file entries whose bytes disagree cannot establish the selected Skill's source date.
     const dates =
-      acquisition?.lock_file_entries
+      sourceImport?.lock_file_entries
         .filter(
           (observation) =>
             observation.content_agreement === "agrees" &&
@@ -101,9 +101,9 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
     }
     metadata.set(skill.skill_id, {
       source: source === undefined ? null : sourceIdentityLabel(source),
-      revision: acquisition?.revision ?? null,
+      revision: sourceImport?.revision ?? null,
       source_updated_at: sourceUpdated,
-      imported_at: validTimestamp(acquisition?.imported_at),
+      imported_at: validTimestamp(sourceImport?.imported_at),
     });
   }
   return metadata;

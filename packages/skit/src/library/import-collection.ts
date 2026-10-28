@@ -196,8 +196,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         Schema.toEquivalence(SourceIdentity)(candidate.upstream.source_identity, source) &&
         Schema.toEquivalence(SourceTracking)(candidate.upstream.tracking, refreshTracking)) ||
       (candidate.upstream === undefined &&
-        sourceImports(state, candidate.collection_id).some((acquisition) =>
-          Schema.toEquivalence(SourceIdentity)(acquisition.source_identity, source),
+        sourceImports(state, candidate.collection_id).some((sourceImport) =>
+          Schema.toEquivalence(SourceIdentity)(sourceImport.source_identity, source),
         )),
   );
   const added = collection === undefined;
@@ -223,7 +223,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     snapshotDigest: request.collectionVersionDigest,
     members: request.facts,
   };
-  const acquisition: Import = {
+  const sourceImport: Import = {
     import_id: makeImportId(),
     collection_id: collectionId,
     kind: "source",
@@ -244,7 +244,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
   if (
     previous !== undefined &&
     Schema.toEquivalence(Import)(previous, {
-      ...acquisition,
+      ...sourceImport,
       import_id: previous.import_id,
       imported_at: previous.imported_at,
     }) &&
@@ -299,7 +299,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         materialization_profile: fact.materializationProfile,
       })),
     });
-  state.imports.push(acquisition);
+  state.imports.push(sourceImport);
   const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
       (error) =>

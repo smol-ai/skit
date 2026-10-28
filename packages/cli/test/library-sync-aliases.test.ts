@@ -117,8 +117,8 @@ it.effect(
         ids(after.imports, (item) => item.import_id),
         ids([...(yield* a.state).imports, ...before.imports], (item) => item.import_id),
       );
-      for (const acquisition of after.imports)
-        assert.strictEqual(acquisition.collection_id, published.collection.collection_id);
+      for (const sourceImport of after.imports)
+        assert.strictEqual(sourceImport.collection_id, published.collection.collection_id);
       assert.deepStrictEqual(after.enabled, enable([publishedSkill.skill_id]));
       assert.deepStrictEqual(after.invocation_policies, {
         [publishedSkill.skill_id]: "explicit",
@@ -263,8 +263,8 @@ it.effect(
         (item) => item.skill_version_id !== v1,
       )!.skill_version_id;
       const imported = yield* collectionVersionDigests(b);
-      const localAcquisitions = ids((yield* b.state).imports, (item) => item.import_id);
-      const remoteAcquisitions = ids(server.remote!.manifest.imports, (item) => item.import_id);
+      const localImports = ids((yield* b.state).imports, (item) => item.import_id);
+      const remoteImports = ids(server.remote!.manifest.imports, (item) => item.import_id);
 
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
@@ -287,7 +287,7 @@ it.effect(
       // The rejected Version's import and bytes stay retained.
       assert.deepStrictEqual(
         ids(after.imports, (item) => item.import_id),
-        [...new Set([...localAcquisitions, ...remoteAcquisitions])].sort(),
+        [...new Set([...localImports, ...remoteImports])].sort(),
       );
       assert.strictEqual(after.imports.length, 3);
       yield* assertIntact(homes, b, imported);
@@ -304,8 +304,8 @@ it.effect("many independent imports of one upstream converge on one published id
     const published = yield* a.importSource("same");
     yield* b.importSource("same");
     yield* c.importSource("same");
-    const acquisitions = [];
-    for (const device of [a, b, c]) acquisitions.push(...(yield* device.state).imports);
+    const imports = [];
+    for (const device of [a, b, c]) imports.push(...(yield* device.state).imports);
     const imported = yield* collectionVersionDigests(c);
     assert.strictEqual((yield* a.sync()).status, "pushed");
     assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
@@ -329,7 +329,7 @@ it.effect("many independent imports of one upstream converge on one published id
       );
       assert.deepStrictEqual(
         ids(state.imports, (item) => item.import_id),
-        ids(acquisitions, (item) => item.import_id),
+        ids(imports, (item) => item.import_id),
       );
       yield* assertIntact(homes, device, imported);
     }

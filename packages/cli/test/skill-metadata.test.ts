@@ -88,8 +88,8 @@ it.effect(
           ...skill,
           local_version_id: skill.versions[0]!.skill_version_id,
         })),
-        imports: state.imports.map((acquisition, index) => ({
-          ...acquisition,
+        imports: state.imports.map((sourceImport, index) => ({
+          ...sourceImport,
           lock_file_entries: [observation(index)],
         })),
       };
@@ -130,8 +130,8 @@ it.effect(
       const unavailable = yield* readLibrarySkillMetadata(
         {
           ...selected,
-          imports: selected.imports.map((acquisition) => ({
-            ...acquisition,
+          imports: selected.imports.map((sourceImport) => ({
+            ...sourceImport,
             lock_file_entries: [{ ...observation(0), content_agreement: "mismatch" }],
           })),
         },
@@ -141,8 +141,8 @@ it.effect(
       const conflicting = yield* readLibrarySkillMetadata(
         {
           ...selected,
-          imports: selected.imports.map((acquisition) => ({
-            ...acquisition,
+          imports: selected.imports.map((sourceImport) => ({
+            ...sourceImport,
             lock_file_entries: [
               observation(0),
               { ...observation(0), source_updated_at: "2026-04-21T00:00:00.000Z" },

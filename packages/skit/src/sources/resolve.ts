@@ -858,7 +858,7 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
         return yield* invalidSource(`Selected discovery Skill is absent upstream: ${name}`);
   }
   const seen = new Set<string>();
-  const acquiredDirectories: string[] = [];
+  const importedDirectories: string[] = [];
   let downloadedBytes = 0;
   let regularBytes = 0;
   const originalRoot = join(workspace, "discovery-original");
@@ -871,7 +871,7 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     if (selectedMembers && !selectedMembers.has(entry.name)) continue;
     const directory = join(originalRoot, entry.name);
     yield* fs.makeDirectory(directory);
-    acquiredDirectories.push(directory);
+    importedDirectories.push(directory);
     if (item.version === "0.2.0") {
       const artifact = item.entry;
       if (!discoveryDigest.test(artifact.digest))
@@ -980,7 +980,7 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     source,
     descriptorKind: "observed" as const,
     originalRoot,
-    observedSkillPaths: acquiredDirectories.map(
+    observedSkillPaths: importedDirectories.map(
       (directory) => relative(originalRoot, directory) || ".",
     ),
   };
@@ -1188,7 +1188,7 @@ export function resolveSkitSource(
         source.type === "registry" ? (source.authority ?? options.registryBaseUrl) : undefined;
       if (source.type === "registry" && !registryBaseUrl)
         return yield* Effect.fail(new RegistryNotConfigured());
-      const acquiredSource: SkitSource =
+      const importedSource: SkitSource =
         source.type === "registry"
           ? { ...source, authority: registryBaseUrl!.replace(/\/$/, "") }
           : source;
@@ -1269,7 +1269,7 @@ export function resolveSkitSource(
         yield* assertDirectSkillDocument(skillText, type);
         yield* fs.writeFileString(join(directory, "SKILL.md"), skillText);
         return {
-          source: acquiredSource,
+          source: importedSource,
           revision,
           originalRoot: directory,
           descriptorKind: "observed" as const,
@@ -1322,7 +1322,7 @@ export function resolveSkitSource(
         options.previousSkillPaths,
         extracted,
       );
-      return { source: acquiredSource, ...discovered, originalRoot: extracted, revision };
+      return { source: importedSource, ...discovered, originalRoot: extracted, revision };
     }).pipe(
       Effect.catchTag("PluginSkillConflict", (error) =>
         Effect.fail(

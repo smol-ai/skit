@@ -309,7 +309,8 @@ it.effect(
       expect(restored.skills).toHaveLength(2);
       expect(restored.collection_versions).toEqual(after.collection_versions);
       expect(restored.imports).toHaveLength(after.imports.length + 1);
-      for (const acquisition of after.imports) expect(restored.imports).toContainEqual(acquisition);
+      for (const sourceImport of after.imports)
+        expect(restored.imports).toContainEqual(sourceImport);
       const prior = f.before.skills[0];
       const selected = restored.skills.find((skill) => skill.skill_id === prior.skill_id)!;
       expect(currentSkillVersion(restored, selected)?.skill_version_id).toBe(

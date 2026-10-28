@@ -103,9 +103,9 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       ...saved.state,
       collections: [collection],
       skills: [member],
-      imports: saved.state.imports.map((acquisition) => ({
-        ...acquisition,
-        lock_file_entries: acquisition.lock_file_entries.map((observation) => ({
+      imports: saved.state.imports.map((sourceImport) => ({
+        ...sourceImport,
+        lock_file_entries: sourceImport.lock_file_entries.map((observation) => ({
           ...observation,
           source_type: "github",
           source_url: upstream,
@@ -163,15 +163,15 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       checked[0]?.skills_sh?.members[0]?.upstream_commit,
     );
     const subject = librarySubjects(localState)[0]!;
-    const acquisition = localState.imports[0]!;
+    const sourceImport = localState.imports[0]!;
     const collectionVersion = localState.collection_versions[0]!;
     type Observation = LibraryState["imports"][number]["lock_file_entries"][number];
     const checkObservation = (change: Partial<Observation> = {}) =>
       checkSkillsShSubject(
         subject,
         {
-          ...acquisition,
-          lock_file_entries: acquisition.lock_file_entries.map((observation) => ({
+          ...sourceImport,
+          lock_file_entries: sourceImport.lock_file_entries.map((observation) => ({
             ...observation,
             ...change,
           })),

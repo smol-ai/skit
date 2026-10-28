@@ -46,11 +46,11 @@ const takeCollection = (
     ...manifest.skills.filter((item) => item.collection_id !== id),
     ...remote.skills.filter((item) => item.collection_id === id),
   ];
-  const acquisitions = [
+  const imports = [
     ...manifest.imports.filter((item) => item.collection_id !== id),
     ...remote.imports.filter((item) => item.collection_id === id),
   ];
-  const referenced = new Set(acquisitions.map((item) => item.collection_version_id));
+  const referenced = new Set(imports.map((item) => item.collection_version_id));
   const retained_copies = [
     ...manifest.collection_versions,
     ...remote.collection_versions.filter(
@@ -75,9 +75,9 @@ const takeCollection = (
       ...remote.collections.filter((item) => item.collection_id === id),
     ],
     skills,
-    imports: acquisitions,
+    imports: imports,
     collection_versions: retained_copies,
-    enabled: mergeEnabled({ skills, imports: acquisitions, collection_versions: retained_copies }, [
+    enabled: mergeEnabled({ skills, imports: imports, collection_versions: retained_copies }, [
       [...manifest.enabled.filter((item) => !belongs(item)), ...remote.enabled.filter(belongs)],
     ]),
   };
@@ -354,7 +354,7 @@ export function mergeLibraryManifests(
     (item) => item.collection_version_id,
     takeRemote,
   );
-  const acquisitions = mergeRecords<Import>(
+  const imports = mergeRecords<Import>(
     "acquisition",
     base.imports,
     local.imports,
@@ -363,7 +363,7 @@ export function mergeLibraryManifests(
     takeRemote,
   );
   // A copy may be shared by Collections. Keep it while any surviving import references it.
-  const referencedCopies = new Set(acquisitions.values.map((item) => item.collection_version_id));
+  const referencedCopies = new Set(imports.values.map((item) => item.collection_version_id));
   for (const id of referencedCopies) {
     if (trees.values.some((item) => item.collection_version_id === id)) continue;
     const copy =
@@ -376,17 +376,17 @@ export function mergeLibraryManifests(
     collections: collections.values,
     skills: skills.values,
     collection_versions: trees.values,
-    imports: acquisitions.values,
+    imports: imports.values,
   };
   const enabled = mergeEnabledIntent(base, local, remote, library, takeRemote);
   const manifest = currentLibraryManifest({
     collections: collections.values,
     skills: skills.values,
     collection_versions: trees.values,
-    imports: acquisitions.values,
+    imports: imports.values,
     snapshot_digests: librarySnapshotDigests({
       collection_versions: trees.values,
-      imports: acquisitions.values,
+      imports: imports.values,
     }),
     enabled: enabled.values,
   });
@@ -401,7 +401,7 @@ export function mergeLibraryManifests(
         ),
     ),
     ...trees.conflicts,
-    ...acquisitions.conflicts.filter(
+    ...imports.conflicts.filter(
       (key) =>
         ![...base.imports, ...local.imports, ...remote.imports].some(
           (item) =>

@@ -34,7 +34,7 @@ const copy: CollectionVersion = {
   ],
 };
 const collectionId = makeCollectionId();
-const acquisition = (overrides: Partial<Import>): Import => ({
+const sourceImport = (overrides: Partial<Import>): Import => ({
   import_id: makeImportId(),
   collection_id: collectionId,
   kind: "source",
@@ -54,7 +54,7 @@ const acquisition = (overrides: Partial<Import>): Import => ({
 });
 
 it("omits GitHub bytes pinned to a commit from private snapshot planning", () => {
-  const pinned = acquisition({});
+  const pinned = sourceImport({});
   assert.strictEqual(importCanBeRefetched(pinned), true);
   assert.deepStrictEqual(
     librarySnapshotDigests({ collection_versions: [copy], imports: [pinned] }),
@@ -64,7 +64,7 @@ it("omits GitHub bytes pinned to a commit from private snapshot planning", () =>
 
 it("restores by revision whatever the collection root or input text", () => {
   for (const restorable of [
-    acquisition({
+    sourceImport({
       source_identity: {
         kind: "github",
         owner: "example-org",
@@ -73,7 +73,7 @@ it("restores by revision whatever the collection root or input text", () => {
       },
       input: { value: "https://github.com/example-org/skills/tree/main/skills" },
     }),
-    acquisition({
+    sourceImport({
       source_identity: {
         kind: "registry",
         authority: "default",
@@ -88,12 +88,12 @@ it("restores by revision whatever the collection root or input text", () => {
 });
 
 it("keeps unpinned, local, and edit imports snapshot-backed", () => {
-  const { revision: _revision, ...unpinned } = acquisition({});
-  const local = acquisition({
+  const { revision: _revision, ...unpinned } = sourceImport({});
+  const local = sourceImport({
     source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/skill" } },
     input: { value: "/tmp/skill" },
   });
-  const edit = acquisition({ kind: "edit" });
+  const edit = sourceImport({ kind: "edit" });
   for (const item of [unpinned, local, edit]) assert.strictEqual(importCanBeRefetched(item), false);
   assert.deepStrictEqual(
     librarySnapshotDigests({ collection_versions: [copy], imports: [unpinned] }),
@@ -112,13 +112,13 @@ const sourceCopy: CollectionVersion = {
   collection_version_id: sourceCopyId,
   digest: sourceDigest,
 };
-const { revision: _unpinnedRevision, ...unpinnedAcquisition } = acquisition({});
+const { revision: _unpinnedRevision, ...unpinnedImport } = sourceImport({});
 const mixedManifest: LibraryManifest = {
   schema: "skit.library.v8",
   collections: [{ collection_id: collectionId, label: "skills" }],
   skills: [],
   collection_versions: [copy, sourceCopy],
-  imports: [unpinnedAcquisition, acquisition({ collection_version_id: sourceCopyId })],
+  imports: [unpinnedImport, sourceImport({ collection_version_id: sourceCopyId })],
   snapshot_digests: [digest],
   enabled: [],
 };
@@ -126,7 +126,7 @@ const mixedManifest: LibraryManifest = {
 it("decodes a v4 manifest into the current model without selections", () => {
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
-  const legacyAcquisition = {
+  const legacyImport = {
     acquisition_id: makeImportId(),
     retained_copy_id: collectionVersionId,
     source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
@@ -154,7 +154,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
             artifact_digest: digest,
             validation_identity_digest: digest,
             materialization_profile: "plain-skill/v1",
-            origins: [{ acquisition_id: legacyAcquisition.acquisition_id, source_path: "review" }],
+            origins: [{ acquisition_id: legacyImport.acquisition_id, source_path: "review" }],
           },
         ],
       },
@@ -172,7 +172,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
         },
       },
     ],
-    acquisitions: [legacyAcquisition],
+    acquisitions: [legacyImport],
     snapshot_digests: [digest],
     bindings: [],
   });

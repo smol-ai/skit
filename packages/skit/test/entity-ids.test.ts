@@ -34,7 +34,7 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
     skill: first,
     version: deterministicMigrationId("skillVersion", source, seed),
     imported: deterministicMigrationId("retainedCopy", source, seed),
-    acquisition: deterministicMigrationId("acquisition", source, seed),
+    sourceImport: deterministicMigrationId("acquisition", source, seed),
     projection: deterministicMigrationId("projection", source, seed),
     machine: deterministicMigrationId("machine", source, seed),
     operation: deterministicMigrationId("operation", source, seed),
@@ -45,7 +45,7 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
   assert.strictEqual(Schema.is(SkillId)(ids.skill), true);
   assert.strictEqual(Schema.is(SkillVersionId)(ids.version), true);
   assert.strictEqual(Schema.is(CollectionVersionId)(ids.imported), true);
-  assert.strictEqual(Schema.is(ImportId)(ids.acquisition), true);
+  assert.strictEqual(Schema.is(ImportId)(ids.sourceImport), true);
   assert.strictEqual(Schema.is(InstalledSkillId)(ids.projection), true);
   assert.strictEqual(Schema.is(MachineId)(ids.machine), true);
   assert.strictEqual(Schema.is(OperationId)(ids.operation), true);

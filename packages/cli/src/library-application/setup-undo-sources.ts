@@ -12,7 +12,7 @@ import {
 import type { SetupIntent } from "./setup-undo-intent.js";
 
 export interface UndoSourceImport {
-  readonly acquisitionId: Import["import_id"];
+  readonly importId: Import["import_id"];
   readonly observedAt: string;
 }
 
@@ -61,7 +61,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
     let observation = observations.get(prior.collectionId);
     if (!observation) {
       observation = {
-        acquisitionId: makeImportId(),
+        importId: makeImportId(),
         observedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       };
       observations.set(prior.collectionId, observation);
@@ -83,7 +83,7 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       collection_version_id: original.collection_version_id,
       source_identity: original.source_identity,
       ...(original.revision === undefined ? {} : { revision: original.revision }),
-      import_id: observation.acquisitionId,
+      import_id: observation.importId,
       imported_at: observation.observedAt,
       machine_id: machineId,
       input: { value: path },

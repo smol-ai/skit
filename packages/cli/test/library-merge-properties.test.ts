@@ -60,7 +60,7 @@ const pool = Array.from({ length: 4 }, (_, index) => {
         },
       ],
     },
-    acquisition: {
+    sourceImport: {
       import_id: makeImportId(),
       collection_id: collectionId,
       kind: "source" as const,
@@ -103,16 +103,16 @@ const manifestOf = (choices: Side): LibraryManifest => {
         : [],
   );
   const retained_copies = present.map(({ entry }) => entry.collectionVersion);
-  const acquisitions = present.map(({ entry }) => entry.acquisition);
+  const imports = present.map(({ entry }) => entry.sourceImport);
   return Schema.decodeUnknownSync(LibraryManifest)(
     currentLibraryManifest({
       collections: present.map(({ entry, choice }) => entry.collection(choice.label)),
       skills: present.map(({ entry }) => entry.skill),
       collection_versions: retained_copies,
-      imports: acquisitions,
+      imports: imports,
       snapshot_digests: librarySnapshotDigests({
         collection_versions: retained_copies,
-        imports: acquisitions,
+        imports: imports,
       }),
       enabled: entries,
     }),

@@ -1057,7 +1057,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     const versionId = makeCollectionVersionId();
     const skillVersionId = makeSkillVersionId();
     const skillId = makeSkillId();
-    const acquisitionId = makeImportId();
+    const importId = makeImportId();
     const machineId = makeMachineId();
     const installedSkillId = makeInstalledSkillId();
     const orphanedSkill = join(f.codex, "orphaned");
@@ -1143,7 +1143,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       ],
       imports: [
         {
-          import_id: acquisitionId,
+          import_id: importId,
           collection_id: collectionId,
           kind: "source",
           collection_version_id: versionId,
@@ -1328,7 +1328,7 @@ it.effect(
       const missingVersionId = makeSkillVersionId();
       const currentSkillId = makeSkillId();
       const missingSkillId = makeSkillId();
-      const acquisitionId = makeImportId();
+      const importId = makeImportId();
       const machineId = makeMachineId();
       const currentInstalledSkillId = makeInstalledSkillId();
       const missingInstalledSkillId = makeInstalledSkillId();
@@ -1425,7 +1425,7 @@ it.effect(
         ],
         imports: [
           {
-            import_id: acquisitionId,
+            import_id: importId,
             collection_id: collectionId,
             kind: "source",
             collection_version_id: versionId,
@@ -1597,8 +1597,8 @@ for (const kind of ["source", "edit"] as const) {
       expectImport({ ...library, collection_versions: [] });
       expectImport({
         ...library,
-        imports: library.imports.map((acquisition) => ({
-          ...acquisition,
+        imports: library.imports.map((sourceImport) => ({
+          ...sourceImport,
           collection_id: makeCollectionId(),
         })),
       });
@@ -1620,9 +1620,9 @@ for (const kind of ["source", "edit"] as const) {
       ]);
       expectImport({
         ...library,
-        imports: library.imports.map((acquisition) => ({
-          ...acquisition,
-          lock_file_entries: acquisition.lock_file_entries.map((observation) => ({
+        imports: library.imports.map((sourceImport) => ({
+          ...sourceImport,
+          lock_file_entries: sourceImport.lock_file_entries.map((observation) => ({
             ...observation,
             lock_content_hash: `sha256:${"b".repeat(64)}`,
           })),

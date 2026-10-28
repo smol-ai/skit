@@ -66,8 +66,8 @@ export class SourceRestoreInvalid
  * The Source to refetch an import's exact bytes from: its recorded identity at its
  * revision. Git restores pin the commit separately; a Registry restore names the Release.
  */
-const restorableSource = (acquisition: Import): SkitSource | undefined => {
-  const identity = acquisition.source_identity;
+const restorableSource = (sourceImport: Import): SkitSource | undefined => {
+  const identity = sourceImport.source_identity;
   const subpath =
     (identity.kind === "github" || identity.kind === "git") && identity.collection_root !== "."
       ? { subpath: identity.collection_root }
@@ -83,13 +83,13 @@ const restorableSource = (acquisition: Import): SkitSource | undefined => {
     case "git":
       return { type: "git", remote: identity.remote.value, ...subpath };
     case "registry":
-      return acquisition.revision === undefined
+      return sourceImport.revision === undefined
         ? undefined
         : {
             type: "registry",
             namespace: identity.namespace,
             slug: identity.slug,
-            version: acquisition.revision,
+            version: sourceImport.revision,
             ...(identity.authority === "default" ? {} : { authority: identity.authority }),
           };
     default:
@@ -103,12 +103,12 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   options: RestoreOptions,
 ) {
   const copy = manifest.collection_versions.find((candidate) => candidate.digest === digest);
-  const acquisition = manifest.imports.find(
+  const sourceImport = manifest.imports.find(
     (candidate) =>
       candidate.collection_version_id === copy?.collection_version_id &&
       importCanBeRefetched(candidate),
   );
-  if (copy === undefined || acquisition === undefined)
+  if (copy === undefined || sourceImport === undefined)
     return yield* new SourceRestoreInvalid({
       digest,
       detail: "manifest has no exact source-restoration acquisition",
@@ -116,14 +116,15 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   const archive = yield* Effect.scoped(
     Effect.gen(function* () {
       const gitSource =
-        acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git";
-      const commit = gitSource ? acquisition.revision : undefined;
+        sourceImport.source_identity.kind === "github" ||
+        sourceImport.source_identity.kind === "git";
+      const commit = gitSource ? sourceImport.revision : undefined;
       if (gitSource && commit === undefined)
         return yield* new SourceRestoreInvalid({
           digest,
           detail: "pinned Git acquisition has no commit",
         });
-      const source = restorableSource(acquisition);
+      const source = restorableSource(sourceImport);
       if (source === undefined)
         return yield* new SourceRestoreInvalid({
           digest,

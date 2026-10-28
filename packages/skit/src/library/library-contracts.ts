@@ -231,14 +231,14 @@ export interface Import extends Schema.Schema.Type<typeof Import> {}
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** True only when the acquisition names exact bytes another device can retrieve and verify. */
-export const importCanBeRefetched = (acquisition: Import): boolean => {
-  if (acquisition.kind !== "source" || acquisition.revision === undefined) return false;
-  switch (acquisition.source_identity.kind) {
+export const importCanBeRefetched = (sourceImport: Import): boolean => {
+  if (sourceImport.kind !== "source" || sourceImport.revision === undefined) return false;
+  switch (sourceImport.source_identity.kind) {
     case "github":
     case "git":
-      return gitObjectId.test(acquisition.revision);
+      return gitObjectId.test(sourceImport.revision);
     case "registry":
-      return acquisition.revision !== "latest";
+      return sourceImport.revision !== "latest";
     default:
       return false;
   }
@@ -254,9 +254,9 @@ export const librarySnapshotDigests = (input: {
         .filter(
           (copy) =>
             !input.imports.some(
-              (acquisition) =>
-                acquisition.collection_version_id === copy.collection_version_id &&
-                importCanBeRefetched(acquisition),
+              (sourceImport) =>
+                sourceImport.collection_version_id === copy.collection_version_id &&
+                importCanBeRefetched(sourceImport),
             ),
         )
         .map((copy) => copy.digest),
@@ -312,7 +312,7 @@ const collectionImports = (
   collectionId: CollectionId,
 ): Import[] =>
   library.imports
-    .filter((acquisition) => acquisition.collection_id === collectionId)
+    .filter((sourceImport) => sourceImport.collection_id === collectionId)
     .toSorted(
       (left, right) =>
         right.imported_at.localeCompare(left.imported_at) ||
@@ -324,7 +324,7 @@ export const sourceImports = (
   library: Pick<LibraryEntities, "imports">,
   collectionId: CollectionId,
 ): Import[] =>
-  collectionImports(library, collectionId).filter((acquisition) => acquisition.kind === "source");
+  collectionImports(library, collectionId).filter((sourceImport) => sourceImport.kind === "source");
 
 /** The Skills present in a Collection's latest source import. */
 export const currentCollectionSkills = (library: LibraryEntities, collectionId: CollectionId) => {
@@ -344,11 +344,11 @@ export const currentCollectionSkills = (library: LibraryEntities, collectionId: 
  * holds the Skill at its path; a retained edit holds the one edited Skill at its root.
  */
 export const versionBacking = (library: LibraryEntities, skill: Skill, version: SkillVersion) => {
-  for (const acquisition of collectionImports(library, skill.collection_id)) {
+  for (const sourceImport of collectionImports(library, skill.collection_id)) {
     const copy = library.collection_versions.find(
-      (candidate) => candidate.collection_version_id === acquisition.collection_version_id,
+      (candidate) => candidate.collection_version_id === sourceImport.collection_version_id,
     );
-    const path = acquisition.kind === "source" ? skill.path : ".";
+    const path = sourceImport.kind === "source" ? skill.path : ".";
     const member = copy?.members.find((candidate) => candidate.source_path === path);
     if (
       copy !== undefined &&
@@ -357,7 +357,7 @@ export const versionBacking = (library: LibraryEntities, skill: Skill, version: 
       member.artifact_digest === version.artifact_digest &&
       member.materialization_profile === version.materialization_profile
     )
-      return { acquisition, copy, member };
+      return { acquisition: sourceImport, copy, member };
   }
   return undefined;
 };
@@ -368,9 +368,9 @@ export const versionBacking = (library: LibraryEntities, skill: Skill, version: 
  * Versions) is skipped rather than leaving the Skill without one.
  */
 const lastImportedVersion = (library: LibraryEntities, skill: Skill) => {
-  for (const acquisition of sourceImports(library, skill.collection_id)) {
+  for (const sourceImport of sourceImports(library, skill.collection_id)) {
     const member = library.collection_versions
-      .find((copy) => copy.collection_version_id === acquisition.collection_version_id)
+      .find((copy) => copy.collection_version_id === sourceImport.collection_version_id)
       ?.members.find((candidate) => candidate.source_path === skill.path);
     const version = skill.versions.find(
       (candidate) => candidate.artifact_digest === member?.artifact_digest,

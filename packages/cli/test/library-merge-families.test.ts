@@ -36,19 +36,19 @@ interface Side {
   readonly collections: readonly Collection[];
   readonly skills: readonly Skill[];
   readonly retained_copies: readonly CollectionVersion[];
-  readonly acquisitions: readonly Import[];
+  readonly imports: readonly Import[];
   readonly entries: readonly Enabled[];
 }
 const none: Side = {
   collections: [],
   skills: [],
   retained_copies: [],
-  acquisitions: [],
+  imports: [],
   entries: [],
 };
 
 interface Observation {
-  readonly acquisition: Import;
+  readonly sourceImport: Import;
   readonly copy: CollectionVersion;
   readonly versions: Readonly<Record<string, SkillVersion>>;
 }
@@ -96,7 +96,7 @@ const fixture = (paths: readonly string[]) => {
     };
     return {
       copy,
-      acquisition: {
+      sourceImport: {
         import_id: makeImportId(),
         collection_id,
         kind,
@@ -163,7 +163,7 @@ const fixture = (paths: readonly string[]) => {
         };
       }),
       retained_copies: observations.map((item) => item.copy),
-      acquisitions: observations.map((item) => item.acquisition),
+      imports: observations.map((item) => item.sourceImport),
       entries: options.entries ?? [],
     }),
   };
@@ -308,7 +308,7 @@ const families = {
         collections: [...mine.collections, ...theirs.collections],
         skills: [...mine.skills, ...theirs.skills],
         retained_copies: [...mine.retained_copies, ...theirs.retained_copies],
-        acquisitions: [...mine.acquisitions, ...theirs.acquisitions],
+        imports: [...mine.imports, ...theirs.imports],
         entries: [],
       },
       symmetric: true,
@@ -357,7 +357,7 @@ const families = {
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
-        acquisitions: [...remote.acquisitions, mine.acquisition],
+        imports: [...remote.imports, mine.sourceImport],
       },
       symmetric: true,
     };
@@ -418,7 +418,7 @@ const families = {
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
-        acquisitions: [...remote.acquisitions, mine.acquisition],
+        imports: [...remote.imports, mine.sourceImport],
       },
       symmetric: false,
       imports: { skills: [x.skillIds.alpha!], collections: [x.collection_id] },
@@ -445,7 +445,7 @@ const families = {
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
-        acquisitions: [...remote.acquisitions, mine.acquisition],
+        imports: [...remote.imports, mine.sourceImport],
       },
       symmetric: false,
       imports: { skills: [x.skillIds.alpha!], collections: [x.collection_id] },
@@ -471,17 +471,17 @@ type FamilyName = keyof typeof families;
 
 const manifestOf = (sides: readonly Side[]): LibraryManifest => {
   const retained_copies = sides.flatMap((side) => side.retained_copies);
-  const acquisitions = sides.flatMap((side) => side.acquisitions);
+  const imports = sides.flatMap((side) => side.imports);
   const entries = sides.flatMap((side) => side.entries);
   return Schema.decodeUnknownSync(LibraryManifest)(
     currentLibraryManifest({
       collections: sides.flatMap((side) => side.collections),
       skills: sides.flatMap((side) => side.skills),
       collection_versions: retained_copies,
-      imports: acquisitions,
+      imports: imports,
       snapshot_digests: librarySnapshotDigests({
         collection_versions: retained_copies,
-        imports: acquisitions,
+        imports: imports,
       }),
       enabled: entries,
     }),

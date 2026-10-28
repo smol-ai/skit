@@ -262,8 +262,8 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
     const f = yield* fixture;
     const manifest = {
       ...f.manifest,
-      imports: f.manifest.imports.map((acquisition) => {
-        const { revision: _revision, ...unpinned } = acquisition;
+      imports: f.manifest.imports.map((sourceImport) => {
+        const { revision: _revision, ...unpinned } = sourceImport;
         return unpinned;
       }),
     };

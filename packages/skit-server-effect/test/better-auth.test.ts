@@ -882,7 +882,7 @@ describe("Better Auth adapter", () => {
       const skillId = makeSkillId();
       const skillVersionId = makeSkillVersionId();
       const collectionVersionId = makeCollectionVersionId();
-      const acquisitionId = makeImportId();
+      const importId = makeImportId();
       const machineId = makeMachineId();
       // A v5 manifest as an older CLI would write it, then the current model of the same Library.
       const portableV5 = {
@@ -900,7 +900,7 @@ describe("Better Auth adapter", () => {
               },
               tracking: { kind: "default" },
               selection: { kind: "full-tree" },
-              last_acquisition_id: acquisitionId,
+              last_acquisition_id: importId,
             },
           },
         ],
@@ -918,7 +918,7 @@ describe("Better Auth adapter", () => {
                 artifact_digest: archive.digest,
                 validation_identity_digest: archive.digest,
                 materialization_profile: "plain-skill/v1",
-                origins: [{ acquisition_id: acquisitionId, source_path: "." }],
+                origins: [{ acquisition_id: importId, source_path: "." }],
               },
             ],
           },
@@ -940,7 +940,7 @@ describe("Better Auth adapter", () => {
         ],
         acquisitions: [
           {
-            acquisition_id: acquisitionId,
+            acquisition_id: importId,
             retained_copy_id: collectionVersionId,
             input: { value: "private:test/library" },
             source_identity: {
@@ -985,7 +985,7 @@ describe("Better Auth adapter", () => {
         retained_copies: portableV5.retained_copies,
         acquisitions: [
           {
-            acquisition_id: acquisitionId,
+            acquisition_id: importId,
             collection_id: collectionId,
             kind: "source",
             retained_copy_id: collectionVersionId,

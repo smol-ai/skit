@@ -91,11 +91,11 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* readAuthorWorkspace(root);
   const physical = (yield* fs.exists(root)) ? yield* fs.realPath(root) : root;
-  const acquisitionsFor = (collection: Collection) =>
-    state.imports.filter((acquisition) => acquisition.collection_id === collection.collection_id);
+  const importsFor = (collection: Collection) =>
+    state.imports.filter((sourceImport) => sourceImport.collection_id === collection.collection_id);
   const sameRoot: Collection[] = [];
   for (const collection of state.collections) {
-    const inputs = acquisitionsFor(collection).map((acquisition) => acquisition.input.value);
+    const inputs = importsFor(collection).map((sourceImport) => sourceImport.input.value);
     for (const input of inputs)
       if ((yield* fs.exists(input)) && (yield* fs.realPath(input)) === physical) {
         sameRoot.push(collection);
@@ -131,8 +131,7 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
       collection.upstream?.source_identity.kind === "authored-workspace" &&
       collection.upstream.source_identity.workspace_id === planned.workspace_id,
   );
-  const existingInput =
-    existing === undefined ? undefined : acquisitionsFor(existing)[0]?.input.value;
+  const existingInput = existing === undefined ? undefined : importsFor(existing)[0]?.input.value;
   if (
     existingInput !== undefined &&
     (yield* fs.exists(existingInput)) &&
@@ -207,9 +206,9 @@ export const markAuthorWorkspaceRemoved = Effect.fn("Author.markWorkspaceRemoved
   const collection = state.collections.find((item) => item.collection_id === collectionId);
   if (collection?.upstream?.source_identity.kind !== "authored-workspace") return;
   const path = state.imports.find(
-    (acquisition) =>
-      acquisition.collection_id === collection.collection_id &&
-      acquisition.source_identity.kind === "authored-workspace",
+    (sourceImport) =>
+      sourceImport.collection_id === collection.collection_id &&
+      sourceImport.source_identity.kind === "authored-workspace",
   )?.input.value;
   if (path === undefined) return;
   const workspace = yield* readAuthorWorkspace(path);

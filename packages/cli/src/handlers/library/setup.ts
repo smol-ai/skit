@@ -260,12 +260,12 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const collectionIds = [
     ...new Set(
       state.imports
-        .filter((acquisition) =>
-          acquisition.lock_file_entries.some(
+        .filter((sourceImport) =>
+          sourceImport.lock_file_entries.some(
             (observation) => observation.type === "skills.sh-lock",
           ),
         )
-        .map((acquisition) => acquisition.collection_id),
+        .map((sourceImport) => sourceImport.collection_id),
     ),
   ];
   if (!collectionIds.length) return;

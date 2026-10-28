@@ -273,10 +273,10 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     );
     expect(persisted.present).toBe(true);
     if (!persisted.present) return;
-    const acquisition = persisted.state.imports[0]!;
-    expect(acquisition.input.value).toBe(`wellknown:${base}`);
-    expect(acquisition.kind).toBe("source");
-    expect(acquisition.lock_file_entries).toEqual([
+    const sourceImport = persisted.state.imports[0]!;
+    expect(sourceImport.input.value).toBe(`wellknown:${base}`);
+    expect(sourceImport.kind).toBe("source");
+    expect(sourceImport.lock_file_entries).toEqual([
       expect.objectContaining({
         source_url: base,
         well_known_digest: expect.stringMatching(/^sha256:/),
@@ -286,7 +286,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const skill = persisted.state.skills.find(
       (item) => item.skill_id === imported.skills[0]?.skill_id,
     );
-    expect(acquisition.collection_id).toBe(skill?.collection_id);
+    expect(sourceImport.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.collection_versions[0]!;
     const original = collectionVersionPath(home.originals, tree.digest);
     expect(yield* fs.readFileString(join(original, "review", "SKILL.md"))).toBe(installedText);

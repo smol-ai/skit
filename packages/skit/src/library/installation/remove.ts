@@ -88,11 +88,11 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
         // Only a batch that retired every copy removes the Collection. A failed one saves just
         // the copies it moved aside.
         const candidate = mutation.state;
-        const acquisitions = candidate.imports.filter(
-          (acquisition) => acquisition.collection_id !== options.collectionId,
+        const imports = candidate.imports.filter(
+          (sourceImport) => sourceImport.collection_id !== options.collectionId,
         );
         const survivingCopyIds = new Set(
-          acquisitions.map((acquisition) => acquisition.collection_version_id),
+          imports.map((sourceImport) => sourceImport.collection_version_id),
         );
         const { invocation_policies, ...enabled } = removeFromEnabled(candidate, {
           skills: removedSkillIds,
@@ -107,7 +107,7 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
             (item) => !removedSkillIds.has(item.skill_id),
           ),
           skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
-          imports: acquisitions,
+          imports: imports,
           collection_versions: candidate.collection_versions.filter((copy) =>
             survivingCopyIds.has(copy.collection_version_id),
           ),

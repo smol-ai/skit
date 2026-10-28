@@ -39,7 +39,7 @@ const collectionId = makeCollectionId();
 const collectionVersionId = makeCollectionVersionId();
 const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
-const acquisitionId = makeImportId();
+const importId = makeImportId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
   schemaVersion: 10,
@@ -83,7 +83,7 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
   ],
   imports: [
     {
-      import_id: acquisitionId,
+      import_id: importId,
       collection_id: collectionId,
       kind: "source",
       collection_version_id: collectionVersionId,

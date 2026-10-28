@@ -755,10 +755,10 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     const restoredPath = join(secondHome, "originals", restoredHex.slice(0, 2), restoredHex);
     expect(await readFile(join(restoredPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(restoredPath, "README.md"))).toBe(false);
-    const gitAcquisition = restored.imports.find((item) => item.revision === gitRevision);
-    expect(gitAcquisition).toMatchObject({ kind: "source", revision: gitRevision });
+    const gitImport = restored.imports.find((item) => item.revision === gitRevision);
+    expect(gitImport).toMatchObject({ kind: "source", revision: gitRevision });
     const gitCopy = restored.collection_versions.find(
-      (item) => item.collection_version_id === gitAcquisition?.collection_version_id,
+      (item) => item.collection_version_id === gitImport?.collection_version_id,
     );
     expect(gitCopy).toBeDefined();
     const gitHex = gitCopy!.digest.slice("sha256:".length);
@@ -940,11 +940,11 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       for (const name of ["racing-left", "racing-right"]) {
         const skill = synced.skills.find((item) => item.name === name)!;
         expect(skill).toBeDefined();
-        const acquisition = synced.imports.find(
+        const sourceImport = synced.imports.find(
           (item) => item.collection_id === skill.collection_id,
         )!;
         const copy = synced.collection_versions.find(
-          (item) => item.collection_version_id === acquisition.collection_version_id,
+          (item) => item.collection_version_id === sourceImport.collection_version_id,
         )!;
         const digest = copy.digest.slice("sha256:".length);
         expect(

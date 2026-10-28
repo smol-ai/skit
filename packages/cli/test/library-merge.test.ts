@@ -31,13 +31,13 @@ const decode = Schema.decodeUnknownEffect(LibraryManifest);
 const skillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const collectionId = makeCollectionId();
-const acquisitionId = makeImportId();
+const importId = makeImportId();
 const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const second = makeSkillVersionId();
 const third = makeSkillVersionId();
-const acquisitionB = makeImportId();
-const acquisitionC = makeImportId();
+const importB = makeImportId();
+const importC = makeImportId();
 const copyB = makeCollectionVersionId();
 const copyC = makeCollectionVersionId();
 const collection = {
@@ -110,7 +110,7 @@ const manifest = (enabled: unknown[] = []) => ({
   ],
   imports: [
     {
-      import_id: acquisitionId,
+      import_id: importId,
       collection_id: collectionId,
       kind: "source" as const,
       collection_version_id: collectionVersionId,
@@ -125,8 +125,8 @@ const manifest = (enabled: unknown[] = []) => ({
       lock_file_entries: [],
     },
     ...[
-      [acquisitionB, copyB],
-      [acquisitionC, copyC],
+      [importB, copyB],
+      [importC, copyC],
     ].map(([import_id, collection_version_id]) => ({
       import_id,
       collection_id: collectionId,
@@ -374,8 +374,8 @@ it.effect("marks a Collection whose only difference is fetch records as evidence
     const refetched = manifest();
     const desired = yield* decode({
       ...refetched,
-      imports: refetched.imports.map((acquisition, index) =>
-        index === 0 ? { ...acquisition, imported_at: "2026-02-01T00:00:00.000Z" } : acquisition,
+      imports: refetched.imports.map((sourceImport, index) =>
+        index === 0 ? { ...sourceImport, imported_at: "2026-02-01T00:00:00.000Z" } : sourceImport,
       ),
     });
     assert.deepEqual(planLibrarySync(desired, remote, desired).remote, [
@@ -758,8 +758,8 @@ it.effect(
     Effect.gen(function* () {
       const input = yield* decode({
         ...manifest(),
-        imports: manifest().imports.map((acquisition) => ({
-          ...acquisition,
+        imports: manifest().imports.map((sourceImport) => ({
+          ...sourceImport,
           kind: "source",
         })),
       });

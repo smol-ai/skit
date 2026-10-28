@@ -641,7 +641,7 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
     yield* a.edit((state) => ({
       ...state,
       imports: [
-        ...state.imports.map((acquisition) => ({ ...acquisition, revision: "a".repeat(40) })),
+        ...state.imports.map((sourceImport) => ({ ...sourceImport, revision: "a".repeat(40) })),
         { ...state.imports[0], import_id: extraId, revision: "b".repeat(40) },
       ],
     }));

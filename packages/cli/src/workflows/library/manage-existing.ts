@@ -157,20 +157,20 @@ const planManage = Effect.fn("Library.planManage")(function* (
   const blockers: Array<{ path: string; reason: ManageBlocker }> = [];
   const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
   const sourceContentHash = yield* deterministicTreeHash(sourcePath);
-  const existingAcquisitionIds = new Set(
+  const existingImportIds = new Set(
     state.imports
       .filter(
-        (acquisition) =>
-          acquisition.source_identity.kind === "local" &&
-          resolve(acquisition.source_identity.path.value) === sourcePath,
+        (sourceImport) =>
+          sourceImport.source_identity.kind === "local" &&
+          resolve(sourceImport.source_identity.path.value) === sourcePath,
       )
-      .map((acquisition) => acquisition.import_id),
+      .map((sourceImport) => sourceImport.import_id),
   );
   const existingCollection = state.collections.find((collection) =>
     state.imports.some(
-      (acquisition) =>
-        acquisition.collection_id === collection.collection_id &&
-        existingAcquisitionIds.has(acquisition.import_id),
+      (sourceImport) =>
+        sourceImport.collection_id === collection.collection_id &&
+        existingImportIds.has(sourceImport.import_id),
     ),
   );
   const existingSkill = state.skills.find(

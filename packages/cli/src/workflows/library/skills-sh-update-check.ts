@@ -42,15 +42,15 @@ const sourceUrl = (
 
 export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function* (
   subject: LibrarySubject,
-  acquisition: LibraryState["imports"][number] | undefined,
+  sourceImport: LibraryState["imports"][number] | undefined,
   collectionVersion: LibraryState["collection_versions"][number] | undefined,
 ) {
-  if (!acquisition || !collectionVersion) return undefined;
+  if (!sourceImport || !collectionVersion) return undefined;
   const checkedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const store = yield* LibraryStore;
   const observations = [
     ...new Map(
-      acquisition.lock_file_entries.flatMap((observation) =>
+      sourceImport.lock_file_entries.flatMap((observation) =>
         observation.type === "skills.sh-lock"
           ? [
               [

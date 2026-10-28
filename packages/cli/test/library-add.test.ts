@@ -394,7 +394,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
     );
     assert.ok(
       after.imports.every(
-        (acquisition) => acquisition.collection_version_id === added.collection_version_id,
+        (sourceImport) => sourceImport.collection_version_id === added.collection_version_id,
       ),
     );
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -441,7 +441,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
     // The new commit is recorded as its own import of the same bytes.
     assert.strictEqual(recorded.collection_versions.length, 1);
     assert.deepStrictEqual(
-      recorded.imports.map((acquisition) => acquisition.revision),
+      recorded.imports.map((sourceImport) => sourceImport.revision),
       ["a".repeat(40), "b".repeat(40)],
     );
     assert.deepStrictEqual(repeated.imports, recorded.imports);
@@ -480,7 +480,7 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.deepStrictEqual(
-      state.imports.map((acquisition) => acquisition.revision),
+      state.imports.map((sourceImport) => sourceImport.revision),
       ["1.2.3"],
     );
     // A Release the Registry can serve again needs no snapshot of its own.

@@ -222,17 +222,17 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
               (candidate) => candidate.skill_id === preview.skill_id,
             );
             const version = skill === undefined ? undefined : currentSkillVersion(current, skill);
-            const acquisition =
+            const sourceImport =
               skill === undefined || version === undefined
                 ? undefined
                 : versionBacking(current, skill, version)?.acquisition;
-            if (version === undefined || acquisition === undefined)
+            if (version === undefined || sourceImport === undefined)
               return yield* new EditImportStale({
                 message: "Selected retained Version is incomplete",
               });
             return {
               skillVersionId: version.skill_version_id,
-              collectionVersionId: acquisition.collection_version_id,
+              collectionVersionId: sourceImport.collection_version_id,
               snapshotDigest: preview.snapshot_digest,
             };
           });
