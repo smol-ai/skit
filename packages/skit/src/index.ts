@@ -61,6 +61,23 @@ export * from "./artifact/tree.js";
 
 export * from "./library/store/library-store.js";
 export { withLibraryWriterLock } from "./library/store/writer-lock.js";
+// Records written beside v9 state (setup and undo evidence) migrate through the same shapes.
+export {
+  CollectionVersionV7,
+  ImportV7,
+  importFromV7,
+  collectionVersionFromV7,
+} from "./library/store/manifest-v7.js";
+export {
+  DeviceBindingV9,
+  DeviceSkillSelectionV9,
+  InstalledSkillV9,
+  RepositoryBindingV9,
+  deviceSelectionFromV9,
+  globalFromV9,
+  installedSkillFromV9,
+  repositoryFromV9,
+} from "./library/store/state-schema-v9.js";
 export * from "./library/inventory/refresh.js";
 
 export {
@@ -72,7 +89,7 @@ export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
 export { skillsShLockFileEntry } from "./library/skills-sh-lock-file.js";
 export * from "./library/library-state.js";
-export * from "./library/binding-intent.js";
+export * from "./library/enabled.js";
 export * from "./library/library-restore.js";
 export * from "./library/collection-version-plan.js";
 export * from "./library/restore-progress.js";

@@ -1,0 +1,16 @@
+{
+  "library": {
+    "library_id": "library_wire",
+    "revision_id": "revision_9",
+    "manifest": {
+      "schema": "skit.library.v9",
+      "collections": [],
+      "skills": [],
+      "retained_copies": [],
+      "acquisitions": [],
+      "snapshot_digests": [],
+      "bindings": [],
+      "device_policies": [{ "scope": { "kind": "global" }, "skills": {} }]
+    }
+  }
+}

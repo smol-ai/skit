@@ -21,7 +21,7 @@ const digest = `sha256:${"a".repeat(64)}`;
 const retainedCopyId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const copy: CollectionVersion = {
-  retained_copy_id: retainedCopyId,
+  collection_version_id: retainedCopyId,
   digest,
   copy_profile: "verbatim/v1",
   members: [
@@ -35,10 +35,10 @@ const copy: CollectionVersion = {
 };
 const collectionId = makeCollectionId();
 const acquisition = (overrides: Partial<Import>): Import => ({
-  acquisition_id: makeImportId(),
+  import_id: makeImportId(),
   collection_id: collectionId,
   kind: "source",
-  retained_copy_id: retainedCopyId,
+  collection_version_id: retainedCopyId,
   source_identity: {
     kind: "github",
     owner: "example-org",
@@ -47,9 +47,9 @@ const acquisition = (overrides: Partial<Import>): Import => ({
   },
   input: { value: "https://github.com/example-org/skills" },
   revision: "e0219e96214ac420bdb8d15141340625fda63bbb",
-  acquired_at: "2026-09-16T00:00:00.000Z",
+  imported_at: "2026-09-16T00:00:00.000Z",
   machine_id: machineId,
-  observations: [],
+  lock_file_entries: [],
   ...overrides,
 });
 
@@ -57,7 +57,7 @@ it("omits GitHub bytes pinned to a commit from private snapshot planning", () =>
   const pinned = acquisition({});
   assert.strictEqual(importCanBeRefetched(pinned), true);
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [pinned] }),
+    librarySnapshotDigests({ collection_versions: [copy], imports: [pinned] }),
     [],
   );
 });
@@ -87,20 +87,20 @@ it("restores by revision whatever the collection root or input text", () => {
     assert.strictEqual(importCanBeRefetched(restorable), true);
 });
 
-it("keeps unpinned, local, and retained-edit acquisitions snapshot-backed", () => {
+it("keeps unpinned, local, and edit imports snapshot-backed", () => {
   const { revision: _revision, ...unpinned } = acquisition({});
   const local = acquisition({
     source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/skill" } },
     input: { value: "/tmp/skill" },
   });
-  const edit = acquisition({ kind: "retained-edit" });
+  const edit = acquisition({ kind: "edit" });
   for (const item of [unpinned, local, edit]) assert.strictEqual(importCanBeRefetched(item), false);
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [unpinned] }),
+    librarySnapshotDigests({ collection_versions: [copy], imports: [unpinned] }),
     [digest],
   );
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy, { ...copy }], acquisitions: [local] }),
+    librarySnapshotDigests({ collection_versions: [copy, { ...copy }], imports: [local] }),
     [digest],
   );
 });
@@ -109,18 +109,18 @@ const sourceDigest = `sha256:${"b".repeat(64)}`;
 const sourceCopyId = makeCollectionVersionId();
 const sourceCopy: CollectionVersion = {
   ...copy,
-  retained_copy_id: sourceCopyId,
+  collection_version_id: sourceCopyId,
   digest: sourceDigest,
 };
 const { revision: _unpinnedRevision, ...unpinnedAcquisition } = acquisition({});
 const mixedManifest: LibraryManifest = {
-  schema: "skit.library.v7",
+  schema: "skit.library.v8",
   collections: [{ collection_id: collectionId, label: "skills" }],
   skills: [],
-  retained_copies: [copy, sourceCopy],
-  acquisitions: [unpinnedAcquisition, acquisition({ retained_copy_id: sourceCopyId })],
+  collection_versions: [copy, sourceCopy],
+  imports: [unpinnedAcquisition, acquisition({ collection_version_id: sourceCopyId })],
   snapshot_digests: [digest],
-  bindings: [],
+  enabled: [],
 };
 
 it("decodes a v4 manifest into the current model without selections", () => {
@@ -161,7 +161,9 @@ it("decodes a v4 manifest into the current model without selections", () => {
     ],
     retained_copies: [
       {
-        ...copy,
+        retained_copy_id: copy.collection_version_id,
+        digest: copy.digest,
+        copy_profile: copy.copy_profile,
         members: [{ ...copy.members[0]!, source_path: "review" }],
         v3_normalized_tree: {
           digest,
@@ -174,14 +176,14 @@ it("decodes a v4 manifest into the current model without selections", () => {
     snapshot_digests: [digest],
     bindings: [],
   });
-  assert.strictEqual(decoded.schema, "skit.library.v7");
-  assert.strictEqual("v3_normalized_tree" in decoded.retained_copies[0]!, false);
-  assert.deepStrictEqual(decoded.acquisitions[0]?.source_identity, {
+  assert.strictEqual(decoded.schema, "skit.library.v8");
+  assert.strictEqual("v3_normalized_tree" in decoded.collection_versions[0]!, false);
+  assert.deepStrictEqual(decoded.imports[0]?.source_identity, {
     kind: "well-known",
     locator: { value: "https://skills.example" },
   });
-  assert.strictEqual(decoded.acquisitions[0]?.kind, "source");
-  assert.strictEqual(decoded.acquisitions[0]?.collection_id, collectionId);
+  assert.strictEqual(decoded.imports[0]?.kind, "source");
+  assert.strictEqual(decoded.imports[0]?.collection_id, collectionId);
   assert.deepStrictEqual(decoded.skills[0]?.versions[0]?.skill_version_id, versionId);
 });
 

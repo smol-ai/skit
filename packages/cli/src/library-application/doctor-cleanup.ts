@@ -44,12 +44,13 @@ export function suggestDoctorCleanup(
   const placements = enabledCollections(state);
   for (const budget of budgets) {
     for (const entry of budget.entries) {
-      const projection = state.projections.find(
+      const projection = state.installed_skills.find(
         (p) => resolve(p.path, "SKILL.md") === resolve(entry.path) && p.status === "installed",
       );
       const skill = state.skills.find((s) => s.skill_id === projection?.skill_id);
-      if (!projection || !skill || projection.target === "legacy" || entry.demand <= 0) continue;
-      const target = projection.target;
+      if (!projection || !skill || projection.destination === "legacy" || entry.demand <= 0)
+        continue;
+      const target = projection.destination;
       // Any observed access protects the skill, including zero-use raw read evidence.
       if (
         usage.rows.some(
@@ -66,11 +67,8 @@ export function suggestDoctorCleanup(
           p.skillIds.includes(skill.skill_id) &&
           resolve(
             p.scope.kind === "repository"
-              ? (existingRepositorySkillsDirectory(
-                  state,
-                  { scope: p.scope, entries: [] },
-                  target,
-                ) ?? skillsDirectoryFor(target, p.scope, configuration))
+              ? (existingRepositorySkillsDirectory(state, p.scope.root, target) ??
+                  skillsDirectoryFor(target, p.scope, configuration))
               : skillsDirectoryFor(target, p.scope, configuration),
           ) === resolve(projection.root),
       );

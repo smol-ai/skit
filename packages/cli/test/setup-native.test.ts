@@ -896,7 +896,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const retained = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 9,
+      schemaVersion: 10,
       collections: [
         {
           collection_id: collectionId,
@@ -916,11 +916,11 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
           versions: [],
         },
       ],
-      retained_copies: [],
-      acquisitions: [],
-      global_bindings: [],
-      local_bindings: [],
-      projections: [],
+      collection_versions: [],
+      imports: [],
+      enabled: [],
+      repositories: [],
+      installed_skills: [],
       tombstones: [],
       unmanaged: [],
       adoption_receipts: [],
@@ -1093,7 +1093,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     yield* f.fs.writeFileString(join(projectedSkill, ".skit-ownership.json"), projectionMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), projectionMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 9,
+      schemaVersion: 10,
       collections: [
         {
           collection_id: collectionId,
@@ -1126,9 +1126,9 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
           ],
         },
       ],
-      retained_copies: [
+      collection_versions: [
         {
-          retained_copy_id: versionId,
+          collection_version_id: versionId,
           digest: contentHash,
           copy_profile: "verbatim/v1",
           members: [
@@ -1141,12 +1141,12 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
           ],
         },
       ],
-      acquisitions: [
+      imports: [
         {
-          acquisition_id: acquisitionId,
+          import_id: acquisitionId,
           collection_id: collectionId,
           kind: "source",
-          retained_copy_id: versionId,
+          collection_version_id: versionId,
           input: { value: "skit://registry.test/tim/skills" },
           source_identity: {
             kind: "registry",
@@ -1154,30 +1154,25 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
             namespace: "tim",
             slug: "skills",
           },
-          acquired_at: "2026-01-01T00:00:00.000Z",
+          imported_at: "2026-01-01T00:00:00.000Z",
           machine_id: machineId,
-          observations: [],
+          lock_file_entries: [],
         },
       ],
-      global_bindings: [
+      enabled: [{ skill: skillId }],
+      repositories: [],
+      installed_skills: [
         {
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: skillId }],
-        },
-      ],
-      local_bindings: [],
-      projections: [
-        {
-          projection_id: projectionId,
+          installed_skill_id: projectionId,
           collection_id: collectionId,
           skill_id: skillId,
           skill_version_id: skillVersionId,
-          target: "agents",
+          destination: "agents",
           root: f.codex,
           path: projectedSkill,
           expected_digest: contentHash,
           status: "installed",
-          projected_at: "2026-01-01T00:00:00.000Z",
+          installed_at: "2026-01-01T00:00:00.000Z",
         },
       ],
       tombstones: [],
@@ -1368,7 +1363,7 @@ it.effect(
         }),
       );
       const state = Schema.decodeUnknownSync(LibraryState)({
-        schemaVersion: 9,
+        schemaVersion: 10,
         collections: [
           {
             collection_id: collectionId,
@@ -1407,9 +1402,9 @@ it.effect(
             ],
           },
         ],
-        retained_copies: [
+        collection_versions: [
           {
-            retained_copy_id: versionId,
+            collection_version_id: versionId,
             digest: currentHash,
             copy_profile: "verbatim/v1",
             members: [
@@ -1428,53 +1423,45 @@ it.effect(
             ],
           },
         ],
-        acquisitions: [
+        imports: [
           {
-            acquisition_id: acquisitionId,
+            import_id: acquisitionId,
             collection_id: collectionId,
             kind: "source",
-            retained_copy_id: versionId,
+            collection_version_id: versionId,
             input: { value: "/source" },
             source_identity: { kind: "local", machine_id: machineId, path: { value: "/source" } },
-            acquired_at: "2026-01-01T00:00:00.000Z",
+            imported_at: "2026-01-01T00:00:00.000Z",
             machine_id: machineId,
-            observations: [],
+            lock_file_entries: [],
           },
         ],
-        global_bindings: [
+        enabled: [{ skill: currentSkillId }, { skill: missingSkillId }],
+        repositories: [],
+        installed_skills: [
           {
-            scope: { kind: "global" },
-            entries: [
-              { kind: "skill", skill_id: currentSkillId },
-              { kind: "skill", skill_id: missingSkillId },
-            ],
-          },
-        ],
-        local_bindings: [],
-        projections: [
-          {
-            projection_id: currentProjectionId,
+            installed_skill_id: currentProjectionId,
             collection_id: collectionId,
             skill_id: currentSkillId,
             skill_version_id: currentVersionId,
-            target: "agents",
+            destination: "agents",
             root: f.codex,
             path: current,
             expected_digest: currentHash,
             status: "installed",
-            projected_at: "2026-01-01T00:00:00.000Z",
+            installed_at: "2026-01-01T00:00:00.000Z",
           },
           {
-            projection_id: missingProjectionId,
+            installed_skill_id: missingProjectionId,
             collection_id: collectionId,
             skill_id: missingSkillId,
             skill_version_id: missingVersionId,
-            target: "agents",
+            destination: "agents",
             root: f.codex,
             path: missing,
             expected_digest: currentHash,
             status: "installed",
-            projected_at: "2026-01-01T00:00:00.000Z",
+            installed_at: "2026-01-01T00:00:00.000Z",
           },
         ],
         tombstones: [],
@@ -1507,7 +1494,7 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-for (const kind of ["source", "retained-edit"] as const) {
+for (const kind of ["source", "edit"] as const) {
   it.effect(`requires matching retained lock evidence for a ${kind} acquisition`, () =>
     Effect.sync(() => {
       const machineId = makeMachineId();
@@ -1520,7 +1507,7 @@ for (const kind of ["source", "retained-edit"] as const) {
         contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
       });
       const library = Schema.decodeUnknownSync(LibraryState)({
-        schemaVersion: 9,
+        schemaVersion: 10,
         collections: [{ collection_id: collectionId, label: "Reviews" }],
         skills: [
           {
@@ -1539,9 +1526,9 @@ for (const kind of ["source", "retained-edit"] as const) {
             ],
           },
         ],
-        retained_copies: [
+        collection_versions: [
           {
-            retained_copy_id: copyId,
+            collection_version_id: copyId,
             digest: hash,
             copy_profile: "verbatim/v1",
             members: [
@@ -1554,12 +1541,12 @@ for (const kind of ["source", "retained-edit"] as const) {
             ],
           },
         ],
-        acquisitions: [
+        imports: [
           {
-            acquisition_id: makeImportId(),
+            import_id: makeImportId(),
             collection_id: collectionId,
             kind,
-            retained_copy_id: copyId,
+            collection_version_id: copyId,
             input: { value: "https://github.com/acme/reviews" },
             source_identity: {
               kind: "github",
@@ -1567,9 +1554,9 @@ for (const kind of ["source", "retained-edit"] as const) {
               repository: "reviews",
               collection_root: ".",
             },
-            acquired_at: "2026-01-01T00:00:00.000Z",
+            imported_at: "2026-01-01T00:00:00.000Z",
             machine_id: machineId,
-            observations: [
+            lock_file_entries: [
               {
                 type: "skills.sh-lock",
                 machine_id: machineId,
@@ -1589,9 +1576,9 @@ for (const kind of ["source", "retained-edit"] as const) {
             ],
           },
         ],
-        global_bindings: [],
-        local_bindings: [],
-        projections: [],
+        enabled: [],
+        repositories: [],
+        installed_skills: [],
         tombstones: [],
         unmanaged: [],
         adoption_receipts: [],
@@ -1607,17 +1594,17 @@ for (const kind of ["source", "retained-edit"] as const) {
           classifySetupOnboarding(observed, { library: state, machineId: selectedMachine }),
         ).toMatchObject([{ action: "import-observed-collection", name: "review" }]);
       expectImport(library, offered, makeMachineId());
-      expectImport({ ...library, retained_copies: [] });
+      expectImport({ ...library, collection_versions: [] });
       expectImport({
         ...library,
-        acquisitions: library.acquisitions.map((acquisition) => ({
+        imports: library.imports.map((acquisition) => ({
           ...acquisition,
           collection_id: makeCollectionId(),
         })),
       });
       expectImport({
         ...library,
-        retained_copies: library.retained_copies.map((copy) => ({
+        collection_versions: library.collection_versions.map((copy) => ({
           ...copy,
           members: copy.members.map((member) => ({ ...member, source_path: "other" })),
         })),
@@ -1633,9 +1620,9 @@ for (const kind of ["source", "retained-edit"] as const) {
       ]);
       expectImport({
         ...library,
-        acquisitions: library.acquisitions.map((acquisition) => ({
+        imports: library.imports.map((acquisition) => ({
           ...acquisition,
-          observations: acquisition.observations.map((observation) => ({
+          lock_file_entries: acquisition.lock_file_entries.map((observation) => ({
             ...observation,
             lock_content_hash: `sha256:${"b".repeat(64)}`,
           })),

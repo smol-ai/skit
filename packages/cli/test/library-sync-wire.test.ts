@@ -53,9 +53,9 @@ const exchange = <A, E>(
   );
 };
 
-it.effect("decodes a literal skit.library.v7 head without loss", () =>
+it.effect("decodes a literal skit.library.v8 head without loss", () =>
   Effect.gen(function* () {
-    const head = yield* wire("portable-v7.json");
+    const head = yield* wire("portable-v8.json");
     const archive = yield* wire("snapshot-archive.json");
     const { result, sent } = yield* exchange(
       () => Response.json(head),
@@ -67,7 +67,7 @@ it.effect("decodes a literal skit.library.v7 head without loss", () =>
     assert.deepStrictEqual(result, head.library);
     assert.ok(result);
     // The pinned Git import is restorable from its Source; the retained edit needs a snapshot.
-    assert.deepStrictEqual(result.manifest.acquisitions.map(importCanBeRefetched), [true, false]);
+    assert.deepStrictEqual(result.manifest.imports.map(importCanBeRefetched), [true, false]);
     assert.deepStrictEqual(librarySnapshotDigests(result.manifest), [archive.digest]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -95,9 +95,9 @@ it.effect("rejects a literal skit.library.v2 head instead of reading it", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("refuses a literal skit.library.v8 head as written by a newer SKIT", () =>
+it.effect("refuses a literal skit.library.v9 head as written by a newer SKIT", () =>
   Effect.gen(function* () {
-    const head = yield* wire("portable-v8.json");
+    const head = yield* wire("portable-v9.json");
     const failure = yield* Effect.flip(
       exchange(
         () => Response.json(head),
@@ -108,15 +108,15 @@ it.effect("refuses a literal skit.library.v8 head as written by a newer SKIT", (
     assert.strictEqual(failure.code, "VALIDATION_FAILED");
     assert.deepStrictEqual(
       [failure.observed, failure.supported],
-      ["skit.library.v8", "skit.library.v7"],
+      ["skit.library.v9", "skit.library.v8"],
     );
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("refuses a literal skit.library.v8 write response as written by a newer SKIT", () =>
+it.effect("refuses a literal skit.library.v9 write response as written by a newer SKIT", () =>
   Effect.gen(function* () {
-    const current = yield* wire("portable-v7.json");
-    const head = yield* wire("portable-v8.json");
+    const current = yield* wire("portable-v8.json");
+    const head = yield* wire("portable-v9.json");
     const failure = yield* Effect.flip(
       exchange(
         () => Response.json(head),
@@ -129,7 +129,7 @@ it.effect("refuses a literal skit.library.v8 write response as written by a newe
 
 it.effect("reads a missing, foreign or malformed manifest schema as an invalid response", () =>
   Effect.gen(function* () {
-    const head = yield* wire("portable-v8.json");
+    const head = yield* wire("portable-v9.json");
     for (const schema of [
       undefined,
       8,
@@ -153,7 +153,7 @@ it.effect("reads a missing, foreign or malformed manifest schema as an invalid r
 
 it.effect("writes the supported request body and decodes the literal response", () =>
   Effect.gen(function* () {
-    const head = yield* wire("portable-v7.json");
+    const head = yield* wire("portable-v8.json");
     const { result, sent } = yield* exchange(
       () => Response.json(head),
       (api) => api.write("revision_6", head.library.manifest),
@@ -171,7 +171,7 @@ it.effect("writes the supported request body and decodes the literal response", 
 
 it.effect("reads a literal REVISION_CONFLICT as a Library changed on the server", () =>
   Effect.gen(function* () {
-    const head = yield* wire("portable-v7.json");
+    const head = yield* wire("portable-v8.json");
     const failure = yield* Effect.flip(
       exchange(
         () => Response.json({ error: "REVISION_CONFLICT" }, { status: 409 }),

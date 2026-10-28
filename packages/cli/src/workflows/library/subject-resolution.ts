@@ -119,9 +119,9 @@ export const subjectImportIds = (
   subject: LibrarySubject,
 ): ReadonlySet<string> =>
   new Set(
-    state.acquisitions
+    state.imports
       .filter((acquisition) => acquisition.collection_id === subjectCollectionId(subject))
-      .map((acquisition) => acquisition.acquisition_id),
+      .map((acquisition) => acquisition.import_id),
   );
 
 export const owningCollectionSubject = (

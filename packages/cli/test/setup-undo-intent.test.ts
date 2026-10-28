@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  bindingSkillIds,
+  enabledSkillIds,
   currentSkillVersion,
   MachineSettings,
   skitLayer,
@@ -110,23 +110,18 @@ it.effect(
         );
       yield* retain(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
       const retained = yield* home.durable;
-      const binding = {
-        scope: { kind: "global" as const },
-        entries: [
-          { kind: "collection" as const, collection_id: retained.collections[0].collection_id },
-        ],
-      };
-      const before = { ...retained, global_bindings: [binding] };
+      const enabled = [{ collection: retained.collections[0].collection_id }];
+      const before = { ...retained, enabled };
       yield* retain(skills, "2026-10-02T00:00:00.000Z");
-      const after = { ...(yield* home.durable), global_bindings: [binding] };
-      expect(bindingSkillIds(before, binding)).toHaveLength(1);
-      expect(bindingSkillIds(after, binding)).toHaveLength(2);
+      const after = { ...(yield* home.durable), enabled };
+      expect(enabledSkillIds(before, enabled)).toHaveLength(1);
+      expect(enabledSkillIds(after, enabled)).toHaveLength(2);
       const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
       expect(inverse.conflicts).toContain(
         `Collection source membership ${retained.collections[0].collection_id} requires restoration before undo`,
       );
       expect(inverse.state.skills).toEqual(after.skills);
-      expect(inverse.state.retained_copies).toEqual(after.retained_copies);
+      expect(inverse.state.collection_versions).toEqual(after.collection_versions);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -137,78 +132,50 @@ it.effect(
       const f = yield* fixture();
       const before: LibraryState = {
         ...f.state,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: [{ kind: "skill", skill_id: f.existing.skill_id }],
-            invocation_policies: { [f.existing.skill_id]: "explicit" },
-          },
-        ],
+        enabled: [{ skill: f.existing.skill_id }],
+        invocation_policies: { [f.existing.skill_id]: "explicit" },
       };
       const after: LibraryState = {
         ...before,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: [
-              ...before.global_bindings[0].entries,
-              { kind: "skill", skill_id: f.chosen.skill_id },
-            ],
-            invocation_policies: {
-              [f.existing.skill_id]: "implicit",
-              [f.chosen.skill_id]: "explicit",
-            },
-          },
-        ],
+        enabled: [...before.enabled, { skill: f.chosen.skill_id }],
+        invocation_policies: {
+          [f.existing.skill_id]: "implicit",
+          [f.chosen.skill_id]: "explicit",
+        },
       };
       const current: LibraryState = {
         ...after,
-        global_bindings: [
-          {
-            ...after.global_bindings[0],
-            entries: [
-              ...after.global_bindings[0].entries,
-              { kind: "skill", skill_id: f.later.skill_id },
-            ],
-            invocation_policies: {
-              ...after.global_bindings[0].invocation_policies,
-              [f.later.skill_id]: "host-policy",
-            },
-          },
-        ],
+        enabled: [...after.enabled, { skill: f.later.skill_id }],
+        invocation_policies: {
+          ...after.invocation_policies,
+          [f.later.skill_id]: "host-policy",
+        },
       };
       const inverse = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
       expect(inverse.conflicts).toEqual([]);
-      expect(inverse.state.global_bindings[0].entries).toEqual([
-        { kind: "skill", skill_id: f.existing.skill_id },
-        { kind: "skill", skill_id: f.later.skill_id },
+      expect(inverse.state.enabled).toEqual([
+        { skill: f.existing.skill_id },
+        { skill: f.later.skill_id },
       ]);
-      expect(inverse.state.global_bindings[0].invocation_policies).toEqual({
+      expect(inverse.state.invocation_policies).toEqual({
         [f.existing.skill_id]: "explicit",
         [f.later.skill_id]: "host-policy",
       });
-      expect(inverse.state.acquisitions).toEqual(current.acquisitions);
-      expect(inverse.state.retained_copies).toEqual(current.retained_copies);
+      expect(inverse.state.imports).toEqual(current.imports);
+      expect(inverse.state.collection_versions).toEqual(current.collection_versions);
       expect(
         reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
       ).toBe(false);
       const edited = {
         ...current,
-        global_bindings: [
-          {
-            ...current.global_bindings[0],
-            invocation_policies: {
-              ...current.global_bindings[0].invocation_policies,
-              [f.existing.skill_id]: "host-policy" as const,
-            },
-          },
-        ],
+        invocation_policies: {
+          ...current.invocation_policies,
+          [f.existing.skill_id]: "host-policy" as const,
+        },
       };
       const conflict = reverseSetupIntent(edited, setupIntent(before), setupIntent(after));
       expect(conflict.conflicts).toContain(`account binding invocation ${f.existing.skill_id}`);
-      expect(conflict.state.global_bindings[0].invocation_policies?.[f.existing.skill_id]).toBe(
-        "host-policy",
-      );
+      expect(conflict.state.invocation_policies?.[f.existing.skill_id]).toBe("host-policy");
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -248,7 +215,7 @@ it.effect(
       if (!restored) return yield* Effect.die(new Error("Retained Skill disappeared"));
       expect(currentSkillVersion(inverse.state, restored)?.skill_version_id).toBe(initialVersion);
       expect(restored.versions).toHaveLength(2);
-      expect(inverse.state.acquisitions).toEqual(after.acquisitions);
+      expect(inverse.state.imports).toEqual(after.imports);
       expect(
         reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
       ).toBe(false);
@@ -287,33 +254,22 @@ it.effect(
       const f = yield* fixture();
       const before: LibraryState = {
         ...f.state,
-        global_bindings: [
-          { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: f.later.skill_id }] },
-        ],
+        enabled: [{ skill: f.later.skill_id }],
         device_skill_selection: {
           mode: "choose",
-          binding: {
-            scope: { kind: "global" },
-            entries: [{ kind: "skill", skill_id: f.existing.skill_id }],
-          },
+          enabled: [{ skill: f.existing.skill_id }],
         },
       };
       const after: LibraryState = {
         ...before,
         device_skill_selection: {
           mode: "choose",
-          binding: {
-            scope: { kind: "global" },
-            entries: [
-              { kind: "skill", skill_id: f.existing.skill_id },
-              { kind: "skill", skill_id: f.chosen.skill_id },
-            ],
-          },
+          enabled: [{ skill: f.existing.skill_id }, { skill: f.chosen.skill_id }],
         },
       };
       const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
       expect(inverse.conflicts).toEqual([]);
-      expect(inverse.state.global_bindings).toEqual(before.global_bindings);
+      expect(inverse.state.enabled).toEqual(before.enabled);
       expect(inverse.state.device_skill_selection).toEqual(before.device_skill_selection);
       const changedMode = reverseSetupIntent(
         { ...after, device_skill_selection: { mode: "follow-account" } },
@@ -374,27 +330,20 @@ it.effect(
 );
 
 it.effect(
-  "undoing the only setup binding preserves later fields the current schema does not own",
+  "undoing the only setup enable preserves later fields the current schema does not own",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const before = f.state;
       const after: LibraryState = {
         ...before,
-        global_bindings: [
-          { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: f.chosen.skill_id }] },
-        ],
+        enabled: [{ skill: f.chosen.skill_id }],
       };
-      const laterBinding = Object.assign({}, after.global_bindings[0], { futureSetting: "keep" });
-      const inverse = reverseSetupIntent(
-        { ...after, global_bindings: [laterBinding] },
-        setupIntent(before),
-        setupIntent(after),
-      );
+      const later = Object.assign({}, after, { futureSetting: "keep" });
+      const inverse = reverseSetupIntent(later, setupIntent(before), setupIntent(after));
       expect(inverse.conflicts).toEqual([]);
-      expect(inverse.state.global_bindings).toEqual([
-        { scope: { kind: "global" }, entries: [], futureSetting: "keep" },
-      ]);
+      expect(inverse.state.enabled).toEqual([]);
+      expect(inverse.state).toHaveProperty("futureSetting", "keep");
       expect(
         reverseSetupIntent(inverse.state, setupIntent(before), setupIntent(after)).changed,
       ).toBe(false);

@@ -40,7 +40,7 @@ export const refreshLibraryInventoryForCli = Effect.fn("CLI.refreshLibraryInvent
     unmanaged: state.unmanaged.filter((item) =>
       roots.some(({ root }) => pathIsWithin(root, item.path)),
     ),
-    custodyIssues: (state.custodyIssues ?? []).filter((item) =>
+    ownershipIssues: (state.ownershipIssues ?? []).filter((item) =>
       roots.some(({ root }) => pathIsWithin(root, item.path)),
     ),
     ...(state.scanIssues
@@ -150,8 +150,9 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
           sync_ancestry: _syncAncestry,
           assessmentAcceptances: _,
           collections: __,
-          global_bindings: ___,
-          local_bindings: ____,
+          enabled: ___,
+          invocation_policies: ____,
+          repositories: _____,
           ...inventory
         } = value;
         yield* renderer.result(result("inventory", inventory));

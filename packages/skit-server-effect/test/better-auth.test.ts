@@ -959,7 +959,7 @@ describe("Better Auth adapter", () => {
         snapshot_digests: [archive.digest],
         bindings: [],
       };
-      const portable = {
+      const portableV7 = {
         schema: "skit.library.v7",
         collections: [
           {
@@ -999,6 +999,26 @@ describe("Better Auth adapter", () => {
         snapshot_digests: [archive.digest],
         bindings: [],
       };
+      const portable = {
+        schema: "skit.library.v8",
+        collections: portableV7.collections,
+        skills: portableV7.skills,
+        collection_versions: portableV7.retained_copies.map(({ retained_copy_id, ...copy }) => ({
+          ...copy,
+          collection_version_id: retained_copy_id,
+        })),
+        imports: portableV7.acquisitions.map(
+          ({ acquisition_id, retained_copy_id, acquired_at, observations, ...item }) => ({
+            ...item,
+            import_id: acquisition_id,
+            collection_version_id: retained_copy_id,
+            imported_at: acquired_at,
+            lock_file_entries: observations,
+          }),
+        ),
+        snapshot_digests: portableV7.snapshot_digests,
+        enabled: [],
+      };
       const writeLibrarySync = (expected: string | null, manifest: unknown) =>
         request("/api/library/portable", {
           method: "PUT",
@@ -1013,10 +1033,11 @@ describe("Better Auth adapter", () => {
       expect((yield* writeLibrarySync(null, portableV5)).status).toBe(400);
       expect(
         (yield* writeLibrarySync(null, {
-          ...portable,
+          ...portableV7,
           schema: "skit.library.v6",
         })).status,
       ).toBe(400);
+      expect((yield* writeLibrarySync(null, portableV7)).status).toBe(400);
       const committed = yield* writeLibrarySync(null, portable);
       expect(committed.status).toBe(200);
       const syncedBody = Schema.decodeUnknownSync(
@@ -1038,13 +1059,13 @@ describe("Better Auth adapter", () => {
         "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
       const sourceBacked = {
         ...portable,
-        retained_copies: [
+        collection_versions: [
           {
-            ...portable.retained_copies[0],
+            ...portable.collection_versions[0],
             digest: missingDigest,
             members: [
               {
-                ...portable.retained_copies[0].members[0],
+                ...portable.collection_versions[0].members[0],
                 source_digest: missingDigest,
                 artifact_digest: missingDigest,
               },
@@ -1064,9 +1085,9 @@ describe("Better Auth adapter", () => {
             ],
           },
         ],
-        acquisitions: [
+        imports: [
           {
-            ...portable.acquisitions[0],
+            ...portable.imports[0],
             source_identity: {
               kind: "github",
               owner: "example-org",
@@ -1087,9 +1108,9 @@ describe("Better Auth adapter", () => {
       expect(
         (yield* writeLibrarySync(sourceBody.library.revision_id, {
           ...portable,
-          retained_copies: [
+          collection_versions: [
             {
-              ...portable.retained_copies[0],
+              ...portable.collection_versions[0],
               digest: missingDigest,
             },
           ],
@@ -1121,7 +1142,7 @@ describe("Better Auth adapter", () => {
       });
       expect(legacyRead.status).toBe(200);
       expect(yield* webPromise(() => legacyRead.json())).toMatchObject({
-        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v7" } },
+        library: { revision_id: legacyRevisionId, manifest: { schema: "skit.library.v8" } },
       });
       const v5RevisionId = "library_revision_v5_fixture";
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
@@ -1138,7 +1159,25 @@ describe("Better Auth adapter", () => {
       });
       expect(v5Read.status).toBe(200);
       expect(yield* webPromise(() => v5Read.json())).toMatchObject({
-        library: { revision_id: v5RevisionId, manifest: { schema: "skit.library.v7" } },
+        library: { revision_id: v5RevisionId, manifest: { schema: "skit.library.v8" } },
+      });
+      // A revision a v7 CLI stored reads back in the current model.
+      const v7RevisionId = "library_revision_v7_fixture";
+      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+        sql.batch([
+          sql`INSERT INTO library_revisions
+                (revision_id, library_id, parent_revision_id, manifest_json, created_at)
+              VALUES (${v7RevisionId}, ${libraryId}, ${v5RevisionId}, ${JSON.stringify(portableV7)}, '2026-01-04T00:00:00.000Z')`,
+          sql`UPDATE libraries SET current_revision_id = ${v7RevisionId}
+              WHERE library_id = ${libraryId}`,
+        ]),
+      );
+      const v7Read = yield* request("/api/library/portable", {
+        headers: { cookie: sessionCookie },
+      });
+      expect(v7Read.status).toBe(200);
+      expect(yield* webPromise(() => v7Read.json())).toMatchObject({
+        library: { revision_id: v7RevisionId, manifest: portable },
       });
 
       yield* Effect.flatMap(
@@ -1393,13 +1432,13 @@ describe("Better Auth adapter", () => {
         const alice = yield* account("alice", "192.0.2.120");
         const bob = yield* account("bob", "192.0.2.121");
         const manifest = {
-          schema: "skit.library.v7",
+          schema: "skit.library.v8",
           collections: [],
           skills: [],
-          retained_copies: [],
-          acquisitions: [],
+          collection_versions: [],
+          imports: [],
           snapshot_digests: [],
-          bindings: [],
+          enabled: [],
         };
         const firstWrite = () =>
           send("/api/library/portable", {

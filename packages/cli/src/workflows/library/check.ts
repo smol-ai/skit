@@ -39,17 +39,19 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
       const skills = subject.skills;
       const acquisitionIds = subjectImportIds(state, subject);
       const copyIds = new Set(
-        state.acquisitions
-          .filter((acquisition) => acquisitionIds.has(acquisition.acquisition_id))
-          .map((acquisition) => acquisition.retained_copy_id),
+        state.imports
+          .filter((acquisition) => acquisitionIds.has(acquisition.import_id))
+          .map((acquisition) => acquisition.collection_version_id),
       );
-      const copies = state.retained_copies.filter((copy) => copyIds.has(copy.retained_copy_id));
+      const copies = state.collection_versions.filter((copy) =>
+        copyIds.has(copy.collection_version_id),
+      );
       const acquisition = latestSourceImport(state, subject);
       const currentCopy =
         acquisition === undefined
           ? undefined
-          : state.retained_copies.find(
-              (copy) => copy.retained_copy_id === acquisition.retained_copy_id,
+          : state.collection_versions.find(
+              (copy) => copy.collection_version_id === acquisition.collection_version_id,
             );
       const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
@@ -57,7 +59,7 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
       const retained_copies = [];
       for (const copy of copies) {
         retained_copies.push({
-          retained_copy_id: copy.retained_copy_id,
+          retained_copy_id: copy.collection_version_id,
           digest: copy.digest,
           retained_bytes_current:
             (yield* originalTreeHash(collectionVersionPath(store.originalsPath, copy.digest))) ===
@@ -85,8 +87,8 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
         ...(inspected === undefined
           ? {}
           : { available_snapshot_digest: inspected.snapshot_digest }),
-        acquisition_provenance: state.acquisitions.some((acquisition) =>
-          acquisitionIds.has(acquisition.acquisition_id),
+        acquisition_provenance: state.imports.some((acquisition) =>
+          acquisitionIds.has(acquisition.import_id),
         ),
         ...(skillsSh ? { skills_sh: skillsSh } : {}),
       };

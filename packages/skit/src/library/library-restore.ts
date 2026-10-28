@@ -16,7 +16,7 @@ import {
   importCanBeRefetched,
   type Import,
   type SkitSource,
-  bindingSkillIds,
+  enabledSkillIds,
   currentLibraryManifest,
   librarySnapshotDigests,
   type LibraryManifest,
@@ -102,10 +102,11 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   digest: string,
   options: RestoreOptions,
 ) {
-  const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
-  const acquisition = manifest.acquisitions.find(
+  const copy = manifest.collection_versions.find((candidate) => candidate.digest === digest);
+  const acquisition = manifest.imports.find(
     (candidate) =>
-      candidate.retained_copy_id === copy?.retained_copy_id && importCanBeRefetched(candidate),
+      candidate.collection_version_id === copy?.collection_version_id &&
+      importCanBeRefetched(candidate),
   );
   if (copy === undefined || acquisition === undefined)
     return yield* new SourceRestoreInvalid({
@@ -188,8 +189,10 @@ const invalidPlan = (
   plan: CollectionVersionPlan,
   hasDownload: boolean,
 ): string | undefined => {
-  const required = new Set(manifest.retained_copies.map((copy) => copy.digest));
-  const copies = new Map(manifest.retained_copies.map((copy) => [copy.retained_copy_id, copy]));
+  const required = new Set(manifest.collection_versions.map((copy) => copy.digest));
+  const copies = new Map(
+    manifest.collection_versions.map((copy) => [copy.collection_version_id, copy]),
+  );
   const snapshots = new Set(manifest.snapshot_digests);
   const covered = new Set<Digest>();
   for (const digest of [
@@ -242,10 +245,12 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
       Effect.gen(function* () {
         for (const [index, digest] of plan.reusable.entries()) {
           const path = collectionVersionPath(options.originalsPath, digest);
-          const copy = manifest.retained_copies.find((candidate) => candidate.digest === digest);
+          const copy = manifest.collection_versions.find(
+            (candidate) => candidate.digest === digest,
+          );
           const subject =
-            manifest.acquisitions.find(
-              (candidate) => candidate.retained_copy_id === copy?.retained_copy_id,
+            manifest.imports.find(
+              (candidate) => candidate.collection_version_id === copy?.collection_version_id,
             )?.input.value ?? digest;
           yield* progress.tick({ phase, completed: index, subject });
           // Replan on retry rather than silently adding an unplanned transfer.
@@ -291,7 +296,9 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
     for (const archive of downloaded) archives.set(archive.digest, archive);
   }
   for (const id of plan.reacquire) {
-    const copy = manifest.retained_copies.find((candidate) => candidate.retained_copy_id === id);
+    const copy = manifest.collection_versions.find(
+      (candidate) => candidate.collection_version_id === id,
+    );
     if (copy === undefined)
       return yield* new RestoreInvalid({ detail: `unknown retained copy ${id}` });
     // A stale or mismatched plan must never turn private content into a source fetch.
@@ -300,7 +307,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
         detail: `snapshot-backed retained copy ${copy.digest} not downloaded`,
       });
     const subject =
-      manifest.acquisitions.find((candidate) => candidate.retained_copy_id === id)?.input.value ??
+      manifest.imports.find((candidate) => candidate.collection_version_id === id)?.input.value ??
       copy.digest;
     const archive = yield* progress.around(
       { kind: "fetch-source", subject },
@@ -309,7 +316,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
     archives.set(archive.digest, archive);
   }
   // Plans describe observations, not authority to omit required content.
-  for (const copy of manifest.retained_copies) {
+  for (const copy of manifest.collection_versions) {
     if (!archives.has(copy.digest) && !existingPaths.has(copy.digest))
       return yield* new RestoreInvalid({ detail: `retained copy ${copy.digest} not downloaded` });
   }
@@ -332,15 +339,15 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
   const received = new Map(archives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
   const verifiedPaths = new Map(existingPaths);
-  const phase: RestorePhase = { kind: "retain", total: manifest.retained_copies.length };
+  const phase: RestorePhase = { kind: "retain", total: manifest.collection_versions.length };
   if (phase.total)
     yield* progress.around(
       phase,
       Effect.gen(function* () {
-        for (const [index, tree] of manifest.retained_copies.entries()) {
+        for (const [index, tree] of manifest.collection_versions.entries()) {
           const label =
-            manifest.acquisitions.find(
-              (candidate) => candidate.retained_copy_id === tree.retained_copy_id,
+            manifest.imports.find(
+              (candidate) => candidate.collection_version_id === tree.collection_version_id,
             )?.input.value ?? tree.digest;
           yield* progress.tick({ phase, completed: index, subject: label });
           const archive = received.get(tree.digest);
@@ -386,11 +393,11 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
     currentLibraryState({
       collections: [...manifest.collections],
       skills: [...manifest.skills],
-      retained_copies: [...manifest.retained_copies],
-      acquisitions: [...manifest.acquisitions],
-      global_bindings: [...manifest.bindings],
-      local_bindings: [],
-      projections: [],
+      collection_versions: [...manifest.collection_versions],
+      imports: [...manifest.imports],
+      enabled: [...manifest.enabled],
+      repositories: [],
+      installed_skills: [],
       unmanaged: [],
     }),
   ).pipe(
@@ -408,26 +415,22 @@ export function strandedByRestore(current: LibraryState, manifest: LibraryManife
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
   );
   const conflicts = [
-    ...current.projections.flatMap((projection) =>
-      (!manifest.bindings.some((binding) =>
-        bindingSkillIds(manifest, binding).includes(projection.skill_id),
-      ) &&
+    ...current.installed_skills.flatMap((projection) =>
+      (!enabledSkillIds(manifest, manifest.enabled).includes(projection.skill_id) &&
         !repositorySelectsInstalledSkill(current, projection)) ||
       (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
         ? []
-        : [`device:${projection.projection_id}:managed-projection`],
+        : [`device:${projection.installed_skill_id}:managed-projection`],
     ),
-    ...current.local_bindings.flatMap((binding) => {
-      return binding.entries.every((entry) =>
-        entry.kind === "skill"
-          ? manifest.skills.some((skill) => skill.skill_id === entry.skill_id)
-          : manifest.collections.some(
-              (collection) => collection.collection_id === entry.collection_id,
-            ),
+    ...current.repositories.flatMap((repository) =>
+      repository.enabled.every((item) =>
+        "skill" in item
+          ? manifest.skills.some((skill) => skill.skill_id === item.skill)
+          : manifest.collections.some((collection) => collection.collection_id === item.collection),
       )
         ? []
-        : [`device:${binding.scope.root}:repository-binding`];
-    }),
+        : [`device:${repository.root}:repository-binding`],
+    ),
   ];
   return [...new Set(conflicts)].sort();
 }
@@ -440,30 +443,30 @@ export const blendRestoredState = Effect.fn("Library.blendRestoredState")(functi
   const manifest: LibraryManifest = currentLibraryManifest({
     collections: restored.collections,
     skills: restored.skills,
-    retained_copies: restored.retained_copies,
-    acquisitions: restored.acquisitions,
+    collection_versions: restored.collection_versions,
+    imports: restored.imports,
     snapshot_digests: librarySnapshotDigests(restored),
-    bindings: restored.global_bindings.map(
-      ({ invocation_policies: _policies, ...binding }) => binding,
-    ),
+    enabled: restored.enabled,
   });
   const ownership = strandedByRestore(current, manifest);
   if (ownership.length > 0) return yield* new RestoreInvalid({ detail: ownership.join(", ") });
-  const localPolicies = current.global_bindings[0]?.invocation_policies;
+  // This device's invocation overrides apply to whatever the restored Library enables.
+  const { invocation_policies: localPolicies, ...device } = current;
   return yield* LibraryState.makeEffect({
-    ...current,
+    ...device,
     collections: restored.collections,
     skills: restored.skills,
-    retained_copies: restored.retained_copies,
-    acquisitions: restored.acquisitions,
-    global_bindings: restored.global_bindings.map((binding) =>
-      localPolicies === undefined ? binding : { ...binding, invocation_policies: localPolicies },
-    ),
+    collection_versions: restored.collection_versions,
+    imports: restored.imports,
+    enabled: restored.enabled,
+    ...(localPolicies === undefined || restored.enabled.length === 0
+      ? {}
+      : { invocation_policies: localPolicies }),
   }).pipe(
     Effect.mapError(
       () =>
         new RestoreInvalid({
-          detail: "merged Library conflicts with device Bindings or ownership",
+          detail: "merged Library conflicts with what this device enables or owns",
         }),
     ),
   );

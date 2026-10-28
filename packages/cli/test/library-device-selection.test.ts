@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { effectiveGlobalBindings } from "@smolai/skit-core";
+import { globalEnabled } from "@smolai/skit-core";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -16,12 +16,7 @@ it.effect("persists an empty device choice before either Library exists", () =>
     const first = yield* a.retain("first");
     yield* a.edit((state) => ({
       ...state,
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: first.skills[0]!.skill_id }],
-        },
-      ],
+      enabled: [{ skill: first.skills[0]!.skill_id }],
     }));
     yield* a.sync();
     yield* b.sync();
@@ -59,7 +54,7 @@ it.effect("removing a Collection prunes its device choice without leaving choose
     yield* b.remove(first.collection.collection_id);
     const selection = (yield* b.state).device_skill_selection;
     assert.strictEqual(selection?.mode, "choose");
-    if (selection?.mode === "choose") assert.deepStrictEqual(selection.binding.entries, []);
+    if (selection?.mode === "choose") assert.deepStrictEqual(selection.enabled, []);
     assert.notStrictEqual((yield* b.sync()).status, "enablement_incomplete");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -107,41 +102,30 @@ it.effect(
       assert.ok(localSkill);
       yield* a.edit((state) => ({
         ...state,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: [{ kind: "collection", collection_id: published.collection.collection_id }],
-          },
-        ],
+        enabled: [{ collection: published.collection.collection_id }],
       }));
       yield* a.sync();
-      const account = (yield* remote)?.manifest.bindings;
+      const account = (yield* remote)?.manifest.enabled;
       yield* b.edit((state) => ({
         ...state,
         device_skill_selection: {
           mode: "choose",
-          binding: {
-            scope: { kind: "global" },
-            entries: [
-              { kind: "skill", skill_id: localSkill.skill_id },
-              { kind: "collection", collection_id: local.collection.collection_id },
-            ],
-            invocation_policies: { [localSkill.skill_id]: "explicit" },
-          },
+          enabled: [{ skill: localSkill.skill_id }, { collection: local.collection.collection_id }],
+          invocation_policies: { [localSkill.skill_id]: "explicit" },
         },
       }));
       const result = yield* b.sync({ adopt: true });
       assert.strictEqual(result.status, "merged");
       const state = yield* b.state;
-      const binding = effectiveGlobalBindings(state)[0];
-      assert.deepStrictEqual(binding?.entries, [
-        { kind: "skill", skill_id: publishedSkill.skill_id },
-        { kind: "collection", collection_id: published.collection.collection_id },
+      const global = globalEnabled(state);
+      assert.deepStrictEqual(global.enabled, [
+        { skill: publishedSkill.skill_id },
+        { collection: published.collection.collection_id },
       ]);
-      assert.deepStrictEqual(binding?.invocation_policies, {
+      assert.deepStrictEqual(global.invocation_policies, {
         [publishedSkill.skill_id]: "explicit",
       });
-      assert.deepStrictEqual((yield* remote)?.manifest.bindings, account);
+      assert.deepStrictEqual((yield* remote)?.manifest.enabled, account);
       assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -153,14 +137,9 @@ it.effect("retains the full account Library while persisting an individual devic
     const second = yield* a.retain("second");
     yield* a.edit((state) => ({
       ...state,
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [
-            { kind: "collection", collection_id: first.collection.collection_id },
-            { kind: "collection", collection_id: second.collection.collection_id },
-          ],
-        },
+      enabled: [
+        { collection: first.collection.collection_id },
+        { collection: second.collection.collection_id },
       ],
     }));
     yield* a.sync();
@@ -192,12 +171,7 @@ it.effect("a blocked selected destination leaves the Library synced and can be r
     const first = yield* a.retain("first");
     yield* a.edit((state) => ({
       ...state,
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: first.skills[0]!.skill_id }],
-        },
-      ],
+      enabled: [{ skill: first.skills[0]!.skill_id }],
     }));
     yield* a.sync();
     const head = yield* remote;
@@ -264,10 +238,8 @@ it.effect("a whole-collection choice follows membership while an individual does
     const individual = yield* b.state;
     const whole = yield* c.state;
     const collection = first.collection.collection_id;
-    assert.deepStrictEqual(effectiveGlobalBindings(individual)[0]?.entries[0]?.kind, "skill");
-    assert.deepStrictEqual(effectiveGlobalBindings(whole)[0]?.entries, [
-      { kind: "collection", collection_id: collection },
-    ]);
+    assert.isTrue("skill" in globalEnabled(individual).enabled[0]!);
+    assert.deepStrictEqual(globalEnabled(whole).enabled, [{ collection: collection }]);
     yield* a.retainMany("tools", ["first", "new-member"], "2026-02-01T00:00:00.000Z");
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* b.sync()).status, "merged");

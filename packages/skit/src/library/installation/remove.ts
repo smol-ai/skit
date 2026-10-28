@@ -2,7 +2,7 @@ import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
 import { withInstalledSkillMutation } from "../../projection/mutation.js";
-import { removeBindingEntities } from "../binding-intent.js";
+import { removeFromEnabled } from "../enabled.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
@@ -71,7 +71,7 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
     (mutation) =>
       Effect.gen(function* () {
         let retired = 0;
-        for (const projection of mutation.state.projections.filter((item) =>
+        for (const projection of mutation.state.installed_skills.filter((item) =>
           removedSkillIds.has(item.skill_id),
         )) {
           const skill = mutation.state.skills.find((item) => item.skill_id === projection.skill_id);
@@ -86,27 +86,34 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
         // Only a batch that retired every copy removes the Collection. A failed one saves just
         // the copies it moved aside.
         const candidate = mutation.state;
-        const acquisitions = candidate.acquisitions.filter(
+        const acquisitions = candidate.imports.filter(
           (acquisition) => acquisition.collection_id !== options.collectionId,
         );
         const survivingCopyIds = new Set(
-          acquisitions.map((acquisition) => acquisition.retained_copy_id),
+          acquisitions.map((acquisition) => acquisition.collection_version_id),
         );
+        const { invocation_policies, ...enabled } = removeFromEnabled(candidate, {
+          skills: removedSkillIds,
+          collections: new Set([options.collectionId]),
+        });
         Object.assign(candidate, {
-          ...removeBindingEntities(candidate, {
-            skills: removedSkillIds,
-            collections: new Set([options.collectionId]),
-          }),
+          ...enabled,
           collections: candidate.collections.filter(
             (item) => item.collection_id !== options.collectionId,
           ),
-          projections: candidate.projections.filter((item) => !removedSkillIds.has(item.skill_id)),
+          installed_skills: candidate.installed_skills.filter(
+            (item) => !removedSkillIds.has(item.skill_id),
+          ),
           skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
-          acquisitions,
-          retained_copies: candidate.retained_copies.filter((copy) =>
-            survivingCopyIds.has(copy.retained_copy_id),
+          imports: acquisitions,
+          collection_versions: candidate.collection_versions.filter((copy) =>
+            survivingCopyIds.has(copy.collection_version_id),
           ),
         });
+        // Assigning cannot remove a key, so overrides left for no remaining Skill go explicitly.
+        if (invocation_policies === undefined)
+          delete (candidate as { invocation_policies?: unknown }).invocation_policies;
+        else Object.assign(candidate, { invocation_policies });
         return retired;
       }),
   );

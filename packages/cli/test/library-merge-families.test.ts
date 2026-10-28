@@ -13,7 +13,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
   type Import,
-  type BindingEntry,
+  type Enabled,
   type Collection,
   type CollectionId,
   type CollectionVersion,
@@ -37,7 +37,7 @@ interface Side {
   readonly skills: readonly Skill[];
   readonly retained_copies: readonly CollectionVersion[];
   readonly acquisitions: readonly Import[];
-  readonly entries: readonly BindingEntry[];
+  readonly entries: readonly Enabled[];
 }
 const none: Side = {
   collections: [],
@@ -84,7 +84,7 @@ const fixture = (paths: readonly string[]) => {
   ): Omit<Observation, "versions"> => {
     const retained_copy_id = makeCollectionVersionId();
     const copy: CollectionVersion = {
-      retained_copy_id,
+      collection_version_id: retained_copy_id,
       digest: digest(canonicalJson(members)),
       copy_profile: "verbatim/v1",
       members: Object.entries(members).map(([path, item]) => ({
@@ -97,19 +97,19 @@ const fixture = (paths: readonly string[]) => {
     return {
       copy,
       acquisition: {
-        acquisition_id: makeImportId(),
+        import_id: makeImportId(),
         collection_id,
         kind,
-        retained_copy_id,
+        collection_version_id: retained_copy_id,
         source_identity: {
           kind: "local",
           machine_id: machineId,
           path: { value: `/src/${collection_id}` },
         },
         input: { value: `/src/${collection_id}` },
-        acquired_at: at,
+        imported_at: at,
         machine_id: machineId,
-        observations: [],
+        lock_file_entries: [],
       },
     };
   };
@@ -130,14 +130,14 @@ const fixture = (paths: readonly string[]) => {
     /** A retained local edit of one Skill. */
     edit: (path: string, bytes: string, at = "2026-01-01T00:00:00.000Z"): Observation => {
       const edited = { [path]: version(path, bytes) };
-      return { ...acquire("retained-edit", edited, at), versions: edited };
+      return { ...acquire("edit", edited, at), versions: edited };
     },
     /** This Collection as one side holds it. */
     held: (
       observations: readonly Observation[],
       options: {
         label?: string;
-        entries?: readonly BindingEntry[];
+        entries?: readonly Enabled[];
         selected?: Readonly<Record<string, SkillVersion>>;
       } = {},
     ): Side => ({
@@ -169,7 +169,7 @@ const fixture = (paths: readonly string[]) => {
   };
 };
 
-const skill = (id: SkillId): BindingEntry => ({ kind: "skill", skill_id: id });
+const skill = (id: SkillId): Enabled => ({ skill: id });
 
 interface Family {
   readonly base: Side;
@@ -368,7 +368,7 @@ const families = {
     const both = [skill(x.skillIds.alpha!), skill(x.skillIds.beta!)];
     return {
       base: x.held([first], { entries: both }),
-      local: x.held([first], { entries: [{ kind: "collection", collection_id: x.collection_id }] }),
+      local: x.held([first], { entries: [{ collection: x.collection_id }] }),
       remote: x.held([first], { entries: [skill(x.skillIds.beta!)] }),
       conflicts: ["binding:global"],
       resolved: x.held([first], { entries: [skill(x.skillIds.beta!)] }),
@@ -477,10 +477,13 @@ const manifestOf = (sides: readonly Side[]): LibraryManifest => {
     currentLibraryManifest({
       collections: sides.flatMap((side) => side.collections),
       skills: sides.flatMap((side) => side.skills),
-      retained_copies,
-      acquisitions,
-      snapshot_digests: librarySnapshotDigests({ retained_copies, acquisitions }),
-      bindings: entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }],
+      collection_versions: retained_copies,
+      imports: acquisitions,
+      snapshot_digests: librarySnapshotDigests({
+        collection_versions: retained_copies,
+        imports: acquisitions,
+      }),
+      enabled: entries,
     }),
   );
 };
@@ -499,15 +502,12 @@ const canonical = (manifest: LibraryManifest) => {
       })),
       (item) => item.skill_id,
     ),
-    retained_copies: sorted(manifest.retained_copies, (item) => item.retained_copy_id),
-    acquisitions: sorted(manifest.acquisitions, (item) => item.acquisition_id),
+    collection_versions: sorted(manifest.collection_versions, (item) => item.collection_version_id),
+    imports: sorted(manifest.imports, (item) => item.import_id),
     snapshot_digests: [...manifest.snapshot_digests].sort(),
-    bindings: manifest.bindings.map((binding) => ({
-      ...binding,
-      entries: sorted(binding.entries, (entry) =>
-        entry.kind === "collection" ? entry.collection_id : entry.skill_id,
-      ),
-    })),
+    enabled: sorted(manifest.enabled, (item) =>
+      "collection" in item ? item.collection : item.skill,
+    ),
   });
 };
 
@@ -589,8 +589,8 @@ it.prop(
     const expected = conflicts.has("binding:global")
       ? sides.map((side, index) => ({
           ...side,
-          entries: cases[index]!.remote.entries.filter((entry) =>
-            present.has(entry.kind === "collection" ? entry.collection_id : entry.skill_id),
+          entries: cases[index]!.remote.entries.filter((item) =>
+            present.has("collection" in item ? item.collection : item.skill),
           ),
         }))
       : sides;

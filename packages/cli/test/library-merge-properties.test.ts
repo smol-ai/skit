@@ -11,7 +11,7 @@ import {
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-  type BindingEntry,
+  type Enabled,
 } from "@smolai/skit-core";
 import {
   mergeLibraryManifests,
@@ -48,7 +48,7 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       ],
     },
     retainedCopy: {
-      retained_copy_id: retainedCopyId,
+      collection_version_id: retainedCopyId,
       digest,
       copy_profile: "verbatim/v1" as const,
       members: [
@@ -61,19 +61,19 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       ],
     },
     acquisition: {
-      acquisition_id: makeImportId(),
+      import_id: makeImportId(),
       collection_id: collectionId,
       kind: "source" as const,
-      retained_copy_id: retainedCopyId,
+      collection_version_id: retainedCopyId,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
         path: { value: `/tmp/pool-${index}` },
       },
       input: { value: `/tmp/pool-${index}` },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     },
   };
 });
@@ -95,11 +95,11 @@ const manifestOf = (choices: Side): LibraryManifest => {
     const choice = choices[index];
     return choice === undefined ? [] : [{ entry, choice }];
   });
-  const entries = present.flatMap(({ entry, choice }): BindingEntry[] =>
+  const entries = present.flatMap(({ entry, choice }): Enabled[] =>
     choice.binding === "skill"
-      ? [{ kind: "skill", skill_id: entry.skillId }]
+      ? [{ skill: entry.skillId }]
       : choice.binding === "collection"
-        ? [{ kind: "collection", collection_id: entry.collectionId }]
+        ? [{ collection: entry.collectionId }]
         : [],
   );
   const retained_copies = present.map(({ entry }) => entry.retainedCopy);
@@ -108,10 +108,13 @@ const manifestOf = (choices: Side): LibraryManifest => {
     currentLibraryManifest({
       collections: present.map(({ entry, choice }) => entry.collection(choice.label)),
       skills: present.map(({ entry }) => entry.skill),
-      retained_copies,
-      acquisitions,
-      snapshot_digests: librarySnapshotDigests({ retained_copies, acquisitions }),
-      bindings: entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }],
+      collection_versions: retained_copies,
+      imports: acquisitions,
+      snapshot_digests: librarySnapshotDigests({
+        collection_versions: retained_copies,
+        imports: acquisitions,
+      }),
+      enabled: entries,
     }),
   );
 };

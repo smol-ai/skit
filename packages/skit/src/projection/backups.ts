@@ -30,7 +30,7 @@ export const installedSkillWorkDirectory = Effect.fn("Projection.workDirectory")
  * no longer records it is saved, so its absence is never read as the user's deletion.
  */
 export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
-  projection: Pick<InstalledSkill, "root" | "path" | "projection_id">,
+  projection: Pick<InstalledSkill, "root" | "path" | "installed_skill_id">,
   action: "replace" | "retire",
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -60,7 +60,7 @@ export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
   const stamp = new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "-");
   const backup = join(
     backups,
-    `pending-${projection.projection_id}-${stamp}-${action}-${makeOperationId()}`,
+    `pending-${projection.installed_skill_id}-${stamp}-${action}-${makeOperationId()}`,
   );
   yield* fs.rename(projection.path, backup).pipe(Effect.uninterruptible);
   return backup;
@@ -68,7 +68,7 @@ export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
 
 /** Pending backups of one installed skill, wherever its root's device placed them. */
 const installedSkillBackups = Effect.fn("Projection.backups")(function* (
-  projection: Pick<InstalledSkill, "root" | "projection_id">,
+  projection: Pick<InstalledSkill, "root" | "installed_skill_id">,
   includeKept: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -93,8 +93,8 @@ const installedSkillBackups = Effect.fn("Projection.backups")(function* (
       ...names
         .filter(
           (name) =>
-            name.startsWith(`pending-${projection.projection_id}-`) ||
-            (includeKept && name.startsWith(`kept-${projection.projection_id}-`)),
+            name.startsWith(`pending-${projection.installed_skill_id}-`) ||
+            (includeKept && name.startsWith(`kept-${projection.installed_skill_id}-`)),
         )
         .map((name) => join(backups, name)),
     );
@@ -104,12 +104,12 @@ const installedSkillBackups = Effect.fn("Projection.backups")(function* (
 
 /** Unsettled backups retain their existing narrow protocol. */
 export const pendingInstalledSkillBackups = (
-  projection: Pick<InstalledSkill, "root" | "projection_id">,
+  projection: Pick<InstalledSkill, "root" | "installed_skill_id">,
 ) => installedSkillBackups(projection, false);
 
 /** Inspect both kept and pending predecessors without following a redirected backup directory. */
 export const inspectInstalledSkillBackups = (
-  projection: Pick<InstalledSkill, "root" | "projection_id">,
+  projection: Pick<InstalledSkill, "root" | "installed_skill_id">,
 ) => installedSkillBackups(projection, true);
 
 /** A kept backup may hold bytes nothing else does. It stays until an operator removes it. */

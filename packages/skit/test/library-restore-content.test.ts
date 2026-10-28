@@ -179,8 +179,8 @@ it.effect("prepares downloaded private content and exact source content without 
         ["retain", 2],
       ],
     );
-    assert.deepStrictEqual(restored.state.acquisitions, f.manifest.acquisitions);
-    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(restored.state.imports, f.manifest.imports);
+    assert.deepStrictEqual(restored.state.collection_versions, f.manifest.collection_versions);
     assert.deepStrictEqual(f.requests, [
       {
         url: `${origin}/api/skits/tim/tools/releases/1.2.3/download`,
@@ -212,7 +212,7 @@ it.effect("available source archives require no source access", () =>
     );
     f.unavailable();
     const restored = yield* f.restore([f.privateArchive, sourceArchive]);
-    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(restored.state.collection_versions, f.manifest.collection_versions);
     assert.deepStrictEqual(f.requests, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -262,7 +262,7 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
     const f = yield* fixture;
     const manifest = {
       ...f.manifest,
-      acquisitions: f.manifest.acquisitions.map((acquisition) => {
+      imports: f.manifest.imports.map((acquisition) => {
         const { revision: _revision, ...unpinned } = acquisition;
         return unpinned;
       }),
@@ -288,7 +288,7 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* f.restore();
-    const archives = yield* Effect.forEach(f.manifest.retained_copies, (tree) =>
+    const archives = yield* Effect.forEach(f.manifest.collection_versions, (tree) =>
       captureSnapshotArchive(collectionVersionPath(f.originalsPath, tree.digest)),
     );
     f.unavailable();
@@ -313,7 +313,7 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
       }),
     );
     const restored = yield* restore;
-    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(restored.state.collection_versions, f.manifest.collection_versions);
     assert.deepStrictEqual(
       ticks.map((tick) => tick.completed),
       [0, 1, 1, 2],
@@ -353,7 +353,7 @@ it.effect("existing unlisted objects restore without source access or private ar
         ["retain", 2],
       ],
     );
-    assert.deepStrictEqual(restored.state.retained_copies, f.manifest.retained_copies);
+    assert.deepStrictEqual(restored.state.collection_versions, f.manifest.collection_versions);
     assert.deepStrictEqual(f.requests, []);
     yield* f.fs.writeFileString(
       join(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), "SKILL.md"),
@@ -390,7 +390,7 @@ it.effect(
       );
       assert.deepStrictEqual(
         plan.reusable,
-        f.manifest.retained_copies.map((copy) => copy.digest),
+        f.manifest.collection_versions.map((copy) => copy.digest),
       );
       assert.deepStrictEqual(plan.download, []);
       assert.deepStrictEqual(plan.reacquire, []);
@@ -428,7 +428,7 @@ it.effect("verified whole-tree bytes do not bypass member digest verification", 
     yield* f.restore();
     const manifest = {
       ...f.manifest,
-      retained_copies: f.manifest.retained_copies.map((copy) => ({
+      collection_versions: f.manifest.collection_versions.map((copy) => ({
         ...copy,
         members: copy.members.map((member) => ({
           ...member,
@@ -481,8 +481,8 @@ it.effect(
         localArchives: [],
       });
       const foreign = yield* captureSnapshotArchive(f.sourceRoot);
-      assert.isFalse(f.manifest.retained_copies.some((copy) => copy.digest === foreign.digest));
-      const privateCopy = f.manifest.retained_copies.find(
+      assert.isFalse(f.manifest.collection_versions.some((copy) => copy.digest === foreign.digest));
+      const privateCopy = f.manifest.collection_versions.find(
         (copy) => copy.digest === f.privateCopy.snapshotDigest,
       );
       assert(privateCopy);
@@ -493,7 +493,7 @@ it.effect(
         { ...plan, reusable: [foreign.digest] },
         { ...plan, download: [...plan.download, foreign.digest] },
         { ...plan, download: [...plan.download, f.source.snapshotDigest] },
-        { ...plan, reacquire: [...plan.reacquire, privateCopy.retained_copy_id] },
+        { ...plan, reacquire: [...plan.reacquire, privateCopy.collection_version_id] },
       ]) {
         const error = yield* prepareRestore(f.manifest, invalid, {
           originalsPath: f.originalsPath,

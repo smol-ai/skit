@@ -15,8 +15,12 @@ import {
 import {
   BindingEntryV7,
   BindingV7,
+  collectionVersionFromV7,
   CollectionVersionV7,
+  enabledFromV7,
+  importFromV7,
   ImportV7,
+  libraryManifestFromV7,
   LibraryManifestV7,
 } from "./manifest-v7.js";
 import {
@@ -113,14 +117,92 @@ export const LibraryStateV9 = Schema.Struct({
 });
 export type LibraryStateV9 = typeof LibraryStateV9.Type;
 
-/** v9 → current. */
+const policies = (invocation_policies: Readonly<Record<string, InvocationPolicy>> | undefined) =>
+  invocation_policies === undefined ? {} : { invocation_policies };
+
+export const DeviceSkillSelectionV9 = LibraryStateV9.fields.device_skill_selection.schema;
+export type DeviceSkillSelectionV9 = typeof DeviceSkillSelectionV9.Type;
+
+export const installedSkillFromV9 = ({
+  projection_id,
+  target,
+  projected_at,
+  ...copy
+}: typeof InstalledSkillV9.Type) => ({
+  ...copy,
+  installed_skill_id: projection_id,
+  destination: target,
+  installed_at: projected_at,
+});
+
+export const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
+  root: binding.scope.root,
+  enabled: enabledFromV7(binding.entries),
+  ...policies(binding.invocation_policies),
+});
+
+/** The global list a v9 global Binding held; none means nothing enabled. */
+export const globalFromV9 = (binding: typeof DeviceBindingV9.Type | undefined) => ({
+  enabled: binding === undefined ? [] : enabledFromV7(binding.entries),
+  ...policies(binding?.invocation_policies),
+});
+
+export const deviceSelectionFromV9 = (selection: DeviceSkillSelectionV9) =>
+  selection.mode === "choose"
+    ? { mode: "choose" as const, ...globalFromV9(selection.binding) }
+    : selection;
+
+/**
+ * v9 → v10: Bindings become plain lists of enabled items held where they apply (the Library, each
+ * repository, the device's own choice), and stored records take plain names.
+ */
+const libraryStateFromV9 = ({
+  schemaVersion: _schemaVersion,
+  sync_ancestry,
+  device_skill_selection,
+  retained_copies,
+  acquisitions,
+  global_bindings,
+  local_bindings,
+  projections,
+  custodyIssues,
+  ...fields
+}: LibraryStateV9) => {
+  return {
+    ...fields,
+    schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+    ...(sync_ancestry === undefined
+      ? {}
+      : {
+          sync_ancestry: {
+            ...sync_ancestry,
+            base_manifest: libraryManifestFromV7(sync_ancestry.base_manifest),
+          },
+        }),
+    ...(device_skill_selection === undefined
+      ? {}
+      : { device_skill_selection: deviceSelectionFromV9(device_skill_selection) }),
+    collection_versions: retained_copies.map(collectionVersionFromV7),
+    imports: acquisitions.map(importFromV7),
+    ...globalFromV9(global_bindings[0]),
+    repositories: local_bindings.map(repositoryFromV9),
+    installed_skills: projections.map(installedSkillFromV9),
+    ...(custodyIssues === undefined
+      ? {}
+      : {
+          ownershipIssues: custodyIssues.map(({ code, projectionId, ...issue }) => ({
+            ...issue,
+            code: code === "ORPHANED_PROJECTION_CLAIM" ? "ORPHANED_OWNERSHIP_MARKER" : code,
+            ...(projectionId === undefined ? {} : { installedSkillId: projectionId }),
+          })),
+        }),
+  };
+};
+
 export const LibraryStateFromV9 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV9)),
   Schema.decodeTo(LibraryStateDocument, {
-    decode: SchemaGetter.transform((state) => ({
-      ...state,
-      schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
-    })),
+    decode: SchemaGetter.transform(libraryStateFromV9),
     encode: SchemaGetter.forbidden(() => "v9 Library state is decode-only"),
   }),
 );

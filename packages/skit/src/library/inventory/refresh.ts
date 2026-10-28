@@ -42,7 +42,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
   const fs = yield* FileSystem.FileSystem;
-  for (const projection of state.projections) {
+  for (const projection of state.installed_skills) {
     const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
     const version = skill?.versions.find(
       (item) => item.skill_version_id === projection.skill_version_id,
@@ -71,7 +71,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         : "conflicted";
   }
   const managed = new Set<string>();
-  for (const projection of state.projections)
+  for (const projection of state.installed_skills)
     managed.add((yield* physicalPath(projection.path)).key);
   const priorUnmanaged = new Map<string, LibraryState["unmanaged"][number]>();
   for (const item of state.unmanaged)
@@ -80,7 +80,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     (item) =>
       typeof item.path !== "string" || !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
-  state.custodyIssues = (state.custodyIssues ?? []).filter(
+  state.ownershipIssues = (state.ownershipIssues ?? []).filter(
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
   const observedPaths = new Map<
@@ -183,7 +183,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     const observedHash = yield* deterministicTreeHash(observed.canonicalPath);
     const marker = yield* inspectOwnershipMarker(observed.path);
     if (marker.kind === "invalid") {
-      state.custodyIssues.push({
+      state.ownershipIssues.push({
         code: "INVALID_OWNERSHIP_MARKER",
         path: observed.path,
         canonicalPath: observed.canonicalPath,
@@ -197,8 +197,8 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         projectionId: marker.marker.projection_id,
         expectedHash: marker.marker.expected_digest,
       };
-      state.custodyIssues.push({
-        code: "ORPHANED_PROJECTION_CLAIM",
+      state.ownershipIssues.push({
+        code: "ORPHANED_OWNERSHIP_MARKER",
         path: observed.path,
         canonicalPath: observed.canonicalPath,
         harnesses,
@@ -234,11 +234,11 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   yield* store.save(state, loaded);
   // A verified installation resolves every older displacement of its installed skill. Those backups
   // no longer explain an absence, so they are kept, never discarded.
-  for (const projection of state.projections) {
+  for (const projection of state.installed_skills) {
     if (projection.status !== "installed") continue;
     const marker = yield* readOwnershipMarker(projection.path);
     if (
-      marker?.projection_id === projection.projection_id &&
+      marker?.projection_id === projection.installed_skill_id &&
       marker.skill_id === projection.skill_id &&
       projection.observed_digest === projection.expected_digest
     )

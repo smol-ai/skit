@@ -14,7 +14,6 @@ import {
   type InstallScope,
   type LibraryState,
   type InventoryScanRoot,
-  type RepositoryBinding,
 } from "@smolai/skit-core";
 import { detectInstalledHarnesses } from "../harness/catalog.js";
 export interface InventoryRootOptions {
@@ -24,21 +23,21 @@ export interface InventoryRootOptions {
   readonly overrides: SkillsDirectoryOverrides;
 }
 
-/** Reuse a repository's own route, excluding routes owned by a nested repository Binding. */
+/** Reuse a repository's own route, excluding routes owned by a nested repository. */
 export function existingRepositorySkillsDirectory(
   state: LibraryState,
-  binding: RepositoryBinding,
+  root: string,
   target: InstallDestination,
 ): string | undefined {
-  return state.projections.find(
+  return state.installed_skills.find(
     (projection) =>
-      projection.target === target &&
-      pathIsWithin(binding.scope.root, projection.root) &&
-      !state.local_bindings.some(
+      projection.destination === target &&
+      pathIsWithin(root, projection.root) &&
+      !state.repositories.some(
         (other) =>
-          other.scope.root !== binding.scope.root &&
-          pathIsWithin(binding.scope.root, other.scope.root) &&
-          pathIsWithin(other.scope.root, projection.root),
+          other.root !== root &&
+          pathIsWithin(root, other.root) &&
+          pathIsWithin(other.root, projection.root),
       ),
   )?.root;
 }
@@ -77,7 +76,7 @@ export const installDestinationsFor = (
 ): readonly InstallDestination[] =>
   detected.includes("claude-code") ? ["agents", "claude"] : ["agents"];
 
-/** Every Harness's own global roots, plus the target roots of each repository Binding. */
+/** Every Harness's own global roots, plus the skills directories of each repository. */
 export function selectInventoryRoots(
   state: LibraryState,
   options: InventoryRootOptions,
@@ -100,10 +99,10 @@ export function selectInventoryRoots(
             : [installSkillsDirectory(harness, "global", context)];
       return roots.flatMap((root) => (root === null ? [] : [{ harness, root: resolve(root) }]));
     }),
-    ...state.local_bindings.flatMap((binding) =>
+    ...state.repositories.flatMap((repository) =>
       Record.toEntries(installDestinationProfiles).map(([target, harness]) => ({
         harness,
-        root: skillsDirectoryFor(target, binding.scope, options),
+        root: skillsDirectoryFor(target, { kind: "repository", root: repository.root }, options),
       })),
     ),
   ]);

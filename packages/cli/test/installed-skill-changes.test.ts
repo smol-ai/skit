@@ -136,16 +136,10 @@ it.effect(
             const store = yield* LibraryStore;
             const state = yield* store.load;
             const other = state.skills.find((skill) => skill.name === "other")!;
-            const binding = state.global_bindings[0];
             yield* store.save(
               {
                 ...state,
-                global_bindings: [
-                  {
-                    ...binding,
-                    entries: [...binding.entries, { kind: "skill", skill_id: other.skill_id }],
-                  },
-                ],
+                enabled: [...state.enabled, { skill: other.skill_id }],
               },
               state,
             );
@@ -161,7 +155,9 @@ it.effect(
       const otherPath = join(f.agents, "other");
       const edited = document("Independent other edits").replace("name: review", "name: other");
       yield* f.fs.writeFileString(join(otherPath, "SKILL.md"), edited);
-      const before = (yield* f.home.durable).projections.find((item) => item.path === otherPath);
+      const before = (yield* f.home.durable).installed_skills.find(
+        (item) => item.path === otherPath,
+      );
       yield* f.update;
       const applied = yield* f.apply;
       expect(
@@ -169,9 +165,9 @@ it.effect(
           (item) => item.path === otherPath && item.status === "local-kept",
         ),
       ).toBe(true);
-      expect((yield* f.home.durable).projections.find((item) => item.path === otherPath)).toEqual(
-        before,
-      );
+      expect(
+        (yield* f.home.durable).installed_skills.find((item) => item.path === otherPath),
+      ).toEqual(before);
       expect(yield* f.fs.readFileString(join(otherPath, "SKILL.md"))).toBe(edited);
       expect(yield* f.fs.exists(join(f.claude, "other"))).toBe(false);
       expect(yield* f.fs.exists(join(f.home.home, "variants", "agents", "other"))).toBe(false);
@@ -205,9 +201,9 @@ it.effect(
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(beforeFiles[0]);
       expect(yield* f.fs.readFileString(join(f.claude, "review", "SKILL.md"))).toBe(beforeFiles[1]);
       const undone = yield* f.home.durable;
-      expect(undone.projections).toEqual(before.projections);
+      expect(undone.installed_skills).toEqual(before.installed_skills);
       expect(undone.skills).toEqual(before.skills);
-      expect(undone.retained_copies).toEqual(before.retained_copies);
+      expect(undone.collection_versions).toEqual(before.collection_versions);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -320,7 +316,7 @@ it.effect(
       expect(observed.reconciliation?.find((fact) => fact.path === f.copy)?.status).toBe(
         "protected",
       );
-      const before = (yield* f.home.durable).projections.find((item) => item.path === f.copy);
+      const before = (yield* f.home.durable).installed_skills.find((item) => item.path === f.copy);
       const input = {
         options: f.options,
         manageOptions: { bindings: f.home.bindings },
@@ -338,7 +334,7 @@ it.effect(
         ),
       );
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(edited);
-      expect((yield* f.home.durable).projections.find((item) => item.path === f.copy)).toEqual(
+      expect((yield* f.home.durable).installed_skills.find((item) => item.path === f.copy)).toEqual(
         before,
       );
       expect(yield* f.fs.exists(join(newCopy, ".skit-ownership.json"))).toBe(true);
@@ -606,12 +602,14 @@ for (const chosen of ["retained", "local"] as const) {
           document("Original baseline"),
         );
         const after = yield* f.home.durable;
-        expect(after.projections).toEqual(before.projections);
+        expect(after.installed_skills).toEqual(before.installed_skills);
         expect(after.skills.map((skill) => skill.local_version_id)).toEqual(
           before.skills.map((skill) => skill.local_version_id),
         );
-        expect(after.retained_copies.length).toBeGreaterThanOrEqual(before.retained_copies.length);
-        expect(after.acquisitions.length).toBeGreaterThanOrEqual(before.acquisitions.length);
+        expect(after.collection_versions.length).toBeGreaterThanOrEqual(
+          before.collection_versions.length,
+        );
+        expect(after.imports.length).toBeGreaterThanOrEqual(before.imports.length);
       }).pipe(Effect.provide(skitLayer)),
   );
 }
@@ -734,11 +732,11 @@ it.effect(
         document("Original baseline"),
       );
       const after = yield* f.home.durable;
-      expect(after.projections).toEqual(before.projections);
+      expect(after.installed_skills).toEqual(before.installed_skills);
       expect(after.skills.map((skill) => skill.local_version_id)).toEqual(
         before.skills.map((skill) => skill.local_version_id),
       );
-      expect(after.acquisitions.length).toBeGreaterThan(before.acquisitions.length);
+      expect(after.imports.length).toBeGreaterThan(before.imports.length);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -746,7 +744,7 @@ it.effect("a settings-only work-dir call never applies pending installed updates
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.update;
-    const before = (yield* f.home.durable).projections;
+    const before = (yield* f.home.durable).installed_skills;
     const work = join(f.root, "new-work-root");
     yield* f.fs.makeDirectory(work);
     const interaction = yield* makeScriptedInteraction([]);
@@ -760,7 +758,7 @@ it.effect("a settings-only work-dir call never applies pending installed updates
       }).pipe(Effect.provide(interaction.layer)),
     );
     expect("operationId" in applied && applied.operationId).toBeTruthy();
-    expect((yield* f.home.durable).projections).toEqual(before);
+    expect((yield* f.home.durable).installed_skills).toEqual(before);
     expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(
       document("Original baseline"),
     );

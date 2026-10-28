@@ -139,9 +139,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const enabled = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(enabled.outcome?.kind, "applied");
     assert.ok(enabled.skills.every((row) => row.scopes.length === 1));
-    assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
-      { kind: "collection", collection_id: collectionId },
-    ]);
+    assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
     const unchanged = yield* home.owned(
       proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
     );
@@ -151,7 +149,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       assert.strictEqual(unchanged.outcome.pending.facts[0]?.writes, "nothing to change");
     assert.deepStrictEqual(libraryCollectionScopes(enabled, collectionId), scopes);
     const beforeRepair = yield* home.durable;
-    const projection = beforeRepair.projections[0]!;
+    const projection = beforeRepair.installed_skills[0]!;
     yield* fs.remove(projection.path, { recursive: true });
     const repair = yield* home.owned(
       proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
@@ -170,12 +168,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
           store.save(
             {
               ...withLeftover,
-              global_bindings: [
-                {
-                  scope: { kind: "global" },
-                  entries: [{ kind: "skill", skill_id: beta.skill_id }],
-                },
-              ],
+              enabled: [{ skill: beta.skill_id }],
             },
             withLeftover,
           ),
@@ -196,7 +189,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.strictEqual(cleaned.outcome?.kind, "applied");
     assert.ok(
       !(yield* fs.exists(
-        withLeftover.projections.find(
+        withLeftover.installed_skills.find(
           (copy) =>
             copy.skill_id === withLeftover.skills.find((skill) => skill.name === "alpha")!.skill_id,
         )!.path,
@@ -263,8 +256,8 @@ const twoScopeProposal = (scopeCount = 2) =>
 
 /** A change from outside the confirming action: it toggles whether ownership issues were recorded. */
 const unplanned = (state: LibraryState): LibraryState => {
-  if (state.custodyIssues === undefined) return { ...state, custodyIssues: [] };
-  const { custodyIssues: _custodyIssues, ...rest } = state;
+  if (state.ownershipIssues === undefined) return { ...state, ownershipIssues: [] };
+  const { ownershipIssues: _custodyIssues, ...rest } = state;
   return rest;
 };
 
@@ -301,8 +294,8 @@ it.effect("refuses a confirmation when the Library changes after its revision ch
     if (confirmed.outcome?.kind === "failed")
       assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
     const state = yield* fixture.home.durable;
-    assert.deepStrictEqual(state.global_bindings, []);
-    assert.deepStrictEqual(state.local_bindings, []);
+    assert.deepStrictEqual(state.enabled, []);
+    assert.deepStrictEqual(state.repositories, []);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -345,7 +338,7 @@ it.effect("refuses an operation that would apply onto a change made after the pr
     if (confirmed.outcome?.kind === "failed")
       assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
     const state = yield* fixture.home.durable;
-    assert.strictEqual(state.global_bindings.length, 1);
-    assert.deepStrictEqual(state.local_bindings, []);
+    assert.strictEqual(state.enabled.length, 1);
+    assert.deepStrictEqual(state.repositories, []);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

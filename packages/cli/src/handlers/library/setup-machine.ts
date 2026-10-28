@@ -97,10 +97,17 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     imported: sources.map(({ source, names }) => ({ source, names })),
     added: additions,
     reconnected: reconnects,
-    projections: state.projections.flatMap((projection) => {
+    projections: state.installed_skills.flatMap((projection) => {
       const name = names.get(projection.skill_id);
       return name !== undefined && taken.has(name)
-        ? [{ name, target: projection.target, path: projection.path, status: projection.status }]
+        ? [
+            {
+              name,
+              target: projection.destination,
+              path: projection.path,
+              status: projection.status,
+            },
+          ]
         : [];
     }),
     leftAlone: observed.onboarding.candidates

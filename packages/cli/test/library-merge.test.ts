@@ -73,13 +73,13 @@ const skill = {
     },
   ],
 };
-const manifest = (bindings: unknown[] = []) => ({
-  schema: "skit.library.v7",
+const manifest = (enabled: unknown[] = []) => ({
+  schema: "skit.library.v8",
   collections: [collection],
   skills: [skill],
-  retained_copies: [
+  collection_versions: [
     {
-      retained_copy_id: retainedCopyId,
+      collection_version_id: retainedCopyId,
       digest,
       copy_profile: "verbatim/v1" as const,
       members: [
@@ -94,8 +94,8 @@ const manifest = (bindings: unknown[] = []) => ({
     ...[
       [copyB, digestB],
       [copyC, digestC],
-    ].map(([retained_copy_id, value]) => ({
-      retained_copy_id,
+    ].map(([collection_version_id, value]) => ({
+      collection_version_id,
       digest: value,
       copy_profile: "verbatim/v1" as const,
       members: [
@@ -108,44 +108,44 @@ const manifest = (bindings: unknown[] = []) => ({
       ],
     })),
   ],
-  acquisitions: [
+  imports: [
     {
-      acquisition_id: acquisitionId,
+      import_id: acquisitionId,
       collection_id: collectionId,
       kind: "source" as const,
-      retained_copy_id: retainedCopyId,
+      collection_version_id: retainedCopyId,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
         path: { value: "/tmp/fixture" },
       },
       input: { value: "/tmp/fixture" },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     },
     ...[
       [acquisitionB, copyB],
       [acquisitionC, copyC],
-    ].map(([acquisition_id, retained_copy_id]) => ({
-      acquisition_id,
+    ].map(([import_id, collection_version_id]) => ({
+      import_id,
       collection_id: collectionId,
       // Later Versions are retained local edits, so the Source keeps observing the first.
-      kind: "retained-edit" as const,
-      retained_copy_id,
+      kind: "edit" as const,
+      collection_version_id,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
         path: { value: "/tmp/fixture" },
       },
       input: { value: "/tmp/fixture" },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     })),
   ],
   snapshot_digests: [digest, digestB, digestC],
-  bindings,
+  enabled,
 });
 
 it.effect(
@@ -155,8 +155,8 @@ it.effect(
       const remote = yield* decode({
         ...manifest(),
         skills: [{ ...skill, path: "one" }],
-        retained_copies: manifest().retained_copies.map((item) =>
-          item.retained_copy_id === retainedCopyId
+        collection_versions: manifest().collection_versions.map((item) =>
+          item.collection_version_id === retainedCopyId
             ? {
                 ...item,
                 members: item.members.map((member) => ({ ...member, source_path: "one" })),
@@ -179,37 +179,37 @@ it.effect(
             versions: [{ ...skill.versions[0], skill_version_id: makeSkillVersionId() }],
           },
         ],
-        retained_copies: [
-          ...remote.retained_copies,
+        collection_versions: [
+          ...remote.collection_versions,
           {
-            ...manifest().retained_copies[0],
-            retained_copy_id: copy,
+            ...manifest().collection_versions[0],
+            collection_version_id: copy,
             digest: latestDigest,
             members: [
-              ...remote.retained_copies[0].members,
-              { ...manifest().retained_copies[0].members[0], source_path: "extra" },
+              ...remote.collection_versions[0].members,
+              { ...manifest().collection_versions[0].members[0], source_path: "extra" },
             ],
           },
         ],
-        acquisitions: [
-          ...manifest().acquisitions,
+        imports: [
+          ...manifest().imports,
           {
-            ...manifest().acquisitions[0],
-            acquisition_id: makeImportId(),
-            retained_copy_id: copy,
-            acquired_at: "2026-02-01T00:00:00Z",
+            ...manifest().imports[0],
+            import_id: makeImportId(),
+            collection_version_id: copy,
+            imported_at: "2026-02-01T00:00:00Z",
           },
         ],
         snapshot_digests: [...manifest().snapshot_digests, latestDigest],
       });
       const empty = yield* decode({
-        schema: "skit.library.v7",
+        schema: "skit.library.v8",
         collections: [],
         skills: [],
-        acquisitions: [],
-        retained_copies: [],
+        imports: [],
+        collection_versions: [],
         snapshot_digests: [],
-        bindings: [],
+        enabled: [],
       });
       const merged = mergeLibraryManifests(empty, local, remote, new Set(), [], [collectionId]);
       assert.deepEqual(merged.conflicts, [`collection:${collectionId}`]);
@@ -217,8 +217,8 @@ it.effect(
       const pinned = yield* decode({
         ...local,
         snapshot_digests: local.snapshot_digests.filter((value) => value !== latestDigest),
-        acquisitions: local.acquisitions.map((item) =>
-          item.retained_copy_id === copy
+        imports: local.imports.map((item) =>
+          item.collection_version_id === copy
             ? {
                 ...item,
                 source_identity: {
@@ -243,7 +243,7 @@ it.effect(
       assert.deepEqual(chosen.conflicts, []);
       assert.deepEqual(chosen.unresolvable, []);
       assert.isFalse(chosen.manifest.skills.some((item) => item.skill_id === extra));
-      assert.isFalse(chosen.manifest.acquisitions.some((item) => item.retained_copy_id === copy));
+      assert.isFalse(chosen.manifest.imports.some((item) => item.collection_version_id === copy));
       yield* decode(chosen.manifest);
     }).pipe(Effect.scoped),
 );
@@ -256,13 +256,13 @@ it.effect("independent Collection remote choice cannot discard a selected local 
       skills: [{ ...skill, local_version_id: second }],
     });
     const empty = yield* decode({
-      schema: "skit.library.v7",
+      schema: "skit.library.v8",
       collections: [],
       skills: [],
-      acquisitions: [],
-      retained_copies: [],
+      imports: [],
+      collection_versions: [],
       snapshot_digests: [],
-      bindings: [],
+      enabled: [],
     });
     const key = `collection:${collectionId}`;
     const merged = mergeLibraryManifests(empty, local, remote, new Set([key]), [skillId]);
@@ -278,18 +278,18 @@ it.effect("resolves Collection deletion against a new import as one conflict", (
       ...manifest(),
       collections: [],
       skills: [],
-      acquisitions: [],
-      retained_copies: [],
+      imports: [],
+      collection_versions: [],
       snapshot_digests: [],
     });
     const refreshed = yield* decode({
       ...manifest(),
-      acquisitions: [
-        ...manifest().acquisitions,
+      imports: [
+        ...manifest().imports,
         {
-          ...manifest().acquisitions[0],
-          acquisition_id: makeImportId(),
-          acquired_at: "2026-02-01T00:00:00.000Z",
+          ...manifest().imports[0],
+          import_id: makeImportId(),
+          imported_at: "2026-02-01T00:00:00.000Z",
         },
       ],
     });
@@ -303,7 +303,7 @@ it.effect("resolves Collection deletion against a new import as one conflict", (
       assert.deepEqual(resolved.conflicts, []);
       yield* LibraryManifest.makeEffect(resolved.manifest);
       assert.deepEqual(resolved.manifest.collections, remote.collections);
-      assert.deepEqual(resolved.manifest.acquisitions, remote.acquisitions);
+      assert.deepEqual(resolved.manifest.imports, remote.imports);
       assert.deepEqual(resolved.manifest.skills, remote.skills);
     }
   }),
@@ -312,17 +312,10 @@ it.effect("resolves Collection deletion against a new import as one conflict", (
 it.effect("merges an independently added global Binding", () =>
   Effect.gen(function* () {
     const base = yield* decode(manifest());
-    const local = yield* decode(
-      manifest([
-        {
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: skillId }],
-        },
-      ]),
-    );
+    const local = yield* decode(manifest([{ skill: skillId }]));
     const merged = mergeLibraryManifests(base, local, base);
     assert.deepEqual(merged.conflicts, []);
-    assert.deepEqual(merged.manifest.bindings, local.bindings);
+    assert.deepEqual(merged.manifest.enabled, local.enabled);
   }),
 );
 
@@ -347,12 +340,7 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
   Effect.gen(function* () {
     const remote = yield* decode(manifest());
     const desired = yield* decode({
-      ...manifest([
-        {
-          scope: { kind: "global" },
-          entries: [{ kind: "skill", skill_id: skillId }],
-        },
-      ]),
+      ...manifest([{ skill: skillId }]),
       skills: [{ ...skill, local_version_id: second }],
     });
     const plan = planLibrarySync(desired, remote, desired);
@@ -386,8 +374,8 @@ it.effect("marks a Collection whose only difference is fetch records as evidence
     const refetched = manifest();
     const desired = yield* decode({
       ...refetched,
-      acquisitions: refetched.acquisitions.map((acquisition, index) =>
-        index === 0 ? { ...acquisition, acquired_at: "2026-02-01T00:00:00.000Z" } : acquisition,
+      imports: refetched.imports.map((acquisition, index) =>
+        index === 0 ? { ...acquisition, imported_at: "2026-02-01T00:00:00.000Z" } : acquisition,
       ),
     });
     assert.deepEqual(planLibrarySync(desired, remote, desired).remote, [
@@ -429,34 +417,26 @@ it.effect(
             ),
           },
         ],
-        acquisitions: [
-          ...manifest().acquisitions,
-          { ...manifest().acquisitions[0], acquisition_id: makeImportId() },
-        ],
+        imports: [...manifest().imports, { ...manifest().imports[0], import_id: makeImportId() }],
       });
       const original = structuredClone(local);
       const state = yield* Schema.decodeUnknownEffect(LibraryState)({
-        schemaVersion: 9,
+        schemaVersion: 10,
         ...local,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: [{ kind: "skill", skill_id: skillId }],
-          },
-        ],
-        local_bindings: [],
+        enabled: [{ skill: skillId }],
+        repositories: [],
         unmanaged: [],
-        projections: [
+        installed_skills: [
           {
-            projection_id: makeInstalledSkillId(),
+            installed_skill_id: makeInstalledSkillId(),
             skill_id: skillId,
             skill_version_id: localId,
-            target: "agents",
+            destination: "agents",
             root: "/tmp/skills",
             path: "/tmp/skills/review",
             expected_digest: digestB,
             status: "installed",
-            projected_at: "2026-01-01T00:00:00.000Z",
+            installed_at: "2026-01-01T00:00:00.000Z",
           },
         ],
         assessmentAcceptances: [digestB, digestC].map((artifactContentDigest) => ({
@@ -472,18 +452,18 @@ it.effect(
       const merged = yield* prepareLibraryMerge({ base, local, remote, device: state });
       if (merged._tag !== "Ready") return assert.fail(`Expected ready merge, got ${merged._tag}`);
       yield* decode(merged.manifest);
-      assert.strictEqual(merged.manifest.acquisitions.length, local.acquisitions.length);
+      assert.strictEqual(merged.manifest.imports.length, local.imports.length);
       assert.deepEqual(local, original);
       const device = merged.device;
       assert.deepEqual(
-        strandedByRestore(device, { ...merged.manifest, bindings: state.global_bindings }),
+        strandedByRestore(device, { ...merged.manifest, enabled: state.enabled }),
         [],
       );
-      assert.strictEqual(device.projections[0]?.skill_version_id, second);
-      assert.strictEqual(device.projections[0]?.expected_digest, digestB);
+      assert.strictEqual(device.installed_skills[0]?.skill_version_id, second);
+      assert.strictEqual(device.installed_skills[0]?.expected_digest, digestB);
       assert.strictEqual(device.assessmentAcceptances?.[0]?.skill_version_id, second);
       assert.strictEqual(device.assessmentAcceptances?.[1]?.skill_version_id, localId);
-      assert.strictEqual(state.projections[0]?.skill_version_id, localId);
+      assert.strictEqual(state.installed_skills[0]?.skill_version_id, localId);
       // A third device adopts the already published handle, and subsequent syncs are idempotent.
       const thirdDevice = {
         ...local,
@@ -653,7 +633,7 @@ const pairDigest = `sha256:${"d".repeat(64)}`;
 const alpha = makeSkillId();
 const beta = makeSkillId();
 const pairManifest = (entries: unknown[]) => ({
-  schema: "skit.library.v7",
+  schema: "skit.library.v8",
   collections: [{ collection_id: pairCollection, label: "fixture/pair" }],
   skills: [
     [alpha, "alpha", digestB],
@@ -673,9 +653,9 @@ const pairManifest = (entries: unknown[]) => ({
       },
     ],
   })),
-  retained_copies: [
+  collection_versions: [
     {
-      retained_copy_id: pairCopy,
+      collection_version_id: pairCopy,
       digest: pairDigest,
       copy_profile: "verbatim/v1" as const,
       members: [
@@ -689,51 +669,45 @@ const pairManifest = (entries: unknown[]) => ({
       })),
     },
   ],
-  acquisitions: [
+  imports: [
     {
-      acquisition_id: makeImportId(),
+      import_id: makeImportId(),
       collection_id: pairCollection,
       kind: "source" as const,
-      retained_copy_id: pairCopy,
+      collection_version_id: pairCopy,
       source_identity: { kind: "local" as const, machine_id: machineId, path: { value: "/pair" } },
       input: { value: "/pair" },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     },
   ],
   snapshot_digests: [pairDigest],
-  bindings: entries.length ? [{ scope: { kind: "global" }, entries }] : [],
+  enabled: entries,
 });
 
 it.effect(
   "keeps both Skills disabled when two devices each disable one of a followed Collection",
   () =>
     Effect.gen(function* () {
-      const base = yield* decode(
-        pairManifest([{ kind: "collection", collection_id: pairCollection }]),
-      );
+      const base = yield* decode(pairManifest([{ collection: pairCollection }]));
       // Disabling one Skill of a followed Collection rewrites it as the remaining Skill's entry.
-      const local = yield* decode(pairManifest([{ kind: "skill", skill_id: beta }]));
-      const remote = yield* decode(pairManifest([{ kind: "skill", skill_id: alpha }]));
+      const local = yield* decode(pairManifest([{ skill: beta }]));
+      const remote = yield* decode(pairManifest([{ skill: alpha }]));
       const merged = mergeLibraryManifests(base, local, remote);
       assert.deepEqual(merged.conflicts, []);
-      assert.deepEqual(merged.manifest.bindings, []);
+      assert.deepEqual(merged.manifest.enabled, []);
     }),
 );
 
 it.effect("keeps one device's disable when the other device changed nothing", () =>
   Effect.gen(function* () {
-    const base = yield* decode(
-      pairManifest([{ kind: "collection", collection_id: pairCollection }]),
-    );
-    const local = yield* decode(pairManifest([{ kind: "skill", skill_id: beta }]));
+    const base = yield* decode(pairManifest([{ collection: pairCollection }]));
+    const local = yield* decode(pairManifest([{ skill: beta }]));
     const remote = yield* decode(base);
     const merged = mergeLibraryManifests(base, local, remote);
     assert.deepEqual(merged.conflicts, []);
-    assert.deepEqual(merged.manifest.bindings, [
-      { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: beta }] },
-    ]);
+    assert.deepEqual(merged.manifest.enabled, [{ skill: beta }]);
   }),
 );
 
@@ -784,18 +758,16 @@ it.effect(
     Effect.gen(function* () {
       const input = yield* decode({
         ...manifest(),
-        acquisitions: manifest().acquisitions.map((acquisition) => ({
+        imports: manifest().imports.map((acquisition) => ({
           ...acquisition,
           kind: "source",
         })),
       });
-      const ordered = [...input.acquisitions].sort((a, b) =>
-        b.acquisition_id.localeCompare(a.acquisition_id),
-      );
+      const ordered = [...input.imports].sort((a, b) => b.import_id.localeCompare(a.import_id));
       const expected = currentSkillVersion(input, input.skills[0]!);
       const expectedMembers = currentCollectionSkills(input, collectionId);
-      for (const acquisitions of [ordered, ordered.toReversed()]) {
-        const candidate = { ...input, acquisitions };
+      for (const imports of [ordered, ordered.toReversed()]) {
+        const candidate = { ...input, imports };
         const normalized = normalizeLibraryManifest(candidate);
         assert.deepStrictEqual(sourceImports(candidate, collectionId), ordered);
         assert.deepStrictEqual(currentSkillVersion(candidate, candidate.skills[0]!), expected);

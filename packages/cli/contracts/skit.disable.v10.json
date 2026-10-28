@@ -1,5 +1,5 @@
 {
-  "$id": "skit.disable.v9",
+  "$id": "skit.disable.v10",
   "type": "object",
   "properties": {
     "subject_id": {
@@ -49,8 +49,12 @@
         }
       ]
     },
-    "enabled": {
-      "type": "boolean"
+    "action": {
+      "type": "string",
+      "enum": [
+        "enable",
+        "disable"
+      ]
     },
     "invocation": {
       "type": "string"
@@ -161,176 +165,45 @@
         "additionalProperties": true
       }
     },
-    "bindings": {
+    "enabled": {
       "type": "array",
       "items": {
         "anyOf": [
           {
             "type": "object",
             "properties": {
-              "scope": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "global"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ],
-                "additionalProperties": true
-              },
-              "entries": {
-                "type": "array",
-                "items": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "collection"
-                          ]
-                        },
-                        "collection_id": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "collection_id"
-                      ],
-                      "additionalProperties": true
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "skill"
-                          ]
-                        },
-                        "skill_id": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "skill_id"
-                      ],
-                      "additionalProperties": true
-                    }
-                  ]
-                }
-              },
-              "invocation_policies": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "enum": [
-                    "explicit",
-                    "implicit",
-                    "host-policy"
-                  ]
-                }
+              "collection": {
+                "type": "string"
               }
             },
             "required": [
-              "scope",
-              "entries"
+              "collection"
             ],
             "additionalProperties": true
           },
           {
             "type": "object",
             "properties": {
-              "scope": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "repository"
-                    ]
-                  },
-                  "root": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "root"
-                ],
-                "additionalProperties": true
-              },
-              "entries": {
-                "type": "array",
-                "items": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "collection"
-                          ]
-                        },
-                        "collection_id": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "collection_id"
-                      ],
-                      "additionalProperties": true
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "skill"
-                          ]
-                        },
-                        "skill_id": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "kind",
-                        "skill_id"
-                      ],
-                      "additionalProperties": true
-                    }
-                  ]
-                }
-              },
-              "invocation_policies": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "enum": [
-                    "explicit",
-                    "implicit",
-                    "host-policy"
-                  ]
-                }
+              "skill": {
+                "type": "string"
               }
             },
             "required": [
-              "scope",
-              "entries"
+              "skill"
             ],
             "additionalProperties": true
           }
+        ]
+      }
+    },
+    "invocation_policies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "explicit",
+          "implicit",
+          "host-policy"
         ]
       }
     },
@@ -414,9 +287,9 @@
     "subject_id",
     "skills",
     "scope",
-    "enabled",
+    "action",
     "changed",
-    "bindings",
+    "enabled",
     "application",
     "projections"
   ],

@@ -5,7 +5,7 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { installEnabledSkills } from "../src/library/installation/install-enabled.js";
 import { removeCollection } from "../src/library/installation/remove.js";
-import type { BindingEntry } from "../src/library/library-contracts.js";
+import type { Enabled } from "../src/library/library-contracts.js";
 import { importCollection } from "../src/library/import-collection.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
@@ -57,7 +57,7 @@ const upstream = Effect.gen(function* () {
       );
     });
   const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(storeLayer));
-  const enable = (entries: readonly BindingEntry[]) =>
+  const enable = (enabled: readonly Enabled[]) =>
     Effect.gen(function* () {
       const state = yield* load;
       yield* withLibraryWriterLock(
@@ -66,7 +66,7 @@ const upstream = Effect.gen(function* () {
           store.save(
             {
               ...state,
-              global_bindings: [{ scope: { kind: "global" }, entries }],
+              enabled: [...enabled],
             },
             state,
           ),
@@ -92,7 +92,7 @@ it.effect("a whole-Collection entry installs Skills added upstream and retires d
     const { refresh, enable, project, installed } = yield* upstream;
     const first = yield* refresh(["alpha", "beta"]);
     assert.ok(first.collection);
-    yield* enable([{ kind: "collection", collection_id: first.collection.collection_id }]);
+    yield* enable([{ collection: first.collection.collection_id }]);
     yield* project;
     assert.deepStrictEqual(yield* installed, ["alpha", "beta"]);
 
@@ -108,7 +108,7 @@ it.effect("an individually enabled Skill deleted upstream stays installed", () =
     const first = yield* refresh(["alpha", "beta"]);
     const beta = first.skills.find((skill) => skill.name === "beta");
     assert.ok(beta);
-    yield* enable([{ kind: "skill", skill_id: beta.skill_id }]);
+    yield* enable([{ skill: beta.skill_id }]);
     yield* project;
     assert.deepStrictEqual(yield* installed, ["beta"]);
 
@@ -126,7 +126,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
     const first = yield* refresh(["alpha"]);
     assert.ok(first.collection);
     const collectionId = first.collection.collection_id;
-    yield* enable([{ kind: "collection", collection_id: collectionId }]);
+    yield* enable([{ collection: collectionId }]);
     yield* project;
     const planned = yield* load;
 
@@ -140,7 +140,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
     assert.strictEqual(error._tag, "LibraryChanged");
     const state = yield* load;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-    assert.strictEqual(state.projections.length, 2);
+    assert.strictEqual(state.installed_skills.length, 2);
     assert.deepStrictEqual(yield* installed, ["alpha", "beta"]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

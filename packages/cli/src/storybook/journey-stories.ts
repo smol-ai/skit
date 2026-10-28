@@ -42,7 +42,7 @@ const skillId = makeSkillId();
 const acquisitionId = makeImportId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 9,
+  schemaVersion: 10,
   collections: [
     {
       collection_id: collectionId,
@@ -66,9 +66,9 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       ],
     },
   ],
-  retained_copies: [
+  collection_versions: [
     {
-      retained_copy_id: collectionVersionId,
+      collection_version_id: collectionVersionId,
       digest,
       copy_profile: "verbatim/v1",
       members: [
@@ -81,26 +81,26 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       ],
     },
   ],
-  acquisitions: [
+  imports: [
     {
-      acquisition_id: acquisitionId,
+      import_id: acquisitionId,
       collection_id: collectionId,
       kind: "source",
-      retained_copy_id: collectionVersionId,
+      collection_version_id: collectionVersionId,
       input: { value: "/fixtures/review" },
       source_identity: {
         kind: "local",
         machine_id: machineId,
         path: { value: "/fixtures/review" },
       },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     },
   ],
-  global_bindings: [],
-  local_bindings: [],
-  projections: [],
+  enabled: [],
+  repositories: [],
+  installed_skills: [],
   unmanaged: [],
   adoption_receipts: [],
 });
@@ -156,21 +156,19 @@ const previewDoctorCleanup = Effect.scoped(
       yield* store.save(
         {
           ...storyState,
-          global_bindings: [
-            { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: skillId }] },
-          ],
-          projections: [
+          enabled: [{ skill: skillId }],
+          installed_skills: [
             {
-              projection_id: makeInstalledSkillId(),
+              installed_skill_id: makeInstalledSkillId(),
               skill_id: skillId,
               skill_version_id: skillVersionId,
-              target: "agents",
+              destination: "agents",
               root: skillsRoot,
               path,
               expected_digest: digest,
               observed_digest: digest,
               status: "installed",
-              projected_at: "2026-10-18T00:00:00.000Z",
+              installed_at: "2026-10-18T00:00:00.000Z",
             },
           ],
         },

@@ -51,12 +51,7 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   const enabledCollectionData = JSON.parse(enabledCollection.stdout).data;
   expect(enabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
   // `--all` follows the whole Collection rather than freezing today's Skills.
-  expect(enabledCollectionData.bindings).toEqual([
-    expect.objectContaining({
-      scope: { kind: "global" },
-      entries: [{ kind: "collection", collection_id: sourceData.collection_id }],
-    }),
-  ]);
+  expect(enabledCollectionData.enabled).toEqual([{ collection: sourceData.collection_id }]);
   expect(await readFile(join(codexRoot, "release-notes", "SKILL.md"), "utf8")).toContain(
     "# release-notes",
   );
@@ -80,7 +75,7 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   expect(disabledCollection.status, disabledCollection.stderr).toBe(0);
   const disabledCollectionData = JSON.parse(disabledCollection.stdout).data;
   expect(disabledCollectionData.skills).toEqual(["code-review", "release-notes"]);
-  expect(disabledCollectionData.bindings).toEqual([]);
+  expect(disabledCollectionData.enabled).toEqual([]);
   expect(existsSync(join(codexRoot, "code-review"))).toBe(false);
   expect(existsSync(join(codexRoot, "release-notes"))).toBe(false);
 });

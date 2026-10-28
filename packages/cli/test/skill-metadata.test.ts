@@ -67,8 +67,8 @@ it.effect(
       const state = yield* home.durable;
       const observation = (index: number): SkillsShLockFileEntry => ({
         type: "skills.sh-lock",
-        machine_id: state.acquisitions[index]!.machine_id,
-        observed_at: state.acquisitions[index]!.acquired_at,
+        machine_id: state.imports[index]!.machine_id,
+        observed_at: state.imports[index]!.imported_at,
         source_updated_at: index === 0 ? "2026-04-20T00:00:00.000Z" : "2026-09-25T00:00:00.000Z",
         lock_path: { value: "/fixture/skills-lock.json" },
         lock_version: 3,
@@ -88,9 +88,9 @@ it.effect(
           ...skill,
           local_version_id: skill.versions[0]!.skill_version_id,
         })),
-        acquisitions: state.acquisitions.map((acquisition, index) => ({
+        imports: state.imports.map((acquisition, index) => ({
           ...acquisition,
-          observations: [observation(index)],
+          lock_file_entries: [observation(index)],
         })),
       };
       yield* home.owned(
@@ -130,9 +130,9 @@ it.effect(
       const unavailable = yield* readLibrarySkillMetadata(
         {
           ...selected,
-          acquisitions: selected.acquisitions.map((acquisition) => ({
+          imports: selected.imports.map((acquisition) => ({
             ...acquisition,
-            observations: [{ ...observation(0), content_agreement: "mismatch" }],
+            lock_file_entries: [{ ...observation(0), content_agreement: "mismatch" }],
           })),
         },
         home.originals,
@@ -141,9 +141,9 @@ it.effect(
       const conflicting = yield* readLibrarySkillMetadata(
         {
           ...selected,
-          acquisitions: selected.acquisitions.map((acquisition) => ({
+          imports: selected.imports.map((acquisition) => ({
             ...acquisition,
-            observations: [
+            lock_file_entries: [
               observation(0),
               { ...observation(0), source_updated_at: "2026-04-21T00:00:00.000Z" },
             ],

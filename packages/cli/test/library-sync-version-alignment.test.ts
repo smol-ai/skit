@@ -20,12 +20,7 @@ it.effect(
       assert.ok(skillId);
       yield* a.edit((state) => ({
         ...state,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: [{ kind: "skill", skill_id: skillId }],
-          },
-        ],
+        enabled: [{ skill: skillId }],
       }));
       yield* a.project();
       assert.strictEqual((yield* a.sync()).status, "pushed");
@@ -44,9 +39,9 @@ it.effect(
       yield* b.project();
       const aBefore = yield* a.state;
       const bBefore = yield* b.state;
-      const publishedId = aBefore.projections[0]?.skill_version_id;
+      const publishedId = aBefore.installed_skills[0]?.skill_version_id;
       assert.ok(publishedId);
-      assert.notStrictEqual(publishedId, bBefore.projections[0]?.skill_version_id);
+      assert.notStrictEqual(publishedId, bBefore.installed_skills[0]?.skill_version_id);
       assert.strictEqual((yield* a.sync()).status, "merged");
       const writesBeforePreview = server.writes;
       const previewUntouched = yield* captureDisk(b.disk);
@@ -61,17 +56,17 @@ it.effect(
       );
       assert.strictEqual((yield* b.sync()).status, "merged");
       const bAfter = yield* b.state;
-      assert.strictEqual(bAfter.projections[0]?.skill_version_id, publishedId);
+      assert.strictEqual(bAfter.installed_skills[0]?.skill_version_id, publishedId);
       assert.strictEqual(
-        bAfter.projections[0]?.projection_id,
-        bBefore.projections[0]?.projection_id,
+        bAfter.installed_skills[0]?.installed_skill_id,
+        bBefore.installed_skills[0]?.installed_skill_id,
       );
       assert.strictEqual(
-        bAfter.projections[0]?.expected_digest,
-        bBefore.projections[0]?.expected_digest,
+        bAfter.installed_skills[0]?.expected_digest,
+        bBefore.installed_skills[0]?.expected_digest,
       );
-      assert.strictEqual(bAfter.acquisitions.length, 3);
-      assert.strictEqual(bAfter.retained_copies.length, 3);
+      assert.strictEqual(bAfter.imports.length, 3);
+      assert.strictEqual(bAfter.collection_versions.length, 3);
       const marker = yield* inspectOwnershipMarker(join(b.root, "review"));
       assert.strictEqual(marker.kind, "valid");
       if (marker.kind === "valid") assert.strictEqual(marker.marker.skill_version_id, publishedId);
@@ -104,7 +99,7 @@ it.effect(
               : version,
           ),
         })),
-        projections: state.projections.map((projection) => ({
+        installed_skills: state.installed_skills.map((projection) => ({
           ...projection,
           skill_version_id: equivalentId,
         })),
@@ -116,7 +111,7 @@ it.effect(
       assert.strictEqual((yield* b.sync({ takeRemote: [`skill:${skillId}`] })).status, "merged");
       const resolved = yield* b.state;
       assert.strictEqual(resolved.skills[0]?.local_version_id, oldVersionId);
-      assert.strictEqual(resolved.projections[0]?.skill_version_id, oldVersionId);
+      assert.strictEqual(resolved.installed_skills[0]?.skill_version_id, oldVersionId);
       assert.strictEqual(
         yield* fs.readFileString(join(b.root, "review", "SKILL.md")),
         "initial bytes\n",

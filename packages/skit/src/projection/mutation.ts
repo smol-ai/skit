@@ -38,7 +38,7 @@ import {
 } from "../library/entity-ids.js";
 import type { InstalledSkill } from "../library/library-state.js";
 import {
-  effectiveGlobalBindings,
+  globalEnabled,
   libraryStateRevision,
   type LibraryState,
 } from "../library/library-state.js";
@@ -168,7 +168,7 @@ export const prepareInstalledSkillRebuild = Effect.fn("Projection.prepareRebuild
   projection: InstalledSkill,
   invocationIntent: InvocationIntent,
 ) {
-  const target = projection.target;
+  const target = projection.destination;
   if (target === "legacy")
     return yield* new InstalledSkillFailure({
       message: "Legacy installed skills require their original saved bytes",
@@ -282,7 +282,7 @@ export function expectedInstalledSkillHashResult(
     return Result.fail(
       new OwnershipMarkerDisagrees({
         skillId: projection.skill_id,
-        target: projection.target,
+        target: projection.destination,
       }),
     );
   return Result.succeed(projection.expected_digest);
@@ -311,7 +311,7 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
   yield* ensureSkillsDirectoryWritable(root);
   const destination = join(root, yield* installedSkillName(skill.name));
   const projectionId = request.identity.projectionId;
-  const prior = previous?.projection_id === projectionId ? previous : undefined;
+  const prior = previous?.installed_skill_id === projectionId ? previous : undefined;
   const workDirectory = yield* installedSkillWorkDirectory(root);
   return yield* Effect.scoped(
     Effect.gen(function* () {
@@ -328,15 +328,15 @@ const materializeInstalledSkill = Effect.fn("Projection.materialize")(function* 
       });
       const desiredHash = yield* deterministicTreeHash(temporary);
       const projection: InstalledSkill = {
-        projection_id: projectionId,
+        installed_skill_id: projectionId,
         skill_id: request.identity.skillId,
         skill_version_id: request.identity.skillVersionId,
-        target,
+        destination: target,
         root,
         path: destination,
         expected_digest: desiredHash,
         status: "pending",
-        projected_at: request.projectedAt,
+        installed_at: request.projectedAt,
       };
       const settled = () => projection;
       /**
@@ -518,7 +518,7 @@ export const inspectInstalledSkill = Effect.fn("Projection.inspectInstalledSkill
   if (
     !marker ||
     marker.skill_id !== projection.skill_id ||
-    marker.projection_id !== projection.projection_id ||
+    marker.projection_id !== projection.installed_skill_id ||
     observed !== markerExpectedHash(marker)
   )
     return { kind: "conflicted" as const, observed };
@@ -564,7 +564,7 @@ export const installedSkillDisplaced = Effect.fn("Projection.displaced")(functio
   for (const backup of yield* pendingInstalledSkillBackups(projection)) {
     const marker = yield* readOwnershipMarker(backup);
     if (
-      marker?.projection_id === projection.projection_id &&
+      marker?.projection_id === projection.installed_skill_id &&
       marker.expected_digest === projection.expected_digest
     )
       return true;
@@ -585,11 +585,11 @@ const reproducible = Effect.fn("Projection.reproducible")(function* (
   projectionId: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const recorded = prior.projections.find((item) => item.projection_id === projectionId);
+  const recorded = prior.installed_skills.find((item) => item.installed_skill_id === projectionId);
   const marker = yield* readOwnershipMarker(backup);
   if (
     recorded === undefined ||
-    marker?.projection_id !== recorded.projection_id ||
+    marker?.projection_id !== recorded.installed_skill_id ||
     marker.skill_id !== recorded.skill_id ||
     marker.skill_version_id !== recorded.skill_version_id
   )
@@ -598,15 +598,15 @@ const reproducible = Effect.fn("Projection.reproducible")(function* (
   const version = skill?.versions.find(
     (item) => item.skill_version_id === recorded.skill_version_id,
   );
-  const target = recorded.target;
+  const target = recorded.destination;
   // A former per-Harness root's transforms are no longer known, so its copy cannot be restaged.
   if (skill === undefined || version === undefined || target === "legacy") return false;
   const source = yield* installedSkillSource(prior, originalsPath, skill, version);
   const expected = yield* losslessTree(backup);
   if (source.kind === "invalid" || expected === undefined) return false;
   const policies = new Set(
-    [...effectiveGlobalBindings(prior), ...prior.local_bindings].flatMap((binding) => {
-      const policy = binding.invocation_policies?.[skill.skill_id];
+    [globalEnabled(prior), ...prior.repositories].flatMap((list) => {
+      const policy = list.invocation_policies?.[skill.skill_id];
       return policy === undefined ? [] : [policy];
     }),
   );
@@ -714,7 +714,7 @@ export const withInstalledSkillMutation = Effect.fn("Projection.mutate")(functio
   const backUp: BackUp = (projection, action) =>
     backUpInstalledSkill(projection, action).pipe(
       Effect.map(() => {
-        onDisk.set(projection.projection_id, { ...projection, status: "pending" });
+        onDisk.set(projection.installed_skill_id, { ...projection, status: "pending" });
       }),
     );
   const mutation: InstalledSkillMutation<S> = {
@@ -745,7 +745,7 @@ export const withInstalledSkillMutation = Effect.fn("Projection.mutate")(functio
       return result.projection;
     }),
     uninstall: Effect.fn("Projection.uninstall")(function* (projection, onConflict, message) {
-      touched.set(projection.projection_id, projection);
+      touched.set(projection.installed_skill_id, projection);
       const result = yield* uninstallSkill(projection, onConflict, message, backUp);
       return result.kind === "retired"
         ? { kind: "retired" as const, observed: result.observed }
@@ -756,11 +756,11 @@ export const withInstalledSkillMutation = Effect.fn("Projection.mutate")(functio
     if (onDisk.size === 0) return Effect.void;
     const next = structuredClone(loaded);
     for (const projection of onDisk.values()) {
-      const index = next.projections.findIndex(
-        (item) => item.projection_id === projection.projection_id,
+      const index = next.installed_skills.findIndex(
+        (item) => item.installed_skill_id === projection.installed_skill_id,
       );
-      if (index >= 0) next.projections[index] = projection;
-      else next.projections.push(projection);
+      if (index >= 0) next.installed_skills[index] = projection;
+      else next.installed_skills.push(projection);
     }
     return context.save(next, loaded);
   }).pipe(
@@ -771,7 +771,7 @@ export const withInstalledSkillMutation = Effect.fn("Projection.mutate")(functio
   const value = yield* stage(mutation).pipe(Effect.onError(() => saveOnDisk));
   const pending = yield* Effect.forEach([...touched.values()], (projection) =>
     Effect.map(pendingInstalledSkillBackups(projection), (backups) =>
-      backups.map((backup) => ({ backup, projectionId: projection.projection_id })),
+      backups.map((backup) => ({ backup, projectionId: projection.installed_skill_id })),
     ),
   ).pipe(
     Effect.map((backups) => backups.flat()),

@@ -1,11 +1,9 @@
 import {
-  BindingEntry,
-  bindingSkillIds,
   currentCollectionSkills,
-  DeviceBinding,
-  effectiveGlobalBindings,
-  scopeBinding,
-  RepositoryBinding,
+  Enabled,
+  enabledAt,
+  enabledSkillIds,
+  globalEnabled,
   type LibraryState,
   type SkillId,
   type InstallScope,
@@ -90,81 +88,66 @@ export const calculateSetEnabled = Effect.fn("SetEnabled.calculate")(function* (
   const skillIdsByName = new Map(members.map((member) => [member.name, member.skill_id]));
   const skillIds = skills.flatMap((name) => skillIdsByName.get(name) ?? []);
   const scope = options.scope;
-  const existing = scopeBinding(state, scope);
-  // A Skill subject still belongs to a Collection whose entry may enable it.
+  const existing = enabledAt(state, scope);
+  // A Skill subject still belongs to a Collection whose item may enable it.
   const ownerId = collection?.collection_id ?? skill?.collection_id;
   const collectionMembers = new Set<SkillId>(
     ownerId === undefined
       ? []
       : currentCollectionSkills(state, ownerId).map((member) => member.skill_id),
   );
-  const followsCollection = (existing?.entries ?? []).some(
-    (entry) => entry.kind === "collection" && entry.collection_id === ownerId,
+  const followsCollection = (existing?.enabled ?? []).some(
+    (item) => "collection" in item && item.collection === ownerId,
   );
-  let entries: BindingEntry[] = [...(existing?.entries ?? [])];
-  const withoutCollection = (items: BindingEntry[]) =>
-    items.filter(
-      (entry) =>
-        !(entry.kind === "collection" && entry.collection_id === ownerId) &&
-        !(entry.kind === "skill" && collectionMembers.has(entry.skill_id)),
+  let items: Enabled[] = [...(existing?.enabled ?? [])];
+  const withoutCollection = (list: Enabled[]) =>
+    list.filter(
+      (item) =>
+        !("collection" in item && item.collection === ownerId) &&
+        !("skill" in item && collectionMembers.has(item.skill)),
     );
-  const skillEntry = (skillId: SkillId): BindingEntry => ({ kind: "skill", skill_id: skillId });
   const hasSkill = (skillId: string) =>
-    entries.some((entry) => entry.kind === "skill" && entry.skill_id === skillId);
+    items.some((item) => "skill" in item && item.skill === skillId);
   if (options.all && collection !== undefined) {
-    // A whole Collection follows its Source, so it replaces any of its individual entries.
-    entries = withoutCollection(entries);
-    if (options.enabled)
-      entries.push({ kind: "collection", collection_id: collection.collection_id });
-    // A Skill gone from the Source is enabled only by its own entry, which disabling ends too.
-    else
-      entries = entries.filter(
-        (entry) => !(entry.kind === "skill" && skillIds.includes(entry.skill_id)),
-      );
+    // A whole Collection follows its Source, so it replaces any of its individual items.
+    items = withoutCollection(items);
+    if (options.enabled) items.push({ collection: collection.collection_id });
+    // A Skill gone from the Source is enabled only by its own item, which disabling ends too.
+    else items = items.filter((item) => !("skill" in item && skillIds.includes(item.skill)));
   } else if (options.enabled) {
     for (const skillId of skillIds)
       if (!(followsCollection && collectionMembers.has(skillId)) && !hasSkill(skillId))
-        entries.push(skillEntry(skillId));
+        items.push({ skill: skillId });
   } else {
     // Disabling one Skill of a followed Collection keeps its other current Skills individually.
     if (followsCollection && skillIds.some((skillId) => collectionMembers.has(skillId)))
-      entries = [
-        ...withoutCollection(entries),
+      items = [
+        ...withoutCollection(items),
         ...[...collectionMembers]
           .filter((skillId) => !skillIds.includes(skillId))
-          .map((skillId) => skillEntry(skillId)),
+          .map((skillId) => ({ skill: skillId })),
       ];
-    entries = entries.filter(
-      (entry) => !(entry.kind === "skill" && skillIds.includes(entry.skill_id)),
-    );
+    items = items.filter((item) => !("skill" in item && skillIds.includes(item.skill)));
   }
   const policies = { ...existing?.invocation_policies };
   for (const skillId of skillIds) {
     if (!options.enabled || options.invocation === "declared") delete policies[skillId];
     else if (options.invocation !== undefined) policies[skillId] = options.invocation;
   }
-  const common = {
-    entries,
-    ...(Object.keys(policies).length ? { invocation_policies: policies } : {}),
-  };
-  const bindings: Array<DeviceBinding | RepositoryBinding> =
-    existing === undefined && entries.length === 0
-      ? []
-      : [
-          scope.kind === "global"
-            ? { ...common, scope: { kind: "global" } }
-            : { ...common, scope: { kind: "repository", root: scope.root } },
-        ];
-  const changed = bindings.some(
-    (binding) =>
-      existing === undefined ||
-      !Schema.toEquivalence(Schema.Array(BindingEntry))(existing.entries, binding.entries) ||
+  const invocation_policies = Object.keys(policies).length ? policies : undefined;
+  // The global list always exists, even empty: a failed disable leaves it empty until its copies
+  // are removed, and a retry must still update them. A repository with no record before or after
+  // has nothing to record.
+  const hasList = existing !== undefined || items.length > 0;
+  const changed =
+    hasList &&
+    (existing === undefined ||
+      !Schema.toEquivalence(Schema.Array(Enabled))(existing.enabled, items) ||
       !Schema.toEquivalence(Schema.UndefinedOr(Schema.Record(Schema.String, Schema.String)))(
         existing.invocation_policies,
-        binding.invocation_policies,
-      ),
-  );
-  const existingIds = new Set(existing ? bindingSkillIds(state, existing) : []);
+        invocation_policies,
+      ));
+  const existingIds = new Set(existing ? enabledSkillIds(state, existing.enabled) : []);
   const newlyEnabledSkills = options.enabled
     ? skills.filter((name) => {
         const id = skillIdsByName.get(name);
@@ -176,13 +159,15 @@ export const calculateSetEnabled = Effect.fn("SetEnabled.calculate")(function* (
       subject_id: subject.subjectId,
       skills,
       scope,
-      enabled: options.enabled,
+      action: options.enabled ? ("enable" as const) : ("disable" as const),
       ...(options.invocation === undefined ? {} : { invocation: options.invocation }),
       changed,
-      bindings,
+      enabled: items,
+      ...(invocation_policies === undefined ? {} : { invocation_policies }),
     },
     skillIds,
     newlyEnabledSkills,
+    hasList,
   };
 });
 
@@ -213,17 +198,21 @@ export const uniqueInstallScopes = (scopes: readonly InstallScope[]) => [
   ...new Map(scopes.map((scope) => [scopeIdentity(scope), scope])).values(),
 ];
 
-/** One Collection's enabled members and invocation intent at a Scope, including empty follows. */
+/** One Collection's enabled members and invocation intent at a scope, including empty follows. */
 export const enabledCollections = (state: LibraryState): EnabledCollection[] =>
-  [...effectiveGlobalBindings(state), ...state.local_bindings].flatMap((binding) => {
-    const ids = bindingSkillIds(state, binding);
+  [
+    { scope: { kind: "global" as const }, ...globalEnabled(state) },
+    ...state.repositories.map((repository) => ({
+      ...repository,
+      scope: { kind: "repository" as const, root: repository.root },
+    })),
+  ].flatMap((list) => {
+    const ids = enabledSkillIds(state, list.enabled);
     const collections = new Set([
       ...state.skills
         .filter((skill) => ids.includes(skill.skill_id))
         .map((skill) => skill.collection_id),
-      ...binding.entries.flatMap((entry) =>
-        entry.kind === "collection" ? [entry.collection_id] : [],
-      ),
+      ...list.enabled.flatMap((item) => ("collection" in item ? [item.collection] : [])),
     ]);
     return [...collections].map((collectionId) => {
       const skillIds = state.skills
@@ -231,10 +220,10 @@ export const enabledCollections = (state: LibraryState): EnabledCollection[] =>
         .map((skill) => skill.skill_id);
       return {
         collectionId,
-        scope: binding.scope,
+        scope: list.scope,
         skillIds,
         invocationBySkill: Object.fromEntries(
-          skillIds.map((id) => [id, binding.invocation_policies?.[id] ?? "declared"]),
+          skillIds.map((id) => [id, list.invocation_policies?.[id] ?? "declared"]),
         ),
       };
     });
@@ -273,8 +262,8 @@ export const expandSetEnabledIntent = Effect.fn("SetEnabled.expandIntent")(funct
       intent.members !== "whole" &&
       (scopes.length > 1 || intent.where === "where-enabled")
     ) {
-      const binding = scopeBinding(state, scope);
-      const enabled = new Set(binding === undefined ? [] : bindingSkillIds(state, binding));
+      const atScope = enabledAt(state, scope);
+      const enabled = new Set(atScope === undefined ? [] : enabledSkillIds(state, atScope.enabled));
       names = (names ?? subject.skills.map((skill) => skill.name)).filter((name) =>
         subject.skills.some((skill) => skill.name === name && enabled.has(skill.skill_id)),
       );

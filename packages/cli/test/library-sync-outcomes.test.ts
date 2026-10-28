@@ -46,17 +46,59 @@ const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (
     );
 });
 
+/** A current state with nothing installed, written as the v7 document an older SKIT left. */
+const asV7 = ({
+  schemaVersion: _schemaVersion,
+  collection_versions,
+  imports,
+  enabled,
+  invocation_policies,
+  repositories,
+  installed_skills,
+  ...fields
+}: LibraryState) => {
+  assert.deepStrictEqual([repositories, installed_skills], [[], []]);
+  return {
+    ...fields,
+    schemaVersion: 7,
+    retained_copies: collection_versions.map(({ collection_version_id, ...copy }) => ({
+      ...copy,
+      retained_copy_id: collection_version_id,
+    })),
+    acquisitions: imports.map(
+      ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
+        ...item,
+        acquisition_id: import_id,
+        kind: kind === "edit" ? "retained-edit" : kind,
+        retained_copy_id: collection_version_id,
+        acquired_at: imported_at,
+        observations: lock_file_entries,
+      }),
+    ),
+    global_bindings: enabled.length
+      ? [
+          {
+            scope: { kind: "global" },
+            entries: enabled.map((item) =>
+              "skill" in item
+                ? { kind: "skill", skill_id: item.skill }
+                : { kind: "collection", collection_id: item.collection },
+            ),
+            ...(invocation_policies === undefined ? {} : { invocation_policies }),
+          },
+        ]
+      : [],
+    local_bindings: [],
+    projections: [],
+  };
+};
+
 const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
   yield* a.retain("first");
   yield* a.edit((state) => ({
     ...state,
-    global_bindings: [
-      {
-        scope: { kind: "global" },
-        entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-        invocation_policies: { [state.skills[0]!.skill_id]: "explicit" },
-      },
-    ],
+    enabled: [{ skill: state.skills[0]!.skill_id }],
+    invocation_policies: { [state.skills[0]!.skill_id]: "explicit" },
   }));
   yield* a.project();
   yield* a.sync();
@@ -121,7 +163,7 @@ const cases: readonly {
         const archive = yield* captureSnapshotArchive(
           collectionVersionPath(
             join(b.home, "originals"),
-            competingState.retained_copies[0]!.digest,
+            competingState.collection_versions[0]!.digest,
           ),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
@@ -314,15 +356,7 @@ const cases: readonly {
         const second = yield* a.retain("second", { name: "review" });
         yield* a.edit((state) => ({
           ...state,
-          global_bindings: [
-            {
-              scope: { kind: "global" },
-              entries: [first, second].map((item) => ({
-                kind: "skill" as const,
-                skill_id: item.skills[0]!.skill_id,
-              })),
-            },
-          ],
+          enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
         }));
         // Without enabled roots nothing collides, so the Library can be pushed as it is.
         yield* a.sync({ rootFor: () => undefined });
@@ -369,7 +403,7 @@ const cases: readonly {
           server.remote!.manifest.collections.map((item) => item.collection_id),
           winner.manifest.collections.map((item) => item.collection_id),
         );
-        assert.deepStrictEqual((yield* a.state).global_bindings[0]!.invocation_policies, {
+        assert.deepStrictEqual((yield* a.state).invocation_policies, {
           [(yield* a.state).skills.find((item) => item.name === "first")!.skill_id]: "explicit",
         });
       }),
@@ -477,12 +511,7 @@ const cases: readonly {
           yield* a.retain("first");
           yield* a.edit((state) => ({
             ...state,
-            global_bindings: [
-              {
-                scope: { kind: "global" },
-                entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-              },
-            ],
+            enabled: [{ skill: state.skills[0]!.skill_id }],
           }));
         } else {
           yield* seed(homes);
@@ -529,12 +558,7 @@ const cases: readonly {
         const second = yield* a.retain("second");
         const enable = (ids: readonly SkillId[]) => (state: LibraryState) => ({
           ...state,
-          global_bindings: [
-            {
-              scope: { kind: "global" as const },
-              entries: ids.map((skill_id) => ({ kind: "skill" as const, skill_id })),
-            },
-          ],
+          enabled: ids.map((skill) => ({ skill })),
         });
         yield* a.edit(enable([first.skills[0]!.skill_id]));
         yield* a.project();
@@ -546,14 +570,14 @@ const cases: readonly {
           yield* b.sync();
         } else yield* a.retain("first", update);
         // An edit the selected Version would replace, and a Skill reconciliation must newly install.
-        const projection = (yield* a.state).projections[0]!;
+        const projection = (yield* a.state).installed_skills[0]!;
         yield* fs.writeFileString(join(projection.path, "SKILL.md"), "unretained edit\n");
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
         inject({ _tag: "ObstructAfterSave", home: a.home, path: join(a.root, "second") });
         assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
         const observed = yield* deterministicTreeHash(projection.path);
-        const recorded = (yield* a.state).projections.find(
-          (item) => item.projection_id === projection.projection_id,
+        const recorded = (yield* a.state).installed_skills.find(
+          (item) => item.installed_skill_id === projection.installed_skill_id,
         );
         assert.deepStrictEqual(
           [recorded?.status, recorded?.observed_digest],
@@ -651,15 +675,7 @@ it.effect("a --take-remote key is refused before collision checks on a push and 
     const second = yield* a.retain("second", { name: "review" });
     yield* a.edit((state) => ({
       ...state,
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [first, second].map((item) => ({
-            kind: "skill" as const,
-            skill_id: item.skills[0]!.skill_id,
-          })),
-        },
-      ],
+      enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
     }));
     const takeRemote = ["collection:not-a-conflict"];
     assert.strictEqual((yield* a.sync()).status, "conflicted");
@@ -692,18 +708,13 @@ for (const home of ["current", "legacy", "absent"] as const)
             yield* a.retain("first");
             yield* a.edit((state) => ({
               ...state,
-              global_bindings: [
-                {
-                  scope: { kind: "global" },
-                  entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-                },
-              ],
+              enabled: [{ skill: state.skills[0]!.skill_id }],
             }));
           }
           if (home === "legacy")
             yield* fs.writeFileString(
               join(a.home, "state.json"),
-              JSON.stringify({ ...(yield* a.state), schemaVersion: 7 }),
+              JSON.stringify(asV7(yield* a.state)),
             );
           const before = yield* captureDisk(a.disk);
           const stored = server.stored;
@@ -713,7 +724,7 @@ for (const home of ["current", "legacy", "absent"] as const)
             _tag: "ServeHead",
             body: JSON.parse(
               yield* fs.readFileString(
-                join(import.meta.dirname, "fixtures/library-wire/portable-v8.json"),
+                join(import.meta.dirname, "fixtures/library-wire/portable-v9.json"),
               ),
             ),
           });

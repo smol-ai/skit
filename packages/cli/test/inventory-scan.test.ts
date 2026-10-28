@@ -109,8 +109,8 @@ it.effect.each([true, false])(
       const state = yield* (yield* LibraryStore).load;
       const observed = yield* scanInventory(state, [{ harness: "codex", root }]);
       expect(observed.unmanaged).toEqual([]);
-      expect(observed.custodyIssues).toMatchObject([
-        { path, code: valid ? "ORPHANED_PROJECTION_CLAIM" : "INVALID_OWNERSHIP_MARKER" },
+      expect(observed.ownershipIssues).toMatchObject([
+        { path, code: valid ? "ORPHANED_OWNERSHIP_MARKER" : "INVALID_OWNERSHIP_MARKER" },
       ]);
       expect(yield* fs.readFileString(join(target, ".skit-ownership.json"))).toBe(marker);
     }).pipe(Effect.provide(nativeLibraryLayer)),

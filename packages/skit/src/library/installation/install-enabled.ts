@@ -14,10 +14,10 @@ import { repositorySelectsInstalledSkill } from "./uninstall.js";
 import { installedSkillSource } from "./installed-skill-source.js";
 import { LibraryStore } from "../store/library-store.js";
 import type { Digest, InstallDestination } from "../../vocabulary.js";
-import { scopeBinding, type InstalledSkill } from "../library-state.js";
+import { enabledAt, type InstalledSkill } from "../library-state.js";
 import { makeInstalledSkillId } from "../entity-ids.js";
 import type { SkillId } from "../entity-ids.js";
-import { bindingSkillIds, currentSkillVersion, versionBacking } from "../library-contracts.js";
+import { currentSkillVersion, enabledSkillIds, versionBacking } from "../library-contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 export class InstalledSkillInvalid
@@ -34,7 +34,7 @@ export class InstalledSkillInvalid
   }
 }
 
-/** Install every skill one enabled setting turns on into one install destination; return the copies written. Caller owns the writer lock. */
+/** Install every skill enabled at one scope into one install destination; return the copies written. Caller owns the writer lock. */
 export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(function* (options: {
   target: InstallDestination;
   scope?: { kind: "global" } | { kind: "repository"; root: string };
@@ -55,11 +55,11 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
   const store = yield* LibraryStore;
   const state = yield* store.load;
   const scope = options.scope ?? { kind: "global" as const };
-  const binding = scopeBinding(state, scope);
-  if (binding === undefined)
-    return yield* new InstalledSkillInvalid({ detail: "Binding is missing" });
+  const enabled = enabledAt(state, scope);
+  if (enabled === undefined)
+    return yield* new InstalledSkillInvalid({ detail: "Nothing is enabled at this scope" });
 
-  const boundSkillIds = bindingSkillIds(state, binding).filter(
+  const boundSkillIds = enabledSkillIds(state, enabled.enabled).filter(
     (id) => options.onlySkillIds === undefined || options.onlySkillIds.includes(id),
   );
   const selected = state.skills
@@ -73,7 +73,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
     });
   if (selected.length !== boundSkillIds.length)
     return yield* new InstalledSkillInvalid({
-      detail: "Binding selects a Skill without a selected retained Version",
+      detail: "An enabled Skill has no selected retained Version",
     });
 
   // Compare physical roots so a configured symlink alias cannot retire the active installation.
@@ -81,8 +81,10 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
   const canonicalRoots = new Map<string, string>();
   for (const root of new Set([
     options.root,
-    ...state.projections.filter((item) => item.target === options.target).map((item) => item.root),
-    ...state.local_bindings.map((item) => item.scope.root),
+    ...state.installed_skills
+      .filter((item) => item.destination === options.target)
+      .map((item) => item.root),
+    ...state.repositories.map((repository) => repository.root),
   ])) {
     const identity = yield* installDestinationPathIdentity(root).pipe(
       Effect.orElseSucceed(() => ({
@@ -94,22 +96,22 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
     canonicalRoots.set(root, identity.canonicalPath ?? resolve(root));
   }
   const atTarget = (projection: InstalledSkill) =>
-    projection.target === options.target &&
+    projection.destination === options.target &&
     (options.onlySkillIds === undefined || options.onlySkillIds.includes(projection.skill_id)) &&
     rootKeys.get(projection.root) === rootKeys.get(options.root);
   const former =
     scope.kind === "global"
-      ? state.projections.filter(
+      ? state.installed_skills.filter(
           (projection) =>
-            projection.target === options.target &&
+            projection.destination === options.target &&
             !atTarget(projection) &&
             boundSkillIds.includes(projection.skill_id) &&
             !repositorySelectsInstalledSkill(state, projection) &&
-            !state.local_bindings.some(
-              (local) =>
-                bindingSkillIds(state, local).includes(projection.skill_id) &&
+            !state.repositories.some(
+              (repository) =>
+                enabledSkillIds(state, repository.enabled).includes(projection.skill_id) &&
                 pathIsWithin(
-                  canonicalRoots.get(local.scope.root) ?? local.scope.root,
+                  canonicalRoots.get(repository.root) ?? repository.root,
                   canonicalRoots.get(projection.root) ?? projection.root,
                 ),
             ),
@@ -132,7 +134,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
     },
     (mutation) =>
       Effect.gen(function* () {
-        for (const existing of mutation.state.projections.filter(
+        for (const existing of mutation.state.installed_skills.filter(
           (item) => atTarget(item) && !boundSkillIds.includes(item.skill_id),
         )) {
           const skill = mutation.state.skills.find((item) => item.skill_id === existing.skill_id);
@@ -147,10 +149,10 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
             `Refusing to disable ${skill.name}: ${existing.path} was edited after SKIT wrote it`,
           );
         }
-        mutation.state.projections.splice(
+        mutation.state.installed_skills.splice(
           0,
-          mutation.state.projections.length,
-          ...mutation.state.projections.filter((item) => !atTarget(item)),
+          mutation.state.installed_skills.length,
+          ...mutation.state.installed_skills.filter((item) => !atTarget(item)),
         );
         const toRetire: InstalledSkill[] = [];
         for (const item of selected) {
@@ -162,12 +164,12 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
           );
           if (source.kind === "invalid")
             return yield* new InstalledSkillInvalid({ detail: source.detail });
-          const previousRows = state.projections.filter(
+          const previousRows = state.installed_skills.filter(
             (candidate) => candidate.skill_id === item.skill.skill_id && atTarget(candidate),
           );
           const priorProjection = previousRows[0];
-          const projectionId = priorProjection?.projection_id ?? makeInstalledSkillId();
-          const policy = binding.invocation_policies?.[item.skill.skill_id];
+          const projectionId = priorProjection?.installed_skill_id ?? makeInstalledSkillId();
+          const policy = enabled.invocation_policies?.[item.skill.skill_id];
           const projected = yield* mutation.project({
             installation: { libraryPath: source.libraryPath },
             skill: {
@@ -205,7 +207,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
               options.restoreNativeDeletedSkills?.includes(item.skill.skill_id) ?? false,
             projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           });
-          mutation.state.projections.push(projected);
+          mutation.state.installed_skills.push(projected);
           // Keep the last working copy when the new destination is blocked or locally modified.
           if (projected.status === "installed")
             toRetire.push(
@@ -219,10 +221,10 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
         }
         for (const old of toRetire) {
           yield* mutation.uninstall(old, "throw", retirementMessage(old));
-          const index = mutation.state.projections.findIndex(
-            (candidate) => candidate.projection_id === old.projection_id,
+          const index = mutation.state.installed_skills.findIndex(
+            (candidate) => candidate.installed_skill_id === old.installed_skill_id,
           );
-          if (index >= 0) mutation.state.projections.splice(index, 1);
+          if (index >= 0) mutation.state.installed_skills.splice(index, 1);
         }
         return selected.length;
       }),

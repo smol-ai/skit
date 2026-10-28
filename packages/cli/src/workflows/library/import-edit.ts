@@ -4,8 +4,8 @@ import {
   inspectOwnershipMarker,
   LibraryStore,
   libraryStateRevision,
-  bindingSkillIds,
-  effectiveGlobalBindings,
+  enabledByScope,
+  enabledSkillIds,
   currentSkillVersion,
   prepareImport,
   installEnabledSkills,
@@ -17,8 +17,7 @@ import {
   type InstalledSkill,
   type Digest,
   type OwnershipMarker,
-  type DeviceBinding,
-  type RepositoryBinding,
+  type InstallScope,
   type InstalledSkillId,
 } from "@smolai/skit-core";
 import { Data, Clock, Effect } from "effect";
@@ -80,8 +79,8 @@ const matchingInstalledSkill = Effect.fn("Library.EditImport.matchInstalledSkill
 ) {
   const matches = projections.filter(
     (projection) =>
-      projection.projection_id === selector ||
-      projection.target === selector ||
+      projection.installed_skill_id === selector ||
+      projection.destination === selector ||
       resolve(projection.path) === resolve(selector),
   );
   if (matches.length === 0)
@@ -106,7 +105,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     return yield* new EditImportMissing({
       message: `${skill.name} has no selected retained Version`,
     });
-  const candidates = state.projections.filter(
+  const candidates = state.installed_skills.filter(
     (projection) => projection.skill_id === skill.skill_id,
   );
   const selected = yield* matchingInstalledSkill(candidates, selector);
@@ -129,12 +128,12 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
   for (const projection of candidates) {
     const digest = yield* deterministicTreeHash(projection.path);
     observations.push({
-      projection_id: projection.projection_id,
-      target: projection.target,
+      projection_id: projection.installed_skill_id,
+      target: projection.destination,
       path: projection.path,
       observed_digest: digest,
       agreement:
-        projection.projection_id === selected.projection_id
+        projection.installed_skill_id === selected.installed_skill_id
           ? "selected"
           : digest === observed
             ? "identical"
@@ -146,7 +145,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     skill_id: skill.skill_id,
     skill_name: skill.name,
     previous_skill_version_id: previousVersion.skill_version_id,
-    selected_projection_id: selected.projection_id,
+    selected_projection_id: selected.installed_skill_id,
     observed_digest: observed,
     snapshot_digest: prepared.digest,
     retained_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
@@ -155,16 +154,14 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
   } satisfies EditImportPlan;
 });
 
-const bindingForInstalledSkill = (
-  state: LibraryState,
-  projection: InstalledSkill,
-): DeviceBinding | RepositoryBinding | undefined =>
-  [...effectiveGlobalBindings(state), ...state.local_bindings].find(
-    (binding) =>
-      projection.target !== "legacy" &&
-      bindingSkillIds(state, binding).includes(projection.skill_id) &&
-      (binding.scope.kind === "global" || resolve(binding.scope.root) === resolve(projection.root)),
-  );
+/** The scope whose list enables this installed skill, so an edit is imported under it. */
+const enablingScope = (state: LibraryState, projection: InstalledSkill): InstallScope | undefined =>
+  enabledByScope(state).find(
+    ({ scope, enabled }) =>
+      projection.destination !== "legacy" &&
+      enabledSkillIds(state, enabled).includes(projection.skill_id) &&
+      (scope.kind === "global" || resolve(scope.root) === resolve(projection.root)),
+  )?.scope;
 
 /** Capture the Library and observations once; callers only render or apply this operation. */
 export const prepareEditImport = Effect.fn("Library.prepareEditImport")(function* (
@@ -203,8 +200,8 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         return yield* new EditImportStale({
           message: "The installed skill's bytes changed after the retention was previewed",
         });
-      const selected = current.projections.find(
-        (projection) => projection.projection_id === preview.selected_projection_id,
+      const selected = current.installed_skills.find(
+        (projection) => projection.installed_skill_id === preview.selected_projection_id,
       )!;
       const retained = preview.retention_required
         ? yield* Effect.scoped(
@@ -231,7 +228,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
               });
             return {
               skillVersionId: version.skill_version_id,
-              retainedCopyId: acquisition.retained_copy_id,
+              retainedCopyId: acquisition.collection_version_id,
               snapshotDigest: preview.snapshot_digest,
             };
           });
@@ -251,21 +248,19 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
       const afterRetention = yield* store.load;
       const reconciled = new Set<string>();
       for (const observation of preview.projections) {
-        const projection = afterRetention.projections.find(
-          (candidate) => candidate.projection_id === observation.projection_id,
+        const projection = afterRetention.installed_skills.find(
+          (candidate) => candidate.installed_skill_id === observation.projection_id,
         );
-        const binding =
-          projection === undefined
-            ? undefined
-            : bindingForInstalledSkill(afterRetention, projection);
-        if (projection === undefined || binding === undefined || projection.target === "legacy")
+        const scope =
+          projection === undefined ? undefined : enablingScope(afterRetention, projection);
+        if (projection === undefined || scope === undefined || projection.destination === "legacy")
           continue;
-        const coordinate = `${projection.target}\0${canonicalJson(binding.scope)}\0${projection.root}`;
+        const coordinate = `${projection.destination}\0${canonicalJson(scope)}\0${projection.root}`;
         if (reconciled.has(coordinate)) continue;
         reconciled.add(coordinate);
         yield* installEnabledSkills({
-          target: projection.target,
-          scope: binding.scope,
+          target: projection.destination,
+          scope,
           root: projection.root,
           variantsPath: store.variantsPath,
           acceptedObservations: accepted,
@@ -281,17 +276,16 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         snapshot_digest: retained.snapshotDigest,
         retained: preview.retention_required,
         projections: preview.projections.map((observation) => {
-          const projection = settled.projections.find(
-            (candidate) => candidate.projection_id === observation.projection_id,
+          const projection = settled.installed_skills.find(
+            (candidate) => candidate.installed_skill_id === observation.projection_id,
           );
-          const hasBinding =
-            projection === undefined ? undefined : bindingForInstalledSkill(settled, projection);
+          const scope = projection === undefined ? undefined : enablingScope(settled, projection);
           return {
             projection_id: observation.projection_id,
             target: observation.target,
             path: observation.path,
             status:
-              hasBinding === undefined
+              scope === undefined
                 ? ("deferred" as const)
                 : projection?.status === "installed"
                   ? ("projected" as const)

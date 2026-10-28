@@ -270,9 +270,9 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
 
 const inventoryFindings = (state: LibraryInventory): string[] => {
   const lines: string[] = [];
-  if (state.custodyIssues?.length) {
-    lines.push(`Ownership issues · ${state.custodyIssues.length}`);
-    for (const issue of state.custodyIssues)
+  if (state.ownershipIssues?.length) {
+    lines.push(`Ownership issues · ${state.ownershipIssues.length}`);
+    for (const issue of state.ownershipIssues)
       lines.push(
         `  ${conditionHeadline(issue.code, "Local ownership issue")}`,
         `    Path: ${compactHomePath(issue.path)}`,
@@ -321,7 +321,7 @@ export function renderInventory(
     string,
     { name: string; statuses: Set<string>; harnesses: Set<HarnessName> }
   >();
-  for (const projection of state.projections) {
+  for (const projection of state.installed_skills) {
     const path = projection.path;
     const skill = state.skills.find((candidate) => candidate.skill_id === projection.skill_id);
     if (skill === undefined) continue;
@@ -330,8 +330,8 @@ export function renderInventory(
       statuses: new Set<string>(),
       harnesses: new Set<HarnessName>(),
     };
-    if (projection.target !== "legacy")
-      for (const harness of installDestinationHarnesses[projection.target])
+    if (projection.destination !== "legacy")
+      for (const harness of installDestinationHarnesses[projection.destination])
         row.harnesses.add(harness);
     row.statuses.add(projection.status);
     managed.set(path, row);

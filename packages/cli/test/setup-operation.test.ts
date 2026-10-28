@@ -127,7 +127,7 @@ it.effect(
       const saved = yield* inspectSetupOperation(f.home.home, applied.operationId);
       expect(saved.changes.every((entry) => entry.saved)).toBe(true);
       expect(saved.complete).toBeDefined();
-      expect(saved.operation.before.global).toEqual([]);
+      expect(saved.operation.before.global).toEqual({ enabled: [] });
       expect(saved.operation.files.find((entry) => entry.path === f.source)?.entry?.marker).toBe(
         null,
       );
@@ -135,7 +135,7 @@ it.effect(
         saved.operation.files.find((entry) => entry.path === join(f.root, "claude", "review"))
           ?.entry,
       ).toBe(null);
-      expect(saved.complete?.intent.global[0].entries).toHaveLength(1);
+      expect(saved.complete?.intent.global.enabled).toHaveLength(1);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
       expect((yield* inspectRecoveryOperation(f.home.home, applied.operationId)).entries).toEqual(
         [],
@@ -194,7 +194,7 @@ it.effect(
         return yield* Effect.die(new Error("Expected an uncertain Library publication"));
       expect(libraryStateRevision(yield* f.home.durable)).toBe(last.change.afterRevision);
       expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["review"]);
-      expect((yield* f.home.durable).global_bindings).toEqual([]);
+      expect((yield* f.home.durable).enabled).toEqual([]);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
     }).pipe(Effect.provide(skitLayer)),
 );

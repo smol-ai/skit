@@ -12,11 +12,81 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
-import { currentSkillVersion } from "../src/library/library-contracts.js";
-import { effectiveGlobalBindings, emptyLibraryState } from "../src/library/library-state.js";
+import { currentSkillVersion, type Enabled } from "../src/library/library-contracts.js";
+import {
+  emptyLibraryState,
+  globalEnabled,
+  type LibraryState,
+} from "../src/library/library-state.js";
 import { inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
+
+const bindingEntries = (enabled: readonly Enabled[]) =>
+  enabled.map((item) =>
+    "skill" in item
+      ? { kind: "skill", skill_id: item.skill }
+      : { kind: "collection", collection_id: item.collection },
+  );
+
+/** A current state written as the v9 document it migrates from, so tests can build older states. */
+const asV9 = ({
+  schemaVersion: _schemaVersion,
+  collection_versions,
+  imports,
+  enabled,
+  invocation_policies,
+  repositories,
+  installed_skills,
+  ...fields
+}: LibraryState) => {
+  assert.isUndefined(fields.sync_ancestry);
+  assert.isUndefined(fields.device_skill_selection);
+  assert.isUndefined(fields.ownershipIssues);
+  return {
+    ...fields,
+    schemaVersion: 9,
+    retained_copies: collection_versions.map(({ collection_version_id, ...copy }) => ({
+      ...copy,
+      retained_copy_id: collection_version_id,
+    })),
+    acquisitions: imports.map(
+      ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
+        ...item,
+        acquisition_id: import_id,
+        kind: kind === "edit" ? "retained-edit" : kind,
+        retained_copy_id: collection_version_id,
+        acquired_at: imported_at,
+        observations: lock_file_entries,
+      }),
+    ),
+    global_bindings:
+      enabled.length > 0 || invocation_policies !== undefined
+        ? [
+            {
+              scope: { kind: "global" },
+              entries: bindingEntries(enabled),
+              ...(invocation_policies === undefined ? {} : { invocation_policies }),
+            },
+          ]
+        : [],
+    local_bindings: repositories.map((repository) => ({
+      scope: { kind: "repository", root: repository.root },
+      entries: bindingEntries(repository.enabled),
+      ...(repository.invocation_policies === undefined
+        ? {}
+        : { invocation_policies: repository.invocation_policies }),
+    })),
+    projections: installed_skills.map(
+      ({ installed_skill_id, destination, installed_at, ...copy }) => ({
+        ...copy,
+        projection_id: installed_skill_id,
+        target: destination,
+        projected_at: installed_at,
+      }),
+    ),
+  };
+};
 
 interface LegacySkillVersionFixture {
   readonly [field: string]: unknown;
@@ -28,21 +98,21 @@ it.effect("v8 state migrates to account-following without changing portable inte
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v8-migration-" });
     yield* fs.writeFileString(
       join(home, "state.json"),
-      JSON.stringify({ ...emptyLibraryState(), schemaVersion: 8 }),
+      JSON.stringify({ ...asV9(emptyLibraryState()), schemaVersion: 8 }),
     );
     const migrated = yield* inspectLibrary(home);
     assert.isTrue(migrated.present);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 9);
+    assert.strictEqual(migrated.state.schemaVersion, 10);
     assert.isUndefined(migrated.state.device_skill_selection);
-    assert.deepStrictEqual(effectiveGlobalBindings(migrated.state), migrated.state.global_bindings);
+    assert.deepStrictEqual(globalEnabled(migrated.state), { enabled: migrated.state.enabled });
     assert.isTrue(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v8.backup-")),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("migrates a persisted v4 well-known subset to v9 once at the state-file boundary", () =>
+it.effect("migrates a persisted v4 well-known subset to v10 once at the state-file boundary", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v4-migration-" });
@@ -52,15 +122,15 @@ it.effect("migrates a persisted v4 well-known subset to v9 once at the state-fil
     const migrated = yield* inspectLibrary(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 9);
+    assert.strictEqual(migrated.state.schemaVersion, 10);
     assert.strictEqual(migrated.state.collections.length, 1);
-    assert.strictEqual(migrated.state.acquisitions[0]?.kind, "source");
+    assert.strictEqual(migrated.state.imports[0]?.kind, "source");
     assert.strictEqual(
-      migrated.state.acquisitions[0]?.collection_id,
+      migrated.state.imports[0]?.collection_id,
       migrated.state.collections[0]?.collection_id,
     );
     assert.strictEqual(
-      migrated.state.acquisitions[0]?.input.value,
+      migrated.state.imports[0]?.input.value,
       "wellknown:https://skills.example#skills=review",
     );
     assert.deepStrictEqual(Object.keys(migrated.state.collections[0]?.upstream ?? {}).sort(), [
@@ -74,27 +144,21 @@ it.effect("migrates a persisted v4 well-known subset to v9 once at the state-fil
     const skillId = migrated.state.skills[0]!.skill_id;
     const collectionId = migrated.state.collections[0]!.collection_id;
     // Every current Skill of the Collection was bound, so the Collection is bound.
-    assert.deepStrictEqual(migrated.state.global_bindings[0]?.entries, [
-      { kind: "collection", collection_id: collectionId },
+    assert.deepStrictEqual(migrated.state.enabled, [{ collection: collectionId }]);
+    assert.strictEqual(migrated.state.invocation_policies?.[skillId], "explicit");
+    assert.deepStrictEqual(migrated.state.repositories, [
+      {
+        root: "/workspace",
+        enabled: [{ collection: collectionId }],
+        invocation_policies: { [skillId]: "implicit" },
+      },
     ]);
+    assert.strictEqual(migrated.state.installed_skills.length, 1);
     assert.strictEqual(
-      migrated.state.global_bindings[0]?.invocation_policies?.[skillId],
-      "explicit",
+      migrated.state.installed_skills[0]?.skill_id,
+      migrated.state.skills[0]?.skill_id,
     );
-    assert.deepStrictEqual(migrated.state.local_bindings[0]?.scope, {
-      kind: "repository",
-      root: "/workspace",
-    });
-    assert.deepStrictEqual(migrated.state.local_bindings[0]?.entries, [
-      { kind: "collection", collection_id: collectionId },
-    ]);
-    assert.strictEqual(
-      migrated.state.local_bindings[0]?.invocation_policies?.[skillId],
-      "implicit",
-    );
-    assert.strictEqual(migrated.state.projections.length, 1);
-    assert.strictEqual(migrated.state.projections[0]?.skill_id, migrated.state.skills[0]?.skill_id);
-    assert.strictEqual("collection_id" in migrated.state.projections[0]!, false);
+    assert.strictEqual("collection_id" in migrated.state.installed_skills[0]!, false);
 
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v4.backup-")),
@@ -358,7 +422,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 9);
+    assert.strictEqual(state.schemaVersion, 10);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -370,11 +434,11 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     // Migration keeps every import and Skill, even `dropped`, which upstream deleted and
     // nothing uses.
     assert.deepStrictEqual(
-      state.acquisitions.map((item) => [item.acquisition_id, item.kind, item.revision]),
+      state.imports.map((item) => [item.import_id, item.kind, item.revision]),
       [
         [ids.first, "source", "1".repeat(40)],
         [ids.second, "source", "2".repeat(40)],
-        [ids.edit, "retained-edit", undefined],
+        [ids.edit, "edit", undefined],
       ],
     );
     assert.deepStrictEqual(
@@ -391,17 +455,9 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(currentSkillVersion(state, skill(ids.beta))?.skill_version_id, ids.betaEdit);
     assert.strictEqual(currentSkillVersion(state, skill(ids.gone))?.skill_version_id, ids.gone1);
     // Per-Harness Bindings merge into one.
+    assert.deepStrictEqual(state.enabled, [{ collection: collectionId }, { skill: ids.gone }]);
     assert.deepStrictEqual(
-      state.global_bindings.map((binding) => binding.entries),
-      [
-        [
-          { kind: "collection", collection_id: collectionId },
-          { kind: "skill", skill_id: ids.gone },
-        ],
-      ],
-    );
-    assert.deepStrictEqual(
-      state.projections.map((projection) => projection.target),
+      state.installed_skills.map((projection) => projection.destination),
       ["agents"],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -421,10 +477,11 @@ for (const agreed of [true, false])
         const current = yield* inspectLibrary(home);
         assert.strictEqual(current.present, true);
         if (!current.present) return;
-        const { schemaVersion: _current, ...state } = current.state;
+        const { schemaVersion: _current, ...state } = asV9(current.state);
         const skill = state.skills[0]!;
         const version = skill.versions[0]!.skill_version_id;
         const entries = state.global_bindings[0]!.entries;
+        const enabled = current.state.enabled;
         const binding = (harness: string, policy: string) => ({
           harness,
           scope: { kind: "global" },
@@ -465,17 +522,15 @@ for (const agreed of [true, false])
         const migrated = yield* inspectLibrary(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
-        assert.strictEqual(migrated.state.schemaVersion, 9);
-        assert.deepStrictEqual(migrated.state.global_bindings, [
-          {
-            scope: { kind: "global" },
-            entries,
-            // Harnesses that disagreed leave the Skill on its declared policy.
-            ...(agreed ? { invocation_policies: { [skill.skill_id]: "explicit" } } : {}),
-          },
-        ]);
+        assert.strictEqual(migrated.state.schemaVersion, 10);
+        assert.deepStrictEqual(migrated.state.enabled, enabled);
+        // Harnesses that disagreed leave the Skill on its declared policy.
         assert.deepStrictEqual(
-          migrated.state.projections.map((item) => item.target),
+          migrated.state.invocation_policies,
+          agreed ? { [skill.skill_id]: "explicit" } : undefined,
+        );
+        assert.deepStrictEqual(
+          migrated.state.installed_skills.map((item) => item.destination),
           ["agents", "claude", "legacy", "legacy"],
         );
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -494,7 +549,7 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
     if (!current.present) return;
     yield* fs.writeFileString(
       join(home, "state.json"),
-      JSON.stringify({ ...current.state, schemaVersion: 7 }),
+      JSON.stringify({ ...asV9(current.state), schemaVersion: 7 }),
     );
 
     const migrated = yield* inspectLibrary(home);
@@ -543,5 +598,122 @@ it.effect("state load and publication retain nested extensions without skipping 
     );
     const failure = yield* Effect.flip(inspectLibrary(home));
     assert.strictEqual(failure._tag, "InvalidLibraryState");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("migrates v9 Bindings to enabled lists and renames stored records", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v9-migration-" });
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+    );
+    const current = yield* inspectLibrary(home);
+    assert.strictEqual(current.present, true);
+    if (!current.present) return;
+    const v9 = asV9(current.state);
+    const skill = v9.skills[0]!;
+    const collectionId = skill.collection_id;
+    const projection = v9.projections[0]!;
+    const acquisition = v9.acquisitions[0]!;
+    const baseManifest = {
+      schema: "skit.library.v7",
+      collections: v9.collections,
+      skills: v9.skills,
+      retained_copies: v9.retained_copies,
+      acquisitions: v9.acquisitions,
+      snapshot_digests: v9.retained_copies.map((copy) => copy.digest),
+      bindings: [
+        { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: skill.skill_id }] },
+      ],
+    };
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      JSON.stringify({
+        ...v9,
+        acquisitions: [
+          ...v9.acquisitions,
+          {
+            ...acquisition,
+            acquisition_id: makeImportId(),
+            kind: "retained-edit",
+            acquired_at: "2026-10-01T00:00:00.000Z",
+          },
+        ],
+        // An empty global Binding keeps its invocation overrides until its copies are updated.
+        global_bindings: [
+          {
+            scope: { kind: "global" },
+            entries: [],
+            invocation_policies: { [skill.skill_id]: "explicit" },
+          },
+        ],
+        device_skill_selection: {
+          mode: "choose",
+          binding: {
+            scope: { kind: "global" },
+            entries: [{ kind: "collection", collection_id: collectionId }],
+            invocation_policies: { [skill.skill_id]: "implicit" },
+          },
+        },
+        custodyIssues: [
+          {
+            code: "ORPHANED_PROJECTION_CLAIM",
+            path: projection.path,
+            canonicalPath: projection.path,
+            harnesses: ["codex"],
+            observedHash: projection.expected_digest,
+            projectionId: projection.projection_id,
+          },
+        ],
+        sync_ancestry: {
+          origin: "https://registry.example",
+          library_id: "library",
+          revision_id: "revision",
+          base_manifest: baseManifest,
+        },
+      }),
+    );
+
+    const migrated = yield* inspectLibrary(home);
+    assert.strictEqual(migrated.present, true);
+    if (!migrated.present) return;
+    const state = migrated.state;
+    assert.strictEqual(state.schemaVersion, 10);
+    assert.deepStrictEqual(state.enabled, []);
+    assert.deepStrictEqual(state.invocation_policies, { [skill.skill_id]: "explicit" });
+    assert.deepStrictEqual(state.device_skill_selection, {
+      mode: "choose",
+      enabled: [{ collection: collectionId }],
+      invocation_policies: { [skill.skill_id]: "implicit" },
+    });
+    assert.deepStrictEqual(state.repositories, current.state.repositories);
+    assert.deepStrictEqual(state.collection_versions, current.state.collection_versions);
+    assert.deepStrictEqual(
+      state.imports.map((item) => item.kind),
+      ["source", "edit"],
+    );
+    assert.deepStrictEqual(state.imports[0], current.state.imports[0]);
+    assert.deepStrictEqual(state.installed_skills, current.state.installed_skills);
+    assert.deepStrictEqual(state.ownershipIssues, [
+      {
+        code: "ORPHANED_OWNERSHIP_MARKER",
+        path: projection.path,
+        canonicalPath: projection.path,
+        harnesses: ["codex"],
+        observedHash: projection.expected_digest,
+        installedSkillId: projection.projection_id,
+      },
+    ]);
+    assert.strictEqual(state.sync_ancestry?.base_manifest.schema, "skit.library.v8");
+    assert.deepStrictEqual(state.sync_ancestry?.base_manifest.enabled, [{ skill: skill.skill_id }]);
+    assert.deepStrictEqual(
+      state.sync_ancestry?.base_manifest.collection_versions,
+      current.state.collection_versions,
+    );
+    assert.isTrue(
+      (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v9.backup-")),
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

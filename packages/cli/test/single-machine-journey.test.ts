@@ -81,17 +81,13 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     "--invocation",
     "implicit",
   );
-  expect(overridden.bindings).toEqual([
-    expect.objectContaining({ invocation_policies: { [skill!.skill_id]: "implicit" } }),
-  ]);
+  expect(overridden.invocation_policies).toEqual({ [skill!.skill_id]: "implicit" });
   expect(await readFile(join(codexRoot, "code-review", "agents", "openai.yaml"), "utf8")).toContain(
     "allow_implicit_invocation: true",
   );
 
   const reset = succeed(outputContracts.enable, "enable", skill!.name, "--invocation", "declared");
-  expect(reset.bindings).toEqual([
-    expect.not.objectContaining({ invocation_policies: expect.anything() }),
-  ]);
+  expect(reset.invocation_policies).toBeUndefined();
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
 
   succeed(outputContracts.disable, "disable", skill!.name);

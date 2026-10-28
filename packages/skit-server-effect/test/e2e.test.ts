@@ -705,11 +705,11 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     first(["add", raw]);
     first(["add", gitRemote]);
     const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(9);
+    expect(retained.schemaVersion).toBe(10);
     expect(retained.collections).toHaveLength(2);
-    expect(retained.global_bindings).toEqual([]);
+    expect(retained.enabled).toEqual([]);
     const collectionId = retained.collections[0].collection_id;
-    const selected = retained.retained_copies[0];
+    const selected = retained.collection_versions[0];
     expect(selected).toBeDefined();
     const selectedHex = selected!.digest.slice("sha256:".length);
     const selectedPath = join(firstHome, "originals", selectedHex.slice(0, 2), selectedHex);
@@ -747,18 +747,18 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(9);
+    expect(restored.schemaVersion).toBe(10);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
-    expect(restored.acquisitions[0].observations).toEqual([]);
-    expect(restored.global_bindings).toEqual([]);
-    const restoredHex = restored.retained_copies[0].digest.slice("sha256:".length);
+    expect(restored.imports[0].lock_file_entries).toEqual([]);
+    expect(restored.enabled).toEqual([]);
+    const restoredHex = restored.collection_versions[0].digest.slice("sha256:".length);
     const restoredPath = join(secondHome, "originals", restoredHex.slice(0, 2), restoredHex);
     expect(await readFile(join(restoredPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(restoredPath, "README.md"))).toBe(false);
-    const gitAcquisition = restored.acquisitions.find((item) => item.revision === gitRevision);
+    const gitAcquisition = restored.imports.find((item) => item.revision === gitRevision);
     expect(gitAcquisition).toMatchObject({ kind: "source", revision: gitRevision });
-    const gitCopy = restored.retained_copies.find(
-      (item) => item.retained_copy_id === gitAcquisition?.retained_copy_id,
+    const gitCopy = restored.collection_versions.find(
+      (item) => item.collection_version_id === gitAcquisition?.collection_version_id,
     );
     expect(gitCopy).toBeDefined();
     const gitHex = gitCopy!.digest.slice("sha256:".length);
@@ -776,11 +776,8 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "merge_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     const converged = await state(secondHome);
-    expect(converged.global_bindings).toHaveLength(1);
-    expect(converged.global_bindings[0]?.entries).toEqual(
-      expect.arrayContaining([{ kind: "collection", collection_id: collectionId }]),
-    );
-    expect(converged.global_bindings[0]?.entries).toHaveLength(2);
+    expect(converged.enabled).toEqual(expect.arrayContaining([{ collection: collectionId }]));
+    expect(converged.enabled).toHaveLength(2);
     expect(await readFile(join(secondCodex, "raw-review", "SKILL.md"), "utf8")).toBe(rawText);
     expect(await readFile(join(secondClaude, "raw-review", "SKILL.md"), "utf8")).toBe(rawText);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
@@ -943,11 +940,11 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       for (const name of ["racing-left", "racing-right"]) {
         const skill = synced.skills.find((item) => item.name === name)!;
         expect(skill).toBeDefined();
-        const acquisition = synced.acquisitions.find(
+        const acquisition = synced.imports.find(
           (item) => item.collection_id === skill.collection_id,
         )!;
-        const copy = synced.retained_copies.find(
-          (item) => item.retained_copy_id === acquisition.retained_copy_id,
+        const copy = synced.collection_versions.find(
+          (item) => item.collection_version_id === acquisition.collection_version_id,
         )!;
         const digest = copy.digest.slice("sha256:".length);
         expect(

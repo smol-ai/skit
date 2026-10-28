@@ -10,7 +10,7 @@ import {
   installEnabledSkills,
   refreshLibraryInventory,
 } from "@smolai/skit-core";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { updateInstalledSkills } from "../src/workflows/library/update-installed-skills.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
@@ -56,14 +56,9 @@ const boundRawReview = Effect.gen(function* () {
       store.save(
         {
           ...bound,
-          global_bindings: [
-            {
-              scope: { kind: "global" },
-              entries: bound.skills
-                .filter((skill) => skill.collection_id === first.collection?.collection_id)
-                .map((skill) => ({ kind: "skill" as const, skill_id: skill.skill_id })),
-            },
-          ],
+          enabled: bound.skills
+            .filter((skill) => skill.collection_id === first.collection?.collection_id)
+            .map((skill) => ({ skill: skill.skill_id })),
         },
         bound,
       ),
@@ -83,7 +78,7 @@ const boundRawReview = Effect.gen(function* () {
   const projection = Effect.gen(function* () {
     const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(state);
-    const row = state.projections.find((item) => item.target === "agents");
+    const row = state.installed_skills.find((item) => item.destination === "agents");
     assert.ok(row);
     const skill = state.skills[0];
     return {
@@ -147,7 +142,7 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
         store.save(
           {
             ...state,
-            projections: state.projections.map((row) => ({
+            installed_skills: state.installed_skills.map((row) => ({
               ...row,
               skill_version_id: selected,
               status: "conflicted" as const,
@@ -173,7 +168,7 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
     assert.ok(skillId);
     const changed = yield* writingTo(
       home,
-      setLibraryBindings({
+      setLibraryEnabled({
         query: skillId,
         all: false,
         roots: { home, configHome: join(home, "config"), overrides: { codex: [newRoot] } },
@@ -193,9 +188,12 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
       "first verbatim Skill\n",
     );
     const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.strictEqual(after.projections.filter((row) => row.root === roots.codexRoot).length, 0);
-    assert.strictEqual(after.projections.filter((row) => row.root === newRoot).length, 1);
-    assert.deepStrictEqual(after.global_bindings, before.global_bindings);
+    assert.strictEqual(
+      after.installed_skills.filter((row) => row.root === roots.codexRoot).length,
+      0,
+    );
+    assert.strictEqual(after.installed_skills.filter((row) => row.root === newRoot).length, 1);
+    assert.deepStrictEqual(after.enabled, before.enabled);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -238,20 +236,12 @@ for (const followedCollection of [false, true])
             store.save(
               {
                 ...withOther,
-                global_bindings: withOther.global_bindings.map((binding) => ({
-                  ...binding,
-                  entries: [
-                    ...(followedCollection
-                      ? [
-                          {
-                            kind: "collection" as const,
-                            collection_id: selectedSkill.collection_id,
-                          },
-                        ]
-                      : binding.entries),
-                    { kind: "skill" as const, skill_id: otherId },
-                  ],
-                })),
+                enabled: [
+                  ...(followedCollection
+                    ? [{ collection: selectedSkill.collection_id }]
+                    : withOther.enabled),
+                  { skill: otherId },
+                ],
               },
               withOther,
             ),
@@ -266,8 +256,8 @@ for (const followedCollection of [false, true])
           refreshLibraryInventory(installed, () => []).pipe(Effect.provide(layer)),
         );
         const suppressed = yield* load;
-        const suppressedRow = suppressed.projections.find(
-          (row) => row.skill_id === skillId && row.target === "agents",
+        const suppressedRow = suppressed.installed_skills.find(
+          (row) => row.skill_id === skillId && row.destination === "agents",
         );
         assert.strictEqual(suppressedRow?.status, "suppressed");
         assert.strictEqual(suppressedRow?.suppression_reason, "native_delete");
@@ -278,7 +268,7 @@ for (const followedCollection of [false, true])
         const enable = (dryRun: boolean) =>
           writingTo(
             home,
-            setLibraryBindings({
+            setLibraryEnabled({
               query: skillId,
               all: false,
               roots: {
@@ -303,16 +293,16 @@ for (const followedCollection of [false, true])
         assert.strictEqual(applied.value.changed, false);
         assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
         const after = yield* load;
-        const restored = after.projections.find(
-          (row) => row.skill_id === skillId && row.target === "agents",
+        const restored = after.installed_skills.find(
+          (row) => row.skill_id === skillId && row.destination === "agents",
         );
         assert.strictEqual(restored?.status, "installed");
         assert.strictEqual(restored?.suppression_reason, undefined);
         assert.strictEqual(restored?.suppressed_at, undefined);
-        assert.deepStrictEqual(after.global_bindings, before.global_bindings);
+        assert.deepStrictEqual(after.enabled, before.enabled);
         assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "other")), false);
         assert.strictEqual(
-          after.projections.find((row) => row.skill_id === otherId)?.suppression_reason,
+          after.installed_skills.find((row) => row.skill_id === otherId)?.suppression_reason,
           "native_delete",
         );
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

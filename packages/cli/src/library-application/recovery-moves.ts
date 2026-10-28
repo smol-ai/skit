@@ -191,8 +191,8 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     const path = resolve(expected.path);
     const check = Effect.gen(function* () {
       const state = yield* store.load;
-      const current = state.projections.find(
-        (projection) => projection.projection_id === expected.projection_id,
+      const current = state.installed_skills.find(
+        (projection) => projection.installed_skill_id === expected.installed_skill_id,
       );
       if (canonicalJson(current ?? null) !== canonicalJson(expected))
         return yield* new PlanIsStale();
@@ -201,7 +201,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     const observed = yield* inspectOwnershipMarker(path);
     if (
       observed.kind !== "valid" ||
-      observed.marker.projection_id !== expected.projection_id ||
+      observed.marker.projection_id !== expected.installed_skill_id ||
       observed.marker.skill_id !== expected.skill_id ||
       observed.marker.skill_version_id !== expected.skill_version_id ||
       observed.marker.expected_digest !== expected.expected_digest

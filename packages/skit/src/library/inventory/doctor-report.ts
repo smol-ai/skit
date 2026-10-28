@@ -20,19 +20,19 @@ export const LibraryDoctorReport = Schema.Struct({
 export type LibraryDoctorReport = typeof LibraryDoctorReport.Type;
 
 export function libraryDoctorReport(state: LibraryState): LibraryDoctorReport {
-  const issues: LibraryDoctorIssue[] = state.projections
+  const issues: LibraryDoctorIssue[] = state.installed_skills
     .filter((item) => item.status !== "installed" && item.status !== "unsupported")
     .map((item) => ({
       code: item.status === "conflicted" ? "PROJECTION_CONFLICT" : "PROJECTION_DRIFT",
       skillId: item.skill_id,
       path: item.path,
-      target: item.target,
+      target: item.destination,
     }));
   issues.push(
     ...(state.scanIssues ?? [])
       .filter((item) => item.code === "UNREADABLE_PATH")
       .map((item) => ({ ...item })),
-    ...(state.custodyIssues ?? []).map((item) => ({
+    ...(state.ownershipIssues ?? []).map((item) => ({
       code: item.code,
       skillId: item.skillId,
       path: item.path,

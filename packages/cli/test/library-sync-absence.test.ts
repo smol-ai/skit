@@ -16,10 +16,10 @@ type Device = Homes["a"];
 const empty: LibraryManifest = currentLibraryManifest({
   collections: [],
   skills: [],
-  retained_copies: [],
-  acquisitions: [],
+  collection_versions: [],
+  imports: [],
   snapshot_digests: [],
-  bindings: [],
+  enabled: [],
 });
 
 /**
@@ -133,7 +133,7 @@ it.effect("empty R and absent L: the empty Library is pulled and anchored", () =
     assert.strictEqual((yield* a.sync()).status, "pulled");
     const state = yield* a.state;
     assert.deepStrictEqual(
-      [state.collections, state.skills, state.acquisitions, state.retained_copies],
+      [state.collections, state.skills, state.imports, state.collection_versions],
       [[], [], [], []],
     );
     assert.strictEqual(state.sync_ancestry?.revision_id, head.revision_id);
@@ -167,12 +167,7 @@ const anchored = Effect.fn("Test.anchoredHome")(function* (device: Device) {
   yield* device.retain("first");
   yield* device.edit((state) => ({
     ...state,
-    global_bindings: [
-      {
-        scope: { kind: "global" },
-        entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-      },
-    ],
+    enabled: [{ skill: state.skills[0]!.skill_id }],
   }));
   yield* device.project();
   assert.strictEqual((yield* device.sync()).status, "pushed");

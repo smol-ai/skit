@@ -69,15 +69,9 @@ it.effect("accepts exactly one of two saves planned from the same state", () =>
     const { inLibrary } = yield* library;
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const base = yield* store.load;
-    const entries = base.skills.map((skill) => ({
-      kind: "skill" as const,
-      skill_id: skill.skill_id,
-    }));
-    const global = { ...base, global_bindings: [{ scope: { kind: "global" as const }, entries }] };
-    const local = {
-      ...base,
-      local_bindings: [{ scope: { kind: "repository" as const, root: "/workspace" }, entries }],
-    };
+    const enabled = base.skills.map((skill) => ({ skill: skill.skill_id }));
+    const global = { ...base, enabled };
+    const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
     const outcomes = yield* Effect.all(
       [global, local].map((next) => Effect.result(store.save(next, base))),
@@ -99,15 +93,9 @@ it.effect("accepts exactly one of two concurrent saves sharing one held writer l
     const { inLibrary } = yield* library;
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const base = yield* store.load;
-    const entries = base.skills.map((skill) => ({
-      kind: "skill" as const,
-      skill_id: skill.skill_id,
-    }));
-    const global = { ...base, global_bindings: [{ scope: { kind: "global" as const }, entries }] };
-    const local = {
-      ...base,
-      local_bindings: [{ scope: { kind: "repository" as const, root: "/workspace" }, entries }],
-    };
+    const enabled = base.skills.map((skill) => ({ skill: skill.skill_id }));
+    const global = { ...base, enabled };
+    const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
     // Both forks inherit the outer lock, so only the save mutex can serialize them.
     const outcomes = yield* withLibraryWriterLock(
@@ -138,7 +126,7 @@ it.effect("refuses to save while another process holds the lock, and leaves its 
     const lock = join(store.home, ".lock");
     yield* fs.writeFileString(lock, "4242@elsewhere token\n");
 
-    const error = yield* store.save({ ...state, global_bindings: [] }, state).pipe(Effect.flip);
+    const error = yield* store.save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "LibraryBusy");
     assert.strictEqual(yield* fs.readFileString(lock), "4242@elsewhere token\n");
@@ -204,7 +192,7 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
       Effect.provideService(FileSystem.FileSystem, gatedFs),
     );
     const base = yield* store.load;
-    const next = { ...base, global_bindings: [] };
+    const next = { ...base, enabled: [] };
     let child: Fiber.Fiber<void, unknown> | undefined;
     const owner = yield* withLibraryWriterLock(
       home,

@@ -117,8 +117,11 @@ it.effect(
       const f = yield* fixture;
       const state = yield* f.seed(registrySource);
       yield* f.sync();
-      assert.deepStrictEqual((yield* f.load(f.freshHome)).retained_copies, state.retained_copies);
-      const digest = state.retained_copies[0]!.digest;
+      assert.deepStrictEqual(
+        (yield* f.load(f.freshHome)).collection_versions,
+        state.collection_versions,
+      );
+      const digest = state.collection_versions[0]!.digest;
       assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
       for (const [path, bytes] of Object.entries(f.files))
         assert.strictEqual(yield* f.fs.readFileString(join(f.root(digest), path)), bytes);
@@ -131,15 +134,7 @@ it.effect(
           yield* store.save(
             {
               ...restored,
-              global_bindings: [
-                {
-                  scope: { kind: "global" },
-                  entries: restored.skills.map((skill) => ({
-                    kind: "skill" as const,
-                    skill_id: skill.skill_id,
-                  })),
-                },
-              ],
+              enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
             },
             restored,
           );
@@ -171,7 +166,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     yield* f.repack;
     const state = yield* f.seed(registrySource);
     yield* f.sync();
-    const digest = state.retained_copies[0]!.digest;
+    const digest = state.collection_versions[0]!.digest;
     assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "README.md")));
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "skills/.gitkeep")));
@@ -192,7 +187,7 @@ it.effect("changed declared source bytes fail before saving a fresh Library", ()
     const error = yield* f.sync().pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
-      assert.strictEqual(error.digest, state.retained_copies[0]!.digest);
+      assert.strictEqual(error.digest, state.collection_versions[0]!.digest);
       assert.include(error.detail, "source returned");
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
@@ -265,7 +260,7 @@ it.effect.each(["git", "github"] as const)(
         ),
       );
       yield* f.sync().pipe(Effect.provide(localGit));
-      const digest = state.retained_copies[0]!.digest;
+      const digest = state.collection_versions[0]!.digest;
       assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.root(digest), "skit.json")),

@@ -89,7 +89,7 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
 export const makeLibrarySkillInvocationReader = Effect.fn("Library.skillInvocationReader")(
   function* (state: LibraryState, originalsPath: string) {
     const hashes = yield* Cache.make({
-      capacity: Math.max(1, state.retained_copies.length + state.skills.length),
+      capacity: Math.max(1, state.collection_versions.length + state.skills.length),
       lookup: originalTreeHash,
     });
     return (skill: Skill) =>

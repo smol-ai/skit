@@ -7,8 +7,8 @@ import {
   inspectOwnershipMarker,
   LibraryStore,
   libraryStateRevision,
-  bindingSkillIds,
-  scopeBinding,
+  enabledAt,
+  enabledSkillIds,
   InvalidLibraryState,
   SkillsDirectoryNotWritable,
   skillUsageLayer,
@@ -109,20 +109,10 @@ it.effect("global enablement changes the device choice without changing account 
             store.save(
               {
                 ...state,
-                global_bindings: [
-                  {
-                    scope: { kind: "global" },
-                    entries: [
-                      {
-                        kind: "skill",
-                        skill_id: state.skills.find((skill) => skill.name === "beta")!.skill_id,
-                      },
-                    ],
-                  },
-                ],
+                enabled: [{ skill: state.skills.find((skill) => skill.name === "beta")!.skill_id }],
                 device_skill_selection: {
                   mode: "choose",
-                  binding: { scope: { kind: "global" }, entries: [] },
+                  enabled: [],
                 },
               },
               state,
@@ -131,11 +121,11 @@ it.effect("global enablement changes the device choice without changing account 
         ),
       ),
     );
-    const account = (yield* f.home.durable).global_bindings;
+    const account = (yield* f.home.durable).enabled;
     const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.bindings));
     yield* f.home.owned(applySetEnabledPlan(plan));
     const after = yield* f.home.durable;
-    assert.deepStrictEqual(after.global_bindings, account);
+    assert.deepStrictEqual(after.enabled, account);
     assert.strictEqual(after.device_skill_selection?.mode, "choose");
     assert.isTrue(yield* f.fs.exists(join(f.destination, "alpha", "SKILL.md")));
     assert.isFalse(yield* f.fs.exists(join(f.destination, "beta")));
@@ -157,18 +147,13 @@ it.effect.each(["follows-collection", "empty"] as const)(
               store.save(
                 {
                   ...state,
-                  global_bindings: [
-                    {
-                      scope: { kind: "global" },
-                      entries:
-                        accountBinding === "follows-collection"
-                          ? [{ kind: "collection", collection_id: collection.collection_id }]
-                          : [],
-                    },
-                  ],
+                  enabled:
+                    accountBinding === "follows-collection"
+                      ? [{ collection: collection.collection_id }]
+                      : [],
                   device_skill_selection: {
                     mode: "choose",
-                    binding: { scope: { kind: "global" }, entries: [] },
+                    enabled: [],
                   },
                 },
                 state,
@@ -181,7 +166,7 @@ it.effect.each(["follows-collection", "empty"] as const)(
         planSetEnabled([{ ...f.request, selectedSkills: ["alpha", "beta"] }], f.home.bindings),
       );
       yield* f.home.owned(applySetEnabledPlan(enabled));
-      const account = (yield* f.home.durable).global_bindings;
+      const account = (yield* f.home.durable).enabled;
       const selection = yield* f.home.owned(openSetEnabledSession());
       const before = yield* f.fs.readFileString(f.home.statePath);
       const plan = yield* f.home.owned(
@@ -196,19 +181,16 @@ it.effect.each(["follows-collection", "empty"] as const)(
         ),
       );
       assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
-      assert.strictEqual(plan.changes[0]?.bindings[0]?.entries.length, 1);
-      assert.strictEqual(plan.changes[1]?.bindings[0]?.entries.length, 0);
+      assert.strictEqual(plan.changes[0]?.enabled.length, 1);
+      assert.strictEqual(plan.changes[1]?.enabled.length, 0);
       const outcomes = yield* f.home.owned(applySetEnabledPlan(plan));
-      assert.deepStrictEqual(outcomes[0]?.value.bindings, plan.changes[0]?.bindings);
-      assert.deepStrictEqual(outcomes[1]?.value.bindings, []);
+      assert.deepStrictEqual(outcomes[0]?.value.enabled, plan.changes[0]?.enabled);
+      assert.deepStrictEqual(outcomes[1]?.value.enabled, []);
       const after = yield* f.home.durable;
-      assert.deepStrictEqual(
-        after.global_bindings,
-        accountBinding === "follows-collection" ? account : [],
-      );
+      assert.deepStrictEqual(after.enabled, accountBinding === "follows-collection" ? account : []);
       assert.deepStrictEqual(after.device_skill_selection, {
         mode: "choose",
-        binding: { scope: { kind: "global" }, entries: [] },
+        enabled: [],
       });
       assert.isFalse(yield* f.fs.exists(join(f.destination, "alpha")));
       assert.isFalse(yield* f.fs.exists(join(f.destination, "beta")));
@@ -228,15 +210,9 @@ it.effect("retrying an already selected device Skill still checks unmanaged copi
                 ...state,
                 device_skill_selection: {
                   mode: "choose",
-                  binding: {
-                    scope: { kind: "global" },
-                    entries: [
-                      {
-                        kind: "skill",
-                        skill_id: state.skills.find((skill) => skill.name === "alpha")!.skill_id,
-                      },
-                    ],
-                  },
+                  enabled: [
+                    { skill: state.skills.find((skill) => skill.name === "alpha")!.skill_id },
+                  ],
                 },
               },
               state,
@@ -298,7 +274,9 @@ it.effect("refuses a plan when the Library changed during interactive selection"
       writingTo(
         f.home.home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) => store.save({ ...state, custodyIssues: [] }, state)),
+          Effect.flatMap(store.load, (state) =>
+            store.save({ ...state, ownershipIssues: [] }, state),
+          ),
         ),
       ),
     );
@@ -315,7 +293,7 @@ it.effect("refuses a plan when the Library changed during interactive selection"
     );
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SetEnabledStale");
-    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -331,7 +309,7 @@ it.effect("rechecks duplicates created after preview before saving Binding inten
     yield* f.fs.writeFileString(join(nativeCopy, "SKILL.md"), "native copy\n");
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "InstalledSkillWouldDuplicate");
-    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
     assert.strictEqual(yield* f.fs.readFileString(join(nativeCopy, "SKILL.md")), "native copy\n");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -346,7 +324,7 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
       .pipe(withSandboxDenying(join(f.root, "account", ".agents")), Effect.flip);
     assert.instanceOf(error, SkillsDirectoryNotWritable);
     assert.strictEqual(error.root, f.destination);
-    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -358,7 +336,7 @@ it.effect("refuses to apply a prepared plan to another Library", () =>
     const other = yield* libraryHome({ home: join(f.root, "other-library") });
     const error = yield* other.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SetEnabledStale");
-    assert.deepStrictEqual((yield* other.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* other.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -430,13 +408,8 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
     const settled = yield* f.home.durable;
     const beta = selection.view.collections[0]?.members.find((member) => member.name === "beta");
     assert.ok(beta);
-    assert.deepStrictEqual(settled.global_bindings, []);
-    assert.deepStrictEqual(settled.local_bindings[0]?.entries, [
-      {
-        kind: "skill",
-        skill_id: beta.id,
-      },
-    ]);
+    assert.deepStrictEqual(settled.enabled, []);
+    assert.deepStrictEqual(settled.repositories[0]?.enabled, [{ skill: beta.id }]);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -449,7 +422,9 @@ it.effect("a TUI proposal keeps the revision displayed before the proposal was m
       writingTo(
         f.home.home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) => store.save({ ...state, custodyIssues: [] }, state)),
+          Effect.flatMap(store.load, (state) =>
+            store.save({ ...state, ownershipIssues: [] }, state),
+          ),
         ),
       ),
     );
@@ -490,10 +465,10 @@ it.effect("batch previews accumulate same-scope disables without restoring earli
       ),
     );
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
-    assert.strictEqual(plan.changes[0]?.bindings[0]?.entries.length, 1);
-    assert.strictEqual(plan.changes[1]?.bindings[0]?.entries.length, 0);
+    assert.strictEqual(plan.changes[0]?.enabled.length, 1);
+    assert.strictEqual(plan.changes[1]?.enabled.length, 0);
     yield* f.home.owned(applySetEnabledPlan(plan));
-    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -645,7 +620,7 @@ it.effect("cleanup uses one captured Library and an injected usage scanner", () 
     assert.strictEqual(loads, 1);
     assert.strictEqual(plan.changes.length, 1);
     yield* f.home.owned(applySetEnabledPlan(plan));
-    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -749,7 +724,7 @@ it.effect(
       );
       yield* f.home.owned(applySetEnabledPlan(enable));
       const state = yield* f.home.durable;
-      const local = state.projections.find(
+      const local = state.installed_skills.find(
         (p) =>
           p.path !== join(f.destination, "alpha") &&
           p.skill_id === state.skills.find((s) => s.name === "alpha")?.skill_id,
@@ -829,13 +804,9 @@ it.effect(
       );
       const beta = (yield* f.home.durable).skills.find((s) => s.name === "beta");
       assert.ok(beta);
-      assert.deepStrictEqual(plan.changes[1]?.bindings[0]?.entries, [
-        { kind: "skill", skill_id: beta.skill_id },
-      ]);
+      assert.deepStrictEqual(plan.changes[1]?.enabled, [{ skill: beta.skill_id }]);
       yield* f.home.owned(applySetEnabledPlan(plan));
-      assert.deepStrictEqual((yield* f.home.durable).global_bindings[0]?.entries, [
-        { kind: "skill", skill_id: beta.skill_id },
-      ]);
+      assert.deepStrictEqual((yield* f.home.durable).enabled, [{ skill: beta.skill_id }]);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "gamma")), false);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), true);
@@ -914,7 +885,7 @@ it.effect("a different copy at the destination is reported, and disabling leaves
     );
     yield* f.home.owned(applySetEnabledPlan(disable));
     assert.strictEqual(yield* f.fs.readFileString(theirs), "# alpha, edited by hand\n");
-    assert.deepStrictEqual((yield* f.home.durable).projections, []);
+    assert.deepStrictEqual((yield* f.home.durable).installed_skills, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -933,7 +904,7 @@ it.effect("allow-duplicate refuses to replace the user's link at the destination
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "InstalledSkillWouldReplaceLink");
-    assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.readLink(join(f.destination, "alpha")), elsewhere);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -999,9 +970,9 @@ it.effect(
       assert.instanceOf(failed, SetEnabledIncomplete);
       assert.strictEqual(failed.code, "OPERATION_FAILED");
       const state = yield* f.home.durable;
-      const binding = scopeBinding(state, { kind: "global" });
+      const binding = enabledAt(state, { kind: "global" });
       assert.ok(binding);
-      assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+      assert.strictEqual(enabledSkillIds(state, binding.enabled).length, 1);
       assert.strictEqual(failed.results[0]?.application.intent, "saved");
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
       assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
@@ -1069,9 +1040,9 @@ it.effect(
       assert.instanceOf(failed, SetEnabledIncomplete);
       assert.strictEqual(failed.code, "CONFLICT");
       const state = yield* f.home.durable;
-      const binding = scopeBinding(state, { kind: "global" });
+      const binding = enabledAt(state, { kind: "global" });
       assert.ok(binding);
-      assert.deepStrictEqual(bindingSkillIds(state, binding), []);
+      assert.deepStrictEqual(enabledSkillIds(state, binding.enabled), []);
       assert.strictEqual(failed.results[0]?.application.intent, "saved");
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
       assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
@@ -1173,10 +1144,10 @@ it.effect("a batch retains earlier results and stops after an accepted scope can
     );
     assert.strictEqual(yield* f.fs.exists(target), false);
     const state = yield* f.home.durable;
-    assert.strictEqual(state.local_bindings.length, 1);
-    const binding = scopeBinding(state, { kind: "global" });
+    assert.strictEqual(state.repositories.length, 1);
+    const binding = enabledAt(state, { kind: "global" });
     assert.ok(binding);
-    assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+    assert.strictEqual(enabledSkillIds(state, binding.enabled).length, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -1207,9 +1178,9 @@ it.effect.each(["defect", "interruption"] as const)(
         assert.isFalse(Cause.hasFails(exit.cause));
       }
       const state = yield* f.home.durable;
-      const binding = scopeBinding(state, { kind: "global" });
+      const binding = enabledAt(state, { kind: "global" });
       assert.ok(binding);
-      assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+      assert.strictEqual(enabledSkillIds(state, binding.enabled).length, 1);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -1245,7 +1216,7 @@ it.effect(
       assert.ok(result);
       assert.strictEqual(result.contract, "enable");
       if (result.contract !== "enable") return;
-      assert.strictEqual(result.schema, "skit.enable.v9");
+      assert.strictEqual(result.schema, "skit.enable.v10");
       assert.strictEqual(result.exitCode, 12);
       assert.strictEqual(result.data.application.status, "incomplete");
       assert.strictEqual(result.data.application.intent, "saved");
@@ -1324,9 +1295,9 @@ it.effect(
       );
       assert.strictEqual(failed.results[0]?.application.status, "complete");
       const state = yield* f.home.durable;
-      const binding = scopeBinding(state, { kind: "global" });
+      const binding = enabledAt(state, { kind: "global" });
       assert.ok(binding);
-      assert.strictEqual(bindingSkillIds(state, binding).length, 1);
+      assert.strictEqual(enabledSkillIds(state, binding.enabled).length, 1);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
       assert.strictEqual(
         yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
@@ -1357,7 +1328,7 @@ it.effect(
                       // Simulate an external non-cooperating writer after this operation's first commit.
                       yield* f.fs.writeFileString(
                         store.statePath,
-                        JSON.stringify({ ...next, custodyIssues: [] }),
+                        JSON.stringify({ ...next, ownershipIssues: [] }),
                       );
                     }
                   }),
@@ -1370,13 +1341,13 @@ it.effect(
       assert.strictEqual(failed.reason, "reconciliation");
       assert.strictEqual(failed.code, "CONFLICT");
       const current = yield* f.home.durable;
-      assert.deepStrictEqual(current.custodyIssues, []);
-      assert.deepStrictEqual(current.projections, []);
+      assert.deepStrictEqual(current.ownershipIssues, []);
+      assert.deepStrictEqual(current.installed_skills, []);
       assert.notStrictEqual(failed.results[0]?.application.revision, libraryStateRevision(current));
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
-      const binding = scopeBinding(current, { kind: "global" });
+      const binding = enabledAt(current, { kind: "global" });
       assert.ok(binding);
-      assert.strictEqual(bindingSkillIds(current, binding).length, 1);
+      assert.strictEqual(enabledSkillIds(current, binding.enabled).length, 1);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

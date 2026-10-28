@@ -1,9 +1,4 @@
-import {
-  DeviceBinding,
-  InvocationPolicy,
-  InstallDestination,
-  RepositoryBinding,
-} from "@smolai/skit-core";
+import { Enabled, InstallScope, InvocationPolicy, InstallDestination } from "@smolai/skit-core";
 import { Schema } from "effect";
 import { DuplicateCopy, DuplicateScanError } from "../../projection/duplicates.js";
 
@@ -11,21 +6,15 @@ import { DuplicateCopy, DuplicateScanError } from "../../projection/duplicates.j
 // wire view: Effect 4's JSON Schema exporter otherwise opens records whose custom
 // TypeID key check cannot be represented, dropping the value constraint as well.
 const invocationPolicies = Schema.optionalKey(Schema.Record(Schema.String, InvocationPolicy));
-const deviceBindingOutput = DeviceBinding.pipe(
-  Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
-);
-const repositoryBindingOutput = RepositoryBinding.pipe(
-  Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
-);
 
 export const SetEnabledChange = Schema.Struct({
   subject_id: Schema.String,
   skills: Schema.Array(Schema.String),
-  scope: Schema.Union([DeviceBinding.fields.scope, RepositoryBinding.fields.scope]),
-  enabled: Schema.Boolean,
+  scope: InstallScope,
+  action: Schema.Literals(["enable", "disable"]),
   invocation: Schema.optionalKey(Schema.String),
   changed: Schema.Boolean,
-  /** An unchanged Binding whose copies are missing, edited, or left behind and will be repaired. */
+  /** Nothing to save at this scope, but copies are missing, edited, or left behind and will be repaired. */
   repair: Schema.optionalKey(Schema.Boolean),
   shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /**
@@ -37,7 +26,9 @@ export const SetEnabledChange = Schema.Struct({
     Schema.Array(Schema.Struct({ target: InstallDestination, path: Schema.String })),
   ),
   warnings: Schema.optionalKey(Schema.Array(DuplicateScanError)),
-  bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
+  /** Everything enabled at this scope after the change. */
+  enabled: Schema.Array(Enabled),
+  invocation_policies: invocationPolicies,
 });
 export type SetEnabledChange = typeof SetEnabledChange.Type;
 

@@ -30,7 +30,7 @@ export interface SkillsShUpdateMember {
 
 const sourceUrl = (
   subject: LibrarySubject,
-  observations: readonly LibraryState["acquisitions"][number]["observations"][number][],
+  observations: readonly LibraryState["imports"][number]["lock_file_entries"][number][],
 ) => {
   const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
   const source = upstream?.source_identity;
@@ -42,15 +42,15 @@ const sourceUrl = (
 
 export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function* (
   subject: LibrarySubject,
-  acquisition: LibraryState["acquisitions"][number] | undefined,
-  retainedCopy: LibraryState["retained_copies"][number] | undefined,
+  acquisition: LibraryState["imports"][number] | undefined,
+  retainedCopy: LibraryState["collection_versions"][number] | undefined,
 ) {
   if (!acquisition || !retainedCopy) return undefined;
   const checkedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const store = yield* LibraryStore;
   const observations = [
     ...new Map(
-      acquisition.observations.flatMap((observation) =>
+      acquisition.lock_file_entries.flatMap((observation) =>
         observation.type === "skills.sh-lock"
           ? [
               [

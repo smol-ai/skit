@@ -5,8 +5,7 @@ import {
   leftoverSkills,
   uninstallSkills,
   withLibraryWriter,
-  type DeviceBinding,
-  type RepositoryBinding,
+  type EnabledAtScope,
   type InstallDestination,
   type ManageApproval,
   type SkillId,
@@ -24,13 +23,13 @@ export interface UpdateInstalledSkillsOptions {
   /** A target's global root, or undefined when it is inactive; overrides `roots` for routing. */
   readonly rootFor?: (target: InstallDestination) => string | undefined;
   readonly variantsPath: string;
-  readonly onlyBindings?: readonly (DeviceBinding | RepositoryBinding)[];
+  readonly onlyScopes?: readonly EnabledAtScope[];
   readonly manage?: ManageApproval;
   /** Manage unmanaged copies that already hold exactly the bytes SKIT would install. */
   readonly manageIdentical?: boolean;
   readonly restoreNativeDeletedSkills?: readonly string[];
   /** Sync also repairs repository copies at their existing device-local roots. */
-  readonly includeRepositoryBindings?: boolean;
+  readonly includeRepositories?: boolean;
   readonly onlySkillIds?: readonly SkillId[];
 }
 
@@ -56,35 +55,32 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   const retired = yield* uninstallSkills(
     leftoverSkills(state, {
       activeDestinations: activeTargets,
-      enabled: intent.bindings,
-      inactiveOnly: options.onlyBindings !== undefined,
+      enabled: intent.globals[0]?.enabled ?? [],
+      inactiveOnly: options.onlyScopes !== undefined,
       ...(options.onlySkillIds === undefined ? {} : { onlySkillIds: options.onlySkillIds }),
     }),
     { variantsPath: options.variantsPath, activeDestinations: activeTargets },
   );
 
   let projected = 0;
-  const bindings = options.includeRepositoryBindings
-    ? intent.allBindings
-    : (options.onlyBindings ?? intent.allBindings);
-  const outcomes: Array<{ target: InstallDestination; scope: (typeof bindings)[number]["scope"] }> =
-    [];
-  for (const binding of bindings) {
-    const repositoryBinding =
-      binding.scope.kind === "repository" ? { ...binding, scope: binding.scope } : undefined;
+  const lists = options.includeRepositories
+    ? intent.byScope
+    : (options.onlyScopes ?? intent.byScope);
+  const outcomes: Array<{ target: InstallDestination; scope: EnabledAtScope["scope"] }> = [];
+  for (const { scope } of lists) {
     for (const target of activeTargets) {
       const root =
-        binding.scope.kind === "global" && options.rootFor !== undefined
+        scope.kind === "global" && options.rootFor !== undefined
           ? options.rootFor(target)
           : options.roots === undefined
-            ? options.includeRepositoryBindings && repositoryBinding !== undefined
-              ? existingRepositorySkillsDirectory(state, repositoryBinding, target)
+            ? options.includeRepositories && scope.kind === "repository"
+              ? existingRepositorySkillsDirectory(state, scope.root, target)
               : undefined
-            : skillsDirectoryFor(target, binding.scope, options.roots);
+            : skillsDirectoryFor(target, scope, options.roots);
       if (root === undefined) continue;
       projected += yield* installEnabledSkills({
         target,
-        scope: binding.scope,
+        scope,
         root,
         variantsPath: options.variantsPath,
         restoreNativeDeletedSkills: options.restoreNativeDeletedSkills,
@@ -92,7 +88,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
         ...(options.manage === undefined ? {} : { manage: options.manage }),
         ...(options.manageIdentical ? { manageIdentical: true } : {}),
       });
-      outcomes.push({ target, scope: binding.scope });
+      outcomes.push({ target, scope });
     }
   }
   return { projected, retired, outcomes };

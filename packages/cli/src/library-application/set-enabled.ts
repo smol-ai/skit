@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import {
-  bindingSkillIds,
+  enabledSkillIds,
   skillsToCheckForDuplicates,
   LinkStat,
   deterministicTreeHash,
@@ -8,8 +8,8 @@ import {
   inspectOwnershipMarker,
   installedSkillName,
   type InstallDestination,
-  replaceScopeBinding,
-  pruneEmptyBindings,
+  setEnabledAt,
+  pruneEmptyEnabled,
   lastSavedLibraryState,
   LibraryStore,
   libraryStateRevision,
@@ -124,8 +124,11 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
   configuration: SetEnabledConfiguration,
   targets: readonly InstallDestination[],
 ) {
-  const { plan, skillIds, newlyEnabledSkills } = yield* calculateSetEnabled(state, options);
-  const { scope, bindings, changed } = plan;
+  const { plan, skillIds, newlyEnabledSkills, hasList } = yield* calculateSetEnabled(
+    state,
+    options,
+  );
+  const { scope, changed } = plan;
   const warnings: DuplicateScanError[] = [];
   const namesToCheck = skillsToCheckForDuplicates(
     state,
@@ -154,15 +157,15 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
       }
     }
   }
-  // An unchanged Binding still repairs its copies when they are missing, edited, or left behind.
+  // An unchanged scope still repairs its copies when they are missing, edited, or left behind.
   let repair = false;
   if (!changed) {
     const fs = yield* FileSystem.FileSystem;
-    const bound = bindings.map((binding) => new Set(bindingSkillIds(state, binding)));
+    const bound = new Set(enabledSkillIds(state, plan.enabled));
     for (const target of targets) {
       const root = skillsDirectoryFor(target, scope, configuration);
-      const projections = state.projections.filter(
-        (projection) => projection.root === root && projection.target === target,
+      const projections = state.installed_skills.filter(
+        (projection) => projection.root === root && projection.destination === target,
       );
       if (options.enabled)
         for (const skillId of skillIds) {
@@ -173,10 +176,9 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
             !(yield* fs.exists(projection.path)) ||
             (yield* deterministicTreeHash(projection.path)) !== projection.expected_digest;
         }
-      else if (bindings.length)
+      else if (hasList)
         for (const projection of projections)
-          if (!bound.some((ids) => ids.has(projection.skill_id)))
-            repair ||= yield* fs.exists(projection.path);
+          if (!bound.has(projection.skill_id)) repair ||= yield* fs.exists(projection.path);
     }
   }
   return {
@@ -207,8 +209,8 @@ const planRequests = Effect.fn("SetEnabled.planRequests")(function* (
   for (const request of captured) {
     const change = yield* planChange(projected, request, routing, targets);
     changes.push(change);
-    // Later previews see earlier intent at the same Scope, just as apply does.
-    for (const binding of change.bindings) projected = replaceScopeBinding(projected, binding);
+    // Later plans see earlier intent at the same scope, just as apply does.
+    if (change.changed) projected = setEnabledAt(projected, change.scope, change);
   }
   const plan: SetEnabledPlan = { [planType]: true, changes: structuredClone(changes) };
   preparedPlans.set(plan, {
@@ -261,7 +263,7 @@ export const planSetEnabled = Effect.fn("SetEnabled.plan")(function* (
   return yield* planRequests(yield* store.load, store.home, requests, configuration);
 });
 
-/** Authoritatively reload, commit Binding intent, then update installed skills to match it. */
+/** Authoritatively reload, save what is enabled, then update installed skills to match it. */
 const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   state: LibraryState,
   options: SetEnabledRequest,
@@ -282,7 +284,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const current = yield* store.load;
   if (libraryStateRevision(current) !== expectedRevision) return yield* stale();
   const calculated = yield* calculateSetEnabled(current, options);
-  const { plan, skillIds, newlyEnabledSkills } = calculated;
+  const { plan, skillIds, newlyEnabledSkills, hasList } = calculated;
   const warnings: DuplicateScanError[] = [];
   const namesToCheck = skillsToCheckForDuplicates(
     current,
@@ -348,8 +350,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
       });
   if (options.enabled) for (const root of roots) yield* ensureSkillsDirectoryWritable(root);
   if (plan.changed) {
-    let next = current;
-    for (const binding of plan.bindings) next = replaceScopeBinding(next, binding);
+    const next = setEnabledAt(current, plan.scope, plan);
     // Saving onto `current`, the previewed revision, makes the check above atomic.
     yield* store
       .save(next, current)
@@ -366,7 +367,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
             ? skillsDirectoryFor(target, plan.scope, configuration)
             : undefined,
         variantsPath: store.variantsPath,
-        onlyBindings: plan.bindings,
+        onlyScopes: hasList ? [plan] : [],
         restoreNativeDeletedSkills: options.enabled ? skillIds : [],
         ...(options.preserveUnselectedProjections ? { onlySkillIds: skillIds } : {}),
         ...(options.manage === undefined ? {} : { manage: options.manage }),
@@ -379,8 +380,8 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
       )
         return yield* stale();
       if (options.enabled) return settled;
-      // Empty Bindings are needed to retire copies; prune only after reconciliation.
-      const pruned = pruneEmptyBindings(settled);
+      // An empty list is needed to uninstall copies; prune only once they are updated.
+      const pruned = pruneEmptyEnabled(settled);
       if (pruned !== settled) yield* store.save(pruned, settled);
       return pruned;
     }),
@@ -388,13 +389,14 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const recorded = Result.isSuccess(reconciled)
     ? reconciled.success
     : ((yield* lastSavedLibraryState) ?? current);
-  const projections = recorded.projections.flatMap(({ target, root, path, status, skill_id }) =>
-    target !== "legacy" &&
-    skillIds.includes(skill_id) &&
-    activeTargets.includes(target) &&
-    root === skillsDirectoryFor(target, plan.scope, configuration)
-      ? [{ target, path, status }]
-      : [],
+  const projections = recorded.installed_skills.flatMap(
+    ({ destination, root, path, status, skill_id }) =>
+      destination !== "legacy" &&
+      skillIds.includes(skill_id) &&
+      activeTargets.includes(destination) &&
+      root === skillsDirectoryFor(destination, plan.scope, configuration)
+        ? [{ target: destination, path, status }]
+        : [],
   );
   const missing = options.enabled
     ? destinations.filter(
@@ -428,9 +430,6 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const classified = failure === undefined ? undefined : classifyFailure(failure);
   const value: SetEnabledResult = {
     ...plan,
-    bindings: options.enabled
-      ? plan.bindings
-      : plan.bindings.filter((binding) => binding.entries.length > 0),
     ...(repair ? { repair } : {}),
     ...(duplicates.length ? { shadows: duplicates } : {}),
     ...(warnings.length ? { warnings } : {}),

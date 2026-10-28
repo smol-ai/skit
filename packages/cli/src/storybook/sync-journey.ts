@@ -60,18 +60,10 @@ export const syncJourney = (failDownload: boolean) =>
         const state = yield* store.load;
         const bound = {
           ...state,
-          global_bindings: [
-            {
-              scope: { kind: "global" as const },
-              entries: state.skills.map((skill) => ({
-                kind: "skill" as const,
-                skill_id: skill.skill_id,
-              })),
-            },
-          ],
+          enabled: state.skills.map((skill) => ({ skill: skill.skill_id })),
         };
         const manifest = yield* libraryManifestFromLocalState(bound);
-        const archives = yield* Effect.forEach(state.retained_copies, (tree) =>
+        const archives = yield* Effect.forEach(state.collection_versions, (tree) =>
           captureSnapshotArchive(collectionVersionPath(store.originalsPath, tree.digest)),
         );
         return { manifest, archives };

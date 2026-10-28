@@ -256,9 +256,11 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const state = yield* store.load;
   const collectionIds = [
     ...new Set(
-      state.acquisitions
+      state.imports
         .filter((acquisition) =>
-          acquisition.observations.some((observation) => observation.type === "skills.sh-lock"),
+          acquisition.lock_file_entries.some(
+            (observation) => observation.type === "skills.sh-lock",
+          ),
         )
         .map((acquisition) => acquisition.collection_id),
     ),

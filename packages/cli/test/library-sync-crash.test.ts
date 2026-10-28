@@ -125,19 +125,11 @@ const enable =
   (skillId: string) =>
   (state: LibraryState): LibraryState => ({
     ...state,
-    global_bindings: [
-      {
-        scope: { kind: "global" },
-        entries: [
-          ...(state.global_bindings[0]?.entries ?? []),
-          { kind: "skill", skill_id: skillId as LibraryState["skills"][number]["skill_id"] },
-        ],
-        invocation_policies: {
-          ...state.global_bindings[0]?.invocation_policies,
-          [skillId]: "explicit",
-        },
-      },
-    ],
+    enabled: [...state.enabled, { skill: skillId as LibraryState["skills"][number]["skill_id"] }],
+    invocation_policies: {
+      ...state.invocation_policies,
+      [skillId]: "explicit",
+    },
   });
 
 it.effect("a merge keeps device-local invocation policies", () =>
@@ -154,7 +146,7 @@ it.effect("a merge keeps device-local invocation policies", () =>
     assert.strictEqual((yield* a.sync()).status, "merged");
     const merged = yield* a.state;
     assert.strictEqual(merged.collections.length, 2);
-    assert.deepStrictEqual(merged.global_bindings[0]?.invocation_policies, {
+    assert.deepStrictEqual(merged.invocation_policies, {
       [skillId]: "explicit",
     });
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -172,19 +164,9 @@ const furnished = Effect.fn("Test.furnishedHome")(function* ({
   yield* fs.makeDirectory(join(repository, ".agents", "skills"), { recursive: true });
   yield* a.edit((state) => ({
     ...state,
-    global_bindings: [
-      {
-        scope: { kind: "global" },
-        entries: [{ kind: "skill", skill_id: skill.skill_id }],
-        invocation_policies: { [skill.skill_id]: "explicit" },
-      },
-    ],
-    local_bindings: [
-      {
-        scope: { kind: "repository", root: repository },
-        entries: [{ kind: "skill", skill_id: skill.skill_id }],
-      },
-    ],
+    enabled: [{ skill: skill.skill_id }],
+    invocation_policies: { [skill.skill_id]: "explicit" },
+    repositories: [{ root: repository, enabled: [{ skill: skill.skill_id }] }],
     assessmentAcceptances: [
       {
         fingerprint: version.artifact_digest,
@@ -202,10 +184,10 @@ const furnished = Effect.fn("Test.furnishedHome")(function* ({
 });
 
 const deviceFields = (state: LibraryState) => ({
-  policies: state.global_bindings[0]?.invocation_policies,
-  local_bindings: state.local_bindings,
+  policies: state.invocation_policies,
+  repositories: state.repositories,
   assessmentAcceptances: state.assessmentAcceptances,
-  projections: state.projections,
+  projections: state.installed_skills,
 });
 
 it.effect("every declared device field survives a push, a merge and a clean sync", () =>
@@ -214,14 +196,14 @@ it.effect("every declared device field survives a push, a merge and a clean sync
     const { a, b, remote } = homes;
     yield* furnished(homes);
     const before = yield* a.state;
-    assert.strictEqual(before.projections.length, 2);
+    assert.strictEqual(before.installed_skills.length, 2);
 
     assert.strictEqual((yield* a.sync()).status, "pushed");
     const pushed = yield* a.state;
     assert.deepStrictEqual(deviceFields(pushed), deviceFields(before));
     assert.deepStrictEqual(
-      [pushed.collections, pushed.skills, pushed.acquisitions, pushed.retained_copies],
-      [before.collections, before.skills, before.acquisitions, before.retained_copies],
+      [pushed.collections, pushed.skills, pushed.imports, pushed.collection_versions],
+      [before.collections, before.skills, before.imports, before.collection_versions],
     );
     assert.strictEqual(pushed.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
 
@@ -231,8 +213,8 @@ it.effect("every declared device field survives a push, a merge and a clean sync
     assert.strictEqual((yield* a.sync()).status, "merged");
     const merged = yield* a.state;
     assert.deepStrictEqual(deviceFields(merged), deviceFields(before));
-    assert.includeDeepMembers(merged.acquisitions, before.acquisitions);
-    assert.includeDeepMembers(merged.retained_copies, before.retained_copies);
+    assert.includeDeepMembers(merged.imports, before.imports);
+    assert.includeDeepMembers(merged.collection_versions, before.collection_versions);
     assert.strictEqual(merged.collections.length, 2);
     assert.strictEqual(merged.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
 
@@ -376,7 +358,7 @@ for (const removalSyncsFirst of [true, false])
         for (const device of [a, b]) {
           const state = yield* device.state;
           assert.isFalse(state.collections.some((item) => item.collection_id === removed));
-          assert.deepStrictEqual(state.global_bindings, []);
+          assert.deepStrictEqual(state.enabled, []);
           assert.strictEqual((yield* device.sync()).status, "clean");
         }
         assert.isFalse(

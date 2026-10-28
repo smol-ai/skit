@@ -156,7 +156,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
     const entry = yield* readCodexSkills(executable, cwd, undefined, true);
     const fs = yield* FileSystem.FileSystem;
     const managed = new Set(
-      yield* Effect.forEach(state.projections, (projection) =>
+      yield* Effect.forEach(state.installed_skills, (projection) =>
         fs.realPath(projection.path).pipe(Effect.orElseSucceed(() => resolve(projection.path))),
       ),
     );

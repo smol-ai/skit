@@ -11,7 +11,7 @@ import {
   type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
-import { setLibraryBindings, previewTestBindings } from "./helpers/binding-changes.js";
+import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
 import { calculateSetEnabled } from "../src/workflows/library/set-enabled-request.js";
 import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
 import { planRemove } from "../src/workflows/library/remove.js";
@@ -142,7 +142,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       }).pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
-    const planned = yield* setLibraryBindings({
+    const planned = yield* setLibraryEnabled({
       ...base,
       invocation,
     }).pipe(Effect.provide(layer));
@@ -150,15 +150,15 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.deepEqual(planned.value.skills, ["review"]);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);
     const beforeApply = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.deepEqual(beforeApply?.global_bindings, []);
+    assert.deepEqual(beforeApply?.enabled, []);
 
-    const previewed = yield* previewTestBindings({ ...base, invocation }).pipe(
+    const previewed = yield* planLibraryEnabled({ ...base, invocation }).pipe(
       Effect.provide(layer),
     );
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        store.save({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
+        store.save({ ...state, ownershipIssues: state.ownershipIssues ?? [] }, state),
       ).pipe(Effect.provide(layer)),
     );
     const stale = yield* applySetEnabledPlan(previewed).pipe(Effect.provide(layer), Effect.flip);
@@ -174,7 +174,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       Effect.gen(function* () {
         const current = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
         assert.ok(current);
-        return yield* setLibraryBindings({
+        return yield* setLibraryEnabled({
           ...base,
           invocation: { ...invocation, enabled, dryRun: false },
         }).pipe(Effect.provide(layer));
@@ -190,9 +190,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const retained = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     const reviewSkillId = retained?.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewSkillId);
-    assert.deepEqual(retained?.global_bindings[0]?.entries, [
-      { kind: "skill", skill_id: reviewSkillId },
-    ]);
+    assert.deepEqual(retained?.enabled, [{ skill: reviewSkillId }]);
     const repeated = yield* writingTo(home, apply(true));
     assert.strictEqual(repeated.value.changed, false);
     assert.strictEqual(repeated.value.repair, undefined);
@@ -208,7 +206,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(disabled.value.changed, true);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);
     const final = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.deepEqual(final?.global_bindings, []);
+    assert.deepEqual(final?.enabled, []);
     assert.strictEqual(final?.skills.find((skill) => skill.name === "review")?.versions.length, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -255,7 +253,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
       Effect.gen(function* () {
         yield* writingTo(
           home,
-          setLibraryBindings({
+          setLibraryEnabled({
             query,
             all,
             roots: {
@@ -272,20 +270,18 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
           }).pipe(Effect.provide(layer)),
         );
         const settled = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-        return settled.global_bindings[0]?.entries ?? [];
+        return settled.enabled ?? [];
       });
 
     assert.deepStrictEqual(yield* set(skillId("review"), true, false), [
-      { kind: "skill", skill_id: skillId("review") },
+      { skill: skillId("review") },
     ]);
     // `--all` follows the Collection and replaces its individual entries.
-    assert.deepStrictEqual(yield* set(collectionId, true, true), [
-      { kind: "collection", collection_id: collectionId },
-    ]);
+    assert.deepStrictEqual(yield* set(collectionId, true, true), [{ collection: collectionId }]);
     // Disabling one Skill keeps the Collection's other current Skills individually.
     assert.deepStrictEqual(yield* set(skillId("test"), false, false), [
-      { kind: "skill", skill_id: skillId("review") },
-      { kind: "skill", skill_id: skillId("docs") },
+      { skill: skillId("review") },
+      { skill: skillId("docs") },
     ]);
     assert.deepStrictEqual((yield* fs.readDirectory(roots.codexRoot)).sort(), ["docs", "review"]);
     // Disabling the whole Collection removes every entry for it.

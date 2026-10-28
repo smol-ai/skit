@@ -3,7 +3,7 @@ const conditionHeadlines: Readonly<Record<string, string>> = {
   DANGLING_SYMLINK: "Dangling symlink",
   INVALID_OWNERSHIP_MARKER: "Invalid SKIT ownership marker",
   MISSING_ROOT: "Harness skills directory is absent",
-  ORPHANED_PROJECTION_CLAIM: "Skill copy claims an unknown Library entry",
+  ORPHANED_OWNERSHIP_MARKER: "Skill copy claims an unknown Library entry",
   PROJECTION_CONFLICT: "Local skill copy conflicts with the Library",
   PROJECTION_DRIFT: "Local skill copy differs from the Library",
   UNREADABLE_PATH: "Harness skills directory could not be read",

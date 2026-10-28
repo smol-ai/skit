@@ -4,9 +4,8 @@ import { isAbsolute, resolve } from "node:path";
 import { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
   Import,
-  Binding,
-  BindingEntry,
   Collection,
+  Enabled,
   currentLibraryManifest,
   LibraryManifest,
   CollectionVersion,
@@ -22,24 +21,23 @@ export const AbsoluteDevicePath = Schema.String.check(
 );
 export type AbsoluteDevicePath = typeof AbsoluteDevicePath.Type;
 
-export const DeviceBinding = Schema.Struct({
-  ...Binding.fields,
-  invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
-});
-export interface DeviceBinding extends Schema.Schema.Type<typeof DeviceBinding> {}
+/** How agents may invoke each enabled skill, when the user overrode what its author declared. */
+export const InvocationPolicies = Schema.Record(SkillId, InvocationPolicy);
+export type InvocationPolicies = typeof InvocationPolicies.Type;
 
-export const RepositoryBinding = Schema.Struct({
-  scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
-  entries: Schema.Array(BindingEntry),
-  invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
+/** What is enabled in one repository folder. It stays on this device; sync never sends it. */
+export const Repository = Schema.Struct({
+  root: AbsoluteDevicePath,
+  enabled: Schema.Array(Enabled),
+  invocation_policies: Schema.optionalKey(InvocationPolicies),
 });
-export interface RepositoryBinding extends Schema.Schema.Type<typeof RepositoryBinding> {}
+export interface Repository extends Schema.Schema.Type<typeof Repository> {}
 
 export const InstalledSkill = Schema.Struct({
-  projection_id: InstalledSkillId,
+  installed_skill_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  target: RecordedInstallDestination,
+  destination: RecordedInstallDestination,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
   expected_digest: Digest,
@@ -47,7 +45,7 @@ export const InstalledSkill = Schema.Struct({
   status: Schema.mutableKey(HarnessInstallStatus),
   suppression_reason: Schema.mutableKey(Schema.optional(Schema.Literal("native_delete"))),
   suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),
-  projected_at: Schema.String,
+  installed_at: Schema.String,
 });
 export interface InstalledSkill extends Schema.Schema.Type<typeof InstalledSkill> {}
 
@@ -63,14 +61,18 @@ export const SyncAncestry = Schema.Struct({
 });
 export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
 
-/** Account bindings remain portable; a device may independently choose what it installs. */
+/** What the account enables travels with sync; a device may instead choose what it installs. */
 export const DeviceSkillSelection = Schema.Union([
   Schema.Struct({ mode: Schema.Literal("follow-account") }),
-  Schema.Struct({ mode: Schema.Literal("choose"), binding: DeviceBinding }),
+  Schema.Struct({
+    mode: Schema.Literal("choose"),
+    enabled: Schema.Array(Enabled),
+    invocation_policies: Schema.optionalKey(InvocationPolicies),
+  }),
 ]);
 export type DeviceSkillSelection = typeof DeviceSkillSelection.Type;
 
-export const CURRENT_LIBRARY_STATE_VERSION = 9 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 10 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
@@ -80,32 +82,33 @@ export const LibraryState = Schema.Struct({
   pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
   collections: Schema.mutable(Schema.Array(Collection)),
   skills: Schema.mutable(Schema.Array(Skill)),
-  retained_copies: Schema.mutable(Schema.Array(CollectionVersion)),
-  acquisitions: Schema.mutable(Schema.Array(Import)),
-  global_bindings: Schema.mutable(Schema.Array(DeviceBinding)),
-  local_bindings: Schema.mutable(Schema.Array(RepositoryBinding)),
-  projections: Schema.mutable(Schema.Array(InstalledSkill)),
+  collection_versions: Schema.mutable(Schema.Array(CollectionVersion)),
+  imports: Schema.mutable(Schema.Array(Import)),
+  /** What is enabled for every project: the account's selection, as this device last saw it. */
+  enabled: Schema.mutable(Schema.Array(Enabled)),
+  invocation_policies: Schema.optionalKey(InvocationPolicies),
+  repositories: Schema.mutable(Schema.Array(Repository)),
+  installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
 }).check(
   Schema.makeFilter(
     (state) => {
       const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
       const collections = new Set(state.collections.map((collection) => collection.collection_id));
-      const localCoordinates = state.local_bindings.map((binding) => resolve(binding.scope.root));
-      const projectionCoordinates = state.projections.map((projection) => resolve(projection.path));
+      const repositoryRoots = state.repositories.map((repository) => resolve(repository.root));
+      const projectionCoordinates = state.installed_skills.map((projection) =>
+        resolve(projection.path),
+      );
       return (
-        state.global_bindings.length <= 1 &&
-        new Set(localCoordinates).size === localCoordinates.length &&
+        new Set(repositoryRoots).size === repositoryRoots.length &&
         new Set(projectionCoordinates).size === projectionCoordinates.length &&
-        new Set(state.projections.map((projection) => projection.projection_id)).size ===
-          state.projections.length &&
-        state.local_bindings.every((binding) =>
-          binding.entries.every((entry) =>
-            entry.kind === "skill"
-              ? skills.has(entry.skill_id)
-              : collections.has(entry.collection_id),
+        new Set(state.installed_skills.map((projection) => projection.installed_skill_id)).size ===
+          state.installed_skills.length &&
+        state.repositories.every((repository) =>
+          repository.enabled.every((item) =>
+            "skill" in item ? skills.has(item.skill) : collections.has(item.collection),
           ),
         ) &&
-        state.projections.every((projection) => {
+        state.installed_skills.every((projection) => {
           const skill = skills.get(projection.skill_id);
           return skill?.versions.some(
             (version) => version.skill_version_id === projection.skill_version_id,
@@ -113,17 +116,12 @@ export const LibraryState = Schema.Struct({
         })
       );
     },
-    { message: "Device Bindings and installed skills must name retained entities" },
+    { message: "Repositories and installed skills must name retained entities" },
   ),
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
 
-export {
-  effectiveGlobalBindings,
-  scopeBinding,
-  replaceScopeBinding,
-  pruneEmptyBindings,
-} from "./binding-intent.js";
+export { globalEnabled, enabledAt, setEnabledAt, pruneEmptyEnabled } from "./enabled.js";
 
 export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
   ...fields,
@@ -135,11 +133,11 @@ export const emptyLibraryState = (): LibraryState =>
   currentLibraryState({
     collections: [],
     skills: [],
-    retained_copies: [],
-    acquisitions: [],
-    global_bindings: [],
-    local_bindings: [],
-    projections: [],
+    collection_versions: [],
+    imports: [],
+    enabled: [],
+    repositories: [],
+    installed_skills: [],
     unmanaged: [],
   });
 
@@ -155,10 +153,11 @@ export const LibraryInventory = LibraryState.mapFields(
     "device_skill_selection",
     "pending_device_selection_origin",
     "collections",
-    "retained_copies",
-    "acquisitions",
-    "global_bindings",
-    "local_bindings",
+    "collection_versions",
+    "imports",
+    "enabled",
+    "invocation_policies",
+    "repositories",
   ]),
 );
 export type LibraryInventory = typeof LibraryInventory.Type;
@@ -180,12 +179,10 @@ export const libraryManifestFromLocalState = Effect.fn("Library.libraryManifestF
       currentLibraryManifest({
         collections: state.collections,
         skills: state.skills,
-        retained_copies: state.retained_copies,
-        acquisitions: state.acquisitions,
+        collection_versions: state.collection_versions,
+        imports: state.imports,
         snapshot_digests,
-        bindings: state.global_bindings.map(
-          ({ invocation_policies: _policies, ...binding }) => binding,
-        ),
+        enabled: state.enabled,
       }),
     );
   },

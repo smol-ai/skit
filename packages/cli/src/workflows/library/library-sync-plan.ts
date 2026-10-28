@@ -1,5 +1,5 @@
 import {
-  BindingEntry,
+  Enabled,
   canonicalJson,
   currentSkillVersion,
   type LibraryManifest,
@@ -21,42 +21,39 @@ const collectionSkills = (manifest: LibraryManifest, collectionId: string) =>
 
 const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
   const skills = manifest.skills.filter((skill) => skill.collection_id === collectionId);
-  const acquisitions = manifest.acquisitions.filter((item) => item.collection_id === collectionId);
-  const retainedCopyIds = new Set(acquisitions.map((item) => item.retained_copy_id));
+  const imports = manifest.imports.filter((item) => item.collection_id === collectionId);
+  const versionIds = new Set(imports.map((item) => item.collection_version_id));
   return {
     collection: manifest.collections.find((item) => item.collection_id === collectionId),
     skills,
-    acquisitions,
-    retained_copies: manifest.retained_copies.filter((item) =>
-      retainedCopyIds.has(item.retained_copy_id),
+    imports,
+    collection_versions: manifest.collection_versions.filter((item) =>
+      versionIds.has(item.collection_version_id),
     ),
   };
 };
 
-/** The entries of `from` that `to` lacks, labelled with Collection or Skill names. */
+/** The items of `from` that `to` lacks, labelled with Collection or Skill names. */
 const entriesMissing = (
   manifest: LibraryManifest,
-  from: LibraryManifest["bindings"][number] | undefined,
-  to: LibraryManifest["bindings"][number] | undefined,
+  from: readonly Enabled[] | undefined,
+  to: readonly Enabled[] | undefined,
 ): readonly SyncBindingEntry[] =>
-  (from?.entries ?? [])
-    .filter(
-      (entry) =>
-        !(to?.entries ?? []).some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
-    )
-    .map((entry) =>
-      entry.kind === "collection"
+  (from ?? [])
+    .filter((item) => !(to ?? []).some((other) => Schema.toEquivalence(Enabled)(item, other)))
+    .map((item) =>
+      "collection" in item
         ? {
             kind: "collection" as const,
             label:
-              manifest.collections.find((item) => item.collection_id === entry.collection_id)
-                ?.label ?? entry.collection_id,
+              manifest.collections.find(
+                (collection) => collection.collection_id === item.collection,
+              )?.label ?? item.collection,
           }
         : {
             kind: "skill" as const,
             label:
-              manifest.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
-              entry.skill_id,
+              manifest.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
           },
     );
 
@@ -104,8 +101,11 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       },
     ];
   });
-  const previousBindings = new Map(before.bindings.map((binding) => [binding.scope.kind, binding]));
-  const desiredBindings = new Map(after.bindings.map((binding) => [binding.scope.kind, binding]));
+  // `skit sync` reports the global list as a Binding, present while it enables something.
+  const listed = (manifest: LibraryManifest) =>
+    manifest.enabled.length > 0 ? [["global", manifest.enabled] as const] : [];
+  const previousBindings = new Map(listed(before));
+  const desiredBindings = new Map(listed(after));
   const bindingChanges = [...new Set([...previousBindings.keys(), ...desiredBindings.keys()])]
     .sort()
     .flatMap((scope): SyncChange[] => {

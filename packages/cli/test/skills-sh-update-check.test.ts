@@ -96,16 +96,16 @@ it.effect("checks skills.sh status against real Git history without saving Libra
         },
         tracking: { kind: "default" as const },
         selection: { kind: "selected-skills" as const, names: [member.name] },
-        last_acquisition_id: saved.state.acquisitions[0]!.acquisition_id,
+        last_acquisition_id: saved.state.imports[0]!.import_id,
       },
     };
     const localState = {
       ...saved.state,
       collections: [collection],
       skills: [member],
-      acquisitions: saved.state.acquisitions.map((acquisition) => ({
+      imports: saved.state.imports.map((acquisition) => ({
         ...acquisition,
-        observations: acquisition.observations.map((observation) => ({
+        lock_file_entries: acquisition.lock_file_entries.map((observation) => ({
           ...observation,
           source_type: "github",
           source_url: upstream,
@@ -163,15 +163,15 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       checked[0]?.skills_sh?.members[0]?.upstream_commit,
     );
     const subject = librarySubjects(localState)[0]!;
-    const acquisition = localState.acquisitions[0]!;
-    const retainedCopy = localState.retained_copies[0]!;
-    type Observation = LibraryState["acquisitions"][number]["observations"][number];
+    const acquisition = localState.imports[0]!;
+    const retainedCopy = localState.collection_versions[0]!;
+    type Observation = LibraryState["imports"][number]["lock_file_entries"][number];
     const checkObservation = (change: Partial<Observation> = {}) =>
       checkSkillsShSubject(
         subject,
         {
           ...acquisition,
-          observations: acquisition.observations.map((observation) => ({
+          lock_file_entries: acquisition.lock_file_entries.map((observation) => ({
             ...observation,
             ...change,
           })),

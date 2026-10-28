@@ -47,7 +47,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
     const path = collectionVersionPath(
       join(home, "originals"),
-      loaded.state.retained_copies[0]!.digest,
+      loaded.state.collection_versions[0]!.digest,
     );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
     const changed = yield* checkSubjects(loaded.state, retained.collection_id).pipe(
@@ -79,7 +79,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(withoutObservedCopy[0]?.source_status, "not-applicable");
     assert.strictEqual(
       withoutObservedCopy[0]?.current_snapshot_digest,
-      loaded.state.retained_copies[0]!.digest,
+      loaded.state.collection_versions[0]!.digest,
     );
     assert.strictEqual(withoutObservedCopy[0]?.available_snapshot_digest, undefined);
     const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
@@ -88,8 +88,8 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(reloaded.present, true);
     if (!reloaded.present) return;
     assert.deepStrictEqual(
-      reloaded.state.retained_copies[0]?.digest,
-      loaded.state.retained_copies[0]?.digest,
+      reloaded.state.collection_versions[0]?.digest,
+      loaded.state.collection_versions[0]?.digest,
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

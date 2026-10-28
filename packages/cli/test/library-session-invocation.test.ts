@@ -104,8 +104,8 @@ it.effect(
       expect(invocationBriefing(policy)).toContain("Claude Code: Only when asked");
       expect(invocationBriefing(policy)).toContain("Codex: Automatically");
 
-      const projection = (yield* home.durable).projections.find(
-        (copy) => copy.target === "agents",
+      const projection = (yield* home.durable).installed_skills.find(
+        (copy) => copy.destination === "agents",
       )!;
       const files = new Map([
         ["SKILL.md", yield* fs.readFileString(join(projection.path, "SKILL.md"))],
@@ -223,7 +223,7 @@ Tools
         ).every((agent) => agent.effectivePolicy === "explicit"),
       ).toBe(true);
       const state = yield* home.durable;
-      const retained = collectionVersionPath(home.originals, state.retained_copies[0]!.digest);
+      const retained = collectionVersionPath(home.originals, state.collection_versions[0]!.digest);
       yield* fs.writeFileString(join(retained, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(openLibrarySession());
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
@@ -284,7 +284,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       if (problem === "missing-skill")
         yield* fs.remove(
           join(
-            collectionVersionPath(home.originals, badState.retained_copies[0]!.digest),
+            collectionVersionPath(home.originals, badState.collection_versions[0]!.digest),
             "SKILL.md",
           ),
         );
@@ -321,12 +321,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
             store.save(
               {
                 ...state,
-                global_bindings: [
-                  {
-                    scope: { kind: "global" },
-                    entries: [{ kind: "skill", skill_id: badState.skills[0]!.skill_id }],
-                  },
-                ],
+                enabled: [{ skill: badState.skills[0]!.skill_id }],
               },
               state,
             ),
@@ -406,7 +401,7 @@ Tools
       );
       const state = yield* home.durable;
       const payload = join(
-        collectionVersionPath(home.originals, state.retained_copies[0]!.digest),
+        collectionVersionPath(home.originals, state.collection_versions[0]!.digest),
         "retained-payload.txt",
       );
       let payloadReads = 0;

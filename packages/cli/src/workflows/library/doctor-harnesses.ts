@@ -415,16 +415,16 @@ export function classifyOpenCodeWarnings(
   for (const skill of check.skills) {
     if (!skill.path) continue;
     const selectedPath = resolve(skill.path);
-    const agents = state.projections.find(
+    const agents = state.installed_skills.find(
       (projection) =>
-        projection.target === "agents" &&
+        projection.destination === "agents" &&
         projection.status === "installed" &&
         resolve(join(projection.path, "SKILL.md")) === selectedPath,
     );
     if (!agents || agents.observed_digest !== agents.expected_digest) continue;
-    const claude = state.projections.find(
+    const claude = state.installed_skills.find(
       (projection) =>
-        projection.target === "claude" &&
+        projection.destination === "claude" &&
         projection.status === "installed" &&
         projection.skill_id === agents.skill_id &&
         projection.skill_version_id === agents.skill_version_id &&

@@ -8,7 +8,7 @@ import {
 } from "../../src/library-application/set-enabled.js";
 import type { InventoryRootOptions } from "../../src/projection/roots.js";
 
-interface BindingOptions {
+interface SetEnabledOptions {
   readonly query: string;
   readonly all: boolean;
   readonly selectedSkills?: readonly string[];
@@ -26,7 +26,7 @@ interface BindingOptions {
 }
 
 /** Test convenience for one request; all planning and execution use the public application seam. */
-export const previewTestBindings = (options: BindingOptions) => {
+export const planLibraryEnabled = (options: SetEnabledOptions) => {
   const request: SetEnabledRequest = {
     query: options.query,
     all: options.all,
@@ -41,16 +41,16 @@ export const previewTestBindings = (options: BindingOptions) => {
   return planSetEnabled([request], options.roots);
 };
 
-export const setLibraryBindings = Effect.fn("Test.setLibraryBindings")(function* (
-  options: BindingOptions,
+export const setLibraryEnabled = Effect.fn("Test.setLibraryEnabled")(function* (
+  options: SetEnabledOptions,
 ) {
-  const plan = yield* previewTestBindings(options);
+  const plan = yield* planLibraryEnabled(options);
   if (options.invocation.dryRun) {
     const value = plan.changes[0];
-    if (value === undefined) return yield* Effect.die("Expected one Binding plan");
+    if (value === undefined) return yield* Effect.die("Expected one plan");
     return { kind: "plan" as const, value };
   }
   const [outcome] = yield* applySetEnabledPlan(plan);
-  if (outcome === undefined) return yield* Effect.die("Expected one Binding outcome");
+  if (outcome === undefined) return yield* Effect.die("Expected one outcome");
   return outcome;
 });

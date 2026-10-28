@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import {
   canonicalJson,
   copyLocalTree,
-  effectiveGlobalBindings,
+  globalEnabled,
   inspectOwnershipMarker,
   inspectInstalledSkillBackups,
   LibraryStore,
@@ -31,12 +31,12 @@ export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
   projection === undefined
     ? null
     : {
-        projection_id: projection.projection_id,
+        installed_skill_id: projection.installed_skill_id,
         skill_id: projection.skill_id,
         skill_version_id: projection.skill_version_id,
         path: projection.path,
         root: projection.root,
-        target: projection.target,
+        target: projection.destination,
         expected_digest: projection.expected_digest,
         status: projection.status,
         suppressed_at: projection.suppressed_at,
@@ -137,9 +137,9 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const physicalPaths: string[] = [];
   const physicalHome = yield* links.realPathNative(store.home);
   for (const file of operation.files) {
-    const prior = operation.projections.find((item) => resolve(item.path) === file.path);
+    const prior = operation.installedSkills.find((item) => resolve(item.path) === file.path);
     const after = expected.find((item) => resolve(item.path) === file.path);
-    const current = state.projections.find((item) => resolve(item.path) === file.path);
+    const current = state.installed_skills.find((item) => resolve(item.path) === file.path);
     const saved = recovery.entries.filter((entry) => entry.path === file.path);
     const observed = yield* captureSetupFile(file.path);
     observations.push(observed);
@@ -149,7 +149,8 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       after?.status === "installed" &&
       (file.entry === null || file.entry.marker === null);
     const approvedPath =
-      operation.projectionPaths === undefined || operation.projectionPaths.includes(file.path);
+      operation.installedSkillPaths === undefined ||
+      operation.installedSkillPaths.includes(file.path);
     const claim = possibleClaim && approvedPath && confirmedProjectionPaths.has(file.path);
     if (!saved.length && !changedProjection && possibleClaim && approvedPath && !claim) {
       conflicts.push(`Setup's ownership claim is not confirmed: ${file.path}`);
@@ -214,7 +215,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       after &&
       equal(installedSkillChoice(current), installedSkillChoice(after)) &&
       marker?.kind === "valid" &&
-      marker.marker.projection_id === current.projection_id &&
+      marker.marker.projection_id === current.installed_skill_id &&
       marker.marker.skill_id === current.skill_id &&
       marker.marker.skill_version_id === current.skill_version_id &&
       marker.marker.expected_digest === current.expected_digest;
@@ -302,8 +303,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         }
     }
     if (source === undefined && prior && file.entry.markerType === "File") {
-      const policy =
-        effectiveGlobalBindings(restoredState)[0]?.invocation_policies?.[prior.skill_id];
+      const policy = globalEnabled(restoredState).invocation_policies?.[prior.skill_id];
       const rebuilt = yield* Effect.result(
         prepareInstalledSkillRebuild(
           restoredState,

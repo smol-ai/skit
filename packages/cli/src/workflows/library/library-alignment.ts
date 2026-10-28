@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import {
   Upstream,
-  remapBindingEntities,
-  type BindingEntry,
+  remapEnabled,
+  type Enabled,
   type CollectionId,
   type LibraryManifest,
   type LibraryState,
@@ -35,10 +35,10 @@ const collectionId = (id: CollectionId, aliases: LibraryAliases) =>
   aliases.collections.find((alias) => alias.from === id)?.to ?? id;
 const skillId = (id: SkillId, aliases: LibraryAliases) =>
   aliases.skills.find((alias) => alias.from === id)?.to ?? id;
-const bindingEntry = (entry: BindingEntry, aliases: LibraryAliases): BindingEntry =>
-  entry.kind === "collection"
-    ? { ...entry, collection_id: collectionId(entry.collection_id, aliases) }
-    : { ...entry, skill_id: skillId(entry.skill_id, aliases) };
+const aliasEnabled = (item: Enabled, aliases: LibraryAliases): Enabled =>
+  "collection" in item
+    ? { collection: collectionId(item.collection, aliases) }
+    : { skill: skillId(item.skill, aliases) };
 
 /** Apply only observed Version aliases, including to the accepted base; never match by digest. */
 const aliasSkills = (skills: LibraryManifest["skills"], aliases: LibraryAliases) =>
@@ -132,14 +132,11 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
       collection_id: collectionId(item.collection_id, aliases),
     })),
     skills: aliasSkills(manifest.skills, aliases),
-    acquisitions: manifest.acquisitions.map((item) => ({
+    imports: manifest.imports.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
-    bindings: manifest.bindings.map((binding) => ({
-      ...binding,
-      entries: binding.entries.map((entry) => bindingEntry(entry, aliases)),
-    })),
+    enabled: manifest.enabled.map((item) => aliasEnabled(item, aliases)),
   };
 }
 
@@ -149,17 +146,17 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
  */
 export function aliasDevice(state: LibraryState, aliases: LibraryAliases): LibraryState {
   return {
-    ...remapBindingEntities(state, aliases),
+    ...remapEnabled(state, aliases),
     collections: state.collections.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
     skills: aliasSkills(state.skills, aliases),
-    acquisitions: state.acquisitions.map((item) => ({
+    imports: state.imports.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
-    projections: state.projections.map((projection) => {
+    installed_skills: state.installed_skills.map((projection) => {
       const skill = skillId(projection.skill_id, aliases);
       return {
         ...projection,
@@ -172,10 +169,10 @@ export function aliasDevice(state: LibraryState, aliases: LibraryAliases): Libra
           )?.to.skill_version_id ?? projection.skill_version_id,
       };
     }),
-    ...(state.custodyIssues === undefined
+    ...(state.ownershipIssues === undefined
       ? {}
       : {
-          custodyIssues: state.custodyIssues.map((issue) => ({
+          ownershipIssues: state.ownershipIssues.map((issue) => ({
             ...issue,
             ...(issue.skillId === undefined ? {} : { skillId: skillId(issue.skillId, aliases) }),
             ...(issue.collectionId === undefined

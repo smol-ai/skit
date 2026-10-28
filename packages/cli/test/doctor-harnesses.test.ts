@@ -349,22 +349,22 @@ const collisionFixture = () => {
   const state = currentLibraryState({
     collections: [],
     skills: [],
-    retained_copies: [],
-    acquisitions: [],
-    global_bindings: [],
-    local_bindings: [],
+    collection_versions: [],
+    imports: [],
+    enabled: [],
+    repositories: [],
     unmanaged: [],
-    projections: (["agents", "claude"] as const).map((target) => ({
-      projection_id: makeInstalledSkillId(),
+    installed_skills: (["agents", "claude"] as const).map((target) => ({
+      installed_skill_id: makeInstalledSkillId(),
       skill_id: skillId,
       skill_version_id: versionId,
-      target,
+      destination: target,
       root: `/home/.${target}/skills`,
       path: `/home/.${target}/skills/review`,
       expected_digest: digest,
       observed_digest: digest,
       status: "installed" as const,
-      projected_at: "2026-10-01T00:00:00.000Z",
+      installed_at: "2026-10-01T00:00:00.000Z",
     })),
   });
   const warning =
@@ -399,13 +399,13 @@ test.each([
   "unknown-warning",
 ])("doctor keeps OpenCode warnings for %s", (kind) => {
   const { state, check } = collisionFixture();
-  const claude = state.projections[1];
+  const claude = state.installed_skills[1];
   if (!claude) throw new Error("Missing fixture projection");
   if (kind === "different-content") claude.observed_digest = `sha256:${"b".repeat(64)}`;
   if (kind === "different-version")
-    state.projections[1] = { ...claude, skill_version_id: makeSkillVersionId() };
+    state.installed_skills[1] = { ...claude, skill_version_id: makeSkillVersionId() };
   if (kind === "edited") claude.status = "conflicted";
-  if (kind === "foreign") state.projections.pop();
+  if (kind === "foreign") state.installed_skills.pop();
   if (kind === "claude-selected")
     check.skills = [
       { name: "review", path: "/home/.claude/skills/review/SKILL.md", warnings: [], errors: [] },
@@ -420,10 +420,10 @@ test.each([
 
 test("doctor accepts intact target-specific invocation renderings of the same Version", () => {
   const { state, check } = collisionFixture();
-  const claude = state.projections[1];
+  const claude = state.installed_skills[1];
   if (!claude) throw new Error("Missing fixture projection");
   const claudeDigest = `sha256:${"b".repeat(64)}`;
-  state.projections[1] = {
+  state.installed_skills[1] = {
     ...claude,
     expected_digest: claudeDigest,
     observed_digest: claudeDigest,

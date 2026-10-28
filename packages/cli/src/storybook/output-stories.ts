@@ -35,10 +35,7 @@ const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
 const collectionVersionId = makeCollectionVersionId();
 const installedSkillId = makeInstalledSkillId();
-const binding = {
-  scope: { kind: "global" as const },
-  entries: [{ kind: "skill" as const, skill_id: skillId }],
-};
+const enabled = [{ skill: skillId }];
 const emptyAudit = {
   ruleset: { id: "skit/skill-static-audit" as const, version: "1" },
   declaredCapabilities: [],
@@ -501,7 +498,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "empty",
     result("inventory", {
       skills: [],
-      projections: [],
+      installed_skills: [],
       unmanaged: [],
       machine: {
         repositoryRoots: ["/home/story/dev"],
@@ -518,7 +515,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     "copy-dates",
     result("inventory", {
       skills: [],
-      projections: [],
+      installed_skills: [],
       unmanaged: [],
       machine: {
         repositoryRoots: [],
@@ -902,9 +899,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       subject_id: collectionId,
       skills: ["review"],
       scope: { kind: "global" },
-      enabled: true,
+      action: "enable",
       changed: true,
-      bindings: [binding],
+      enabled,
     }),
   ),
   resultStory(
@@ -915,9 +912,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       subject_id: collectionId,
       skills: ["review"],
       scope: { kind: "global" },
-      enabled: true,
+      action: "enable",
       changed: true,
-      bindings: [binding],
+      enabled,
       projections: [
         { target: "agents", path: "/home/story/.agents/skills/review", status: "installed" },
       ],
@@ -930,9 +927,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       subject_id: collectionId,
       skills: ["review"],
       scope: { kind: "global" },
-      enabled: false,
+      action: "disable",
       changed: true,
-      bindings: [],
+      enabled: [],
     }),
   ),
   resultStory(
@@ -943,9 +940,9 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       subject_id: collectionId,
       skills: ["review"],
       scope: { kind: "global" },
-      enabled: false,
+      action: "disable",
       changed: true,
-      bindings: [],
+      enabled: [],
       projections: [],
     }),
   ),

@@ -247,7 +247,7 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
         }
       }
       expect((yield* home.durable).skills).toHaveLength(0);
-      expect((yield* home.durable).retained_copies).toHaveLength(0);
+      expect((yield* home.durable).collection_versions).toHaveLength(0);
     }
     expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
   }).pipe(Effect.provide(skitLayer)),

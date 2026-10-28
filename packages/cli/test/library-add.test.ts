@@ -15,7 +15,7 @@ import {
 import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
 import { planUpdates, updateSubjects } from "../src/library-application/update.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemove } from "../src/workflows/library/remove.js";
 import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
@@ -51,7 +51,10 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     );
     assert.strictEqual(state.collections.length, 1);
     assert.strictEqual(state.skills[0]?.name, "review");
-    assert.strictEqual(state.retained_copies[0]?.retained_copy_id, added.retained_version_id);
+    assert.strictEqual(
+      state.collection_versions[0]?.collection_version_id,
+      added.retained_version_id,
+    );
     assert.strictEqual(
       yield* fs.readFileString(
         join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
@@ -69,7 +72,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     );
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
     assert.strictEqual(refreshed.collections.length, 1);
-    assert.strictEqual(refreshed.acquisitions.length, 2);
+    assert.strictEqual(refreshed.imports.length, 2);
     assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
     const failure = yield* planUpdates(added.collection_id).pipe(
       Effect.provide(libraryStoreLayer({ home })),
@@ -142,8 +145,11 @@ it.effect("reports the retained package when its source disappears after publica
     assert.strictEqual(yield* fs.exists(source), false);
     assert.deepStrictEqual(added.skills, [{ name: "review", verbatim_path: memberPath }]);
     const state = yield* store.load;
-    assert.strictEqual(state.retained_copies[0]?.retained_copy_id, added.retained_version_id);
-    assert.strictEqual(state.retained_copies[0]?.digest, added.snapshot_digest);
+    assert.strictEqual(
+      state.collection_versions[0]?.collection_version_id,
+      added.retained_version_id,
+    );
+    assert.strictEqual(state.collection_versions[0]?.digest, added.snapshot_digest);
     assert.strictEqual(
       yield* fs.readFileString(
         join(
@@ -263,11 +269,9 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         dryRun: false,
       },
     });
-    yield* writingTo(home, run(setLibraryBindings(bindingInput(true))));
+    yield* writingTo(home, run(setLibraryEnabled(bindingInput(true))));
     const enabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.deepStrictEqual(enabled.global_bindings[0]?.entries, [
-      { kind: "skill", skill_id: skill.skill_id },
-    ]);
+    assert.deepStrictEqual(enabled.enabled, [{ skill: skill.skill_id }]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
       (yield* run(checkSubjects(enabled, skill.skill_id)))[0]?.source_status,
@@ -288,15 +292,15 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       ...desired,
       collections: [],
       skills: [],
-      retained_copies: [],
-      acquisitions: [],
+      collection_versions: [],
+      imports: [],
       snapshot_digests: [],
-      bindings: [],
+      enabled: [],
     };
     assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
-    yield* writingTo(home, run(setLibraryBindings(bindingInput(false))));
+    yield* writingTo(home, run(setLibraryEnabled(bindingInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.deepStrictEqual(disabled.global_bindings, []);
+    assert.deepStrictEqual(disabled.enabled, []);
     yield* writingTo(
       home,
       run(
@@ -341,7 +345,7 @@ it.effect("re-adding a changed local source adds a Skill Version and uses it", (
       currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
       after.skills[0]?.versions[1]?.skill_version_id,
     );
-    assert.strictEqual(after.retained_copies.length, 2);
+    assert.strictEqual(after.collection_versions.length, 2);
     assert.strictEqual(addedAgain.collection_id, added.collection_id);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -376,8 +380,8 @@ it.effect("repeated identical local re-adds record nothing new", () =>
 
     assert.strictEqual(first.snapshot_digest, added.snapshot_digest);
     assert.strictEqual(second.snapshot_digest, added.snapshot_digest);
-    assert.strictEqual(after.retained_copies.length, 1);
-    assert.strictEqual(after.acquisitions.length, 1);
+    assert.strictEqual(after.collection_versions.length, 1);
+    assert.strictEqual(after.imports.length, 1);
     assert.strictEqual(after.skills[0]?.versions.length, 1);
     assert.strictEqual(
       yield* fs.exists(
@@ -389,8 +393,8 @@ it.effect("repeated identical local re-adds record nothing new", () =>
       false,
     );
     assert.ok(
-      after.acquisitions.every(
-        (acquisition) => acquisition.retained_copy_id === added.retained_version_id,
+      after.imports.every(
+        (acquisition) => acquisition.collection_version_id === added.retained_version_id,
       ),
     );
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -435,12 +439,12 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
     const repeated = yield* load;
 
     // The new commit is recorded as its own import of the same bytes.
-    assert.strictEqual(recorded.retained_copies.length, 1);
+    assert.strictEqual(recorded.collection_versions.length, 1);
     assert.deepStrictEqual(
-      recorded.acquisitions.map((acquisition) => acquisition.revision),
+      recorded.imports.map((acquisition) => acquisition.revision),
       ["a".repeat(40), "b".repeat(40)],
     );
-    assert.deepStrictEqual(repeated.acquisitions, recorded.acquisitions);
+    assert.deepStrictEqual(repeated.imports, recorded.imports);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -476,7 +480,7 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.deepStrictEqual(
-      state.acquisitions.map((acquisition) => acquisition.revision),
+      state.imports.map((acquisition) => acquisition.revision),
       ["1.2.3"],
     );
     // A Release the Registry can serve again needs no snapshot of its own.

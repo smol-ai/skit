@@ -144,7 +144,7 @@ it.effect(
         state.skills.map((skill) => skill.name),
         ["alpha"],
       );
-      assert.deepStrictEqual(state.projections, []);
+      assert.deepStrictEqual(state.installed_skills, []);
       assert.strictEqual(
         yield* fs.readLink(join(f.root, "config", "devin", "skills", "alpha")),
         join(f.root, "Work", "skills", "alpha"),
@@ -215,15 +215,15 @@ it.effect("applying the reviewed plan ID starts managing every recommended copy"
     assert.isTrue(Exit.isSuccess(exit));
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-    assert.isNotEmpty(state.projections);
-    assert.isTrue(state.projections.every((projection) => projection.status === "installed"));
+    assert.isNotEmpty(state.installed_skills);
+    assert.isTrue(state.installed_skills.every((projection) => projection.status === "installed"));
     // The result reports what happened, so a caller need not re-observe to find out.
     const report = Exit.isSuccess(exit) ? exit.value : undefined;
     assert.deepStrictEqual(
       report?.added.map((copy) => copy.name),
       ["alpha", "beta"],
     );
-    assert.strictEqual(report?.projections.length, state.projections.length);
+    assert.strictEqual(report?.projections.length, state.installed_skills.length);
     assert.deepStrictEqual(report?.leftAlone, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -263,10 +263,12 @@ it.effect(
       assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
       const state = yield* f.home.durable;
       assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-      assert.isTrue(state.projections.every((projection) => projection.status === "installed"));
+      assert.isTrue(
+        state.installed_skills.every((projection) => projection.status === "installed"),
+      );
       yield* f.home.owned((yield* f.home.owned(prepareSetupUndo(operationId))).apply());
       assert.strictEqual(yield* fs.readLink(alias), originalLink);
-      assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+      assert.deepStrictEqual((yield* f.home.durable).enabled, []);
       assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -300,7 +302,7 @@ it.effect("identical copies at each target are managed in place, not left to con
 
     assert.isTrue(Exit.isSuccess(exit));
     const state = yield* f.home.durable;
-    const gamma = state.projections.filter((projection) => projection.path.endsWith("/gamma"));
+    const gamma = state.installed_skills.filter((projection) => projection.path.endsWith("/gamma"));
     assert.deepStrictEqual(
       gamma.map((projection) => projection.status),
       ["installed", "installed"],

@@ -9,7 +9,7 @@ import {
   prepareInstalledSkillRebuild,
   installEnabledSkills,
   importEdit,
-  scopeBinding,
+  globalEnabled,
 } from "@smolai/skit-core";
 import type { InstalledSkillChange, SetupVersionChoice } from "./setup-contract.js";
 import { captureSetupFile } from "../../library-application/setup-operation.js";
@@ -62,7 +62,9 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     return yield* new PlanIsStale();
   // Check the entire choice before the first retention, rename or install.
   for (const fact of live) {
-    const projection = state.projections.find((item) => item.projection_id === fact.projectionId);
+    const projection = state.installed_skills.find(
+      (item) => item.installed_skill_id === fact.projectionId,
+    );
     const skill = state.skills.find((item) => item.skill_id === fact.skillId);
     if (
       !projection ||
@@ -92,12 +94,12 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   // Render all selected destinations before displacing any of them. This also uses their policy.
   const desired = new Map<string, string>();
   for (const fact of live) {
-    const projection = retained.projections.find(
-      (item) => item.projection_id === fact.projectionId,
+    const projection = retained.installed_skills.find(
+      (item) => item.installed_skill_id === fact.projectionId,
     )!;
     const skill = retained.skills.find((item) => item.skill_id === fact.skillId)!;
     const version = currentSkillVersion(retained, skill)!;
-    const policy = scopeBinding(retained, { kind: "global" })?.invocation_policies?.[fact.skillId];
+    const policy = globalEnabled(retained).invocation_policies?.[fact.skillId];
     const digest = yield* Effect.scoped(
       Effect.gen(function* () {
         const renderer = yield* prepareInstalledSkillRebuild(
@@ -117,7 +119,9 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   const preservation = yield* prepareOwnedRecoveryMoves(
     live.map((fact) => ({
       name: fact.name,
-      projection: retained.projections.find((item) => item.projection_id === fact.projectionId)!,
+      projection: retained.installed_skills.find(
+        (item) => item.installed_skill_id === fact.projectionId,
+      )!,
     })),
     operationDirectory,
   );
@@ -127,8 +131,8 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       return yield* new PlanIsStale();
   yield* preservation.apply();
   for (const fact of live) {
-    const projection = retained.projections.find(
-      (item) => item.projection_id === fact.projectionId,
+    const projection = retained.installed_skills.find(
+      (item) => item.installed_skill_id === fact.projectionId,
     )!;
     yield* installEnabledSkills({
       target: fact.target,
@@ -138,8 +142,8 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       onlySkillIds: [fact.skillId],
       restoreNativeDeletedSkills: [fact.skillId],
     });
-    const after = (yield* store.load).projections.find(
-      (item) => item.projection_id === fact.projectionId,
+    const after = (yield* store.load).installed_skills.find(
+      (item) => item.installed_skill_id === fact.projectionId,
     );
     if (
       !after ||

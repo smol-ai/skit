@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { collectionVersionPath } from "@smolai/skit-core";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { updateSubjects, updateExitCode } from "../src/library-application/update.js";
@@ -154,7 +154,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         yield* writingTo(
           f.home,
           f.run(
-            setLibraryBindings({
+            setLibraryEnabled({
               query: collection.collection_id,
               all: true,
               roots,
@@ -234,7 +234,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
         assert.include(yield* f.fs.readFileString(projectionPath), "after");
         const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
-        assert.strictEqual(after.acquisitions.length, retained.acquisitions.length);
+        assert.strictEqual(after.imports.length, retained.imports.length);
         const unchanged = yield* writingTo(
           f.home,
           f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
@@ -366,8 +366,8 @@ it.effect("aborts the batch on typed shared state failures", () =>
 it.effect("stops on corruption of an existing retained object", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const copy = f.before.retained_copies.find(
-      (copy) => copy.retained_copy_id === f.before.acquisitions[0]!.retained_copy_id,
+    const copy = f.before.collection_versions.find(
+      (copy) => copy.collection_version_id === f.before.imports[0]!.collection_version_id,
     )!;
     yield* f.fs.writeFileString(
       join(collectionVersionPath(join(f.home, "originals"), copy.digest), "a", "SKILL.md"),

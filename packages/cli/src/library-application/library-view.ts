@@ -1,13 +1,12 @@
 import {
-  bindingSkillIds,
-  effectiveGlobalBindings,
   currentCollectionSkills,
   currentSkillVersion,
+  enabledSkillIds,
+  globalEnabled,
   LibraryStore,
+  type Enabled,
   type LibraryState,
   type InstallScope,
-  type DeviceBinding,
-  type RepositoryBinding,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
@@ -29,8 +28,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     const collection = state.collections.find((item) => item.collection_id === skill.collection_id);
     const source =
       collection?.upstream?.source_identity ??
-      state.acquisitions.find((item) => item.collection_id === skill.collection_id)
-        ?.source_identity;
+      state.imports.find((item) => item.collection_id === skill.collection_id)?.source_identity;
     return {
       id: skill.skill_id,
       name: skill.name,
@@ -127,27 +125,34 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         ),
       }));
     }),
+    // `skit list` still reports this as its one global Binding, present while it enables
+    // something or the device keeps its own choice.
     globalBindings: structuredClone(
-      effectiveGlobalBindings(state).map((binding) => ({
-        scope: binding.scope,
-        entries: binding.entries.map((entry) =>
-          entry.kind === "collection"
-            ? {
-                ...entry,
-                label:
-                  state.collections.find(
-                    (collection) => collection.collection_id === entry.collection_id,
-                  )?.label ?? entry.collection_id,
-              }
-            : {
-                ...entry,
-                name:
-                  state.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
-                  entry.skill_id,
-              },
-        ),
-        skills: bindingSkillIds(state, binding),
-      })),
+      [globalEnabled(state)]
+        .filter(
+          (global) => global.enabled.length > 0 || state.device_skill_selection?.mode === "choose",
+        )
+        .map((global) => ({
+          scope: { kind: "global" as const },
+          entries: global.enabled.map((item) =>
+            "collection" in item
+              ? {
+                  kind: "collection" as const,
+                  collection_id: item.collection,
+                  label:
+                    state.collections.find(
+                      (collection) => collection.collection_id === item.collection,
+                    )?.label ?? item.collection,
+                }
+              : {
+                  kind: "skill" as const,
+                  skill_id: item.skill,
+                  name:
+                    state.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
+                },
+          ),
+          skills: enabledSkillIds(state, global.enabled),
+        })),
     ),
     descriptionLoad: (collectionId: string) => {
       const collection = state.collections.find((item) => item.collection_id === collectionId);
@@ -159,14 +164,14 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     },
     listingSizeAfter: (change: {
       readonly scope: InstallScope;
-      readonly bindings: readonly (DeviceBinding | RepositoryBinding)[];
+      readonly enabled: readonly Enabled[];
     }) =>
-      new Set(
-        [
-          ...change.bindings,
-          ...(change.scope.kind === "repository" ? effectiveGlobalBindings(state) : []),
-        ].flatMap((binding) => bindingSkillIds(state, binding)),
-      ).size,
+      new Set([
+        ...enabledSkillIds(state, change.enabled),
+        ...(change.scope.kind === "repository"
+          ? enabledSkillIds(state, globalEnabled(state).enabled)
+          : []),
+      ]).size,
   };
 };
 

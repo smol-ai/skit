@@ -1,11 +1,34 @@
-import type { LibraryState } from "../library-state.js";
+import type { InvocationPolicies, LibraryState } from "../library-state.js";
 import type { LibraryAuditChange } from "./audit-log.js";
-import { bindingSkillIds, currentSkillVersion } from "../library-contracts.js";
+import { currentSkillVersion, enabledSkillIds, type Enabled } from "../library-contracts.js";
 
-type Binding = LibraryState["global_bindings"][number] | LibraryState["local_bindings"][number];
+interface ScopeList {
+  readonly scopeId: string;
+  readonly enabled: readonly Enabled[];
+  readonly invocation_policies?: InvocationPolicies;
+}
 
-const bindingId = (binding: Binding) =>
-  binding.scope.kind === "repository" ? `repository:${binding.scope.root}` : binding.scope.kind;
+/**
+ * Each scope's list, keyed as history has always named it (`global`, `repository:<root>`). The
+ * global list counts as present while it enables something or carries invocation overrides.
+ */
+const scopeLists = (state: LibraryState): ScopeList[] => [
+  ...(state.enabled.length > 0 || state.invocation_policies !== undefined
+    ? [
+        {
+          scopeId: "global",
+          enabled: state.enabled,
+          ...(state.invocation_policies === undefined
+            ? {}
+            : { invocation_policies: state.invocation_policies }),
+        },
+      ]
+    : []),
+  ...state.repositories.map((repository) => ({
+    ...repository,
+    scopeId: `repository:${repository.root}`,
+  })),
+];
 
 const byKey = <T>(items: readonly T[], key: (item: T) => string) =>
   new Map(items.map((item) => [key(item), item]));
@@ -118,48 +141,48 @@ export const diffLibraryState = (
       });
   }
 
-  const bindings = compare<Binding>(
-    [...before.global_bindings, ...before.local_bindings],
-    [...after.global_bindings, ...after.local_bindings],
-    bindingId,
-  );
-  for (const item of bindings.added)
+  const lists = compare(scopeLists(before), scopeLists(after), (list) => list.scopeId);
+  for (const item of lists.added)
     changes.push({
       entity: "binding",
-      id: bindingId(item),
+      id: item.scopeId,
       action: "enabled",
-      after: bindingSkillIds(after, item).join(","),
+      after: enabledSkillIds(after, item.enabled).join(","),
     });
-  for (const item of bindings.removed)
+  for (const item of lists.removed)
     changes.push({
       entity: "binding",
-      id: bindingId(item),
+      id: item.scopeId,
       action: "disabled",
-      before: bindingSkillIds(before, item).join(","),
+      before: enabledSkillIds(before, item.enabled).join(","),
     });
-  for (const { previous, current } of bindings.kept) {
-    const was = bindingSkillIds(before, previous).sort().join(",");
-    const now = bindingSkillIds(after, current).sort().join(",");
+  for (const { previous, current } of lists.kept) {
+    const was = enabledSkillIds(before, previous.enabled).sort().join(",");
+    const now = enabledSkillIds(after, current.enabled).sort().join(",");
     const policyChanged =
       JSON.stringify(previous.invocation_policies ?? {}) !==
       JSON.stringify(current.invocation_policies ?? {});
     if (was !== now)
       changes.push({
         entity: "binding",
-        id: bindingId(current),
+        id: current.scopeId,
         action: "skills-changed",
         before: was,
         after: now,
       });
     else if (policyChanged)
-      changes.push({ entity: "binding", id: bindingId(current), action: "invocation-changed" });
+      changes.push({ entity: "binding", id: current.scopeId, action: "invocation-changed" });
   }
 
-  const projections = compare(before.projections, after.projections, (item) => item.projection_id);
+  const projections = compare(
+    before.installed_skills,
+    after.installed_skills,
+    (item) => item.installed_skill_id,
+  );
   for (const item of projections.added)
     changes.push({
       entity: "projection",
-      id: item.projection_id,
+      id: item.installed_skill_id,
       action: "projected",
       after: item.status,
       path: item.path,
@@ -168,7 +191,7 @@ export const diffLibraryState = (
   for (const item of projections.removed)
     changes.push({
       entity: "projection",
-      id: item.projection_id,
+      id: item.installed_skill_id,
       action: "retired",
       before: item.status,
       path: item.path,
@@ -181,7 +204,7 @@ export const diffLibraryState = (
       continue;
     changes.push({
       entity: "projection",
-      id: current.projection_id,
+      id: current.installed_skill_id,
       action: previous.status === current.status ? "reprojected" : current.status,
       before: previous.status,
       after: current.status,

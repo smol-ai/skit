@@ -8,7 +8,7 @@ export interface CollectionVersionPlan {
   readonly localArchives: readonly SnapshotArchive[];
   readonly reusable: readonly Digest[];
   readonly download: readonly Digest[];
-  readonly reacquire: readonly LibraryManifest["retained_copies"][number]["retained_copy_id"][];
+  readonly reacquire: readonly LibraryManifest["collection_versions"][number]["collection_version_id"][];
 }
 
 /** Read-only: no hashing, downloads, source acquisition, or writes. */
@@ -22,15 +22,15 @@ export const planCollectionVersions = Effect.fn("Library.planCollectionVersions"
   const snapshots = new Set(manifest.snapshot_digests);
   const reusable: Digest[] = [];
   const download: Digest[] = [];
-  const reacquire: LibraryManifest["retained_copies"][number]["retained_copy_id"][] = [];
-  for (const copy of manifest.retained_copies) {
+  const reacquire: LibraryManifest["collection_versions"][number]["collection_version_id"][] = [];
+  for (const copy of manifest.collection_versions) {
     if (seen.has(copy.digest)) continue;
     seen.add(copy.digest);
     if (available.has(copy.digest)) continue;
     if (yield* fs.exists(collectionVersionPath(options.originalsPath, copy.digest)))
       reusable.push(copy.digest);
     else if (snapshots.has(copy.digest)) download.push(copy.digest);
-    else reacquire.push(copy.retained_copy_id);
+    else reacquire.push(copy.collection_version_id);
   }
   return {
     localArchives: options.localArchives.filter((archive) => seen.has(archive.digest)),

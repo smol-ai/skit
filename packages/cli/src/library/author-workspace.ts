@@ -92,9 +92,7 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
   const workspace = yield* readAuthorWorkspace(root);
   const physical = (yield* fs.exists(root)) ? yield* fs.realPath(root) : root;
   const acquisitionsFor = (collection: Collection) =>
-    state.acquisitions.filter(
-      (acquisition) => acquisition.collection_id === collection.collection_id,
-    );
+    state.imports.filter((acquisition) => acquisition.collection_id === collection.collection_id);
   const sameRoot: Collection[] = [];
   for (const collection of state.collections) {
     const inputs = acquisitionsFor(collection).map((acquisition) => acquisition.input.value);
@@ -208,7 +206,7 @@ export const markAuthorWorkspaceRemoved = Effect.fn("Author.markWorkspaceRemoved
 ) {
   const collection = state.collections.find((item) => item.collection_id === collectionId);
   if (collection?.upstream?.source_identity.kind !== "authored-workspace") return;
-  const path = state.acquisitions.find(
+  const path = state.imports.find(
     (acquisition) =>
       acquisition.collection_id === collection.collection_id &&
       acquisition.source_identity.kind === "authored-workspace",

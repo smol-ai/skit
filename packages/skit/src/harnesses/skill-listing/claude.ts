@@ -349,7 +349,7 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       }
     }
     const managed = new Map<string, string>();
-    for (const projection of state.projections) {
+    for (const projection of state.installed_skills) {
       const path = yield* fs
         .realPath(join(projection.path, "SKILL.md"))
         .pipe(

@@ -111,7 +111,7 @@ export const devices = Effect.gen(function* () {
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.provide(layer),
         );
-        const digest = state.retained_copies[0]!.digest.slice("sha256:".length);
+        const digest = state.collection_versions[0]!.digest.slice("sha256:".length);
         yield* fs.writeFileString(
           join(home, "originals", digest.slice(0, 2), digest, "SKILL.md"),
           "corrupted original\n",
@@ -122,7 +122,7 @@ export const devices = Effect.gen(function* () {
         Effect.gen(function* () {
           return yield* importEdit({
             skillId: projection.skill_id,
-            projectionId: projection.projection_id,
+            projectionId: projection.installed_skill_id,
             path: projection.path,
             observedHash: yield* deterministicTreeHash(projection.path),
             retainedAt: "2026-02-01T00:00:00Z",

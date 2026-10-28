@@ -475,8 +475,8 @@
       },
       "outputSchemas": [
         "skit.doctor.v7",
-        "skit.disable.plan.v8",
-        "skit.disable.v9"
+        "skit.disable.plan.v9",
+        "skit.disable.v10"
       ],
       "exitCodes": [
         0,
@@ -571,8 +571,8 @@
         ]
       },
       "outputSchemas": [
-        "skit.disable.v9",
-        "skit.disable.plan.v8"
+        "skit.disable.v10",
+        "skit.disable.plan.v9"
       ],
       "exitCodes": [
         0,
@@ -684,8 +684,8 @@
         ]
       },
       "outputSchemas": [
-        "skit.enable.v9",
-        "skit.enable.plan.v8"
+        "skit.enable.v10",
+        "skit.enable.plan.v9"
       ],
       "exitCodes": [
         0,
@@ -811,7 +811,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v11"
+        "skit.inventory.v12"
       ],
       "exitCodes": [
         0,

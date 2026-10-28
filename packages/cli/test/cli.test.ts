@@ -359,7 +359,7 @@ describe("CLI contracts", () => {
             : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v9");
+        expect(failure.message).toContain("supports v4–v10");
         expect(failure.remediation).toContain("Back up the state file");
         expect(failure.remediation).toContain("skit setup");
         expect(failure.remediation).not.toContain("author validate");
@@ -399,8 +399,8 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v9",
-        data: expect.objectContaining({ enabled: true }),
+        schema: "skit.enable.v10",
+        data: expect.objectContaining({ action: "enable" }),
       }),
     );
 
@@ -605,12 +605,12 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v8");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v9");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
-    expect(state.global_bindings).toEqual([]);
+    expect(state.enabled).toEqual([]);
   });
 
   test("both destinations and lifecycle dry-runs preserve exact state and installed skills", async () => {
@@ -777,8 +777,8 @@ describe("CLI contracts", () => {
     const retainedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
     expect(retainedSkill?.versions).toHaveLength(2);
     expect(retainedSkill?.local_version_id).toBe(applied.data.retained_skill_version_id);
-    expect(state.acquisitions.at(-1)).toMatchObject({
-      kind: "retained-edit",
+    expect(state.imports.at(-1)).toMatchObject({
+      kind: "edit",
       source_identity: {
         kind: "local",
         path: { value: paths.claude },
@@ -810,7 +810,7 @@ describe("CLI contracts", () => {
     const selectedDigest = preview.data.observed_digest;
     const marker = JSON.parse(markerBefore.claude);
     await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
-    const projection = partialState.projections.find(
+    const projection = partialState.installed_skills.find(
       (candidate: { path: string }) => candidate.path === paths.claude,
     );
     projection.skill_version_id = marker.skill_version_id;
@@ -838,7 +838,7 @@ describe("CLI contracts", () => {
     expect(afterRecovery.skills[0]?.versions.length).toBe(
       beforeRecovery.skills[0]?.versions.length,
     );
-    expect(afterRecovery.acquisitions.length).toBe(beforeRecovery.acquisitions.length);
+    expect(afterRecovery.imports.length).toBe(beforeRecovery.imports.length);
 
     const stateBeforeRepeat = await readFile(join(home, "state.json"), "utf8");
     const repeated = run("update", "review", "--from-projection", "claude-code");

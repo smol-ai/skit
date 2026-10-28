@@ -1,6 +1,6 @@
 import {
-  bindingSkillIds,
-  effectiveGlobalBindings,
+  enabledByScope,
+  enabledSkillIds,
   withLibraryWriter,
   LibraryStore,
   type LibraryState,
@@ -73,18 +73,14 @@ const skillChanges = (
     readonly artifact_digest?: string;
   }>,
 ) => {
-  const bindings = [...effectiveGlobalBindings(state), ...state.local_bindings];
-  const followed = bindings.some((binding) =>
-    binding.entries.some(
-      (entry) => entry.kind === "collection" && entry.collection_id === collectionId,
-    ),
+  const lists = enabledByScope(state);
+  const followed = lists.some((list) =>
+    list.enabled.some((item) => "collection" in item && item.collection === collectionId),
   );
   const individual = new Set<string>(
-    bindings.flatMap((binding) =>
-      binding.entries.flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
-    ),
+    lists.flatMap((list) => list.enabled.flatMap((item) => ("skill" in item ? [item.skill] : []))),
   );
-  const enabled = new Set<string>(bindings.flatMap((binding) => bindingSkillIds(state, binding)));
+  const enabled = new Set<string>(lists.flatMap((list) => enabledSkillIds(state, list.enabled)));
   const skillAt = (path: string) =>
     state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
   const added = observed.filter(
@@ -125,8 +121,8 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   const priorTree =
     acquisition === undefined
       ? undefined
-      : state.retained_copies.find(
-          (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
+      : state.collection_versions.find(
+          (tree) => tree.collection_version_id === acquisition.collection_version_id,
         );
   if (acquisition === undefined || priorTree === undefined)
     return yield* new CollectionNotUpdatable({
@@ -240,16 +236,15 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
           updateInstalledSkills({
             roots: options.roots,
             variantsPath: store.variantsPath,
-            onlyBindings: [...effectiveGlobalBindings(current), ...current.local_bindings].filter(
-              (binding) =>
-                binding.entries.some((entry) =>
-                  entry.kind === "collection"
-                    ? entry.collection_id === collectionId
-                    : current.skills.some(
-                        (skill) =>
-                          skill.skill_id === entry.skill_id && skill.collection_id === collectionId,
-                      ),
-                ),
+            onlyScopes: enabledByScope(current).filter((list) =>
+              list.enabled.some((item) =>
+                "collection" in item
+                  ? item.collection === collectionId
+                  : current.skills.some(
+                      (skill) =>
+                        skill.skill_id === item.skill && skill.collection_id === collectionId,
+                    ),
+              ),
             ),
           }),
           (value) => ({ kind: "projections-reconciled", projected: value.projected }),
@@ -257,13 +252,13 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         projected = reconciled.projected;
       }
       const after = yield* (yield* LibraryStore).load;
-      const retainedTree = after.retained_copies.find(
-        (tree) => tree.retained_copy_id === retained.retained_version_id,
+      const retainedTree = after.collection_versions.find(
+        (tree) => tree.collection_version_id === retained.retained_version_id,
       );
       return {
         subject_id: before.subjectId,
         subject_kind: before.kind,
-        previous_retained_copy_id: priorTree.retained_copy_id,
+        previous_retained_copy_id: priorTree.collection_version_id,
         selected_retained_copy_id: retained.retained_version_id,
         snapshot_digest: retained.snapshot_digest,
         changed,
@@ -329,8 +324,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             const current = yield* store.load;
             const previous = latestSourceImport(state, before);
             const latest = latestSourceImport(current, before);
-            sourceRetained =
-              latest !== undefined && latest.acquisition_id !== previous?.acquisition_id;
+            sourceRetained = latest !== undefined && latest.import_id !== previous?.import_id;
           }
           const error = commandFailure(cause);
           return {

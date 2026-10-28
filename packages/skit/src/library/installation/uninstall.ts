@@ -1,28 +1,24 @@
 import { Effect } from "effect";
 import { pathIsWithin } from "../../platform/path-identity.js";
-import {
-  effectiveGlobalBindings,
-  type LibraryState,
-  type InstalledSkill,
-} from "../library-state.js";
+import { globalEnabled, type LibraryState, type InstalledSkill } from "../library-state.js";
 import { withInstalledSkillMutation } from "../../projection/mutation.js";
 import { LibraryStore } from "../store/library-store.js";
-import { bindingSkillIds, type Binding } from "../library-contracts.js";
+import { enabledSkillIds, type Enabled } from "../library-contracts.js";
 import type { InstallDestination } from "../../vocabulary.js";
 import type { SkillId } from "../entity-ids.js";
 
-/** A repository Binding owns its selected installations beneath that repository. */
+/** A repository owns the installed skills it enables beneath it. */
 export const repositorySelectsInstalledSkill = (state: LibraryState, projection: InstalledSkill) =>
-  state.local_bindings.some(
-    (binding) =>
-      pathIsWithin(binding.scope.root, projection.root) &&
-      !state.local_bindings.some(
+  state.repositories.some(
+    (repository) =>
+      pathIsWithin(repository.root, projection.root) &&
+      !state.repositories.some(
         (other) =>
-          other.scope.root !== binding.scope.root &&
-          pathIsWithin(binding.scope.root, other.scope.root) &&
-          pathIsWithin(other.scope.root, projection.root),
+          other.root !== repository.root &&
+          pathIsWithin(repository.root, other.root) &&
+          pathIsWithin(other.root, projection.root),
       ) &&
-      bindingSkillIds(state, binding).includes(projection.skill_id),
+      enabledSkillIds(state, repository.enabled).includes(projection.skill_id),
   );
 
 /**
@@ -34,22 +30,22 @@ export const leftoverSkills = (
   state: LibraryState,
   options: {
     activeDestinations: readonly InstallDestination[];
-    /** The enabled settings to compare against; the state's own when omitted. */
-    enabled?: readonly Binding[];
+    /** What is enabled for every project, to compare against; the state's own when omitted. */
+    enabled?: readonly Enabled[];
     /** Only copies at inactive or former destinations, leaving enable changes to the caller. */
     inactiveOnly?: boolean;
     onlySkillIds?: readonly SkillId[];
   },
 ): InstalledSkill[] =>
-  state.projections.filter(
+  state.installed_skills.filter(
     (projection) =>
       (options.onlySkillIds === undefined ||
         (options.onlySkillIds.includes(projection.skill_id) &&
           !repositorySelectsInstalledSkill(state, projection))) &&
-      (!(options.activeDestinations as readonly string[]).includes(projection.target) ||
+      (!(options.activeDestinations as readonly string[]).includes(projection.destination) ||
         (!options.inactiveOnly &&
-          !(options.enabled ?? effectiveGlobalBindings(state)).some((binding) =>
-            bindingSkillIds(state, binding).includes(projection.skill_id),
+          !enabledSkillIds(state, options.enabled ?? globalEnabled(state).enabled).includes(
+            projection.skill_id,
           ) &&
           !repositorySelectsInstalledSkill(state, projection))),
   );
@@ -79,13 +75,13 @@ export const uninstallSkills = Effect.fn("Library.uninstallSkills")(function* (
       Effect.gen(function* () {
         let uninstalled = 0;
         for (const copy of copies) {
-          const projection = mutation.state.projections.find(
-            (item) => item.projection_id === copy.projection_id,
+          const projection = mutation.state.installed_skills.find(
+            (item) => item.installed_skill_id === copy.installed_skill_id,
           );
           const skill = mutation.state.skills.find((item) => item.skill_id === copy.skill_id);
           if (projection === undefined || skill === undefined) continue;
           const inactive = !(options.activeDestinations as readonly string[]).includes(
-            projection.target,
+            projection.destination,
           );
           const outcome = yield* mutation.uninstall(
             projection,
@@ -98,10 +94,10 @@ export const uninstallSkills = Effect.fn("Library.uninstallSkills")(function* (
             continue;
           }
           if (outcome.kind === "retired") uninstalled++;
-          const index = mutation.state.projections.findIndex(
-            (item) => item.projection_id === projection.projection_id,
+          const index = mutation.state.installed_skills.findIndex(
+            (item) => item.installed_skill_id === projection.installed_skill_id,
           );
-          if (index >= 0) mutation.state.projections.splice(index, 1);
+          if (index >= 0) mutation.state.installed_skills.splice(index, 1);
         }
         return uninstalled;
       }),

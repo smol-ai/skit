@@ -71,7 +71,7 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
     let sourceUpdated: string | null = null;
     // Lock file entries whose bytes disagree cannot establish the selected Skill's source date.
     const dates =
-      acquisition?.observations
+      acquisition?.lock_file_entries
         .filter(
           (observation) =>
             observation.content_agreement === "agrees" &&
@@ -103,7 +103,7 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
       source: source === undefined ? null : sourceIdentityLabel(source),
       revision: acquisition?.revision ?? null,
       source_updated_at: sourceUpdated,
-      acquired_at: validTimestamp(acquisition?.acquired_at),
+      acquired_at: validTimestamp(acquisition?.imported_at),
     });
   }
   return metadata;

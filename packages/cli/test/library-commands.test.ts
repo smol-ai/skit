@@ -97,7 +97,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
           store.save(
             {
               ...beforeStaleChange,
-              custodyIssues: beforeStaleChange.custodyIssues ?? [],
+              ownershipIssues: beforeStaleChange.ownershipIssues ?? [],
             },
             beforeStaleChange,
           ),
@@ -175,15 +175,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
           store.save(
             {
               ...state,
-              global_bindings: [
-                { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
-              ],
-              local_bindings: [
-                {
-                  scope: { kind: "repository", root },
-                  entries: [{ kind: "skill", skill_id: reviewId }],
-                },
-              ],
+              enabled: [{ skill: reviewId }],
+              repositories: [{ root, enabled: [{ skill: reviewId }] }],
             },
             state,
           ),
@@ -231,8 +224,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     assert.strictEqual((yield* interaction.results).length, 2);
     const disabled = yield* home.durable;
-    assert.deepStrictEqual(disabled.global_bindings, []);
-    assert.deepStrictEqual(disabled.local_bindings, []);
+    assert.deepStrictEqual(disabled.enabled, []);
+    assert.deepStrictEqual(disabled.repositories, []);
     const collectionId = collection.collection!.collection_id;
     const enable = yield* makeScriptedInteraction([collectionId, "collection"]);
     yield* home.owned(
@@ -247,9 +240,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         configuration,
       }).pipe(Effect.provide(enable.layer)),
     );
-    assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
-      { kind: "collection", collection_id: collectionId },
-    ]);
+    assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
     assert.ok(!(yield* enable.prompts).some((prompt) => prompt.kind === "multiselect"));
 
     const unchangedBrowse = yield* makeScriptedInteraction([
@@ -308,7 +299,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         Effect.provide(browseDisable.layer),
       ),
     );
-    assert.deepStrictEqual((yield* home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).enabled, []);
     yield* home.owned(
       presentSetEnabled({
         action: "enable",
@@ -335,7 +326,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         configuration,
       }).pipe(Effect.provide(directDisable.layer)),
     );
-    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).repositories, []);
     assert.strictEqual(yield* directDisable.remaining, 0);
     assert.strictEqual((yield* directDisable.prompts).length, 1);
     for (const scope of [{ kind: "global" } as const, { kind: "repository", root } as const]) {
@@ -366,8 +357,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         configuration,
       }).pipe(Effect.provide(disableEverywhere.layer)),
     );
-    assert.deepStrictEqual((yield* home.durable).global_bindings, []);
-    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).enabled, []);
+    assert.deepStrictEqual((yield* home.durable).repositories, []);
     assert.strictEqual(yield* disableEverywhere.remaining, 0);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -425,15 +416,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     const retained = yield* home.durable;
     const state = {
       ...retained,
-      global_bindings: [
-        {
-          scope: { kind: "global" as const },
-          entries: retained.skills.map((skill) => ({
-            kind: "skill" as const,
-            skill_id: skill.skill_id,
-          })),
-        },
-      ],
+      enabled: retained.skills.map((skill) => ({ skill: skill.skill_id })),
     };
     yield* home.owned(LibraryStore.use((store) => store.save(state, retained)));
     const configuration = yield* libraryCommandConfiguration({
@@ -479,9 +462,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     const after = yield* home.durable;
     const showMe = retained.skills.find((skill) => skill.name === "show-me");
     assert.ok(showMe);
-    assert.deepStrictEqual(after.global_bindings[0]?.entries, [
-      { kind: "skill", skill_id: showMe.skill_id },
-    ]);
+    assert.deepStrictEqual(after.enabled, [{ skill: showMe.skill_id }]);
     const single = yield* makeScriptedInteraction(["cancel"]);
     yield* home.owned(
       presentSetEnabled({
@@ -546,15 +527,8 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
           store.save(
             {
               ...state,
-              global_bindings: [
-                { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
-              ],
-              local_bindings: [
-                {
-                  scope: { kind: "repository", root },
-                  entries: [{ kind: "skill", skill_id: reviewId }],
-                },
-              ],
+              enabled: [{ skill: reviewId }],
+              repositories: [{ root, enabled: [{ skill: reviewId }] }],
             },
             state,
           ),
@@ -610,7 +584,7 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
       ),
     );
     const current = yield* home.durable;
-    const concurrent = { ...current, global_bindings: [] };
+    const concurrent = { ...current, enabled: [] };
     yield* home.owned(
       withLibraryWriter(LibraryStore.use((store) => store.save(concurrent, current))),
     );

@@ -183,17 +183,17 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
             versions: [],
           },
         ],
-        projections: [
+        installed_skills: [
           {
-            projection_id: makeInstalledSkillId(),
+            installed_skill_id: makeInstalledSkillId(),
             skill_id: skillId,
             skill_version_id: versionId,
-            target: "agents" as const,
+            destination: "agents" as const,
             root: AbsoluteDevicePath.make(f.root),
             path: AbsoluteDevicePath.make(join(f.root, "projection")),
             expected_digest: Digest.make(`sha256:${"a".repeat(64)}`),
             status: "installed" as const,
-            projected_at: "2026-10-06T00:00:00Z",
+            installed_at: "2026-10-06T00:00:00Z",
           },
         ],
       };

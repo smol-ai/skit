@@ -89,7 +89,7 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
               save: (next, base) =>
                 Effect.gen(function* () {
                   yield* store.save(next, base);
-                  if (next.projections.some((projection) => projection.status === "installed"))
+                  if (next.installed_skills.some((projection) => projection.status === "installed"))
                     yield* f.fs.writeFileString(
                       join(f.duplicate, ".git"),
                       "gitdir: newly-owned-checkout\n",
@@ -122,7 +122,7 @@ it.effect(
       const applied = yield* f.home.owned(f.apply);
       expect(yield* f.fs.exists(f.duplicate)).toBe(false);
       expect(
-        (yield* f.home.durable).projections.every(
+        (yield* f.home.durable).installed_skills.every(
           (projection) => projection.status === "installed",
         ),
       ).toBe(true);
@@ -141,7 +141,7 @@ it.effect(
         "Excluded but irreplaceable",
       );
       expect(yield* f.fs.readDirectory(join(f.duplicate, "empty"))).toEqual([]);
-      expect((yield* f.home.durable).global_bindings).toEqual([]);
+      expect((yield* f.home.durable).enabled).toEqual([]);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -172,7 +172,7 @@ it.effect(
               save: (next, base) =>
                 Effect.gen(function* () {
                   yield* store.save(next, base);
-                  if (next.projections.some((projection) => projection.status === "installed"))
+                  if (next.installed_skills.some((projection) => projection.status === "installed"))
                     yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
                 }),
             }),

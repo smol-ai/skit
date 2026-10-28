@@ -166,8 +166,8 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
       return {
         exists: true,
         skills: observed.skills.map((skill) => skill.name),
-        projections: observed.projections.map((projection) => ({
-          target: projection.target,
+        projections: observed.installed_skills.map((projection) => ({
+          target: projection.destination,
           path: relativeToHome(home, projection.path),
           status: projection.status,
         })),

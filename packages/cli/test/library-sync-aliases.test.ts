@@ -23,10 +23,7 @@ import { devices } from "./helpers/library-sync-devices.js";
 type Homes = Effect.Success<typeof devices>;
 type Device = Homes["a"];
 
-const enable = (ids: readonly SkillId[]) => ({
-  scope: { kind: "global" as const },
-  entries: ids.map((id) => ({ kind: "skill" as const, skill_id: id })),
-});
+const enable = (ids: readonly SkillId[]) => ids.map((id) => ({ skill: id }));
 const ids = <T>(records: readonly T[], key: (record: T) => string) => records.map(key).sort();
 
 /**
@@ -44,7 +41,10 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   yield* libraryManifestFromLocalState(state);
   const ancestry = state.sync_ancestry;
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
-  for (const digest of new Set([...retained, ...state.retained_copies.map((copy) => copy.digest)]))
+  for (const digest of new Set([
+    ...retained,
+    ...state.collection_versions.map((copy) => copy.digest),
+  ]))
     assert.strictEqual(
       (yield* captureSnapshotArchive(collectionVersionPath(join(device.home, "originals"), digest)))
         .digest,
@@ -54,11 +54,11 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   if (head === null) return;
   assert.isTrue(Schema.is(LibraryManifest)(head.manifest));
   const stored = new Set(server.stored.snapshots.map(([digest]) => digest));
-  for (const copy of head.manifest.retained_copies) assert.isTrue(stored.has(copy.digest));
+  for (const copy of head.manifest.collection_versions) assert.isTrue(stored.has(copy.digest));
 });
 
 const retainedDigests = (device: Device) =>
-  Effect.map(device.state, (state) => state.retained_copies.map((copy) => copy.digest));
+  Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.digest));
 
 /** Raw state text, so retired handles are checked without going through the loader. */
 const stateBytes = (fs: FileSystem.FileSystem, device: Device) =>
@@ -82,16 +82,12 @@ it.effect(
       const repository = join(b.home, "repo");
       yield* b.edit((state) => ({
         ...state,
-        global_bindings: [
+        enabled: enable([localSkill.skill_id]),
+        invocation_policies: { [localSkill.skill_id]: "explicit" },
+        repositories: [
           {
-            ...enable([localSkill.skill_id]),
-            invocation_policies: { [localSkill.skill_id]: "explicit" },
-          },
-        ],
-        local_bindings: [
-          {
-            scope: { kind: "repository", root: repository },
-            entries: [{ kind: "collection", collection_id: local.collection.collection_id }],
+            root: repository,
+            enabled: [{ collection: local.collection.collection_id }],
             invocation_policies: { [localSkill.skill_id]: "implicit" },
           },
         ],
@@ -99,7 +95,7 @@ it.effect(
       yield* b.project();
       const before = yield* b.state;
       const retained = yield* retainedDigests(b);
-      const projectionId = before.projections[0]!.projection_id;
+      const projectionId = before.installed_skills[0]!.installed_skill_id;
       assert.strictEqual((yield* a.sync()).status, "pushed");
       assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
 
@@ -118,28 +114,25 @@ it.effect(
         [publishedVersion],
       );
       assert.deepStrictEqual(
-        ids(after.acquisitions, (item) => item.acquisition_id),
-        ids(
-          [...(yield* a.state).acquisitions, ...before.acquisitions],
-          (item) => item.acquisition_id,
-        ),
+        ids(after.imports, (item) => item.import_id),
+        ids([...(yield* a.state).imports, ...before.imports], (item) => item.import_id),
       );
-      for (const acquisition of after.acquisitions)
+      for (const acquisition of after.imports)
         assert.strictEqual(acquisition.collection_id, published.collection.collection_id);
-      assert.deepStrictEqual(after.global_bindings, [
+      assert.deepStrictEqual(after.enabled, enable([publishedSkill.skill_id]));
+      assert.deepStrictEqual(after.invocation_policies, {
+        [publishedSkill.skill_id]: "explicit",
+      });
+      assert.deepStrictEqual(after.repositories, [
         {
-          ...enable([publishedSkill.skill_id]),
-          invocation_policies: { [publishedSkill.skill_id]: "explicit" },
-        },
-      ]);
-      assert.deepStrictEqual(after.local_bindings, [
-        {
-          scope: { kind: "repository", root: repository },
-          entries: [{ kind: "collection", collection_id: published.collection.collection_id }],
+          root: repository,
+          enabled: [{ collection: published.collection.collection_id }],
           invocation_policies: { [publishedSkill.skill_id]: "implicit" },
         },
       ]);
-      const projection = after.projections.find((item) => item.projection_id === projectionId);
+      const projection = after.installed_skills.find(
+        (item) => item.installed_skill_id === projectionId,
+      );
       assert.ok(projection);
       assert.strictEqual(projection.skill_id, publishedSkill.skill_id);
       assert.strictEqual(projection.skill_version_id, publishedVersion);
@@ -167,7 +160,7 @@ it.effect(
       // A gains B's import without another write, then both homes are clean.
       assert.strictEqual(server.writes, 2);
       assert.strictEqual((yield* a.sync()).status, "merged");
-      assert.strictEqual((yield* a.state).acquisitions.length, 2);
+      assert.strictEqual((yield* a.state).imports.length, 2);
       assert.strictEqual((yield* b.sync()).status, "clean");
       assert.strictEqual((yield* a.sync()).status, "clean");
       assert.strictEqual(server.writes, 2);
@@ -185,8 +178,8 @@ it.effect("distinct upstreams with identical bytes keep separate identities", ()
     const secondState = yield* b.state;
     // The case is only meaningful when the retained bytes really are identical.
     assert.strictEqual(
-      firstState.retained_copies[0]!.digest,
-      secondState.retained_copies[0]!.digest,
+      firstState.collection_versions[0]!.digest,
+      secondState.collection_versions[0]!.digest,
     );
     assert.strictEqual(
       first.skills[0]!.versions[0]!.artifact_digest,
@@ -217,10 +210,10 @@ it.effect("distinct upstreams with identical bytes keep separate identities", ()
         ].sort(),
       );
       assert.deepStrictEqual(
-        ids(state.retained_copies, (item) => item.retained_copy_id),
+        ids(state.collection_versions, (item) => item.collection_version_id),
         [
-          firstState.retained_copies[0]!.retained_copy_id,
-          secondState.retained_copies[0]!.retained_copy_id,
+          firstState.collection_versions[0]!.collection_version_id,
+          secondState.collection_versions[0]!.collection_version_id,
         ].sort(),
       );
       yield* assertIntact(homes, device, retained);
@@ -270,11 +263,8 @@ it.effect(
         (item) => item.skill_version_id !== v1,
       )!.skill_version_id;
       const retained = yield* retainedDigests(b);
-      const localAcquisitions = ids((yield* b.state).acquisitions, (item) => item.acquisition_id);
-      const remoteAcquisitions = ids(
-        server.remote!.manifest.acquisitions,
-        (item) => item.acquisition_id,
-      );
+      const localAcquisitions = ids((yield* b.state).imports, (item) => item.import_id);
+      const remoteAcquisitions = ids(server.remote!.manifest.imports, (item) => item.import_id);
 
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
@@ -296,10 +286,10 @@ it.effect(
       assert.notInclude(yield* stateBytes(fs, b), localV2);
       // The rejected Version's import and bytes stay retained.
       assert.deepStrictEqual(
-        ids(after.acquisitions, (item) => item.acquisition_id),
+        ids(after.imports, (item) => item.import_id),
         [...new Set([...localAcquisitions, ...remoteAcquisitions])].sort(),
       );
-      assert.strictEqual(after.acquisitions.length, 3);
+      assert.strictEqual(after.imports.length, 3);
       yield* assertIntact(homes, b, retained);
       assert.strictEqual((yield* a.sync()).status, "merged");
       assert.strictEqual((yield* b.sync()).status, "clean");
@@ -315,7 +305,7 @@ it.effect("many independent imports of one upstream converge on one published id
     yield* b.retain("same");
     yield* c.retain("same");
     const acquisitions = [];
-    for (const device of [a, b, c]) acquisitions.push(...(yield* device.state).acquisitions);
+    for (const device of [a, b, c]) acquisitions.push(...(yield* device.state).imports);
     const retained = yield* retainedDigests(c);
     assert.strictEqual((yield* a.sync()).status, "pushed");
     assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
@@ -338,8 +328,8 @@ it.effect("many independent imports of one upstream converge on one published id
         [published.skills[0]!.versions[0]!.skill_version_id],
       );
       assert.deepStrictEqual(
-        ids(state.acquisitions, (item) => item.acquisition_id),
-        ids(acquisitions, (item) => item.acquisition_id),
+        ids(state.imports, (item) => item.import_id),
+        ids(acquisitions, (item) => item.import_id),
       );
       yield* assertIntact(homes, device, retained);
     }
@@ -354,12 +344,12 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     const { fs, a, b, server } = homes;
     const initial = yield* a.retain("review", { bytes: "v1\n" });
     const skillId = initial.skills[0]!.skill_id;
-    yield* a.edit((state) => ({ ...state, global_bindings: [enable([skillId])] }));
+    yield* a.edit((state) => ({ ...state, enabled: enable([skillId]) }));
     yield* a.project();
     yield* a.sync();
     assert.strictEqual((yield* b.sync()).status, "pulled");
     for (const device of [a, b]) {
-      const projection = (yield* device.state).projections[0]!;
+      const projection = (yield* device.state).installed_skills[0]!;
       yield* fs.writeFileString(join(projection.path, "SKILL.md"), "authored edit\n");
       yield* device.retainProjectionEdit(projection);
     }
@@ -382,18 +372,15 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     );
     assert.notInclude(yield* stateBytes(fs, b), bEdit);
     // The source import and both devices' retained edits.
-    assert.strictEqual(after.acquisitions.length, 3);
-    assert.strictEqual(
-      after.acquisitions.filter((item) => item.kind === "retained-edit").length,
-      2,
-    );
-    for (const projection of after.projections)
+    assert.strictEqual(after.imports.length, 3);
+    assert.strictEqual(after.imports.filter((item) => item.kind === "edit").length, 2);
+    for (const projection of after.installed_skills)
       assert.include(
         skill.versions.map((item) => item.skill_version_id),
         projection.skill_version_id,
       );
     assert.strictEqual(
-      yield* fs.readFileString(join(after.projections[0]!.path, "SKILL.md")),
+      yield* fs.readFileString(join(after.installed_skills[0]!.path, "SKILL.md")),
       "authored edit\n",
     );
     yield* assertIntact(homes, b, retained);
@@ -421,11 +408,11 @@ it.effect(
       const publishedSkill = published.skills[0]!;
       yield* a.edit((state) => ({
         ...state,
-        global_bindings: [enable([publishedSkill.skill_id])],
+        enabled: enable([publishedSkill.skill_id]),
       }));
       yield* b.edit((state) => ({
         ...state,
-        global_bindings: [enable([local.skills[0]!.skill_id])],
+        enabled: enable([local.skills[0]!.skill_id]),
       }));
       yield* b.project();
       yield* a.sync();
@@ -463,13 +450,13 @@ it.effect(
       );
       // B's strictly older import stays as history, with its bytes.
       assert.deepStrictEqual(
-        ids(after.acquisitions, (item) => item.acquisition_id),
+        ids(after.imports, (item) => item.import_id),
         [
-          ...before.acquisitions.map((item) => item.acquisition_id),
-          ...(yield* a.state).acquisitions.map((item) => item.acquisition_id),
+          ...before.imports.map((item) => item.import_id),
+          ...(yield* a.state).imports.map((item) => item.import_id),
         ].sort(),
       );
-      assert.deepStrictEqual(after.global_bindings, [enable([publishedSkill.skill_id])]);
+      assert.deepStrictEqual(after.enabled, enable([publishedSkill.skill_id]));
       assert.strictEqual(yield* fs.readFileString(join(b.root, "same", "SKILL.md")), "published\n");
       yield* assertIntact(homes, b, retained);
       assert.strictEqual((yield* a.sync()).status, "merged");

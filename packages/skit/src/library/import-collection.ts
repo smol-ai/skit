@@ -212,10 +212,10 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     state.collections.push(collection);
   }
   const collectionId = collection.collection_id;
-  const retainedCopy = state.retained_copies.find(
+  const retainedCopy = state.collection_versions.find(
     (candidate) => candidate.digest === request.retainedDigest,
   );
-  const retainedCopyId = retainedCopy?.retained_copy_id ?? makeCollectionVersionId();
+  const retainedCopyId = retainedCopy?.collection_version_id ?? makeCollectionVersionId();
   // Return the identity and facts of this retained copy, including on an unchanged import.
   // These contain no scoped paths, so callers can consume them after preparation closes.
   const imported = {
@@ -224,17 +224,17 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     members: request.facts,
   };
   const acquisition: Import = {
-    acquisition_id: makeImportId(),
+    import_id: makeImportId(),
     collection_id: collectionId,
     kind: "source",
-    retained_copy_id: retainedCopyId,
+    collection_version_id: retainedCopyId,
     source_identity: source,
     input: { value: request.input },
     ...(revision === undefined ? {} : { revision }),
-    acquired_at: request.retainedAt,
+    imported_at: request.retainedAt,
     machine_id: machineId,
     // The importing machine records the entries, as it records the import itself.
-    observations: request.observations.map((entry) => ({ ...entry, machine_id: machineId })),
+    lock_file_entries: request.observations.map((entry) => ({ ...entry, machine_id: machineId })),
   };
   const skillAt = (path: string) =>
     state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
@@ -245,14 +245,14 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     previous !== undefined &&
     Schema.toEquivalence(Import)(previous, {
       ...acquisition,
-      acquisition_id: previous.acquisition_id,
-      acquired_at: previous.acquired_at,
+      import_id: previous.import_id,
+      imported_at: previous.imported_at,
     }) &&
     unchangedSkills.every((skill) => skill !== undefined)
   )
     return { action: "unchanged" as const, collection, skills: unchangedSkills, ...imported };
-  const previousCopy = state.retained_copies.find(
-    (copy) => copy.retained_copy_id === previous?.retained_copy_id,
+  const previousCopy = state.collection_versions.find(
+    (copy) => copy.collection_version_id === previous?.collection_version_id,
   );
   const persistedSkills = [];
   // Import metadata can change without changing the Versions the Library uses.
@@ -288,8 +288,8 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     }
   }
   if (retainedCopy === undefined)
-    state.retained_copies.push({
-      retained_copy_id: retainedCopyId,
+    state.collection_versions.push({
+      collection_version_id: retainedCopyId,
       digest: request.retainedDigest,
       copy_profile: "verbatim/v1",
       members: request.facts.map((fact) => ({
@@ -299,7 +299,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
         materialization_profile: fact.materializationProfile,
       })),
     });
-  state.acquisitions.push(acquisition);
+  state.imports.push(acquisition);
   const successor = yield* decodeLibraryState(state).pipe(
     Effect.mapError(
       (error) =>
@@ -362,7 +362,7 @@ export class InstalledSkillChanged
  */
 export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   readonly skillId: LibraryState["skills"][number]["skill_id"];
-  readonly projectionId: LibraryState["projections"][number]["projection_id"];
+  readonly projectionId: LibraryState["installed_skills"][number]["installed_skill_id"];
   readonly path: string;
   readonly observedHash: Digest;
   readonly retainedAt: string;
@@ -376,8 +376,8 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
     });
   const state = structuredClone(current.state);
   const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
-  const projection = state.projections.find(
-    (candidate) => candidate.projection_id === request.projectionId,
+  const projection = state.installed_skills.find(
+    (candidate) => candidate.installed_skill_id === request.projectionId,
   );
   if (
     skill === undefined ||
@@ -402,10 +402,10 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
   const fact = prepared.facts[0]!;
   const machineId = yield* MachineSettings.ensureIdentity(store.home);
-  const retainedCopy = state.retained_copies.find(
+  const retainedCopy = state.collection_versions.find(
     (candidate) => candidate.digest === prepared.digest,
   );
-  const retainedCopyId = retainedCopy?.retained_copy_id ?? makeCollectionVersionId();
+  const retainedCopyId = retainedCopy?.collection_version_id ?? makeCollectionVersionId();
   const version = skill.versions.find(
     (candidate) => candidate.artifact_digest === fact.artifactDigest,
   ) ?? {
@@ -416,8 +416,8 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
     materialization_profile: fact.materializationProfile,
   };
   if (retainedCopy === undefined)
-    state.retained_copies.push({
-      retained_copy_id: retainedCopyId,
+    state.collection_versions.push({
+      collection_version_id: retainedCopyId,
       digest: prepared.digest,
       copy_profile: "verbatim/v1",
       members: [
@@ -429,20 +429,20 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
         },
       ],
     });
-  state.acquisitions.push({
-    acquisition_id: makeImportId(),
+  state.imports.push({
+    import_id: makeImportId(),
     collection_id: skill.collection_id,
-    kind: "retained-edit",
-    retained_copy_id: retainedCopyId,
+    kind: "edit",
+    collection_version_id: retainedCopyId,
     source_identity: {
       kind: "local",
       machine_id: machineId,
       path: { value: request.path },
     },
     input: { value: request.path },
-    acquired_at: request.retainedAt,
+    imported_at: request.retainedAt,
     machine_id: machineId,
-    observations: [],
+    lock_file_entries: [],
   });
   if (!skill.versions.includes(version)) skill.versions.push(version);
   skill.local_version_id = version.skill_version_id;

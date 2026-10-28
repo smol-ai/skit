@@ -119,8 +119,8 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
         })();
     const observedOwnership = yield* ownershipAt(hit.realPath);
     const markerProjection = observedOwnership.marker
-      ? observedLibrary.projections.find(
-          (projection) => projection.projection_id === observedOwnership.marker?.projection_id,
+      ? observedLibrary.installed_skills.find(
+          (projection) => projection.installed_skill_id === observedOwnership.marker?.projection_id,
         )
       : undefined;
     const ownershipCheck =
@@ -205,7 +205,7 @@ const scanSetupInstalledSkills = Effect.fn("Setup.scanInstalledSkills")(function
   const { libraryCollectionsById } = indexes;
   const projections: SetupInstalledSkill[] = [];
   const fs = yield* FileSystem.FileSystem;
-  for (const projection of observedLibrary.projections) {
+  for (const projection of observedLibrary.installed_skills) {
     const skill = observedLibrary.skills.find(
       (candidate) => candidate.skill_id === projection.skill_id,
     );
@@ -219,7 +219,9 @@ const scanSetupInstalledSkills = Effect.fn("Setup.scanInstalledSkills")(function
       name: skill.name,
       path,
       harnesses:
-        projection.target === "legacy" ? [] : [...installDestinationHarnesses[projection.target]],
+        projection.destination === "legacy"
+          ? []
+          : [...installDestinationHarnesses[projection.destination]],
       status: !present ? "missing" : projection.status === "installed" ? "current" : "modified",
     });
   }

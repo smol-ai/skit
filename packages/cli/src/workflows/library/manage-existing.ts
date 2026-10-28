@@ -158,19 +158,19 @@ const planManage = Effect.fn("Library.planManage")(function* (
   const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
   const sourceContentHash = yield* deterministicTreeHash(sourcePath);
   const existingAcquisitionIds = new Set(
-    state.acquisitions
+    state.imports
       .filter(
         (acquisition) =>
           acquisition.source_identity.kind === "local" &&
           resolve(acquisition.source_identity.path.value) === sourcePath,
       )
-      .map((acquisition) => acquisition.acquisition_id),
+      .map((acquisition) => acquisition.import_id),
   );
   const existingCollection = state.collections.find((collection) =>
-    state.acquisitions.some(
+    state.imports.some(
       (acquisition) =>
         acquisition.collection_id === collection.collection_id &&
-        existingAcquisitionIds.has(acquisition.acquisition_id),
+        existingAcquisitionIds.has(acquisition.import_id),
     ),
   );
   const existingSkill = state.skills.find(
@@ -619,7 +619,7 @@ const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
     required++;
     const path = join(root, name);
     const expectedPath = yield* canonical(path);
-    const candidates = state.projections.filter(
+    const candidates = state.installed_skills.filter(
       (projection) => projection.skill_id === skill?.skill_id && projection.status === "installed",
     );
     const installedPaths = yield* Effect.forEach(candidates, (projection) =>

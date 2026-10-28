@@ -43,8 +43,8 @@ it.effect(
         "authored-workspace",
       );
       const firstState = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
-      assert.strictEqual(firstState.retained_copies.length, 1);
-      const firstTree = firstState.retained_copies[0];
+      assert.strictEqual(firstState.collection_versions.length, 1);
+      const firstTree = firstState.collection_versions[0];
       assert.ok(firstTree);
       assert.strictEqual(
         yield* fs.exists(
@@ -65,7 +65,7 @@ it.effect(
       assert.strictEqual(state.collections.length, 1);
       // The refreshed tree is retained alongside the first.
       assert.deepStrictEqual(
-        state.retained_copies.map((copy) => copy.digest === firstTree.digest),
+        state.collection_versions.map((copy) => copy.digest === firstTree.digest),
         [true, false],
       );
       assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
@@ -205,7 +205,7 @@ it.effect(
       assert.strictEqual(pending.registration, undefined);
       const retained = yield* f.home.durable;
       assert.strictEqual(retained.collections.length, 1);
-      const copy = retained.retained_copies[0]!;
+      const copy = retained.collection_versions[0]!;
       assert.isTrue(
         yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.digest), "skit.json")),
       );

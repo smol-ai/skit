@@ -2,9 +2,12 @@ import { Schema, SchemaGetter } from "effect";
 import { CollectionId, CollectionVersionId, ImportId, MachineId, SkillId } from "../entity-ids.js";
 import {
   Collection,
+  type CollectionVersion,
   CollectionVersionSkill,
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
+  type Enabled,
   HistoricalLocator,
+  type Import,
   LibraryManifest,
   Skill,
   SkillsShLockFileEntry,
@@ -171,13 +174,53 @@ export const mergeGlobalBindingsV7 = (
   return entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }];
 };
 
-/** v7 → current. */
+/** v7 → v8: enabled items lose their `kind`, and stored entities take plain names. */
+export const enabledFromV7 = (entries: readonly BindingEntryV7[]): Enabled[] =>
+  entries.map((entry) =>
+    entry.kind === "skill" ? { skill: entry.skill_id } : { collection: entry.collection_id },
+  );
+
+export const collectionVersionFromV7 = ({
+  retained_copy_id,
+  ...copy
+}: CollectionVersionV7): CollectionVersion => ({
+  ...copy,
+  collection_version_id: retained_copy_id,
+});
+
+export const importFromV7 = ({
+  acquisition_id,
+  kind,
+  retained_copy_id,
+  acquired_at,
+  observations,
+  ...fields
+}: ImportV7): Import => ({
+  ...fields,
+  import_id: acquisition_id,
+  kind: kind === "retained-edit" ? "edit" : "source",
+  collection_version_id: retained_copy_id,
+  imported_at: acquired_at,
+  lock_file_entries: observations,
+});
+
+export const libraryManifestFromV7 = ({
+  schema: _schema,
+  retained_copies,
+  acquisitions,
+  bindings,
+  ...fields
+}: LibraryManifestV7) => ({
+  ...fields,
+  schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
+  collection_versions: retained_copies.map(collectionVersionFromV7),
+  imports: acquisitions.map(importFromV7),
+  enabled: enabledFromV7(bindings.flatMap((binding) => binding.entries)),
+});
+
 export const LibraryManifestFromV7 = LibraryManifestV7.pipe(
   Schema.decodeTo(LibraryManifest, {
-    decode: SchemaGetter.transform((manifest) => ({
-      ...manifest,
-      schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
-    })),
+    decode: SchemaGetter.transform(libraryManifestFromV7),
     encode: SchemaGetter.forbidden(() => "v7 portable Library manifests are decode-only"),
   }),
 );

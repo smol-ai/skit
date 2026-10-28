@@ -21,7 +21,7 @@ import {
   readableSkillsDirectories,
 } from "../src/projection/duplicates.js";
 import { importSource } from "../src/library-application/import-source.js";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
 import { setupCommand } from "../src/handlers/library/setup.js";
 import { Renderer } from "../src/presentation/renderer.js";
@@ -84,7 +84,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
             roots: f.home.inventory,
             variantsPath: f.home.variantsPath,
           };
-          const preview = yield* setLibraryBindings({
+          const preview = yield* setLibraryEnabled({
             ...options,
             invocation: { ...options.invocation, dryRun: true },
           });
@@ -95,22 +95,22 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
               aliases: [expect.objectContaining({ path: f.alias, via: "symlink" })],
             }),
           ]);
-          const result = yield* Effect.result(setLibraryBindings(options));
+          const result = yield* Effect.result(setLibraryEnabled(options));
           expect(Result.isFailure(result) && result.failure._tag).toBe(
             "InstalledSkillWouldDuplicate",
           );
-          expect((yield* store.load).global_bindings).toEqual(before.global_bindings);
+          expect((yield* store.load).enabled).toEqual(before.enabled);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
-          yield* setLibraryBindings({ ...options, allowDuplicate: true });
+          yield* setLibraryEnabled({ ...options, allowDuplicate: true });
           expect(yield* f.fs.readFileString(join(f.destination, "SKILL.md"))).toBe(
             yield* f.fs.readFileString(join(f.source, "SKILL.md")),
           );
-          const policyChange = yield* setLibraryBindings({
+          const policyChange = yield* setLibraryEnabled({
             ...options,
             invocation: { ...options.invocation, invocation: "explicit" as const },
           });
           expect(policyChange.value.shadows).toBeUndefined();
-          expect((yield* store.load).global_bindings[0].invocation_policies).toBeDefined();
+          expect((yield* store.load).invocation_policies).toBeDefined();
         }),
       ),
     );
@@ -137,7 +137,7 @@ it.effect("guided setup preserves an individual link to the selected source with
     expect(yield* interaction.remaining).toBe(0);
     const state = yield* f.home.durable;
     expect(state.skills.map((skill) => skill.name)).toEqual(["review"]);
-    expect(state.global_bindings).toHaveLength(1);
+    expect(state.enabled).toHaveLength(1);
     expect(yield* f.fs.exists(f.source)).toBe(true);
     expect(yield* f.fs.exists(f.destination)).toBe(true);
     expect(yield* f.fs.exists(f.alias)).toBe(false);
@@ -227,7 +227,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
           ).toBe("duplicate-action-required");
           const state = yield* (yield* LibraryStore).load;
           expect(state.collections).toEqual([]);
-          expect(state.global_bindings).toEqual([]);
+          expect(state.enabled).toEqual([]);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
         }),
       ),
@@ -343,7 +343,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
         Effect.gen(function* () {
           yield* importSource(f.source);
           const result = yield* Effect.result(
-            setLibraryBindings({
+            setLibraryEnabled({
               query: "review",
               all: false,
               invocation: {
@@ -367,7 +367,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
           expect(Result.isFailure(result) && result.failure._tag).toBe(
             "InstalledSkillWouldDuplicate",
           );
-          expect((yield* (yield* LibraryStore).load).global_bindings).toEqual([]);
+          expect((yield* (yield* LibraryStore).load).enabled).toEqual([]);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
         }),
       ),
@@ -390,7 +390,7 @@ it.effect(
           Effect.gen(function* () {
             yield* importSource(f.source);
             const store = yield* LibraryStore;
-            yield* setLibraryBindings({
+            yield* setLibraryEnabled({
               query: "review",
               all: false,
               allowDuplicate: true,
@@ -403,14 +403,14 @@ it.effect(
               variantsPath: f.home.variantsPath,
             });
             const state = yield* store.load;
-            expect(state.projections.some((projection) => projection.target === "claude")).toBe(
-              true,
-            );
+            expect(
+              state.installed_skills.some((projection) => projection.destination === "claude"),
+            ).toBe(true);
             yield* store.save(
               {
                 ...state,
-                projections: state.projections.map((projection) =>
-                  projection.target === "claude"
+                installed_skills: state.installed_skills.map((projection) =>
+                  projection.destination === "claude"
                     ? { ...projection, status: "suppressed", suppression_reason: "native_delete" }
                     : projection,
                 ),
@@ -538,7 +538,7 @@ it.effect("guided setup preserves every selected individual link in one operatio
     expect(yield* interaction.remaining).toBe(0);
     const state = yield* f.home.durable;
     expect(state.skills).toHaveLength(2);
-    expect(state.global_bindings.flatMap((binding) => binding.entries)).toHaveLength(2);
+    expect(state.enabled).toHaveLength(2);
     for (const path of [f.source, source])
       expect(yield* f.fs.exists(join(path, "SKILL.md"))).toBe(true);
     for (const path of [f.alias, alias]) expect(yield* f.fs.exists(path)).toBe(false);
@@ -578,9 +578,7 @@ it.effect.each(["retain-only", "keep-both"] as const)(
         ),
       );
       expect(yield* interaction.remaining).toBe(0);
-      expect(
-        (yield* f.home.durable).global_bindings.flatMap((binding) => binding.entries),
-      ).toHaveLength(action === "retain-only" ? 0 : 2);
+      expect((yield* f.home.durable).enabled).toHaveLength(action === "retain-only" ? 0 : 2);
       expect(yield* f.fs.readLink(aliasRoot)).toBe(join(f.root, "Work", "skills"));
       expect(yield* f.fs.exists(f.destination)).toBe(action === "keep-both");
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -624,11 +622,7 @@ it.effect("preserves selected links and equal copies automatically across add an
     expect(yield* interaction.remaining).toBe(0);
     const state = yield* f.home.durable;
     expect(state.skills).toHaveLength(4);
-    const enabled = new Set(
-      state.global_bindings
-        .flatMap((binding) => binding.entries)
-        .flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
-    );
+    const enabled = new Set(state.enabled.flatMap((item) => ("skill" in item ? [item.skill] : [])));
     expect(
       state.skills
         .filter((skill) => enabled.has(skill.skill_id))

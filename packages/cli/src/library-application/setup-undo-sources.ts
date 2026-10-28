@@ -12,7 +12,7 @@ import {
 import type { SetupIntent } from "./setup-undo-intent.js";
 
 export interface UndoSourceImport {
-  readonly acquisitionId: Import["acquisition_id"];
+  readonly acquisitionId: Import["import_id"];
   readonly observedAt: string;
 }
 
@@ -30,22 +30,22 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
   const evidence: { path: string; hash: string }[] = [];
   for (const prior of before.sources ?? []) {
     const after = expected.sources?.find((item) => item.collectionId === prior.collectionId);
-    if (!after || after.retainedCopyId === prior.retainedCopyId) continue;
+    if (!after || after.collectionVersionId === prior.collectionVersionId) continue;
     const current = sourceImports(state, prior.collectionId)[0];
-    if (current?.retained_copy_id === prior.retainedCopyId) continue;
-    if (current?.retained_copy_id !== after.retainedCopyId) {
+    if (current?.collection_version_id === prior.collectionVersionId) continue;
+    if (current?.collection_version_id !== after.collectionVersionId) {
       conflicts.push(`Collection source changed after setup: ${prior.collectionId}`);
       continue;
     }
-    const original = state.acquisitions.find(
+    const original = state.imports.find(
       (item) =>
-        item.acquisition_id === prior.acquisitionId &&
+        item.import_id === prior.importId &&
         item.collection_id === prior.collectionId &&
         item.kind === "source" &&
-        item.retained_copy_id === prior.retainedCopyId,
+        item.collection_version_id === prior.collectionVersionId,
     );
-    const copy = state.retained_copies.find(
-      (item) => item.retained_copy_id === prior.retainedCopyId,
+    const copy = state.collection_versions.find(
+      (item) => item.collection_version_id === prior.collectionVersionId,
     );
     if (!original || !copy || !machineId) {
       conflicts.push(`Prior retained source evidence is unavailable: ${prior.collectionId}`);
@@ -68,9 +68,9 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
     }
     const now = Date.parse(observation.observedAt);
     if (
-      !Number.isFinite(Date.parse(current.acquired_at)) ||
-      now <= Date.parse(current.acquired_at) ||
-      observation.observedAt <= current.acquired_at
+      !Number.isFinite(Date.parse(current.imported_at)) ||
+      now <= Date.parse(current.imported_at) ||
+      observation.observedAt <= current.imported_at
     ) {
       conflicts.push(
         `Clock has not advanced past the current source observation: ${prior.collectionId}`,
@@ -80,15 +80,15 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
     restorations.push({
       kind: "source",
       collection_id: original.collection_id,
-      retained_copy_id: original.retained_copy_id,
+      collection_version_id: original.collection_version_id,
       source_identity: original.source_identity,
       ...(original.revision === undefined ? {} : { revision: original.revision }),
-      acquisition_id: observation.acquisitionId,
-      acquired_at: observation.observedAt,
+      import_id: observation.acquisitionId,
+      imported_at: observation.observedAt,
       machine_id: machineId,
       input: { value: path },
       // Old lock/source assertions are history; reading retained bytes is not a new upstream probe.
-      observations: [],
+      lock_file_entries: [],
     });
   }
   return {

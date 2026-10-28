@@ -157,7 +157,7 @@ for (const scenario of [
         expect(state.skills).toHaveLength(2);
         expect(state.skills.every((skill) => skill.name === selectedName)).toBe(true);
         expect(state.collections).toHaveLength(2);
-        expect(state.projections).toHaveLength(0);
+        expect(state.installed_skills).toHaveLength(0);
         expect(yield* fs.readFileString(join(selectedPaths[0], "SKILL.md"))).toContain(
           "First content",
         );

@@ -1,7 +1,7 @@
 import { markAuthorWorkspaceRemoved } from "../../library/author-workspace.js";
 import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import {
-  bindingSkillIds,
+  enabledSkillIds,
   removeCollection,
   SkillRemovalRequiresCollection,
   type LibraryState,
@@ -40,17 +40,17 @@ export const planRemove = Effect.fn("Library.planRemove")(function* (
     subject_kind: subject.kind,
     versions: skills.reduce((count, skill) => count + skill.versions.length, 0),
     skills: skills.length,
-    global_bindings: state.global_bindings.filter((binding) =>
-      bindingSkillIds(state, binding).some((skillId) =>
+    global_bindings: [state.enabled].filter((enabled) =>
+      enabledSkillIds(state, enabled).some((skillId) =>
         skills.some((skill) => skill.skill_id === skillId),
       ),
     ).length,
-    repository_bindings: state.local_bindings.filter((binding) =>
-      bindingSkillIds(state, binding).some((skillId) =>
+    repository_bindings: state.repositories.filter((repository) =>
+      enabledSkillIds(state, repository.enabled).some((skillId) =>
         skills.some((skill) => skill.skill_id === skillId),
       ),
     ).length,
-    owned_projections: state.projections.filter((projection) =>
+    owned_projections: state.installed_skills.filter((projection) =>
       skills.some((skill) => skill.skill_id === projection.skill_id),
     ).length,
   };

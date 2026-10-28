@@ -39,7 +39,7 @@ export const scanLocalUsage = Effect.fn("LocalUsage.scan")(function* (
     end: options.end,
     project: options.project,
     progress: options.progress,
-    projections: state.projections.flatMap((projection) => {
+    projections: state.installed_skills.flatMap((projection) => {
       const skill = skills.get(projection.skill_id);
       return skill ? [{ path: projection.path, skillId: skill.skill_id, name: skill.name }] : [];
     }),

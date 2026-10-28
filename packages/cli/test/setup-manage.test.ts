@@ -86,16 +86,16 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     yield* fs.writeFileString(join(managedSkill, "SKILL.md"), managedText);
 
     const state = yield* home.durable;
-    expect(state.global_bindings).toHaveLength(1);
-    expect(state.global_bindings[0]).toMatchObject({ scope: { kind: "global" } });
+    expect(state.enabled).toHaveLength(1);
+    expect("skill" in state.enabled[0]!).toBe(true);
     expect(state.collections).toHaveLength(2);
     expect(state.collections.every((collection) => collection.upstream === undefined)).toBe(true);
     expect(state.skills.every((skill) => skill.collection_id !== undefined)).toBe(true);
-    expect(state.retained_copies).toHaveLength(2);
-    expect(state.projections).toEqual([
+    expect(state.collection_versions).toHaveLength(2);
+    expect(state.installed_skills).toEqual([
       expect.objectContaining({ path: managedSkill, status: "installed" }),
     ]);
-    const retainedDocuments = yield* Effect.forEach(state.retained_copies, (copy) =>
+    const retainedDocuments = yield* Effect.forEach(state.collection_versions, (copy) =>
       fs.readFileString(join(collectionVersionPath(home.originals, copy.digest), "SKILL.md")),
     );
     expect(retainedDocuments).toEqual(
@@ -108,7 +108,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
       skillDocument("repo-only", "Repository skill"),
     );
     expect((yield* libraryManifestFromLocalState(state)).snapshot_digests).toEqual(
-      state.retained_copies.map((copy) => copy.digest).sort(),
+      state.collection_versions.map((copy) => copy.digest).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -157,14 +157,14 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
     expect(yield* interaction.remaining).toBe(0);
     const state = yield* home.durable;
     expect(state.collections).toHaveLength(2);
-    expect(state.projections).toEqual(
+    expect(state.installed_skills).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: emptyDirectorySkill, status: "installed" }),
         expect.objectContaining({ path: finderMetadataSkill, status: "installed" }),
       ]),
     );
-    expect(state.projections).toHaveLength(2);
-    const retained = yield* Effect.forEach(state.retained_copies, (copy) =>
+    expect(state.installed_skills).toHaveLength(2);
+    const retained = yield* Effect.forEach(state.collection_versions, (copy) =>
       Effect.gen(function* () {
         const path = collectionVersionPath(home.originals, copy.digest);
         return {
@@ -315,10 +315,9 @@ it.effect(
       // The Codex root is SKIT's shared destination and already holds the bytes SKIT would install, so
       // enabling starts managing that copy in place rather than recording a conflict with it.
       expect((yield* inspectOwnershipMarker(join(codex, "review"))).kind).toBe("valid");
-      expect((yield* home.durable).projections.map((projection) => projection.status)).toEqual([
-        "installed",
-        "installed",
-      ]);
+      expect((yield* home.durable).installed_skills.map((projection) => projection.status)).toEqual(
+        ["installed", "installed"],
+      );
       expect((yield* home.durable).collections).toHaveLength(1);
       expect((yield* interaction.prompts)[0].choices).toHaveLength(2);
     }).pipe(Effect.provide(skitLayer)),

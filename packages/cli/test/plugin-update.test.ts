@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { importSource } from "../src/library-application/import-source.js";
 import { planUpdates, updateSubjects } from "../src/library-application/update.js";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
@@ -65,7 +65,7 @@ it.effect(
       yield* writingTo(
         home,
         run(
-          setLibraryBindings({
+          setLibraryEnabled({
             query: collectionId,
             all: true,
             roots,
@@ -93,7 +93,7 @@ it.effect(
       assert.isFalse("status" in outcomes[0]!);
       const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.deepStrictEqual(after.collections, before.collections);
-      assert.deepStrictEqual(after.global_bindings, before.global_bindings);
+      assert.deepStrictEqual(after.enabled, before.enabled);
       assert.deepStrictEqual(
         currentCollectionSkills(after, collectionId)
           .map((entry) => entry.path)

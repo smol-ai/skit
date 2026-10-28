@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v11",
+  "$id": "skit.inventory.v12",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -75,7 +75,7 @@
         "additionalProperties": true
       }
     },
-    "custodyIssues": {
+    "ownershipIssues": {
       "anyOf": [
         {
           "type": "array",
@@ -85,7 +85,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "ORPHANED_PROJECTION_CLAIM",
+                  "ORPHANED_OWNERSHIP_MARKER",
                   "INVALID_OWNERSHIP_MARKER"
                 ]
               },
@@ -141,7 +141,7 @@
                   }
                 ]
               },
-              "projectionId": {
+              "installedSkillId": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -380,12 +380,12 @@
         "additionalProperties": true
       }
     },
-    "projections": {
+    "installed_skills": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "projection_id": {
+          "installed_skill_id": {
             "type": "string"
           },
           "skill_id": {
@@ -394,7 +394,7 @@
           "skill_version_id": {
             "type": "string"
           },
-          "target": {
+          "destination": {
             "type": "string",
             "enum": [
               "agents",
@@ -457,20 +457,20 @@
               }
             ]
           },
-          "projected_at": {
+          "installed_at": {
             "type": "string"
           }
         },
         "required": [
-          "projection_id",
+          "installed_skill_id",
           "skill_id",
           "skill_version_id",
-          "target",
+          "destination",
           "root",
           "path",
           "expected_digest",
           "status",
-          "projected_at"
+          "installed_at"
         ],
         "additionalProperties": true
       }
@@ -1097,7 +1097,7 @@
   "required": [
     "unmanaged",
     "skills",
-    "projections",
+    "installed_skills",
     "machine"
   ],
   "additionalProperties": true,

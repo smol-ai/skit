@@ -273,10 +273,10 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     );
     expect(persisted.present).toBe(true);
     if (!persisted.present) return;
-    const acquisition = persisted.state.acquisitions[0]!;
+    const acquisition = persisted.state.imports[0]!;
     expect(acquisition.input.value).toBe(`wellknown:${base}`);
     expect(acquisition.kind).toBe("source");
-    expect(acquisition.observations).toEqual([
+    expect(acquisition.lock_file_entries).toEqual([
       expect.objectContaining({
         source_url: base,
         well_known_digest: expect.stringMatching(/^sha256:/),
@@ -287,7 +287,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       (item) => item.skill_id === retained.skills[0]?.skill_id,
     );
     expect(acquisition.collection_id).toBe(skill?.collection_id);
-    const tree = persisted.state.retained_copies[0]!;
+    const tree = persisted.state.collection_versions[0]!;
     const original = collectionVersionPath(home.originals, tree.digest);
     expect(yield* fs.readFileString(join(original, "review", "SKILL.md"))).toBe(installedText);
     expect(yield* fs.exists(join(original, "README.md"))).toBe(false);
@@ -304,7 +304,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     expect(reloaded.present).toBe(true);
     if (!reloaded.present) return;
     expect(reloaded.state.skills[0]?.versions).toHaveLength(1);
-    expect(reloaded.state.acquisitions[0]?.input.value).toContain(base);
+    expect(reloaded.state.imports[0]?.input.value).toContain(base);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -492,9 +492,9 @@ it.effect("manages a selected member from a two-Skill GitHub lock collection", (
         .filter((skill) => skill.collection_id === retained.collection?.collection_id)
         .map((skill) => skill.name),
     ).toEqual(["review"]);
-    expect(saved.state.acquisitions[0]?.collection_id).toBe(retained.collection?.collection_id);
-    expect(saved.state.acquisitions[0]?.observations).toHaveLength(1);
-    expect(saved.state.acquisitions[0]?.observations[0]?.source).toBe("acme/skills");
+    expect(saved.state.imports[0]?.collection_id).toBe(retained.collection?.collection_id);
+    expect(saved.state.imports[0]?.lock_file_entries).toHaveLength(1);
+    expect(saved.state.imports[0]?.lock_file_entries[0]?.source).toBe("acme/skills");
     const secondSetup = yield* home.owned(runSetup(setup));
     expect(
       secondSetup.onboarding.candidates

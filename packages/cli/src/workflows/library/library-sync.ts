@@ -12,7 +12,7 @@ import {
   prepareDeviceInstallation,
   withDeviceSkillSelection,
   sameDeviceSkillSelection,
-  bindingSkillIds,
+  enabledSkillIds,
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-inspection.js";
 import { prepareSyncTransfer } from "./library-sync-snapshots.js";
@@ -43,9 +43,9 @@ const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string
 const emptyManifest: LibraryManifest = currentLibraryManifest({
   collections: [],
   skills: [],
-  retained_copies: [],
-  acquisitions: [],
-  bindings: [],
+  collection_versions: [],
+  imports: [],
+  enabled: [],
   snapshot_digests: [],
 });
 const same = (a: LibraryManifest, b: LibraryManifest) =>
@@ -107,7 +107,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       ? yield* libraryManifestFromLocalState(local.state)
       : emptyManifest;
     const inventory = yield* inspectSyncSnapshots(
-      local.present ? local.state.retained_copies : [],
+      local.present ? local.state.collection_versions : [],
       store.originalsPath,
       progress,
     );
@@ -197,8 +197,8 @@ export const syncLibrary = Effect.fn("Library.sync")(
           "--keep-enabled changes account bindings and cannot be combined with a device selection.",
       });
     const missingSelection = installation.missing.map(
-      (entry) =>
-        `The selected ${entry.kind} ${entry.kind === "skill" ? entry.skill_id : entry.collection_id} is no longer in the Library; update this device's selection.`,
+      (item) =>
+        `The selected ${"skill" in item ? `skill ${item.skill}` : `collection ${item.collection}`} is no longer in the Library; update this device's selection.`,
     );
     const collision = yield* progress.around(
       { kind: "check-destinations" },
@@ -212,8 +212,8 @@ export const syncLibrary = Effect.fn("Library.sync")(
     if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
     if (collision.conflicts.length && !choosing)
       return conflicted(collision.conflicts, remote?.revision_id);
-    const { account: desired, installation: effectiveManifest } = installation.resolveBindings(
-      collision.manifest.bindings,
+    const { account: desired, installation: effectiveManifest } = installation.resolveEnabled(
+      collision.manifest.enabled,
     );
     const transition = yield* progress.around(
       { kind: "check-projections" },
@@ -345,7 +345,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
             { kind: "enable" },
             updateInstalledSkills({
               ...projectionOptions,
-              includeRepositoryBindings: true,
+              includeRepositories: true,
             }),
           );
           return { ...installedSkillCounts(result), issues: [] as string[] };
@@ -358,8 +358,8 @@ export const syncLibrary = Effect.fn("Library.sync")(
         const state = yield* store.load;
         if (choosing && options.inventory !== undefined) {
           const ids = new Set(
-            deviceInstallationIntent(state).bindings.flatMap((binding) =>
-              bindingSkillIds(state, binding),
+            deviceInstallationIntent(state).globals.flatMap((global) =>
+              enabledSkillIds(state, global.enabled),
             ),
           );
           const names = state.skills
@@ -386,7 +386,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
             { kind: "enable" },
             updateInstalledSkills({
               ...projectionOptions,
-              includeRepositoryBindings: true,
+              includeRepositories: true,
             }),
           ),
         );
@@ -398,16 +398,16 @@ export const syncLibrary = Effect.fn("Library.sync")(
           };
         const after = yield* store.load;
         const ids = new Set(
-          deviceInstallationIntent(after).bindings.flatMap((binding) =>
-            bindingSkillIds(after, binding),
+          deviceInstallationIntent(after).globals.flatMap((global) =>
+            enabledSkillIds(after, global.enabled),
           ),
         );
-        for (const projection of after.projections.filter(
+        for (const projection of after.installed_skills.filter(
           (item) =>
             ids.has(item.skill_id) &&
             item.status === "conflicted" &&
-            (item.target === "agents" || item.target === "claude") &&
-            options.projection?.rootFor(item.target) !== undefined,
+            (item.destination === "agents" || item.destination === "claude") &&
+            options.projection?.rootFor(item.destination) !== undefined,
         ))
           issues.push(
             `Cannot install at ${projection.path}: existing content or ownership conflicts. Preserve it and review before retrying.`,

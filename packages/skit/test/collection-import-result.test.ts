@@ -63,12 +63,12 @@ for (const kind of ["observed", "authored"] as const) {
       const imported = yield* retain(source, "2026-10-16T00:00:00.000Z");
       const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
       const state = yield* store.load;
-      const copy = state.retained_copies.find(
-        (candidate) => candidate.retained_copy_id === imported.retainedCopyId,
+      const copy = state.collection_versions.find(
+        (candidate) => candidate.collection_version_id === imported.retainedCopyId,
       );
       assert.ok(copy);
       assert.strictEqual(copy.digest, imported.snapshotDigest);
-      assert.strictEqual(state.acquisitions[0]?.retained_copy_id, imported.retainedCopyId);
+      assert.strictEqual(state.imports[0]?.collection_version_id, imported.retainedCopyId);
       assert.strictEqual(state.skills[0]?.skill_id, imported.skills[0]?.skill_id);
       const retainedRoot = collectionVersionPath(store.originalsPath, imported.snapshotDigest);
       assert.strictEqual(yield* originalTreeHash(retainedRoot), imported.snapshotDigest);
@@ -105,9 +105,9 @@ for (const kind of ["observed", "authored"] as const) {
       assert.strictEqual(reused.snapshotDigest, imported.snapshotDigest);
       assert.notStrictEqual(reused.collection.collection_id, imported.collection.collection_id);
       const final = yield* store.load;
-      assert.strictEqual(final.retained_copies.length, 1);
+      assert.strictEqual(final.collection_versions.length, 1);
       assert.strictEqual(final.collections.length, 2);
-      assert.strictEqual(final.acquisitions.length, 2);
+      assert.strictEqual(final.imports.length, 2);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 }
@@ -164,11 +164,11 @@ for (const kind of ["observed", "authored"] as const) {
       const first = yield* retain("a".repeat(40));
       assert.strictEqual(first.action, "added");
       assert.strictEqual((yield* retain("a".repeat(40))).action, "unchanged");
-      assert.strictEqual((yield* store.load).acquisitions.length, 1);
+      assert.strictEqual((yield* store.load).imports.length, 1);
 
       // A new upstream revision is recorded even when it contains the same bytes.
       assert.strictEqual((yield* retain("b".repeat(40))).action, "unchanged");
-      assert.strictEqual((yield* store.load).acquisitions.length, 2);
+      assert.strictEqual((yield* store.load).imports.length, 2);
       yield* write("second");
       const changed = yield* retain("c".repeat(40));
       assert.strictEqual(changed.action, "updated");
@@ -294,7 +294,7 @@ for (const kind of ["observed", "authored"] as const) {
         const after = yield* store.load;
         assert.strictEqual(result.collection.collection_id, initial.collection.collection_id);
         assert.strictEqual(after.collections.length, 1);
-        assert.strictEqual(after.acquisitions.length, 2);
+        assert.strictEqual(after.imports.length, 2);
         assert.deepStrictEqual(result.skills.map((skill) => skill.name).sort(), [...names].sort());
         assert.deepStrictEqual(
           currentCollectionSkills(after, initial.collection.collection_id)
@@ -335,7 +335,7 @@ for (const kind of ["observed", "authored"] as const) {
           );
         }
         assert.strictEqual((yield* retain(names)).action, "unchanged");
-        assert.strictEqual((yield* store.load).acquisitions.length, 2);
+        assert.strictEqual((yield* store.load).imports.length, 2);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
   }

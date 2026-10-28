@@ -22,13 +22,13 @@ export const indexSetupOnboardingEvidence = (
   const library = retained?.library;
   const retainedByLockEvidence = new Map<string, Set<string>>();
   if (library && retained?.machineId)
-    for (const acquisition of library.acquisitions) {
-      const observations = acquisition.observations.filter(
+    for (const acquisition of library.imports) {
+      const observations = acquisition.lock_file_entries.filter(
         (observation) => observation.machine_id === retained.machineId,
       );
       if (!observations.length) continue;
-      const members = library.retained_copies
-        .filter((copy) => copy.retained_copy_id === acquisition.retained_copy_id)
+      const members = library.collection_versions
+        .filter((copy) => copy.collection_version_id === acquisition.collection_version_id)
         .flatMap((copy) => copy.members);
       for (const skill of library.skills.filter(
         (skill) => skill.collection_id === acquisition.collection_id,

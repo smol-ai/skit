@@ -98,7 +98,7 @@ it.effect("prepares mixed choices without writes and applies their captured mean
     yield* f.home.owned(plan.apply(f.apply));
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-    assert.deepStrictEqual(state.global_bindings, []);
+    assert.deepStrictEqual(state.enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.alias), false);
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.linked, "SKILL.md")),

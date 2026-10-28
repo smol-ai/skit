@@ -51,9 +51,9 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     if (!saved.present) return;
     assert.ok(retained.collection?.label.length);
     assert.strictEqual(retained.collection?.upstream, undefined);
-    assert.strictEqual(saved.state.acquisitions[0]?.machine_id, machineId);
-    assert.strictEqual(saved.state.acquisitions[0]?.input.value, installed);
-    const tree = saved.state.retained_copies[0];
+    assert.strictEqual(saved.state.imports[0]?.machine_id, machineId);
+    assert.strictEqual(saved.state.imports[0]?.input.value, installed);
+    const tree = saved.state.collection_versions[0];
     assert.ok(tree);
     const firstOriginal = collectionVersionPath(join(firstHome, "originals"), tree.digest);
     assert.strictEqual(
@@ -74,8 +74,8 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     const second = yield* inspectLibrary(secondHome);
     assert.strictEqual(second.present, true);
     if (!second.present) return;
-    assert.deepStrictEqual(second.state.acquisitions, saved.state.acquisitions);
-    assert.deepStrictEqual(second.state.local_bindings, []);
+    assert.deepStrictEqual(second.state.imports, saved.state.imports);
+    assert.deepStrictEqual(second.state.repositories, []);
     const secondOriginal = collectionVersionPath(join(secondHome, "originals"), tree.digest);
     assert.strictEqual(
       yield* fs.readFileString(join(secondOriginal, "SKILL.md")),
@@ -141,7 +141,7 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
     assert.deepStrictEqual(saved.state.skills.find((skill) => skill.name === "stable")?.versions, [
       stableVersion,
     ]);
-    assert.strictEqual(saved.state.retained_copies.length, 2);
-    assert.strictEqual(saved.state.acquisitions.length, 2);
+    assert.strictEqual(saved.state.collection_versions.length, 2);
+    assert.strictEqual(saved.state.imports.length, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
