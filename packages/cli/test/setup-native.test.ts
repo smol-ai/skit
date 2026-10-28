@@ -205,12 +205,12 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       `${JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.work] }, null, 2)}\n`,
     );
 
-    const observed = yield* scanForSetup({
+    const scan = yield* scanForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: false,
     });
-    expect(observed.machineConfig).toEqual({
+    expect(scan.machineConfig).toEqual({
       path: join(f.libraryHome, "machine.json"),
       repositoryRoots: [f.work],
       repositoryDecisions: [],
@@ -307,7 +307,7 @@ it.effect("binds setup consent to current discovery evidence", () =>
     const preview = yield* scanForSetup(f.options);
 
     const unchanged = yield* revalidateSetup(f.options, preview.onboarding.planId);
-    expect(unchanged.observed.onboarding.planId).toBe(preview.onboarding.planId);
+    expect(unchanged.scan.onboarding.planId).toBe(preview.onboarding.planId);
 
     yield* f.fs.writeFileString(
       join(skill, "SKILL.md"),
@@ -365,21 +365,21 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
       yield* f.fs.makeDirectory(join(f.repository, "packages", `package-${index}`, "src"), {
         recursive: true,
       });
-    const observed = yield* scanForSetup(f.options);
-    const byName = new Map(observed.instances.map((instance) => [instance.name, instance]));
-    expect(observed.scan).toEqual({
+    const scan = yield* scanForSetup(f.options);
+    const byName = new Map(scan.instances.map((instance) => [instance.name, instance]));
+    expect(scan.scan).toEqual({
       complete: true,
       directoriesExamined: 2,
       repositorySearchDepth: 1,
     });
-    expect(observed.repositories).toEqual([
+    expect(scan.repositories).toEqual([
       {
         path: f.repository,
         skills: ["private", "review", "root-local"],
         status: "undecided",
       },
     ]);
-    expect(observed.repositoryConfigs).toEqual([]);
+    expect(scan.repositoryConfigs).toEqual([]);
     expect(byName.get("review")?.git.status).toBe("committed");
     expect(byName.get("review")?.locks).toEqual([
       expect.objectContaining({
@@ -413,10 +413,10 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
     expect(byName.get("private")?.git.status).toBe("ignored");
     expect(byName.get("root-local")?.git.status).toBe("mixed");
     expect(byName.has("generated")).toBe(false);
-    expect(observed.locks).toEqual([
+    expect(scan.locks).toEqual([
       expect.objectContaining({ scope: "project", status: "valid", version: 1 }),
     ]);
-    expect(observed.onboarding.candidates).toEqual([
+    expect(scan.onboarding.candidates).toEqual([
       expect.objectContaining({
         name: "private",
         action: "repository-owned",
@@ -464,11 +464,11 @@ it.effect("applies repository discovery exclusions and declared collection roots
     );
     yield* git(f.repository, "commit", "-qm", "configure discovery");
 
-    const observed = yield* scanForSetup(f.options);
-    expect(observed.scan.complete).toBe(true);
-    expect(observed.instances.map((instance) => instance.name)).toEqual(["private"]);
-    expect(observed.instances[0]?.git.status).toBe("ignored");
-    expect(observed.repositoryConfigs).toEqual([
+    const scan = yield* scanForSetup(f.options);
+    expect(scan.scan.complete).toBe(true);
+    expect(scan.instances.map((instance) => instance.name)).toEqual(["private"]);
+    expect(scan.instances[0]?.git.status).toBe("ignored");
+    expect(scan.repositoryConfigs).toEqual([
       {
         repository: f.repository,
         path: join(f.repository, "skit.config.json"),
@@ -500,7 +500,7 @@ for (const failure of ["ls-files", "status"] as const) {
       );
       expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
       const process = yield* SourceProcess;
-      const observed = yield* runSetup(f.options).pipe(
+      const scan = yield* runSetup(f.options).pipe(
         Effect.provideService(SourceProcess, {
           ...process,
           output: (command, args, options) =>
@@ -510,12 +510,12 @@ for (const failure of ["ls-files", "status"] as const) {
         }),
         Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
       );
-      expect(observed.scan.complete).toBe(false);
-      expect(observed.instances.map((item) => item.name).sort()).toEqual(
+      expect(scan.scan.complete).toBe(false);
+      expect(scan.instances.map((item) => item.name).sort()).toEqual(
         failure === "ls-files" ? ["local"] : ["local", "tracked"],
       );
       expect(
-        observed.instances.every(
+        scan.instances.every(
           (item) => item.git.status === "unavailable" && item.git.repository === f.repository,
         ),
       ).toBe(true);
@@ -550,9 +550,9 @@ it.effect("routes configured copies to the nearest selected repository and its e
         discovery: { exclude: ["custom/blocked"], collections: [] },
       }),
     );
-    const observed = yield* scanForSetup({ ...f.options, repositoryRoots: [f.repository, nested] });
-    expect(observed.scan.complete).toBe(true);
-    expect(observed.instances.map((item) => [item.name, item.git])).toEqual([
+    const scan = yield* scanForSetup({ ...f.options, repositoryRoots: [f.repository, nested] });
+    expect(scan.scan.complete).toBe(true);
+    expect(scan.instances.map((item) => [item.name, item.git])).toEqual([
       ["review", { status: "untracked", repository: nested }],
     ]);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -569,9 +569,9 @@ it.effect("reports unsafe repository discovery config instead of applying it", (
       }),
     );
 
-    const observed = yield* scanForSetup(f.options);
-    expect(observed.scan.complete).toBe(false);
-    expect(observed.repositoryConfigs).toEqual([
+    const scan = yield* scanForSetup(f.options);
+    expect(scan.scan.complete).toBe(false);
+    expect(scan.repositoryConfigs).toEqual([
       expect.objectContaining({ repository: f.repository, status: "malformed" }),
     ]);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -594,14 +594,14 @@ it.effect("plans equivalent loose installed skills and blocks divergent copies",
       `${skillDocument("divergent")}\nDifferent bytes\n`,
     );
 
-    const observed = yield* scanForSetup(f.options);
+    const scan = yield* scanForSetup(f.options);
     const reviewPaths = yield* Effect.forEach([claudeReview, codexReview], (path) =>
       f.fs.realPath(path),
     );
     const divergentPaths = yield* Effect.forEach([claudeDivergent, codexDivergent], (path) =>
       f.fs.realPath(path),
     );
-    expect(observed.onboarding.candidates).toEqual([
+    expect(scan.onboarding.candidates).toEqual([
       {
         name: "divergent",
         paths: divergentPaths.sort(),
@@ -632,7 +632,7 @@ it.effect("offers equivalent Codex native and shared-root installations for owne
     const physicalSource = yield* f.fs.realPath(source);
     const physicalTarget = yield* f.fs.realPath(target);
 
-    const observed = yield* scanForSetup({
+    const scan = yield* scanForSetup({
       ...f.options,
       inventory: {
         home: f.root,
@@ -642,12 +642,12 @@ it.effect("offers equivalent Codex native and shared-root installations for owne
     });
 
     expect(
-      observed.instances
+      scan.instances
         .filter((instance) => instance.name === "shared")
         .map((instance) => instance.path),
     ).toEqual([physicalTarget, physicalSource]);
     expect(
-      observed.onboarding.candidates.find(
+      scan.onboarding.candidates.find(
         (candidate) => candidate.name === "shared" && candidate.action === "manage-locally",
       ),
     ).toMatchObject({ paths: [physicalTarget, physicalSource], sourceSelection: "required" });
@@ -1179,7 +1179,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       unmanaged: [],
       adoption_receipts: [],
     });
-    const observed = yield* Effect.gen(function* () {
+    const scan = yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
       yield* store.save(state, yield* store.load);
       return yield* runSetup(f.options);
@@ -1190,7 +1190,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     );
     const authoredSkillRealPath = yield* f.fs.realPath(authoredSkill);
 
-    expect(observed.authoredCollections).toEqual([
+    expect(scan.authoredCollections).toEqual([
       {
         repository: f.repository,
         descriptorPath: join(f.repository, "skit.json"),
@@ -1204,18 +1204,17 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       },
     ]);
     expect(
-      observed.instances.find((instance) => instance.path === authoredSkillRealPath)?.owner,
+      scan.instances.find((instance) => instance.path === authoredSkillRealPath)?.owner,
     ).toEqual({ kind: "authored", skitLocator, collectionId });
     expect(
-      observed.instances.find((instance) => instance.path === authoredSkillRealPath)
-        ?.contentIdentity,
+      scan.instances.find((instance) => instance.path === authoredSkillRealPath)?.contentIdentity,
     ).toEqual({
       status: "exact",
       currentHash: contentHash,
       libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "council" }],
     });
     expect(
-      observed.instances.find((instance) => instance.aliases.includes(installedSkill))?.owner,
+      scan.instances.find((instance) => instance.aliases.includes(installedSkill))?.owner,
     ).toEqual({
       kind: "skit",
       membership: {
@@ -1228,11 +1227,11 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
         source: "https://registry.test/tim/skills",
       },
     });
+    expect(scan.instances.find((instance) => instance.aliases.includes(copiedSkill))).toMatchObject(
+      { owner: { kind: "invalid-marker" } },
+    );
     expect(
-      observed.instances.find((instance) => instance.aliases.includes(copiedSkill)),
-    ).toMatchObject({ owner: { kind: "invalid-marker" } });
-    expect(
-      observed.instances.find((instance) => instance.aliases.includes(orphanedSkill))?.owner,
+      scan.instances.find((instance) => instance.aliases.includes(orphanedSkill))?.owner,
     ).toEqual({
       kind: "skit",
       membership: {
@@ -1242,7 +1241,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
         skillVersionId: orphanedSkillVersionId,
       },
     });
-    expect(observed.installedSkills).toEqual(
+    expect(scan.installedSkills).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           collectionId,
@@ -1265,15 +1264,15 @@ it.effect("coalesces harness aliases and retains broken-link and malformed-lock 
     const globalLock = join(f.root, "state", "skills", ".skill-lock.json");
     yield* f.fs.makeDirectory(join(f.root, "state", "skills"), { recursive: true });
     yield* f.fs.writeFileString(globalLock, "not json");
-    const observed = yield* scanForSetup(f.options);
-    const review = observed.instances.find((instance) => instance.name === "review");
+    const scan = yield* scanForSetup(f.options);
+    const review = scan.instances.find((instance) => instance.name === "review");
     expect([...(review?.aliases ?? [])].sort()).toEqual([skill, join(f.codex, "review")].sort());
     expect(review?.scope).toBe("global");
     expect(review?.harnesses).toEqual(["codex"]);
-    expect(observed.brokenLinks).toEqual([
+    expect(scan.brokenLinks).toEqual([
       { path: join(f.codex, "broken"), target: "../missing", harnesses: ["codex"] },
     ]);
-    expect(observed.locks).toEqual([
+    expect(scan.locks).toEqual([
       { scope: "global", path: globalLock, status: "malformed", entries: [] },
     ]);
     expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
@@ -1468,7 +1467,7 @@ it.effect(
         unmanaged: [],
         adoption_receipts: [],
       });
-      const observed = yield* Effect.gen(function* () {
+      const scan = yield* Effect.gen(function* () {
         const store = yield* LibraryStore;
         yield* store.save(state, yield* store.load);
         return yield* runSetup(f.options);
@@ -1478,16 +1477,16 @@ it.effect(
         ),
       );
 
-      expect(observed.installedSkills).toEqual(
+      expect(scan.installedSkills).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ skillId: currentSkillId, path: current, status: "current" }),
           expect.objectContaining({ skillId: missingSkillId, path: missing, status: "missing" }),
         ]),
       );
-      expect(observed.instances.find((instance) => instance.name === "current")?.owner.kind).toBe(
+      expect(scan.instances.find((instance) => instance.name === "current")?.owner.kind).toBe(
         "skit",
       );
-      expect(observed.instances.find((instance) => instance.name === "orphaned")?.owner.kind).toBe(
+      expect(scan.instances.find((instance) => instance.name === "orphaned")?.owner.kind).toBe(
         "skit",
       );
       expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(false);
@@ -1622,8 +1621,8 @@ for (const kind of ["source", "edit"] as const) {
         ...library,
         imports: library.imports.map((sourceImport) => ({
           ...sourceImport,
-          lock_file_entries: sourceImport.lock_file_entries.map((observation) => ({
-            ...observation,
+          lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+            ...lockFileEntry,
             lock_content_hash: `sha256:${"b".repeat(64)}`,
           })),
         })),

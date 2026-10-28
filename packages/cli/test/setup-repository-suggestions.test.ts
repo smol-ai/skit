@@ -12,7 +12,7 @@ it.effect("suggests common folders holding repositories only while none is confi
     yield* fs.makeDirectory(join(root, "Work", "app", ".git"), { recursive: true });
     yield* fs.makeDirectory(join(root, "dev", "notes"), { recursive: true });
     const home = yield* libraryHome({ home: join(root, "library"), inventoryHome: root });
-    const observe = (repositoryRoots: readonly string[]) =>
+    const scan = (repositoryRoots: readonly string[]) =>
       home.owned(
         runSetup({
           libraryHome: home.home,
@@ -24,7 +24,7 @@ it.effect("suggests common folders holding repositories only while none is confi
         }),
       );
 
-    assert.deepStrictEqual((yield* observe([])).suggestedRepositoryRoots, [join(root, "Work")]);
-    assert.deepStrictEqual((yield* observe([join(root, "Work")])).suggestedRepositoryRoots, []);
+    assert.deepStrictEqual((yield* scan([])).suggestedRepositoryRoots, [join(root, "Work")]);
+    assert.deepStrictEqual((yield* scan([join(root, "Work")])).suggestedRepositoryRoots, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

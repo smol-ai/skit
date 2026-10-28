@@ -75,7 +75,7 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
 ) {
   const library = yield* refreshLibraryInventoryCommand(options);
   const renderer = yield* Renderer;
-  const observed = yield* renderer.withStatus(
+  const scan = yield* renderer.withStatus(
     "Scanning repository and harness skills",
     runSetup({
       libraryHome: options.libraryHome,
@@ -87,11 +87,11 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
   return {
     ...library,
     machine: {
-      repositoryRoots: observed.machineConfig.repositoryRoots,
-      repositoryDecisions: observed.machineConfig.repositoryDecisions,
-      scan: observed.scan,
+      repositoryRoots: scan.machineConfig.repositoryRoots,
+      repositoryDecisions: scan.machineConfig.repositoryDecisions,
+      scan: scan.scan,
       instances: yield* Effect.forEach(
-        observed.instances,
+        scan.instances,
         (instance) =>
           skillModificationTime(instance.path).pipe(
             Effect.map((modified) => ({
@@ -101,8 +101,8 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
           ),
         { concurrency: 8 },
       ),
-      brokenLinks: observed.brokenLinks,
-      suppressed: observed.suppressed,
+      brokenLinks: scan.brokenLinks,
+      suppressed: scan.suppressed,
     },
   };
 });

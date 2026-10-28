@@ -15,7 +15,7 @@ const base64 = (bytes: Uint8Array): string => {
 };
 
 /** Capture only verbatim-tree members; `.git` and SKIT residue are excluded by that profile. */
-export const captureSnapshotArchive = Effect.fn("Library.captureSnapshotArchive")(function* (
+export const readSnapshotArchive = Effect.fn("Library.readSnapshotArchive")(function* (
   root: string,
 ) {
   const entries: SnapshotArchiveEntry[] = [];
@@ -37,23 +37,23 @@ export const captureSnapshotArchive = Effect.fn("Library.captureSnapshotArchive"
 });
 
 /** Materialize only a previously verified archive in an owned scoped workspace. */
-export const materializeVerifiedSnapshot = Effect.fn("Library.materializeVerifiedSnapshot")(
-  function* (verified: Effect.Success<ReturnType<typeof verifySnapshotArchive>>) {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-private-snapshot-" });
-    for (const entry of verified.entries) {
-      const path = join(root, entry.path);
-      if (entry.kind === "directory") yield* fs.makeDirectory(path, { mode: 0o700 });
-      if (entry.kind === "file") {
-        const bytes = verified.files.get(entry.path);
-        if (bytes === undefined)
-          return yield* new SnapshotArchiveInvalid({ reason: `missing file: ${entry.path}` });
-        yield* fs.writeFile(path, bytes, { flag: "wx", mode: entry.mode });
-      }
-      if (entry.kind === "symlink") yield* fs.symlink(entry.target, path);
+export const writeVerifiedSnapshot = Effect.fn("Library.writeVerifiedSnapshot")(function* (
+  verified: Effect.Success<ReturnType<typeof verifySnapshotArchive>>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-private-snapshot-" });
+  for (const entry of verified.entries) {
+    const path = join(root, entry.path);
+    if (entry.kind === "directory") yield* fs.makeDirectory(path, { mode: 0o700 });
+    if (entry.kind === "file") {
+      const bytes = verified.files.get(entry.path);
+      if (bytes === undefined)
+        return yield* new SnapshotArchiveInvalid({ reason: `missing file: ${entry.path}` });
+      yield* fs.writeFile(path, bytes, { flag: "wx", mode: entry.mode });
     }
-    if ((yield* originalTreeHash(root)) !== verified.archive.digest)
-      return yield* new SnapshotArchiveInvalid({ reason: "materialized tree digest mismatch" });
-    return root;
-  },
-);
+    if (entry.kind === "symlink") yield* fs.symlink(entry.target, path);
+  }
+  if ((yield* originalTreeHash(root)) !== verified.archive.digest)
+    return yield* new SnapshotArchiveInvalid({ reason: "materialized tree digest mismatch" });
+  return root;
+});

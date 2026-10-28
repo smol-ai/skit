@@ -60,7 +60,7 @@ export type UninstallResult =
   | { kind: "conflicted"; observed: Digest }
   | { kind: "uninstalled"; observed: Digest };
 
-export interface MaterializeInstalledSkillRequest {
+export interface WriteInstalledSkillRequest {
   /** Installed-skill ownership coordinate and retained root, without a save contract. */
   installation: { readonly libraryPath: string };
   skill: {
@@ -133,7 +133,7 @@ const copyInstalledSkillTree = Effect.fn("Install.copyTree")((from: string, to: 
 
 const copySkill = Effect.fn("Install.copySkill")(function* (
   request: Pick<
-    MaterializeInstalledSkillRequest,
+    WriteInstalledSkillRequest,
     "sourcePath" | "shared" | "target" | "declaredInvocation" | "invocationIntent"
   > & { destination: string; libraryPath: string },
 ): Effect.fn.Return<
@@ -228,7 +228,7 @@ const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_
 // expected-digest check below is what detects local edits.
 const markerMatches = (
   marker: OwnershipMarker,
-  request: Pick<MaterializeInstalledSkillRequest, "identity">,
+  request: Pick<WriteInstalledSkillRequest, "identity">,
 ) =>
   marker.installed_skill_id === request.identity.installedSkillId &&
   marker.skill_id === request.identity.skillId;
@@ -240,7 +240,7 @@ const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.expected_digest === right.expected_digest;
 
 const ownershipMarker = (
-  request: MaterializeInstalledSkillRequest,
+  request: WriteInstalledSkillRequest,
   installedSkillId: InstalledSkillIdType,
   expectedHash: Digest,
 ): OwnershipMarker => ({
@@ -293,8 +293,8 @@ type BackUp = (
   action: "replace" | "retire",
 ) => Effect.Effect<void, UnsafeInstalledSkillBackups | PlatformError, TreeRequirements>;
 
-const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
-  request: MaterializeInstalledSkillRequest,
+const writeInstalledSkill = Effect.fn("Install.write")(function* (
+  request: WriteInstalledSkillRequest,
   context: NativeInstalledSkillContext & { readonly backUp: BackUp },
 ): Effect.fn.Return<
   { installedSkill: InstalledSkill; changed: boolean },
@@ -371,13 +371,13 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
             });
           yield* fs.rename(temporary, destination).pipe(Effect.uninterruptible);
         }
-        const observed = yield* hasher.hash(destination);
-        if (observed !== desiredHash)
+        const currentHash = yield* hasher.hash(destination);
+        if (currentHash !== desiredHash)
           return yield* new InstalledSkillFailure({
             message: `Post-${verification} hash verification failed for ${skill.skillId} at ${target}`,
           });
         changed = true;
-        return { ...installedSkill, status: "installed" as const, current_digest: observed };
+        return { ...installedSkill, status: "installed" as const, current_digest: currentHash };
       });
       const nativeDeletion =
         !request.restoreNativeDeletion &&
@@ -395,7 +395,7 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
       if (yield* exists(destination)) {
         const markerInspection = yield* inspectOwnershipMarker(destination);
         const marker = markerInspection.kind === "valid" ? markerInspection.marker : null;
-        const observed = yield* hasher.hash(destination);
+        const currentHash = yield* hasher.hash(destination);
         const realDestination = yield* fs
           .realPath(destination)
           .pipe(Effect.orElseSucceed(() => resolve(destination)));
@@ -410,16 +410,16 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
         const replacementMatches =
           request.replacement !== undefined &&
           request.replacement.installedSkillId === installedSkillId &&
-          request.replacement.currentHash === observed &&
-          observed === desiredHash &&
+          request.replacement.currentHash === currentHash &&
+          currentHash === desiredHash &&
           marker !== null &&
           sameMarker(marker, request.replacement.marker);
         if (replacementMatches) return yield* commit("marker", "replacement");
         if (!marker || !markerMatches(marker, request)) {
           if (markerInspection.kind === "absent" && request.manage && manageMatchesDestination) {
-            if (observed !== request.manage.currentHash)
+            if (currentHash !== request.manage.currentHash)
               return yield* new ManageTargetChanged({ path: destination });
-            if (observed !== desiredHash)
+            if (currentHash !== desiredHash)
               return yield* new ManageContentMismatch({ path: destination });
             // Equal content is managed in place, keeping every entry the hash leaves out.
             return yield* commit("marker", "adoption");
@@ -446,22 +446,22 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
             markerInspection.kind === "absent" &&
             request.manageIdentical &&
             !repositoryOwned &&
-            observed === desiredHash &&
+            currentHash === desiredHash &&
             (yield* (yield* LinkStat).lstat(destination)).type === "Directory" &&
             !(yield* exists(join(destination, ".git"))) &&
             !(yield* exists(join(destination, "skit.remote.json")))
           )
             return yield* commit("marker", "adoption");
           installedSkill.status = "conflicted";
-          installedSkill.current_digest = observed;
+          installedSkill.current_digest = currentHash;
           return settled();
         }
-        if (observed !== markerExpectedHash(marker)) {
+        if (currentHash !== markerExpectedHash(marker)) {
           const variant = join(
             context.variantsPath,
             target,
             yield* installedSkillName(skill.name),
-            observed.slice(7),
+            currentHash.slice(7),
           );
           if (!(yield* exists(variant))) {
             yield* fs.makeDirectory(dirname(variant), { recursive: true });
@@ -477,14 +477,14 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
             ...installedSkill,
             expected_digest: prior?.expected_digest ?? markerExpectedHash(marker),
             status: "conflicted" as const,
-            current_digest: observed,
+            current_digest: currentHash,
           };
         }
-        if (observed === desiredHash) {
+        if (currentHash === desiredHash) {
           if (marker.skill_version_id !== request.identity.skillVersionId)
             return yield* commit("marker", "marker");
           installedSkill.status = "installed";
-          installedSkill.current_digest = observed;
+          installedSkill.current_digest = currentHash;
           return settled();
         }
         return yield* commit("replace", "write");
@@ -666,7 +666,7 @@ export const installedSkillName = Effect.fn("Install.name")(function* (name: str
 export interface InstalledSkillMutation<S extends InstalledSkillState = InstalledSkillState> {
   readonly state: S;
   readonly install: (
-    request: Omit<MaterializeInstalledSkillRequest, "state">,
+    request: Omit<WriteInstalledSkillRequest, "state">,
   ) => Effect.Effect<InstalledSkill, InstalledSkillMutationError, TreeRequirements | TreeHasher>;
   readonly uninstall: (
     installedSkill: InstalledSkill,
@@ -725,7 +725,7 @@ export const withInstalledSkillMutation = Effect.fn("Install.mutate")(function* 
       if (!root) return yield* new NoSkillsDirectory({ target: request.target });
       yield* installedSkillName(request.skill.name);
       const installedSkillId = request.identity.installedSkillId;
-      const result = yield* materializeInstalledSkill(
+      const result = yield* writeInstalledSkill(
         { ...request, state: candidate },
         { ...context, backUp },
       ).pipe(

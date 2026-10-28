@@ -69,7 +69,7 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
                 currentHash: yield* deterministicTreeHash(source),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           });
         }),
       ),
@@ -309,7 +309,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
                 currentHash: yield* deterministicTreeHash(healthy),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );
@@ -407,7 +407,7 @@ Tools
         "retained-payload.txt",
       );
       let payloadReads = 0;
-      const observedFs = {
+      const recordingFs = {
         ...fs,
         readFile: (path: string) =>
           fs.readFile(path).pipe(
@@ -421,7 +421,7 @@ Tools
       const view = yield* home.owned(openLibraryView());
       const read = home
         .owned(view.readSkills())
-        .pipe(Effect.provideService(FileSystem.FileSystem, observedFs));
+        .pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));
       const first = yield* read;
       expect(first).toHaveLength(2);
       expect(first.every((row) => Result.isSuccess(row.authorInvocation))).toBe(true);

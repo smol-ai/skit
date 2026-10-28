@@ -424,7 +424,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
             revision: { kind: "commit", commit },
             importedAt,
             skills: [{ name: "review", sourcePath: skill, relativePath: "review", currentHash }],
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );

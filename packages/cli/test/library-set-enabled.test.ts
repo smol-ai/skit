@@ -54,7 +54,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
               currentHash: yield* deterministicTreeHash(test),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -240,7 +240,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
             input: observed,
             importedAt,
             skills: members,
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );

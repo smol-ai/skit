@@ -211,11 +211,11 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
         f.home.home,
         Effect.gen(function* () {
           const options = { ...f.options, repositoryRoots: [], persistRoots: false };
-          const observed = yield* runSetup(options);
+          const scan = yield* runSetup(options);
           const result = yield* Effect.result(
             manageSetupCopies(
               { installOptions: f.home.installOptions },
-              observed,
+              scan,
               [{ name: "review", sourcePath: f.source }],
               "new",
             ),
@@ -244,7 +244,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
         f.home.home,
         Effect.gen(function* () {
           const options = { ...f.options, repositoryRoots: [], persistRoots: false };
-          const observed = yield* runSetup(options);
+          const scan = yield* runSetup(options);
           const fs = FileSystem.FileSystem.of({
             ...f.fs,
             rename: (from, to) =>
@@ -262,7 +262,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
           const result = yield* Effect.result(
             manageSetupCopies(
               { installOptions: f.home.installOptions },
-              observed,
+              scan,
               [{ name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" }],
               "new",
             ).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
@@ -486,10 +486,10 @@ it.effect(
           f.home.home,
           Effect.gen(function* () {
             const options = { ...f.options, repositoryRoots: [], persistRoots: false };
-            const observed = yield* runSetup(options);
+            const scan = yield* runSetup(options);
             const applied = yield* manageSetupCopies(
               { installOptions: f.home.installOptions },
-              observed,
+              scan,
               [
                 { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
                 { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
@@ -664,8 +664,8 @@ for (const operation of ["add", "bind"] as const) {
               if (operation === "bind") yield* importSource(f.source);
               const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
               const before = yield* (yield* LibraryStore).load;
-              const observed = yield* runSetup(setup);
-              const conflict = copyConflict(observed, { name: "review", sourcePath: f.source });
+              const scan = yield* runSetup(setup);
+              const conflict = copyConflict(scan, { name: "review", sourcePath: f.source });
               if (conflict.kind !== "retirable")
                 return yield* Effect.die("Expected retirable aliases");
               const approvedSymlinks = yield* recordDuplicateSymlinks(
@@ -724,19 +724,19 @@ for (const operation of ["add", "bind"] as const) {
 it.effect("duplicate decisions apply only to copies that setup can enable", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const observed = yield* f.home.owned(
+    const scan = yield* f.home.owned(
       runSetup({ ...f.options, repositoryRoots: [], persistRoots: false }),
     );
     const selection = { name: "review", sourcePath: f.source };
-    expect(copyConflict(observed, selection).kind).toBe("retirable");
+    expect(copyConflict(scan, selection).kind).toBe("retirable");
     for (const changed of [
       { scope: "project" as const },
       { harnesses: [] },
       { git: { repository: f.root, status: "committed" as const } },
     ]) {
       const ineligible = {
-        ...observed,
-        instances: observed.instances.map((instance) =>
+        ...scan,
+        instances: scan.instances.map((instance) =>
           instance.path === f.source ? { ...instance, ...changed } : instance,
         ),
       };
@@ -808,7 +808,7 @@ it.effect.each(["source", "alias"] as const)(
       yield* initializeLibraryMachine(f.home.home);
       yield* f.home.owned(
         Effect.gen(function* () {
-          const observed = yield* runSetup({
+          const scan = yield* runSetup({
             ...f.options,
             repositoryRoots: [],
             persistRoots: false,
@@ -820,7 +820,7 @@ it.effect.each(["source", "alias"] as const)(
           };
           const selection = yield* checkManageSelection(
             input,
-            copyConflict(observed, input),
+            copyConflict(scan, input),
             () => new Error("Expected retirable aliases"),
           );
           const request = {
@@ -828,7 +828,7 @@ it.effect.each(["source", "alias"] as const)(
             currentHash: yield* deterministicTreeHash(f.source),
             ownership: {
               harnesses: ["codex" as const],
-              machineId: observed.machineConfig.machineId,
+              machineId: scan.machineConfig.machineId,
             },
           };
           expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);

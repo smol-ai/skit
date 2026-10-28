@@ -158,10 +158,10 @@ export function walkTree(
   options: { respectGitIgnore?: boolean } = {},
 ): Effect.Effect<TreeEntry[], TreeError | PlatformError, TreeRequirements> {
   if (policy === "normalized")
-    return walkTreeInternal(root, policy, { ...options, observeExcluded: false }).pipe(
+    return walkTreeInternal(root, policy, { ...options, reportExcluded: false }).pipe(
       Effect.map((inspection) => [...inspection.entries]),
     );
-  return walkTreeInternal(root, policy, { ...options, observeExcluded: false }).pipe(
+  return walkTreeInternal(root, policy, { ...options, reportExcluded: false }).pipe(
     Effect.map((inspection) => [...inspection.entries]),
   );
 }
@@ -171,13 +171,13 @@ export function inspectNormalizedTree(
   root: string,
   options: { respectGitIgnore?: boolean } = {},
 ): Effect.Effect<NormalizedTreeInspection, TreeError | PlatformError, TreeRequirements> {
-  return walkTreeInternal(root, "normalized", { ...options, observeExcluded: true });
+  return walkTreeInternal(root, "normalized", { ...options, reportExcluded: true });
 }
 
 function walkTreeInternal(
   root: string,
   policy: TreePolicy,
-  options: { respectGitIgnore?: boolean; observeExcluded: boolean },
+  options: { respectGitIgnore?: boolean; reportExcluded: boolean },
 ): Effect.Effect<NormalizedTreeInspection, TreeError | PlatformError, TreeRequirements> {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -241,7 +241,7 @@ function walkTreeInternal(
             (policy === "verbatim" &&
               ((depth === 0 && name === ".git") || isCollectionControlRootEntry(name, depth)));
           if (controlExcluded) {
-            if (policy === "normalized" && options.observeExcluded)
+            if (policy === "normalized" && options.reportExcluded)
               yield* recordExcluded(absolute, entryPath, "normalized-control-exclusion");
             continue;
           }
@@ -250,7 +250,7 @@ function walkTreeInternal(
             !includedPaths.has(entryPath) &&
             !includedDirectories.has(entryPath)
           ) {
-            if (options.observeExcluded) yield* recordExcluded(absolute, entryPath, "gitignored");
+            if (options.reportExcluded) yield* recordExcluded(absolute, entryPath, "gitignored");
             continue;
           }
           const info = yield* links.lstat(absolute);

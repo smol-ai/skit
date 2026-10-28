@@ -71,13 +71,13 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
   indexes: ReturnType<typeof indexSetupLibrary>,
   home: string,
 ) {
-  const { hits, harnessRoots, observedLibrary, library, locks } = evidence;
+  const { hits, harnessRoots, libraryInventory, library, locks } = evidence;
   const { libraryCollectionsById, librarySkillsByHash, authoredBySkillPath } = indexes;
-  const observePnpm = yield* makePnpmSkillCheck();
+  const checkPnpm = yield* makePnpmSkillCheck();
   const grouped = new Map<string, SetupEvidence["hits"]>();
   const pnpmByPath = new Map<string, Effect.Success<ReturnType<typeof pnpmSkillOwner>>>();
   for (const hit of hits) {
-    if (!pnpmByPath.has(hit.path)) pnpmByPath.set(hit.path, yield* observePnpm(hit.path));
+    if (!pnpmByPath.has(hit.path)) pnpmByPath.set(hit.path, yield* checkPnpm(hit.path));
     const key = `${hit.realPath}\0${pnpmByPath.get(hit.path) ? "pnpm" : "source"}`;
     grouped.set(key, [...(grouped.get(key) ?? []), hit]);
   }
@@ -117,18 +117,18 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
             libraryMatches,
           };
         })();
-    const observedOwnership = yield* ownershipAt(hit.realPath);
-    const markerInstalledSkill = observedOwnership.marker
-      ? observedLibrary.installed_skills.find(
+    const currentOwnership = yield* ownershipAt(hit.realPath);
+    const markerInstalledSkill = currentOwnership.marker
+      ? libraryInventory.installed_skills.find(
           (installedSkill) =>
-            installedSkill.installed_skill_id === observedOwnership.marker?.installed_skill_id,
+            installedSkill.installed_skill_id === currentOwnership.marker?.installed_skill_id,
         )
       : undefined;
     const ownershipCheck =
       markerInstalledSkill !== undefined &&
       !sorted.some((candidate) => resolve(candidate.path) === resolve(markerInstalledSkill.path))
         ? ({ ownership: "invalid-marker" } as const)
-        : observedOwnership;
+        : currentOwnership;
     const managedMembership = (() => {
       const marker = "marker" in ownershipCheck ? ownershipCheck.marker : undefined;
       if (!marker) return undefined;
@@ -161,7 +161,7 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
       locks,
       roots.some((root) => root.scope === "global"),
     );
-    const observedOwner = classifyOwner({
+    const detectedOwner = classifyOwner({
       canonicalPath: hit.realPath,
       home,
       harnesses,
@@ -169,7 +169,7 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
       locks: instanceLocks,
     });
     const pnpmOwner = pnpmByPath.get(hit.path);
-    const canonicalOwner = yield* observePnpm(hit.realPath);
+    const canonicalOwner = yield* checkPnpm(hit.realPath);
     const instancePath = Boolean(pnpmOwner) !== Boolean(canonicalOwner) ? hit.path : hit.realPath;
     const owner: SetupSkillInstance["owner"] =
       pnpmOwner ??
@@ -179,7 +179,7 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
           ? { kind: "invalid-marker" }
           : authoredCollection
             ? { kind: "authored", ...authoredCollection }
-            : observedOwner);
+            : detectedOwner);
     const instance: SetupSkillInstance = {
       name: hit.name,
       path: instancePath,
@@ -200,14 +200,14 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
 });
 
 const scanSetupInstalledSkills = Effect.fn("Setup.scanInstalledSkills")(function* (
-  observedLibrary: SetupEvidence["observedLibrary"],
+  libraryInventory: SetupEvidence["libraryInventory"],
   indexes: ReturnType<typeof indexSetupLibrary>,
 ) {
   const { libraryCollectionsById } = indexes;
   const installedSkills: SetupInstalledSkill[] = [];
   const fs = yield* FileSystem.FileSystem;
-  for (const installedSkill of observedLibrary.installed_skills) {
-    const skill = observedLibrary.skills.find(
+  for (const installedSkill of libraryInventory.installed_skills) {
+    const skill = libraryInventory.skills.find(
       (candidate) => candidate.skill_id === installedSkill.skill_id,
     );
     if (skill === undefined) continue;
@@ -241,6 +241,6 @@ export const scanSetupCopies = Effect.fn("Setup.scanCopies")(function* (
     status: probe.status,
     command: probe.command,
   }));
-  const installedSkills = yield* scanSetupInstalledSkills(evidence.observedLibrary, indexes);
+  const installedSkills = yield* scanSetupInstalledSkills(evidence.libraryInventory, indexes);
   return { instances, onboardingInstances, probes, installedSkills };
 });

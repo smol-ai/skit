@@ -62,22 +62,22 @@ export class SetupDuplicateDecisionRequired
 /** Hold the observed choices and their meaning through preparation and confirmation. */
 export const openSetupReview = Effect.fn("Setup.openReview")(function* (
   options: SetupOptions,
-  observation: SetupResult,
+  lockFileEntry: SetupResult,
   manage: ManageOptions,
 ) {
   const setup = structuredClone(options);
   const manageOptions = structuredClone(manage);
-  const observed = structuredClone(observation);
+  const scan = structuredClone(lockFileEntry);
   const configured = yield* MachineSettings.read(setup.libraryHome);
   const previous = new Map(configured.repositories.map((item) => [item.path, item.status]));
   const repositoryDecisions = setup.repositoryDecisions ?? [];
   const persistRoots =
     setup.persistRoots ||
     repositoryDecisions.some((item) => previous.get(item.path) !== item.status);
-  const copies = setupReviewCopies(observed.instances, observed.onboarding.candidates);
+  const copies = setupReviewCopies(scan.instances, scan.onboarding.candidates);
   const copyConflicts = new Map<string, SetupCopyConflict>();
   for (const copy of copies) {
-    let conflict = copyConflict(observed, {
+    let conflict = copyConflict(scan, {
       name: copy.instance.name,
       sourcePath: copy.instance.path,
     });
@@ -89,7 +89,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     }
     copyConflicts.set(copy.instance.path, conflict);
   }
-  const removablePaths = yield* setupRemovablePaths(setup, observed);
+  const removablePaths = yield* setupRemovablePaths(setup, scan);
   const sources = new Map<
     string,
     {
@@ -101,7 +101,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       >[];
     }
   >();
-  for (const candidate of observed.onboarding.candidates) {
+  for (const candidate of scan.onboarding.candidates) {
     if (candidate.action !== "import-observed-collection") continue;
     const prior = sources.get(candidate.groupKey);
     sources.set(candidate.groupKey, {
@@ -127,7 +127,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       return yield* invalid("Choose an available setup action from the observed review");
     }
     return structuredClone(
-      setupSelectedCopies(observed, add, bind).map((copy) => ({
+      setupSelectedCopies(scan, add, bind).map((copy) => ({
         ...copy,
         conflict: copyConflicts.get(copy.sourcePath) ?? copy.conflict,
       })),
@@ -142,7 +142,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     readonly versionChoices?: readonly SetupVersionChoice[];
   }) {
     const versionChoices = selection.versionChoices ?? [];
-    const alternatives = setupVersionAlternatives(observed.changes ?? []);
+    const alternatives = setupVersionAlternatives(scan.changes ?? []);
     if (
       new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
       versionChoices.some(
@@ -239,22 +239,22 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         .filter((copy) => copy.operation === "bind")
         .flatMap(
           (copy) =>
-            observed.instances
+            scan.instances
               .find((instance) => instance.path === copy.sourcePath)
               ?.contentIdentity.libraryMatches.map((match) => match.skillId) ?? [],
         ),
     );
     const approval: SetupApproval = {
       setup,
-      planId: observed.onboarding.planId,
+      planId: scan.onboarding.planId,
       persistRoots,
       imports,
       bindings: decisions.filter((copy) => copy.operation === "bind"),
       ownership: decisions.filter((copy) => copy.operation === "add"),
-      removals: yield* planSetupRemovals(setup, observed, removals, removablePaths),
+      removals: yield* planSetupRemovals(setup, scan, removals, removablePaths),
       versionChoices: structuredClone(versionChoices),
       changes: structuredClone(
-        (observed.changes ?? []).filter(
+        (scan.changes ?? []).filter(
           (fact) =>
             selection.reconcileExisting !== false ||
             selectedExistingSkills.has(fact.skillId) ||
@@ -264,7 +264,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       ),
     };
     const repositoryCopies = approval.ownership.filter((copy) =>
-      observed.instances.some(
+      scan.instances.some(
         (instance) =>
           instance.path === copy.sourcePath &&
           (instance.git.repository !== undefined || !isSetupInstallDestination(instance)),
@@ -275,13 +275,13 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       sourcePath: copy.sourcePath,
     });
     const summary = {
-      sourceUpdateMayNeedReview: imports.length > 0 && (observed.changes?.length ?? 0) > 0,
+      sourceUpdateMayNeedReview: imports.length > 0 && (scan.changes?.length ?? 0) > 0,
       changes: approval.changes ?? [],
       versionChoices,
       persistRoots,
       repositoryDecisions,
       createsMachineIdentity:
-        (imports.length > 0 || approval.ownership.length > 0) && !observed.machineConfig.machineId,
+        (imports.length > 0 || approval.ownership.length > 0) && !scan.machineConfig.machineId,
       sources: [...new Set(imports.map((item) => item.groupKey))].map((key) => {
         const source = sources.get(key)?.candidates[0];
         return {
@@ -298,9 +298,9 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
           (copy) =>
             copy.duplicateAction !== "retain-only" &&
             isSetupInstallDestination(
-              observed.instances.find((instance) => instance.path === copy.sourcePath),
+              scan.instances.find((instance) => instance.path === copy.sourcePath),
             ) &&
-            !observed.onboarding.candidates.some(
+            !scan.onboarding.candidates.some(
               (candidate) =>
                 candidate.action === "repository-owned" &&
                 candidate.paths.includes(copy.sourcePath),
@@ -312,9 +312,9 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
           (copy) =>
             copy.duplicateAction === "retain-only" ||
             !isSetupInstallDestination(
-              observed.instances.find((instance) => instance.path === copy.sourcePath),
+              scan.instances.find((instance) => instance.path === copy.sourcePath),
             ) ||
-            observed.onboarding.candidates.some(
+            scan.onboarding.candidates.some(
               (candidate) =>
                 candidate.action === "repository-owned" &&
                 candidate.paths.includes(copy.sourcePath),
@@ -343,7 +343,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       repositoryCopiesRemain: repositoryCopies.length > 0,
       authoritativeCopies: approval.ownership
         .filter((copy) =>
-          observed.onboarding.candidates.some(
+          scan.onboarding.candidates.some(
             (candidate) =>
               candidate.paths.includes(copy.sourcePath) &&
               candidate.action === "blocked" &&
@@ -387,7 +387,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       canApply: !changesNeedingChoice(approval.changes ?? [], versionChoices).length,
       reviewId: hashParts([
         canonicalJson({
-          planId: observed.onboarding.planId,
+          planId: scan.onboarding.planId,
           setup,
           changes: approval.changes,
           versionChoices,
@@ -408,7 +408,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         applySetupPlan({ manage: manageOptions, withStatus }, approved),
     };
   });
-  const recommended = observed.onboarding.recommended;
+  const recommended = scan.onboarding.recommended;
   const recommendedValues: string[] = [];
   for (const recommendation of recommended.copies) {
     const copy = copies.find(
@@ -452,7 +452,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     selection: SetupExplicitSelection,
   ) {
     for (const id of selection.reconcileSkillIds ?? []) {
-      if (!(observed.changes ?? []).some((fact) => fact.skillId === id))
+      if (!(scan.changes ?? []).some((fact) => fact.skillId === id))
         return yield* invalid("Choose an observed existing Skill identifier");
     }
     const sourceKeys: string[] = [];
@@ -482,13 +482,13 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     const fs = yield* FileSystem.FileSystem;
     const names = new Set<string>();
     for (const path of paths) {
-      const copy = observed.instances.find((item) => item.path === path);
+      const copy = scan.instances.find((item) => item.path === path);
       if (!copy) return yield* invalid("Choose an observed copy to compare");
       names.add(copy.name);
     }
     if (!names.size) return yield* invalid("Choose at least one observed copy to compare");
     const compared = [];
-    for (const instance of observed.instances.filter((item) => names.has(item.name))) {
+    for (const instance of scan.instances.filter((item) => names.has(item.name))) {
       const markdown = yield* fs.readFileString(join(instance.path, "SKILL.md"));
       const currentHash = yield* deterministicTreeHash(instance.path);
       if (currentHash !== instance.contentIdentity.currentHash)
@@ -508,7 +508,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     duplicates: SetupDuplicateAction | undefined,
   ) {
     const chosen = yield* explicitChoices(selection);
-    const alternatives = setupVersionAlternatives(observed.changes ?? []);
+    const alternatives = setupVersionAlternatives(scan.changes ?? []);
     const versionChoices: SetupVersionChoice[] = [];
     for (const skillId of selection.useRetainedSkillIds ?? []) {
       const choice = alternatives.find(
@@ -563,7 +563,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
           : {}),
       })),
     ),
-    versionAlternatives: setupVersionAlternatives(observed.changes ?? []),
+    versionAlternatives: setupVersionAlternatives(scan.changes ?? []),
     selectedCopies,
     explicitChoices,
     compareCopies,

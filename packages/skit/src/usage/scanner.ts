@@ -180,7 +180,7 @@ export const skillUsageLayer = Layer.effect(
         let agent = /\/subagents\/agent-([^/]+)\.jsonl(?:\.zst)?$/.exec(file.path)?.[1];
         let sessionKnown = false;
         let turn: string | undefined;
-        let observedBytes = 0;
+        let bytesRead = 0;
         const projectCwds = new Map<string, string>();
         const consume = Effect.fn("SkillUsage.record")(function* (line: string) {
           if (!line.length) return;
@@ -306,7 +306,7 @@ export const skillUsageLayer = Layer.effect(
         const bytes = fs.stream(file.path, { chunkSize: 256 * 1024, bytesToRead: file.size }).pipe(
           Stream.tap((chunk) =>
             Effect.sync(() => {
-              observedBytes += chunk.length;
+              bytesRead += chunk.length;
               c.bytesRead += chunk.length;
             }),
           ),
@@ -340,7 +340,7 @@ export const skillUsageLayer = Layer.effect(
         if (
           !after ||
           Number(after.size) !== file.size ||
-          observedBytes !== file.size ||
+          bytesRead !== file.size ||
           Option.match(after.mtime, { onNone: () => 0, onSome: (d) => d.getTime() }) !==
             file.modified
         )
@@ -372,7 +372,7 @@ export const skillUsageLayer = Layer.effect(
       >();
       const rows = new Map<string, Mutable<UsageRow>>();
       const seen = new Set<string>();
-      const invocationObservations: Invocation[] = [];
+      const invocations: Invocation[] = [];
       for (const observation of observations) {
         const { event, cwd, timestamp, coverage: c } = observation;
         const rawPath = event.path;
@@ -438,7 +438,7 @@ export const skillUsageLayer = Layer.effect(
           lastSeenAt: timestamp,
         };
         if (event.kind !== "selections") row[event.kind]++;
-        invocationObservations.push({
+        invocations.push({
           key,
           row,
           event,
@@ -449,7 +449,7 @@ export const skillUsageLayer = Layer.effect(
         if (timestamp > row.lastSeenAt) row.lastSeenAt = timestamp;
         rows.set(key, row);
       }
-      correlateInvocations(invocationObservations);
+      correlateInvocations(invocations);
       const durationEnd = yield* Clock.monotonicTimeNanos;
       return {
         window,

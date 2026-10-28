@@ -65,7 +65,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutObservedCopy = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
+    const withoutCopy = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
@@ -76,12 +76,12 @@ it.effect("checks retained files without treating an observed local copy as an u
         variantsPath: join(home, "variants"),
       }),
     );
-    assert.strictEqual(withoutObservedCopy[0]?.source_status, "not-applicable");
+    assert.strictEqual(withoutCopy[0]?.source_status, "not-applicable");
     assert.strictEqual(
-      withoutObservedCopy[0]?.current_snapshot_digest,
+      withoutCopy[0]?.current_snapshot_digest,
       loaded.state.collection_versions[0]!.digest,
     );
-    assert.strictEqual(withoutObservedCopy[0]?.available_snapshot_digest, undefined);
+    assert.strictEqual(withoutCopy[0]?.available_snapshot_digest, undefined);
     const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );

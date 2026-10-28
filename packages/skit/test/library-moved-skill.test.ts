@@ -35,7 +35,7 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
         input: source,
         importedAt: "2026-09-17T00:00:00.000Z",
         skills,
-        observations: [],
+        lockFileEntries: [],
       }).pipe(Effect.scoped, Effect.provide(libraryStoreLayer({ home })));
 
     const before = yield* importSource([yield* skillAt("in-progress/spec")]);

@@ -4,7 +4,7 @@ import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  captureSnapshotArchive,
+  readSnapshotArchive,
   libraryManifestFromLocalState,
   LibraryStore,
   libraryStoreLayer,
@@ -122,7 +122,7 @@ it.effect(
         state.collection_versions,
       );
       const digest = state.collection_versions[0]!.digest;
-      assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
+      assert.strictEqual((yield* readSnapshotArchive(f.root(digest))).digest, digest);
       for (const [path, bytes] of Object.entries(f.files))
         assert.strictEqual(yield* f.fs.readFileString(join(f.root(digest), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
@@ -167,7 +167,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     const state = yield* f.seed(registrySource);
     yield* f.sync();
     const digest = state.collection_versions[0]!.digest;
-    assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
+    assert.strictEqual((yield* readSnapshotArchive(f.root(digest))).digest, digest);
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "README.md")));
     assert.isFalse(yield* f.fs.exists(join(f.root(digest), "skills/.gitkeep")));
     assert.strictEqual(
@@ -261,7 +261,7 @@ it.effect.each(["git", "github"] as const)(
       );
       yield* f.sync().pipe(Effect.provide(localGit));
       const digest = state.collection_versions[0]!.digest;
-      assert.strictEqual((yield* captureSnapshotArchive(f.root(digest))).digest, digest);
+      assert.strictEqual((yield* readSnapshotArchive(f.root(digest))).digest, digest);
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.root(digest), "skit.json")),
         f.files["skit.json"],

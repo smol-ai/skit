@@ -71,7 +71,7 @@ const library = Effect.gen(function* () {
         currentHash: yield* deterministicTreeHash(source),
       },
     ],
-    observations: [],
+    lockFileEntries: [],
   });
   const history = Effect.flatMap(LibraryAuditLog, (log) => log.list()).pipe(
     Effect.provide(libraryAuditLogLayer({ home })),

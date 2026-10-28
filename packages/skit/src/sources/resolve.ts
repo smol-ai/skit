@@ -407,7 +407,7 @@ type DiscoveredSkills =
   | {
       descriptorKind: "observed";
       /** Skill directories relative to `originalRoot`, `.` when it is itself the Skill. */
-      observedSkillPaths: readonly string[];
+      foundSkillPaths: readonly string[];
       diagnostics?: readonly SourceDiscoveryDiagnostic[];
     };
 
@@ -686,7 +686,7 @@ function discoverRoot(
         return yield* invalidSource("None of the locked Skill paths exist in the acquired Source");
       return {
         descriptorKind: "observed" as const,
-        observedSkillPaths: selectedSkills,
+        foundSkillPaths: selectedSkills,
       };
     }
     const exclude = yield* readDiscoveryExclusions(extracted);
@@ -738,7 +738,7 @@ function discoverRoot(
     if (foundSkills.length)
       return {
         descriptorKind: "observed" as const,
-        observedSkillPaths: foundSkills.map((directory) => relative(extracted, directory) || "."),
+        foundSkillPaths: foundSkills.map((directory) => relative(extracted, directory) || "."),
         ...(selection.diagnostics.length ? { diagnostics: selection.diagnostics } : {}),
       };
     return yield* Effect.fail(new NoSkitDescriptorFound());
@@ -980,7 +980,7 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     source,
     descriptorKind: "observed" as const,
     originalRoot,
-    observedSkillPaths: importedDirectories.map(
+    foundSkillPaths: importedDirectories.map(
       (directory) => relative(originalRoot, directory) || ".",
     ),
   };
@@ -1273,7 +1273,7 @@ export function resolveSkitSource(
           revision,
           originalRoot: directory,
           descriptorKind: "observed" as const,
-          observedSkillPaths: ["."],
+          foundSkillPaths: ["."],
         };
       }
       const archive = join(
@@ -1351,7 +1351,7 @@ export function resolveSkitSource(
     // Manifest-selected directory links must retain target content at the original member path.
     if (resolved.descriptorKind === "observed") {
       const targets = new Map<string, string>();
-      for (const path of resolved.observedSkillPaths) {
+      for (const path of resolved.foundSkillPaths) {
         const selected = join(resolved.originalRoot, path);
         const target = yield* fs.realPath(selected);
         if (target !== (yield* fs.realPath(dirname(selected))) + sep + basename(selected))
@@ -1359,7 +1359,7 @@ export function resolveSkitSource(
       }
       if (targets.size) {
         const originalRoot = join(workspace, "manifest-selected-original");
-        for (const path of resolved.observedSkillPaths) {
+        for (const path of resolved.foundSkillPaths) {
           const destination = join(originalRoot, path);
           yield* fs.makeDirectory(dirname(destination), { recursive: true });
           yield* copyLocalTree(

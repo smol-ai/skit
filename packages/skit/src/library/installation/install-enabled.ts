@@ -40,7 +40,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
   scope?: { kind: "global" } | { kind: "repository"; root: string };
   root: string;
   variantsPath: string;
-  acceptedObservations?: ReadonlyMap<
+  acceptedCopies?: ReadonlyMap<
     string,
     { readonly currentHash: Digest; readonly marker: OwnershipMarker }
   >;
@@ -195,12 +195,12 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
               skillId: item.skill.skill_id,
               skillVersionId: item.version.skill_version_id,
             },
-            ...(options.acceptedObservations?.get(installedSkillId) === undefined
+            ...(options.acceptedCopies?.get(installedSkillId) === undefined
               ? {}
               : {
                   replacement: {
                     installedSkillId,
-                    ...options.acceptedObservations.get(installedSkillId)!,
+                    ...options.acceptedCopies.get(installedSkillId)!,
                   },
                 }),
             ...(options.manage === undefined ? {} : { manage: options.manage }),

@@ -146,15 +146,6 @@ export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillConten
   );
 });
 
-export const refreshLibrarySession = Effect.fn("LibrarySession.refresh")(function* (
-  state: LibrarySessionState,
-) {
-  return {
-    ...(yield* openLibrarySession()),
-    ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
-  } satisfies LibrarySessionState;
-});
-
 export function libraryPolicyAfter(
   row: LibrarySkillRow,
   intent: InvocationOption,

@@ -159,7 +159,7 @@ export const devices = Effect.gen(function* () {
                 currentHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       importMany: (repository: string, names: readonly string[], importedAt: string) =>
@@ -184,7 +184,7 @@ export const devices = Effect.gen(function* () {
             input: sourcePath,
             importedAt,
             skills,
-            observations: [],
+            lockFileEntries: [],
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       remove: (collectionId: string) =>

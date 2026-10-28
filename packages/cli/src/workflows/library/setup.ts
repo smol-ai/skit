@@ -154,7 +154,7 @@ const scanForSetup = Effect.fn("Library.setup")(
           .map(([path]) => path)
           .sort()
       : [];
-    const observed = {
+    const scan = {
       machineConfig: {
         path: machineConfig.path,
         ...(machineConfig.machineId === undefined ? {} : { machineId: machineConfig.machineId }),
@@ -234,14 +234,14 @@ const scanForSetup = Effect.fn("Library.setup")(
       brokenLinks: yield* collectBrokenLinks(harnessRoots),
       suppressed: walk.suppressed,
     } satisfies SetupResult;
-    return { observed, library };
+    return { scan, library };
   },
   (effect, options) =>
     options.persistRoots ? withConfigurationWriter(options.libraryHome, effect) : effect,
 );
 
 export const runSetup = (options: SetupOptions) =>
-  Effect.map(scanForSetup(options), (scan) => scan.observed);
+  Effect.map(scanForSetup(options), (result) => result.scan);
 
 /** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
@@ -249,9 +249,9 @@ export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   approvedPlanId: typeof Digest.Type,
 ) {
   const current = yield* scanForSetup({ ...options, persistRoots: false });
-  if (current.observed.onboarding.planId !== approvedPlanId)
+  if (current.scan.onboarding.planId !== approvedPlanId)
     return yield* Effect.fail(
-      new SetupPlanStale({ approvedPlanId, currentPlanId: current.observed.onboarding.planId }),
+      new SetupPlanStale({ approvedPlanId, currentPlanId: current.scan.onboarding.planId }),
     );
   return current;
 });

@@ -51,7 +51,7 @@ const upstream = Effect.gen(function* () {
             revision: { kind: "commit", commit: String(refreshes).repeat(40) },
             importedAt: `2026-09-16T0${refreshes}:00:00.000Z`,
             skills,
-            observations: [],
+            lockFileEntries: [],
           }).pipe(Effect.provide(storeLayer)),
         ),
       );

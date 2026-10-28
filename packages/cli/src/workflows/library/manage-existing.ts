@@ -187,7 +187,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
     : undefined;
   if (!skill) blockers.push({ path: sourcePath, reason: "multiple-skills" });
 
-  const observedTargets: PlannedManageTarget[] = [];
+  const plannedTargets: PlannedManageTarget[] = [];
   for (const target of targets) {
     const path = resolve(target.path);
     const expectedPath = resolve(join(dirname(path), previewSkill?.name ?? ""));
@@ -197,7 +197,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
     const physicalTargetPath = yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => path));
     if (!skill || !physicalExpectedPath || physicalExpectedPath !== physicalTargetPath) {
       blockers.push({ path, reason: "not-projection-target" });
-      observedTargets.push({ ...target, path, status: "blocked" });
+      plannedTargets.push({ ...target, path, status: "blocked" });
       continue;
     }
     const lossless = yield* manageBlockers(path);
@@ -225,7 +225,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
       blockers.push({ path, reason: "managed-by-another-entry" });
       blocked = true;
     }
-    observedTargets.push({
+    plannedTargets.push({
       ...target,
       path,
       currentHash,
@@ -238,7 +238,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
     sourcePath,
     snapshotDigest: preview.snapshot_digest,
     ...(skill ? { skill } : {}),
-    targets: observedTargets,
+    targets: plannedTargets,
     blockers,
     applicable: blockers.length === 0,
   };

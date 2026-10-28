@@ -29,7 +29,7 @@ import {
 } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
 import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
-import { materializedSkillDigest } from "./skill-materialization.js";
+import { installedSkillDigest } from "./installed-skill-digest.js";
 import {
   collectionLabelFromSource,
   sourceIdentityFromSource,
@@ -68,7 +68,7 @@ export interface ImportRequest {
   readonly revision?: SourceRevision;
   readonly importedAt: string;
   readonly skills: readonly ImportRequestSkill[];
-  readonly observations: readonly SkillsShLockFileEntry[];
+  readonly lockFileEntries: readonly SkillsShLockFileEntry[];
 }
 
 const safeRelative = (path: string) =>
@@ -145,7 +145,7 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
       sourcePath: skill.relativePath,
       sourceDigest: yield* originalTreeHash(path),
       artifactDigest: yield* Effect.scoped(
-        materializedSkillDigest({ collectionVersionPath: staged, sourcePath: skill.relativePath }),
+        installedSkillDigest({ collectionVersionPath: staged, sourcePath: skill.relativePath }),
       ),
       validationDigest: skill.currentHash,
       materializationProfile: "plain-skill/v1",
@@ -234,7 +234,10 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     imported_at: request.importedAt,
     machine_id: machineId,
     // The importing machine records the entries, as it records the import itself.
-    lock_file_entries: request.observations.map((entry) => ({ ...entry, machine_id: machineId })),
+    lock_file_entries: request.lockFileEntries.map((entry) => ({
+      ...entry,
+      machine_id: machineId,
+    })),
   };
   const skillAt = (path: string) =>
     state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
@@ -506,7 +509,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
         sourcePath: member.path,
         sourceDigest: yield* originalTreeHash(join(collectionVersionPath, member.path)),
         artifactDigest: yield* Effect.scoped(
-          materializedSkillDigest({
+          installedSkillDigest({
             collectionVersionPath,
             sourcePath: member.path,
             shared: member.shared,
@@ -519,7 +522,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
     return yield* persistPrepared({
       ...request,
       skills: [],
-      observations: [],
+      lockFileEntries: [],
       collectionVersionDigest,
       facts,
     });

@@ -63,7 +63,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
               currentHash,
             })),
           ),
-          observations: [],
+          lockFileEntries: [],
         }),
       ).pipe(Effect.provide(libraryStoreLayer({ home: skitHome })));
     });

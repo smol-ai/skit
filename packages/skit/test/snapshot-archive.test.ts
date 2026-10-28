@@ -2,8 +2,8 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import {
-  captureSnapshotArchive,
-  materializeVerifiedSnapshot,
+  readSnapshotArchive,
+  writeVerifiedSnapshot,
   verifySnapshotArchive,
 } from "../src/library/snapshot-archive.js";
 import { originalTreeHash } from "../src/library/collection-version.js";
@@ -21,7 +21,7 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
       mode: 0o755,
     });
     yield* fs.symlink("SKILL.md", join(root, "skills", "review", "alias.md"));
-    const archive = yield* captureSnapshotArchive(root);
+    const archive = yield* readSnapshotArchive(root);
     assert.strictEqual(archive.digest, yield* originalTreeHash(root));
     assert.strictEqual(
       archive.entries.some((entry) => entry.path.startsWith(".git")),
@@ -32,7 +32,7 @@ it.effect("verifies real retained bytes and rejects a changed archive", () =>
       verified.files.get("skills/review/SKILL.md"),
       Uint8Array.from([0, 1, 255]),
     );
-    const restored = yield* materializeVerifiedSnapshot(verified);
+    const restored = yield* writeVerifiedSnapshot(verified);
     assert.strictEqual(yield* originalTreeHash(restored), archive.digest);
     assert.deepStrictEqual(
       yield* fs.readFile(join(restored, "skills", "review", "SKILL.md")),

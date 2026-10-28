@@ -49,7 +49,7 @@ const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
             currentHash: yield* deterministicTreeHash(source),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }),
     );
   }
@@ -105,7 +105,7 @@ it.effect(
             source: { type: "github", owner: "test", repository: "membership" },
             importedAt: date,
             skills: selected,
-            observations: [],
+            lockFileEntries: [],
           }),
         );
       yield* importSource(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
@@ -204,7 +204,7 @@ it.effect(
               currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       );
       const after = yield* f.home.durable;
@@ -237,7 +237,7 @@ it.effect(
               currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       );
       const current = yield* f.home.durable;

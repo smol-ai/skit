@@ -53,7 +53,7 @@ for (const kind of ["observed", "authored"] as const) {
                       currentHash: yield* deterministicTreeHash(join(path, memberPath)),
                     },
                   ],
-                  observations: [],
+                  lockFileEntries: [],
                 }),
           ).pipe(inLibrary(home)),
         );
@@ -154,7 +154,7 @@ for (const kind of ["observed", "authored"] as const) {
                       currentHash: yield* deterministicTreeHash(source),
                     },
                   ],
-                  observations: [],
+                  lockFileEntries: [],
                 }),
           ).pipe(inLibrary(home)),
         );
@@ -254,7 +254,7 @@ for (const kind of ["observed", "authored"] as const) {
                 ? importAuthoredCollection({ ...request, root: source })
                 : importCollection({
                     ...request,
-                    observations: [],
+                    lockFileEntries: [],
                     skills: yield* Effect.forEach(names, (name) =>
                       Effect.gen(function* () {
                         const path = join(source, "skills", name);

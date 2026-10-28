@@ -101,7 +101,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
                 ]
               : []),
           ],
-          observations: [],
+          lockFileEntries: [],
         }).pipe(Effect.provide(libraryStoreLayer({ home }))),
       ),
     );
@@ -1262,7 +1262,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
         if (marker.kind === "valid")
           yield* project({
             root: targetRoot,
-            acceptedObservations: new Map([
+            acceptedCopies: new Map([
               [
                 installed.installed_skill_id,
                 {

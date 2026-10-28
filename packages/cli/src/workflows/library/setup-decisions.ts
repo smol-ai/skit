@@ -75,15 +75,15 @@ export const isSetupInstallDestination = (
 
 /** Shared applicability and allowed actions for prompting and both mutation validators. */
 export function copyConflict(
-  observed: Pick<SetupResult, "instances"> & {
+  scan: Pick<SetupResult, "instances"> & {
     readonly onboarding: Pick<SetupResult["onboarding"], "candidates">;
   },
   selection: { readonly name: string; readonly sourcePath: string },
 ): SetupCopyConflict {
-  const candidate = observed.onboarding.candidates.find(
+  const candidate = scan.onboarding.candidates.find(
     (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
   );
-  const instance = observed.instances.find((item) => item.path === selection.sourcePath);
+  const instance = scan.instances.find((item) => item.path === selection.sourcePath);
   const duplicates = candidate?.duplicates ?? [];
   if (
     !duplicates.length ||
@@ -97,7 +97,7 @@ export function copyConflict(
     selectedHash !== undefined &&
     duplicates.every((duplicate) =>
       duplicate.aliases.every((alias) => {
-        const copy = observed.instances.find((item) => item.path === alias.path);
+        const copy = scan.instances.find((item) => item.path === alias.path);
         return (
           alias.via === "directory" &&
           alias.path === duplicate.canonicalPath &&
@@ -197,14 +197,14 @@ export type SetupCopyChoice = SetupSelectedCopy & {
 };
 
 export function setupSelectedCopies(
-  observed: SetupResult,
+  scan: SetupResult,
   add: readonly { readonly name: string; readonly sourcePath: string }[],
   bind: readonly { readonly name: string; readonly sourcePath: string }[],
 ): SetupSelectedCopy[] {
   return [
     ...add.map((selection) => ({ ...selection, operation: "add" as const })),
     ...bind.map((selection) => ({ ...selection, operation: "bind" as const })),
-  ].map((copy) => ({ ...copy, conflict: copyConflict(observed, copy) }));
+  ].map((copy) => ({ ...copy, conflict: copyConflict(scan, copy) }));
 }
 
 /** Choices the review can interpret; presentation supplies labels and ordering. */

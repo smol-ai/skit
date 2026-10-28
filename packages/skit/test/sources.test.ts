@@ -112,7 +112,7 @@ describe("source contracts", () => {
         for (const selected of selections) {
           const source = { type: "git" as const, remote: fixture.remote, ...selected.source };
           const observed = yield* resolve(source);
-          expect(observed.observedSkillPaths).toEqual([selected.path]);
+          expect(observed.foundSkillPaths).toEqual([selected.path]);
           const sourcePath = join(observed.originalRoot, selected.path);
           const prepared = yield* prepareImport([
             {
@@ -188,7 +188,7 @@ describe("source contracts", () => {
             fs.makeTempDirectoryScoped({ ...options, directory: alias }),
         }),
       );
-      expect(resolved.observedSkillPaths).toEqual(["."]);
+      expect(resolved.foundSkillPaths).toEqual(["."]);
       expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toEqual(fixture.content);
     }).pipe(provide),
   );
@@ -196,7 +196,7 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       const fixture = yield* gitLinkFixture;
       const selected = yield* resolve({ type: "git", remote: fixture.remote, subpath: "example" });
-      expect(selected.observedSkillPaths?.toSorted()).toEqual([
+      expect(selected.foundSkillPaths?.toSorted()).toEqual([
         "plugins/bundle/skills/review",
         "skills/review",
       ]);
@@ -219,7 +219,7 @@ describe("source contracts", () => {
         );
       }
       const discovered = yield* resolve(root);
-      expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+      expect(discovered.foundSkillPaths?.toSorted()).toEqual([
         ".github/plugins/bundle/skills/review",
         "examples/plugins/demo",
         "plugins/bundle/skills/review",
@@ -238,11 +238,11 @@ describe("source contracts", () => {
         "---\nname: review\ndescription: Review.\n---\n",
       );
       const direct = yield* resolve(join(root, path));
-      expect(direct.observedSkillPaths).toEqual(["."]);
+      expect(direct.foundSkillPaths).toEqual(["."]);
       yield* fs.symlink(join(root, path), join(root, "selected-link"));
       const linked = yield* resolve(join(root, "selected-link"));
       expect(linked.originalRoot).toEqual(yield* fs.realPath(join(root, path)));
-      expect(linked.observedSkillPaths).toEqual(["."]);
+      expect(linked.foundSkillPaths).toEqual(["."]);
     }).pipe(provide),
   );
   it.effect("imports plugin-only Sources with their original member paths", () =>
@@ -255,7 +255,7 @@ describe("source contracts", () => {
         "---\nname: review\ndescription: Review.\n---\n",
       );
       const source = yield* resolve(root);
-      expect(source.observedSkillPaths).toEqual(["plugins/bundle/skills/review"]);
+      expect(source.foundSkillPaths).toEqual(["plugins/bundle/skills/review"]);
     }).pipe(provide),
   );
   it.effect(
@@ -277,7 +277,7 @@ describe("source contracts", () => {
           join(root, ".claude/skills/dev-link"),
         );
         const discovered = yield* resolve(root);
-        expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+        expect(discovered.foundSkillPaths?.toSorted()).toEqual([
           ".claude/skills/asb-positioning",
           "dev-skills/doc-skills",
         ]);
@@ -461,7 +461,7 @@ describe("source contracts", () => {
         skillDirectories: ["skills/review"],
       };
       const first = yield* resolve(source);
-      expect(first.observedSkillPaths).toEqual(["skills/review"]);
+      expect(first.foundSkillPaths).toEqual(["skills/review"]);
       const firstHash = yield* deterministicTreeHash(first.originalRoot);
       expect(yield* readText(join(first.originalRoot, "skills", "review", "SKILL.md"))).toContain(
         "# review",
@@ -552,7 +552,7 @@ describe("source contracts", () => {
       );
       expect(resolved.source.type).toBe("well-known");
       expect(sourceLocator(resolved.source)).toBe(`wellknown:${base}`);
-      expect(resolved.observedSkillPaths).toEqual(["review"]);
+      expect(resolved.foundSkillPaths).toEqual(["review"]);
       expect(yield* readText(join(resolved.originalRoot, "review", "SKILL.md"))).toBe(skill);
       const failure = yield* resolve(`wellknown:${base}`).pipe(
         Effect.provideService(HttpClient.HttpClient, client(`${skill}changed`)),
@@ -808,7 +808,7 @@ describe("source contracts", () => {
       const resolved = yield* resolve(url).pipe(
         Effect.provideService(HttpClient.HttpClient, client(skill, "text/plain")),
       );
-      expect(resolved.observedSkillPaths).toEqual(["."]);
+      expect(resolved.foundSkillPaths).toEqual(["."]);
       expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toBe(skill);
 
       const failure = yield* resolve(url).pipe(

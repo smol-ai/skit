@@ -260,12 +260,12 @@ const lockSkillPath = (lockPath: string | undefined, name: string) => {
 const lockFileEntryFor = (
   lock: SetupLockMatch,
   machineId: MachineId,
-  observedAt: string,
+  checkedAt: string,
   skillName: string,
 ): SkillsShLockFileEntry =>
   skillsShLockFileEntry({
     machine_id: machineId,
-    read_at: observedAt,
+    read_at: checkedAt,
     ...(lock.entry.updatedAt ? { source_updated_at: lock.entry.updatedAt } : {}),
     lock_path: lock.lockPath,
     lock_version: lock.lockVersion,
@@ -292,7 +292,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
     candidates: readonly { name: string; paths: readonly string[]; skillPath?: string }[],
     instances: readonly Pick<SetupSkillInstance, "name" | "path" | "locks" | "contentIdentity">[],
     machineId: MachineId,
-    observedAt: string,
+    checkedAt: string,
   ) {
     const first = candidates[0];
     if (!first)
@@ -300,7 +300,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         name: "collection",
         reason: "observation-missing",
       });
-    const observedSkills = [];
+    const foundSkills = [];
     const provenance = [];
     const claimedMembers: Array<{ lock: SetupLockMatch; name: string }> = [];
     const fs = yield* FileSystem.FileSystem;
@@ -342,7 +342,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
           reason: "observation-missing",
         });
       claimedMembers.push({ lock, name: candidate.name });
-      observedSkills.push({
+      foundSkills.push({
         name: candidate.name,
         sourcePath: instance.path,
         relativePath:
@@ -351,10 +351,10 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
             : lockSkillPath(candidate.skillPath, candidate.name),
         currentHash,
       });
-      for (const observation of matchingInstances.flatMap((item) =>
+      for (const lockFileEntry of matchingInstances.flatMap((item) =>
         item.locks.filter((candidateLock) => setupLockGroupKey(candidateLock) === groupKey),
       ))
-        provenance.push(lockFileEntryFor(observation, machineId, observedAt, candidate.name));
+        provenance.push(lockFileEntryFor(lockFileEntry, machineId, checkedAt, candidate.name));
     }
     for (const lock of new Map(claimedMembers.map(({ lock }) => [lock.lockPath, lock])).values()) {
       const text = yield* fs
@@ -377,6 +377,6 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         reason: "source-unresolvable",
       });
     const source = resolution.source;
-    return { source, skills: observedSkills, observations: provenance };
+    return { source, skills: foundSkills, lockFileEntries: provenance };
   },
 );

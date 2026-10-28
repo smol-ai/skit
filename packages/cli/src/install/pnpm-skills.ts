@@ -144,8 +144,8 @@ export const makePnpmSkillCheck = Effect.fn("PnpmSkills.makeCheck")(function* ()
 
 /** Standalone and mutation-time checks always start with fresh evidence. */
 export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory: string) {
-  const observe = yield* makePnpmSkillCheck();
-  return yield* observe(directory);
+  const checkPnpm = yield* makePnpmSkillCheck();
+  return yield* checkPnpm(directory);
 });
 
 export class PnpmSkillManaged

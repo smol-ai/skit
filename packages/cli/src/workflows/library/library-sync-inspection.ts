@@ -1,5 +1,5 @@
 import {
-  captureSnapshotArchive,
+  readSnapshotArchive,
   collectionVersionPath,
   type SnapshotArchive,
 } from "@smolai/skit-core";
@@ -19,7 +19,7 @@ export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(f
       const archives = new Map<string, SnapshotArchive>();
       for (const [verified, tree] of copies.entries()) {
         yield* progress.tick({ phase, completed: verified });
-        const archive = yield* captureSnapshotArchive(
+        const archive = yield* readSnapshotArchive(
           collectionVersionPath(originalsPath, tree.digest),
         );
         if (archive.digest !== tree.digest)

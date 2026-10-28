@@ -42,7 +42,7 @@ const boundRawReview = Effect.gen(function* () {
                 currentHash: yield* deterministicTreeHash(source),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );
@@ -222,7 +222,7 @@ for (const followedCollection of [false, true])
                 currentHash: yield* deterministicTreeHash(otherSource),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }),
         );
         const otherId = other.skills[0]?.skill_id;

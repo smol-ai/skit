@@ -49,7 +49,7 @@ const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(fun
       yield* leavePnpmSkill(join(resolved.root, skill.path));
     }
   } else {
-    for (const path of resolved.observedSkillPaths) {
+    for (const path of resolved.foundSkillPaths) {
       yield* leavePnpmSkill(join(inputRoot, path));
       yield* leavePnpmSkill(join(resolved.originalRoot, path));
     }
@@ -61,10 +61,9 @@ const describeSourceSkills = Effect.fn("Library.describeSourceSkills")(function*
   resolved: Extract<ResolvedSkitSource, { descriptorKind: "observed" }>,
   sourceLabel: string,
 ) {
-  if (resolved.observedSkillPaths.length === 0)
-    return yield* new AddNoSkills({ source: sourceLabel });
+  if (resolved.foundSkillPaths.length === 0) return yield* new AddNoSkills({ source: sourceLabel });
   const fs = yield* FileSystem.FileSystem;
-  return yield* Effect.forEach(resolved.observedSkillPaths, (relativePath) =>
+  return yield* Effect.forEach(resolved.foundSkillPaths, (relativePath) =>
     Effect.gen(function* () {
       const sourcePath =
         relativePath === "." ? resolved.originalRoot : join(resolved.originalRoot, relativePath);
@@ -211,7 +210,7 @@ export const importSource = Effect.fn("Library.addSource")(function* (
             : yield* importCollection({
                 ...request,
                 skills: yield* describeSourceSkills(resolved, historicalInput),
-                observations: [],
+                lockFileEntries: [],
               });
         return {
           action: imported.action,

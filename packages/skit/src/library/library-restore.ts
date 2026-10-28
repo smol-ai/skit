@@ -9,7 +9,7 @@ import { prepareImport } from "./import-collection.js";
 import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
-import { captureSnapshotArchive, materializeVerifiedSnapshot } from "./snapshot-archive.js";
+import { readSnapshotArchive, writeVerifiedSnapshot } from "./snapshot-archive.js";
 import { verifySnapshotArchive } from "./snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "./library-state.js";
 import {
@@ -150,7 +150,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
             digest,
             detail: "declared retained copy source has no declared Descriptor",
           });
-        return yield* captureSnapshotArchive(resolved.root);
+        return yield* readSnapshotArchive(resolved.root);
       }
       const prepared = yield* prepareImport(
         yield* Effect.forEach(copy.members, (member) =>
@@ -168,7 +168,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
           }),
         ),
       );
-      return yield* captureSnapshotArchive(prepared.staged);
+      return yield* readSnapshotArchive(prepared.staged);
     }),
   );
   if (archive.digest !== digest)
@@ -367,7 +367,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
               const verified = yield* verifySnapshotArchive(archive);
               path = yield* Effect.scoped(
                 Effect.gen(function* () {
-                  const temporary = yield* materializeVerifiedSnapshot(verified);
+                  const temporary = yield* writeVerifiedSnapshot(verified);
                   return yield* writeCollectionVersion(
                     temporary,
                     options.originalsPath,

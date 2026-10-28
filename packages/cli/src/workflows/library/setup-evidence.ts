@@ -23,10 +23,10 @@ export const indexSetupOnboardingEvidence = (
   const importedByLockEvidence = new Map<string, Set<string>>();
   if (library && imported?.machineId)
     for (const sourceImport of library.imports) {
-      const observations = sourceImport.lock_file_entries.filter(
-        (observation) => observation.machine_id === imported.machineId,
+      const lockFileEntries = sourceImport.lock_file_entries.filter(
+        (lockFileEntry) => lockFileEntry.machine_id === imported.machineId,
       );
-      if (!observations.length) continue;
+      if (!lockFileEntries.length) continue;
       const members = library.collection_versions
         .filter((copy) => copy.collection_version_id === sourceImport.collection_version_id)
         .flatMap((copy) => copy.members);
@@ -42,12 +42,12 @@ export const indexSetupOnboardingEvidence = (
             )
           )
             continue;
-          for (const observation of observations) {
+          for (const lockFileEntry of lockFileEntries) {
             const key = lockEvidenceKey(
-              observation.lock_path.value,
-              observation.lock_content_hash,
-              observation.skill_name,
-              observation.skill_path,
+              lockFileEntry.lock_path.value,
+              lockFileEntry.lock_content_hash,
+              lockFileEntry.skill_name,
+              lockFileEntry.skill_path,
               version.validation_identity_digest,
             );
             const subjects = importedByLockEvidence.get(key) ?? new Set<string>();

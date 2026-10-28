@@ -83,7 +83,7 @@ const fixture = Effect.gen(function* () {
         input: source,
         importedAt: "2026-10-16T00:00:00.000Z",
         skills,
-        observations: [],
+        lockFileEntries: [],
       }),
     ),
   );
@@ -764,7 +764,7 @@ it.effect(
             source: { type: "local", path: source },
             input: source,
             importedAt: "2026-10-18T00:00:00.000Z",
-            observations: [],
+            lockFileEntries: [],
             skills: [
               {
                 name: "gamma",

@@ -7,7 +7,7 @@ import {
   LibraryState,
   libraryStoreLayer,
   InvalidLibraryState,
-  captureSnapshotArchive,
+  readSnapshotArchive,
   deterministicTreeHash,
   collectionVersionPath,
   libraryManifestFromLocalState,
@@ -160,7 +160,7 @@ const cases: readonly {
         yield* b.importSource("from-b");
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
-        const archive = yield* captureSnapshotArchive(
+        const archive = yield* readSnapshotArchive(
           collectionVersionPath(
             join(b.home, "originals"),
             competingState.collection_versions[0]!.digest,
@@ -575,13 +575,13 @@ const cases: readonly {
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
         inject({ _tag: "ObstructAfterSave", home: a.home, path: join(a.root, "second") });
         assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
-        const observed = yield* deterministicTreeHash(installedSkill.path);
+        const currentHash = yield* deterministicTreeHash(installedSkill.path);
         const recorded = (yield* a.state).installed_skills.find(
           (item) => item.installed_skill_id === installedSkill.installed_skill_id,
         );
         assert.deepStrictEqual(
           [recorded?.status, recorded?.current_digest],
-          ["conflicted", observed],
+          ["conflicted", currentHash],
         );
         yield* fs.remove(join(a.root, "second"));
         assert.strictEqual((yield* a.sync()).status, "clean");

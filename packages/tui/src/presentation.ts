@@ -175,12 +175,12 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
     ["rule", report.rules],
     ["marketplace", report.marketplaces],
   ];
-  const observedItems = capabilityGroups.flatMap(([kind, capabilities]) =>
+  const foundItems = capabilityGroups.flatMap(([kind, capabilities]) =>
     capabilities.map((capability) => itemFromCapability(kind, capability)),
   );
   const unmatchedFindings = report.findings.filter((finding) => finding.entryIds.length === 0);
   const items: AuditItem[] = [
-    ...observedItems,
+    ...foundItems,
     ...unmatchedFindings.map((finding): AuditItem => ({
       name: finding.unresolvedSubject ?? finding.code,
       kind: "finding",

@@ -40,12 +40,12 @@ const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(runSetup({ ...options, persistRoots: false }));
+  const scan = yield* home.owned(runSetup({ ...options, persistRoots: false }));
   const interaction = yield* makeScriptedInteraction([]);
   const apply = setupApplyCommand({
     options,
     manageOptions: { installOptions: home.installOptions },
-    planId: observed.onboarding.planId,
+    planId: scan.onboarding.planId,
   }).pipe(Effect.provide(interaction.layer));
   return { fs, root, source, home, apply };
 });

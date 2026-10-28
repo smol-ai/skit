@@ -68,11 +68,11 @@ const classifyLockClaims = (
         decision = { _tag: "Contested" };
       continue;
     }
-    const observedInstances = group.filter((instance) =>
+    const foundInstances = group.filter((instance) =>
       instance.locks.some((candidate) => setupLockGroupKey(candidate) === groupKey),
     );
     let matchingCollections: Set<string> | undefined;
-    for (const instance of observedInstances) {
+    for (const instance of foundInstances) {
       const currentHash = instance.contentIdentity.currentHash;
       const matchingLock = instance.locks.find((item) => setupLockGroupKey(item) === groupKey);
       if (currentHash === undefined || matchingLock === undefined) {
@@ -97,7 +97,7 @@ const classifyLockClaims = (
       continue;
     }
     imports.push({
-      paths: observedInstances.map((instance) => instance.path).sort(),
+      paths: foundInstances.map((instance) => instance.path).sort(),
       action: "import-observed-collection",
       groupKey,
       source: lock.entry.source,

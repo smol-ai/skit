@@ -90,7 +90,7 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
     ]);
   }
 
-  const observedAt = new Date(
+  const checkedAt = new Date(
     yield* Effect.clockWith((clock) => clock.currentTimeMillis),
   ).toISOString();
   const imported = [];
@@ -102,7 +102,7 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
       candidates,
       current.instances,
       machineId,
-      observedAt,
+      checkedAt,
     ).pipe(
       Effect.catchTag("SkillsShImportEvidenceInvalid", ({ name, reason }) =>
         Effect.fail(new SetupImportInvalid({ name, reason })),
@@ -113,9 +113,9 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
         importCollection({
           input: sourceLocator(evidence.source),
           source: evidence.source,
-          importedAt: observedAt,
+          importedAt: checkedAt,
           skills: evidence.skills,
-          observations: evidence.observations,
+          lockFileEntries: evidence.lockFileEntries,
         }),
       ),
     );

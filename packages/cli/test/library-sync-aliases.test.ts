@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import {
-  captureSnapshotArchive,
+  readSnapshotArchive,
   currentSkillVersion,
   libraryManifestFromLocalState,
   LibraryManifest,
@@ -46,7 +46,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
     ...state.collection_versions.map((copy) => copy.digest),
   ]))
     assert.strictEqual(
-      (yield* captureSnapshotArchive(collectionVersionPath(join(device.home, "originals"), digest)))
+      (yield* readSnapshotArchive(collectionVersionPath(join(device.home, "originals"), digest)))
         .digest,
       digest,
     );

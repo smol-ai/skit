@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import {
-  captureSnapshotArchive,
+  readSnapshotArchive,
   deterministicTreeHash,
   libraryManifestFromLocalState,
   makeMachineId,
@@ -54,7 +54,7 @@ const fixture = Effect.gen(function* () {
             currentHash: yield* deterministicTreeHash(skillPath),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }).pipe(inLibrary(home)),
     ),
   );
@@ -74,7 +74,7 @@ const fixture = Effect.gen(function* () {
             currentHash: yield* deterministicTreeHash(privatePath),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }).pipe(inLibrary(home)),
     ),
   );
@@ -82,7 +82,7 @@ const fixture = Effect.gen(function* () {
   assert(saved.present);
   const manifest = yield* libraryManifestFromLocalState(saved.state);
   assert.deepStrictEqual(manifest.snapshot_digests, [privateCopy.snapshotDigest]);
-  const privateArchive = yield* captureSnapshotArchive(
+  const privateArchive = yield* readSnapshotArchive(
     collectionVersionPath(join(home, "originals"), privateCopy.snapshotDigest),
   );
   const archivePath = join(root, "release.zip");
@@ -188,7 +188,7 @@ it.effect("prepares downloaded private content and exact source content without 
       },
     ]);
     const sourceRoot = collectionVersionPath(f.originalsPath, f.source.snapshotDigest);
-    assert.strictEqual((yield* captureSnapshotArchive(sourceRoot)).digest, f.source.snapshotDigest);
+    assert.strictEqual((yield* readSnapshotArchive(sourceRoot)).digest, f.source.snapshotDigest);
     assert.strictEqual(
       yield* f.fs.readFileString(join(sourceRoot, "skills/review/SKILL.md")),
       f.bytes,
@@ -207,7 +207,7 @@ it.effect("prepares downloaded private content and exact source content without 
 it.effect("available source archives require no source access", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const sourceArchive = yield* captureSnapshotArchive(
+    const sourceArchive = yield* readSnapshotArchive(
       collectionVersionPath(join(f.home, "originals"), f.source.snapshotDigest),
     );
     f.unavailable();
@@ -289,7 +289,7 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
     const f = yield* fixture;
     yield* f.restore();
     const archives = yield* Effect.forEach(f.manifest.collection_versions, (tree) =>
-      captureSnapshotArchive(collectionVersionPath(f.originalsPath, tree.digest)),
+      readSnapshotArchive(collectionVersionPath(f.originalsPath, tree.digest)),
     );
     f.unavailable();
     const ticks: RestoreTick[] = [];
@@ -452,7 +452,7 @@ it.effect("verified whole-tree bytes do not bypass member digest verification", 
 it.effect("an incomplete plan fails before retaining any available archive", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const sourceArchive = yield* captureSnapshotArchive(
+    const sourceArchive = yield* readSnapshotArchive(
       collectionVersionPath(join(f.home, "originals"), f.source.snapshotDigest),
     );
     const plan = yield* planCollectionVersions(f.manifest, {
@@ -480,7 +480,7 @@ it.effect(
         originalsPath: f.originalsPath,
         localArchives: [],
       });
-      const foreign = yield* captureSnapshotArchive(f.sourceRoot);
+      const foreign = yield* readSnapshotArchive(f.sourceRoot);
       assert.isFalse(f.manifest.collection_versions.some((copy) => copy.digest === foreign.digest));
       const privateCopy = f.manifest.collection_versions.find(
         (copy) => copy.digest === f.privateCopy.snapshotDigest,

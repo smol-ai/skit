@@ -59,7 +59,7 @@ it.effect(
                   currentHash: yield* deterministicTreeHash(source),
                 },
               ],
-              observations: [],
+              lockFileEntries: [],
             }),
           ),
         );

@@ -38,7 +38,7 @@ const installedSkillFixture = Effect.gen(function* () {
             currentHash: yield* deterministicTreeHash(source),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }),
     ),
   );
@@ -143,7 +143,7 @@ it.effect(
                 currentHash: yield* deterministicTreeHash(source),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );

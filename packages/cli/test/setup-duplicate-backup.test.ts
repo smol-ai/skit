@@ -35,11 +35,11 @@ const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(runSetup({ ...options, persistRoots: false }));
+  const scan = yield* home.owned(runSetup({ ...options, persistRoots: false }));
   const input = {
     options,
     manageOptions: { installOptions: home.installOptions },
-    planId: observed.onboarding.planId,
+    planId: scan.onboarding.planId,
     selection: { sourceIds: [], copyPaths: [source], removePaths: [] },
   };
   const interaction = yield* makeScriptedInteraction([]);
@@ -59,8 +59,8 @@ it.effect("a protected authored copy has an explicit choice and no automatic pre
       join(f.duplicate, "skit.remote.json"),
       "Uncertain authored metadata",
     );
-    const observed = yield* f.home.owned(runSetup({ ...f.input.options, persistRoots: false }));
-    const input = { ...f.input, planId: observed.onboarding.planId };
+    const scan = yield* f.home.owned(runSetup({ ...f.input.options, persistRoots: false }));
+    const input = { ...f.input, planId: scan.onboarding.planId };
     const unresolved = yield* Effect.flip(
       f.home.owned(prepareSetupCommand(input).pipe(Effect.provide(f.interaction.layer))),
     );

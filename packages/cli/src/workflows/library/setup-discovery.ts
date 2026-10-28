@@ -609,7 +609,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
   const store = yield* LibraryStore;
   const library = yield* store.load;
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);
-  const observedLibrary = yield* scanInventory(
+  const libraryInventory = yield* scanInventory(
     library,
     harnessRoots.map(({ harness, root }) => ({ harness, root })),
   );
@@ -634,7 +634,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     harnessRoots,
     library,
     authoredCollections,
-    observedLibrary,
+    libraryInventory,
     discoveryComplete: complete,
     hits,
     locks,

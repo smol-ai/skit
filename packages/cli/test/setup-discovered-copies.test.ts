@@ -95,7 +95,7 @@ for (const scenario of [
         applyIndependent ? selectedPaths.map((path) => `${selectedName}\0${path}`) : ["control"],
         applyIndependent,
       ]);
-      const observed = yield* home.owned(
+      const scan = yield* home.owned(
         writingTo(
           home.home,
           setupCommand({
@@ -116,7 +116,7 @@ for (const scenario of [
         scenario === "global differing copies" ||
         scenario === "global differing symlink target" ||
         scenario === "same repository differing copies";
-      const candidates = observed.onboarding.candidates.filter((item) => names.includes(item.name));
+      const candidates = scan.onboarding.candidates.filter((item) => names.includes(item.name));
       expect(candidates).toHaveLength(scenario.startsWith("separate") ? 10 : 5);
       expect(candidates.every((item) => item.action === "blocked")).toBe(hidden);
       if (hidden)
@@ -125,7 +125,7 @@ for (const scenario of [
             (item) => item.action === "blocked" && item.reason === "divergent-copies",
           ),
         ).toBe(true);
-      expect(observed.instances.filter((item) => names.includes(item.name))).toHaveLength(
+      expect(scan.instances.filter((item) => names.includes(item.name))).toHaveLength(
         scenario === "global symlink aliases" ? 5 : 10,
       );
       const picker = (yield* interaction.prompts).find(

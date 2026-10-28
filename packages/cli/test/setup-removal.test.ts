@@ -193,18 +193,18 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
         f.home.home,
         Effect.gen(function* () {
           const options = { ...f.options, persistRoots: false };
-          const observed = yield* runSetup(options);
-          const candidates = observed.onboarding.candidates.filter(
+          const scan = yield* runSetup(options);
+          const candidates = scan.onboarding.candidates.filter(
             (item) => item.name === "copied" || item.name === "linked",
           );
-          const paths = yield* setupRemovablePaths(options, observed);
-          const plan = yield* planSetupRemovals(options, observed, candidates, paths);
+          const paths = yield* setupRemovablePaths(options, scan);
+          const plan = yield* planSetupRemovals(options, scan, candidates, paths);
           yield* f.fs.writeFileString(
             join(f.copy, "SKILL.md"),
             "---\nname: copied\ndescription: Changed after preview\n---\n",
           );
           expect(
-            (yield* Effect.flip(revalidateSetupPlan(options, observed.onboarding.planId)))._tag,
+            (yield* Effect.flip(revalidateSetupPlan(options, scan.onboarding.planId)))._tag,
           ).toBe("SetupPlanStale");
           yield* f.fs.rename(f.copy, `${f.copy}-original`);
           yield* f.fs.makeDirectory(f.copy);
@@ -229,8 +229,8 @@ it.effect("does not offer source trees reached through a linked skills directory
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          const observed = yield* runSetup({ ...f.options, persistRoots: false });
-          const paths = yield* setupRemovablePaths({ ...f.options, persistRoots: false }, observed);
+          const scan = yield* runSetup({ ...f.options, persistRoots: false });
+          const paths = yield* setupRemovablePaths({ ...f.options, persistRoots: false }, scan);
           expect([...paths.values()].flat()).toEqual([]);
           expect((yield* (yield* LinkStat).lstat(join(shared, "copied"))).type).toBe("Directory");
         }),

@@ -134,13 +134,13 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const guided = input.interactive && !input.dryRun && input.manageOptions !== undefined;
   const steps = setupStepPlan({ scanRepositories: roots.length > 0 });
   if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
-  const observe = (options: SetupOptions) =>
+  const scanSetup = (options: SetupOptions) =>
     renderer.withStatus("Observing local skills", runSetup(options));
-  let observed = yield* observe(setupOptions);
+  let scan = yield* scanSetup(setupOptions);
   if (!input.interactive && persistRoots) {
     const review = yield* openSetupReview(
       { ...setupOptions, persistRoots: true },
-      observed,
+      scan,
       input.manageOptions ?? { installOptions: setupOptions.inventory },
     );
     // The explicit work-dir flag approves only this settings change, not skill enablement.
@@ -151,15 +151,15 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       reconcileExisting: false,
     });
     const applied = yield* plan.apply(renderer.withStatus);
-    const refreshed = yield* observe(setupOptions);
+    const refreshed = yield* scanSetup(setupOptions);
     return {
       ...refreshed,
       machineConfig: { ...refreshed.machineConfig, persisted: true },
       operationId: applied.operationId,
     };
   }
-  if (!guided || !input.manageOptions) return observed;
-  const discoveredRepositories = observed.repositories;
+  if (!guided || !input.manageOptions) return scan;
+  const discoveredRepositories = scan.repositories;
   const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
   const displayRoots = roots.map(displayPath).join(", ");
   if (roots.length)
@@ -194,11 +194,11 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       repositoryDecisions,
       scanDecidedRepositories: true,
     };
-    observed = yield* observe({ ...setupOptions, persistRoots: false });
+    scan = yield* scanSetup({ ...setupOptions, persistRoots: false });
   }
   const review = yield* openSetupReview(
     { ...setupOptions, persistRoots },
-    observed,
+    scan,
     input.manageOptions,
   );
   const sources = yield* chooseKnownSources(steps, review);
@@ -209,18 +209,18 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   );
   const versionChoices = yield* chooseSetupVersions(
     review.versionAlternatives,
-    observed.changes ?? [],
+    scan.changes ?? [],
     displayPath,
   );
   const plan = yield* review.prepare({ sources, copies, decisions, versionChoices });
-  if (!plan.canApply) return yield* plan.apply(renderer.withStatus).pipe(Effect.as(observed));
+  if (!plan.canApply) return yield* plan.apply(renderer.withStatus).pipe(Effect.as(scan));
   if (!plan.hasChanges) {
     yield* renderer.step(
       steps.step("confirm"),
       "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
     );
     yield* offerSkillsShUpdateCheck();
-    return observed;
+    return scan;
   }
   yield* renderer.step(
     steps.step("confirm"),
@@ -233,7 +233,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const prompter = yield* Prompter;
   if (!(yield* prompter.confirm(setupPrompts.confirm))) {
     yield* renderer.note("No changes were applied.", "Setup cancelled");
-    return observed;
+    return scan;
   }
   const applied = yield* plan.apply(renderer.withStatus);
   yield* renderSetupAliasRecovery(applied);
@@ -251,7 +251,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     "Setup complete",
   );
   yield* offerSkillsShUpdateCheck();
-  return applied.observed;
+  return applied.scan;
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
@@ -262,7 +262,7 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
       state.imports
         .filter((sourceImport) =>
           sourceImport.lock_file_entries.some(
-            (observation) => observation.type === "skills.sh-lock",
+            (lockFileEntry) => lockFileEntry.type === "skills.sh-lock",
           ),
         )
         .map((sourceImport) => sourceImport.collection_id),
@@ -475,7 +475,7 @@ export const setupCliCommand = Command.make(
                 const copies = yield* opened.review.compareCopies(
                   choice.selection?.copyPaths ?? [],
                 );
-                const discovery = setupDiscoveryOutput(opened.observed, opened.review, context);
+                const discovery = setupDiscoveryOutput(opened.scan, opened.review, context);
                 return result("setupComparison", {
                   planId: opened.planId,
                   copies,
@@ -487,7 +487,7 @@ export const setupCliCommand = Command.make(
                           (item.kind === "copy" &&
                             copies.some((copy) => copy.path === item.path)) ||
                           (item.kind === "version" &&
-                            opened.observed.changes?.some(
+                            opened.scan.changes?.some(
                               (fact) =>
                                 fact.skillId === item.skillId &&
                                 copies.some((copy) => copy.name === fact.name),
@@ -508,7 +508,7 @@ export const setupCliCommand = Command.make(
                   actions: [
                     setupScanAction(context),
                     setupReviewAction(context, prepared.planId, choice),
-                    ...setupDiscoveryOutput(prepared.observed, prepared.review, context)
+                    ...setupDiscoveryOutput(prepared.scan, prepared.review, context)
                       .choices.filter(
                         (item) =>
                           item.kind === "version" &&

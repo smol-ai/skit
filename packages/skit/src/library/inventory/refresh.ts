@@ -58,12 +58,12 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
       }
       continue;
     }
-    const observed = yield* deterministicTreeHash(installedSkill.path);
+    const currentHash = yield* deterministicTreeHash(installedSkill.path);
     const marker = yield* readOwnershipMarker(installedSkill.path);
-    installedSkill.current_digest = observed;
+    installedSkill.current_digest = currentHash;
     const expected = expectedInstalledSkillHashResult(installedSkill, marker);
     installedSkill.status =
-      marker && Result.isSuccess(expected) && observed === expected.success
+      marker && Result.isSuccess(expected) && currentHash === expected.success
         ? "installed"
         : "conflicted";
   }
@@ -80,7 +80,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   state.ownershipIssues = (state.ownershipIssues ?? []).filter(
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
-  const observedPaths = new Map<
+  const foundPaths = new Map<
     string,
     {
       path: string;
@@ -163,7 +163,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
           continue;
         const identity = yield* physicalPath(path);
         if (managed.has(identity.key)) continue;
-        const observed = observedPaths.get(identity.key) ?? {
+        const observed = foundPaths.get(identity.key) ?? {
           path,
           harness,
           paths: new Set<string>(),
@@ -172,10 +172,10 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         };
         observed.harnesses.add(harness);
         observed.paths.add(path);
-        observedPaths.set(identity.key, observed);
+        foundPaths.set(identity.key, observed);
       }
     }
-  for (const observed of observedPaths.values()) {
+  for (const observed of foundPaths.values()) {
     const harnesses = [...observed.harnesses].sort();
     const currentHash = yield* deterministicTreeHash(observed.canonicalPath);
     const marker = yield* inspectOwnershipMarker(observed.path);

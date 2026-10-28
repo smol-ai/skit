@@ -3,7 +3,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import {
   LibraryStore,
-  captureSnapshotArchive,
+  readSnapshotArchive,
   deterministicTreeHash,
   libraryManifestFromLocalState,
   libraryStoreLayer,
@@ -53,7 +53,7 @@ export const syncJourney = (failDownload: boolean) =>
                 currentHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           });
         }
         const store = yield* LibraryStore;
@@ -64,7 +64,7 @@ export const syncJourney = (failDownload: boolean) =>
         };
         const manifest = yield* libraryManifestFromLocalState(bound);
         const archives = yield* Effect.forEach(state.collection_versions, (tree) =>
-          captureSnapshotArchive(collectionVersionPath(store.originalsPath, tree.digest)),
+          readSnapshotArchive(collectionVersionPath(store.originalsPath, tree.digest)),
         );
         return { manifest, archives };
       }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));

@@ -68,18 +68,18 @@ export interface SetupApplyOptions {
  */
 export const applySetupPlan = Effect.fn("Setup.applyPlan")(
   function* (options: SetupApplyOptions, approval: SetupApproval) {
-    const scan = yield* options.withStatus(
+    const revalidated = yield* options.withStatus(
       "Revalidating the approved setup plan",
       revalidateSetupPlan(approval.setup, approval.planId),
     );
-    const installedSkillChanges = approval.changes ?? scan.observed.changes ?? [];
+    const installedSkillChanges = approval.changes ?? revalidated.scan.changes ?? [];
     const reviewedIds = new Set<string>();
     for (const fact of installedSkillChanges) {
       if (
         reviewedIds.has(fact.installedSkillId) ||
         canonicalJson(fact) !==
           canonicalJson(
-            scan.observed.changes?.find(
+            revalidated.scan.changes?.find(
               (item) => item.installedSkillId === fact.installedSkillId,
             ) ?? null,
           )
@@ -89,7 +89,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     }
     const reviewedSkills = new Set(installedSkillChanges.map((fact) => fact.skillId));
     if (
-      (scan.observed.changes ?? []).some(
+      (revalidated.scan.changes ?? []).some(
         (fact) => reviewedSkills.has(fact.skillId) && !reviewedIds.has(fact.installedSkillId),
       )
     )
@@ -113,9 +113,9 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       (copy) =>
         copy.duplicateAction !== "retain-only" &&
         isSetupInstallDestination(
-          scan.observed.instances.find((instance) => instance.path === copy.sourcePath),
+          revalidated.scan.instances.find((instance) => instance.path === copy.sourcePath),
         ) &&
-        !scan.observed.onboarding.candidates.some(
+        !revalidated.scan.onboarding.candidates.some(
           (candidate) =>
             candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
         ),
@@ -138,12 +138,12 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           yield* ensureSkillsDirectoryWritable(
             skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
           );
-    let current = scan.observed;
+    let current = revalidated.scan;
     const store = yield* LibraryStore;
-    let revision = libraryStateRevision(scan.library);
+    let revision = libraryStateRevision(revalidated.library);
     const operation = yield* beginSetupOperation(
       { ...approval, changes: installedSkillChanges },
-      scan.library,
+      revalidated.library,
       projects,
       installedCopies.map((copy) => copy.name),
     );
@@ -216,7 +216,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const imported = yield* store.load;
         if (libraryStateRevision(imported) !== revision)
           return yield* new LibraryChanged({ path: join(store.home, "state.json") });
-        for (const fact of scan.observed.changes ?? []) {
+        for (const fact of revalidated.scan.changes ?? []) {
           const skill = imported.skills.find((item) => item.skill_id === fact.skillId);
           if (
             skill &&
@@ -225,7 +225,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             deferredSkills.add(fact.skillId);
         }
       }
-      for (const fact of scan.observed.changes ?? []) {
+      for (const fact of revalidated.scan.changes ?? []) {
         if (!deferredSkills.has(fact.skillId)) continue;
         changeOutcomes.push({
           installedSkillId: fact.installedSkillId,
@@ -284,7 +284,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     }
     yield* operation.complete();
     return {
-      observed: current,
+      scan: current,
       warnings,
       recoveryDirectories,
       changes: changeOutcomes,

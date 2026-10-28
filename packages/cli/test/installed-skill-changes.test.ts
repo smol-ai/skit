@@ -16,7 +16,7 @@ import { setupCommand } from "../src/handlers/library/setup.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { captureSetupFile } from "../src/library-application/setup-operation.js";
+import { readSkillPathDetails } from "../src/library-application/setup-operation.js";
 import {
   inspectRecoveryOperation,
   listRecoveryOperations,
@@ -67,7 +67,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
       planId: initial.onboarding.planId,
     }).pipe(Effect.provide(interaction.layer)),
   );
-  const observe = home.owned(runSetup(options));
+  const scan = home.owned(runSetup(options));
   const update = Effect.gen(function* () {
     yield* TestClock.adjust("1 second");
     yield* fs.writeFileString(join(source, "SKILL.md"), document("Incoming retained update"));
@@ -77,7 +77,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
         input: source,
         source: { type: "local", path: source },
         importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-        observations: [],
+        lockFileEntries: [],
         skills: [
           {
             name: "review",
@@ -90,17 +90,17 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
     );
   });
   const apply = Effect.gen(function* () {
-    const observation = yield* observe;
+    const lockFileEntry = yield* scan;
     const interaction = yield* makeScriptedInteraction([]);
     return yield* home.owned(
       setupApplyCommand({
         options,
         manageOptions: { installOptions: home.installOptions },
-        planId: observation.onboarding.planId,
+        planId: lockFileEntry.onboarding.planId,
       }).pipe(Effect.provide(interaction.layer)),
     );
   });
-  return { fs, root, source, agents, claude, copy, home, options, observe, update, apply };
+  return { fs, root, source, agents, claude, copy, home, options, observe: scan, update, apply };
 });
 
 it.effect(
@@ -118,7 +118,7 @@ it.effect(
           input: otherSource,
           source: { type: "local", path: otherSource },
           importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-          observations: [],
+          lockFileEntries: [],
           skills: [
             {
               name: "other",
@@ -250,11 +250,11 @@ it.effect("an explicit empty selection leaves existing pending updates untouched
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.update;
-    const observed = yield* f.observe;
+    const scan = yield* f.observe;
     const input = {
       options: f.options,
       manageOptions: { installOptions: f.home.installOptions },
-      planId: observed.onboarding.planId,
+      planId: scan.onboarding.planId,
       selection: { sourceIds: [], copyPaths: [], removePaths: [] },
     };
     const interaction = yield* makeScriptedInteraction([]);
@@ -308,13 +308,13 @@ it.effect(
         join(newCopy, "SKILL.md"),
         document("New selected Skill").replace("name: review", "name: another"),
       );
-      const observed = yield* f.observe;
-      expect(observed.changes?.find((fact) => fact.path === f.copy)?.status).toBe("protected");
+      const scan = yield* f.observe;
+      expect(scan.changes?.find((fact) => fact.path === f.copy)?.status).toBe("protected");
       const before = (yield* f.home.durable).installed_skills.find((item) => item.path === f.copy);
       const input = {
         options: f.options,
         manageOptions: { installOptions: f.home.installOptions },
-        planId: observed.onboarding.planId,
+        planId: scan.onboarding.planId,
         selection: { sourceIds: [], copyPaths: [newCopy], removePaths: [] },
       };
       const interaction = yield* makeScriptedInteraction([]);
@@ -367,8 +367,8 @@ for (const scenario of [
         const stateBytes = yield* f.fs.readFileString(join(f.home.home, "state.json"));
         const settingsBytes = yield* f.fs.readFileString(join(f.home.home, "machine.json"));
         const installed = yield* f.fs.readFileString(join(f.copy, "SKILL.md"));
-        const observed = yield* f.observe;
-        const fact = observed.changes?.find((item) => item.path === f.copy);
+        const scan = yield* f.observe;
+        const fact = scan.changes?.find((item) => item.path === f.copy);
         expect(fact?.status).toBe(
           {
             aligned: "unchanged",
@@ -384,7 +384,7 @@ for (const scenario of [
         expect(yield* f.fs.readFileString(join(f.home.home, "state.json"))).toBe(stateBytes);
         expect(yield* f.fs.readFileString(join(f.home.home, "machine.json"))).toBe(settingsBytes);
         expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(installed);
-        expect((yield* f.observe).onboarding.planId).toBe(observed.onboarding.planId);
+        expect((yield* f.observe).onboarding.planId).toBe(scan.onboarding.planId);
       }).pipe(Effect.provide(skitLayer)),
   );
 }
@@ -399,9 +399,9 @@ it.effect("a changed marker cannot redefine the Library baseline", () =>
       markerPath,
       JSON.stringify({ ...marker, expected_digest: `sha256:${"f".repeat(64)}` }),
     );
-    const observed = yield* f.observe;
-    expect(observed.changes?.find((item) => item.path === f.copy)?.status).toBe("protected");
-    expect(observed.onboarding.planId).not.toBe(before.onboarding.planId);
+    const scan = yield* f.observe;
+    expect(scan.changes?.find((item) => item.path === f.copy)?.status).toBe("protected");
+    expect(scan.onboarding.planId).not.toBe(before.onboarding.planId);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -541,13 +541,13 @@ for (const chosen of ["retained", "local"] as const) {
         yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "Independent control bytes");
         yield* f.fs.makeDirectory(join(f.copy, "empty"));
         const before = yield* f.home.durable;
-        const observed = yield* f.observe;
-        const fact = observed.changes!.find((item) => item.path === f.copy)!;
+        const scan = yield* f.observe;
+        const fact = scan.changes!.find((item) => item.path === f.copy)!;
         expect(fact.status).toBe("competing");
         const input = {
           options: f.options,
           manageOptions: { installOptions: f.home.installOptions },
-          planId: observed.onboarding.planId,
+          planId: scan.onboarding.planId,
           selection: {
             sourceIds: [],
             copyPaths: [],
@@ -609,12 +609,12 @@ it.effect("metadata-only alignment keeps the directory and excluded user content
     yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), document("Incoming retained update"));
     yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "Keep this control entry");
     yield* f.fs.makeDirectory(join(f.copy, "empty"));
-    const before = yield* captureSetupFile(f.copy);
+    const before = yield* readSkillPathDetails(f.copy);
     const fact = (yield* f.observe).changes!.find((item) => item.path === f.copy)!;
     expect(fact.status).toBe("unchanged");
     expect(fact.metadataChanged).toBe(true);
     yield* f.apply;
-    const after = yield* captureSetupFile(f.copy);
+    const after = yield* readSkillPathDetails(f.copy);
     expect(after.entry?.ino).toBe(before.entry?.ino);
     expect(after.entry?.unstampedHash).toBe(before.entry?.unstampedHash);
     expect(after.entry?.marker).not.toBe(before.entry?.marker);
@@ -630,11 +630,11 @@ it.effect("a local version choice keeps a native-deleted sibling absent", () =>
     yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), document("Chosen local edits"));
     const sibling = join(f.claude, "review");
     yield* f.fs.rename(sibling, join(f.root, "removed-by-user"));
-    const observed = yield* f.observe;
+    const scan = yield* f.observe;
     const input = {
       options: f.options,
       manageOptions: { installOptions: f.home.installOptions },
-      planId: observed.onboarding.planId,
+      planId: scan.onboarding.planId,
       selection: { sourceIds: [], copyPaths: [], removePaths: [], useCopyPaths: [f.copy] },
     };
     const interaction = yield* makeScriptedInteraction([]);
@@ -664,11 +664,11 @@ it.effect(
       yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), edited);
       const before = yield* f.home.durable;
       const existing = new Set(yield* listRecoveryOperations(f.home.home));
-      const observed = yield* f.observe;
+      const scan = yield* f.observe;
       const input = {
         options: f.options,
         manageOptions: { installOptions: f.home.installOptions },
-        planId: observed.onboarding.planId,
+        planId: scan.onboarding.planId,
         selection: { sourceIds: [], copyPaths: [], removePaths: [], useCopyPaths: [f.copy] },
       };
       const interaction = yield* makeScriptedInteraction([]);

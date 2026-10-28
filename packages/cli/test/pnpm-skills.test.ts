@@ -58,10 +58,10 @@ it.effect("shares document reads within a scan and starts fresh for mutation che
         }),
     });
     yield* Effect.gen(function* () {
-      const observe = yield* makePnpmSkillCheck();
-      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
-      expect((yield* observe(f.skill))?.kind).toBe("pnpm");
-      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+      const checkPnpm = yield* makePnpmSkillCheck();
+      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
+      expect((yield* checkPnpm(f.skill))?.kind).toBe("pnpm");
+      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
       expect(calls.get(f.ledgerPath)).toBe(1);
       expect(calls.get(join(f.pkg, "package.json"))).toBe(1);
       expect([...calls.values()].every((count) => count === 1)).toBe(true);
@@ -104,9 +104,9 @@ it.effect("reports unreadable evidence, retries it, and keeps missing-file probe
         }),
     });
     yield* Effect.gen(function* () {
-      const observe = yield* makePnpmSkillCheck();
-      expect(yield* observe(f.alias)).toBeUndefined();
-      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+      const checkPnpm = yield* makePnpmSkillCheck();
+      expect(yield* checkPnpm(f.alias)).toBeUndefined();
+      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
     }).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(References.MinimumLogLevel, "Debug"),
@@ -292,14 +292,14 @@ it.effect("keeps an authored workspace source distinct from pnpm's recorded alia
       persistRoots: false,
       probePath: "",
     };
-    const observed = yield* home.owned(runSetup(options));
-    const source = observed.instances.find((item) => item.path === skill);
-    const installed = observed.instances.find((item) => item.path === f.alias);
+    const scan = yield* home.owned(runSetup(options));
+    const source = scan.instances.find((item) => item.path === skill);
+    const installed = scan.instances.find((item) => item.path === f.alias);
     expect(source?.owner.kind).toBe("authored");
     expect(source?.aliases).not.toContain(f.alias);
     expect(installed?.owner.kind).toBe("pnpm");
-    expect(observed.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
-    expect((yield* setupRemovablePaths(options, observed)).has(f.alias)).toBe(false);
+    expect(scan.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
+    expect((yield* setupRemovablePaths(options, scan)).has(f.alias)).toBe(false);
     const imported = yield* home.owned(writingTo(home.home, importSource(skill)));
     expect(imported.skills.map((item) => item.name)).toEqual(["demo-guide"]);
     expect(yield* f.fs.readLink(f.alias)).toBe(skill);
@@ -327,17 +327,16 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
       persistRoots: false,
       probePath: "",
     };
-    const observed = yield* home.owned(runSetup(options));
-    const instance = observed.instances.find((item) => item.path === alias);
+    const scan = yield* home.owned(runSetup(options));
+    const instance = scan.instances.find((item) => item.path === alias);
     expect(instance?.owner.kind).toBe("unknown");
-    expect(observed.onboarding.candidates.some((item) => item.paths.includes(alias))).toBe(false);
-    const row = setupDiscoveredSkillChoices(
-      observed.instances,
-      observed.onboarding.candidates,
-    ).find((item) => item.instance.path === alias);
+    expect(scan.onboarding.candidates.some((item) => item.paths.includes(alias))).toBe(false);
+    const row = setupDiscoveredSkillChoices(scan.instances, scan.onboarding.candidates).find(
+      (item) => item.instance.path === alias,
+    );
     expect(row?.choice.disabled).toBe(true);
     expect(row?.details).toContain("Left in place · no setup action");
-    expect((yield* setupRemovablePaths(options, observed)).get(alias)).toEqual([alias]);
+    expect((yield* setupRemovablePaths(options, scan)).get(alias)).toEqual([alias]);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -360,19 +359,18 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
       persistRoots: false,
       probePath: "",
     };
-    const observed = yield* home.owned(runSetup(options));
-    expect(Schema.is(SetupResult)(observed)).toBe(true);
-    const instance = observed.instances.find((item) => item.name === "demo-guide");
+    const scan = yield* home.owned(runSetup(options));
+    expect(Schema.is(SetupResult)(scan)).toBe(true);
+    const instance = scan.instances.find((item) => item.name === "demo-guide");
     expect(instance?.owner.kind).toBe("pnpm");
     expect(instance?.aliases).toContain(f.alias);
-    expect(observed.onboarding.candidates.some((item) => item.name === "demo-guide")).toBe(false);
-    const row = setupDiscoveredSkillChoices(
-      observed.instances,
-      observed.onboarding.candidates,
-    ).find((item) => item.instance.name === "demo-guide");
+    expect(scan.onboarding.candidates.some((item) => item.name === "demo-guide")).toBe(false);
+    const row = setupDiscoveredSkillChoices(scan.instances, scan.onboarding.candidates).find(
+      (item) => item.instance.name === "demo-guide",
+    );
     expect(row?.choice.disabled).toBe(true);
     expect(row?.details).toContain("Managed by pnpm · left in place");
-    expect((yield* setupRemovablePaths(options, observed)).has(f.skill)).toBe(false);
+    expect((yield* setupRemovablePaths(options, scan)).has(f.skill)).toBe(false);
     const add = yield* Effect.result(home.owned(importSource(f.alias)));
     expect(add._tag).toBe("Failure");
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
@@ -380,7 +378,7 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
       home.owned(
         manageSetupCopies(
           { installOptions: home.installOptions },
-          observed,
+          scan,
           [{ name: "demo-guide", sourcePath: f.skill }],
           "new",
         ),

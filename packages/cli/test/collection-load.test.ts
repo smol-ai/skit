@@ -75,7 +75,7 @@ effectIt.effect(
               input: source,
               importedAt,
               skills,
-              observations: [],
+              lockFileEntries: [],
             }),
           ),
         );

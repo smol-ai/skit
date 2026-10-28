@@ -38,7 +38,7 @@ const library = Effect.gen(function* () {
             currentHash: yield* deterministicTreeHash(source),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }),
     ),
   );

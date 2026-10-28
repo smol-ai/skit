@@ -51,7 +51,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
               currentHash: yield* deterministicTreeHash(installed),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -108,7 +108,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
           input: source,
           importedAt: "2026-10-02T00:00:00.000Z",
           skills,
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -233,7 +233,7 @@ const twoScopeProposal = (scopeCount = 2) =>
               currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );

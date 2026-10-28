@@ -78,7 +78,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
           source: origin,
           importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           skills,
-          observations: [],
+          lockFileEntries: [],
         }),
       );
     });
@@ -150,10 +150,10 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(
+  const scan = yield* home.owned(
     runSetup({ ...options, repositoryRoots: [root], persistRoots: false }),
   );
-  expect(observed.onboarding.recommended.sources).toHaveLength(1);
+  expect(scan.onboarding.recommended.sources).toHaveLength(1);
   const interaction = yield* makeScriptedInteraction([]);
   const executed = yield* Effect.result(
     home.owned(
@@ -161,7 +161,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         options,
         workDirFlag: root,
         manageOptions: { installOptions: home.installOptions },
-        planId: observed.onboarding.planId,
+        planId: scan.onboarding.planId,
       }).pipe(
         Effect.provide(interaction.layer),
         Effect.provideService(FileSystem.FileSystem, {
@@ -480,14 +480,14 @@ it.effect(
         document("existing", "Before setup"),
       );
       expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
-      const observed = yield* f.home.owned(
+      const scan = yield* f.home.owned(
         runSetup({ ...f.options, persistRoots: false, repositoryRoots: [f.root] }),
       );
       const input = {
         options: f.options,
         workDirFlag: f.root,
         manageOptions: { installOptions: f.home.installOptions },
-        planId: observed.onboarding.planId,
+        planId: scan.onboarding.planId,
         selection: {
           sourceIds: [],
           copyPaths: [],

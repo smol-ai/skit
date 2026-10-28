@@ -6,7 +6,6 @@ export { openLibraryView } from "./library-view.js";
 export {
   openLibrarySession,
   readLibrarySkillContent,
-  refreshLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,

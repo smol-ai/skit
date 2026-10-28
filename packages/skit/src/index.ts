@@ -95,7 +95,7 @@ export * from "./library/collection-version-plan.js";
 export * from "./library/restore-progress.js";
 export * from "./library/installation/uninstall.js";
 export * from "./library/installation/remove.js";
-export * from "./library/skill-materialization.js";
+export * from "./library/installed-skill-digest.js";
 export * from "./library/import-collection.js";
 export * from "./library/installation/install-enabled.js";
 export * from "./library/snapshot-archive.js";

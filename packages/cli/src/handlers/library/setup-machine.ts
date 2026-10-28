@@ -37,28 +37,28 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
     repositoryRoots: input.workDirFlag ? [resolve(input.workDirFlag)] : [],
     persistRoots: false,
   };
-  const observed = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
-  if (observed.onboarding.planId !== planId.value)
+  const scan = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
+  if (scan.onboarding.planId !== planId.value)
     return yield* new SetupPlanStale({
       approvedPlanId: planId.value,
-      currentPlanId: observed.onboarding.planId,
+      currentPlanId: scan.onboarding.planId,
     });
   const review = yield* openSetupReview(
     { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
-    observed,
+    scan,
     input.manageOptions,
   );
-  return { observed, review, planId: planId.value };
+  return { scan, review, planId: planId.value };
 });
 
 export const prepareSetupCommand = Effect.fn("CLI.setup.prepare")(function* (
   input: Parameters<typeof openSetupCommandReview>[0],
 ) {
-  const { observed, review, planId } = yield* openSetupCommandReview(input);
+  const { scan, review, planId } = yield* openSetupCommandReview(input);
   const plan = yield* input.selection
     ? review.prepareExplicit(input.selection, input.duplicates)
     : review.prepareRecommended(input.duplicates);
-  return { observed, review, plan, planId };
+  return { scan, review, plan, planId };
 });
 
 export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
@@ -69,7 +69,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
       detail: "Explicit selections require --reviewed with the reviewId from --review",
     });
   const renderer = yield* Renderer;
-  const { observed, plan, planId } = yield* prepareSetupCommand(input);
+  const { scan, plan, planId } = yield* prepareSetupCommand(input);
   if (input.reviewedPlanId !== undefined && input.reviewedPlanId !== plan.reviewId)
     return yield* new OptionCombinationInvalid({
       detail: "The reviewed setup choices changed. Review these choices again before applying.",
@@ -110,7 +110,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
           ]
         : [];
     }),
-    leftAlone: observed.onboarding.candidates
+    leftAlone: scan.onboarding.candidates
       .filter((candidate) => !taken.has(candidate.name))
       .map((candidate) => ({
         name: candidate.name,

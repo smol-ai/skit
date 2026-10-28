@@ -43,7 +43,7 @@ it.effect("skips repository discovery unless --work-dir supplies a directory", (
     ).toBe(0);
     const home = yield* libraryHome({ home: join(root, "home"), inventoryHome: root });
     const interaction = yield* makeScriptedInteraction([]);
-    const observed = yield* home.owned(
+    const scan = yield* home.owned(
       setupCommand({
         options: {
           libraryHome: home.home,
@@ -56,8 +56,8 @@ it.effect("skips repository discovery unless --work-dir supplies a directory", (
       }).pipe(Effect.provide(interaction.layer)),
     );
 
-    expect(observed.machineConfig.repositoryRoots).toEqual([]);
-    expect(observed.repositories).toEqual([]);
+    expect(scan.machineConfig.repositoryRoots).toEqual([]);
+    expect(scan.repositories).toEqual([]);
     expect(yield* interaction.prompts).toEqual([]);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -333,7 +333,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
       }),
     );
     const home = yield* libraryHome({ home: join(root, "home"), inventoryHome: root });
-    const observed = yield* home.owned(
+    const scan = yield* home.owned(
       runSetup({
         libraryHome: home.home,
         repositoryRoots: [],
@@ -343,7 +343,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
         inventory: home.inventory,
       }),
     );
-    expect(observed.locks).toEqual([
+    expect(scan.locks).toEqual([
       expect.objectContaining({
         scope: "global",
         status: "valid",

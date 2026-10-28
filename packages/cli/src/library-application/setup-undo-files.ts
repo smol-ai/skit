@@ -17,14 +17,14 @@ import {
   type InstalledSkill,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { inspectSetupOperation, captureSetupFile } from "./setup-operation.js";
+import { inspectSetupOperation, readSkillPathDetails } from "./setup-operation.js";
 import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "./recovery-moves.js";
 import { checkSetupGlobalContent } from "./setup-external-ownership.js";
 import { recoveryFingerprint, RecoveryInvalid } from "./recovery-evidence.js";
 
 type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["operation"];
 type File = Operation["files"][number];
-type CapturedFile = Effect.Success<ReturnType<typeof captureSetupFile>>;
+type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
 
 /** Scan timestamps are evidence, not a change to desired installed-skill ownership. */
 export const installedSkillChoice = (installedSkill: InstalledSkill | undefined) =>
@@ -121,7 +121,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     inspectRecoveryOperation(store.home, id),
   );
   const conflicts: string[] = [];
-  const observations: CapturedFile[] = [];
+  const pathDetails: SkillPathDetails[] = [];
   const actions: {
     path: string;
     kind: "release-ownership" | "restore" | "remove-created";
@@ -141,11 +141,11 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     const after = expected.find((item) => resolve(item.path) === file.path);
     const current = state.installed_skills.find((item) => resolve(item.path) === file.path);
     const saved = recovery.entries.filter((entry) => entry.path === file.path);
-    const observed = yield* captureSetupFile(file.path);
-    observations.push(observed);
+    const details = yield* readSkillPathDetails(file.path);
+    pathDetails.push(details);
     const changedInstalledSkill = !equal(installedSkillChoice(prior), installedSkillChoice(after));
     const possibleClaim =
-      observed.entry?.marker !== file.entry?.marker &&
+      details.entry?.marker !== file.entry?.marker &&
       after?.status === "installed" &&
       (file.entry === null || file.entry.marker === null);
     const approvedPath =
@@ -177,7 +177,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       conflicts.push(`Original parent changed: ${file.path}`);
       continue;
     }
-    const physical = join(observed.anchor.physicalPath, relative(observed.anchor.path, file.path));
+    const physical = join(details.anchor.physicalPath, relative(details.anchor.path, file.path));
     if (
       physical === physicalHome ||
       pathIsWithin(physicalHome, physical) ||
@@ -204,12 +204,12 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       continue;
     }
     if (
-      observed.entry?.hash === file.entry?.hash &&
-      (observed.entry !== null) === (file.entry !== null)
+      details.entry?.hash === file.entry?.hash &&
+      (details.entry !== null) === (file.entry !== null)
     )
       continue;
     const marker =
-      observed.entry?.markerType === "File" ? yield* inspectOwnershipMarker(file.path) : undefined;
+      details.entry?.markerType === "File" ? yield* inspectOwnershipMarker(file.path) : undefined;
     const owned =
       current &&
       after &&
@@ -221,37 +221,37 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       marker.marker.expected_digest === current.expected_digest;
     if (
       file.entry &&
-      observed.entry &&
+      details.entry &&
       owned &&
-      observed.entry.dev === file.entry.dev &&
-      observed.entry.ino === file.entry.ino &&
-      observed.entry.unstampedHash === file.entry.unstampedHash
+      details.entry.dev === file.entry.dev &&
+      details.entry.ino === file.entry.ino &&
+      details.entry.unstampedHash === file.entry.unstampedHash
     ) {
       actions.push({ path: file.path, kind: "release-ownership" });
       continue;
     }
     if (
       file.entry &&
-      observed.entry &&
-      observed.entry.dev === file.entry.dev &&
-      observed.entry.ino === file.entry.ino &&
-      observed.entry.unstampedHash !== file.entry.unstampedHash
+      details.entry &&
+      details.entry.dev === file.entry.dev &&
+      details.entry.ino === file.entry.ino &&
+      details.entry.unstampedHash !== file.entry.unstampedHash
     ) {
       conflicts.push(`Managed original was edited: ${file.path}`);
       continue;
     }
-    if (observed.entry && !owned) {
+    if (details.entry && !owned) {
       conflicts.push(`Occupied original path: ${file.path}`);
       continue;
     }
-    if (observed.entry && owned) moves.push({ name: basename(file.path), installedSkill: current });
+    if (details.entry && owned) moves.push({ name: basename(file.path), installedSkill: current });
     if (file.entry === null) {
-      if (observed.entry) actions.push({ path: file.path, kind: "remove-created" });
+      if (details.entry) actions.push({ path: file.path, kind: "remove-created" });
       continue;
     }
     // Missing a setup-created successor is not permission to reverse a newer user deletion.
     if (
-      !observed.entry &&
+      !details.entry &&
       after &&
       !saved.some((entry) => entry.status === "saved") &&
       !backups.some((inspection) =>
@@ -265,7 +265,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     // File recovery calls an occupied destination a conflict. Full undo can first
     // preserve its owned successor, so validate the saved original independently.
     for (const entry of saved) {
-      const evidence = yield* captureSetupFile(entry.recoveryPath);
+      const evidence = yield* readSkillPathDetails(entry.recoveryPath);
       if (
         evidence.entry?.hash === file.entry.hash &&
         evidence.entry.dev === file.entry.dev &&
@@ -276,7 +276,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     for (const installedSkill of [prior, after]) {
       if (source !== undefined || installedSkill === undefined) continue;
       for (const path of yield* inspectInstalledSkillBackups(installedSkill)) {
-        const evidence = yield* captureSetupFile(path);
+        const evidence = yield* readSkillPathDetails(path);
         if (
           evidence.entry?.hash === file.entry.hash &&
           evidence.entry.dev === file.entry.dev &&
@@ -294,7 +294,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
           const root = collectionVersionPath(store.originalsPath, backing.copy.digest);
           const path =
             backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-          const evidence = yield* Effect.result(captureSetupFile(path));
+          const evidence = yield* Effect.result(readSkillPathDetails(path));
           if (
             evidence._tag === "Success" &&
             evidence.success.entry?.unstampedHash === file.entry.unstampedHash
@@ -327,7 +327,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       conflicts.push(`Original bytes unavailable: ${file.path}`);
       continue;
     }
-    const original = (yield* captureSetupFile(source)).entry;
+    const original = (yield* readSkillPathDetails(source)).entry;
     const transfer =
       original?.dev === file.entry.dev && original?.ino === file.entry.ino ? "move" : "copy";
     if (
@@ -343,11 +343,11 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const backup = yield* prepareOwnedRecoveryMoves(moves, backupDirectory);
   const sourceEvidence = yield* Effect.forEach(
     actions.filter((action) => action.source !== undefined),
-    (action) => captureSetupFile(action.source!),
+    (action) => readSkillPathDetails(action.source!),
   );
   return {
     conflicts,
-    observations,
+    pathDetails,
     actions,
     affected: [...affected],
     sourceEvidence,
@@ -383,17 +383,17 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
             yield* checkSetupGlobalContent(file.path);
             yield* checkAnchor(file);
             if (action.kind === "release-ownership") {
-              const before = observations.find((item) => item.path === file.path)!;
-              if (!equal(yield* captureSetupFile(file.path), before))
+              const before = pathDetails.find((item) => item.path === file.path)!;
+              if (!equal(yield* readSkillPathDetails(file.path), before))
                 return yield* new PlanIsStale();
               yield* restoreMarker(file.path, file.entry!);
             } else if (action.kind === "restore") {
-              if ((yield* captureSetupFile(file.path)).entry !== null)
+              if ((yield* readSkillPathDetails(file.path)).entry !== null)
                 return yield* new PlanIsStale();
               if (
                 action.transfer === "move" &&
                 !equal(
-                  yield* captureSetupFile(action.source!),
+                  yield* readSkillPathDetails(action.source!),
                   sourceEvidence.find((entry) => entry.path === action.source),
                 )
               )
@@ -405,7 +405,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
                 )
                 .pipe(Effect.uninterruptible);
             }
-            const actual = (yield* captureSetupFile(file.path)).entry;
+            const actual = (yield* readSkillPathDetails(file.path)).entry;
             if (file.entry === null ? actual !== null : actual?.hash !== file.entry.hash)
               return yield* new RecoveryInvalid({
                 detail: `Original restoration incomplete: ${file.path}`,

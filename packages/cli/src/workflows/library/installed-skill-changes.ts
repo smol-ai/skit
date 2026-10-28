@@ -17,7 +17,7 @@ import {
   type SkitFailure,
   type LibraryState,
 } from "@smolai/skit-core";
-import { captureSetupFile } from "../../library-application/setup-operation.js";
+import { readSkillPathDetails } from "../../library-application/setup-operation.js";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
@@ -120,7 +120,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       ...(version ? { desiredVersionId: version.skill_version_id } : {}),
       metadataChanged: false,
     };
-    const observed = yield* Effect.result(captureSetupFile(resolve(installedSkill.path)));
+    const observed = yield* Effect.result(readSkillPathDetails(resolve(installedSkill.path)));
     if (observed._tag === "Failure") {
       facts.push({
         ...base,
@@ -226,7 +226,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       continue;
     }
     const current = yield* deterministicTreeHash(installedSkill.path);
-    const after = yield* captureSetupFile(resolve(installedSkill.path));
+    const after = yield* readSkillPathDetails(resolve(installedSkill.path));
     if (canonicalJson(before) !== canonicalJson(after)) {
       facts.push(protect("The copy changed during observation"));
       continue;
@@ -298,7 +298,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       installedSkill.status === "installed"
     )
       continue;
-    const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
+    const evidence = hashParts([canonicalJson(yield* readSkillPathDetails(resolve(fact.path)))]);
     if (evidence !== fact.evidence || current !== fact.currentHash) return yield* new PlanIsStale();
     yield* installEnabledSkills({
       target: fact.destination,
@@ -308,7 +308,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       onlySkillIds: [fact.skillId],
       ...(current === fact.desiredHash
         ? {
-            acceptedObservations: new Map([
+            acceptedCopies: new Map([
               [fact.installedSkillId, { currentHash: current, marker: marker.marker }],
             ]),
           }

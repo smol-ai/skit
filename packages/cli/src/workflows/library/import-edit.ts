@@ -109,8 +109,8 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     (installedSkill) => installedSkill.skill_id === skill.skill_id,
   );
   const selected = yield* matchingInstalledSkill(candidates, selector);
-  const observed = yield* deterministicTreeHash(selected.path);
-  if (observed === selected.expected_digest)
+  const currentHash = yield* deterministicTreeHash(selected.path);
+  if (currentHash === selected.expected_digest)
     return yield* new EditImportMissing({
       message: `${selected.path} has not changed from its retained Version`,
     });
@@ -120,14 +120,14 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
         name: skill.name,
         sourcePath: selected.path,
         relativePath: ".",
-        currentHash: observed,
+        currentHash: currentHash,
       },
     ]),
   );
-  const observations: Array<EditImportPlan["installed_skills"][number]> = [];
+  const installedSkills: Array<EditImportPlan["installed_skills"][number]> = [];
   for (const installedSkill of candidates) {
     const digest = yield* deterministicTreeHash(installedSkill.path);
-    observations.push({
+    installedSkills.push({
       installed_skill_id: installedSkill.installed_skill_id,
       destination: installedSkill.destination,
       path: installedSkill.path,
@@ -135,7 +135,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
       agreement:
         installedSkill.installed_skill_id === selected.installed_skill_id
           ? "selected"
-          : digest === observed
+          : digest === currentHash
             ? "identical"
             : "different",
     });
@@ -146,11 +146,11 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     skill_name: skill.name,
     previous_skill_version_id: previousVersion.skill_version_id,
     selected_installed_skill_id: selected.installed_skill_id,
-    current_digest: observed,
+    current_digest: currentHash,
     snapshot_digest: prepared.digest,
     original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
-    import_required: previousVersion.artifact_digest !== observed,
-    installed_skills: observations,
+    import_required: previousVersion.artifact_digest !== currentHash,
+    installed_skills: installedSkills,
   } satisfies EditImportPlan;
 });
 
@@ -251,9 +251,9 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
       }
       const afterRetention = yield* store.load;
       const reconciled = new Set<string>();
-      for (const observation of preview.installed_skills) {
+      for (const previewed of preview.installed_skills) {
         const installedSkill = afterRetention.installed_skills.find(
-          (candidate) => candidate.installed_skill_id === observation.installed_skill_id,
+          (candidate) => candidate.installed_skill_id === previewed.installed_skill_id,
         );
         const scope =
           installedSkill === undefined ? undefined : enablingScope(afterRetention, installedSkill);
@@ -271,7 +271,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           scope,
           root: installedSkill.root,
           variantsPath: store.variantsPath,
-          acceptedObservations: accepted,
+          acceptedCopies: accepted,
         });
       }
       const settled = yield* store.load;
@@ -283,16 +283,16 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         collection_version_id: imported.collectionVersionId,
         snapshot_digest: imported.snapshotDigest,
         imported: preview.import_required,
-        installed_skills: preview.installed_skills.map((observation) => {
+        installed_skills: preview.installed_skills.map((previewed) => {
           const installedSkill = settled.installed_skills.find(
-            (candidate) => candidate.installed_skill_id === observation.installed_skill_id,
+            (candidate) => candidate.installed_skill_id === previewed.installed_skill_id,
           );
           const scope =
             installedSkill === undefined ? undefined : enablingScope(settled, installedSkill);
           return {
-            installed_skill_id: observation.installed_skill_id,
-            destination: observation.destination,
-            path: observation.path,
+            installed_skill_id: previewed.installed_skill_id,
+            destination: previewed.destination,
+            path: previewed.path,
             status:
               scope === undefined
                 ? ("deferred" as const)

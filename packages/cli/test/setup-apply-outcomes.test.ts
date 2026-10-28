@@ -603,7 +603,7 @@ const importDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
               currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         });
       }),
     );

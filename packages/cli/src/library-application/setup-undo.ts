@@ -49,7 +49,7 @@ const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonic
 const readUndo = Effect.fn("SetupUndo.read")(function* (
   operationId: string,
   backupDirectory: string,
-  sourceObservations: Map<CollectionId, UndoSourceImport>,
+  undoSourceImports: Map<CollectionId, UndoSourceImport>,
 ) {
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
@@ -150,7 +150,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         expected,
         store.originalsPath,
         settings.machineId,
-        sourceObservations,
+        undoSourceImports,
       );
   const intent = reverseSetupIntent(state, saved.operation.before, expected, sources.restorations);
   const discovery = reverseSetupDiscovery(settings, saved.operation.settings, expectedSettings);
@@ -186,7 +186,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
       attempts,
       sources: sources.evidence,
       files: files && {
-        observations: files.observations,
+        pathDetails: files.pathDetails,
         sources: files.sourceEvidence,
         actions: files.actions,
       },
@@ -235,15 +235,15 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const backupDirectory = recoveryOperationDirectory(store.home);
-  const sourceObservations = new Map<CollectionId, UndoSourceImport>();
-  const observed = yield* readUndo(operationId, backupDirectory, sourceObservations);
+  const undoSourceImports = new Map<CollectionId, UndoSourceImport>();
+  const reviewed = yield* readUndo(operationId, backupDirectory, undoSourceImports);
   return {
-    summary: observed.summary,
+    summary: reviewed.summary,
     apply: () =>
       withLibraryWriter(
         Effect.gen(function* () {
-          const current = yield* readUndo(operationId, backupDirectory, sourceObservations);
-          if (current.summary.planId !== observed.summary.planId) return yield* new PlanIsStale();
+          const current = yield* readUndo(operationId, backupDirectory, undoSourceImports);
+          if (current.summary.planId !== reviewed.summary.planId) return yield* new PlanIsStale();
           if (current.summary.status === "already-undone") return current.summary;
           if (current.summary.conflicts.length)
             return yield* new RecoveryInvalid({ detail: current.summary.conflicts.join("; ") });

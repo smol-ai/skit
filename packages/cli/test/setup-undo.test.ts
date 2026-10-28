@@ -43,7 +43,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(
+  const scan = yield* home.owned(
     runSetup({ ...options, repositoryRoots: [root], persistRoots: false }),
   );
   const interaction = yield* makeScriptedInteraction([]);
@@ -52,7 +52,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     workDirFlag: root,
     ...(removeOnly ? { selection: { sourceIds: [], copyPaths: [], removePaths: [source] } } : {}),
     manageOptions: { installOptions: home.installOptions },
-    planId: observed.onboarding.planId,
+    planId: scan.onboarding.planId,
   };
   const applied = yield* home.owned(
     Effect.gen(function* () {

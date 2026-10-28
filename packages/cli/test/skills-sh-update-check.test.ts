@@ -105,8 +105,8 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       skills: [member],
       imports: saved.state.imports.map((sourceImport) => ({
         ...sourceImport,
-        lock_file_entries: sourceImport.lock_file_entries.map((observation) => ({
-          ...observation,
+        lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+          ...lockFileEntry,
           source_type: "github",
           source_url: upstream,
         })),
@@ -166,13 +166,13 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     const sourceImport = localState.imports[0]!;
     const collectionVersion = localState.collection_versions[0]!;
     type Observation = LibraryState["imports"][number]["lock_file_entries"][number];
-    const checkObservation = (change: Partial<Observation> = {}) =>
+    const checkLockEntry = (change: Partial<Observation> = {}) =>
       checkSkillsShSubject(
         subject,
         {
           ...sourceImport,
-          lock_file_entries: sourceImport.lock_file_entries.map((observation) => ({
-            ...observation,
+          lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+            ...lockFileEntry,
             ...change,
           })),
         },
@@ -180,12 +180,12 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       ).pipe(Effect.provideService(LibraryStore, store));
     const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
     const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;
-    expect((yield* checkObservation({ ref: originalCommit }))?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry({ ref: originalCommit }))?.members[0]).toMatchObject({
       status: "current",
       baseline_commit: originalCommit,
       baseline_verification: "lock+original-bytes",
     });
-    const treeOnly = (yield* checkObservation({
+    const treeOnly = (yield* checkLockEntry({
       computed_hash: undefined,
       skill_folder_hash: originalTree,
     }))?.members[0];
@@ -196,35 +196,35 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       baseline_verification: "lock-only",
       reason: "Git tree hash cannot verify retained filesystem bytes",
     });
-    expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
       status: "differs-from-lock-and-upstream",
     });
     // The next check must fetch the existing mirror, rather than inspecting its old tip.
     yield* fs.writeFileString(join(upstreamSkill, "SKILL.md"), original);
     expect(yield* runGit(upstream, ["commit", "-qam", "restored"])).toBe(0);
-    expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
       status: "lock-stale",
     });
-    expect((yield* checkObservation())?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry())?.members[0]).toMatchObject({
       status: "current",
       baseline_verification: "lock+original-bytes",
     });
     expect(yield* runGit(upstream, ["rm", "-q", "skills/review/SKILL.md"])).toBe(0);
     expect(yield* runGit(upstream, ["commit", "-qm", "removed"])).toBe(0);
-    expect((yield* checkObservation())?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry())?.members[0]).toMatchObject({
       status: "removed-upstream",
       baseline_verification: "lock+original-bytes",
     });
-    expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
       status: "unverifiable",
       reason: "lock hash not found in searched ref history",
     });
-    expect((yield* checkObservation({ ref: "missing-ref" }))?.members[0]).toMatchObject({
+    expect((yield* checkLockEntry({ ref: "missing-ref" }))?.members[0]).toMatchObject({
       status: "unverifiable",
       reason: "could not resolve ref missing-ref",
     });
     expect(
-      (yield* checkObservation({ source_url: join(root, "missing-source") }))?.members[0],
+      (yield* checkLockEntry({ source_url: join(root, "missing-source") }))?.members[0],
     ).toMatchObject({
       status: "unverifiable",
       reason: "could not reach Git source",

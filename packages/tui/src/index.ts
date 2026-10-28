@@ -24,7 +24,6 @@ import {
   libraryApplicationLayer,
   openLibrarySession,
   readLibrarySkillContent,
-  refreshLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
@@ -1186,7 +1185,12 @@ async function cancelPending(): Promise<void> {
 
 async function refreshLibrary(): Promise<void> {
   if (!libraryHost.state) return;
-  await transitionLibrary((state) => refreshLibrarySession(state));
+  await transitionLibrary((state) =>
+    Effect.map(openLibrarySession(), (session) => ({
+      ...session,
+      ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
+    })),
+  );
   await refreshListingBudgets();
   render();
 }

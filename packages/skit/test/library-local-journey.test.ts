@@ -8,7 +8,7 @@ import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { planCollectionVersions } from "../src/library/collection-version-plan.js";
 import { prepareRestore } from "../src/library/library-restore.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
-import { captureSnapshotArchive } from "../src/library/snapshot-archive.js";
+import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
@@ -42,7 +42,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
               currentHash: yield* deterministicTreeHash(installed),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }).pipe(inLibrary(firstHome)),
       ),
     );
@@ -63,7 +63,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
 
     const manifest = yield* libraryManifestFromLocalState(saved.state);
     assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
-    const archive = yield* captureSnapshotArchive(firstOriginal);
+    const archive = yield* readSnapshotArchive(firstOriginal);
     const originalsPath = join(secondHome, "originals");
     const plan = yield* planCollectionVersions(manifest, {
       originalsPath,
@@ -118,7 +118,7 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
                 currentHash: yield* deterministicTreeHash(stable),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }).pipe(inLibrary(home)),
         ),
       );

@@ -194,11 +194,11 @@ export const setupResultActions = (
 
 /** Translate already validated application choices. Duplicate alternatives never originate here. */
 export const setupDiscoveryOutput = (
-  observed: SetupResult,
+  scan: SetupResult,
   review: SetupReview,
   context: SetupActionContext,
 ) => {
-  const planId = observed.onboarding.planId;
+  const planId = scan.onboarding.planId;
   const empty = { sourceIds: [], copyPaths: [], removePaths: [] };
   const variants = (
     selection: SetupExplicitSelection | undefined,
@@ -211,10 +211,10 @@ export const setupDiscoveryOutput = (
       }),
     );
   return {
-    ...observed,
+    ...scan,
     actions: [
       setupScanAction(context),
-      ...(observed.operationId
+      ...(scan.operationId
         ? [
             {
               rel: "inspect-recovery",
@@ -223,7 +223,7 @@ export const setupDiscoveryOutput = (
                 "library",
                 "recovery",
                 "inspect",
-                observed.operationId,
+                scan.operationId,
                 "--home",
                 context.home,
                 "--json",
@@ -234,16 +234,14 @@ export const setupDiscoveryOutput = (
         : []),
       ...variants(undefined, review.recommendedChoices),
       setupRecoveryListAction(context.home),
-      ...observed.suggestedRepositoryRoots.map((workDir) =>
-        setupScanAction({ ...context, workDir }),
-      ),
+      ...scan.suggestedRepositoryRoots.map((workDir) => setupScanAction({ ...context, workDir })),
     ],
     choices: [
       ...review.versionAlternatives.map((choice) => ({
         kind: "version" as const,
         label:
           choice.version === "retained"
-            ? `Use retained version of ${observed.changes?.find((fact) => fact.skillId === choice.skillId)?.name}`
+            ? `Use retained version of ${scan.changes?.find((fact) => fact.skillId === choice.skillId)?.name}`
             : `Use current copy at ${choice.path}`,
         skillId: choice.skillId,
         ...(choice.version === "retained" ? {} : { path: choice.path }),
@@ -274,7 +272,7 @@ export const setupDiscoveryOutput = (
           ),
         ],
       })),
-      ...[...new Map((observed.changes ?? []).map((fact) => [fact.skillId, fact])).values()].map(
+      ...[...new Map((scan.changes ?? []).map((fact) => [fact.skillId, fact])).values()].map(
         (fact) => ({
           kind: "existing" as const,
           label: fact.name,

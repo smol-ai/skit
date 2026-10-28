@@ -117,7 +117,9 @@ const maybeStat = Effect.fn("SetupOperation.stat")(function* (path: string) {
 });
 
 /** Bind absent entries to an existing physical ancestor as well as recording present bytes. */
-export const captureSetupFile = Effect.fn("SetupOperation.captureFile")(function* (path: string) {
+export const readSkillPathDetails = Effect.fn("SetupOperation.readSkillPathDetails")(function* (
+  path: string,
+) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   let anchor = dirname(path);
@@ -214,7 +216,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       for (const entry of copy.approvedCopies ?? []) paths.add(resolve(entry.path));
     }
   }
-  const files = yield* Effect.forEach([...paths].sort(), captureSetupFile);
+  const files = yield* Effect.forEach([...paths].sort(), readSkillPathDetails);
   let expectedIntent = setupIntent(initial);
   let expectedInstalledSkills = structuredClone(initial.installed_skills);
   let expectedSettings = setupDiscoverySettings(settings);

@@ -54,7 +54,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
               currentHash: yield* deterministicTreeHash(installed),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -161,7 +161,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
               currentHash: yield* deterministicTreeHash(effect),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -387,7 +387,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
               currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -409,7 +409,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
               currentHash: yield* deterministicTreeHash(other),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -513,7 +513,7 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
               currentHash: yield* deterministicTreeHash(effect),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );

@@ -73,13 +73,13 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
     const dates =
       sourceImport?.lock_file_entries
         .filter(
-          (observation) =>
-            observation.content_agreement === "agrees" &&
-            observation.skill_name === skill.name &&
-            (observation.skill_path === undefined || observation.skill_path === skill.path),
+          (lockFileEntry) =>
+            lockFileEntry.content_agreement === "agrees" &&
+            lockFileEntry.skill_name === skill.name &&
+            (lockFileEntry.skill_path === undefined || lockFileEntry.skill_path === skill.path),
         )
-        .flatMap((observation) => {
-          const date = validTimestamp(observation.source_updated_at);
+        .flatMap((lockFileEntry) => {
+          const date = validTimestamp(lockFileEntry.source_updated_at);
           return date === null ? [] : [date];
         }) ?? [];
     // Contradictory observations do not establish a single date.
