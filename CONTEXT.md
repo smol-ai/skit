@@ -1,17 +1,44 @@
 # skit
 
-SKIT acquires, retains, distributes, and materializes agent skills. Its domain model keeps four questions separate: what an artifact is, where a copy is located, how that copy was derived, and whether SKIT manages it.
+SKIT adds, imports, installs and syncs agent skills. Its domain model keeps four questions separate: what an artifact is, where a copy is located, how that copy was derived, and whether SKIT owns it.
 
 ```text
 What is it?              Artifact
 Where is this copy?      Location
 Where did it come from?  Provenance
-Does SKIT manage it?     Custody
+Does SKIT own it?        Ownership
 ```
 
-A Locator provides access to an Artifact. Provenance explains how an Artifact Instance was derived. A Library Entry retains an Artifact. A Binding states where a Skill is wanted. A Projection materializes a Binding. Custody states whether SKIT manages that Projection.
+A Locator provides access to an Artifact. Provenance explains how an Artifact Instance was derived. An Import records a Source's files as a Collection Version in the Library. Enabling a Skill at a Scope installs it into the skills directories Harnesses read. An Ownership Marker shows that SKIT installed a folder and may change it.
 
-An Author changes a Draft. A Publisher publishes a Release. A Library Owner retains Artifacts and declares Binding intent. A Skill User uses Skills through Projections consumed by Harnesses.
+An Author changes a Draft. A Publisher publishes a Release. A Library Owner imports Collections and chooses what is enabled. A Skill User uses Skills through Installed Skills that Harnesses read.
+
+## Verbs
+
+Each verb has one meaning. Use these and no others for Library work.
+
+| Verb | Meaning |
+| --- | --- |
+| add | Put a Source into the Library. |
+| import | Store a Source's files as a Collection Version. |
+| enable / disable | Choose what is on at a Scope. |
+| install / uninstall | Write or remove a skill folder in a skills directory. |
+| update | Bring a Source, or installed skills, up to date. |
+| manage | Take over an existing folder so SKIT owns it. |
+| remove | Take something out; a folder goes to recovery. |
+| back up | Put a file or folder into recovery. |
+| restore | Put something back from recovery. |
+| undo | Reverse a setup. |
+| load / save | Read or write SKIT's saved state. |
+| read / write | Read or write one known thing on disk. |
+| scan | Walk skills directories to find what is there. Changes nothing. |
+| refresh | Scan, then save what was found into the Library. |
+| check | Verify without changing anything. |
+| sync | Merge this device's Library with the server's. |
+| plan / apply | Preview a change, then make it. |
+| inspect | Show something in detail without changing it. |
+
+_Avoid_: acquire, retain, retire, preserve, reconcile, adopt, observe, bind, project, materialize, capture, reload, and publish for anything but Releases.
 
 ## Language
 
@@ -22,15 +49,15 @@ One agent capability represented by a `SKILL.md` document and its related files.
 _Avoid_: command, prompt
 
 **Skill Version**:
-One exact state of a Skill's file tree. Skill Versions are unordered: identical file trees are the same Version even when their copies have different Sources, Collection memberships, provenance, or custody. A Content Digest labels the state under a particular hashing policy; a `version` field declared inside the Skill is metadata, not Version identity.
-_Avoid_: Artifact Instance, Content Digest, Source Revision, declared version
+One exact state of a Skill's file tree. Skill Versions are unordered: identical file trees are the same Version even when their copies have different Sources, Collection memberships, provenance, or ownership. A Content Hash labels the state under a particular hashing policy; a `version` field declared inside the Skill is metadata, not Version identity.
+_Avoid_: Artifact Instance, Content Hash, Source Revision, declared version
 
 **Skill Collection**:
 One or more skills arranged in the Agent Skills filesystem format. A collection does not necessarily have a SKIT identity.
 _Avoid_: repo, pack, source
 
 **Collection Identity**:
-A structured, versioned identity for one retained Skill Collection. A declared SKIT supplies one kind of collection identity; a descriptorless collection derives another from its canonical Source coordinate. Collection identity excludes Source Revision, Content Digest, credentials, and display-only aliases.
+A structured, versioned identity for one Skill Collection in the Library. A declared SKIT supplies one kind of collection identity; a descriptorless collection derives another from its canonical Source coordinate. Collection identity excludes Source Revision, Content Hash, credentials, and display-only aliases.
 _Avoid_: Provisional SKIT ID, content hash, display name
 
 **Collection Reference**:
@@ -42,7 +69,7 @@ A portable Agent Skills-compatible package extended by a `skit.json` Descriptor.
 _Avoid_: library, profile, installation
 
 **SKIT Identity**:
-The stable logical identity and Release history associated with a SKIT package by one authoritative Registry. It consists of Registry authority, Namespace, and SKIT slug; its canonical readable form is `skit://<registry-authority>/<namespace>/<skit>`. A bare `namespace/skit` is shorthand only within an explicitly selected Registry. It is distinct from any concrete copy, archive, Source, or Content Digest.
+The stable logical identity and Release history associated with a SKIT package by one authoritative Registry. It consists of Registry authority, Namespace, and SKIT slug; its canonical readable form is `skit://<registry-authority>/<namespace>/<skit>`. A bare `namespace/skit` is shorthand only within an explicitly selected Registry. It is distinct from any concrete copy, archive, Source, or Content Hash.
 _Avoid_: Registry-relative global ID, package file, working tree, content hash
 
 **Descriptor**:
@@ -62,8 +89,8 @@ Server-managed storage for an editable Draft's history. An implementation may us
 _Avoid_: Git remote, Registry Binding, release archive
 
 **Author Workspace**:
-One device-local editable checkout in which an Author changes a SKIT. It has a stable device-local workspace identity and may participate in the local Library without becoming a local-source snapshot or Registry Release.
-_Avoid_: local Collection, Library Entry, Author Repository, Draft Revision
+One device-local editable checkout in which an Author changes a SKIT. It has a stable device-local workspace identity and may take part in the local Library without becoming a local Collection Version or a Registry Release.
+_Avoid_: local Collection, Author Repository, Draft Revision
 
 **Author Workspace Identity**:
 The opaque, device-local identity of one Author Workspace. It remains stable when that checkout moves, differs between clones, and is neither portable SKIT Identity nor an absolute path.
@@ -78,25 +105,25 @@ One immutable state in the history of a Draft. A server may represent it interna
 _Avoid_: release, public Git commit
 
 **Release**:
-One immutable, versioned snapshot associated with a SKIT. A release does not become public merely because it exists.
+One immutable, versioned set of files published for a SKIT. A release does not become public merely because it exists.
 _Avoid_: draft, installation, publication
 
 **Artifact**:
-Concrete content that SKIT can acquire, retain, validate, publish, or materialize. Skills, skill collections, drafts, and releases can be artifacts.
+Concrete content that SKIT can import, store, validate, publish, or install. Skills, skill collections, drafts, and releases can be artifacts.
 _Avoid_: source, location
 
 **Artifact Instance**:
-One concrete copy of an artifact at one location. Management and provenance describe an artifact instance, not an abstract skill or SKIT.
+One concrete copy of an artifact at one location. Ownership and provenance describe an artifact instance, not an abstract skill or SKIT.
 _Avoid_: artifact identity
 
-**Content Digest**:
-A hash label computed from an artifact's content under a stated hashing policy. Matching digests are evidence of content equality under that policy; a digest does not identify logical SKIT, location, Source, or provenance.
-_Avoid_: SKIT ID, Skill Version, Source Revision
+**Content Hash**:
+A hash computed from an artifact's content under a stated hashing policy, written `sha256:…`. Matching hashes are evidence of content equality under that policy; a hash does not identify a logical SKIT, location, Source, or provenance.
+_Avoid_: digest, SKIT ID, Skill Version, Source Revision
 
-### Acquisition and provenance
+### Imports and provenance
 
 **Locator**:
-An address or path through which SKIT can acquire or observe an artifact. A locator does not identify the artifact or explain how the current copy was produced.
+An address or path through which SKIT can import or read an artifact. A locator does not identify the artifact or explain how the current copy was produced.
 _Avoid_: source, provenance, artifact
 
 **Location**:
@@ -104,23 +131,27 @@ The resolved place at which one artifact instance exists. A location can be a fi
 _Avoid_: identity, provenance
 
 **Source**:
-A recorded locator and acquisition policy that SKIT can use again. A source is not the acquired artifact or its complete provenance.
+A recorded locator and import policy that SKIT can use again. A source is not the imported artifact or its complete provenance.
 _Avoid_: artifact, origin, upstream
 
 **Source Revision**:
-A specific state supplied by a source, such as a Git commit. It does not replace the acquired artifact's content digest.
-_Avoid_: release, content digest
+A specific state supplied by a source, such as a Git commit. It does not replace the imported artifact's Content Hash.
+_Avoid_: release, content hash
 
-**Acquisition**:
-The operation that obtains an artifact through a source.
-_Avoid_: installation, enablement
+**Import**:
+The record of obtaining a Collection's files through a Source: which Source, which Collection Version it produced, when, and any skills.sh lock file entries that vouched for it. An Import does not enable anything.
+_Avoid_: acquisition, installation, enablement
+
+**Collection Version**:
+One immutable copy of a Collection's original files, stored in the Library and identified by its Content Hash. Sync uploads the Collection Versions that cannot be fetched again from a public Source.
+_Avoid_: retained copy, snapshot
 
 **Original**:
-The artifact retained exactly as acquired, before normalization or other transformation.
+A file exactly as imported, before normalization or other transformation. Originals are kept in Collection Versions.
 _Avoid_: release, normalized copy
 
 **Provenance**:
-The chain of acquisitions and transformations that produced one artifact instance.
+The chain of imports and derivations that produced one artifact instance.
 _Avoid_: location, owner, source
 
 **Derivation**:
@@ -128,8 +159,8 @@ One provenance step that produces an output artifact instance from an input arti
 _Avoid_: location, copy history
 
 **Normalization**:
-A derivation that converts an acquired original into a validated SKIT representation without changing the original.
-_Avoid_: publication, acquisition
+A derivation that converts an imported original into a validated SKIT representation without changing the original.
+_Avoid_: publication, import
 
 ### Authoring
 
@@ -159,99 +190,87 @@ _Avoid_: author, owner, user
 The relationship that permits a principal to publish under a SKIT identity or namespace.
 _Avoid_: authorship grant, account role
 
-### Library management
+### The Library
 
 **Library**:
-A principal's retained SKIT packages, standalone Skills or descriptorless Agent Skills packages, and desired Binding intent. Portable Library intent is separate from device-local Projection evidence.
+The Collections and Skills a principal has imported, their Collection Versions and Imports, and what they have enabled where. The portable Library is separate from this device's Installed Skills.
 _Avoid_: cache, registry, harness state
 
-**Library Entry**:
-The record that associates a retained artifact with its identity, locator, provenance, and selected release. A library entry does not enable a skill.
-_Avoid_: installation, projection
-
 **Library Owner**:
-The principal or team whose retained artifacts and binding intent form a library. A team-owned library has no single person as its owner.
+The principal or team whose imported Collections and enabled lists form a Library. A team-owned Library has no single person as its owner.
 _Avoid_: author, publisher, skill user, generic user
 
 **Skill User**:
-A principal who uses a Skill through a Projection consumed by a Harness. A Skill User need not own the Library from which the Binding and retained Artifact originated. Library ownership, device-local Projection state, and SKIT Custody are separate relationships.
+A principal who uses a Skill through an Installed Skill that a Harness reads. A Skill User need not own the Library the Skill came from. Library ownership, this device's Installed Skills, and SKIT's Ownership of folders are separate relationships.
 _Avoid_: consumer, library owner, generic user
 
 **Harness**:
-An agent tool whose configuration can consume projected skills, such as Codex, Claude Code, OpenCode, or Devin.
+An agent tool that reads installed skills, such as Codex, Claude Code, OpenCode, or Devin.
 _Avoid_: agent, client, host, target
 
 **Harness Availability**:
-Device-local evidence that a Harness can consume Projections on this device. Support for a Harness adapter and portable Binding intent do not establish availability.
-_Avoid_: Binding, supported harness, synchronized capability
+Device-local evidence that a Harness can read installed skills on this device. Support for a Harness adapter and what is enabled do not establish availability.
+_Avoid_: enabled, supported harness, synchronized capability
 
 **Scope**:
-The context in which a binding applies: global or repository-specific. The same skill can be bound to the same harness in multiple scopes.
+Where something is enabled: everywhere on this device (global), or in one repository. The same Skill can be enabled at several scopes.
 _Avoid_: level, project
 
-**Binding**:
-The intent that selected skills be available at one scope. A binding names no harness, because every harness that reads a Projection Target sees its copies. A binding does not prove that SKIT materialized the corresponding files.
-_Avoid_: installation, link, projection
+**Enabled**:
+The list of Collections and Skills turned on at one Scope. An enabled Collection follows its Source: every current Skill in it is on. Being enabled names no Harness, because every Harness that reads a skills directory sees what is installed there, and it does not prove that SKIT installed the files.
+_Avoid_: binding, installation, link
 
 **Library Manifest**:
-A portable declaration of library entries and bindings. It contains desired state, not device-local projection evidence.
+The portable form of the Library that sync exchanges: its Collections, Skills, Collection Versions, Imports and what is enabled everywhere. It holds what is wanted, not what this device has installed.
 _Avoid_: state file, backup
 
-**Reconciliation Plan**:
-The proposed changes required to make local library intent agree with a library manifest.
-_Avoid_: merge, sync result
+**Sync Plan**:
+The changes a sync would make to bring this device's Library and the server's together.
+_Avoid_: reconciliation plan, merge result
 
-### Projection and custody
+### Installing and ownership
 
-**Skill Root**:
-A concrete directory in which Skill artifact instances may be discovered or materialized. A Skill Root may be native to one Harness or a compatibility location consumed by several Harnesses; its path does not itself assign ownership to any Harness.
-_Avoid_: Harness, Binding, Collection
+**Skills Directory**:
+A directory from which Harnesses read skill folders, such as `~/.agents/skills` or `~/.claude/skills`. A skills directory may belong to one Harness or be shared by several; its path does not by itself assign ownership to any Harness.
+_Avoid_: skill root, Harness, Collection
 
-**Projection Target**:
-The destination at which a Skill folder is materialized: the shared `.agents/skills` root, and `.claude/skills` when Claude Code is present. Two Bindings selecting the same physical destination are a routing collision until reconciliation proves how that folder can be managed safely.
-_Avoid_: Projection, Harness, Scope, generic location
+**Install Destination**:
+Where SKIT installs a skill folder: the shared `.agents/skills` directory, and `.claude/skills` when Claude Code is present. Two enabled Skills that would install into the same folder are a collision until it is clear how that folder can be managed safely.
+_Avoid_: projection target, Harness, Scope, generic location
 
-**Projection**:
-One concrete Skill folder materialized at a Projection Target. Harnesses may route to or consume a Projection, but Harness and Scope are Binding inputs rather than properties of the folder. A Projection is not itself desired state, and incidental readability does not implicitly satisfy a Binding.
-_Avoid_: Harness, Scope, binding, installation, source
+**Installed Skill**:
+One skill folder SKIT installed at an Install Destination. Harnesses read Installed Skills, but Harness and Scope are not properties of the folder. An Installed Skill is not itself what is wanted, and a folder that merely happens to be readable does not count as enabled.
+_Avoid_: projection, Harness, Scope, binding, source
 
-**Custody**:
-SKIT's authority to reconcile or remove one concrete projection. Custody requires explicit ownership evidence and applies only to that copy.
-_Avoid_: authorship, library membership, awareness
+**Ownership**:
+SKIT's authority to update or remove one Installed Skill. Ownership requires an Ownership Marker and applies only to that folder.
+_Avoid_: custody, authorship, library membership, awareness
 
 **Ownership Marker**:
-Device-local evidence that SKIT created and has custody of a projection.
+Device-local evidence that SKIT installed, and owns, a folder.
 _Avoid_: provenance, authorship claim
 
 **Managed**:
-A projection for which SKIT has custody and valid ownership evidence.
-_Avoid_: installed, imported, known
+An Installed Skill that SKIT owns, with a valid Ownership Marker.
+_Avoid_: known, imported
 
 **Unmanaged**:
-An artifact instance observed at a projection target for which SKIT has no custody. Observation does not grant custody.
+A skill folder found in a skills directory that SKIT does not own. Finding a folder does not make SKIT its owner.
 _Avoid_: foreign, unknown
 
-**Orphaned Projection**:
-A Projection with a valid Ownership Marker but no matching record in the local Library ledger. The marker preserves SKIT Custody; loss of the ledger record does not make the Projection Unmanaged. Reconciliation may re-index or safely release it, but must not route it through Adoption.
-_Avoid_: Unmanaged, retained Collection, unowned
-
-**Adoption**:
-The explicit transfer of an existing unmanaged artifact instance into SKIT custody.
-_Avoid_: discovery, import
-
-**Observation**:
-What SKIT currently sees at a projection target. An observation does not change binding intent or grant custody.
-_Avoid_: desired state
+**Orphaned Installed Skill**:
+An Installed Skill with a valid Ownership Marker but no matching record in the local Library. The marker still shows SKIT's Ownership; losing the record does not make the folder Unmanaged. A refresh may record it again or release it, but must not treat it as a folder to manage.
+_Avoid_: Unmanaged, unowned, orphaned projection
 
 ### Auditing
 
 **Audit Snapshot**:
-A point-in-time, read-only account of Harnesses, Audit Entries, and Audit Findings visible from a set of local roots. A snapshot does not change Library intent, Projection state, or Custody.
-_Avoid_: inventory, reconciliation plan, desired state
+A point-in-time, read-only account of Harnesses, Audit Entries, and Audit Findings visible from a set of local directories. A snapshot does not change what is enabled, Installed Skills, or Ownership.
+_Avoid_: inventory, sync plan, desired state
 
 **Audit Entry**:
-One identified Skill, plugin, MCP server registration, rule, or marketplace recorded in an Audit Snapshot. An audit entry may relate to more than one Harness and is not evidence of SKIT Custody.
-_Avoid_: Observation, Projection, generic capability
+One identified Skill, plugin, MCP server registration, rule, or marketplace recorded in an Audit Snapshot. An audit entry may relate to more than one Harness and is not evidence of SKIT's Ownership.
+_Avoid_: Installed Skill, generic capability
 
 **Audit Finding**:
 One audit result requiring attention or interpretation. A finding explicitly identifies its related Audit Entries when known; it is not itself an Audit Entry.
@@ -262,13 +281,13 @@ A Harness for which an Audit Snapshot contains direct local evidence. Support fo
 _Avoid_: supported harness, configured adapter
 
 **Drift**:
-A difference between the expected content of a managed projection and its observed content.
+A difference between an Installed Skill's expected Content Hash and the hash of what is on disk.
 _Avoid_: update available, stale
 
 **Conflict**:
-A condition in which SKIT cannot safely reconcile desired state with an observed artifact instance.
+A condition in which SKIT cannot safely make a folder on disk match what is enabled.
 _Avoid_: drift
 
 **Tombstone**:
-A device-local record that a managed projection was intentionally removed.
-_Avoid_: binding, portable intent
+A device-local record that a Managed Installed Skill was intentionally removed.
+_Avoid_: enabled, portable intent

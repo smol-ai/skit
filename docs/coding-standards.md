@@ -30,6 +30,12 @@ Give each word one meaning across the codebase. Before introducing a term, check
 another. When code uses one word for two things, rename one of them rather than
 qualifying it in comments.
 
+Use the verbs in `CONTEXT.md`'s verb table, each in its one meaning, and none
+of the words it lists to avoid. A function that loads saved state says `load`; one
+that walks skills directories says `scan`; one that scans and saves says
+`refresh`. If an operation needs a verb the table lacks, add it there first.
+Call a hash a hash: a `sha256:…` value is a `Hash`, not a digest.
+
 Do not introduce intermediate terms or types. If data passes through a second
 shape that differs only by being unchecked, recased, or partially built, remove
 that shape: let the producer build the final value through one constructor that
