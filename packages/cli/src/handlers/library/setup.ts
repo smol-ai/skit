@@ -141,7 +141,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     const review = yield* openSetupReview(
       { ...setupOptions, persistRoots: true },
       observed,
-      input.manageOptions ?? { bindings: setupOptions.inventory },
+      input.manageOptions ?? { installOptions: setupOptions.inventory },
     );
     // The explicit work-dir flag approves only this settings change, not skill enablement.
     const plan = yield* review.prepare({
@@ -430,7 +430,7 @@ export const setupCliCommand = Command.make(
                 probePath: process.env.PATH,
                 skillsStateHome: paths.xdgStateHome,
               };
-              const manageOptions = { bindings: configuration.pull.bindings };
+              const manageOptions = { installOptions: configuration.pull.installOptions };
               if (
                 [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||
                 (apply !== undefined && input.dryRun)

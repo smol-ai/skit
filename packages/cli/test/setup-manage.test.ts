@@ -64,7 +64,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
           interactive: true,
           dryRun: false,
           workDirFlag: root,
-          manageOptions: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -149,7 +149,7 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
           },
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -230,7 +230,7 @@ it.effect("keeps every conflicting Claude copy visible and manages only the chos
           },
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -306,7 +306,7 @@ it.effect(
               },
               interactive: true,
               dryRun: false,
-              manageOptions: { bindings: home.bindings },
+              manageOptions: { installOptions: home.installOptions },
             }).pipe(Effect.provide(interaction.layer));
           }),
         ),

@@ -31,7 +31,7 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
     detectedHarnesses: Effect.succeed(detectedHarnesses),
     pull: {
       installation,
-      bindings: inventory,
+      installOptions: inventory,
     },
   };
 });

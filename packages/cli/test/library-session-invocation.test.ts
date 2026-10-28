@@ -92,7 +92,7 @@ it.effect(
       expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
       expect(Result.getOrThrow(row.authorInvocation).codex.policy).toBe("implicit");
       const proposed = yield* home.owned(
-        proposeLibraryEnable(session, home.bindings, row, { scope: { kind: "global" } }),
+        proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
       );
       expect(proposed.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
       const enabled = yield* home.owned(confirmLibraryChange(proposed));
@@ -133,7 +133,7 @@ it.effect(
       const disabled = yield* home.owned(
         proposeLibraryDisable(
           enabled,
-          home.bindings,
+          home.installOptions,
           enabled.skills[0]!,
           enabled.skills[0]!.scopes,
         ),
@@ -337,12 +337,12 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       expect(bad.scopes[0]?.policy).toBeUndefined();
       expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);
       const policyChange = yield* home.owned(
-        proposeLibraryInvocation(session, home.bindings, bad, bad.scopes[0]!, "explicit"),
+        proposeLibraryInvocation(session, home.installOptions, bad, bad.scopes[0]!, "explicit"),
       );
       expect(policyChange.outcome?.kind).toBe("failed");
       expect(policyChange.pending).toBeUndefined();
       const disabled = yield* home.owned(
-        proposeLibraryDisable(session, home.bindings, bad, bad.scopes),
+        proposeLibraryDisable(session, home.installOptions, bad, bad.scopes),
       );
       expect(disabled.outcome?.kind).toBe("preview");
       const confirmed = yield* home.owned(confirmLibraryChange(disabled));
@@ -350,7 +350,9 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       const remaining = confirmed.skills.find((row) => row.skillId === bad.skillId)!;
       expect(remaining.scopes).toHaveLength(0);
       const enable = yield* home.owned(
-        proposeLibraryEnable(confirmed, home.bindings, remaining, { scope: { kind: "global" } }),
+        proposeLibraryEnable(confirmed, home.installOptions, remaining, {
+          scope: { kind: "global" },
+        }),
       );
       expect(enable.outcome?.kind).toBe("preview");
       expect(enable.pending?.policies).toEqual([]);

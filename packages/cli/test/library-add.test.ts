@@ -257,7 +257,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       librarySubjects(before).map((subject) => [subject.kind, subject.subjectId, subject.label]),
       [["collection", before.collections[0]?.collection_id, base]],
     );
-    const bindingInput = (enabled: boolean) => ({
+    const enableInput = (enabled: boolean) => ({
       query: skill.skill_id,
       all: false,
       roots: options.roots,
@@ -269,7 +269,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
         dryRun: false,
       },
     });
-    yield* writingTo(home, run(setLibraryEnabled(bindingInput(true))));
+    yield* writingTo(home, run(setLibraryEnabled(enableInput(true))));
     const enabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(enabled.enabled, [{ skill: skill.skill_id }]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
@@ -298,7 +298,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       enabled: [],
     };
     assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
-    yield* writingTo(home, run(setLibraryEnabled(bindingInput(false))));
+    yield* writingTo(home, run(setLibraryEnabled(enableInput(false))));
     const disabled = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
     assert.deepStrictEqual(disabled.enabled, []);
     yield* writingTo(

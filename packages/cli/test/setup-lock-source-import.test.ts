@@ -136,7 +136,7 @@ for (const skillCount of [1, 12]) {
               interactive: true,
               dryRun: false,
               workDirFlag: root,
-              manageOptions: { bindings: home.bindings },
+              manageOptions: { installOptions: home.installOptions },
             }).pipe(Effect.provide(interaction.layer)),
           ),
         );

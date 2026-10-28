@@ -51,7 +51,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
         ? Effect.gen(function* () {
             const configuration = yield* libraryCommandConfiguration(input);
             const session = yield* openLibrarySession();
-            yield* browseLibrary(session, configuration.pull.bindings);
+            yield* browseLibrary(session, configuration.pull.installOptions);
           }).pipe(Effect.provide(terminalPrompterLayer))
         : presentListCommand(),
     );

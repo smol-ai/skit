@@ -105,7 +105,7 @@ const ManagePlan = Schema.Struct({
 interface ManagePlan extends Schema.Schema.Type<typeof ManagePlan> {}
 
 export interface ManageOptions {
-  readonly bindings: InstalledSkillOptions;
+  readonly installOptions: InstalledSkillOptions;
   readonly recoveryOperationDirectory?: string;
 }
 
@@ -359,7 +359,11 @@ export const manageCopy = Effect.fn("Manage.copy")(function* (
   )
     return yield* new PlanIsStale();
   const backup = installing
-    ? yield* planDuplicateBackup(options.bindings, selection, options.recoveryOperationDirectory)
+    ? yield* planDuplicateBackup(
+        options.installOptions,
+        selection,
+        options.recoveryOperationDirectory,
+      )
     : undefined;
   if (request.kind === "retain" && !installing) {
     const imported = yield* importSource(selection.sourcePath);
@@ -398,7 +402,7 @@ export const manageCopy = Effect.fn("Manage.copy")(function* (
     manage.path = plan.sourcePath;
     manage.observedHash = plan.skill.validationDigest;
   }
-  return yield* installCopy(options.bindings, selection, subjectId, manage, backup);
+  return yield* installCopy(options.installOptions, selection, subjectId, manage, backup);
 }, withLibraryWriter);
 
 /** Capture duplicate preservation before managing or binding. */

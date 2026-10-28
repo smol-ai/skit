@@ -57,7 +57,9 @@ const fixture = Effect.gen(function* () {
     skillsStateHome: join(root, "state"),
   };
   const observed = yield* home.owned(runSetup(options));
-  const review = yield* home.owned(openSetupReview(options, observed, { bindings: home.bindings }));
+  const review = yield* home.owned(
+    openSetupReview(options, observed, { installOptions: home.installOptions }),
+  );
   const apply = <A, E, R>(_message: string, effect: Effect.Effect<A, E, R>) => effect;
   return { fs, root, home, agentRoot, linked, alias, options, observed, review, apply };
 });

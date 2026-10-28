@@ -69,7 +69,7 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
           options,
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );

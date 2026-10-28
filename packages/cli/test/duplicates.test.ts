@@ -130,7 +130,7 @@ it.effect("guided setup preserves an individual link to the selected source with
           options: f.options,
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: f.home.bindings },
+          manageOptions: { installOptions: f.home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -214,7 +214,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
           const observed = yield* runSetup(options);
           const result = yield* Effect.result(
             manageSetupCopies(
-              { bindings: f.home.bindings },
+              { installOptions: f.home.installOptions },
               observed,
               [{ name: "review", sourcePath: f.source }],
               "new",
@@ -261,7 +261,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
           });
           const result = yield* Effect.result(
             manageSetupCopies(
-              { bindings: f.home.bindings },
+              { installOptions: f.home.installOptions },
               observed,
               [{ name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" }],
               "new",
@@ -445,7 +445,7 @@ it.effect(
               () => new Error("Expected retirable aliases"),
             );
             const outcome = yield* manageCopy(
-              { bindings: { ...f.home.inventory, home: aliasHome } },
+              { installOptions: { ...f.home.inventory, home: aliasHome } },
               selection,
               {
                 kind: "existing",
@@ -488,7 +488,7 @@ it.effect(
             const options = { ...f.options, repositoryRoots: [], persistRoots: false };
             const observed = yield* runSetup(options);
             const applied = yield* manageSetupCopies(
-              { bindings: f.home.bindings },
+              { installOptions: f.home.installOptions },
               observed,
               [
                 { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
@@ -537,7 +537,7 @@ it.effect("guided setup preserves every selected individual link in one operatio
           options: f.options,
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: f.home.bindings },
+          manageOptions: { installOptions: f.home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -579,7 +579,7 @@ it.effect.each(["retain-only", "keep-both"] as const)(
             options: f.options,
             interactive: true,
             dryRun: false,
-            manageOptions: { bindings: f.home.bindings },
+            manageOptions: { installOptions: f.home.installOptions },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -621,7 +621,7 @@ it.effect("preserves selected links and equal copies automatically across add an
           options: f.options,
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: f.home.bindings },
+          manageOptions: { installOptions: f.home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
@@ -698,13 +698,13 @@ for (const operation of ["add", "bind"] as const) {
               const result =
                 operation === "add"
                   ? yield* manageSetupCopies(
-                      { bindings: f.home.bindings },
+                      { installOptions: f.home.installOptions },
                       fresh,
                       [selection],
                       "new",
                     ).pipe(Effect.asVoid, Effect.result)
                   : yield* manageSetupCopies(
-                      { bindings: f.home.bindings },
+                      { installOptions: f.home.installOptions },
                       fresh,
                       [selection],
                       "existing",
@@ -769,7 +769,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
             options: f.options,
             interactive: true,
             dryRun: false,
-            manageOptions: { bindings: f.home.bindings },
+            manageOptions: { installOptions: f.home.installOptions },
           }).pipe(
             Effect.provideService(Renderer, {
               ...renderer,
@@ -843,9 +843,11 @@ it.effect.each(["source", "alias"] as const)(
             yield* f.fs.rename(f.alias, join(f.root, "displaced-alias"));
             yield* f.fs.symlink(f.source, f.alias);
           }
-          const result = yield* manageCopy({ bindings: f.home.bindings }, selection, request).pipe(
-            Effect.result,
-          );
+          const result = yield* manageCopy(
+            { installOptions: f.home.installOptions },
+            selection,
+            request,
+          ).pipe(Effect.result);
           expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
           expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
           expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);

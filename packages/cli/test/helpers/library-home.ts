@@ -93,7 +93,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     configHome: join(input.inventoryHome ?? home, "config"),
     overrides: roots,
   };
-  const bindings: InstalledSkillOptions = inventory;
+  const installOptions: InstalledSkillOptions = inventory;
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;
@@ -146,7 +146,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     statePath,
     originals: join(home, "originals"),
     inventory,
-    bindings,
+    installOptions,
     variantsPath: join(home, "variants"),
     owned,
     durable,

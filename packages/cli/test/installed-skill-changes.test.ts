@@ -63,7 +63,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
   yield* home.owned(
     setupApplyCommand({
       options,
-      manageOptions: { bindings: home.bindings },
+      manageOptions: { installOptions: home.installOptions },
       planId: initial.onboarding.planId,
     }).pipe(Effect.provide(interaction.layer)),
   );
@@ -95,7 +95,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
     return yield* home.owned(
       setupApplyCommand({
         options,
-        manageOptions: { bindings: home.bindings },
+        manageOptions: { installOptions: home.installOptions },
         planId: observation.onboarding.planId,
       }).pipe(Effect.provide(interaction.layer)),
     );
@@ -253,7 +253,7 @@ it.effect("an explicit empty selection leaves existing pending updates untouched
     const observed = yield* f.observe;
     const input = {
       options: f.options,
-      manageOptions: { bindings: f.home.bindings },
+      manageOptions: { installOptions: f.home.installOptions },
       planId: observed.onboarding.planId,
       selection: { sourceIds: [], copyPaths: [], removePaths: [] },
     };
@@ -313,7 +313,7 @@ it.effect(
       const before = (yield* f.home.durable).installed_skills.find((item) => item.path === f.copy);
       const input = {
         options: f.options,
-        manageOptions: { bindings: f.home.bindings },
+        manageOptions: { installOptions: f.home.installOptions },
         planId: observed.onboarding.planId,
         selection: { sourceIds: [], copyPaths: [newCopy], removePaths: [] },
       };
@@ -546,7 +546,7 @@ for (const chosen of ["retained", "local"] as const) {
         expect(fact.status).toBe("competing");
         const input = {
           options: f.options,
-          manageOptions: { bindings: f.home.bindings },
+          manageOptions: { installOptions: f.home.installOptions },
           planId: observed.onboarding.planId,
           selection: {
             sourceIds: [],
@@ -633,7 +633,7 @@ it.effect("a local version choice keeps a native-deleted sibling absent", () =>
     const observed = yield* f.observe;
     const input = {
       options: f.options,
-      manageOptions: { bindings: f.home.bindings },
+      manageOptions: { installOptions: f.home.installOptions },
       planId: observed.onboarding.planId,
       selection: { sourceIds: [], copyPaths: [], removePaths: [], useCopyPaths: [f.copy] },
     };
@@ -667,7 +667,7 @@ it.effect(
       const observed = yield* f.observe;
       const input = {
         options: f.options,
-        manageOptions: { bindings: f.home.bindings },
+        manageOptions: { installOptions: f.home.installOptions },
         planId: observed.onboarding.planId,
         selection: { sourceIds: [], copyPaths: [], removePaths: [], useCopyPaths: [f.copy] },
       };
@@ -737,7 +737,7 @@ it.effect("a settings-only work-dir call never applies pending installed updates
     const applied = yield* f.home.owned(
       setupCommand({
         options: f.options,
-        manageOptions: { bindings: f.home.bindings },
+        manageOptions: { installOptions: f.home.installOptions },
         workDirFlag: work,
         interactive: false,
         dryRun: false,
@@ -836,7 +836,7 @@ it.effect(
       yield* f.home.owned(
         setupCommand({
           options: f.options,
-          manageOptions: { bindings: f.home.bindings },
+          manageOptions: { installOptions: f.home.installOptions },
           interactive: true,
           dryRun: false,
         }).pipe(Effect.provide(interaction.layer)),

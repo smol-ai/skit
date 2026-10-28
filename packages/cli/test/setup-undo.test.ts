@@ -56,7 +56,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     options,
     workDirFlag: root,
     ...(removeOnly ? { selection: { sourceIds: [], copyPaths: [], removePaths: [source] } } : {}),
-    manageOptions: { bindings: home.bindings },
+    manageOptions: { installOptions: home.installOptions },
     planId: observed.onboarding.planId,
   };
   const applied = yield* home.owned(

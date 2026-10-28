@@ -83,7 +83,7 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
         home.owned(
           setupApplyCommand({
             options,
-            manageOptions: { bindings: home.bindings },
+            manageOptions: { installOptions: home.installOptions },
             ...apply,
           }).pipe(Effect.provide(interaction.layer)),
         ),

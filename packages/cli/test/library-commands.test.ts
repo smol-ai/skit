@@ -87,7 +87,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const row = session.skills[0];
     assert.ok(row);
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.bindings, row, { scope: { kind: "global" } }),
+      proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
     );
     const beforeStaleChange = yield* home.durable;
     yield* home.owned(
@@ -119,7 +119,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
 
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
         Effect.provide(interaction.layer),
       ),
     );
@@ -252,7 +252,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     yield* home.owned(
       browseLibrary(yield* home.owned(openLibrarySession()), {
-        ...home.bindings,
+        ...home.installOptions,
         ...configuration.inventory,
       }).pipe(Effect.provide(unchangedBrowse.layer)),
     );
@@ -282,7 +282,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
         Effect.provide(browseCancel.layer),
       ),
     );
@@ -295,7 +295,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
         Effect.provide(browseDisable.layer),
       ),
     );

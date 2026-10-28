@@ -104,13 +104,13 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
   // `skit sync` reports the global list as a Binding, present while it enables something.
   const listed = (manifest: LibraryManifest) =>
     manifest.enabled.length > 0 ? [["global", manifest.enabled] as const] : [];
-  const previousBindings = new Map(listed(before));
-  const desiredBindings = new Map(listed(after));
-  const bindingChanges = [...new Set([...previousBindings.keys(), ...desiredBindings.keys()])]
+  const previousEnabled = new Map(listed(before));
+  const desiredEnabled = new Map(listed(after));
+  const enabledChanges = [...new Set([...previousEnabled.keys(), ...desiredEnabled.keys()])]
     .sort()
     .flatMap((scope): SyncChange[] => {
-      const previous = previousBindings.get(scope);
-      const desired = desiredBindings.get(scope);
+      const previous = previousEnabled.get(scope);
+      const desired = desiredEnabled.get(scope);
       if (canonicalJson(previous ?? null) === canonicalJson(desired ?? null)) return [];
       return [
         {
@@ -121,7 +121,7 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
         },
       ];
     });
-  return [...collectionChanges, ...bindingChanges];
+  return [...collectionChanges, ...enabledChanges];
 };
 
 export const planLibrarySync = (

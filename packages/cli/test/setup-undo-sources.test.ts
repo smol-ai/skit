@@ -160,7 +160,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
       setupApplyCommand({
         options,
         workDirFlag: root,
-        manageOptions: { bindings: home.bindings },
+        manageOptions: { installOptions: home.installOptions },
         planId: observed.onboarding.planId,
       }).pipe(
         Effect.provide(interaction.layer),
@@ -486,7 +486,7 @@ it.effect(
       const input = {
         options: f.options,
         workDirFlag: f.root,
-        manageOptions: { bindings: f.home.bindings },
+        manageOptions: { installOptions: f.home.installOptions },
         planId: observed.onboarding.planId,
         selection: {
           sourceIds: [],

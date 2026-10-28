@@ -60,7 +60,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
 
     const session = yield* home.owned(openLibrarySession());
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.bindings, session.skills[0]!, {
+      proposeLibraryEnable(session, home.installOptions, session.skills[0]!, {
         scope: { kind: "global" },
       }),
     );
@@ -129,7 +129,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     );
     const scopes = [{ kind: "global" } as const];
     const proposed = yield* home.owned(
-      proposeLibraryCollectionChange(session, home.bindings, collectionId, true, scopes),
+      proposeLibraryCollectionChange(session, home.installOptions, collectionId, true, scopes),
     );
     assert.strictEqual(proposed.outcome.kind, "preview");
     assert.deepStrictEqual(proposed.pending?.facts[0]?.skills.slice().sort(), ["alpha", "beta"]);
@@ -141,7 +141,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.ok(enabled.skills.every((row) => row.scopes.length === 1));
     assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
     const unchanged = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
+      proposeLibraryCollectionChange(enabled, home.installOptions, collectionId, true, scopes),
     );
     assert.strictEqual(unchanged.outcome.kind, "unchanged");
     assert.strictEqual(unchanged.pending, undefined);
@@ -152,7 +152,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const installedSkill = beforeRepair.installed_skills[0]!;
     yield* fs.remove(installedSkill.path, { recursive: true });
     const repair = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
+      proposeLibraryCollectionChange(enabled, home.installOptions, collectionId, true, scopes),
     );
     assert.strictEqual(repair.outcome.kind, "preview");
     const repaired = yield* home.owned(confirmLibraryChange(repair));
@@ -179,7 +179,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const cleanup = yield* home.owned(
       proposeLibraryDisable(
         yield* home.owned(openLibrarySession()),
-        home.bindings,
+        home.installOptions,
         alphaRow,
         alphaRow.scopes,
       ),
@@ -197,7 +197,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     );
 
     const removal = yield* home.owned(
-      proposeLibraryCollectionChange(cleaned, home.bindings, collectionId, false, scopes),
+      proposeLibraryCollectionChange(cleaned, home.installOptions, collectionId, false, scopes),
     );
     assert.strictEqual(removal.outcome.kind, "preview");
     const disabled = yield* home.owned(confirmLibraryChange(removal));
@@ -241,7 +241,7 @@ const twoScopeProposal = (scopeCount = 2) =>
     const proposed = yield* home.owned(
       proposeLibraryCollectionChange(
         session,
-        home.bindings,
+        home.installOptions,
         (yield* home.durable).collections[0]!.collection_id,
         true,
         ([{ kind: "global" }, { kind: "repository", root: repository }] as const).slice(

@@ -38,7 +38,7 @@ const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
   const observed = yield* home.owned(runSetup({ ...options, persistRoots: false }));
   const input = {
     options,
-    manageOptions: { bindings: home.bindings },
+    manageOptions: { installOptions: home.installOptions },
     planId: observed.onboarding.planId,
     selection: { sourceIds: [], copyPaths: [source], removePaths: [] },
   };

@@ -378,10 +378,10 @@ for (const alias of [false, true])
         const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
         const repository = join(home, "repository");
         const repositoryRoot = join(repository, ".agents", "skills");
-        const bindingRoot = alias ? join(home, "repository-alias") : repository;
+        const enabledRoot = alias ? join(home, "repository-alias") : repository;
         if (alias) {
           yield* fs.makeDirectory(repository, { recursive: true });
-          yield* fs.symlink(repository, bindingRoot);
+          yield* fs.symlink(repository, enabledRoot);
         }
         const otherRoot = join(home, "claude", "skills");
         const newRoot = join(home, "new-harness", "skills");
@@ -395,7 +395,7 @@ for (const alias of [false, true])
             store.save(
               {
                 ...state,
-                repositories: [{ root: bindingRoot, enabled }],
+                repositories: [{ root: enabledRoot, enabled }],
               },
               state,
             ),
@@ -416,7 +416,7 @@ for (const alias of [false, true])
             }).pipe(Effect.provide(storeLayer)),
           );
         yield* project("agents", targetRoot);
-        yield* project("agents", repositoryRoot, { kind: "repository", root: bindingRoot });
+        yield* project("agents", repositoryRoot, { kind: "repository", root: enabledRoot });
         yield* project("claude", otherRoot);
         yield* project("agents", newRoot);
         assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), false);
@@ -430,7 +430,7 @@ for (const alias of [false, true])
           after.installed_skills.map((installedSkill) => installedSkill.root).sort(),
           [repositoryRoot, otherRoot, newRoot].sort(),
         );
-        assert.deepStrictEqual(after.repositories, [{ root: bindingRoot, enabled }]);
+        assert.deepStrictEqual(after.repositories, [{ root: enabledRoot, enabled }]);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 

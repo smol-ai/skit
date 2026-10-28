@@ -44,7 +44,7 @@ const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
   const interaction = yield* makeScriptedInteraction([]);
   const apply = setupApplyCommand({
     options,
-    manageOptions: { bindings: home.bindings },
+    manageOptions: { installOptions: home.installOptions },
     planId: observed.onboarding.planId,
   }).pipe(Effect.provide(interaction.layer));
   return { fs, root, source, home, apply };

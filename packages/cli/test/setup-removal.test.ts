@@ -55,7 +55,7 @@ const fixture = Effect.gen(function* () {
             interactive: true,
             dryRun,
             ...(workDirFlag ? { workDirFlag } : {}),
-            manageOptions: { bindings: home.bindings },
+            manageOptions: { installOptions: home.installOptions },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -260,7 +260,7 @@ it.effect("removing one duplicate row preserves the independent copy in another 
           options: { ...f.options, inventory: home.inventory },
           interactive: true,
           dryRun: false,
-          manageOptions: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
