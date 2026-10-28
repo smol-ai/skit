@@ -230,11 +230,11 @@ const markerMatches = (
   marker: OwnershipMarker,
   request: Pick<MaterializeInstalledSkillRequest, "identity">,
 ) =>
-  marker.projection_id === request.identity.projectionId &&
+  marker.installed_skill_id === request.identity.projectionId &&
   marker.skill_id === request.identity.skillId;
 
 const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
-  left.projection_id === right.projection_id &&
+  left.installed_skill_id === right.installed_skill_id &&
   left.skill_id === right.skill_id &&
   left.skill_version_id === right.skill_version_id &&
   left.expected_digest === right.expected_digest;
@@ -244,9 +244,8 @@ const ownershipMarker = (
   projectionId: InstalledSkillIdType,
   expectedHash: Digest,
 ): OwnershipMarker => ({
-  schemaVersion: 4,
-  projectionPolicyVersion: 1,
-  projection_id: request.identity.projectionId,
+  schemaVersion: 5,
+  installed_skill_id: request.identity.projectionId,
   skill_id: request.identity.skillId,
   skill_version_id: request.identity.skillVersionId,
   expected_digest: expectedHash,
@@ -518,7 +517,7 @@ export const inspectInstalledSkill = Effect.fn("Projection.inspectInstalledSkill
   if (
     !marker ||
     marker.skill_id !== projection.skill_id ||
-    marker.projection_id !== projection.installed_skill_id ||
+    marker.installed_skill_id !== projection.installed_skill_id ||
     observed !== markerExpectedHash(marker)
   )
     return { kind: "conflicted" as const, observed };
@@ -564,7 +563,7 @@ export const installedSkillDisplaced = Effect.fn("Projection.displaced")(functio
   for (const backup of yield* pendingInstalledSkillBackups(projection)) {
     const marker = yield* readOwnershipMarker(backup);
     if (
-      marker?.projection_id === projection.installed_skill_id &&
+      marker?.installed_skill_id === projection.installed_skill_id &&
       marker.expected_digest === projection.expected_digest
     )
       return true;
@@ -589,7 +588,7 @@ const reproducible = Effect.fn("Projection.reproducible")(function* (
   const marker = yield* readOwnershipMarker(backup);
   if (
     recorded === undefined ||
-    marker?.projection_id !== recorded.installed_skill_id ||
+    marker?.installed_skill_id !== recorded.installed_skill_id ||
     marker.skill_id !== recorded.skill_id ||
     marker.skill_version_id !== recorded.skill_version_id
   )

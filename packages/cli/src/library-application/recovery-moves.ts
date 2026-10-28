@@ -201,7 +201,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     const observed = yield* inspectOwnershipMarker(path);
     if (
       observed.kind !== "valid" ||
-      observed.marker.projection_id !== expected.installed_skill_id ||
+      observed.marker.installed_skill_id !== expected.installed_skill_id ||
       observed.marker.skill_id !== expected.skill_id ||
       observed.marker.skill_version_id !== expected.skill_version_id ||
       observed.marker.expected_digest !== expected.expected_digest

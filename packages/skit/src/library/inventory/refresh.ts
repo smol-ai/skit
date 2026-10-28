@@ -194,7 +194,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     } else if (marker.kind === "valid") {
       const claim = {
         skillId: marker.marker.skill_id,
-        projectionId: marker.marker.projection_id,
+        projectionId: marker.marker.installed_skill_id,
         expectedHash: marker.marker.expected_digest,
       };
       state.ownershipIssues.push({
@@ -238,7 +238,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
     if (projection.status !== "installed") continue;
     const marker = yield* readOwnershipMarker(projection.path);
     if (
-      marker?.projection_id === projection.installed_skill_id &&
+      marker?.installed_skill_id === projection.installed_skill_id &&
       marker.skill_id === projection.skill_id &&
       projection.observed_digest === projection.expected_digest
     )

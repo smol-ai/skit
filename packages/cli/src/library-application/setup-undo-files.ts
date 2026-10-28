@@ -215,7 +215,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       after &&
       equal(installedSkillChoice(current), installedSkillChoice(after)) &&
       marker?.kind === "valid" &&
-      marker.marker.projection_id === current.installed_skill_id &&
+      marker.marker.installed_skill_id === current.installed_skill_id &&
       marker.marker.skill_id === current.skill_id &&
       marker.marker.skill_version_id === current.skill_version_id &&
       marker.marker.expected_digest === current.expected_digest;

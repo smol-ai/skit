@@ -163,7 +163,7 @@ it.effect(
       assert.strictEqual(installed.installed_skills[0]?.status, "installed");
       const markerV2 = yield* inspectOwnershipMarker(target);
       assert.strictEqual(markerV2.kind, "valid");
-      if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 4);
+      if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 5);
 
       yield* withLibraryWriterLock(
         home,
@@ -256,7 +256,7 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
     if (marker.kind === "valid") {
       assert.strictEqual(marker.marker.skill_version_id, newId);
       assert.strictEqual(
-        marker.marker.projection_id,
+        marker.marker.installed_skill_id,
         before.installed_skills[0]?.installed_skill_id,
       );
     }

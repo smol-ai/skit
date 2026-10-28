@@ -195,7 +195,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
     const marker = yield* inspectOwnershipMarker(projection.path);
     if (
       marker.kind !== "valid" ||
-      marker.marker.projection_id !== projection.installed_skill_id ||
+      marker.marker.installed_skill_id !== projection.installed_skill_id ||
       marker.marker.skill_id !== projection.skill_id ||
       marker.marker.skill_version_id !== projection.skill_version_id ||
       marker.marker.expected_digest !== projection.expected_digest ||
@@ -284,7 +284,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
     const marker = yield* inspectOwnershipMarker(fact.path);
     if (
       marker.kind !== "valid" ||
-      marker.marker.projection_id !== projection.installed_skill_id ||
+      marker.marker.installed_skill_id !== projection.installed_skill_id ||
       marker.marker.skill_id !== projection.skill_id ||
       marker.marker.skill_version_id !== projection.skill_version_id ||
       marker.marker.expected_digest !== projection.expected_digest

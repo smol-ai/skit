@@ -120,7 +120,8 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
     const observedOwnership = yield* ownershipAt(hit.realPath);
     const markerProjection = observedOwnership.marker
       ? observedLibrary.installed_skills.find(
-          (projection) => projection.installed_skill_id === observedOwnership.marker?.projection_id,
+          (projection) =>
+            projection.installed_skill_id === observedOwnership.marker?.installed_skill_id,
         )
       : undefined;
     const ownershipCheck =
@@ -137,13 +138,13 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
       if (skill === undefined)
         return {
           kind: "missing-from-library" as const,
-          projectionId: marker.projection_id,
+          projectionId: marker.installed_skill_id,
           skillId: marker.skill_id,
           skillVersionId: marker.skill_version_id,
         };
       return {
         kind: "retained" as const,
-        projectionId: marker.projection_id,
+        projectionId: marker.installed_skill_id,
         collectionId: skill.collection_id,
         skillId: marker.skill_id,
         skillVersionId: marker.skill_version_id,
