@@ -104,7 +104,7 @@ export async function observe(home: string, fixture: Fixture): Promise<Observati
  * neither theirs nor a copy skit records. Judged from the final state alone, so any sequence of
  * commands that leaves the machine right passes.
  */
-export function preservationFailures(observation: Observation): string[] {
+export function backupFailures(observation: Observation): string[] {
   const accounted = new Set([
     ...observation.library.installedSkills.map((installedSkill) => installedSkill.path),
     ...observation.userLinks.map((link) => link.path),
@@ -226,7 +226,7 @@ export async function buildReport(input: {
   const failures = [
     ...(outcome.timedOut ? ["agent timed out"] : []),
     ...(outcome.exitCode !== 0 && !outcome.timedOut ? [`codex exited ${outcome.exitCode}`] : []),
-    ...preservationFailures(observation),
+    ...backupFailures(observation),
     ...input.verify({ observation, finalMessage }),
   ];
   const { events: _events, ...codex } = outcome;

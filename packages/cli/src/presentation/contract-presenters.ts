@@ -822,12 +822,12 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v3">): s
       "Backed-up copies and their move records are saved in",
       ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
     );
-  const preservationWarnings = data.backupWarnings ?? data.aliasesKept;
-  if (preservationWarnings?.length)
+  const backupWarnings = data.backupWarnings ?? data.aliasesKept;
+  if (backupWarnings?.length)
     lines.push(
       "",
       "Existing copies left in place",
-      ...preservationWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
+      ...backupWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
     );
   return lines.join("\n");
 }

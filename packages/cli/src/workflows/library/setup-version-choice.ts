@@ -116,7 +116,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     );
     desired.set(fact.installedSkillId, digest);
   }
-  const preservation = yield* prepareOwnedRecoveryMoves(
+  const backup = yield* prepareOwnedRecoveryMoves(
     live.map((fact) => ({
       name: fact.name,
       installedSkill: imported.installed_skills.find(
@@ -129,7 +129,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   for (const fact of live)
     if (hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]) !== fact.evidence)
       return yield* new PlanIsStale();
-  yield* preservation.apply();
+  yield* backup.apply();
   for (const fact of live) {
     const installedSkill = imported.installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
@@ -154,7 +154,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       return yield* new PlanIsStale();
   }
   return {
-    recoveryDirectory: preservation.recoveryDirectory,
+    recoveryDirectory: backup.recoveryDirectory,
     outcomes: facts
       .filter((fact) => selected.has(fact.skillId))
       .map((fact) => ({

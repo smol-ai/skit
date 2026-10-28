@@ -108,8 +108,8 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   operation: Operation,
   expected: readonly InstalledSkill[],
   state: LibraryState,
-  preservationDirectory: string,
-  priorPreservations: readonly string[],
+  backupDirectory: string,
+  priorBackups: readonly string[],
   restoredState: LibraryState,
   confirmedInstalledSkillPaths: ReadonlySet<string>,
 ) {
@@ -117,7 +117,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const recovery = yield* inspectRecoveryOperation(store.home, operationId);
-  const preserved = yield* Effect.forEach(priorPreservations, (id) =>
+  const backups = yield* Effect.forEach(priorBackups, (id) =>
     inspectRecoveryOperation(store.home, id),
   );
   const conflicts: string[] = [];
@@ -254,7 +254,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       !observed.entry &&
       after &&
       !saved.some((entry) => entry.status === "saved") &&
-      !preserved.some((inspection) =>
+      !backups.some((inspection) =>
         inspection.entries.some((entry) => entry.path === file.path && entry.status === "saved"),
       )
     ) {
@@ -340,7 +340,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     }
     actions.push({ path: file.path, kind: "restore", source, transfer });
   }
-  const preservation = yield* prepareOwnedRecoveryMoves(moves, preservationDirectory);
+  const backup = yield* prepareOwnedRecoveryMoves(moves, backupDirectory);
   const sourceEvidence = yield* Effect.forEach(
     actions.filter((action) => action.source !== undefined),
     (action) => captureSetupFile(action.source!),
@@ -377,7 +377,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
               });
             staged.set(file.path, path);
           }
-          yield* preservation.apply();
+          yield* backup.apply();
           for (const action of actions) {
             const file = operation.files.find((item) => item.path === action.path)!;
             yield* checkSetupGlobalContent(file.path);

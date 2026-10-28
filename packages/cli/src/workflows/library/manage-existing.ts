@@ -471,7 +471,7 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
     [
       {
         query: subjectId,
-        preserveUnselectedInstalledSkills: true,
+        keepUnselectedInstalledSkills: true,
         all: false,
         allowDuplicate:
           selection.duplicateAction === "keep-both" ||

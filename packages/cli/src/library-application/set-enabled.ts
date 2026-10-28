@@ -371,7 +371,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
         variantsPath: store.variantsPath,
         onlyScopes: hasList ? [plan] : [],
         restoreNativeDeletedSkills: options.enabled ? skillIds : [],
-        ...(options.preserveUnselectedInstalledSkills ? { onlySkillIds: skillIds } : {}),
+        ...(options.keepUnselectedInstalledSkills ? { onlySkillIds: skillIds } : {}),
         ...(options.manage === undefined ? {} : { manage: options.manage }),
         manageIdentical: options.enabled,
       });

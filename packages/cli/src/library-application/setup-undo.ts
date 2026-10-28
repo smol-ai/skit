@@ -72,7 +72,7 @@ const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonic
 
 const readUndo = Effect.fn("SetupUndo.read")(function* (
   operationId: string,
-  preservationDirectory: string,
+  backupDirectory: string,
   sourceObservations: Map<CollectionId, UndoSourceImport>,
 ) {
   const store = yield* LibraryStore;
@@ -89,7 +89,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
       ),
     );
-  const priorPreservations: string[] = [];
+  const priorBackups: string[] = [];
   const attempts: unknown[] = [];
   let done = false;
   if (undoInfo) {
@@ -121,7 +121,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         const attempt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(StoredAttempt))(
           raw,
         ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo record" })));
-        priorPreservations.push(attempt.backupId);
+        priorBackups.push(attempt.backupId);
       }
     }
   }
@@ -186,8 +186,8 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         saved.operation,
         installedSkills,
         state,
-        preservationDirectory,
-        priorPreservations,
+        backupDirectory,
+        priorBackups,
         intent.state,
         confirmedInstalledSkillPaths,
       );
@@ -258,20 +258,20 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
 export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operationId: string) {
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
-  const preservationDirectory = recoveryOperationDirectory(store.home);
+  const backupDirectory = recoveryOperationDirectory(store.home);
   const sourceObservations = new Map<CollectionId, UndoSourceImport>();
-  const observed = yield* readUndo(operationId, preservationDirectory, sourceObservations);
+  const observed = yield* readUndo(operationId, backupDirectory, sourceObservations);
   return {
     summary: observed.summary,
     apply: () =>
       withLibraryWriter(
         Effect.gen(function* () {
-          const current = yield* readUndo(operationId, preservationDirectory, sourceObservations);
+          const current = yield* readUndo(operationId, backupDirectory, sourceObservations);
           if (current.summary.planId !== observed.summary.planId) return yield* new PlanIsStale();
           if (current.summary.status === "already-undone") return current.summary;
           if (current.summary.conflicts.length)
             return yield* new RecoveryInvalid({ detail: current.summary.conflicts.join("; ") });
-          yield* ensureRecoveryOperation(store.home, preservationDirectory);
+          yield* ensureRecoveryOperation(store.home, backupDirectory);
           yield* fs
             .makeDirectory(current.undoDirectory, { mode: 0o700 })
             .pipe(
@@ -286,7 +286,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           yield* writeJsonExclusive(join(current.undoDirectory, `${id}.json`), {
             schemaVersion: 2,
             planId: current.summary.planId,
-            backupId: basename(preservationDirectory),
+            backupId: basename(backupDirectory),
             before: setupIntent(current.state),
             after: setupIntent(current.next),
             settingsBefore: setupDiscoverySettings(current.settings),
@@ -317,7 +317,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           return {
             ...current.summary,
             status: "undone" as const,
-            backupId: basename(preservationDirectory),
+            backupId: basename(backupDirectory),
           };
         }),
       ),

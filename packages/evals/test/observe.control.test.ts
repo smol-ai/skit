@@ -9,7 +9,7 @@ import {
   type EvalCase,
 } from "../src/cases.ts";
 import { baseCaseFixture } from "../src/fixtures.ts";
-import { observe, preservationFailures } from "../src/observe.ts";
+import { observe, backupFailures } from "../src/observe.ts";
 import { startLocalRegistry, type LocalRegistry } from "../src/registry.ts";
 import { createRunRoot, removeRunRoot, type RunRoot } from "../src/run-root.ts";
 import { installSkitPackage, linkTools, runSkit } from "../src/skit-package.ts";
@@ -63,7 +63,7 @@ describe("observe", () => {
       { recursive: true },
     );
 
-    expect(preservationFailures(await observe(run.home, fixture))).toContain(
+    expect(backupFailures(await observe(run.home, fixture))).toContain(
       "skill folder skit does not record: .agents/skills/release-notes",
     );
   });
@@ -92,7 +92,7 @@ async function judge(
 ) {
   const observation = await observe(run.home, fixture);
   return [
-    ...preservationFailures(observation),
+    ...backupFailures(observation),
     ...evalCase.verify({ observation, finalMessage, issued: registry.issued }),
   ];
 }
