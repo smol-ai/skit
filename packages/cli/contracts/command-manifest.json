@@ -319,7 +319,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -358,7 +358,7 @@
         "check"
       ],
       "stability": "stable",
-      "summary": "Check retained Library files or verified source changes.",
+      "summary": "Check the Library's stored files and whether their sources changed.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -392,7 +392,7 @@
       ],
       "positionals": [
         {
-          "name": "skit-or-skill",
+          "name": "skill-or-collection",
           "required": false
         }
       ],
@@ -410,7 +410,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -504,7 +504,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -563,7 +563,7 @@
         "disable"
       ],
       "stability": "stable",
-      "summary": "Disable retained Skills for every agent at a scope.",
+      "summary": "Disable Skills from your Library for every harness at a scope.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -612,7 +612,7 @@
         "invocation": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+          "description": "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
         },
         "dry-run": {
           "type": "boolean",
@@ -632,7 +632,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -676,7 +676,7 @@
         "enable"
       ],
       "stability": "stable",
-      "summary": "Enable retained Skills for every agent at a scope.",
+      "summary": "Enable Skills from your Library for every harness at a scope.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -725,7 +725,7 @@
         "invocation": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
+          "description": "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers. (choices: declared, explicit, implicit, host-policy)"
         },
         "dry-run": {
           "type": "boolean",
@@ -735,7 +735,7 @@
         "allow-duplicate": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Explicitly allow another same-scope copy of a skill already discoverable by an agent."
+          "description": "Explicitly allow another same-scope copy of a skill a harness can already find."
         },
         "json": {
           "type": "boolean",
@@ -750,7 +750,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -794,7 +794,7 @@
         "inventory"
       ],
       "stability": "stable",
-      "summary": "Show every observed Skill instance, its Git state, and refreshed installed skills.",
+      "summary": "Show every Skill folder found on this machine, its Git state, and refreshed installed skills.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -838,7 +838,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -942,7 +942,7 @@
         "list"
       ],
       "stability": "stable",
-      "summary": "List machine-local saved-file recovery operations; files are retained until manually removed.",
+      "summary": "List machine-local saved-file recovery operations; files are kept until you remove them.",
       "effects": {
         "capabilities": [
           "filesystem.read"
@@ -1063,7 +1063,7 @@
         "restore"
       ],
       "stability": "stable",
-      "summary": "Preview or restore verified saved files into free original paths. Does not undo Library bindings or settings.",
+      "summary": "Preview or restore verified saved files into free original paths. Does not change what is enabled or any settings.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1133,7 +1133,7 @@
         "undo"
       ],
       "stability": "stable",
-      "summary": "Preview or undo one setup's intent, installed copies and machine discovery settings while keeping retained artifacts.",
+      "summary": "Preview or undo one setup's intent, installed copies and machine discovery settings while keeping what was imported into the Library.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1200,7 +1200,7 @@
         "list"
       ],
       "stability": "stable",
-      "summary": "Browse retained Skills and Collections and manage enablement.",
+      "summary": "Browse the Skills and Collections in your Library and choose what is enabled.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1236,7 +1236,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -1809,7 +1809,7 @@
         "remove"
       ],
       "stability": "stable",
-      "summary": "Remove a retained Collection and the skills SKIT installed from it.",
+      "summary": "Remove a Collection from your Library and the skills SKIT installed from it.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1833,7 +1833,7 @@
       ],
       "positionals": [
         {
-          "name": "skit-or-skill",
+          "name": "skill-or-collection",
           "required": true
         }
       ],
@@ -1856,7 +1856,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -1901,7 +1901,7 @@
         "accept"
       ],
       "stability": "stable",
-      "summary": "Accept one finding for installing an exact retained Skill Artifact.",
+      "summary": "Accept one finding for installing one exact Skill version in your Library.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -1962,7 +1962,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -2007,7 +2007,7 @@
         "review"
       ],
       "stability": "stable",
-      "summary": "Review security findings for an exact retained Skill Artifact.",
+      "summary": "Review security findings for one exact Skill version in your Library.",
       "effects": {
         "capabilities": [
           "filesystem.read"
@@ -2047,7 +2047,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -2222,22 +2222,22 @@
         "dry-run": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Observe without updating machine configuration."
+          "description": "Scan without saving machine settings."
         },
         "apply": {
           "type": "string",
           "valueName": "string",
-          "description": "Apply this observed planId without prompting; explicit selections also need --reviewed."
+          "description": "Apply this planId without prompting; explicit selections also need --reviewed."
         },
         "review": {
           "type": "string",
           "valueName": "string",
-          "description": "Preview explicit or recommended choices against this observed planId without applying."
+          "description": "Preview explicit or recommended choices against this planId without applying."
         },
         "compare": {
           "type": "string",
           "valueName": "string",
-          "description": "Compare observed copies of the selected skill paths against this planId."
+          "description": "Compare the copies found at the selected skill paths against this planId."
         },
         "reviewed": {
           "type": "string",
@@ -2247,7 +2247,7 @@
         "duplicates": {
           "type": "choice",
           "valueName": "choice",
-          "description": "Override automatic preservation for selected skills: retain-only keeps Library artifacts without enabling; keep-both keeps existing copies active; retire-aliases preserves individual links; preserve-duplicates preserves eligible equal global directories. (choices: retain-only, retire-aliases, keep-both, preserve-duplicates)"
+          "description": "Choose what happens to other copies of the selected skills: retain-only imports into the Library without enabling; keep-both enables and leaves the other copies; retire-aliases enables and moves symlinks to the skill into recovery; preserve-duplicates enables and moves identical global copies into recovery. (choices: retain-only, retire-aliases, keep-both, preserve-duplicates)"
         },
         "use-retained": {
           "type": "string",
@@ -2272,7 +2272,7 @@
         "select-path": {
           "type": "string",
           "valueName": "string",
-          "description": "Choose this observed copy path; repeat to choose more."
+          "description": "Choose this copy path from the scan; repeat to choose more."
         },
         "select-source": {
           "type": "string",
@@ -2282,7 +2282,7 @@
         "remove-path": {
           "type": "string",
           "valueName": "string",
-          "description": "Preserve this eligible installed copy in recovery; repeat to choose more."
+          "description": "Move this installed copy into recovery; repeat to choose more."
         },
         "json": {
           "type": "boolean",
@@ -2297,7 +2297,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -2341,7 +2341,7 @@
         "sync"
       ],
       "stability": "stable",
-      "summary": "Synchronize private retained Library bytes with skit-server.",
+      "summary": "Sync your Library with skit-server.",
       "effects": {
         "capabilities": [
           "filesystem.read",
@@ -2382,7 +2382,7 @@
         "apply": {
           "type": "boolean",
           "valueName": "boolean",
-          "description": "Apply the current Library reconciliation plan."
+          "description": "Apply the current sync plan."
         },
         "adopt": {
           "type": "boolean",
@@ -2397,7 +2397,7 @@
         "keep-enabled": {
           "type": "string",
           "valueName": "string",
-          "description": "Resolve a destination collision by keeping this Skill ID enabled; retain the other Skills without enabling them."
+          "description": "Resolve a destination collision by keeping this Skill ID enabled; keep the other Skills in the Library without enabling them."
         },
         "registry": {
           "type": "string",
@@ -2437,7 +2437,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",
@@ -2521,7 +2521,7 @@
       ],
       "positionals": [
         {
-          "name": "skit-or-skill",
+          "name": "skill-or-collection",
           "required": false
         }
       ],
@@ -2534,7 +2534,7 @@
         "from-projection": {
           "type": "string",
           "valueName": "string",
-          "description": "Retain changed bytes from this installed skill's ID, Harness, or path."
+          "description": "Import edits from this installed skill, given by its ID, harness or path."
         },
         "json": {
           "type": "boolean",
@@ -2549,7 +2549,7 @@
         "codex-root": {
           "type": "string",
           "valueName": "string",
-          "description": "Override the shared .agents skills directory that Codex and other agents read."
+          "description": "Override the shared .agents skills directory that Codex and other harnesses read."
         },
         "claude-root": {
           "type": "string",

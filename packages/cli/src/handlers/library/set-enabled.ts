@@ -43,7 +43,7 @@ const all = Flag.Boolean("all").pipe(
 );
 const invocation = Flag.Literals("invocation", invocationOptions).pipe(
   Flag.withDescription(
-    "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers.",
+    "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers.",
   ),
   Flag.optional,
 );
@@ -53,7 +53,7 @@ const dryRun = Flag.Boolean("dry-run").pipe(
 );
 const allowDuplicate = Flag.Boolean("allow-duplicate").pipe(
   Flag.withDescription(
-    "Explicitly allow another same-scope copy of a skill already discoverable by an agent.",
+    "Explicitly allow another same-scope copy of a skill a harness can already find.",
   ),
   Flag.withDefault(false),
 );
@@ -112,7 +112,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
       ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
-      `${enabled ? "Enable" : "Disable"} retained Skills for every agent at a scope.`,
+      `${enabled ? "Enable" : "Disable"} Skills from your Library for every harness at a scope.`,
     ),
     Command.withExamples(
       enabled

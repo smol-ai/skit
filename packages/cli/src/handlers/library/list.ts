@@ -57,7 +57,9 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
     );
   }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Browse retained Skills and Collections and manage enablement."),
+  Command.withDescription(
+    "Browse the Skills and Collections in your Library and choose what is enabled.",
+  ),
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },

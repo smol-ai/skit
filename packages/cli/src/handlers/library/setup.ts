@@ -56,20 +56,20 @@ const workDirFlag = optionalString(
   "Repository root to remember for this machine and scan.",
 );
 const dryRun = Flag.Boolean("dry-run").pipe(
-  Flag.withDescription("Observe without updating machine configuration."),
+  Flag.withDescription("Scan without saving machine settings."),
   Flag.withDefault(false),
 );
 const applyFlag = optionalString(
   "apply",
-  "Apply this observed planId without prompting; explicit selections also need --reviewed.",
+  "Apply this planId without prompting; explicit selections also need --reviewed.",
 );
 const reviewFlag = optionalString(
   "review",
-  "Preview explicit or recommended choices against this observed planId without applying.",
+  "Preview explicit or recommended choices against this planId without applying.",
 );
 const compareFlag = optionalString(
   "compare",
-  "Compare observed copies of the selected skill paths against this planId.",
+  "Compare the copies found at the selected skill paths against this planId.",
 );
 const reviewedFlag = optionalString(
   "reviewed",
@@ -96,19 +96,22 @@ const selectionFlags = {
     ),
     Flag.withDefault(false),
   ),
-  selectPath: repeated("select-path", "Choose this observed copy path; repeat to choose more."),
+  selectPath: repeated(
+    "select-path",
+    "Choose this copy path from the scan; repeat to choose more.",
+  ),
   selectSource: repeated(
     "select-source",
     "Choose this public source identifier from setup JSON; repeat to choose more.",
   ),
   removePath: repeated(
     "remove-path",
-    "Preserve this eligible installed copy in recovery; repeat to choose more.",
+    "Move this installed copy into recovery; repeat to choose more.",
   ),
 };
 const duplicatesFlag = Flag.Literals("duplicates", SetupDuplicateAction.literals).pipe(
   Flag.withDescription(
-    "Override automatic preservation for selected skills: retain-only keeps Library artifacts without enabling; keep-both keeps existing copies active; retire-aliases preserves individual links; preserve-duplicates preserves eligible equal global directories.",
+    "Choose what happens to other copies of the selected skills: retain-only imports into the Library without enabling; keep-both enables and leaves the other copies; retire-aliases enables and moves symlinks to the skill into recovery; preserve-duplicates enables and moves identical global copies into recovery.",
   ),
   Flag.optional,
 );

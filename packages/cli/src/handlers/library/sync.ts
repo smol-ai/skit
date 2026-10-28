@@ -69,7 +69,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
 });
 
 const apply = Flag.Boolean("apply").pipe(
-  Flag.withDescription("Apply the current Library reconciliation plan."),
+  Flag.withDescription("Apply the current sync plan."),
   Flag.withDefault(false),
 );
 const adopt = Flag.Boolean("adopt").pipe(
@@ -87,7 +87,7 @@ const takeRemote = Flag.String("take-remote").pipe(
 const registry = optionalString("registry", "Select the Registry to synchronize.");
 const keepEnabled = Flag.String("keep-enabled").pipe(
   Flag.withDescription(
-    "Resolve a destination collision by keeping this Skill ID enabled; retain the other Skills without enabling them.",
+    "Resolve a destination collision by keeping this Skill ID enabled; keep the other Skills in the Library without enabling them.",
   ),
   Flag.atLeast(0),
 );
@@ -174,7 +174,7 @@ export const librarySyncCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Synchronize private retained Library bytes with skit-server."),
+  Command.withDescription("Sync your Library with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),
   Command.annotate(CommandMetadata, {
     effects: {

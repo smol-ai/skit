@@ -356,7 +356,7 @@ function changeSummary(pending: Pick<PendingLibraryChange, "facts">): string {
   return pending.facts
     .map(
       (fact) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every agent (${fact.destination})`,
+        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every harness (${fact.destination})`,
     )
     .join("; ");
 }

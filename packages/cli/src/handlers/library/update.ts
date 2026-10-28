@@ -16,13 +16,13 @@ import { result } from "../contracts.js";
 import { planUpdates, updateSubjects, updateExitCode } from "../../library-application/update.js";
 import { prepareEditImport, EditImportMissing } from "../../workflows/library/import-edit.js";
 
-const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
+const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report changes without applying them."),
   Flag.withDefault(false),
 );
 const fromProjection = Flag.String("from-projection").pipe(
-  Flag.withDescription("Retain changed bytes from this installed skill's ID, Harness, or path."),
+  Flag.withDescription("Import edits from this installed skill, given by its ID, harness or path."),
   Flag.optional,
 );
 

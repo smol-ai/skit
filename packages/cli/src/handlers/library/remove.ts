@@ -10,7 +10,7 @@ import { Renderer } from "../../presentation/renderer.js";
 import { executeRemove } from "../../workflows/library/remove.js";
 import { result } from "../contracts.js";
 
-const subject = Argument.String("skit-or-skill");
+const subject = Argument.String("skill-or-collection");
 const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report removals without applying them."),
   Flag.withDefault(false),
@@ -38,7 +38,9 @@ export const removeCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Remove a retained Collection and the skills SKIT installed from it."),
+  Command.withDescription(
+    "Remove a Collection from your Library and the skills SKIT installed from it.",
+  ),
   Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },

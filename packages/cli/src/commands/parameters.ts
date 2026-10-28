@@ -34,7 +34,7 @@ export const optionalString = (name: string, description: string) =>
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
 export const codexRootFlag = optionalString(
   "codex-root",
-  "Override the shared .agents skills directory that Codex and other agents read.",
+  "Override the shared .agents skills directory that Codex and other harnesses read.",
 );
 export const claudeRootFlag = optionalString(
   "claude-root",

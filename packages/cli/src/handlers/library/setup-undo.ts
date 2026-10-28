@@ -129,7 +129,7 @@ export const librarySetupUndoCliCommand = Command.make(
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Preview or undo one setup's intent, installed copies and machine discovery settings while keeping retained artifacts.",
+    "Preview or undo one setup's intent, installed copies and machine discovery settings while keeping what was imported into the Library.",
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },

@@ -44,7 +44,7 @@ export const securityReviewCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
-  Command.withDescription("Review security findings for an exact retained Skill Artifact."),
+  Command.withDescription("Review security findings for one exact Skill version in your Library."),
   Command.withExamples([{ command: "skit security review owner/tools:review --json" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
