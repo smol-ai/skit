@@ -359,7 +359,7 @@ export function evaluateSkillAudit(
     };
   const code = {
     author: "AUTHOR_REVIEW_RECOMMENDED",
-    retain: "RETAIN_REVIEW_RECOMMENDED",
+    import: "IMPORT_REVIEW_RECOMMENDED",
     project: "PROJECT_REVIEW_RECOMMENDED",
   }[context];
   return {

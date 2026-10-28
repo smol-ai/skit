@@ -626,10 +626,10 @@
                               "kind": {
                                 "type": "string",
                                 "enum": [
-                                  "retained"
+                                  "in-library"
                                 ]
                               },
-                              "projectionId": {
+                              "installedSkillId": {
                                 "type": "string"
                               },
                               "collectionId": {
@@ -650,7 +650,7 @@
                             },
                             "required": [
                               "kind",
-                              "projectionId",
+                              "installedSkillId",
                               "skillId",
                               "skillVersionId",
                               "displayName"
@@ -666,7 +666,7 @@
                                   "missing-from-library"
                                 ]
                               },
-                              "projectionId": {
+                              "installedSkillId": {
                                 "type": "string"
                               },
                               "collectionId": {
@@ -681,7 +681,7 @@
                             },
                             "required": [
                               "kind",
-                              "projectionId",
+                              "installedSkillId",
                               "skillId",
                               "skillVersionId"
                             ],

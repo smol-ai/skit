@@ -40,7 +40,7 @@ export const SetupReviewOutput = Schema.Struct({
   canApply: Schema.Boolean,
   summary: Schema.Struct({
     sourceUpdateMayNeedReview: Schema.Boolean,
-    reconciliation: Schema.Array(InstalledSkillChange),
+    changes: Schema.Array(InstalledSkillChange),
     versionChoices: Schema.Array(SetupVersionChoice),
     savesMachineSettings: Schema.Boolean,
     createsMachineIdentity: Schema.Boolean,
@@ -243,7 +243,7 @@ export const setupDiscoveryOutput = (
         kind: "version" as const,
         label:
           choice.version === "retained"
-            ? `Use retained version of ${observed.reconciliation?.find((fact) => fact.skillId === choice.skillId)?.name}`
+            ? `Use retained version of ${observed.changes?.find((fact) => fact.skillId === choice.skillId)?.name}`
             : `Use current copy at ${choice.path}`,
         skillId: choice.skillId,
         ...(choice.version === "retained" ? {} : { path: choice.path }),
@@ -274,15 +274,15 @@ export const setupDiscoveryOutput = (
           ),
         ],
       })),
-      ...[
-        ...new Map((observed.reconciliation ?? []).map((fact) => [fact.skillId, fact])).values(),
-      ].map((fact) => ({
-        kind: "existing" as const,
-        label: fact.name,
-        skillId: fact.skillId,
-        duplicateActions: [],
-        actions: variants({ ...empty, reconcileSkillIds: [fact.skillId] }, []),
-      })),
+      ...[...new Map((observed.changes ?? []).map((fact) => [fact.skillId, fact])).values()].map(
+        (fact) => ({
+          kind: "existing" as const,
+          label: fact.name,
+          skillId: fact.skillId,
+          duplicateActions: [],
+          actions: variants({ ...empty, reconcileSkillIds: [fact.skillId] }, []),
+        }),
+      ),
       ...review.sources.map((source) => ({
         kind: "source" as const,
         label: source.label,
@@ -336,7 +336,7 @@ export const setupDiscoveryOutput = (
 export function setupReviewSummary(summary: SetupReviewSummary) {
   return {
     sourceUpdateMayNeedReview: summary.sourceUpdateMayNeedReview,
-    reconciliation: summary.reconciliation,
+    changes: summary.changes,
     versionChoices: summary.versionChoices,
     savesMachineSettings: summary.persistRoots,
     createsMachineIdentity: summary.createsMachineIdentity,

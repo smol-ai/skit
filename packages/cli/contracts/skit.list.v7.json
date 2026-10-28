@@ -1,5 +1,5 @@
 {
-  "$id": "skit.list.v6",
+  "$id": "skit.list.v7",
   "type": "object",
   "properties": {
     "subjects": {
@@ -55,7 +55,7 @@
                     }
                   ]
                 },
-                "acquired_at": {
+                "imported_at": {
                   "anyOf": [
                     {
                       "type": "string"
@@ -99,7 +99,7 @@
                 "source",
                 "revision",
                 "source_updated_at",
-                "acquired_at",
+                "imported_at",
                 "name",
                 "skill_id",
                 "versions"
@@ -117,98 +117,56 @@
         "additionalProperties": true
       }
     },
-    "bindings": {
+    "enabled": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "scope": {
+        "anyOf": [
+          {
             "type": "object",
             "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "global"
-                ]
+              "collection": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
               }
             },
             "required": [
-              "kind"
+              "collection",
+              "label"
             ],
             "additionalProperties": true
           },
-          "entries": {
-            "type": "array",
-            "items": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "collection"
-                      ]
-                    },
-                    "collection_id": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "collection_id",
-                    "label"
-                  ],
-                  "additionalProperties": true
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "skill"
-                      ]
-                    },
-                    "skill_id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "skill_id",
-                    "name"
-                  ],
-                  "additionalProperties": true
-                }
-              ]
-            }
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          {
+            "type": "object",
+            "properties": {
+              "skill": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "skill",
+              "name"
+            ],
+            "additionalProperties": true
           }
-        },
-        "required": [
-          "scope",
-          "entries",
-          "skills"
-        ],
-        "additionalProperties": true
+        ]
+      }
+    },
+    "enabled_skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     }
   },
   "required": [
     "subjects",
-    "bindings"
+    "enabled",
+    "enabled_skills"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

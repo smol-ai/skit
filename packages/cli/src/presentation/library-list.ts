@@ -3,7 +3,7 @@ import { metadataDate, metadataSource, metadataRevision } from "./skill-metadata
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
 export function renderLibraryList(
-  data: ContractDataForId<"skit.list.v6">,
+  data: ContractDataForId<"skit.list.v7">,
   color = createColors(false),
 ): string {
   if (data.subjects.length === 0) return "No retained Skills in this Library.";
@@ -23,19 +23,15 @@ export function renderLibraryList(
         `    ${color.bold(skill.name)} ${color.dim(`· revision ${metadataRevision(skill.revision)}`)}`,
         `      Source: ${metadataSource(skill.source)}`,
         color.dim(
-          `      Source updated: ${metadataDate(skill.source_updated_at)} · Acquired: ${metadataDate(skill.acquired_at)}`,
+          `      Source updated: ${metadataDate(skill.source_updated_at)} · Imported: ${metadataDate(skill.imported_at)}`,
         ),
       );
   }
-  for (const binding of data.bindings)
+  if (data.enabled.length)
     lines.push(
-      `Enabled: ${
-        binding.entries
-          .map((entry) =>
-            entry.kind === "collection" ? `${entry.label} (whole Collection)` : entry.name,
-          )
-          .join(", ") || "no Skills"
-      }`,
+      `Enabled: ${data.enabled
+        .map((item) => ("collection" in item ? `${item.label} (whole Collection)` : item.name))
+        .join(", ")}`,
     );
   return lines.join("\n");
 }

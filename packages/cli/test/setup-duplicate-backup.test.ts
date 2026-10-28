@@ -182,7 +182,7 @@ it.effect(
       expect(yield* f.fs.exists(f.duplicate)).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("New user edits");
       expect(
-        applied.preservationWarnings?.some((warning) =>
+        applied.backupWarnings?.some((warning) =>
           warning.message.includes("changed before preservation"),
         ),
       ).toBe(true);

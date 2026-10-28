@@ -40,7 +40,7 @@ it.effect("checks retained files without treating an observed local copy as an u
         variantsPath: join(home, "variants"),
       }),
     );
-    assert.strictEqual(current[0]?.retained_copies[0]?.retained_bytes_current, true);
+    assert.strictEqual(current[0]?.collection_versions[0]?.original_intact, true);
     assert.deepStrictEqual(yield* Ref.get(checkedCollections), []);
     assert.strictEqual(current[0]?.source_status, "not-applicable");
     assert.strictEqual(current[0]?.available_snapshot_digest, undefined);
@@ -61,7 +61,7 @@ it.effect("checks retained files without treating an observed local copy as an u
         variantsPath: join(home, "variants"),
       }),
     );
-    assert.strictEqual(changed[0]?.retained_copies[0]?.retained_bytes_current, false);
+    assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });

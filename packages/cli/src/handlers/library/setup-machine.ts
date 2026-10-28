@@ -87,7 +87,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
   const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
   return {
     planId,
-    reconciliation: applied?.reconciliation ?? changeResults(plan.summary.reconciliation, false),
+    changes: applied?.changes ?? changeResults(plan.summary.changes, false),
     ...(applied ? { operationId: applied.operationId } : {}),
     removed: removals.entries.map(({ name, path }) => ({ name, path })),
     recoveryDirectories: [
@@ -97,13 +97,13 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     imported: sources.map(({ source, names }) => ({ source, names })),
     added: additions,
     reconnected: reconnects,
-    projections: state.installed_skills.flatMap((projection) => {
+    installedSkills: state.installed_skills.flatMap((projection) => {
       const name = names.get(projection.skill_id);
       return name !== undefined && taken.has(name)
         ? [
             {
               name,
-              target: projection.destination,
+              destination: projection.destination,
               path: projection.path,
               status: projection.status,
             },
@@ -121,6 +121,6 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
       ? { aliasRecoveryDirectories: applied.recoveryDirectories }
       : {}),
     ...(applied?.warnings.length ? { aliasesKept: applied.warnings } : {}),
-    ...(applied?.warnings.length ? { preservationWarnings: applied.warnings } : {}),
+    ...(applied?.warnings.length ? { backupWarnings: applied.warnings } : {}),
   } satisfies SetupApplied;
 });

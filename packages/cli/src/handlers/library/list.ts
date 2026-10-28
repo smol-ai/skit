@@ -26,7 +26,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
         source: skill.source,
         revision: skill.revision,
         source_updated_at: skill.source_updated_at,
-        acquired_at: skill.acquired_at,
+        imported_at: skill.imported_at,
         name: skill.name,
         skill_id: skill.id,
         ...(skill.versionId === undefined ? {} : { selected_skill_version_id: skill.versionId }),
@@ -36,7 +36,8 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
         })),
       })),
     })),
-    bindings: view.globalBindings,
+    enabled: view.enabledEverywhere.items,
+    enabled_skills: view.enabledEverywhere.skills,
   };
   const renderer = yield* Renderer;
   yield* renderer.result(result("list", value));

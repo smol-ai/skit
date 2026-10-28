@@ -219,11 +219,8 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         assert.isTrue(failed);
         assert.isTrue("status" in outcomes[0]!);
         if (!("status" in outcomes[0]!)) return;
-        assert.strictEqual(
-          outcomes[0].phase,
-          failurePhase === "projection" ? "projection" : "source",
-        );
-        assert.strictEqual(outcomes[0].source_retained, true);
+        assert.strictEqual(outcomes[0].phase, failurePhase === "projection" ? "install" : "source");
+        assert.strictEqual(outcomes[0].source_imported, true);
         assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
         assert.strictEqual(yield* f.fs.readFileString(projectionPath), original);
         const retained = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
@@ -231,7 +228,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
           f.home,
           f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
-        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
+        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
         assert.include(yield* f.fs.readFileString(projectionPath), "after");
         const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
         assert.strictEqual(after.imports.length, retained.imports.length);
@@ -240,7 +237,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
           f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue(
-          unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
+          unchanged.every((item) => "changed" in item && !item.changed && item.installed === 0),
         );
       }).pipe(Effect.provide(testPlatformLayer)),
   );

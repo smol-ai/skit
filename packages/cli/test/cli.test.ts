@@ -241,7 +241,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v6" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v7" });
 
     const add = spawnSync(
       process.execPath,
@@ -387,7 +387,7 @@ describe("CLI contracts", () => {
     );
     expect(reviewed.status).toBe(0);
     const review = JSON.parse(reviewed.stdout);
-    expect(review.schema).toBe("skit.security.review.v3");
+    expect(review.schema).toBe("skit.security.review.v4");
     const fingerprint = review.data.audit.findings[0].fingerprint as string;
     expect(review.data.assessment.outcome).toBe("warn");
 
@@ -427,7 +427,7 @@ describe("CLI contracts", () => {
     const acceptedReview = JSON.parse(accepted.stdout);
     expect(acceptedReview).toEqual(
       expect.objectContaining({
-        schema: "skit.security.accept.v3",
+        schema: "skit.security.accept.v4",
         data: expect.objectContaining({
           assessment: expect.objectContaining({ outcome: "warn" }),
           acceptances: expect.arrayContaining([
@@ -460,8 +460,8 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v6",
-      data: { subjects: [], bindings: [] },
+      schema: "skit.list.v7",
+      data: { subjects: [], enabled: [], enabled_skills: [] },
     });
     expect(result.stderr).toBe("");
   });
@@ -549,7 +549,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v6",
+        schema: "skit.add.v7",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],
@@ -746,13 +746,15 @@ describe("CLI contracts", () => {
     const preview = Schema.decodeUnknownSync(ProjectionRetentionPlanDocument)(
       previewProcess.stdout,
     );
-    expect(preview.data.projections.map(({ target, agreement }) => [target, agreement])).toEqual([
+    expect(
+      preview.data.installed_skills.map(({ destination, agreement }) => [destination, agreement]),
+    ).toEqual([
       ["agents", "different"],
       ["claude", "selected"],
     ]);
     expect(preview.data.observed_digest).not.toBe("");
     expect(preview.data.snapshot_digest).not.toBe("");
-    expect(existsSync(preview.data.retained_path)).toBe(false);
+    expect(existsSync(preview.data.original_path)).toBe(false);
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
     expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
       markerBefore.agents,
@@ -764,11 +766,13 @@ describe("CLI contracts", () => {
       applyProcess.stdout,
     );
     expect(applied.data.previous_skill_version_id).toBe(preview.data.previous_skill_version_id);
-    expect(applied.data.retained_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
-    expect(applied.data.retained).toBe(true);
-    expect(applied.data.projections.map(({ target, status }) => [target, status])).toEqual([
+    expect(applied.data.imported_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
+    expect(applied.data.imported).toBe(true);
+    expect(
+      applied.data.installed_skills.map(({ destination, status }) => [destination, status]),
+    ).toEqual([
       ["agents", "conflicted"],
-      ["claude", "projected"],
+      ["claude", "installed"],
     ]);
 
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
@@ -776,7 +780,7 @@ describe("CLI contracts", () => {
     );
     const retainedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
     expect(retainedSkill?.versions).toHaveLength(2);
-    expect(retainedSkill?.local_version_id).toBe(applied.data.retained_skill_version_id);
+    expect(retainedSkill?.local_version_id).toBe(applied.data.imported_skill_version_id);
     expect(state.imports.at(-1)).toMatchObject({
       kind: "edit",
       source_identity: {
@@ -785,7 +789,7 @@ describe("CLI contracts", () => {
       },
       input: { value: paths.claude },
     });
-    expect(await readFile(join(preview.data.retained_path, "SKILL.md"), "utf8")).toBe(
+    expect(await readFile(join(preview.data.original_path, "SKILL.md"), "utf8")).toBe(
       selectedBytes,
     );
     expect(await readFile(join(paths.claude, "SKILL.md"), "utf8")).toBe(selectedBytes);
@@ -826,11 +830,13 @@ describe("CLI contracts", () => {
     const recovered = Schema.decodeUnknownSync(ProjectionRetentionResultDocument)(
       recoveredProcess.stdout,
     );
-    expect(recovered.data.retained).toBe(false);
-    expect(recovered.data.retained_skill_version_id).toBe(applied.data.retained_skill_version_id);
-    expect(recovered.data.projections.map(({ target, status }) => [target, status])).toEqual([
+    expect(recovered.data.imported).toBe(false);
+    expect(recovered.data.imported_skill_version_id).toBe(applied.data.imported_skill_version_id);
+    expect(
+      recovered.data.installed_skills.map(({ destination, status }) => [destination, status]),
+    ).toEqual([
       ["agents", "conflicted"],
-      ["claude", "projected"],
+      ["claude", "installed"],
     ]);
     const afterRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),

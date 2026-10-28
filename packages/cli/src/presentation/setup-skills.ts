@@ -34,7 +34,7 @@ const sourceGroup = (instance: SetupSkillInstance, home: string): string => {
   const owner = instance.owner;
   if (owner.kind === "harness") return `Plugins · ${owner.source}`;
   if (owner.kind === "skills-sh") return `Known source · ${owner.source}`;
-  if (owner.kind === "skit" && owner.membership.kind === "retained" && owner.membership.source)
+  if (owner.kind === "skit" && owner.membership.kind === "in-library" && owner.membership.source)
     return `Known source · ${owner.membership.source}`;
   if (owner.kind === "authored") return `Known source · ${owner.skitLocator}`;
   const sources = [...new Set(instance.locks.map((lock) => lock.entry.source))];
@@ -60,7 +60,7 @@ const groupOrder = (group: string) =>
 const candidateStatus = (instance: SetupSkillInstance, candidate?: SetupOnboardingCandidate) => {
   if (instance.owner.kind === "pnpm") return "Managed by pnpm · left in place";
   if (instance.owner.kind === "skit")
-    return instance.owner.membership.kind === "retained"
+    return instance.owner.membership.kind === "in-library"
       ? "Already managed in Library"
       : "Managed copy missing from Library · inspect before changing";
   if (instance.owner.kind === "authored") return "Authored SKIT source · kept in place";

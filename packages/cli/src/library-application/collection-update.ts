@@ -230,7 +230,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       // this snapshot before installing failed or temporary-source cleanup interrupted it.
       {
         const current = yield* (yield* LibraryStore).load;
-        phase = "projection";
+        phase = "install";
         const reconciled = yield* progress.around(
           { kind: "projection", subject },
           updateInstalledSkills({
@@ -253,16 +253,16 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       }
       const after = yield* (yield* LibraryStore).load;
       const retainedTree = after.collection_versions.find(
-        (tree) => tree.collection_version_id === retained.retained_version_id,
+        (tree) => tree.collection_version_id === retained.collection_version_id,
       );
       return {
         subject_id: before.subjectId,
         subject_kind: before.kind,
-        previous_retained_copy_id: priorTree.collection_version_id,
-        selected_retained_copy_id: retained.retained_version_id,
+        previous_collection_version_id: priorTree.collection_version_id,
+        selected_collection_version_id: retained.collection_version_id,
         snapshot_digest: retained.snapshot_digest,
         changed,
-        projected,
+        installed: projected,
         label: before.label,
         ...("diagnostics" in retained && retained.diagnostics?.length
           ? { diagnostics: retained.diagnostics }
@@ -334,7 +334,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             label: before.label,
             source,
             phase,
-            source_retained: sourceRetained,
+            source_imported: sourceRetained,
             error: sourceRetained
               ? {
                   ...error,

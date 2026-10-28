@@ -268,7 +268,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.add.v6",
+        "skit.add.v7",
         "skit.add.preview.v4"
       ],
       "exitCodes": [
@@ -376,7 +376,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.check.v7"
+        "skit.check.v8"
       ],
       "exitCodes": [
         0,
@@ -1141,7 +1141,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.undo.v1"
+        "skit.setup.undo.v2"
       ],
       "exitCodes": [
         0,
@@ -1208,7 +1208,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.list.v6"
+        "skit.list.v7"
       ],
       "exitCodes": [
         0,
@@ -1817,8 +1817,8 @@
         ]
       },
       "outputSchemas": [
-        "skit.remove.v4",
-        "skit.remove.plan.v4"
+        "skit.remove.v5",
+        "skit.remove.plan.v5"
       ],
       "exitCodes": [
         0,
@@ -1909,7 +1909,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.security.accept.v3"
+        "skit.security.accept.v4"
       ],
       "exitCodes": [
         0,
@@ -2014,7 +2014,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.security.review.v3"
+        "skit.security.review.v4"
       ],
       "exitCodes": [
         0,
@@ -2191,9 +2191,9 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v9",
-        "skit.setup.applied.v2",
-        "skit.setup.review.v1",
+        "skit.setup.v10",
+        "skit.setup.applied.v3",
+        "skit.setup.review.v2",
         "skit.setup.failed.v1",
         "skit.setup.comparison.v1"
       ],
@@ -2362,7 +2362,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.library.sync.v10"
+        "skit.library.sync.v11"
       ],
       "exitCodes": [
         0,
@@ -2501,10 +2501,10 @@
         ]
       },
       "outputSchemas": [
-        "skit.update.v8",
+        "skit.update.v9",
         "skit.update.plan.v6",
-        "skit.update.projection-retention.v2",
-        "skit.update.projection-retention.plan.v2"
+        "skit.update.projection-retention.v3",
+        "skit.update.projection-retention.plan.v3"
       ],
       "exitCodes": [
         0,

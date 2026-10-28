@@ -1,5 +1,5 @@
 {
-  "$id": "skit.check.v7",
+  "$id": "skit.check.v8",
   "type": "array",
   "items": {
     "type": "object",
@@ -17,26 +17,26 @@
       "label": {
         "type": "string"
       },
-      "retained_copies": {
+      "collection_versions": {
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "retained_copy_id": {
+            "collection_version_id": {
               "type": "string"
             },
             "digest": {
               "type": "string",
               "pattern": "^sha256:[a-f0-9]{64}$"
             },
-            "retained_bytes_current": {
+            "original_intact": {
               "type": "boolean"
             }
           },
           "required": [
-            "retained_copy_id",
+            "collection_version_id",
             "digest",
-            "retained_bytes_current"
+            "original_intact"
           ],
           "additionalProperties": true
         }
@@ -73,7 +73,7 @@
         "type": "string",
         "pattern": "^sha256:[a-f0-9]{64}$"
       },
-      "acquisition_provenance": {
+      "has_imports": {
         "type": "boolean"
       },
       "skills_sh": {
@@ -122,7 +122,7 @@
                   "type": "string",
                   "enum": [
                     "lock-only",
-                    "lock+retained-bytes"
+                    "lock+original-bytes"
                   ]
                 },
                 "upstream_commit": {
@@ -154,10 +154,10 @@
       "subject_id",
       "subject_kind",
       "label",
-      "retained_copies",
+      "collection_versions",
       "unresolved_skill_selections",
       "source_status",
-      "acquisition_provenance"
+      "has_imports"
     ],
     "additionalProperties": true
   },

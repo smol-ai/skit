@@ -84,7 +84,7 @@ export function copyConflict(
     (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
   );
   const instance = observed.instances.find((item) => item.path === selection.sourcePath);
-  const duplicates = candidate?.shadows ?? [];
+  const duplicates = candidate?.duplicates ?? [];
   if (
     !duplicates.length ||
     !isSetupInstallDestination(instance) ||
@@ -214,7 +214,8 @@ export const setupReviewCopies = (
 ) =>
   instances
     .filter(
-      (instance) => instance.owner.kind !== "skit" || instance.owner.membership.kind !== "retained",
+      (instance) =>
+        instance.owner.kind !== "skit" || instance.owner.membership.kind !== "in-library",
     )
     .filter(
       (instance) =>

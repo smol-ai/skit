@@ -40,17 +40,17 @@ export const planRemove = Effect.fn("Library.planRemove")(function* (
     subject_kind: subject.kind,
     versions: skills.reduce((count, skill) => count + skill.versions.length, 0),
     skills: skills.length,
-    global_bindings: [state.enabled].filter((enabled) =>
+    global_enabled: [state.enabled].filter((enabled) =>
       enabledSkillIds(state, enabled).some((skillId) =>
         skills.some((skill) => skill.skill_id === skillId),
       ),
     ).length,
-    repository_bindings: state.repositories.filter((repository) =>
+    repositories: state.repositories.filter((repository) =>
       enabledSkillIds(state, repository.enabled).some((skillId) =>
         skills.some((skill) => skill.skill_id === skillId),
       ),
     ).length,
-    owned_projections: state.installed_skills.filter((projection) =>
+    installed_skills: state.installed_skills.filter((projection) =>
       skills.some((skill) => skill.skill_id === projection.skill_id),
     ).length,
   };
@@ -72,7 +72,7 @@ export const executeRemove = Effect.fn("Library.executeRemove")(
     });
     if (plan.subject_kind === "collection")
       yield* markAuthorWorkspaceRemoved(state, plan.subject_id);
-    return { kind: "removed" as const, value: { ...plan, retired: removed.retired } };
+    return { kind: "removed" as const, value: { ...plan, uninstalled: removed.retired } };
   },
   (effect, _state, options) => (options.dryRun ? effect : withLibraryWriter(effect)),
 );

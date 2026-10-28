@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.undo.v1",
+  "$id": "skit.setup.undo.v2",
   "type": "object",
   "properties": {
     "operationId": {
@@ -44,7 +44,7 @@
           "kind": {
             "type": "string",
             "enum": [
-              "release-custody",
+              "release-ownership",
               "restore",
               "remove-created"
             ]
@@ -92,7 +92,7 @@
         "additionalProperties": true
       }
     },
-    "preservationId": {
+    "backupId": {
       "type": "string"
     },
     "failure": {

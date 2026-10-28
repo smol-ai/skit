@@ -138,7 +138,7 @@ const skill = (
   ),
   source: null,
   revision: null,
-  acquired_at: null,
+  imported_at: null,
   source_updated_at: null,
   collectionSource: { kind: "local", locator: `/sources/${collectionId}` },
   scopes: enabled

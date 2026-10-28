@@ -40,7 +40,7 @@ Run the terminal/key-input smoke check with `pnpm --filter @smolai/skit-storyboo
 
 The `add/added`, `add/updated` and `add/unchanged` fixtures show each source
 acquisition outcome, returned directly by the retention workflow. Each fixture can
-be viewed in human and JSON mode; the outcomes use `skit.add.v6` with a required
+be viewed in human and JSON mode; the outcomes use `skit.add.v7` with a required
 `action` field.
 
 ## Static image export

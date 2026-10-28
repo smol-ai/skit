@@ -16,14 +16,14 @@ export const SetEnabledChange = Schema.Struct({
   changed: Schema.Boolean,
   /** Nothing to save at this scope, but copies are missing, edited, or left behind and will be repaired. */
   repair: Schema.optionalKey(Schema.Boolean),
-  shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
+  duplicates: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /**
    * Folders SKIT does not manage, already at destinations it would write. Enable manages one only
    * when it holds exactly SKIT's copy; otherwise it leaves it in place, reports it `conflicted`,
    * and exits 12.
    */
   unmanaged_destinations: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ target: InstallDestination, path: Schema.String })),
+    Schema.Array(Schema.Struct({ destination: InstallDestination, path: Schema.String })),
   ),
   warnings: Schema.optionalKey(Schema.Array(DuplicateScanError)),
   /** Everything enabled at this scope after the change. */
@@ -50,9 +50,9 @@ export const SetEnabledResult = SetEnabledChange.pipe(
      * Every copy of the changed skills at this scope after the change, with its status. A
      * `conflicted` copy is a folder SKIT found at its destination and did not overwrite.
      */
-    projections: Schema.Array(
+    installed_skills: Schema.Array(
       Schema.Struct({
-        target: InstallDestination,
+        destination: InstallDestination,
         path: Schema.String,
         status: Schema.String,
       }),

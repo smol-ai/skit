@@ -106,9 +106,9 @@ export function setupPlanLines(input: {
         ]
       : []),
     ...summary.versionChoices.map((choice) =>
-      renderSetupVersionChoice(choice, summary.reconciliation, displayPath),
+      renderSetupVersionChoice(choice, summary.changes, displayPath),
     ),
-    ...summary.reconciliation.map((fact) =>
+    ...summary.changes.map((fact) =>
       renderReviewedChanges(fact, summary.versionChoices, displayPath),
     ),
     ...(summary.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),

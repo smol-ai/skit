@@ -224,7 +224,7 @@ export const SkillAudit = Schema.Struct({
 });
 export type SkillAudit = typeof SkillAudit.Type;
 
-export const SkillAssessmentContext = Schema.Literals(["author", "retain", "project", "publish"]);
+export const SkillAssessmentContext = Schema.Literals(["author", "import", "project", "publish"]);
 export type SkillAssessmentContext = typeof SkillAssessmentContext.Type;
 export const SkillAssessmentOutcome = Schema.Literals(["allow", "warn", "block"]);
 export type SkillAssessmentOutcome = typeof SkillAssessmentOutcome.Type;

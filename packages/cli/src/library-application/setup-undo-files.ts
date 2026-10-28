@@ -124,7 +124,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const observations: CapturedFile[] = [];
   const actions: {
     path: string;
-    kind: "release-custody" | "restore" | "remove-created";
+    kind: "release-ownership" | "restore" | "remove-created";
     source?: string;
     transfer?: "move" | "copy" | "rebuild";
   }[] = [];
@@ -227,7 +227,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       observed.entry.ino === file.entry.ino &&
       observed.entry.unstampedHash === file.entry.unstampedHash
     ) {
-      actions.push({ path: file.path, kind: "release-custody" });
+      actions.push({ path: file.path, kind: "release-ownership" });
       continue;
     }
     if (
@@ -382,7 +382,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
             const file = operation.files.find((item) => item.path === action.path)!;
             yield* checkSetupGlobalContent(file.path);
             yield* checkAnchor(file);
-            if (action.kind === "release-custody") {
+            if (action.kind === "release-ownership") {
               const before = observations.find((item) => item.path === file.path)!;
               if (!equal(yield* captureSetupFile(file.path), before))
                 return yield* new PlanIsStale();

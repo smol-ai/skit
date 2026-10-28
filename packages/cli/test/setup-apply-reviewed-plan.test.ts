@@ -223,7 +223,7 @@ it.effect("applying the reviewed plan ID starts managing every recommended copy"
       report?.added.map((copy) => copy.name),
       ["alpha", "beta"],
     );
-    assert.strictEqual(report?.projections.length, state.installed_skills.length);
+    assert.strictEqual(report?.installedSkills.length, state.installed_skills.length);
     assert.deepStrictEqual(report?.leftAlone, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

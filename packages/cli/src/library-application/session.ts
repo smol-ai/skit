@@ -93,7 +93,7 @@ export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () 
     source: row.source,
     revision: row.revision,
     source_updated_at: row.source_updated_at,
-    acquired_at: row.acquired_at,
+    imported_at: row.imported_at,
     name: row.name,
     skillId: row.id,
     skillVersionId: row.versionId,
@@ -209,8 +209,8 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
         });
       const plan = yield* selection.plan(intent, configuration);
       for (const change of plan.changes)
-        if (change.shadows?.length)
-          return yield* new InstalledSkillWouldDuplicate({ duplicates: change.shadows });
+        if (change.duplicates?.length)
+          return yield* new InstalledSkillWouldDuplicate({ duplicates: change.duplicates });
       return plan;
     }),
   );

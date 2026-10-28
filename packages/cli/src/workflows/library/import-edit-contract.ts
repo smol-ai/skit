@@ -8,8 +8,8 @@ import {
 import { Schema } from "effect";
 
 const EditCandidate = Schema.Struct({
-  projection_id: InstalledSkillId,
-  target: RecordedInstallDestination,
+  installed_skill_id: InstalledSkillId,
+  destination: RecordedInstallDestination,
   path: Schema.String,
   observed_digest: Digest,
   agreement: Schema.Literals(["selected", "identical", "different"]),
@@ -20,12 +20,12 @@ export const EditImportPlan = Schema.Struct({
   skill_id: SkillId,
   skill_name: Schema.String,
   previous_skill_version_id: SkillVersionId,
-  selected_projection_id: InstalledSkillId,
+  selected_installed_skill_id: InstalledSkillId,
   observed_digest: Digest,
   snapshot_digest: Digest,
-  retained_path: Schema.String,
-  retention_required: Schema.Boolean,
-  projections: Schema.Array(EditCandidate),
+  original_path: Schema.String,
+  import_required: Schema.Boolean,
+  installed_skills: Schema.Array(EditCandidate),
 });
 export type EditImportPlan = typeof EditImportPlan.Type;
 
@@ -33,16 +33,16 @@ export const EditImportResult = Schema.Struct({
   skill_id: SkillId,
   skill_name: Schema.String,
   previous_skill_version_id: SkillVersionId,
-  retained_skill_version_id: SkillVersionId,
-  retained_copy_id: Schema.String,
+  imported_skill_version_id: SkillVersionId,
+  collection_version_id: Schema.String,
   snapshot_digest: Digest,
-  retained: Schema.Boolean,
-  projections: Schema.Array(
+  imported: Schema.Boolean,
+  installed_skills: Schema.Array(
     Schema.Struct({
-      projection_id: InstalledSkillId,
-      target: RecordedInstallDestination,
+      installed_skill_id: InstalledSkillId,
+      destination: RecordedInstallDestination,
       path: Schema.String,
-      status: Schema.Literals(["projected", "conflicted", "deferred"]),
+      status: Schema.Literals(["installed", "conflicted", "deferred"]),
     }),
   ),
 });

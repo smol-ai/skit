@@ -22,7 +22,7 @@ export interface SkillsShUpdateMember {
   readonly status: SkillsShUpdateStatus;
   readonly baseline_commit?: string;
   readonly baseline_tree?: string;
-  readonly baseline_verification?: "lock-only" | "lock+retained-bytes";
+  readonly baseline_verification?: "lock-only" | "lock+original-bytes";
   readonly upstream_commit?: string;
   readonly upstream_tree?: string;
   readonly reason?: string;
@@ -122,7 +122,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
               baseline_tree: baseline.tree,
               baseline_verification:
                 kind === "computedHash" && observation.content_agreement === "agrees"
-                  ? ("lock+retained-bytes" as const)
+                  ? ("lock+original-bytes" as const)
                   : ("lock-only" as const),
             }
           : {}),
@@ -166,7 +166,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
         upstream_tree: tipState.tree,
         baseline_commit: tip,
         baseline_tree: tipState.tree,
-        baseline_verification: "lock+retained-bytes",
+        baseline_verification: "lock+original-bytes",
         status: "current",
       });
       continue;
@@ -184,7 +184,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       ...base,
       upstream_tree: tipState.tree,
       ...(baseline ? { baseline_commit: baseline.commit, baseline_tree: baseline.tree } : {}),
-      ...(baseline ? { baseline_verification: "lock+retained-bytes" as const } : {}),
+      ...(baseline ? { baseline_verification: "lock+original-bytes" as const } : {}),
       status: baseline ? "update-available" : "unverifiable",
       ...(baseline ? {} : { reason: "lock hash not found in searched ref history" }),
     });

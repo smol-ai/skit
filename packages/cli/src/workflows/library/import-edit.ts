@@ -124,12 +124,12 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
       },
     ]),
   );
-  const observations: Array<EditImportPlan["projections"][number]> = [];
+  const observations: Array<EditImportPlan["installed_skills"][number]> = [];
   for (const projection of candidates) {
     const digest = yield* deterministicTreeHash(projection.path);
     observations.push({
-      projection_id: projection.installed_skill_id,
-      target: projection.destination,
+      installed_skill_id: projection.installed_skill_id,
+      destination: projection.destination,
       path: projection.path,
       observed_digest: digest,
       agreement:
@@ -145,12 +145,12 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     skill_id: skill.skill_id,
     skill_name: skill.name,
     previous_skill_version_id: previousVersion.skill_version_id,
-    selected_projection_id: selected.installed_skill_id,
+    selected_installed_skill_id: selected.installed_skill_id,
     observed_digest: observed,
     snapshot_digest: prepared.digest,
-    retained_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
-    retention_required: previousVersion.artifact_digest !== observed,
-    projections: observations,
+    original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
+    import_required: previousVersion.artifact_digest !== observed,
+    installed_skills: observations,
   } satisfies EditImportPlan;
 });
 
@@ -201,13 +201,13 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           message: "The installed skill's bytes changed after the retention was previewed",
         });
       const selected = current.installed_skills.find(
-        (projection) => projection.installed_skill_id === preview.selected_projection_id,
+        (projection) => projection.installed_skill_id === preview.selected_installed_skill_id,
       )!;
-      const retained = preview.retention_required
+      const retained = preview.import_required
         ? yield* Effect.scoped(
             importEdit({
               skillId: preview.skill_id,
-              projectionId: preview.selected_projection_id,
+              installedSkillId: preview.selected_installed_skill_id,
               path: selected.path,
               observedHash: preview.observed_digest,
               retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -236,20 +236,20 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         InstalledSkillId,
         { readonly observedHash: Digest; readonly marker: OwnershipMarker }
       >();
-      for (const projection of preview.projections) {
+      for (const projection of preview.installed_skills) {
         if (projection.observed_digest !== preview.observed_digest) continue;
         const marker = yield* inspectOwnershipMarker(projection.path);
         if (marker.kind === "valid")
-          accepted.set(projection.projection_id, {
+          accepted.set(projection.installed_skill_id, {
             observedHash: projection.observed_digest,
             marker: marker.marker,
           });
       }
       const afterRetention = yield* store.load;
       const reconciled = new Set<string>();
-      for (const observation of preview.projections) {
+      for (const observation of preview.installed_skills) {
         const projection = afterRetention.installed_skills.find(
-          (candidate) => candidate.installed_skill_id === observation.projection_id,
+          (candidate) => candidate.installed_skill_id === observation.installed_skill_id,
         );
         const scope =
           projection === undefined ? undefined : enablingScope(afterRetention, projection);
@@ -271,24 +271,24 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         skill_id: preview.skill_id,
         skill_name: preview.skill_name,
         previous_skill_version_id: preview.previous_skill_version_id,
-        retained_skill_version_id: retained.skillVersionId,
-        retained_copy_id: retained.retainedCopyId,
+        imported_skill_version_id: retained.skillVersionId,
+        collection_version_id: retained.retainedCopyId,
         snapshot_digest: retained.snapshotDigest,
-        retained: preview.retention_required,
-        projections: preview.projections.map((observation) => {
+        imported: preview.import_required,
+        installed_skills: preview.installed_skills.map((observation) => {
           const projection = settled.installed_skills.find(
-            (candidate) => candidate.installed_skill_id === observation.projection_id,
+            (candidate) => candidate.installed_skill_id === observation.installed_skill_id,
           );
           const scope = projection === undefined ? undefined : enablingScope(settled, projection);
           return {
-            projection_id: observation.projection_id,
-            target: observation.target,
+            installed_skill_id: observation.installed_skill_id,
+            destination: observation.destination,
             path: observation.path,
             status:
               scope === undefined
                 ? ("deferred" as const)
                 : projection?.status === "installed"
-                  ? ("projected" as const)
+                  ? ("installed" as const)
                   : ("conflicted" as const),
           };
         }),

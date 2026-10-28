@@ -206,7 +206,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   );
   const versionChoices = yield* chooseSetupVersions(
     review.versionAlternatives,
-    observed.reconciliation ?? [],
+    observed.changes ?? [],
     displayPath,
   );
   const plan = yield* review.prepare({ sources, copies, decisions, versionChoices });
@@ -242,7 +242,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   yield* renderer.note(
     [
       "Selected setup changes were applied.",
-      ...applied.reconciliation.map((outcome) => renderChangeResult(outcome)),
+      ...applied.changes.map((outcome) => renderChangeResult(outcome)),
       `Setup operation: ${applied.operationId}. Preview full undo with skit library undo ${applied.operationId} using the same --home.`,
     ].join("\n"),
     "Setup complete",
@@ -484,7 +484,7 @@ export const setupCliCommand = Command.make(
                           (item.kind === "copy" &&
                             copies.some((copy) => copy.path === item.path)) ||
                           (item.kind === "version" &&
-                            opened.observed.reconciliation?.some(
+                            opened.observed.changes?.some(
                               (fact) =>
                                 fact.skillId === item.skillId &&
                                 copies.some((copy) => copy.name === fact.name),
@@ -509,7 +509,7 @@ export const setupCliCommand = Command.make(
                       .choices.filter(
                         (item) =>
                           item.kind === "version" &&
-                          prepared.plan.summary.reconciliation.some(
+                          prepared.plan.summary.changes.some(
                             (fact) => fact.skillId === item.skillId,
                           ),
                       )

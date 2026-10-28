@@ -1,8 +1,8 @@
 {
-  "$id": "skit.setup.applied.v2",
+  "$id": "skit.setup.applied.v3",
   "type": "object",
   "properties": {
-    "reconciliation": {
+    "changes": {
       "type": "array",
       "items": {
         "type": "object",
@@ -10,7 +10,7 @@
           "reason": {
             "type": "string"
           },
-          "projectionId": {
+          "installedSkillId": {
             "type": "string"
           },
           "name": {
@@ -31,7 +31,7 @@
           }
         },
         "required": [
-          "projectionId",
+          "installedSkillId",
           "name",
           "path",
           "status"
@@ -131,7 +131,7 @@
         "additionalProperties": true
       }
     },
-    "projections": {
+    "installedSkills": {
       "type": "array",
       "items": {
         "type": "object",
@@ -139,7 +139,7 @@
           "name": {
             "type": "string"
           },
-          "target": {
+          "destination": {
             "type": "string"
           },
           "path": {
@@ -151,7 +151,7 @@
         },
         "required": [
           "name",
-          "target",
+          "destination",
           "path",
           "status"
         ],
@@ -190,7 +190,7 @@
         "type": "string"
       }
     },
-    "preservationWarnings": {
+    "backupWarnings": {
       "type": "array",
       "items": {
         "type": "object",
@@ -264,7 +264,7 @@
     "imported",
     "added",
     "reconnected",
-    "projections",
+    "installedSkills",
     "leftAlone",
     "actions"
   ],

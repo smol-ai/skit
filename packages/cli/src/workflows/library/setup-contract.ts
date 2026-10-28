@@ -92,8 +92,8 @@ export type SetupContentIdentity = typeof SetupContentIdentity.Type;
 
 export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
-    kind: Schema.tag("retained"),
-    projectionId: InstalledSkillId,
+    kind: Schema.tag("in-library"),
+    installedSkillId: InstalledSkillId,
     collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
@@ -102,7 +102,7 @@ export const SetupManagedMembership = Schema.Union([
   }),
   Schema.Struct({
     kind: Schema.tag("missing-from-library"),
-    projectionId: InstalledSkillId,
+    installedSkillId: InstalledSkillId,
     collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
@@ -212,11 +212,11 @@ export const SetupInstalledSkill = Schema.Struct({
 export type SetupInstalledSkill = typeof SetupInstalledSkill.Type;
 
 export const InstalledSkillChange = Schema.Struct({
-  projectionId: InstalledSkillId,
+  installedSkillId: InstalledSkillId,
   skillId: SkillId,
   name: Schema.String,
   path: Schema.String,
-  target: Schema.Literals(["agents", "claude"]),
+  destination: Schema.Literals(["agents", "claude"]),
   baselineHash: Digest,
   currentHash: Schema.optionalKey(Digest),
   desiredHash: Schema.optionalKey(Digest),
@@ -236,7 +236,7 @@ export const InstalledSkillChange = Schema.Struct({
 export type InstalledSkillChange = typeof InstalledSkillChange.Type;
 export const InstalledSkillChangeResult = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
-  projectionId: InstalledSkillId,
+  installedSkillId: InstalledSkillId,
   name: Schema.String,
   path: Schema.String,
   status: Schema.Literals(["updated", "unchanged", "local-kept", "native-delete", "pending"]),
@@ -244,7 +244,7 @@ export const InstalledSkillChangeResult = Schema.Struct({
 export type InstalledSkillChangeResult = typeof InstalledSkillChangeResult.Type;
 
 const SetupOnboardingBase = {
-  shadows: Schema.optionalKey(Schema.Array(DuplicateCopy)),
+  duplicates: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
   destinationLinks: Schema.optionalKey(Schema.Array(Schema.String)),
   name: Schema.String,
@@ -341,8 +341,8 @@ export const SetupResult = Schema.Struct({
   repositories: Schema.Array(SetupRepository),
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),
   authoredCollections: Schema.Array(SetupAuthoredCollection),
-  projections: Schema.Array(SetupInstalledSkill),
-  reconciliation: Schema.optionalKey(Schema.Array(InstalledSkillChange)),
+  installedSkills: Schema.Array(SetupInstalledSkill),
+  changes: Schema.optionalKey(Schema.Array(InstalledSkillChange)),
   onboarding: Schema.Struct({
     planId: Digest,
     candidates: Schema.Array(SetupOnboardingCandidate),
@@ -371,7 +371,7 @@ export type SetupResult = typeof SetupResult.Type;
 /** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
  * every other observed skill was left alone. */
 export const SetupApplied = Schema.Struct({
-  reconciliation: Schema.optionalKey(Schema.Array(InstalledSkillChangeResult)),
+  changes: Schema.optionalKey(Schema.Array(InstalledSkillChangeResult)),
   operationId: Schema.optionalKey(Schema.String),
   removed: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, path: Schema.String })),
@@ -383,10 +383,10 @@ export const SetupApplied = Schema.Struct({
   ),
   added: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
   reconnected: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
-  projections: Schema.Array(
+  installedSkills: Schema.Array(
     Schema.Struct({
       name: Schema.String,
-      target: Schema.String,
+      destination: Schema.String,
       path: Schema.String,
       status: Schema.String,
     }),
@@ -403,7 +403,7 @@ export const SetupApplied = Schema.Struct({
    * were saved, and any symlink kept because it could not be retired safely.
    */
   aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
-  preservationWarnings: Schema.optionalKey(
+  backupWarnings: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
   ),
   aliasesKept: Schema.optionalKey(

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.add.v6",
+  "$id": "skit.add.v7",
   "type": "object",
   "properties": {
     "action": {
@@ -19,7 +19,7 @@
         "type": "string"
       }
     },
-    "retained_version_id": {
+    "collection_version_id": {
       "type": "string"
     },
     "snapshot_digest": {
@@ -76,7 +76,7 @@
   "required": [
     "action",
     "skill_ids",
-    "retained_version_id",
+    "collection_version_id",
     "snapshot_digest",
     "skills"
   ],

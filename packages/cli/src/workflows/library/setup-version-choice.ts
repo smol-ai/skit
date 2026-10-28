@@ -63,7 +63,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   // Check the entire choice before the first retention, rename or install.
   for (const fact of live) {
     const projection = state.installed_skills.find(
-      (item) => item.installed_skill_id === fact.projectionId,
+      (item) => item.installed_skill_id === fact.installedSkillId,
     );
     const skill = state.skills.find((item) => item.skill_id === fact.skillId);
     if (
@@ -83,7 +83,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     yield* Effect.scoped(
       importEdit({
         skillId: copy.skillId,
-        projectionId: copy.projectionId,
+        installedSkillId: copy.installedSkillId,
         path: copy.path,
         observedHash: copy.currentHash,
         retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -95,7 +95,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   const desired = new Map<string, string>();
   for (const fact of live) {
     const projection = retained.installed_skills.find(
-      (item) => item.installed_skill_id === fact.projectionId,
+      (item) => item.installed_skill_id === fact.installedSkillId,
     )!;
     const skill = retained.skills.find((item) => item.skill_id === fact.skillId)!;
     const version = currentSkillVersion(retained, skill)!;
@@ -114,13 +114,13 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
         return yield* deterministicTreeHash(path);
       }),
     );
-    desired.set(fact.projectionId, digest);
+    desired.set(fact.installedSkillId, digest);
   }
   const preservation = yield* prepareOwnedRecoveryMoves(
     live.map((fact) => ({
       name: fact.name,
       projection: retained.installed_skills.find(
-        (item) => item.installed_skill_id === fact.projectionId,
+        (item) => item.installed_skill_id === fact.installedSkillId,
       )!,
     })),
     operationDirectory,
@@ -132,10 +132,10 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   yield* preservation.apply();
   for (const fact of live) {
     const projection = retained.installed_skills.find(
-      (item) => item.installed_skill_id === fact.projectionId,
+      (item) => item.installed_skill_id === fact.installedSkillId,
     )!;
     yield* installEnabledSkills({
-      target: fact.target,
+      target: fact.destination,
       scope: { kind: "global" },
       root: projection.root,
       variantsPath: store.variantsPath,
@@ -143,13 +143,13 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       restoreNativeDeletedSkills: [fact.skillId],
     });
     const after = (yield* store.load).installed_skills.find(
-      (item) => item.installed_skill_id === fact.projectionId,
+      (item) => item.installed_skill_id === fact.installedSkillId,
     );
     if (
       !after ||
       after.status !== "installed" ||
-      after.expected_digest !== desired.get(fact.projectionId) ||
-      (yield* deterministicTreeHash(fact.path)) !== desired.get(fact.projectionId)
+      after.expected_digest !== desired.get(fact.installedSkillId) ||
+      (yield* deterministicTreeHash(fact.path)) !== desired.get(fact.installedSkillId)
     )
       return yield* new PlanIsStale();
   }
@@ -158,7 +158,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     outcomes: facts
       .filter((fact) => selected.has(fact.skillId))
       .map((fact) => ({
-        projectionId: fact.projectionId,
+        installedSkillId: fact.installedSkillId,
         name: fact.name,
         path: fact.path,
         status: fact.status === "native-delete" ? ("native-delete" as const) : ("updated" as const),

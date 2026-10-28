@@ -122,7 +122,7 @@ export const devices = Effect.gen(function* () {
         Effect.gen(function* () {
           return yield* importEdit({
             skillId: projection.skill_id,
-            projectionId: projection.installed_skill_id,
+            installedSkillId: projection.installed_skill_id,
             path: projection.path,
             observedHash: yield* deterministicTreeHash(projection.path),
             retainedAt: "2026-02-01T00:00:00Z",

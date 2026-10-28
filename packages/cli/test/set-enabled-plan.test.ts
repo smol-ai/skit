@@ -827,7 +827,7 @@ it.effect(
       const [outcome] = yield* f.home.owned(applySetEnabledPlan(plan));
 
       assert.deepStrictEqual(
-        outcome?.kind === "applied" ? outcome.value.projections.map((p) => p.status) : [],
+        outcome?.kind === "applied" ? outcome.value.installed_skills.map((p) => p.status) : [],
         ["installed"],
       );
       assert.strictEqual(
@@ -852,7 +852,7 @@ it.effect(
       assert.instanceOf(failure, SetEnabledIncomplete);
 
       assert.deepStrictEqual(
-        failure.results[0]?.projections.map((p) => p.status),
+        failure.results[0]?.installed_skills.map((p) => p.status),
         ["conflicted"],
       );
       assert.strictEqual((yield* inspectOwnershipMarker(checkout)).kind, "absent");
@@ -877,7 +877,7 @@ it.effect("a different copy at the destination is reported, and disabling leaves
     assert.instanceOf(failure, SetEnabledIncomplete);
 
     assert.deepStrictEqual(
-      failure.results[0]?.projections.map((p) => p.status),
+      failure.results[0]?.installed_skills.map((p) => p.status),
       ["conflicted"],
     );
     const disable = yield* f.home.owned(
@@ -924,7 +924,7 @@ it.effect("enable leaves repository-owned identical copies unmanaged, including 
       const failure = yield* Effect.flip(f.home.owned(applySetEnabledPlan(enable)));
       assert.instanceOf(failure, SetEnabledIncomplete);
       assert.deepStrictEqual(
-        failure.results[0]?.projections.map((p) => p.status),
+        failure.results[0]?.installed_skills.map((p) => p.status),
         ["conflicted"],
       );
       assert.strictEqual((yield* inspectOwnershipMarker(skill)).kind, "absent");
@@ -987,7 +987,7 @@ it.effect(
       assert.strictEqual(completed.value.application.intent, "unchanged");
       assert.strictEqual(completed.value.application.status, "complete");
       assert.deepStrictEqual(
-        completed.value.projections.map((projection) => projection.status),
+        completed.value.installed_skills.map((projection) => projection.status),
         ["installed", "installed"],
       );
       assert.strictEqual(

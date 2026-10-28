@@ -53,7 +53,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(state.skills[0]?.name, "review");
     assert.strictEqual(
       state.collection_versions[0]?.collection_version_id,
-      added.retained_version_id,
+      added.collection_version_id,
     );
     assert.strictEqual(
       yield* fs.readFileString(
@@ -147,7 +147,7 @@ it.effect("reports the retained package when its source disappears after publica
     const state = yield* store.load;
     assert.strictEqual(
       state.collection_versions[0]?.collection_version_id,
-      added.retained_version_id,
+      added.collection_version_id,
     );
     assert.strictEqual(state.collection_versions[0]?.digest, added.snapshot_digest);
     assert.strictEqual(
@@ -394,7 +394,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
     );
     assert.ok(
       after.imports.every(
-        (acquisition) => acquisition.collection_version_id === added.retained_version_id,
+        (acquisition) => acquisition.collection_version_id === added.collection_version_id,
       ),
     );
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

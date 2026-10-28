@@ -15,7 +15,7 @@ export const SkillMetadata = Schema.Struct({
   revision: Schema.NullOr(Schema.String),
   source_updated_at: Schema.NullOr(Schema.String),
   /** When the selected bytes were acquired; this is not a source modification time. */
-  acquired_at: Schema.NullOr(Schema.String),
+  imported_at: Schema.NullOr(Schema.String),
 });
 export type SkillMetadata = typeof SkillMetadata.Type;
 
@@ -103,7 +103,7 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
       source: source === undefined ? null : sourceIdentityLabel(source),
       revision: acquisition?.revision ?? null,
       source_updated_at: sourceUpdated,
-      acquired_at: validTimestamp(acquisition?.imported_at),
+      imported_at: validTimestamp(acquisition?.imported_at),
     });
   }
   return metadata;

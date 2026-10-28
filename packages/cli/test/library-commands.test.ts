@@ -71,7 +71,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v6");
+    assert.strictEqual(rendered[0]?.schema, "skit.list.v7");
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
@@ -80,7 +80,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       listing.subjects[0]?.skills.map((skill) => skill.name),
       ["review"],
     );
-    assert.deepStrictEqual(listing.bindings, []);
+    assert.deepStrictEqual(listing.enabled, []);
     assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
     const session = yield* home.owned(openLibrarySession());

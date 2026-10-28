@@ -183,7 +183,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     expect((yield* checkObservation({ ref: originalCommit }))?.members[0]).toMatchObject({
       status: "current",
       baseline_commit: originalCommit,
-      baseline_verification: "lock+retained-bytes",
+      baseline_verification: "lock+original-bytes",
     });
     const treeOnly = (yield* checkObservation({
       computed_hash: undefined,
@@ -207,13 +207,13 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     });
     expect((yield* checkObservation())?.members[0]).toMatchObject({
       status: "current",
-      baseline_verification: "lock+retained-bytes",
+      baseline_verification: "lock+original-bytes",
     });
     expect(yield* runGit(upstream, ["rm", "-q", "skills/review/SKILL.md"])).toBe(0);
     expect(yield* runGit(upstream, ["commit", "-qm", "removed"])).toBe(0);
     expect((yield* checkObservation())?.members[0]).toMatchObject({
       status: "removed-upstream",
-      baseline_verification: "lock+retained-bytes",
+      baseline_verification: "lock+original-bytes",
     });
     expect((yield* checkObservation({ computed_hash: "unknown" }))?.members[0]).toMatchObject({
       status: "unverifiable",

@@ -20,7 +20,7 @@ const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
     case "skills-sh":
       return ["Installed by: skills.sh", `Source: ${owner.source}`];
     case "skit":
-      return owner.membership.kind === "retained"
+      return owner.membership.kind === "in-library"
         ? [
             `Collection: ${owner.membership.displayName}`,
             ...(owner.membership.source ? [`Source: ${owner.membership.source}`] : []),

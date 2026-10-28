@@ -104,7 +104,7 @@ export const librarySetupUndoCliCommand = Command.make(
             phase: "applied",
             actions: [
               ...setupUndoActions(store.home, input.operation),
-              ...("preservationId" in undone
+              ...("backupId" in undone
                 ? [
                     {
                       rel: "inspect-preserved",
@@ -113,7 +113,7 @@ export const librarySetupUndoCliCommand = Command.make(
                         "library",
                         "recovery",
                         "inspect",
-                        undone.preservationId,
+                        undone.backupId,
                         "--home",
                         store.home,
                         "--json",

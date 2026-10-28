@@ -196,8 +196,8 @@ it.effect("an anchored home that matches the remote: an applied clean writes not
       status: "clean",
       changed: false,
       revision_id: server.remote!.revision_id,
-      projected: 0,
-      retired: 0,
+      installed: 0,
+      uninstalled: 0,
     });
     yield* unchanged;
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

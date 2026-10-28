@@ -317,7 +317,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           return {
             ...current.summary,
             status: "undone" as const,
-            preservationId: basename(preservationDirectory),
+            backupId: basename(preservationDirectory),
           };
         }),
       ),

@@ -206,7 +206,7 @@ effectIt.effect("acquired sources are never assessed for conformance", () =>
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
 
-    for (const context of ["retain", "project"] as const)
+    for (const context of ["import", "project"] as const)
       expect(
         (yield* validateSkitDirectory(root, "draft", { assessmentContext: context })).diagnostics,
       ).toEqual([]);

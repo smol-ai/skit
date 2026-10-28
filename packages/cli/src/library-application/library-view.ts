@@ -125,35 +125,23 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         ),
       }));
     }),
-    // `skit list` still reports this as its one global Binding, present while it enables
-    // something or the device keeps its own choice.
-    globalBindings: structuredClone(
-      [globalEnabled(state)]
-        .filter(
-          (global) => global.enabled.length > 0 || state.device_skill_selection?.mode === "choose",
-        )
-        .map((global) => ({
-          scope: { kind: "global" as const },
-          entries: global.enabled.map((item) =>
-            "collection" in item
-              ? {
-                  kind: "collection" as const,
-                  collection_id: item.collection,
-                  label:
-                    state.collections.find(
-                      (collection) => collection.collection_id === item.collection,
-                    )?.label ?? item.collection,
-                }
-              : {
-                  kind: "skill" as const,
-                  skill_id: item.skill,
-                  name:
-                    state.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
-                },
-          ),
-          skills: enabledSkillIds(state, global.enabled),
-        })),
-    ),
+    /** What is enabled for every project on this device, labelled, and the Skills it enables. */
+    enabledEverywhere: structuredClone({
+      items: globalEnabled(state).enabled.map((item) =>
+        "collection" in item
+          ? {
+              collection: item.collection,
+              label:
+                state.collections.find((collection) => collection.collection_id === item.collection)
+                  ?.label ?? item.collection,
+            }
+          : {
+              skill: item.skill,
+              name: state.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
+            },
+      ),
+      skills: enabledSkillIds(state, globalEnabled(state).enabled),
+    }),
     descriptionLoad: (collectionId: string) => {
       const collection = state.collections.find((item) => item.collection_id === collectionId);
       return readDescriptionLoad(

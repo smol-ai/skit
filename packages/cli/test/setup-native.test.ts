@@ -1219,8 +1219,8 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     ).toEqual({
       kind: "skit",
       membership: {
-        kind: "retained",
-        projectionId,
+        kind: "in-library",
+        installedSkillId: projectionId,
         collectionId,
         skillId,
         skillVersionId,
@@ -1237,12 +1237,12 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       kind: "skit",
       membership: {
         kind: "missing-from-library",
-        projectionId: orphanedProjectionId,
+        installedSkillId: orphanedProjectionId,
         skillId: orphanedSkillId,
         skillVersionId: orphanedSkillVersionId,
       },
     });
-    expect(observed.projections).toEqual(
+    expect(observed.installedSkills).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           collectionId,
@@ -1478,7 +1478,7 @@ it.effect(
         ),
       );
 
-      expect(observed.projections).toEqual(
+      expect(observed.installedSkills).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ skillId: currentSkillId, path: current, status: "current" }),
           expect.objectContaining({ skillId: missingSkillId, path: missing, status: "missing" }),

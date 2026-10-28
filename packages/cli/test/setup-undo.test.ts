@@ -338,7 +338,7 @@ it.effect(
           const plan = yield* prepareSetupUndo(f.operationId);
           expect(plan.summary.conflicts).toEqual([]);
           expect(plan.summary.files.map((file) => file.kind).sort()).toEqual([
-            "release-custody",
+            "release-ownership",
             "remove-created",
           ]);
           expect(yield* f.fs.exists(join(f.home.home, "removed", f.operationId, "undo"))).toBe(
@@ -359,9 +359,9 @@ it.effect(
           expect(settings.repositories).toEqual([]);
           expect(settings.repositoryDecisionsInitialized).toBe(false);
           expect(settings.machineId).toBeDefined();
-          if (!("preservationId" in undone))
+          if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.preservationId);
+          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
           expect(recovery.entries).toHaveLength(1);
           expect(recovery.entries[0].status).toBe("saved");
           expect((yield* prepareSetupUndo(f.operationId)).summary.status).toBe("already-undone");
@@ -384,9 +384,9 @@ it.effect(
           const reviewed = yield* prepareSetupUndo(f.operationId);
           expect(reviewed.summary.conflicts).toEqual([]);
           const undone = yield* reviewed.apply();
-          if (!("preservationId" in undone))
+          if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.preservationId);
+          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
           expect(
             yield* f.fs.readFileString(join(recovery.entries[0].recoveryPath, "notes.txt")),
           ).toBe("Later user edits");

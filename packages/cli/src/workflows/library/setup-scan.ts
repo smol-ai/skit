@@ -138,13 +138,13 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
       if (skill === undefined)
         return {
           kind: "missing-from-library" as const,
-          projectionId: marker.installed_skill_id,
+          installedSkillId: marker.installed_skill_id,
           skillId: marker.skill_id,
           skillVersionId: marker.skill_version_id,
         };
       return {
-        kind: "retained" as const,
-        projectionId: marker.installed_skill_id,
+        kind: "in-library" as const,
+        installedSkillId: marker.installed_skill_id,
         collectionId: skill.collection_id,
         skillId: marker.skill_id,
         skillVersionId: marker.skill_version_id,

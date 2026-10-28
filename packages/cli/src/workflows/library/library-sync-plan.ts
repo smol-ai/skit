@@ -7,7 +7,7 @@ import {
 import { Schema } from "effect";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
-import type { SyncChange, SyncBindingEntry, SyncPlan } from "./library-sync-contract.js";
+import type { SyncChange, SyncEnabledItem, SyncPlan } from "./library-sync-contract.js";
 const action = (before: unknown, after: unknown): SyncChange["action"] =>
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 
@@ -38,7 +38,7 @@ const entriesMissing = (
   manifest: LibraryManifest,
   from: readonly Enabled[] | undefined,
   to: readonly Enabled[] | undefined,
-): readonly SyncBindingEntry[] =>
+): readonly SyncEnabledItem[] =>
   (from ?? [])
     .filter((item) => !(to ?? []).some((other) => Schema.toEquivalence(Enabled)(item, other)))
     .map((item) =>
@@ -114,10 +114,10 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       if (canonicalJson(previous ?? null) === canonicalJson(desired ?? null)) return [];
       return [
         {
-          kind: "binding",
+          kind: "enabled",
           action: action(previous, desired),
-          entries_added: entriesMissing(after, desired, previous),
-          entries_removed: entriesMissing(before, previous, desired),
+          items_added: entriesMissing(after, desired, previous),
+          items_removed: entriesMissing(before, previous, desired),
         },
       ];
     });

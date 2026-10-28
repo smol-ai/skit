@@ -45,7 +45,7 @@ export interface SetupApproval {
   readonly ownership: readonly SetupCopySelection[];
   readonly removals: PreparedRecoveryMoves;
   readonly versionChoices?: readonly SetupVersionChoice[];
-  readonly reconciliation?: readonly InstalledSkillChange[];
+  readonly changes?: readonly InstalledSkillChange[];
 }
 
 export interface SetupApplyOptions {
@@ -72,24 +72,25 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       "Revalidating the approved setup plan",
       revalidateSetupPlan(approval.setup, approval.planId),
     );
-    const reconciliation = approval.reconciliation ?? scan.observed.reconciliation ?? [];
+    const reconciliation = approval.changes ?? scan.observed.changes ?? [];
     const reviewedIds = new Set<string>();
     for (const fact of reconciliation) {
       if (
-        reviewedIds.has(fact.projectionId) ||
+        reviewedIds.has(fact.installedSkillId) ||
         canonicalJson(fact) !==
           canonicalJson(
-            scan.observed.reconciliation?.find((item) => item.projectionId === fact.projectionId) ??
-              null,
+            scan.observed.changes?.find(
+              (item) => item.installedSkillId === fact.installedSkillId,
+            ) ?? null,
           )
       )
         return yield* new PlanIsStale();
-      reviewedIds.add(fact.projectionId);
+      reviewedIds.add(fact.installedSkillId);
     }
     const reviewedSkills = new Set(reconciliation.map((fact) => fact.skillId));
     if (
-      (scan.observed.reconciliation ?? []).some(
-        (fact) => reviewedSkills.has(fact.skillId) && !reviewedIds.has(fact.projectionId),
+      (scan.observed.changes ?? []).some(
+        (fact) => reviewedSkills.has(fact.skillId) && !reviewedIds.has(fact.installedSkillId),
       )
     )
       return yield* new PlanIsStale();
@@ -127,7 +128,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           enablingCopies ||
           reconciliation.some(
             (fact) =>
-              fact.target === target &&
+              fact.destination === target &&
               (fact.status === "incoming-update" ||
                 fact.metadataChanged ||
                 (fact.status !== "native-delete" &&
@@ -141,7 +142,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     const store = yield* LibraryStore;
     let revision = libraryStateRevision(scan.library);
     const operation = yield* beginSetupOperation(
-      { ...approval, reconciliation },
+      { ...approval, changes: reconciliation },
       scan.library,
       projects,
       projectedCopies.map((copy) => copy.name),
@@ -215,7 +216,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const imported = yield* store.load;
         if (libraryStateRevision(imported) !== revision)
           return yield* new LibraryChanged({ path: join(store.home, "state.json") });
-        for (const fact of scan.observed.reconciliation ?? []) {
+        for (const fact of scan.observed.changes ?? []) {
           const skill = imported.skills.find((item) => item.skill_id === fact.skillId);
           if (
             skill &&
@@ -224,10 +225,10 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             deferredSkills.add(fact.skillId);
         }
       }
-      for (const fact of scan.observed.reconciliation ?? []) {
+      for (const fact of scan.observed.changes ?? []) {
         if (!deferredSkills.has(fact.skillId)) continue;
         reconciliationOutcomes.push({
-          projectionId: fact.projectionId,
+          installedSkillId: fact.installedSkillId,
           name: fact.name,
           path: fact.path,
           status: fact.status === "native-delete" ? "native-delete" : "pending",
@@ -286,7 +287,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       observed: current,
       warnings,
       recoveryDirectories,
-      reconciliation: reconciliationOutcomes,
+      changes: reconciliationOutcomes,
       operationId: operation.operationId,
     };
   },

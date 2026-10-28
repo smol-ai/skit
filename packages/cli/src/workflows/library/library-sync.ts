@@ -54,8 +54,8 @@ const installedSkillCounts = (result: {
   readonly projected: number;
   readonly retired: number;
 }) => ({
-  projected: result.projected,
-  retired: result.retired,
+  installed: result.projected,
+  uninstalled: result.retired,
 });
 export class SyncLocalChanged
   extends Data.TaggedError("Library.SyncLocalChanged")<{}>
@@ -245,7 +245,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       }
       const projections = options.apply
         ? yield* reconcileSelected()
-        : { projected: 0, retired: 0, issues: [] as string[] };
+        : { installed: 0, uninstalled: 0, issues: [] as string[] };
       return {
         status: projections.issues.length ? ("enablement_incomplete" as const) : ("clean" as const),
         ...(projections.issues.length
@@ -253,7 +253,8 @@ export const syncLibrary = Effect.fn("Library.sync")(
           : {}),
         changed: false,
         revision_id: remote.revision_id,
-        ...installedSkillCounts(projections),
+        installed: projections.installed,
+        uninstalled: projections.uninstalled,
       };
     }
 
@@ -333,8 +334,8 @@ export const syncLibrary = Effect.fn("Library.sync")(
         : {}),
       revision_id: saved.revision_id,
       snapshots,
-      ...installedSkillCounts(projections),
-      retired: retired + projections.retired,
+      installed: projections.installed,
+      uninstalled: retired + projections.uninstalled,
       plan,
     };
 
@@ -380,7 +381,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
                 );
           }
         }
-        if (issues.length) return { projected: 0, retired: 0, issues };
+        if (issues.length) return { installed: 0, uninstalled: 0, issues };
         const attempt = yield* Effect.result(
           progress.around(
             { kind: "enable" },
@@ -392,8 +393,8 @@ export const syncLibrary = Effect.fn("Library.sync")(
         );
         if (Result.isFailure(attempt))
           return {
-            projected: 0,
-            retired: 0,
+            installed: 0,
+            uninstalled: 0,
             issues: [`Enablement failed: ${String(attempt.failure)}`],
           };
         const after = yield* store.load;

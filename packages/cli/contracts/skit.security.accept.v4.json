@@ -1,5 +1,5 @@
 {
-  "$id": "skit.security.accept.v3",
+  "$id": "skit.security.accept.v4",
   "type": "object",
   "properties": {
     "skill_version_id": {
@@ -259,7 +259,7 @@
           "type": "string",
           "enum": [
             "author",
-            "retain",
+            "import",
             "project",
             "publish"
           ]

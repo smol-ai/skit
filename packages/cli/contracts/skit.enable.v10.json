@@ -65,7 +65,7 @@
     "repair": {
       "type": "boolean"
     },
-    "shadows": {
+    "duplicates": {
       "type": "array",
       "items": {
         "type": "object",
@@ -128,7 +128,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "target": {
+          "destination": {
             "type": "string",
             "enum": [
               "agents",
@@ -140,7 +140,7 @@
           }
         },
         "required": [
-          "target",
+          "destination",
           "path"
         ],
         "additionalProperties": true
@@ -255,12 +255,12 @@
       ],
       "additionalProperties": true
     },
-    "projections": {
+    "installed_skills": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "target": {
+          "destination": {
             "type": "string",
             "enum": [
               "agents",
@@ -275,7 +275,7 @@
           }
         },
         "required": [
-          "target",
+          "destination",
           "path",
           "status"
         ],
@@ -291,7 +291,7 @@
     "changed",
     "enabled",
     "application",
-    "projections"
+    "installed_skills"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

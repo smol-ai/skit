@@ -42,7 +42,7 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
   expect(sourceData.skills).toHaveLength(2);
   expect(sourceData).toMatchObject({
     collection_id: expect.any(String),
-    retained_version_id: expect.any(String),
+    collection_version_id: expect.any(String),
     snapshot_digest: expect.stringMatching(/^sha256:/),
   });
 
@@ -63,13 +63,12 @@ test("previews, adds, and projects a descriptorless skill collection", async () 
     (entry: { subject_id: string }) => entry.subject_id === sourceData.collection_id,
   );
   expect(collection).toBeDefined();
-  expect(listing.bindings).toContainEqual({
-    scope: { kind: "global" },
-    entries: [
-      { kind: "collection", collection_id: sourceData.collection_id, label: collection.label },
-    ],
-    skills: collection.skills.map((skill: { skill_id: string }) => skill.skill_id),
-  });
+  expect(listing.enabled).toEqual([
+    { collection: sourceData.collection_id, label: collection.label },
+  ]);
+  expect(listing.enabled_skills).toEqual(
+    collection.skills.map((skill: { skill_id: string }) => skill.skill_id),
+  );
 
   const disabledCollection = run("disable", sourceData.collection_id, "--all");
   expect(disabledCollection.status, disabledCollection.stderr).toBe(0);
@@ -133,12 +132,7 @@ test("retains GitHub collection identity through add, enable, and list", async (
     (skill: { name: string }) => skill.name === "code-review",
   );
   expect(codeReview).toBeDefined();
-  expect(listing.bindings).toContainEqual(
-    expect.objectContaining({
-      scope: { kind: "global" },
-      skills: [codeReview!.skill_id],
-    }),
-  );
+  expect(listing.enabled_skills).toEqual([codeReview!.skill_id]);
 
   const persisted = await readFile(join(home, "state.json"), "utf8");
   const ownership = await readFile(join(codexRoot, "code-review", ".skit-ownership.json"), "utf8");

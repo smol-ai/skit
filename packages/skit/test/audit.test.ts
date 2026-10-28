@@ -330,11 +330,11 @@ describe("static capability evidence", () => {
     expect(evaluateSkillAudit(audit, { context: "author" })).toEqual(
       expect.objectContaining({ context: "author", outcome: "warn" }),
     );
-    expect(evaluateSkillAudit(audit, { context: "retain" })).toEqual(
+    expect(evaluateSkillAudit(audit, { context: "import" })).toEqual(
       expect.objectContaining({
-        context: "retain",
+        context: "import",
         outcome: "warn",
-        reasons: [expect.objectContaining({ code: "RETAIN_REVIEW_RECOMMENDED" })],
+        reasons: [expect.objectContaining({ code: "IMPORT_REVIEW_RECOMMENDED" })],
       }),
     );
     expect(evaluateSkillAudit(audit, { context: "project" })).toEqual(

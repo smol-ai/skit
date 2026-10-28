@@ -206,7 +206,7 @@ test.runIf(realGit)(
       expect(again.code, again.stderr).toBe(0);
       const repeated = addResult(again.stdout);
       expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
-      expect(repeated.retained_version_id).toBe(entry.retained_version_id);
+      expect(repeated.collection_version_id).toBe(entry.collection_version_id);
       expect((await gitInvocations(shim.log)).slice(beforeRepeat).map((args) => args[0])).toEqual([
         "clone",
         "checkout",
@@ -315,7 +315,7 @@ test.runIf(realGit)(
       expect(again.code, again.stderr).toBe(0);
       const repeated = addResult(again.stdout);
       expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
-      expect(repeated.retained_version_id).toBe(entry.retained_version_id);
+      expect(repeated.collection_version_id).toBe(entry.collection_version_id);
       const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );

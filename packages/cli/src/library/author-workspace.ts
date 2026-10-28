@@ -152,7 +152,7 @@ const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(functi
 ) {
   const fs = yield* FileSystem.FileSystem;
   const validated = yield* validateSkitDirectory(root, "source", {
-    assessmentContext: "retain",
+    assessmentContext: "import",
   });
   if (plan.workspace.registration === "removed" && !register && !plan.existing) return undefined;
   const path = metadataPath(root);

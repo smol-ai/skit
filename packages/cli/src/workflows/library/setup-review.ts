@@ -142,7 +142,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     readonly versionChoices?: readonly SetupVersionChoice[];
   }) {
     const versionChoices = selection.versionChoices ?? [];
-    const alternatives = setupVersionAlternatives(observed.reconciliation ?? []);
+    const alternatives = setupVersionAlternatives(observed.changes ?? []);
     if (
       new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
       versionChoices.some(
@@ -253,8 +253,8 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       ownership: decisions.filter((copy) => copy.operation === "add"),
       removals: yield* planSetupRemovals(setup, observed, removals, removablePaths),
       versionChoices: structuredClone(versionChoices),
-      reconciliation: structuredClone(
-        (observed.reconciliation ?? []).filter(
+      changes: structuredClone(
+        (observed.changes ?? []).filter(
           (fact) =>
             selection.reconcileExisting !== false ||
             selectedExistingSkills.has(fact.skillId) ||
@@ -275,8 +275,8 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       sourcePath: copy.sourcePath,
     });
     const summary = {
-      sourceUpdateMayNeedReview: imports.length > 0 && (observed.reconciliation?.length ?? 0) > 0,
-      reconciliation: approval.reconciliation ?? [],
+      sourceUpdateMayNeedReview: imports.length > 0 && (observed.changes?.length ?? 0) > 0,
+      changes: approval.changes ?? [],
       versionChoices,
       persistRoots,
       repositoryDecisions,
@@ -384,12 +384,12 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       custody: structuredClone(approval.ownership),
     };
     return {
-      canApply: !changesNeedingChoice(approval.reconciliation ?? [], versionChoices).length,
+      canApply: !changesNeedingChoice(approval.changes ?? [], versionChoices).length,
       reviewId: hashParts([
         canonicalJson({
           planId: observed.onboarding.planId,
           setup,
-          reconciliation: approval.reconciliation,
+          changes: approval.changes,
           versionChoices,
           sources: [...selection.sources].sort(),
           copies: [...selection.copies].sort(),
@@ -401,8 +401,8 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         imports.length > 0 ||
         decisions.length > 0 ||
         approval.removals.entries.length > 0 ||
-        hasChangesToApply(approval.reconciliation ?? [], versionChoices) ||
-        changesNeedingChoice(approval.reconciliation ?? [], versionChoices).length > 0,
+        hasChangesToApply(approval.changes ?? [], versionChoices) ||
+        changesNeedingChoice(approval.changes ?? [], versionChoices).length > 0,
       summary: structuredClone(summary),
       apply: (withStatus: SetupApplyOptions["withStatus"]) =>
         applySetupPlan({ manage: manageOptions, withStatus }, approved),
@@ -452,7 +452,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     selection: SetupExplicitSelection,
   ) {
     for (const id of selection.reconcileSkillIds ?? []) {
-      if (!(observed.reconciliation ?? []).some((fact) => fact.skillId === id))
+      if (!(observed.changes ?? []).some((fact) => fact.skillId === id))
         return yield* invalid("Choose an observed existing Skill identifier");
     }
     const sourceKeys: string[] = [];
@@ -508,7 +508,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     duplicates: SetupDuplicateAction | undefined,
   ) {
     const chosen = yield* explicitChoices(selection);
-    const alternatives = setupVersionAlternatives(observed.reconciliation ?? []);
+    const alternatives = setupVersionAlternatives(observed.changes ?? []);
     const versionChoices: SetupVersionChoice[] = [];
     for (const skillId of selection.useRetainedSkillIds ?? []) {
       const choice = alternatives.find(
@@ -563,7 +563,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
           : {}),
       })),
     ),
-    versionAlternatives: setupVersionAlternatives(observed.reconciliation ?? []),
+    versionAlternatives: setupVersionAlternatives(observed.changes ?? []),
     selectedCopies,
     explicitChoices,
     compareCopies,

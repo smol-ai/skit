@@ -11,7 +11,7 @@ export const SetupUndoOutput = Schema.Struct({
   files: Schema.Array(
     Schema.Struct({
       path: Schema.String,
-      kind: Schema.Literals(["release-custody", "restore", "remove-created"]),
+      kind: Schema.Literals(["release-ownership", "restore", "remove-created"]),
     }),
   ),
   intentChanged: Schema.Boolean,
@@ -24,7 +24,7 @@ export const SetupUndoOutput = Schema.Struct({
       toSnapshot: Digest,
     }),
   ),
-  preservationId: Schema.optionalKey(Schema.String),
+  backupId: Schema.optionalKey(Schema.String),
   failure: Schema.optionalKey(Schema.String),
   actions: Schema.Array(CommandAction),
 });

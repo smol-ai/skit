@@ -17,7 +17,7 @@ export const AddResult = Schema.Struct({
   action: Schema.Literals(["added", "updated", "unchanged"]),
   collection_id: Schema.optionalKey(Schema.String),
   skill_ids: Schema.Array(Schema.String),
-  retained_version_id: Schema.String,
+  collection_version_id: Schema.String,
   snapshot_digest: Digest,
   skills: Schema.Array(AddSkill),
   diagnostics: Schema.optionalKey(Schema.Array(SourceDiscoveryDiagnostic)),

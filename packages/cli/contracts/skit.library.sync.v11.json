@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v10",
+  "$id": "skit.library.sync.v11",
   "type": "object",
   "properties": {
     "status": {
@@ -45,7 +45,7 @@
     "digest": {
       "type": "string"
     },
-    "projected": {
+    "installed": {
       "anyOf": [
         {
           "type": "number"
@@ -60,7 +60,7 @@
         }
       ]
     },
-    "retired": {
+    "uninstalled": {
       "anyOf": [
         {
           "type": "number"
@@ -215,7 +215,7 @@
                   "kind": {
                     "type": "string",
                     "enum": [
-                      "binding"
+                      "enabled"
                     ]
                   },
                   "action": {
@@ -226,7 +226,7 @@
                       "remove"
                     ]
                   },
-                  "entries_added": {
+                  "items_added": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -249,7 +249,7 @@
                       "additionalProperties": true
                     }
                   },
-                  "entries_removed": {
+                  "items_removed": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -276,8 +276,8 @@
                 "required": [
                   "kind",
                   "action",
-                  "entries_added",
-                  "entries_removed"
+                  "items_added",
+                  "items_removed"
                 ],
                 "additionalProperties": true
               }
@@ -357,7 +357,7 @@
                   "kind": {
                     "type": "string",
                     "enum": [
-                      "binding"
+                      "enabled"
                     ]
                   },
                   "action": {
@@ -368,7 +368,7 @@
                       "remove"
                     ]
                   },
-                  "entries_added": {
+                  "items_added": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -391,7 +391,7 @@
                       "additionalProperties": true
                     }
                   },
-                  "entries_removed": {
+                  "items_removed": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -418,8 +418,8 @@
                 "required": [
                   "kind",
                   "action",
-                  "entries_added",
-                  "entries_removed"
+                  "items_added",
+                  "items_removed"
                 ],
                 "additionalProperties": true
               }

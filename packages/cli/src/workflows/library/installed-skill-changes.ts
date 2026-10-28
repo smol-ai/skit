@@ -72,7 +72,7 @@ export const changeResults = (
   applied: boolean,
 ): InstalledSkillChangeResult[] =>
   facts.map((fact) => ({
-    projectionId: fact.projectionId,
+    installedSkillId: fact.installedSkillId,
     name: fact.name,
     path: fact.path,
     status:
@@ -111,11 +111,11 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
     if (!skill) continue;
     const version = currentSkillVersion(state, skill);
     const base = {
-      projectionId: projection.installed_skill_id,
+      installedSkillId: projection.installed_skill_id,
       skillId: skill.skill_id,
       name: skill.name,
       path: projection.path,
-      target,
+      destination: target,
       baselineHash: projection.expected_digest,
       ...(version ? { desiredVersionId: version.skill_version_id } : {}),
       metadataChanged: false,
@@ -178,8 +178,8 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       instance.scope !== "global" ||
       instance.git.repository ||
       instance.owner.kind !== "skit" ||
-      instance.owner.membership.kind !== "retained" ||
-      instance.owner.membership.projectionId !== projection.installed_skill_id
+      instance.owner.membership.kind !== "in-library" ||
+      instance.owner.membership.installedSkillId !== projection.installed_skill_id
     ) {
       facts.push(protect("Global reader scope and Library ownership are not fully corroborated"));
       continue;
@@ -266,7 +266,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
     if (fact.status === "native-delete") continue;
     const state = yield* store.load;
     const projection = state.installed_skills.find(
-      (item) => item.installed_skill_id === fact.projectionId,
+      (item) => item.installed_skill_id === fact.installedSkillId,
     );
     const skill = state.skills.find((item) => item.skill_id === fact.skillId);
     if (
@@ -275,7 +275,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       !enabledSkillIds(state, globalEnabled(state).enabled).includes(fact.skillId) ||
       currentSkillVersion(state, skill)?.skill_version_id !== fact.desiredVersionId ||
       projection.path !== fact.path ||
-      projection.destination !== fact.target
+      projection.destination !== fact.destination
     )
       return yield* new PlanIsStale();
     if (fact.status !== "incoming-update" && !fact.metadataChanged) continue;
@@ -301,7 +301,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
     const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
     if (evidence !== fact.evidence || current !== fact.currentHash) return yield* new PlanIsStale();
     yield* installEnabledSkills({
-      target: fact.target,
+      target: fact.destination,
       scope: { kind: "global" },
       root: projection.root,
       variantsPath: store.variantsPath,
@@ -309,13 +309,13 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       ...(current === fact.desiredHash
         ? {
             acceptedObservations: new Map([
-              [fact.projectionId, { observedHash: current, marker: marker.marker }],
+              [fact.installedSkillId, { observedHash: current, marker: marker.marker }],
             ]),
           }
         : {}),
     });
     const after = (yield* store.load).installed_skills.find(
-      (item) => item.installed_skill_id === fact.projectionId,
+      (item) => item.installed_skill_id === fact.installedSkillId,
     );
     if (
       !after ||

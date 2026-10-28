@@ -118,7 +118,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       );
       return {
         ...candidate,
-        shadows: matches,
+        duplicates: matches,
         ...(destinationLinks.length ? { destinationLinks } : {}),
       };
     });
@@ -199,7 +199,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       // internal inventory for planning above, but expose only configured or invalid repositories.
       repositoryConfigs: repositoryConfigs.filter((config) => config.status !== "missing"),
       authoredCollections,
-      projections: projections.sort((left, right) =>
+      installedSkills: projections.sort((left, right) =>
         `${left.collectionId}\0${left.skillId}\0${left.path ?? ""}`.localeCompare(
           `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
         ),
@@ -230,7 +230,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       },
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,
-      reconciliation,
+      changes: reconciliation,
       brokenLinks: yield* collectBrokenLinks(harnessRoots),
       suppressed: walk.suppressed,
     } satisfies SetupResult;

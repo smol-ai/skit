@@ -921,7 +921,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
               home,
               importEdit({
                 skillId: first.skill_id,
-                projectionId: first.installed_skill_id,
+                installedSkillId: first.installed_skill_id,
                 path: target,
                 observedHash: yield* deterministicTreeHash(target),
                 retainedAt: "2026-09-17T00:00:00.000Z",

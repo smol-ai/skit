@@ -119,7 +119,7 @@ it("omits managed installed skills while preserving unmanaged copies and orphane
     contentIdentity: { status: "none", libraryMatches: [] },
   };
   const membership = {
-    projectionId: makeInstalledSkillId(),
+    installedSkillId: makeInstalledSkillId(),
     skillId: makeSkillId(),
     skillVersionId: makeSkillVersionId(),
   };
@@ -131,7 +131,7 @@ it("omits managed installed skills while preserving unmanaged copies and orphane
       kind: "skit",
       membership: {
         ...membership,
-        kind: "retained",
+        kind: "in-library",
         collectionId: makeCollectionId(),
         displayName: "review",
       },
@@ -178,7 +178,7 @@ it("separates installed, repository-authored, and loose skills", () => {
       ],
       repositoryConfigs: [],
       authoredCollections: [],
-      projections: [
+      installedSkills: [
         {
           collectionId: managedCollectionId,
           collectionDisplayName: "Managed tools",
@@ -307,8 +307,8 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: {
             kind: "skit",
             membership: {
-              kind: "retained",
-              projectionId: makeInstalledSkillId(),
+              kind: "in-library",
+              installedSkillId: makeInstalledSkillId(),
               collectionId: managedCollectionId,
               skillId: managedSkillId,
               skillVersionId: managedSkillVersionId,
@@ -395,7 +395,7 @@ it("rolls up collections with more than five skill names", () => {
       ],
       repositoryConfigs: [],
       authoredCollections: [],
-      projections: [],
+      installedSkills: [],
       onboarding: {
         planId: `sha256:${"0".repeat(64)}`,
         candidates: [],
@@ -445,7 +445,7 @@ it("presents authored SKITs without treating their source skills as inferred col
           skills: [{ name: "council", path: "/work/skills/skills/council" }],
         },
       ],
-      projections: [
+      installedSkills: [
         {
           collectionId,
           collectionDisplayName: "tim/skills",

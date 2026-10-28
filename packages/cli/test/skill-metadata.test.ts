@@ -113,7 +113,7 @@ it.effect(
                 source: "example/skills",
                 revision: "1".repeat(40),
                 source_updated_at: "2026-04-20T00:00:00.000Z",
-                acquired_at: "2026-05-01T00:00:00.000Z",
+                imported_at: "2026-05-01T00:00:00.000Z",
               },
             ],
           },
@@ -125,7 +125,7 @@ it.effect(
         source_updated_at: "2026-04-20T00:00:00.000Z",
       });
       expect(renderLibraryList(listing)).toContain(
-        "Source updated: 2026-04-20 · Acquired: 2026-05-01",
+        "Source updated: 2026-04-20 · Imported: 2026-05-01",
       );
       const unavailable = yield* readLibrarySkillMetadata(
         {
@@ -271,7 +271,7 @@ skills:
       const metadata = yield* readLibrarySkillMetadata(state, home.originals);
       expect(metadata.get(state.skills[0]!.skill_id)).toMatchObject({
         source_updated_at: "2026-04-20T00:00:00.000Z",
-        acquired_at: "2026-09-29T00:00:00.000Z",
+        imported_at: "2026-09-29T00:00:00.000Z",
         revision: null,
       });
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

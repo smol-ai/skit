@@ -90,7 +90,7 @@ export const addCliCommand = Command.make(
               ? {}
               : { collection_id: retained.collection_id }),
             skill_ids: retained.skill_ids,
-            retained_version_id: retained.retained_version_id,
+            collection_version_id: retained.collection_version_id,
             snapshot_digest: retained.snapshot_digest,
             skills: retained.skills.map((skill) => ({
               name: skill.name,

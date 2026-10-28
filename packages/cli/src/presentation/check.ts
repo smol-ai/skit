@@ -1,9 +1,9 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-export function renderCheck(data: ContractDataForId<"skit.check.v7">) {
+export function renderCheck(data: ContractDataForId<"skit.check.v8">) {
   if (data.length === 0) return "The Library has no retained Library subjects.";
   const lines = data.flatMap((item) => {
-    const retainedBytesCurrent = item.retained_copies.every((tree) => tree.retained_bytes_current);
+    const retainedBytesCurrent = item.collection_versions.every((tree) => tree.original_intact);
     const members = item.skills_sh?.members ?? [];
     const updates = members.filter((member) => member.status === "update-available").length;
     const problems = members.filter(

@@ -141,7 +141,7 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
     : [];
   // Apply settles these only once it has staged SKIT's copy to compare; a preview can say they
   // are there. A link at a destination is a duplicate, reported above.
-  const unmanaged: Array<{ target: InstallDestination; path: string }> = [];
+  const unmanaged: Array<{ destination: InstallDestination; path: string }> = [];
   if (options.enabled) {
     const fs = yield* FileSystem.FileSystem;
     for (const target of targets) {
@@ -153,7 +153,7 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
         if (!(yield* fs.exists(path))) continue;
         if (Option.isSome(yield* Effect.option(fs.readLink(path)))) continue;
         if ((yield* inspectOwnershipMarker(path)).kind === "valid") continue;
-        unmanaged.push({ target, path });
+        unmanaged.push({ destination: target, path });
       }
     }
   }
@@ -183,7 +183,7 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
   }
   return {
     ...plan,
-    ...(duplicates.length ? { shadows: duplicates } : {}),
+    ...(duplicates.length ? { duplicates } : {}),
     ...(unmanaged.length ? { unmanaged_destinations: unmanaged } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...(repair ? { repair } : {}),
@@ -338,11 +338,11 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const roots = activeTargets.map((target) =>
     skillsDirectoryFor(target, plan.scope, configuration),
   );
-  const destinations: { target: InstallDestination; path: string }[] = [];
+  const destinations: { destination: InstallDestination; path: string }[] = [];
   for (const target of activeTargets)
     for (const name of plan.skills)
       destinations.push({
-        target,
+        destination: target,
         path: join(
           skillsDirectoryFor(target, plan.scope, configuration),
           yield* installedSkillName(name),
@@ -395,7 +395,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
       skillIds.includes(skill_id) &&
       activeTargets.includes(destination) &&
       root === skillsDirectoryFor(destination, plan.scope, configuration)
-        ? [{ target: destination, path, status }]
+        ? [{ destination, path, status }]
         : [],
   );
   const missing = options.enabled
@@ -403,7 +403,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
         (destination) =>
           !projections.some(
             (projection) =>
-              projection.target === destination.target &&
+              projection.destination === destination.destination &&
               projection.path === destination.path &&
               projection.status === "installed",
           ),
@@ -415,7 +415,8 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
       projection.status !== "installed" ||
       !destinations.some(
         (destination) =>
-          destination.target === projection.target && destination.path === projection.path,
+          destination.destination === projection.destination &&
+          destination.path === projection.path,
       ),
   );
   const unresolvedPaths = [
@@ -431,9 +432,9 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const value: SetEnabledResult = {
     ...plan,
     ...(repair ? { repair } : {}),
-    ...(duplicates.length ? { shadows: duplicates } : {}),
+    ...(duplicates.length ? { duplicates: duplicates } : {}),
     ...(warnings.length ? { warnings } : {}),
-    projections,
+    installed_skills: projections,
     application: {
       intent: plan.changed ? "saved" : "unchanged",
       revision: libraryStateRevision(recorded),

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.v8",
+  "$id": "skit.update.v9",
   "type": "array",
   "items": {
     "anyOf": [
@@ -32,10 +32,10 @@
             "type": "string",
             "enum": [
               "source",
-              "projection"
+              "install"
             ]
           },
-          "source_retained": {
+          "source_imported": {
             "type": "boolean"
           },
           "error": {
@@ -82,7 +82,7 @@
           "label",
           "source",
           "phase",
-          "source_retained",
+          "source_imported",
           "error"
         ],
         "additionalProperties": true
@@ -100,10 +100,10 @@
               "skill"
             ]
           },
-          "previous_retained_copy_id": {
+          "previous_collection_version_id": {
             "type": "string"
           },
-          "selected_retained_copy_id": {
+          "selected_collection_version_id": {
             "type": "string"
           },
           "snapshot_digest": {
@@ -113,7 +113,7 @@
           "changed": {
             "type": "boolean"
           },
-          "projected": {
+          "installed": {
             "anyOf": [
               {
                 "type": "number"
@@ -201,11 +201,11 @@
         "required": [
           "subject_id",
           "subject_kind",
-          "previous_retained_copy_id",
-          "selected_retained_copy_id",
+          "previous_collection_version_id",
+          "selected_collection_version_id",
           "snapshot_digest",
           "changed",
-          "projected",
+          "installed",
           "label",
           "enabled",
           "new_available",

@@ -161,9 +161,7 @@ it.effect(
       yield* f.update;
       const applied = yield* f.apply;
       expect(
-        applied.reconciliation?.some(
-          (item) => item.path === otherPath && item.status === "local-kept",
-        ),
+        applied.changes?.some((item) => item.path === otherPath && item.status === "local-kept"),
       ).toBe(true);
       expect(
         (yield* f.home.durable).installed_skills.find((item) => item.path === otherPath),
@@ -186,7 +184,7 @@ it.effect(
       yield* f.update;
       const before = yield* f.home.durable;
       const applied = yield* f.apply;
-      expect(applied.reconciliation?.map((item) => item.status)).toEqual(["updated", "updated"]);
+      expect(applied.changes?.map((item) => item.status)).toEqual(["updated", "updated"]);
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(
         document("Incoming retained update"),
       );
@@ -217,9 +215,7 @@ it.effect(
       const marker = yield* f.fs.readFileString(join(f.copy, ".skit-ownership.json"));
       const applied = yield* f.apply;
       expect(
-        applied.reconciliation?.some(
-          (item) => item.path === f.copy && item.status === "local-kept",
-        ),
+        applied.changes?.some((item) => item.path === f.copy && item.status === "local-kept"),
       ).toBe(true);
       expect(applied.operationId).toBeUndefined();
       expect(yield* f.home.durable).toEqual(before);
@@ -265,7 +261,7 @@ it.effect("an explicit empty selection leaves existing pending updates untouched
     const plan = yield* f.home.owned(
       prepareSetupCommand(input).pipe(Effect.provide(interaction.layer)),
     );
-    expect(plan.plan.summary.reconciliation).toEqual([]);
+    expect(plan.plan.summary.changes).toEqual([]);
     expect(plan.plan.hasChanges).toBe(false);
     const recommended = yield* f.home.owned(
       prepareSetupCommand({ ...input, selection: undefined }).pipe(
@@ -313,9 +309,7 @@ it.effect(
         document("New selected Skill").replace("name: review", "name: another"),
       );
       const observed = yield* f.observe;
-      expect(observed.reconciliation?.find((fact) => fact.path === f.copy)?.status).toBe(
-        "protected",
-      );
+      expect(observed.changes?.find((fact) => fact.path === f.copy)?.status).toBe("protected");
       const before = (yield* f.home.durable).installed_skills.find((item) => item.path === f.copy);
       const input = {
         options: f.options,
@@ -374,7 +368,7 @@ for (const scenario of [
         const settingsBytes = yield* f.fs.readFileString(join(f.home.home, "machine.json"));
         const installed = yield* f.fs.readFileString(join(f.copy, "SKILL.md"));
         const observed = yield* f.observe;
-        const fact = observed.reconciliation?.find((item) => item.path === f.copy);
+        const fact = observed.changes?.find((item) => item.path === f.copy);
         expect(fact?.status).toBe(
           {
             aligned: "unchanged",
@@ -406,7 +400,7 @@ it.effect("a changed marker cannot redefine the Library baseline", () =>
       JSON.stringify({ ...marker, expected_digest: `sha256:${"f".repeat(64)}` }),
     );
     const observed = yield* f.observe;
-    expect(observed.reconciliation?.find((item) => item.path === f.copy)?.status).toBe("protected");
+    expect(observed.changes?.find((item) => item.path === f.copy)?.status).toBe("protected");
     expect(observed.onboarding.planId).not.toBe(before.onboarding.planId);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -419,13 +413,11 @@ it.effect(
       const saved = join(f.root, "saved-copy");
       yield* f.fs.rename(f.copy, saved);
       const missing = yield* f.observe;
-      expect(missing.reconciliation?.find((item) => item.path === f.copy)?.status).toBe(
-        "native-delete",
-      );
+      expect(missing.changes?.find((item) => item.path === f.copy)?.status).toBe("native-delete");
       expect(yield* f.fs.exists(f.copy)).toBe(false);
       const bytes = yield* f.fs.readFileString(join(saved, "SKILL.md"));
       yield* f.fs.symlink(saved, f.copy);
-      expect((yield* f.observe).reconciliation?.find((item) => item.path === f.copy)?.status).toBe(
+      expect((yield* f.observe).changes?.find((item) => item.path === f.copy)?.status).toBe(
         "protected",
       );
       expect(yield* f.fs.readFileString(join(saved, "SKILL.md"))).toBe(bytes);
@@ -443,9 +435,7 @@ it.effect(
       yield* f.update;
       const applied = yield* f.apply;
       expect(
-        applied.reconciliation?.some(
-          (item) => item.path === f.copy && item.status === "native-delete",
-        ),
+        applied.changes?.some((item) => item.path === f.copy && item.status === "native-delete"),
       ).toBe(true);
       expect(yield* f.fs.exists(f.copy)).toBe(false);
       yield* f.fs.rename(saved, f.copy);
@@ -469,8 +459,8 @@ it.effect("excluded control bytes participate in reconciliation approval evidenc
     const before = yield* f.observe;
     yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "New independent bytes");
     const after = yield* f.observe;
-    const left = before.reconciliation!.find((item) => item.path === f.copy)!;
-    const right = after.reconciliation!.find((item) => item.path === f.copy)!;
+    const left = before.changes!.find((item) => item.path === f.copy)!;
+    const right = after.changes!.find((item) => item.path === f.copy)!;
     expect(left.status).toBe("unchanged");
     expect(right.status).toBe("unchanged");
     expect(right.currentHash).toBe(left.currentHash);
@@ -523,15 +513,13 @@ it.effect(
       if (review.contract !== "setupReview") return yield* Effect.die(new Error("Expected review"));
       expect(review.data.canApply).toBe(true);
       expect(review.data.summary.sources).toEqual([]);
-      expect(
-        review.data.summary.reconciliation.every((fact) => fact.skillId === choice.skillId),
-      ).toBe(true);
+      expect(review.data.summary.changes.every((fact) => fact.skillId === choice.skillId)).toBe(
+        true,
+      );
       const applied = yield* invoke(actionFor(review.data.actions, "apply").argv);
       if (applied.contract !== "setupApplied")
         return yield* Effect.die(new Error("Expected applied"));
-      expect(applied.data.reconciliation?.filter((item) => item.status === "updated")).toHaveLength(
-        2,
-      );
+      expect(applied.data.changes?.filter((item) => item.status === "updated")).toHaveLength(2);
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(
         document("Incoming retained update"),
       );
@@ -554,7 +542,7 @@ for (const chosen of ["retained", "local"] as const) {
         yield* f.fs.makeDirectory(join(f.copy, "empty"));
         const before = yield* f.home.durable;
         const observed = yield* f.observe;
-        const fact = observed.reconciliation!.find((item) => item.path === f.copy)!;
+        const fact = observed.changes!.find((item) => item.path === f.copy)!;
         expect(fact.status).toBe("competing");
         const input = {
           options: f.options,
@@ -622,7 +610,7 @@ it.effect("metadata-only alignment keeps the directory and excluded user content
     yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "Keep this control entry");
     yield* f.fs.makeDirectory(join(f.copy, "empty"));
     const before = yield* captureSetupFile(f.copy);
-    const fact = (yield* f.observe).reconciliation!.find((item) => item.path === f.copy)!;
+    const fact = (yield* f.observe).changes!.find((item) => item.path === f.copy)!;
     expect(fact.status).toBe("unchanged");
     expect(fact.metadataChanged).toBe(true);
     yield* f.apply;
@@ -658,9 +646,7 @@ it.effect("a local version choice keeps a native-deleted sibling absent", () =>
         Effect.provide(interaction.layer),
       ),
     );
-    expect(applied.reconciliation?.find((item) => item.path === sibling)?.status).toBe(
-      "native-delete",
-    );
+    expect(applied.changes?.find((item) => item.path === sibling)?.status).toBe("native-delete");
     expect(yield* f.fs.exists(sibling)).toBe(false);
     expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(
       document("Chosen local edits"),
@@ -762,9 +748,7 @@ it.effect("a settings-only work-dir call never applies pending installed updates
     expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(
       document("Original baseline"),
     );
-    expect(applied.reconciliation?.find((fact) => fact.path === f.copy)?.status).toBe(
-      "incoming-update",
-    );
+    expect(applied.changes?.find((fact) => fact.path === f.copy)?.status).toBe("incoming-update");
   }).pipe(Effect.provide(skitLayer)),
 );
 

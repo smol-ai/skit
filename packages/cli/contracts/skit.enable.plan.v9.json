@@ -65,7 +65,7 @@
     "repair": {
       "type": "boolean"
     },
-    "shadows": {
+    "duplicates": {
       "type": "array",
       "items": {
         "type": "object",
@@ -128,7 +128,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "target": {
+          "destination": {
             "type": "string",
             "enum": [
               "agents",
@@ -140,7 +140,7 @@
           }
         },
         "required": [
-          "target",
+          "destination",
           "path"
         ],
         "additionalProperties": true

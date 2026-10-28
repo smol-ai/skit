@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v9",
+  "$id": "skit.setup.v10",
   "type": "object",
   "properties": {
     "operationId": {
@@ -283,7 +283,7 @@
         "additionalProperties": true
       }
     },
-    "projections": {
+    "installedSkills": {
       "type": "array",
       "items": {
         "type": "object",
@@ -334,12 +334,12 @@
         "additionalProperties": true
       }
     },
-    "reconciliation": {
+    "changes": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "projectionId": {
+          "installedSkillId": {
             "type": "string"
           },
           "skillId": {
@@ -351,7 +351,7 @@
           "path": {
             "type": "string"
           },
-          "target": {
+          "destination": {
             "type": "string",
             "enum": [
               "agents",
@@ -396,11 +396,11 @@
           }
         },
         "required": [
-          "projectionId",
+          "installedSkillId",
           "skillId",
           "name",
           "path",
-          "target",
+          "destination",
           "baselineHash",
           "evidence",
           "status",
@@ -423,7 +423,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -542,10 +542,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -566,7 +566,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -582,7 +582,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -597,7 +597,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -780,7 +780,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -899,10 +899,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -923,7 +923,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -939,7 +939,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -954,7 +954,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1123,7 +1123,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -1242,10 +1242,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -1266,7 +1266,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1282,7 +1282,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -1297,7 +1297,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1466,7 +1466,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -1585,10 +1585,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -1609,7 +1609,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1625,7 +1625,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -1640,7 +1640,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -1805,7 +1805,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -1924,10 +1924,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -1948,7 +1948,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -1964,7 +1964,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -1979,7 +1979,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -2137,7 +2137,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -2256,10 +2256,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -2280,7 +2280,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -2296,7 +2296,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -2311,7 +2311,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -2469,7 +2469,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -2588,10 +2588,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -2612,7 +2612,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -2628,7 +2628,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -2643,7 +2643,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -2813,7 +2813,7 @@
               {
                 "type": "object",
                 "properties": {
-                  "shadows": {
+                  "duplicates": {
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -2932,10 +2932,10 @@
                                   "kind": {
                                     "type": "string",
                                     "enum": [
-                                      "retained"
+                                      "in-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -2956,7 +2956,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId",
                                   "displayName"
@@ -2972,7 +2972,7 @@
                                       "missing-from-library"
                                     ]
                                   },
-                                  "projectionId": {
+                                  "installedSkillId": {
                                     "type": "string"
                                   },
                                   "collectionId": {
@@ -2987,7 +2987,7 @@
                                 },
                                 "required": [
                                   "kind",
-                                  "projectionId",
+                                  "installedSkillId",
                                   "skillId",
                                   "skillVersionId"
                                 ],
@@ -3397,10 +3397,10 @@
                           "kind": {
                             "type": "string",
                             "enum": [
-                              "retained"
+                              "in-library"
                             ]
                           },
-                          "projectionId": {
+                          "installedSkillId": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -3421,7 +3421,7 @@
                         },
                         "required": [
                           "kind",
-                          "projectionId",
+                          "installedSkillId",
                           "skillId",
                           "skillVersionId",
                           "displayName"
@@ -3437,7 +3437,7 @@
                               "missing-from-library"
                             ]
                           },
-                          "projectionId": {
+                          "installedSkillId": {
                             "type": "string"
                           },
                           "collectionId": {
@@ -3452,7 +3452,7 @@
                         },
                         "required": [
                           "kind",
-                          "projectionId",
+                          "installedSkillId",
                           "skillId",
                           "skillVersionId"
                         ],
@@ -3961,7 +3961,7 @@
     "repositories",
     "repositoryConfigs",
     "authoredCollections",
-    "projections",
+    "installedSkills",
     "onboarding",
     "locks",
     "instances",

@@ -7,7 +7,7 @@ export const SyncConflictDetail = Schema.Struct({
 });
 export type SyncConflictDetail = typeof SyncConflictDetail.Type;
 
-export const SyncBindingEntry = Schema.Struct({
+export const SyncEnabledItem = Schema.Struct({
   kind: Schema.Literals(["collection", "skill"]),
   label: Schema.String,
 });
@@ -27,11 +27,11 @@ export const SyncChange = Schema.Union([
     evidence_only: Schema.Boolean,
   }),
   Schema.Struct({
-    kind: Schema.Literal("binding"),
+    kind: Schema.Literal("enabled"),
     action: Schema.Literals(["add", "update", "remove"]),
-    /** Entries this change enables and disables: a whole Collection or one Skill. */
-    entries_added: Schema.Array(SyncBindingEntry),
-    entries_removed: Schema.Array(SyncBindingEntry),
+    /** Items this change enables and disables: a whole Collection or one Skill. */
+    items_added: Schema.Array(SyncEnabledItem),
+    items_removed: Schema.Array(SyncEnabledItem),
   }),
 ]);
 
@@ -61,8 +61,8 @@ export const SyncResult = Schema.Struct({
   revision_id: Schema.optionalKey(Schema.String),
   snapshots: Schema.optionalKey(Schema.Number),
   digest: Schema.optionalKey(Schema.String),
-  projected: Schema.optionalKey(Schema.Number),
-  retired: Schema.optionalKey(Schema.Number),
+  installed: Schema.optionalKey(Schema.Number),
+  uninstalled: Schema.optionalKey(Schema.Number),
   collections_to_remove: Schema.optionalKey(Schema.Number),
   conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
   conflict_details: Schema.optionalKey(Schema.Array(SyncConflictDetail)),
@@ -72,6 +72,6 @@ export const SyncResult = Schema.Struct({
 });
 export type SyncResult = typeof SyncResult.Type;
 
-export type SyncBindingEntry = typeof SyncBindingEntry.Type;
+export type SyncEnabledItem = typeof SyncEnabledItem.Type;
 export type SyncChange = typeof SyncChange.Type;
 export type SyncPlan = typeof SyncPlan.Type;

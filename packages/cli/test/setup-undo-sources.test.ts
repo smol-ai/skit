@@ -469,12 +469,12 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture(false, false, true);
       const original = f.before.installed_skills[0];
-      expect(f.applied?.reconciliation?.find((item) => item.path === original.path)?.status).toBe(
+      expect(f.applied?.changes?.find((item) => item.path === original.path)?.status).toBe(
         "pending",
       );
-      expect(
-        f.applied?.reconciliation?.find((item) => item.path === original.path)?.reason,
-      ).toContain("review");
+      expect(f.applied?.changes?.find((item) => item.path === original.path)?.reason).toContain(
+        "review",
+      );
       expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
         document("existing", "Before setup"),
       );

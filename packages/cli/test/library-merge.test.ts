@@ -359,10 +359,10 @@ it.effect("plans destination-specific Collection and Binding reconciliation", ()
         evidence_only: false,
       },
       {
-        kind: "binding",
+        kind: "enabled",
         action: "add",
-        entries_added: [{ kind: "skill", label: "review" }],
-        entries_removed: [],
+        items_added: [{ kind: "skill", label: "review" }],
+        items_removed: [],
       },
     ]);
   }),

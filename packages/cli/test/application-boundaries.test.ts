@@ -160,7 +160,7 @@ it.effect(
       );
       assert.deepStrictEqual(failures, []);
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0]?.schema, "skit.list.v6");
+      assert.strictEqual(results[0]?.schema, "skit.list.v7");
       assert.isTrue(yield* fs.exists(join(home, ".lock")));
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.join(writer);

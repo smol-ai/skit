@@ -197,7 +197,7 @@ export const boundSkit = Effect.fn("Test.boundSkit")(function* (path: string, na
 });
 
 export const releaseIdentity = (source: string, release: string) =>
-  validateSkitDirectory(source, release, { assessmentContext: "retain" }).pipe(
+  validateSkitDirectory(source, release, { assessmentContext: "import" }).pipe(
     Effect.map((validated) => validated.identity),
   );
 

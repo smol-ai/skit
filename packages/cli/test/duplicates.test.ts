@@ -88,7 +88,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
             ...options,
             invocation: { ...options.invocation, dryRun: true },
           });
-          expect(preview.value.shadows).toEqual([
+          expect(preview.value.duplicates).toEqual([
             expect.objectContaining({
               name: "review",
               harness: "codex",
@@ -109,7 +109,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
             ...options,
             invocation: { ...options.invocation, invocation: "explicit" as const },
           });
-          expect(policyChange.value.shadows).toBeUndefined();
+          expect(policyChange.value.duplicates).toBeUndefined();
           expect((yield* store.load).invocation_policies).toBeDefined();
         }),
       ),

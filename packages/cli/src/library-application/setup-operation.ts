@@ -245,7 +245,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   const targets = projecting ? yield* activeInstallDestinations(approval.setup.inventory) : [];
   const possibleTargets = projecting ? (["agents", "claude"] as const) : [];
   const projectionPaths = new Set(
-    (approval.reconciliation ?? [])
+    (approval.changes ?? [])
       .filter(
         (fact) =>
           fact.status === "incoming-update" ||

@@ -130,7 +130,7 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
     Effect.gen(function* () {
       if (resolved.descriptorKind === "declared") {
         const validated = yield* validateSkitDirectory(resolved.root, "retained", {
-          assessmentContext: "retain",
+          assessmentContext: "import",
         });
         return {
           kind: "authored" as const,
@@ -217,7 +217,7 @@ export const importSource = Effect.fn("Library.addSource")(function* (
           action: retained.action,
           collection_id: retained.collection.collection_id,
           skill_ids: retained.skills.map((skill) => skill.skill_id),
-          retained_version_id: retained.retainedCopyId,
+          collection_version_id: retained.retainedCopyId,
           snapshot_digest: retained.snapshotDigest,
           ...(resolved.descriptorKind !== "declared" && resolved.diagnostics?.length
             ? { diagnostics: resolved.diagnostics }

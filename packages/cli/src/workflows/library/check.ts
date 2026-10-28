@@ -56,12 +56,12 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
       const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
       const inspected = source === undefined ? undefined : yield* inspectLibrarySource(source);
-      const retained_copies = [];
+      const collection_versions = [];
       for (const copy of copies) {
-        retained_copies.push({
-          retained_copy_id: copy.collection_version_id,
+        collection_versions.push({
+          collection_version_id: copy.collection_version_id,
           digest: copy.digest,
-          retained_bytes_current:
+          original_intact:
             (yield* originalTreeHash(collectionVersionPath(store.originalsPath, copy.digest))) ===
             copy.digest,
         });
@@ -71,7 +71,7 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
         subject_id: subject.subjectId,
         subject_kind: subject.kind,
         label: subject.label,
-        retained_copies,
+        collection_versions,
         unresolved_skill_selections: skills.filter(
           (skill) => currentSkillVersion(state, skill) === undefined,
         ).length,
@@ -87,9 +87,7 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
         ...(inspected === undefined
           ? {}
           : { available_snapshot_digest: inspected.snapshot_digest }),
-        acquisition_provenance: state.imports.some((acquisition) =>
-          acquisitionIds.has(acquisition.import_id),
-        ),
+        has_imports: state.imports.some((acquisition) => acquisitionIds.has(acquisition.import_id)),
         ...(skillsSh ? { skills_sh: skillsSh } : {}),
       };
     }),

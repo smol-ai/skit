@@ -362,7 +362,7 @@ export class InstalledSkillChanged
  */
 export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   readonly skillId: LibraryState["skills"][number]["skill_id"];
-  readonly projectionId: LibraryState["installed_skills"][number]["installed_skill_id"];
+  readonly installedSkillId: LibraryState["installed_skills"][number]["installed_skill_id"];
   readonly path: string;
   readonly observedHash: Digest;
   readonly retainedAt: string;
@@ -377,7 +377,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   const state = structuredClone(current.state);
   const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
   const projection = state.installed_skills.find(
-    (candidate) => candidate.installed_skill_id === request.projectionId,
+    (candidate) => candidate.installed_skill_id === request.installedSkillId,
   );
   if (
     skill === undefined ||
@@ -479,7 +479,7 @@ export interface AuthoredImport {
 export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollectionUnderLock")(
   function* (request: AuthoredImport) {
     const validated = yield* validateSkitDirectory(request.root, "retained", {
-      assessmentContext: "retain",
+      assessmentContext: "import",
     });
     if (validated.diagnostics.some((item) => item.severity === "error"))
       return yield* new ImportRequestInvalid({

@@ -24,23 +24,14 @@ export const ListResult = Schema.Struct({
       ),
     }),
   ),
-  bindings: Schema.Array(
-    Schema.Struct({
-      scope: Schema.Struct({ kind: Schema.Literal("global") }),
-      /** What was enabled: a whole Collection that follows its Source, or one Skill. */
-      entries: Schema.Array(
-        Schema.Union([
-          Schema.Struct({
-            kind: Schema.Literal("collection"),
-            collection_id: CollectionId,
-            label: Schema.String,
-          }),
-          Schema.Struct({ kind: Schema.Literal("skill"), skill_id: SkillId, name: Schema.String }),
-        ]),
-      ),
-      /** The Skills those entries enable now. */
-      skills: Schema.Array(Schema.String),
-    }),
+  /** What is enabled for every project: a whole Collection that follows its Source, or one Skill. */
+  enabled: Schema.Array(
+    Schema.Union([
+      Schema.Struct({ collection: CollectionId, label: Schema.String }),
+      Schema.Struct({ skill: SkillId, name: Schema.String }),
+    ]),
   ),
+  /** The Skills those items enable now. */
+  enabled_skills: Schema.Array(Schema.String),
 });
 export type ListResult = typeof ListResult.Type;
