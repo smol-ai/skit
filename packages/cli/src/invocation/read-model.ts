@@ -15,7 +15,7 @@ import {
 import { Record, Schema } from "effect";
 import { harnessLabel } from "../harness/catalog.js";
 import type { InvocationOption } from "./policy.js";
-import type { SkitBindingScope as Scope } from "@smolai/skit-core";
+import type { InstallScope as Scope } from "@smolai/skit-core";
 
 export type { ResolvedDeclaredPolicy };
 

@@ -5,7 +5,7 @@ import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/
 import { isEntryLink, findDuplicates } from "../../projection/duplicates.js";
 import {
   activeInstallDestinations,
-  bindingRoot,
+  skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
 import type { SetupResult } from "./setup-contract.js";
@@ -109,7 +109,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       const matches = duplicates.filter((duplicate) => duplicate.name === candidate.name);
       if (!matches.length) return candidate;
       const destinations = targets.map((target) =>
-        join(bindingRoot(target, { kind: "global" }, options.inventory), candidate.name),
+        join(skillsDirectoryFor(target, { kind: "global" }, options.inventory), candidate.name),
       );
       const destinationLinks = matches.flatMap((duplicate) =>
         duplicate.aliases

@@ -18,7 +18,7 @@ const repositoryBindingOutput = RepositoryBinding.pipe(
   Schema.fieldsAssign({ invocation_policies: invocationPolicies }),
 );
 
-export const SetEnabledPlan = Schema.Struct({
+export const SetEnabledChange = Schema.Struct({
   subject_id: Schema.String,
   skills: Schema.Array(Schema.String),
   scope: Schema.Union([DeviceBinding.fields.scope, RepositoryBinding.fields.scope]),
@@ -39,9 +39,9 @@ export const SetEnabledPlan = Schema.Struct({
   warnings: Schema.optionalKey(Schema.Array(DuplicateScanError)),
   bindings: Schema.Array(Schema.Union([deviceBindingOutput, repositoryBindingOutput])),
 });
-export type SetEnabledPlan = typeof SetEnabledPlan.Type;
+export type SetEnabledChange = typeof SetEnabledChange.Type;
 
-export const SetEnabledResult = SetEnabledPlan.pipe(
+export const SetEnabledResult = SetEnabledChange.pipe(
   Schema.fieldsAssign({
     application: Schema.Struct({
       intent: Schema.Literals(["saved", "unchanged"]),

@@ -14,7 +14,7 @@ import {
 import { Effect } from "effect";
 import {
   activeInstallDestinations,
-  bindingRoot,
+  skillsDirectoryFor,
   existingRepositorySkillsDirectory,
 } from "../../projection/roots.js";
 import type { InventoryRootOptions } from "../../projection/roots.js";
@@ -80,7 +80,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
             ? options.includeRepositoryBindings && repositoryBinding !== undefined
               ? existingRepositorySkillsDirectory(state, repositoryBinding, target)
               : undefined
-            : bindingRoot(target, binding.scope, options.roots);
+            : skillsDirectoryFor(target, binding.scope, options.roots);
       if (root === undefined) continue;
       projected += yield* installEnabledSkills({
         target,

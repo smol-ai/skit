@@ -8,9 +8,13 @@ import {
   harnessDrivers,
   parseSkillFrontmatter,
   resolveSkillsDirectory,
-  type SkitBindingScope,
+  type InstallScope,
 } from "@smolai/skit-core";
-import { activeInstallDestinations, bindingRoot, type InventoryRootOptions } from "./roots.js";
+import {
+  activeInstallDestinations,
+  skillsDirectoryFor,
+  type InventoryRootOptions,
+} from "./roots.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export const SkillAlias = Schema.Struct({
@@ -39,7 +43,7 @@ export type DuplicateCopy = typeof DuplicateCopy.Type;
 /** Each Harness's readable skills directories for a scope; a global override stands in for its own. */
 export function readableSkillsDirectories(
   options: InventoryRootOptions,
-  scope: SkitBindingScope,
+  scope: InstallScope,
   harnesses: readonly HarnessName[] = HarnessName.literals,
 ) {
   return harnesses.flatMap((harness) => {
@@ -167,7 +171,7 @@ export class DuplicateScanIncomplete
 /** Exclude the destinations we will reconcile together; other same-scope copies are duplicates. */
 export const findDuplicates = Effect.fn("Projection.findDuplicates")(function* (
   options: InventoryRootOptions,
-  scope: SkitBindingScope,
+  scope: InstallScope,
   names: readonly string[],
   errors?: DuplicateScanError[],
 ) {
@@ -175,7 +179,7 @@ export const findDuplicates = Effect.fn("Projection.findDuplicates")(function* (
   const targets = yield* activeInstallDestinations(options);
   const roots = readableSkillsDirectories(options, scope);
   const destinations = targets.flatMap((target) =>
-    names.map((name) => join(bindingRoot(target, scope, options), name)),
+    names.map((name) => join(skillsDirectoryFor(target, scope, options), name)),
   );
   const canonicalDestinations = new Set(
     yield* Effect.forEach(destinations, (path) =>

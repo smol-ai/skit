@@ -134,11 +134,11 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.strictEqual(proposed.outcome.kind, "preview");
     assert.deepStrictEqual(proposed.pending?.facts[0]?.skills.slice().sort(), ["alpha", "beta"]);
     assert.ok(
-      (yield* home.owned(openLibrarySession())).skills.every((row) => row.bindings.length === 0),
+      (yield* home.owned(openLibrarySession())).skills.every((row) => row.scopes.length === 0),
     );
     const enabled = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(enabled.outcome?.kind, "applied");
-    assert.ok(enabled.skills.every((row) => row.bindings.length === 1));
+    assert.ok(enabled.skills.every((row) => row.scopes.length === 1));
     assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
       { kind: "collection", collection_id: collectionId },
     ]);
@@ -188,7 +188,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
         yield* home.owned(openLibrarySession()),
         home.bindings,
         alphaRow,
-        alphaRow.bindings,
+        alphaRow.scopes,
       ),
     );
     assert.strictEqual(cleanup.outcome.kind, "preview");
@@ -209,7 +209,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.strictEqual(removal.outcome.kind, "preview");
     const disabled = yield* home.owned(confirmLibraryChange(removal));
     assert.strictEqual(disabled.outcome?.kind, "applied");
-    assert.ok(disabled.skills.every((row) => row.bindings.length === 0));
+    assert.ok(disabled.skills.every((row) => row.scopes.length === 0));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 

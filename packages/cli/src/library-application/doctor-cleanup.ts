@@ -3,14 +3,14 @@ import {
   type LibraryState,
   type ListingBudget,
   type UsageReport,
-  type SkitBindingScope,
+  type InstallScope,
 } from "@smolai/skit-core";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
-import { bindingChangeSelection, type BindingChangeIntent } from "./binding-changes.js";
-import { bindingPlacements } from "../workflows/library/binding-selection.js";
+import { setEnabledSession, type SetEnabledIntent } from "./set-enabled.js";
+import { enabledCollections } from "../workflows/library/set-enabled-request.js";
 import {
-  bindingRoot,
+  skillsDirectoryFor,
   existingRepositorySkillsDirectory,
   type InventoryRootOptions,
 } from "../projection/roots.js";
@@ -22,7 +22,7 @@ export interface CleanupCandidate {
   readonly skillId: string;
   readonly name: string;
   readonly collectionId: string;
-  readonly scope: SkitBindingScope;
+  readonly scope: InstallScope;
   readonly costs: Readonly<Record<string, number>>;
   readonly hasUsageHistory: boolean;
   readonly selected: boolean;
@@ -41,7 +41,7 @@ export function suggestDoctorCleanup(
   configuration: InventoryRootOptions,
 ): CleanupCandidate[] {
   const candidates = new Map<string, Omit<CleanupCandidate, "selected">>();
-  const placements = bindingPlacements(state);
+  const placements = enabledCollections(state);
   for (const budget of budgets) {
     for (const entry of budget.entries) {
       const projection = state.projections.find(
@@ -70,8 +70,8 @@ export function suggestDoctorCleanup(
                   state,
                   { scope: p.scope, entries: [] },
                   target,
-                ) ?? bindingRoot(target, p.scope, configuration))
-              : bindingRoot(target, p.scope, configuration),
+                ) ?? skillsDirectoryFor(target, p.scope, configuration))
+              : skillsDirectoryFor(target, p.scope, configuration),
           ) === resolve(projection.root),
       );
       if (matching.length !== 1) continue;
@@ -134,7 +134,7 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
 ) {
   const store = yield* LibraryStore;
   const state = yield* store.load;
-  const selection = bindingChangeSelection(state, store.home, store.originalsPath);
+  const selection = setEnabledSession(state, store.home, store.originalsPath);
   const usage = yield* scanLocalUsage(state, { userHome: configuration.home, days, progress });
   const candidates = suggestDoctorCleanup(state, budgets, usage, configuration);
   return {
@@ -154,13 +154,13 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
           candidate.scope.kind === "global" ? "" : resolve(candidate.scope.root),
         ]),
       );
-      const intents: BindingChangeIntent[] = Object.values(groups).map((members) => ({
+      const intents: SetEnabledIntent[] = Object.values(groups).map((members) => ({
         subject: members[0].collectionId,
         enabled: false,
         where: [members[0].scope],
         members: members.map((candidate) => candidate.name),
       }));
-      return selection.previewMany(intents, configuration);
+      return selection.planMany(intents, configuration);
     },
   };
 });

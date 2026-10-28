@@ -1,7 +1,7 @@
 import { Effect, FileSystem } from "effect";
 import { isErrno } from "../platform/errno.js";
 import { basename, dirname, join, resolve } from "node:path";
-import { type HarnessName, type SkitBindingScope } from "@smolai/skit-core";
+import { type HarnessName, type InstallScope } from "@smolai/skit-core";
 import { RoutesCollide } from "./failures.js";
 
 /**
@@ -10,7 +10,7 @@ import { RoutesCollide } from "./failures.js";
  */
 export interface DeclaredRoute {
   harness: HarnessName;
-  scope: SkitBindingScope;
+  scope: InstallScope;
   route: string;
 }
 
@@ -19,7 +19,7 @@ export interface TargetCollision {
   routes: readonly DeclaredRoute[];
 }
 
-export function scopeKey(scope: SkitBindingScope): string {
+export function scopeKey(scope: InstallScope): string {
   return scope.kind === "global" ? "global" : `repository:${resolve(scope.root)}`;
 }
 
@@ -27,7 +27,7 @@ export function routeKey(route: DeclaredRoute): string {
   return `${route.harness}|${scopeKey(route.scope)}`;
 }
 
-function scopeLabel(scope: SkitBindingScope): string {
+function scopeLabel(scope: InstallScope): string {
   return scope.kind === "global" ? "global" : `repository ${resolve(scope.root)}`;
 }
 

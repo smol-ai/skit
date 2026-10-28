@@ -231,7 +231,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     run: previewEnable.pipe(
       Effect.map(
         (state) =>
-          `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.bindings).length} Bindings`,
+          `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.scopes).length} Bindings`,
       ),
     ),
     finalState: (state) => state,

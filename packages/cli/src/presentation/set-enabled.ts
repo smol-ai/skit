@@ -1,10 +1,10 @@
 import type {
-  SetEnabledPlan,
+  SetEnabledChange,
   SetEnabledResult,
 } from "../workflows/library/set-enabled-contract.js";
 
 export function renderSetEnabled(
-  data: SetEnabledPlan | SetEnabledResult,
+  data: SetEnabledChange | SetEnabledResult,
   applied: boolean,
 ): string {
   const application = "application" in data ? data.application : undefined;

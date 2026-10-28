@@ -97,7 +97,7 @@ it.effect(
       expect(proposed.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
       const enabled = yield* home.owned(confirmLibraryChange(proposed));
       expect(enabled.outcome?.kind).toBe("applied");
-      const policy = enabled.skills[0]!.bindings[0]!.policy!;
+      const policy = enabled.skills[0]!.scopes[0]!.policy!;
       expect(policy.agents["claude-code"].effectivePolicy).toBe("explicit");
       expect(policy.agents.codex.effectivePolicy).toBe("implicit");
       expect(invocationRowSummary(policy)).toBe("Varies by agent");
@@ -135,7 +135,7 @@ it.effect(
           enabled,
           home.bindings,
           enabled.skills[0]!,
-          enabled.skills[0]!.bindings,
+          enabled.skills[0]!.scopes,
         ),
       );
       expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
@@ -339,21 +339,21 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       expect(Result.isFailure(bad.authorInvocation)).toBe(true);
       expect(bad.invocationWarning).toContain("Author preference unavailable");
       expect(Result.isSuccess(good.authorInvocation)).toBe(true);
-      expect(bad.bindings[0]?.policy).toBeUndefined();
+      expect(bad.scopes[0]?.policy).toBeUndefined();
       expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);
       const policyChange = yield* home.owned(
-        proposeLibraryInvocation(session, home.bindings, bad, bad.bindings[0]!, "explicit"),
+        proposeLibraryInvocation(session, home.bindings, bad, bad.scopes[0]!, "explicit"),
       );
       expect(policyChange.outcome?.kind).toBe("failed");
       expect(policyChange.pending).toBeUndefined();
       const disabled = yield* home.owned(
-        proposeLibraryDisable(session, home.bindings, bad, bad.bindings),
+        proposeLibraryDisable(session, home.bindings, bad, bad.scopes),
       );
       expect(disabled.outcome?.kind).toBe("preview");
       const confirmed = yield* home.owned(confirmLibraryChange(disabled));
       expect(confirmed.outcome?.kind).toBe("applied");
       const remaining = confirmed.skills.find((row) => row.skillId === bad.skillId)!;
-      expect(remaining.bindings).toHaveLength(0);
+      expect(remaining.scopes).toHaveLength(0);
       const enable = yield* home.owned(
         proposeLibraryEnable(confirmed, home.bindings, remaining, { scope: { kind: "global" } }),
       );

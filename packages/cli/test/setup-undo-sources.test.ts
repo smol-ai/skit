@@ -18,7 +18,7 @@ import {
   sourceImports,
   skitLayer,
 } from "@smolai/skit-core";
-import { bindingRoot } from "../src/projection/roots.js";
+import { skillsDirectoryFor } from "../src/projection/roots.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { inspectSetupOperation } from "../src/library-application/setup-operation.js";
@@ -115,7 +115,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         home.home,
         installEnabledSkills({
           target: "agents",
-          root: bindingRoot("agents", { kind: "global" }, home.inventory),
+          root: skillsDirectoryFor("agents", { kind: "global" }, home.inventory),
           variantsPath: home.variantsPath,
         }),
       ),

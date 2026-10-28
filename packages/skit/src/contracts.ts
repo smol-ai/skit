@@ -14,7 +14,7 @@ import {
   InvocationPolicy,
   InstallDestination,
   RecordedInstallDestination,
-  SkitBindingScope,
+  InstallScope,
   SkitValidationDiagnostic,
 } from "./vocabulary.js";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./library/entity-ids.js";
@@ -24,7 +24,7 @@ export {
   InvocationPolicy,
   InstallDestination,
   RecordedInstallDestination,
-  SkitBindingScope,
+  InstallScope,
   SkillAssessmentAcceptance,
   SkitValidationDiagnostic,
 };

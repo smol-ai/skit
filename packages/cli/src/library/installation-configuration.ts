@@ -1,7 +1,7 @@
 import type { HarnessName, InstallDestination } from "@smolai/skit-core";
 import {
   installDestinationsFor,
-  bindingRoot,
+  skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../projection/roots.js";
 
@@ -18,6 +18,6 @@ export function libraryInstallationConfiguration(
   const active = installDestinationsFor(detected);
   return {
     rootFor: (target) =>
-      active.includes(target) ? bindingRoot(target, { kind: "global" }, roots) : undefined,
+      active.includes(target) ? skillsDirectoryFor(target, { kind: "global" }, roots) : undefined,
   };
 }

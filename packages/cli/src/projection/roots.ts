@@ -11,7 +11,7 @@ import {
   pathIsWithin,
   type SkillsDirectoryOverrides,
   type InstallDestination,
-  type SkitBindingScope,
+  type InstallScope,
   type LibraryState,
   type InventoryScanRoot,
   type RepositoryBinding,
@@ -44,9 +44,9 @@ export function existingRepositorySkillsDirectory(
 }
 
 /** Resolve one target's writable physical skills directory for a Scope. */
-export function bindingRoot(
+export function skillsDirectoryFor(
   target: InstallDestination,
-  scope: SkitBindingScope,
+  scope: InstallScope,
   options: InventoryRootOptions,
 ): string {
   const override = options.overrides[installDestinationProfiles[target]]?.[0];
@@ -103,7 +103,7 @@ export function selectInventoryRoots(
     ...state.local_bindings.flatMap((binding) =>
       Record.toEntries(installDestinationProfiles).map(([target, harness]) => ({
         harness,
-        root: bindingRoot(target, binding.scope, options),
+        root: skillsDirectoryFor(target, binding.scope, options),
       })),
     ),
   ]);

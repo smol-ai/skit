@@ -141,7 +141,7 @@ const skill = (
   acquired_at: null,
   source_updated_at: null,
   collectionSource: { kind: "local", locator: `/sources/${collectionId}` },
-  bindings: enabled
+  scopes: enabled
     ? [{ scope: { kind: "global" }, invocation: "declared", label: "All projects" }]
     : [],
 });

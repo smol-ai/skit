@@ -17,12 +17,11 @@ import {
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
-  type ManageApproval,
 } from "@smolai/skit-core";
 import { Data, Effect, FileSystem, Option, Result, Schema } from "effect";
 import {
   activeInstallDestinations,
-  bindingRoot,
+  skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../projection/roots.js";
 import {
@@ -34,50 +33,36 @@ import {
 } from "../projection/duplicates.js";
 import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import {
-  calculateBindingChange,
-  expandBindingIntent,
-  type BindingChangeIntent,
-  type BindingSelection,
-} from "../workflows/library/binding-selection.js";
+  calculateSetEnabled,
+  expandSetEnabledIntent,
+  type SetEnabledIntent,
+  type SetEnabledRequest,
+} from "../workflows/library/set-enabled-request.js";
 import { libraryView } from "./library-view.js";
 export type {
-  BindingChangeIntent,
-  BindingPlacement,
-} from "../workflows/library/binding-selection.js";
+  SetEnabledIntent,
+  SetEnabledRequest,
+  EnabledCollection,
+} from "../workflows/library/set-enabled-request.js";
 import { classifyFailure } from "../failure-classification.js";
 import { SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 
-export interface BindingChangeRequest extends BindingSelection {
-  /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
-  readonly preserveUnselectedProjections?: boolean;
-  readonly allowDuplicate?: boolean;
-  /** Setup consent applies only to these exact symlinks, until installing succeeds. */
-  readonly allowedDuplicateSymlinks?: readonly {
-    readonly path: string;
-    readonly canonicalPath: string;
-    readonly dev: number;
-    readonly ino: number;
-    readonly linkTarget?: string;
-  }[];
-  readonly manage?: ManageApproval;
-}
+export type SetEnabledConfiguration = InventoryRootOptions;
 
-export type BindingChangeConfiguration = InventoryRootOptions;
-
-const planType = Symbol("BindingChangePlan");
+const planType = Symbol("SetEnabledPlan");
 /** Display facts plus an opaque handle to the exact requests and Library previewed. */
-export interface BindingChangePlan {
+export interface SetEnabledPlan {
   readonly [planType]: true;
-  readonly changes: readonly Effect.Success<ReturnType<typeof previewChange>>[];
+  readonly changes: readonly Effect.Success<ReturnType<typeof planChange>>[];
 }
 
 const preparedPlans = new WeakMap<
-  BindingChangePlan,
+  SetEnabledPlan,
   {
     home: string;
     revision: string;
-    requests: readonly BindingChangeRequest[];
-    configuration: BindingChangeConfiguration;
+    requests: readonly SetEnabledRequest[];
+    configuration: SetEnabledConfiguration;
     repairs: readonly boolean[];
     targets: readonly InstallDestination[];
   }
@@ -93,8 +78,8 @@ export class SetEnabledStale
 }
 
 /** Accepted intent survives a later failure; callers must not mistake this for rejection. */
-export class BindingChangeIncomplete
-  extends Schema.TaggedError<BindingChangeIncomplete>()("Library.BindingChangeIncomplete", {
+export class SetEnabledIncomplete
+  extends Schema.TaggedError<SetEnabledIncomplete>()("Library.SetEnabledIncomplete", {
     results: Schema.Array(SetEnabledResult),
     reason: Schema.Literals(["destinations", "reconciliation", "request"]),
     failure: Schema.Unknown,
@@ -112,9 +97,9 @@ export class BindingChangeIncomplete
     "Inspect the saved bindings and installed copies, resolve the reported condition, then preview and retry the change. No binding rollback was attempted.";
 }
 
-class BindingDestinationsIncomplete
-  extends Schema.TaggedError<BindingDestinationsIncomplete>()(
-    "Library.BindingDestinationsIncomplete",
+class SetEnabledDestinationsIncomplete
+  extends Schema.TaggedError<SetEnabledDestinationsIncomplete>()(
+    "Library.SetEnabledDestinationsIncomplete",
     {
       paths: Schema.Array(Schema.String),
     },
@@ -133,13 +118,13 @@ class BindingDestinationsIncomplete
 const stale = () =>
   new SetEnabledStale({ message: "Library changed after this Binding change was previewed" });
 
-const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
+const planChange = Effect.fn("SetEnabled.planChange")(function* (
   state: LibraryState,
-  options: BindingChangeRequest,
-  configuration: BindingChangeConfiguration,
+  options: SetEnabledRequest,
+  configuration: SetEnabledConfiguration,
   targets: readonly InstallDestination[],
 ) {
-  const { plan, skillIds, newlyEnabledSkills } = yield* calculateBindingChange(state, options);
+  const { plan, skillIds, newlyEnabledSkills } = yield* calculateSetEnabled(state, options);
   const { scope, bindings, changed } = plan;
   const warnings: DuplicateScanError[] = [];
   const namesToCheck = skillsToCheckForDuplicates(
@@ -157,7 +142,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
   if (options.enabled) {
     const fs = yield* FileSystem.FileSystem;
     for (const target of targets) {
-      const root = bindingRoot(target, scope, configuration);
+      const root = skillsDirectoryFor(target, scope, configuration);
       for (const skillId of skillIds) {
         const skill = state.skills.find((candidate) => candidate.skill_id === skillId);
         if (skill === undefined) continue;
@@ -175,7 +160,7 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
     const fs = yield* FileSystem.FileSystem;
     const bound = bindings.map((binding) => new Set(bindingSkillIds(state, binding)));
     for (const target of targets) {
-      const root = bindingRoot(target, scope, configuration);
+      const root = skillsDirectoryFor(target, scope, configuration);
       const projections = state.projections.filter(
         (projection) => projection.root === root && projection.target === target,
       );
@@ -204,11 +189,11 @@ const previewChange = Effect.fn("LibraryBindings.previewChange")(function* (
 });
 
 /** The raw request path is retained for internal managing workflows. */
-const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
+const planRequests = Effect.fn("SetEnabled.planRequests")(function* (
   current: LibraryState,
   home: string,
-  requests: readonly BindingChangeRequest[],
-  configuration: BindingChangeConfiguration,
+  requests: readonly SetEnabledRequest[],
+  configuration: SetEnabledConfiguration,
 ) {
   const routing = {
     home: configuration.home,
@@ -220,12 +205,12 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
   let projected = current;
   const changes = [];
   for (const request of captured) {
-    const change = yield* previewChange(projected, request, routing, targets);
+    const change = yield* planChange(projected, request, routing, targets);
     changes.push(change);
     // Later previews see earlier intent at the same Scope, just as apply does.
     for (const binding of change.bindings) projected = replaceScopeBinding(projected, binding);
   }
-  const plan: BindingChangePlan = { [planType]: true, changes: structuredClone(changes) };
+  const plan: SetEnabledPlan = { [planType]: true, changes: structuredClone(changes) };
   preparedPlans.set(plan, {
     home,
     revision: libraryStateRevision(current),
@@ -238,49 +223,49 @@ const previewRequests = Effect.fn("LibraryBindings.previewRequests")(function* (
 });
 
 /** Internal constructor for application operations sharing one captured Library. */
-export function bindingChangeSelection(current: LibraryState, home: string, originalsPath: string) {
+export function setEnabledSession(current: LibraryState, home: string, originalsPath: string) {
   return {
     view: libraryView(current, originalsPath),
-    previewMany: Effect.fn("LibraryBindings.previewSelections")(function* (
-      intents: readonly BindingChangeIntent[],
-      configuration: BindingChangeConfiguration,
+    planMany: Effect.fn("SetEnabled.planIntents")(function* (
+      intents: readonly SetEnabledIntent[],
+      configuration: SetEnabledConfiguration,
     ) {
       const requests = yield* Effect.forEach(intents, (intent) =>
-        expandBindingIntent(current, intent),
+        expandSetEnabledIntent(current, intent),
       );
-      return yield* previewRequests(current, home, requests.flat(), configuration);
+      return yield* planRequests(current, home, requests.flat(), configuration);
     }),
-    preview: Effect.fn("LibraryBindings.previewSelection")(function* (
-      intent: BindingChangeIntent,
-      configuration: BindingChangeConfiguration,
+    plan: Effect.fn("SetEnabled.planIntent")(function* (
+      intent: SetEnabledIntent,
+      configuration: SetEnabledConfiguration,
     ) {
-      const requests = yield* expandBindingIntent(current, intent);
-      return yield* previewRequests(current, home, requests, configuration);
+      const requests = yield* expandSetEnabledIntent(current, intent);
+      return yield* planRequests(current, home, requests, configuration);
     }),
   };
 }
 
 /** Read facts and accept intents against the Library displayed before asking questions. */
-export const openBindingChangeSelection = Effect.fn("LibraryBindings.openSelection")(function* () {
+export const openSetEnabledSession = Effect.fn("SetEnabled.openSession")(function* () {
   const store = yield* LibraryStore;
-  return bindingChangeSelection(yield* store.load, store.home, store.originalsPath);
+  return setEnabledSession(yield* store.load, store.home, store.originalsPath);
 });
-export type BindingChangeSelection = Effect.Success<ReturnType<typeof openBindingChangeSelection>>;
+export type SetEnabledSession = Effect.Success<ReturnType<typeof openSetEnabledSession>>;
 
 /** Internal managing/testing entry point; front ends use a held selection and user intent. */
-export const previewBindingChanges = Effect.fn("LibraryBindings.preview")(function* (
-  requests: readonly BindingChangeRequest[],
-  configuration: BindingChangeConfiguration,
+export const planSetEnabled = Effect.fn("SetEnabled.plan")(function* (
+  requests: readonly SetEnabledRequest[],
+  configuration: SetEnabledConfiguration,
 ) {
   const store = yield* LibraryStore;
-  return yield* previewRequests(yield* store.load, store.home, requests, configuration);
+  return yield* planRequests(yield* store.load, store.home, requests, configuration);
 });
 
 /** Authoritatively reload, commit Binding intent, then update installed skills to match it. */
-const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
+const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   state: LibraryState,
-  options: BindingChangeRequest,
-  configuration: BindingChangeConfiguration,
+  options: SetEnabledRequest,
+  configuration: SetEnabledConfiguration,
   repair: boolean,
   activeTargets: readonly InstallDestination[],
 ) {
@@ -296,7 +281,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   const store = yield* LibraryStore;
   const current = yield* store.load;
   if (libraryStateRevision(current) !== expectedRevision) return yield* stale();
-  const calculated = yield* calculateBindingChange(current, options);
+  const calculated = yield* calculateSetEnabled(current, options);
   const { plan, skillIds, newlyEnabledSkills } = calculated;
   const warnings: DuplicateScanError[] = [];
   const namesToCheck = skillsToCheckForDuplicates(
@@ -338,7 +323,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     const destinations: string[] = [];
     for (const target of activeTargets)
       for (const skill of plan.skills)
-        destinations.push(join(bindingRoot(target, plan.scope, configuration), skill));
+        destinations.push(join(skillsDirectoryFor(target, plan.scope, configuration), skill));
     const links = duplicates.flatMap((duplicate) =>
       duplicate.aliases
         .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
@@ -348,13 +333,18 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
   }
   // A root SKIT cannot write, such as `.agents` inside Codex's sandbox, fails before the Binding is
   // saved, so enabling never records intent its copies cannot follow.
-  const roots = activeTargets.map((target) => bindingRoot(target, plan.scope, configuration));
+  const roots = activeTargets.map((target) =>
+    skillsDirectoryFor(target, plan.scope, configuration),
+  );
   const destinations: { target: InstallDestination; path: string }[] = [];
   for (const target of activeTargets)
     for (const name of plan.skills)
       destinations.push({
         target,
-        path: join(bindingRoot(target, plan.scope, configuration), yield* installedSkillName(name)),
+        path: join(
+          skillsDirectoryFor(target, plan.scope, configuration),
+          yield* installedSkillName(name),
+        ),
       });
   if (options.enabled) for (const root of roots) yield* ensureSkillsDirectoryWritable(root);
   if (plan.changed) {
@@ -373,7 +363,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
         roots: configuration,
         rootFor: (target) =>
           activeTargets.includes(target)
-            ? bindingRoot(target, plan.scope, configuration)
+            ? skillsDirectoryFor(target, plan.scope, configuration)
             : undefined,
         variantsPath: store.variantsPath,
         onlyBindings: plan.bindings,
@@ -402,7 +392,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     target !== "legacy" &&
     skillIds.includes(skill_id) &&
     activeTargets.includes(target) &&
-    root === bindingRoot(target, plan.scope, configuration)
+    root === skillsDirectoryFor(target, plan.scope, configuration)
       ? [{ target, path, status }]
       : [],
   );
@@ -434,7 +424,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     ? reconciled.failure
     : complete
       ? undefined
-      : new BindingDestinationsIncomplete({ paths: unresolvedPaths });
+      : new SetEnabledDestinationsIncomplete({ paths: unresolvedPaths });
   const classified = failure === undefined ? undefined : classifyFailure(failure);
   const value: SetEnabledResult = {
     ...plan,
@@ -461,7 +451,7 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
     },
   };
   if (!complete)
-    return yield* new BindingChangeIncomplete({
+    return yield* new SetEnabledIncomplete({
       results: [value],
       reason: Result.isFailure(reconciled) ? "reconciliation" : "destinations",
       failure,
@@ -470,8 +460,8 @@ const applyChange = Effect.fn("LibraryBindings.applyChange")(function* (
 });
 
 /** Revalidate and apply the prepared requests in order under one recording writer. */
-export const applyBindingChanges = Effect.fn("LibraryBindings.apply")(function* (
-  plan: BindingChangePlan,
+export const applySetEnabledPlan = Effect.fn("SetEnabled.applyPlan")(function* (
+  plan: SetEnabledPlan,
 ) {
   const prepared = preparedPlans.get(plan);
   const store = yield* LibraryStore;
@@ -494,14 +484,14 @@ export const applyBindingChanges = Effect.fn("LibraryBindings.apply")(function* 
             ),
           );
           if (Result.isFailure(applied)) {
-            if (applied.failure instanceof BindingChangeIncomplete)
-              return yield* new BindingChangeIncomplete({
+            if (applied.failure instanceof SetEnabledIncomplete)
+              return yield* new SetEnabledIncomplete({
                 results: [...outcomes.map((outcome) => outcome.value), ...applied.failure.results],
                 reason: applied.failure.reason,
                 failure: applied.failure.failure,
               });
             if (outcomes.length)
-              return yield* new BindingChangeIncomplete({
+              return yield* new SetEnabledIncomplete({
                 results: outcomes.map((outcome) => outcome.value),
                 reason: "request",
                 failure: applied.failure,

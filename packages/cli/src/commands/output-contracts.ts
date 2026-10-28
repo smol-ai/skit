@@ -32,7 +32,7 @@ import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.js";
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
-import { SetEnabledPlan, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
+import { SetEnabledChange, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
 import { RepositoryPolicyResult } from "../workflows/library/setup-contract.js";
 import { EditImportPlan, EditImportResult } from "../workflows/library/import-edit-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
@@ -127,9 +127,9 @@ export const outputContracts = {
   remove: effectOutput("skit.remove.v4", RemoveResult),
   removePlan: effectOutput("skit.remove.plan.v4", RemovePlan),
   enable: effectOutput("skit.enable.v9", SetEnabledResult),
-  enablePlan: effectOutput("skit.enable.plan.v8", SetEnabledPlan),
+  enablePlan: effectOutput("skit.enable.plan.v8", SetEnabledChange),
   disable: effectOutput("skit.disable.v9", SetEnabledResult),
-  disablePlan: effectOutput("skit.disable.plan.v8", SetEnabledPlan),
+  disablePlan: effectOutput("skit.disable.plan.v8", SetEnabledChange),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
   librarySync: effectOutput("skit.library.sync.v10", SyncResult),

@@ -11,7 +11,7 @@ import {
   type Digest,
   type SkillId,
 } from "@smolai/skit-core";
-import { activeInstallDestinations, bindingRoot } from "../../projection/roots.js";
+import { activeInstallDestinations, skillsDirectoryFor } from "../../projection/roots.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
@@ -135,7 +135,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           )
         )
           yield* ensureSkillsDirectoryWritable(
-            bindingRoot(target, { kind: "global" }, approval.setup.inventory),
+            skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
           );
     let current = scan.observed;
     const store = yield* LibraryStore;

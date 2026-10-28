@@ -36,11 +36,11 @@ import {
   destinationLabel,
   invocationChoices,
   invocationBriefing,
-  invocationEligibleBindings,
+  invocationEligibleScopes,
   invocationRowSummary,
   scopeChoices,
   type LibraryActionOutcome,
-  type LibraryBindingRow,
+  type ScopeRow,
   type LibrarySkillRow,
   type Scope,
   type InvocationOption,
@@ -822,7 +822,7 @@ function probeSelectedHarness(all: boolean): void {
   })();
 }
 
-const ALL_BINDINGS = "all";
+const ALL_SCOPES = "all";
 
 interface ChooserOption {
   value: string;
@@ -986,11 +986,11 @@ function chooseScopeThen(next: (scope: Scope) => void | Promise<void>): void {
   });
 }
 
-function bindingChooserOptions(bindings: readonly LibraryBindingRow[]): ChooserOption[] {
-  return bindings.map((binding, index) => ({
+function scopeChooserOptions(scopes: readonly ScopeRow[]): ChooserOption[] {
+  return scopes.map((scopeRow, index) => ({
     value: String(index),
-    label: destinationLabel(binding.scope),
-    ...(binding.policy ? { hint: invocationRowSummary(binding.policy) } : {}),
+    label: destinationLabel(scopeRow.scope),
+    ...(scopeRow.policy ? { hint: invocationRowSummary(scopeRow.policy) } : {}),
   }));
 }
 
@@ -1074,13 +1074,13 @@ function disableCollection(collectionId: string): void {
     openChooser({
       title: DESTINATION_QUESTION,
       options: [
-        { value: ALL_BINDINGS, label: "All shown" },
+        { value: ALL_SCOPES, label: "All shown" },
         ...scopes.map((scope, index) => ({
           value: String(index),
           label: destinationLabel(scope),
         })),
       ],
-      choose: (value) => disable(value === ALL_BINDINGS ? scopes : [scopes[Number(value)]!]),
+      choose: (value) => disable(value === ALL_SCOPES ? scopes : [scopes[Number(value)]!]),
     });
 }
 
@@ -1106,29 +1106,26 @@ function startDisable(): void {
               hint: "Disable every skill in this collection",
             },
           ]),
-      ...(row.bindings.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
+      ...(row.scopes.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
     ],
     choose: (value) => {
       if (value === "collection") {
         disableCollection(row.collectionId);
         return;
       }
-      const disable = async (bindings: readonly LibraryBindingRow[]) =>
+      const disable = async (scopes: readonly ScopeRow[]) =>
         afterProposal(
           await transitionLibrary((state) =>
-            proposeLibraryDisable(state, libraryConfiguration, row, bindings),
+            proposeLibraryDisable(state, libraryConfiguration, row, scopes),
           ),
         );
-      if (row.bindings.length === 1) void disable(row.bindings);
+      if (row.scopes.length === 1) void disable(row.scopes);
       else
         openChooser({
           title: DESTINATION_QUESTION,
-          options: [
-            { value: ALL_BINDINGS, label: "All shown" },
-            ...bindingChooserOptions(row.bindings),
-          ],
+          options: [{ value: ALL_SCOPES, label: "All shown" }, ...scopeChooserOptions(row.scopes)],
           choose: (chosen) =>
-            disable(chosen === ALL_BINDINGS ? row.bindings : [row.bindings[Number(chosen)]!]),
+            disable(chosen === ALL_SCOPES ? row.scopes : [row.scopes[Number(chosen)]!]),
         });
     },
   });
@@ -1138,14 +1135,14 @@ function startInvocation(): void {
   const row = selectedLibraryRow();
   const session = libraryHost.state;
   if (!row || !session) return;
-  const eligible = invocationEligibleBindings(row);
+  const eligible = invocationEligibleScopes(row);
   if (!eligible.length) return;
-  const choosePolicy = (binding: LibraryBindingRow) => {
-    if (!binding.policy) return;
+  const choosePolicy = (scopeRow: ScopeRow) => {
+    if (!scopeRow.policy) return;
     openChooser({
-      title: binding.policy.question,
-      briefing: invocationBriefing(binding.policy),
-      options: invocationChoices(binding).map((choice) => ({
+      title: scopeRow.policy.question,
+      briefing: invocationBriefing(scopeRow.policy),
+      options: invocationChoices(scopeRow).map((choice) => ({
         value: choice.value,
         label: choice.label,
         ...(choice.hint ? { hint: choice.hint } : {}),
@@ -1157,7 +1154,7 @@ function startInvocation(): void {
               state,
               libraryConfiguration,
               row,
-              binding,
+              scopeRow,
               value as InvocationOption,
             ),
           ),
@@ -1168,7 +1165,7 @@ function startInvocation(): void {
   else
     openChooser({
       title: DESTINATION_QUESTION,
-      options: bindingChooserOptions(eligible),
+      options: scopeChooserOptions(eligible),
       choose: (value) => choosePolicy(eligible[Number(value)]!),
     });
 }

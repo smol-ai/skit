@@ -1,6 +1,6 @@
 import {
   activeInstallDestinations,
-  bindingRoot,
+  skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
 import {
@@ -9,10 +9,10 @@ import {
   type DuplicateCopy,
 } from "../../projection/duplicates.js";
 import {
-  applyBindingChanges,
-  previewBindingChanges,
-  type BindingChangeRequest,
-} from "../../library-application/binding-changes.js";
+  applySetEnabledPlan,
+  planSetEnabled,
+  type SetEnabledRequest,
+} from "../../library-application/set-enabled.js";
 import { PlanIsStale } from "../../library/failures.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
@@ -41,7 +41,7 @@ import {
   type HarnessName as HarnessNameType,
   FailureTypeId,
   type SkitFailure,
-  SkitBindingScope,
+  InstallScope,
   walkTree,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
@@ -53,7 +53,7 @@ import type { InstalledSkillOptions } from "./installed-skill-options.js";
 const ManageTarget = Schema.Struct({
   path: Schema.String,
   harness: HarnessName,
-  scope: SkitBindingScope,
+  scope: InstallScope,
 });
 interface ManageTarget extends Schema.Schema.Type<typeof ManageTarget> {}
 
@@ -445,7 +445,7 @@ const planDuplicateBackup = Effect.fn("Manage.planDuplicateBackup")(function* (
   // A link at SKIT's own destination is replaced by the installed skill itself, which keeps it in that
   // root's backups; moving it afterwards would find the new copy there instead.
   const destinations = (yield* activeInstallDestinations(roots)).map((target) =>
-    join(bindingRoot(target, { kind: "global" }, roots), selection.name),
+    join(skillsDirectoryFor(target, { kind: "global" }, roots), selection.name),
   );
   const store = yield* LibraryStore;
   return yield* planSymlinkBackup(
@@ -464,10 +464,10 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
   roots: InventoryRootOptions,
   selection: SetupCopySelection,
   subjectId: string,
-  manage: NonNullable<BindingChangeRequest["manage"]>,
+  manage: NonNullable<SetEnabledRequest["manage"]>,
   backup?: NonNullable<Effect.Success<ReturnType<typeof planDuplicateBackup>>>,
 ) {
-  const plan = yield* previewBindingChanges(
+  const plan = yield* planSetEnabled(
     [
       {
         query: subjectId,
@@ -492,9 +492,9 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
     ],
     roots,
   );
-  const applied = yield* applyBindingChanges(plan).pipe(
+  const applied = yield* applySetEnabledPlan(plan).pipe(
     Effect.map((results) => ({ results, warnings: [] as { name: string; message: string }[] })),
-    Effect.catchTag("Library.BindingChangeIncomplete", (failure) =>
+    Effect.catchTag("Library.SetEnabledIncomplete", (failure) =>
       // Setup can retain the chosen source while other differing copies stay active.
       // Report the owner's incomplete destinations; actual reconciliation failures stop setup.
       failure.reason === "destinations"
@@ -614,7 +614,7 @@ const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
   );
   let required = 0;
   for (const target of yield* activeInstallDestinations(roots)) {
-    const root = bindingRoot(target, { kind: "global" }, roots);
+    const root = skillsDirectoryFor(target, { kind: "global" }, roots);
     if (!readableRoots.includes(yield* canonical(root))) continue;
     required++;
     const path = join(root, name);

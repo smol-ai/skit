@@ -1,6 +1,6 @@
 import { type ListingBudget } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { applyBindingChanges } from "../../library-application/binding-changes.js";
+import { applySetEnabledPlan } from "../../library-application/set-enabled.js";
 import {
   openDoctorCleanupSelection,
   overBudget,
@@ -97,7 +97,7 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
     return false;
   const outcomes = yield* renderer.withStatus(
     "Disabling selected skills",
-    applyBindingChanges(plan),
+    applySetEnabledPlan(plan),
   );
   for (const outcome of outcomes) yield* renderer.result(result("disable", outcome.value));
   return true;

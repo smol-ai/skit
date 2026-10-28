@@ -290,18 +290,18 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
 }
 
 function libraryRow(row: LibrarySkillRow): LibraryRow {
-  const enabled = row.bindings.length > 0;
+  const enabled = row.scopes.length > 0;
   return {
     name: row.name,
     kind: "library-skill",
     location: row.heading,
     status: row.invocationWarning ? "warning" : "clear",
     summary: enabled
-      ? `Active in ${row.bindings.length} place${row.bindings.length === 1 ? "" : "s"}.`
+      ? `Active in ${row.scopes.length} place${row.scopes.length === 1 ? "" : "s"}.`
       : "Not active anywhere.",
     evidence: [
       ...(enabled
-        ? row.bindings.map((binding) => binding.label)
+        ? row.scopes.map((scopeRow) => scopeRow.label)
         : ["not active anywhere · press e to enable"]),
       ...(row.invocationWarning ? [row.invocationWarning] : []),
     ],
@@ -331,7 +331,7 @@ export function libraryRows(
       left[0]!.heading.localeCompare(right[0]!.heading, undefined, { sensitivity: "base" }),
     )
     .map(([collectionId, members]): LibraryCollectionRow => {
-      const enabled = members.filter((row) => row.bindings.length > 0).length;
+      const enabled = members.filter((row) => row.scopes.length > 0).length;
       return {
         kind: "library-collection",
         collectionId,
@@ -341,7 +341,7 @@ export function libraryRows(
         status: "clear",
         summary: `${members.length} Skill${members.length === 1 ? "" : "s"} · ${enabled} enabled`,
         evidence: members.map(
-          (row) => `${row.name} · ${row.bindings.length ? "enabled" : "not enabled"}`,
+          (row) => `${row.name} · ${row.scopes.length ? "enabled" : "not enabled"}`,
         ),
         agents: [],
       };

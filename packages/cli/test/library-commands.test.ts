@@ -1,5 +1,5 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { SetEnabledStale } from "../src/library-application/binding-changes.js";
+import { SetEnabledStale } from "../src/library-application/set-enabled.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";

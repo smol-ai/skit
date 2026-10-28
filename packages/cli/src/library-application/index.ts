@@ -15,7 +15,7 @@ export {
   confirmLibraryChange,
   cancelLibraryChange,
   type LibraryActionOutcome,
-  type LibraryBindingRow,
+  type ScopeRow,
   type LibrarySessionState,
   type LibrarySkillRow,
   type PendingLibraryChange,
@@ -34,7 +34,7 @@ export {
   destinationLabel,
   invocationChoices,
   invocationBriefing,
-  invocationEligibleBindings,
+  invocationEligibleScopes,
   invocationRowSummary,
   scopeChoices,
   scopeKey,
@@ -50,10 +50,10 @@ export {
 } from "../configuration/skit-configuration.js";
 
 export {
-  applyBindingChanges,
-  BindingChangeIncomplete,
-  openBindingChangeSelection,
-  type BindingChangeIntent,
-  type BindingPlacement,
-  type BindingChangePlan,
-} from "./binding-changes.js";
+  applySetEnabledPlan,
+  SetEnabledIncomplete,
+  openSetEnabledSession,
+  type SetEnabledIntent,
+  type EnabledCollection,
+  type SetEnabledPlan,
+} from "./set-enabled.js";

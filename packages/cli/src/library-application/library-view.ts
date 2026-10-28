@@ -5,17 +5,17 @@ import {
   currentSkillVersion,
   LibraryStore,
   type LibraryState,
-  type SkitBindingScope,
+  type InstallScope,
   type DeviceBinding,
   type RepositoryBinding,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
-  bindingPlacements,
-  sameBindingScope,
-  uniqueBindingScopes,
-  type BindingPlacement,
-} from "../workflows/library/binding-selection.js";
+  enabledCollections,
+  sameInstallScope,
+  uniqueInstallScopes,
+  type EnabledCollection,
+} from "../workflows/library/set-enabled-request.js";
 import { librarySubjects } from "../workflows/library/subject-resolution.js";
 import { readDescriptionLoad } from "../workflows/library/collection-load.js";
 import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
@@ -24,7 +24,7 @@ import { makeLibrarySkillInvocationReader } from "../invocation/library-source.j
 /** Internal constructor: derive a read model from the same snapshot used by a prepared action. */
 export const libraryView = (current: LibraryState, originalsPath: string) => {
   const state = structuredClone(current);
-  const placements = structuredClone(bindingPlacements(state));
+  const placements = structuredClone(enabledCollections(state));
   const skills = state.skills.map((skill) => {
     const collection = state.collections.find((item) => item.collection_id === skill.collection_id);
     const source =
@@ -51,9 +51,9 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     label: collection.label,
     members: skills.filter((skill) => skill.collectionId === collection.collection_id),
   }));
-  const atScope = (scope: BindingPlacement["scope"] | undefined) =>
+  const atScope = (scope: EnabledCollection["scope"] | undefined) =>
     placements.filter(
-      (placement) => scope === undefined || sameBindingScope(placement.scope, scope),
+      (placement) => scope === undefined || sameInstallScope(placement.scope, scope),
     );
   const readFacts = Effect.fn("LibraryView.readFacts")(function* () {
     const metadata = yield* readLibrarySkillMetadata(state, originalsPath);
@@ -65,7 +65,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         structuredClone({
           ...skill,
           ...provenance,
-          bindings: placements
+          scopes: placements
             .filter((placement) => placement.skillIds.includes(skill.id))
             .map((placement) => ({
               scope: placement.scope,
@@ -78,14 +78,15 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
   return {
     collections: structuredClone(collections),
     placements: structuredClone(placements),
-    placementsAt: (scope: BindingPlacement["scope"] | undefined) => structuredClone(atScope(scope)),
+    placementsAt: (scope: EnabledCollection["scope"] | undefined) =>
+      structuredClone(atScope(scope)),
     scopesFor: (collectionId: string) =>
       structuredClone(
-        uniqueBindingScopes(
+        uniqueInstallScopes(
           placements.filter((item) => item.collectionId === collectionId).map((item) => item.scope),
         ),
       ),
-    membersFor: (collectionId: string, scopes?: readonly BindingPlacement["scope"][]) =>
+    membersFor: (collectionId: string, scopes?: readonly EnabledCollection["scope"][]) =>
       structuredClone(
         skills.filter(
           (skill) =>
@@ -94,7 +95,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
               placements.some(
                 (placement) =>
                   placement.skillIds.includes(skill.id) &&
-                  scopes.some((scope) => sameBindingScope(scope, placement.scope)),
+                  scopes.some((scope) => sameInstallScope(scope, placement.scope)),
               )),
         ),
       ),
@@ -157,7 +158,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       );
     },
     listingSizeAfter: (change: {
-      readonly scope: SkitBindingScope;
+      readonly scope: InstallScope;
       readonly bindings: readonly (DeviceBinding | RepositoryBinding)[];
     }) =>
       new Set(

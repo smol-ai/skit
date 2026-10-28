@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { canonicalJson } from "../shared/json.js";
-import type { SkitBindingScope } from "../vocabulary.js";
+import type { InstallScope } from "../vocabulary.js";
 import type { Binding, BindingEntry, LibraryManifest } from "./library-contracts.js";
 import type { CollectionId, SkillId } from "./entity-ids.js";
 import type {
@@ -72,7 +72,7 @@ export const sameDeviceSkillSelection = (left: LibraryState, right: LibraryState
 /** Explicit device enablement verifies every requested Skill, including unchanged intent. */
 export function skillsToCheckForDuplicates(
   state: LibraryState,
-  scope: SkitBindingScope,
+  scope: InstallScope,
   requested: readonly string[],
   newlyEnabled: readonly string[],
 ): readonly string[] {
@@ -183,7 +183,7 @@ export const effectiveGlobalBindings = (state: LibraryState): readonly DeviceBin
 /** The enabled selection at a Scope, whether inherited from the account or chosen locally. */
 export const scopeBinding = (
   state: LibraryState,
-  scope: SkitBindingScope,
+  scope: InstallScope,
 ): DeviceBinding | RepositoryBinding | undefined =>
   scope.kind === "global"
     ? effectiveGlobalBindings(state)[0]

@@ -8,7 +8,8 @@ import {
   RepositoryBinding,
   type LibraryState,
   type SkillId,
-  type SkitBindingScope,
+  type InstallScope,
+  type ManageApproval,
 } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
 import { resolve } from "node:path";
@@ -16,19 +17,32 @@ import type { InvocationOption } from "../../invocation/policy.js";
 import { OptionCombinationInvalid } from "../failures.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
 
-export interface BindingSelection {
+/** One enable or disable at one scope. */
+export interface SetEnabledRequest {
   readonly query: string;
   readonly all?: boolean;
   readonly selectedSkills?: readonly string[];
-  readonly scope: SkitBindingScope;
+  readonly scope: InstallScope;
   readonly enabled: boolean;
   readonly invocation?: InvocationOption;
+  /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
+  readonly preserveUnselectedProjections?: boolean;
+  readonly allowDuplicate?: boolean;
+  /** Setup consent applies only to these exact symlinks, until installing succeeds. */
+  readonly allowedDuplicateSymlinks?: readonly {
+    readonly path: string;
+    readonly canonicalPath: string;
+    readonly dev: number;
+    readonly ino: number;
+    readonly linkTarget?: string;
+  }[];
+  readonly manage?: ManageApproval;
 }
 
 /** Binding policy only: no filesystem, storage, target discovery, or presentation. */
-export const calculateBindingChange = Effect.fn("LibraryBindings.calculate")(function* (
+export const calculateSetEnabled = Effect.fn("SetEnabled.calculate")(function* (
   state: LibraryState,
-  options: BindingSelection,
+  options: SetEnabledRequest,
 ) {
   if (options.invocation !== undefined && !options.enabled)
     return yield* new OptionCombinationInvalid({
@@ -173,34 +187,34 @@ export const calculateBindingChange = Effect.fn("LibraryBindings.calculate")(fun
 });
 
 /** User intent, independent of the per-Scope requests needed to implement it. */
-export interface BindingChangeIntent {
+export interface SetEnabledIntent {
   readonly subject: string;
   readonly enabled: boolean;
   readonly members?: "whole" | readonly string[];
-  readonly where: readonly SkitBindingScope[] | "where-enabled";
+  readonly where: readonly InstallScope[] | "where-enabled";
   readonly invocation?: InvocationOption;
   readonly allowDuplicate?: boolean;
 }
 
-export interface BindingPlacement {
+export interface EnabledCollection {
   readonly collectionId: string;
-  readonly scope: SkitBindingScope;
+  readonly scope: InstallScope;
   readonly skillIds: readonly string[];
   readonly invocationBySkill: Readonly<Record<string, InvocationOption>>;
 }
 
-const scopeIdentity = (scope: SkitBindingScope) =>
+const scopeIdentity = (scope: InstallScope) =>
   scope.kind === "global" ? "global" : `repository:${resolve(scope.root)}`;
 
-export const sameBindingScope = (left: SkitBindingScope, right: SkitBindingScope) =>
+export const sameInstallScope = (left: InstallScope, right: InstallScope) =>
   scopeIdentity(left) === scopeIdentity(right);
 
-export const uniqueBindingScopes = (scopes: readonly SkitBindingScope[]) => [
+export const uniqueInstallScopes = (scopes: readonly InstallScope[]) => [
   ...new Map(scopes.map((scope) => [scopeIdentity(scope), scope])).values(),
 ];
 
 /** One Collection's enabled members and invocation intent at a Scope, including empty follows. */
-export const bindingPlacements = (state: LibraryState): BindingPlacement[] =>
+export const enabledCollections = (state: LibraryState): EnabledCollection[] =>
   [...effectiveGlobalBindings(state), ...state.local_bindings].flatMap((binding) => {
     const ids = bindingSkillIds(state, binding);
     const collections = new Set([
@@ -227,9 +241,9 @@ export const bindingPlacements = (state: LibraryState): BindingPlacement[] =>
   });
 
 /** Expand once, filtering a multi-Scope disable to the members actually enabled at each Scope. */
-export const expandBindingIntent = Effect.fn("LibraryBindings.expandIntent")(function* (
+export const expandSetEnabledIntent = Effect.fn("SetEnabled.expandIntent")(function* (
   state: LibraryState,
-  intent: BindingChangeIntent,
+  intent: SetEnabledIntent,
 ) {
   const subject = yield* resolveLibrarySubject(state, intent.subject);
   const selectedNames =
@@ -240,9 +254,9 @@ export const expandBindingIntent = Effect.fn("LibraryBindings.expandIntent")(fun
     });
   const collectionId =
     subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
-  const scopes = uniqueBindingScopes(
+  const scopes = uniqueInstallScopes(
     intent.where === "where-enabled"
-      ? bindingPlacements(state)
+      ? enabledCollections(state)
           .filter(
             (placement) =>
               placement.collectionId === collectionId &&

@@ -19,7 +19,7 @@ import {
   writeJsonExclusive,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
-import { activeInstallDestinations, bindingRoot } from "../projection/roots.js";
+import { activeInstallDestinations, skillsDirectoryFor } from "../projection/roots.js";
 import type { SetupApproval } from "../workflows/library/setup-apply.js";
 import { ensureRecoveryOperation, recoveryOperationPath } from "./recovery-moves.js";
 import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
@@ -178,7 +178,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   for (const target of targets)
     for (const name of projectedNames)
       projectionPaths.add(
-        join(bindingRoot(target, { kind: "global" }, approval.setup.inventory), name),
+        join(skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory), name),
       );
   const paths = new Set(approval.removals.entries.map((entry) => resolve(entry.path)));
   if (projecting) {
@@ -195,7 +195,9 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     for (const projection of initial.projections) paths.add(resolve(projection.path));
     for (const target of possibleTargets)
       for (const name of names)
-        paths.add(join(bindingRoot(target, { kind: "global" }, approval.setup.inventory), name));
+        paths.add(
+          join(skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory), name),
+        );
     for (const copy of [...approval.bindings, ...approval.ownership]) {
       if (copy.duplicateAction === "retain-only") continue;
       paths.add(resolve(copy.sourcePath));
@@ -219,7 +221,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     machineId: settings.machineId ?? null,
     targets: targets.map((target) => ({
       target,
-      root: bindingRoot(target, { kind: "global" }, approval.setup.inventory),
+      root: skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
     })),
     projectionPaths: [...projectionPaths].sort(),
     files,

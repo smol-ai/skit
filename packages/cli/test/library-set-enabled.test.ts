@@ -12,8 +12,8 @@ import {
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryBindings, previewTestBindings } from "./helpers/binding-changes.js";
-import { calculateBindingChange } from "../src/workflows/library/binding-selection.js";
-import { applyBindingChanges } from "../src/library-application/binding-changes.js";
+import { calculateSetEnabled } from "../src/workflows/library/set-enabled-request.js";
+import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
 import { planRemove } from "../src/workflows/library/remove.js";
 import { planUpdates } from "../src/library-application/update.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
@@ -134,7 +134,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* calculateBindingChange(ambiguous, {
+      (yield* calculateSetEnabled(ambiguous, {
         ...base,
         query: "review",
         scope: invocation.scope,
@@ -161,7 +161,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
         store.save({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
       ).pipe(Effect.provide(layer)),
     );
-    const stale = yield* applyBindingChanges(previewed).pipe(Effect.provide(layer), Effect.flip);
+    const stale = yield* applySetEnabledPlan(previewed).pipe(Effect.provide(layer), Effect.flip);
     assert.strictEqual(stale._tag, "Library.SetEnabledStale");
     yield* writingTo(
       home,

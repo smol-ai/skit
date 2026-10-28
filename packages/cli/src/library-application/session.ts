@@ -6,7 +6,7 @@ import {
   LibraryStore,
   ImportContentInvalid,
   type SourceIdentity,
-  type SkitBindingScope as Scope,
+  type InstallScope as Scope,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
@@ -17,19 +17,19 @@ import {
 import type { InvocationOption } from "../invocation/policy.js";
 import { invocationReadModel, type InvocationReadModel } from "../invocation/read-model.js";
 import type { AuthorInvocationRead } from "../invocation/library-source.js";
-import { bindingRowLabel, destinationLabel } from "./read-model.js";
+import { scopeRowLabel, destinationLabel } from "./read-model.js";
 import { classifyFailure, type ClassifiedFailure } from "../failure-classification.js";
 import type { InstalledSkillOptions } from "../workflows/library/installed-skill-options.js";
 import {
-  applyBindingChanges,
-  openBindingChangeSelection,
+  applySetEnabledPlan,
+  openSetEnabledSession,
   SetEnabledStale,
-  type BindingChangeIntent,
-  type BindingChangeSelection,
-  type BindingChangePlan,
-} from "./binding-changes.js";
+  type SetEnabledIntent,
+  type SetEnabledSession,
+  type SetEnabledPlan,
+} from "./set-enabled.js";
 
-export interface LibraryBindingRow {
+export interface ScopeRow {
   readonly scope: Scope;
   readonly invocation: InvocationOption;
   readonly policy?: InvocationReadModel;
@@ -46,7 +46,7 @@ export interface LibrarySkillRow extends SkillMetadata {
   readonly heading: string;
   readonly hasCollection?: boolean;
   readonly collectionSource?: { readonly kind: SourceIdentity["kind"]; readonly locator: string };
-  readonly bindings: readonly LibraryBindingRow[];
+  readonly scopes: readonly ScopeRow[];
 }
 
 export interface PreviewFacts {
@@ -65,7 +65,7 @@ export interface PreviewFacts {
 }
 
 export interface PendingLibraryChange {
-  readonly plan: BindingChangePlan;
+  readonly plan: SetEnabledPlan;
   readonly facts: readonly PreviewFacts[];
   readonly policies: readonly InvocationReadModel[];
 }
@@ -80,14 +80,14 @@ export type LibraryActionOutcome =
 const sessionSelection = Symbol("LibrarySessionSelection");
 
 export interface LibrarySessionState {
-  readonly [sessionSelection]?: BindingChangeSelection;
+  readonly [sessionSelection]?: SetEnabledSession;
   readonly skills: readonly LibrarySkillRow[];
   readonly pending?: PendingLibraryChange;
   readonly outcome?: LibraryActionOutcome;
 }
 
 export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () {
-  const selection = yield* openBindingChangeSelection();
+  const selection = yield* openSetEnabledSession();
   const rows = yield* selection.view.readSkills();
   const skills: LibrarySkillRow[] = rows.map((row) => ({
     source: row.source,
@@ -105,7 +105,7 @@ export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () 
     heading: row.collectionLabel ?? row.name,
     hasCollection: row.collectionLabel !== undefined,
     ...(row.collectionSource === undefined ? {} : { collectionSource: row.collectionSource }),
-    bindings: row.bindings.map(({ scope, invocation }) => {
+    scopes: row.scopes.map(({ scope, invocation }) => {
       if (Result.isFailure(row.authorInvocation))
         return {
           scope,
@@ -117,7 +117,7 @@ export const openLibrarySession = Effect.fn("LibrarySession.open")(function* () 
         author: row.authorInvocation.success,
         storedIntent: invocation,
       });
-      return { scope, invocation, policy, label: bindingRowLabel({ scope, policy }) };
+      return { scope, invocation, policy, label: scopeRowLabel({ scope, policy }) };
     }),
   }));
   return { skills, [sessionSelection]: selection } satisfies LibrarySessionState;
@@ -181,7 +181,7 @@ const unavailablePolicyChange = (
     },
   }) satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
 
-const factFromPlan = (plan: BindingChangePlan["changes"][number]): PreviewFacts => ({
+const factFromPlan = (plan: SetEnabledPlan["changes"][number]): PreviewFacts => ({
   action: plan.enabled ? "enable" : "disable",
   skills: plan.skills,
   scope: plan.scope,
@@ -197,7 +197,7 @@ const factFromPlan = (plan: BindingChangePlan["changes"][number]): PreviewFacts 
 const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   state: LibrarySessionState,
   configuration: InstalledSkillOptions,
-  intent: BindingChangeIntent,
+  intent: SetEnabledIntent,
   policies: readonly InvocationReadModel[] = [],
 ) {
   const selection = state[sessionSelection];
@@ -207,7 +207,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
         return yield* new SetEnabledStale({
           message: "Open the Library before proposing a Binding change",
         });
-      const plan = yield* selection.preview(intent, configuration);
+      const plan = yield* selection.plan(intent, configuration);
       for (const change of plan.changes)
         if (change.shadows?.length)
           return yield* new InstalledSkillWouldDuplicate({ duplicates: change.shadows });
@@ -281,11 +281,11 @@ export function proposeLibraryDisable(
   state: LibrarySessionState,
   configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
-  bindings: readonly LibraryBindingRow[],
+  scopes: readonly ScopeRow[],
 ) {
   return proposeLibraryChange(state, configuration, {
     subject: row.skillId,
-    where: bindings.map((binding) => binding.scope),
+    where: scopes.map((scopeRow) => scopeRow.scope),
     enabled: false,
   });
 }
@@ -314,7 +314,7 @@ export function proposeLibraryInvocation(
   state: LibrarySessionState,
   configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
-  binding: LibraryBindingRow,
+  scopeRow: ScopeRow,
   invocation: InvocationOption,
 ) {
   const policy = libraryPolicyAfter(row, invocation);
@@ -325,7 +325,7 @@ export function proposeLibraryInvocation(
     configuration,
     {
       subject: row.skillId,
-      where: [binding.scope],
+      where: [scopeRow.scope],
       enabled: true,
       invocation,
     },
@@ -352,7 +352,7 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
   const pending = state.pending;
   if (pending === undefined)
     return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
-  const applied = yield* Effect.result(applyBindingChanges(pending.plan));
+  const applied = yield* Effect.result(applySetEnabledPlan(pending.plan));
   const refreshed = yield* openLibrarySession();
   const outcome: LibraryActionOutcome = Result.isSuccess(applied)
     ? { kind: "applied", pending }

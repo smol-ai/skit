@@ -20,7 +20,7 @@ import {
 import { captureSetupFile } from "../../library-application/setup-operation.js";
 import {
   activeInstallDestinations,
-  bindingRoot,
+  skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../../projection/roots.js";
 import type {
@@ -142,7 +142,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
     if (
       !targets.includes(target) ||
       resolve(projection.path) !==
-        join(resolve(bindingRoot(target, { kind: "global" }, roots)), skill.name)
+        join(resolve(skillsDirectoryFor(target, { kind: "global" }, roots)), skill.name)
     ) {
       facts.push(protect("The recorded copy is outside the active global route"));
       continue;

@@ -19,11 +19,11 @@ export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "
 export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;
 export const InvocationPolicy = Schema.Literals(["explicit", "implicit", "host-policy"]);
 export type InvocationPolicy = typeof InvocationPolicy.Type;
-export const SkitBindingScope = Schema.Union([
+export const InstallScope = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("global") }),
   Schema.Struct({ kind: Schema.Literal("repository"), root: Schema.String }),
 ]);
-export type SkitBindingScope = typeof SkitBindingScope.Type;
+export type InstallScope = typeof InstallScope.Type;
 
 export const SkitValidationDiagnostic = Schema.Struct({
   code: Schema.String,
