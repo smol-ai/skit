@@ -21,7 +21,7 @@ import {
   writeJsonExclusive,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
-import { activeInstallDestinations, skillsDirectoryFor } from "../projection/roots.js";
+import { activeInstallDestinations, skillsDirectoryFor } from "../install/roots.js";
 import type { SetupApproval } from "../workflows/library/setup-apply.js";
 import { ensureRecoveryOperation, recoveryOperationPath } from "./recovery-moves.js";
 import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
@@ -235,7 +235,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   approval: SetupApproval,
   initial: LibraryState,
   projecting: boolean,
-  projectedNames: readonly string[],
+  installedNames: readonly string[],
 ) {
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
@@ -244,7 +244,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   const directory = approval.removals.operationDirectory;
   const targets = projecting ? yield* activeInstallDestinations(approval.setup.inventory) : [];
   const possibleTargets = projecting ? (["agents", "claude"] as const) : [];
-  const projectionPaths = new Set(
+  const installedSkillPaths = new Set(
     (approval.changes ?? [])
       .filter(
         (fact) =>
@@ -256,8 +256,8 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       .map((fact) => resolve(fact.path)),
   );
   for (const target of targets)
-    for (const name of projectedNames)
-      projectionPaths.add(
+    for (const name of installedNames)
+      installedSkillPaths.add(
         join(skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory), name),
       );
   const paths = new Set(approval.removals.entries.map((entry) => resolve(entry.path)));
@@ -272,7 +272,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
         .filter((copy) => copy.duplicateAction !== "retain-only")
         .map((copy) => copy.name),
     ]);
-    for (const projection of initial.installed_skills) paths.add(resolve(projection.path));
+    for (const installedSkill of initial.installed_skills) paths.add(resolve(installedSkill.path));
     for (const target of possibleTargets)
       for (const name of names)
         paths.add(
@@ -287,7 +287,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   }
   const files = yield* Effect.forEach([...paths].sort(), captureSetupFile);
   let expectedIntent = setupIntent(initial);
-  let expectedProjections = structuredClone(initial.installed_skills);
+  let expectedInstalledSkills = structuredClone(initial.installed_skills);
   let expectedSettings = setupDiscoverySettings(settings);
   let expectedMachineId = settings.machineId;
   yield* ensureRecoveryOperation(store.home, directory);
@@ -296,14 +296,14 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     kind: "setup",
     planId: approval.planId,
     before: expectedIntent,
-    installedSkills: expectedProjections,
+    installedSkills: expectedInstalledSkills,
     settings: expectedSettings,
     machineId: settings.machineId ?? null,
     targets: targets.map((target) => ({
       target,
       root: skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
     })),
-    installedSkillPaths: [...projectionPaths].sort(),
+    installedSkillPaths: [...installedSkillPaths].sort(),
     files,
   } satisfies typeof Operation.Type);
   const changes = join(directory, "changes");
@@ -378,7 +378,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     save: Effect.fn("SetupOperation.save")(function* (next: LibraryState, base: LibraryState) {
       const before = setupIntent(base);
       const after = setupIntent(next);
-      const projectionsAfter = structuredClone(next.installed_skills);
+      const installedSkillsAfter = structuredClone(next.installed_skills);
       const changed =
         canonicalJson(before) !== canonicalJson(after) ||
         canonicalJson(base.installed_skills) !== canonicalJson(next.installed_skills);
@@ -390,13 +390,13 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
             before,
             after,
             installedSkillsBefore: structuredClone(base.installed_skills),
-            installedSkillsAfter: projectionsAfter,
+            installedSkillsAfter: installedSkillsAfter,
           })
         : undefined;
       yield* store.save(next, base);
       if (changeRecord) yield* markSaved(changeRecord);
       expectedIntent = after;
-      expectedProjections = projectionsAfter;
+      expectedInstalledSkills = installedSkillsAfter;
     }),
     complete: Effect.fn("SetupOperation.complete")(
       function* () {
@@ -404,7 +404,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
           schemaVersion: 2,
           intent: expectedIntent,
           settings: expectedSettings,
-          installedSkills: expectedProjections,
+          installedSkills: expectedInstalledSkills,
         } satisfies typeof Completion.Type);
       },
       (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
@@ -473,7 +473,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
     : undefined;
   let intent = operation.before;
   let settings = operation.settings;
-  let projections = operation.installedSkills;
+  let installedSkills = operation.installedSkills;
   for (const [index, { change, saved }] of changes.entries()) {
     if (!saved && (index !== changes.length - 1 || complete))
       return yield* new RecoveryInvalid({
@@ -482,13 +482,13 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
     if (change.kind === "library") {
       if (
         canonicalJson(change.before) !== canonicalJson(intent) ||
-        canonicalJson(change.installedSkillsBefore) !== canonicalJson(projections)
+        canonicalJson(change.installedSkillsBefore) !== canonicalJson(installedSkills)
       )
         return yield* new RecoveryInvalid({
           detail: "Setup intent records do not form a continuous operation",
         });
       intent = change.after;
-      projections = change.installedSkillsAfter;
+      installedSkills = change.installedSkillsAfter;
     } else {
       if (canonicalJson(change.before) !== canonicalJson(settings))
         return yield* new RecoveryInvalid({
@@ -501,7 +501,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
     complete &&
     (canonicalJson(complete.intent) !== canonicalJson(intent) ||
       canonicalJson(complete.settings) !== canonicalJson(settings) ||
-      canonicalJson(complete.installedSkills) !== canonicalJson(projections))
+      canonicalJson(complete.installedSkills) !== canonicalJson(installedSkills))
   )
     return yield* new RecoveryInvalid({
       detail: "Setup completion differs from its recorded publications",

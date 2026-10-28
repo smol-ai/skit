@@ -315,7 +315,7 @@ export class SharedTargetCollision
   }
 }
 
-export class ProjectedPathCollision
+export class InstalledPathCollision
   extends Data.TaggedError("ProjectedPathCollision")<{
     path: string;
     kind: "file" | "file-or-directory";
@@ -327,8 +327,8 @@ export class ProjectedPathCollision
   readonly remediation = "Two Skills project to the same path; disable one of them, then retry.";
   get message(): string {
     return this.kind === "file"
-      ? `Projected file collision: ${this.path}`
-      : `Projected file/directory collision: ${this.path}`;
+      ? `Installed file collision: ${this.path}`
+      : `Installed file/directory collision: ${this.path}`;
   }
 }
 

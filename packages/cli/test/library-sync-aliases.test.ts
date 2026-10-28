@@ -95,7 +95,7 @@ it.effect(
       yield* b.project();
       const before = yield* b.state;
       const retained = yield* retainedDigests(b);
-      const projectionId = before.installed_skills[0]!.installed_skill_id;
+      const installedSkillId = before.installed_skills[0]!.installed_skill_id;
       assert.strictEqual((yield* a.sync()).status, "pushed");
       assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
 
@@ -130,12 +130,12 @@ it.effect(
           invocation_policies: { [publishedSkill.skill_id]: "implicit" },
         },
       ]);
-      const projection = after.installed_skills.find(
-        (item) => item.installed_skill_id === projectionId,
+      const installedSkill = after.installed_skills.find(
+        (item) => item.installed_skill_id === installedSkillId,
       );
-      assert.ok(projection);
-      assert.strictEqual(projection.skill_id, publishedSkill.skill_id);
-      assert.strictEqual(projection.skill_version_id, publishedVersion);
+      assert.ok(installedSkill);
+      assert.strictEqual(installedSkill.skill_id, publishedSkill.skill_id);
+      assert.strictEqual(installedSkill.skill_version_id, publishedVersion);
       // The explicit invocation policy is rendered into the installed frontmatter.
       assert.isTrue(
         (yield* fs.readFileString(join(b.root, "same", "SKILL.md"))).endsWith("same\n"),
@@ -349,9 +349,9 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     yield* a.sync();
     assert.strictEqual((yield* b.sync()).status, "pulled");
     for (const device of [a, b]) {
-      const projection = (yield* device.state).installed_skills[0]!;
-      yield* fs.writeFileString(join(projection.path, "SKILL.md"), "authored edit\n");
-      yield* device.retainProjectionEdit(projection);
+      const installedSkill = (yield* device.state).installed_skills[0]!;
+      yield* fs.writeFileString(join(installedSkill.path, "SKILL.md"), "authored edit\n");
+      yield* device.retainInstalledSkillEdit(installedSkill);
     }
     const aEdit = (yield* a.state).skills[0]!.local_version_id;
     const bEdit = (yield* b.state).skills[0]!.local_version_id;
@@ -374,10 +374,10 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     // The source import and both devices' retained edits.
     assert.strictEqual(after.imports.length, 3);
     assert.strictEqual(after.imports.filter((item) => item.kind === "edit").length, 2);
-    for (const projection of after.installed_skills)
+    for (const installedSkill of after.installed_skills)
       assert.include(
         skill.versions.map((item) => item.skill_version_id),
-        projection.skill_version_id,
+        installedSkill.skill_version_id,
       );
     assert.strictEqual(
       yield* fs.readFileString(join(after.installed_skills[0]!.path, "SKILL.md")),

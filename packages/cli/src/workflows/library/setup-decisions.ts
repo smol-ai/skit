@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Digest, hashParts } from "@smolai/skit-core";
-import type { DuplicateCopy } from "../../projection/duplicates.js";
+import type { DuplicateCopy } from "../../install/duplicates.js";
 import type {
   SetupResult,
   SetupSkillInstance,

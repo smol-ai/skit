@@ -134,8 +134,8 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     conflicts.push("Setup belongs to a different machine identity");
   let expected = saved.operation.before;
   let expectedSettings = saved.operation.settings;
-  let projections = saved.operation.installedSkills;
-  const confirmedProjectionPaths = new Set(
+  let installedSkills = saved.operation.installedSkills;
+  const confirmedInstalledSkillPaths = new Set(
     saved.complete ? (saved.operation.installedSkillPaths ?? []) : [],
   );
   for (const { change, saved: confirmed } of saved.changes) {
@@ -145,18 +145,18 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         conflicts.push("Unconfirmed setup Library save differs from both recorded revisions");
       if (applied) {
         expected = change.after;
-        projections = change.installedSkillsAfter;
-        for (const projection of change.installedSkillsAfter)
+        installedSkills = change.installedSkillsAfter;
+        for (const installedSkill of change.installedSkillsAfter)
           if (
-            projection.status === "installed" &&
+            installedSkill.status === "installed" &&
             !equal(
-              projection,
+              installedSkill,
               change.installedSkillsBefore.find(
-                (item) => item.installed_skill_id === projection.installed_skill_id,
+                (item) => item.installed_skill_id === installedSkill.installed_skill_id,
               ),
             )
           )
-            confirmedProjectionPaths.add(projection.path);
+            confirmedInstalledSkillPaths.add(installedSkill.path);
       }
     } else {
       const current = setupDiscoverySettings(settings);
@@ -184,24 +184,24 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     : yield* prepareSetupUndoFiles(
         operationId,
         saved.operation,
-        projections,
+        installedSkills,
         state,
         preservationDirectory,
         priorPreservations,
         intent.state,
-        confirmedProjectionPaths,
+        confirmedInstalledSkillPaths,
       );
   if (files) conflicts.push(...files.conflicts);
-  const nextProjections = structuredClone(intent.state.installed_skills);
+  const nextInstalledSkills = structuredClone(intent.state.installed_skills);
   for (const path of files?.affected ?? []) {
     const prior = saved.operation.installedSkills.find((item) => item.path === path);
-    const current = nextProjections.find((item) => item.path === path);
+    const current = nextInstalledSkills.find((item) => item.path === path);
     if (equal(installedSkillChoice(prior), installedSkillChoice(current))) continue;
-    const index = nextProjections.findIndex((item) => item.path === path);
-    if (index >= 0) nextProjections.splice(index, 1);
-    if (prior) nextProjections.push(structuredClone(prior));
+    const index = nextInstalledSkills.findIndex((item) => item.path === path);
+    if (index >= 0) nextInstalledSkills.splice(index, 1);
+    if (prior) nextInstalledSkills.push(structuredClone(prior));
   }
-  const next = { ...intent.state, installed_skills: nextProjections };
+  const next = { ...intent.state, installed_skills: nextInstalledSkills };
   const planId = hashParts([
     canonicalJson({
       saved,

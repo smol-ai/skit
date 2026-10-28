@@ -79,6 +79,6 @@ export interface UsageOptions {
   readonly days?: number;
   readonly end?: string;
   readonly project?: string;
-  readonly projections?: readonly InstalledSkillUsage[];
+  readonly installedSkills?: readonly InstalledSkillUsage[];
   readonly progress?: (completed: number, total: number) => import("effect").Effect.Effect<void>;
 }

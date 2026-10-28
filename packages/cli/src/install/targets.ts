@@ -49,7 +49,7 @@ export function targetCollisionMessage(collisions: readonly TargetCollision[]): 
 
 /** Fail before any filesystem or ledger mutation when distinct Bindings share a destination. */
 /** Native route resolution retains fail-closed ancestor walking. */
-export const physicalDestination = Effect.fn("Projection.physicalDestination")(function* (
+export const physicalDestination = Effect.fn("Install.physicalDestination")(function* (
   path: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -70,7 +70,7 @@ export const physicalDestination = Effect.fn("Projection.physicalDestination")(f
     current = parent;
   }
 });
-export const detectTargetCollisions = Effect.fn("Projection.detectTargetCollisions")(function* (
+export const detectTargetCollisions = Effect.fn("Install.detectTargetCollisions")(function* (
   routes: readonly DeclaredRoute[],
 ) {
   const byDestination = new Map<string, Map<string, DeclaredRoute>>();
@@ -85,7 +85,7 @@ export const detectTargetCollisions = Effect.fn("Projection.detectTargetCollisio
     .map(([destination, group]) => ({ destination, routes: [...group.values()] }));
   return collisions;
 });
-export const assertNoTargetCollisions = Effect.fn("Projection.assertNoTargetCollisions")(function* (
+export const assertNoTargetCollisions = Effect.fn("Install.assertNoTargetCollisions")(function* (
   routes: readonly DeclaredRoute[],
 ) {
   const collisions = yield* detectTargetCollisions(routes);

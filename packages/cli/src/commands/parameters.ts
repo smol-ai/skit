@@ -2,7 +2,7 @@ import { Option, Record } from "effect";
 import { CliConfig, Flag, GlobalFlag } from "effect/cli";
 import type { HarnessName } from "@smolai/skit-core";
 import type { ResolvedSkitConfiguration } from "../configuration/skit-configuration.js";
-import type { InventoryRootOptions } from "../projection/roots.js";
+import type { InventoryRootOptions } from "../install/roots.js";
 
 /**
  * Effect's built-in global flags, without the interactive command wizard. SKIT asks its own

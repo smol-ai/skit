@@ -315,9 +315,9 @@ it.effect(
       // The Codex root is SKIT's shared destination and already holds the bytes SKIT would install, so
       // enabling starts managing that copy in place rather than recording a conflict with it.
       expect((yield* inspectOwnershipMarker(join(codex, "review"))).kind).toBe("valid");
-      expect((yield* home.durable).installed_skills.map((projection) => projection.status)).toEqual(
-        ["installed", "installed"],
-      );
+      expect(
+        (yield* home.durable).installed_skills.map((installedSkill) => installedSkill.status),
+      ).toEqual(["installed", "installed"]);
       expect((yield* home.durable).collections).toHaveLength(1);
       expect((yield* interaction.prompts)[0].choices).toHaveLength(2);
     }).pipe(Effect.provide(skitLayer)),

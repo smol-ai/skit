@@ -1,7 +1,7 @@
 import {
   encodeHashParts,
   normalizeDescriptorDeclarations as normalizeDescriptor,
-  projectedSkillHashParts,
+  installedSkillHashParts,
   projectSkillFiles as projectFiles,
   sha256Digest,
   type SharedMapping,
@@ -32,7 +32,7 @@ export const normalizeDescriptorDeclarations = Effect.fn(
   }),
 );
 
-export interface ProjectedFile {
+export interface InstalledFile {
   readonly path: string;
   readonly bytes: Uint8Array;
   readonly executable?: boolean;
@@ -48,7 +48,7 @@ const projectionError = (cause: SharedFailure) =>
   });
 
 export const projectSkillFiles = Effect.fn("Integrity.projectSkillFiles")(function* (
-  files: ReadonlyArray<ProjectedFile>,
+  files: ReadonlyArray<InstalledFile>,
   skillPath: string,
   shared: ReadonlyArray<SharedMapping> = [],
 ) {
@@ -57,13 +57,13 @@ export const projectSkillFiles = Effect.fn("Integrity.projectSkillFiles")(functi
   );
 });
 
-export const hashProjectedSkillFiles = Effect.fn("Integrity.hashProjectedSkillFiles")(function* (
-  files: ReadonlyArray<ProjectedFile>,
+export const hashInstalledSkillFiles = Effect.fn("Integrity.hashProjectedSkillFiles")(function* (
+  files: ReadonlyArray<InstalledFile>,
   skillPath: string,
   shared: ReadonlyArray<SharedMapping> = [],
 ) {
   const parts = yield* Effect.fromResult(
-    projectedSkillHashParts([...files], skillPath, [...shared]),
+    installedSkillHashParts([...files], skillPath, [...shared]),
   ).pipe(Effect.mapError(projectionError));
   return yield* sha256Digest(encodeHashParts(parts));
 });

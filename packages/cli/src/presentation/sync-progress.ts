@@ -20,7 +20,7 @@ const syncStatus = (phase: SyncPhase) => {
       return { pending: "Planning Library sync", complete: "Compared Library changes" };
     case "check-destinations":
       return { pending: "Checking Skill destinations", complete: "Checked Skill destinations" };
-    case "check-projections":
+    case "check-installed-skills":
       return { pending: "Checking installed skills", complete: "Checked installed skills" };
     case "check-enabled":
       return { pending: "Checking enabled Skills", complete: "Checked enabled Skills" };

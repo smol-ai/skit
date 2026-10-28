@@ -71,7 +71,7 @@ export function readableSkillsDirectories(
 }
 
 /** Preserve the listing path even when a parent/root itself is a symlink. */
-export const readSkillSymlink = Effect.fn("Projection.readSkillSymlink")(function* (path: string) {
+export const readSkillSymlink = Effect.fn("Install.readSkillSymlink")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   for (let component = resolve(path); ; component = dirname(component)) {
@@ -95,7 +95,7 @@ export const DuplicateScanError = Schema.Struct({
 export type DuplicateScanError = typeof DuplicateScanError.Type;
 
 /** Observe direct skill children only; unrelated unreadable entries never discard the index. */
-export const scanSkillsDirectory = Effect.fn("Projection.scanSkillsDirectory")(function* (
+export const scanSkillsDirectory = Effect.fn("Install.scanSkillsDirectory")(function* (
   roots: readonly { readonly harness: HarnessName; readonly root: string }[],
   options: {
     readonly blockingNames?: readonly string[];
@@ -169,7 +169,7 @@ export class DuplicateScanIncomplete
 }
 
 /** Exclude the destinations we will reconcile together; other same-scope copies are duplicates. */
-export const findDuplicates = Effect.fn("Projection.findDuplicates")(function* (
+export const findDuplicates = Effect.fn("Install.findDuplicates")(function* (
   options: InventoryRootOptions,
   scope: InstallScope,
   names: readonly string[],

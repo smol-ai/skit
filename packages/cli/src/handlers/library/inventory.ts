@@ -15,7 +15,7 @@ import {
   pathIsWithin,
   type LibraryState,
 } from "@smolai/skit-core";
-import { selectInventoryRoots, type InventoryRootOptions } from "../../projection/roots.js";
+import { selectInventoryRoots, type InventoryRootOptions } from "../../install/roots.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";

@@ -22,7 +22,7 @@ import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 import { terminalData } from "../../presentation/terminal-text.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
@@ -30,7 +30,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly adopt: boolean;
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
-  readonly projection: Pick<LibraryInstallationConfiguration, "rootFor">;
+  readonly installedSkill: Pick<LibraryInstallationConfiguration, "rootFor">;
   readonly inventory?: InventoryRootOptions;
   readonly deviceSelection?:
     | "follow-account"
@@ -48,7 +48,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       adopt: options.adopt,
       ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
       ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
-      projection: options.projection,
+      installedSkill: options.installedSkill,
       ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
       ...(options.deviceSelection === undefined
         ? {}
@@ -145,7 +145,7 @@ export const librarySyncCliCommand = Command.make(
           adopt: input.adopt,
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
-          projection: configuration.pull.installation,
+          installedSkill: configuration.pull.installation,
           inventory: configuration.inventory,
           ...(input.followAccount
             ? { deviceSelection: "follow-account" as const }

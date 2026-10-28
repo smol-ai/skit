@@ -18,7 +18,7 @@ import { type ArtifactFile, IntegrityError, type ValidationDiagnostic } from "./
 import { projectionLimitExceeded } from "./projection-limits.js";
 import {
   descriptorError,
-  hashProjectedSkillFiles,
+  hashInstalledSkillFiles,
   normalizeDescriptorDeclarations,
   projectSkillFiles,
 } from "./descriptor.js";
@@ -81,7 +81,7 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
       auditSkill(text.decode(primaryFile.bytes), {
         declaredCapabilities: [...(skill.capabilities ?? [])],
         path: primary,
-        artifactContentDigest: yield* hashProjectedSkillFiles(files, skill.path, skill.shared),
+        artifactContentDigest: yield* hashInstalledSkillFiles(files, skill.path, skill.shared),
       }),
       { context: "publish" },
     );

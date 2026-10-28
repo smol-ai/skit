@@ -10,11 +10,8 @@ import {
   installedSkillDisplaced,
   readOwnershipMarker,
   inspectOwnershipMarker,
-} from "../../projection/mutation.js";
-import {
-  keepInstalledSkillBackup,
-  pendingInstalledSkillBackups,
-} from "../../projection/backups.js";
+} from "../../install/mutation.js";
+import { keepInstalledSkillBackup, pendingInstalledSkillBackups } from "../../install/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {
   readonly harness: HarnessName;
@@ -42,37 +39,37 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
   const fs = yield* FileSystem.FileSystem;
-  for (const projection of state.installed_skills) {
-    const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
+  for (const installedSkill of state.installed_skills) {
+    const skill = state.skills.find((item) => item.skill_id === installedSkill.skill_id);
     const version = skill?.versions.find(
-      (item) => item.skill_version_id === projection.skill_version_id,
+      (item) => item.skill_version_id === installedSkill.skill_version_id,
     );
     if (skill === undefined || version === undefined) continue;
-    if (!(yield* fs.exists(projection.path))) {
+    if (!(yield* fs.exists(installedSkill.path))) {
       // Pending copies may be between managed retirement and sync rematerialization. Their
       // absence is not evidence that the user deleted an installed copy.
-      if (projection.status === "pending" || projection.status === "suppressed") continue;
+      if (installedSkill.status === "pending" || installedSkill.status === "suppressed") continue;
       // Nor is the absence of the very copy SKIT moved aside before it could save why.
-      if (yield* installedSkillDisplaced(projection)) projection.status = "pending";
+      if (yield* installedSkillDisplaced(installedSkill)) installedSkill.status = "pending";
       else {
-        projection.status = "suppressed";
-        projection.suppression_reason = "native_delete";
-        projection.suppressed_at = new Date(yield* Clock.currentTimeMillis).toISOString();
+        installedSkill.status = "suppressed";
+        installedSkill.suppression_reason = "native_delete";
+        installedSkill.suppressed_at = new Date(yield* Clock.currentTimeMillis).toISOString();
       }
       continue;
     }
-    const observed = yield* deterministicTreeHash(projection.path);
-    const marker = yield* readOwnershipMarker(projection.path);
-    projection.observed_digest = observed;
-    const expected = expectedInstalledSkillHashResult(projection, marker);
-    projection.status =
+    const observed = yield* deterministicTreeHash(installedSkill.path);
+    const marker = yield* readOwnershipMarker(installedSkill.path);
+    installedSkill.observed_digest = observed;
+    const expected = expectedInstalledSkillHashResult(installedSkill, marker);
+    installedSkill.status =
       marker && Result.isSuccess(expected) && observed === expected.success
         ? "installed"
         : "conflicted";
   }
   const managed = new Set<string>();
-  for (const projection of state.installed_skills)
-    managed.add((yield* physicalPath(projection.path)).key);
+  for (const installedSkill of state.installed_skills)
+    managed.add((yield* physicalPath(installedSkill.path)).key);
   const priorUnmanaged = new Map<string, LibraryState["unmanaged"][number]>();
   for (const item of state.unmanaged)
     priorUnmanaged.set((yield* physicalPath(item.path)).key, item);
@@ -194,7 +191,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     } else if (marker.kind === "valid") {
       const claim = {
         skillId: marker.marker.skill_id,
-        projectionId: marker.marker.installed_skill_id,
+        installedSkillId: marker.marker.installed_skill_id,
         expectedHash: marker.marker.expected_digest,
       };
       state.ownershipIssues.push({
@@ -234,15 +231,15 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
   yield* store.save(state, loaded);
   // A verified installation resolves every older displacement of its installed skill. Those backups
   // no longer explain an absence, so they are kept, never discarded.
-  for (const projection of state.installed_skills) {
-    if (projection.status !== "installed") continue;
-    const marker = yield* readOwnershipMarker(projection.path);
+  for (const installedSkill of state.installed_skills) {
+    if (installedSkill.status !== "installed") continue;
+    const marker = yield* readOwnershipMarker(installedSkill.path);
     if (
-      marker?.installed_skill_id === projection.installed_skill_id &&
-      marker.skill_id === projection.skill_id &&
-      projection.observed_digest === projection.expected_digest
+      marker?.installed_skill_id === installedSkill.installed_skill_id &&
+      marker.skill_id === installedSkill.skill_id &&
+      installedSkill.observed_digest === installedSkill.expected_digest
     )
-      for (const backup of yield* pendingInstalledSkillBackups(projection))
+      for (const backup of yield* pendingInstalledSkillBackups(installedSkill))
         yield* keepInstalledSkillBackup(backup);
   }
   return { state, roots };

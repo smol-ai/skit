@@ -1,4 +1,4 @@
-import { DuplicateCopy } from "../../projection/duplicates.js";
+import { DuplicateCopy } from "../../install/duplicates.js";
 import {
   CollectionId,
   Digest,
@@ -9,7 +9,7 @@ import {
   SkillVersionId,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { PnpmSkillOwner } from "../../projection/pnpm-skills.js";
+import { PnpmSkillOwner } from "../../install/pnpm-skills.js";
 
 export const SetupVersionChoice = Schema.Struct({
   skillId: SkillId,

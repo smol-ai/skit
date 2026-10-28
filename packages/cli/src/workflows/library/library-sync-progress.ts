@@ -7,7 +7,7 @@ export type SyncPhase =
         | "read-remote"
         | "merge"
         | "check-destinations"
-        | "check-projections"
+        | "check-installed-skills"
         | "check-enabled"
         | "save-remote"
         | "save-local"

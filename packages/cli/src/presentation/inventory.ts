@@ -321,19 +321,19 @@ export function renderInventory(
     string,
     { name: string; statuses: Set<string>; harnesses: Set<HarnessName> }
   >();
-  for (const projection of state.installed_skills) {
-    const path = projection.path;
-    const skill = state.skills.find((candidate) => candidate.skill_id === projection.skill_id);
+  for (const installedSkill of state.installed_skills) {
+    const path = installedSkill.path;
+    const skill = state.skills.find((candidate) => candidate.skill_id === installedSkill.skill_id);
     if (skill === undefined) continue;
     const row = managed.get(path) ?? {
       name: skill.name,
       statuses: new Set<string>(),
       harnesses: new Set<HarnessName>(),
     };
-    if (projection.destination !== "legacy")
-      for (const harness of installDestinationHarnesses[projection.destination])
+    if (installedSkill.destination !== "legacy")
+      for (const harness of installDestinationHarnesses[installedSkill.destination])
         row.harnesses.add(harness);
-    row.statuses.add(projection.status);
+    row.statuses.add(installedSkill.status);
     managed.set(path, row);
   }
   for (const [path, row] of managed)

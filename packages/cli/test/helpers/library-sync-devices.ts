@@ -118,13 +118,13 @@ export const devices = Effect.gen(function* () {
         );
       }),
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
-      retainProjectionEdit: (projection: InstalledSkill) =>
+      retainInstalledSkillEdit: (installedSkill: InstalledSkill) =>
         Effect.gen(function* () {
           return yield* importEdit({
-            skillId: projection.skill_id,
-            installedSkillId: projection.installed_skill_id,
-            path: projection.path,
-            observedHash: yield* deterministicTreeHash(projection.path),
+            skillId: installedSkill.skill_id,
+            installedSkillId: installedSkill.installed_skill_id,
+            path: installedSkill.path,
+            observedHash: yield* deterministicTreeHash(installedSkill.path),
             retainedAt: "2026-02-01T00:00:00Z",
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
@@ -197,12 +197,12 @@ export const devices = Effect.gen(function* () {
         ),
       project: (
         scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
-        projectionRoot = root,
+        skillsDirectory = root,
       ) =>
         installEnabledSkills({
           target: "agents",
           scope,
-          root: projectionRoot,
+          root: skillsDirectory,
           variantsPath: join(home, "variants"),
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       sync: (
@@ -224,7 +224,7 @@ export const devices = Effect.gen(function* () {
           token: "test",
           apply: true,
           ...options,
-          projection: {
+          installedSkill: {
             rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
           },
         }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),

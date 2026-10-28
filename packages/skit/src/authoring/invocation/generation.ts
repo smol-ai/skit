@@ -10,7 +10,7 @@ import { InvocationPolicy } from "../../contracts.js";
 import {
   applyHarnessInvocationPolicy,
   type HarnessInvocationWriteFailure,
-} from "../../harnesses/projection.js";
+} from "../../harnesses/write-invocation.js";
 import {
   AuthoredInvocationHarness,
   invocationMetadataAdapters,

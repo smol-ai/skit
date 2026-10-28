@@ -13,7 +13,7 @@ import { sourceIdentityLabel } from "../../library-application/skill-metadata.js
 import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyOwner } from "./setup-onboarding.js";
-import { makePnpmSkillCheck, pnpmSkillOwner } from "../../projection/pnpm-skills.js";
+import { makePnpmSkillCheck, pnpmSkillOwner } from "../../install/pnpm-skills.js";
 import { probeHarnesses } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,
@@ -118,15 +118,15 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
           };
         })();
     const observedOwnership = yield* ownershipAt(hit.realPath);
-    const markerProjection = observedOwnership.marker
+    const markerInstalledSkill = observedOwnership.marker
       ? observedLibrary.installed_skills.find(
-          (projection) =>
-            projection.installed_skill_id === observedOwnership.marker?.installed_skill_id,
+          (installedSkill) =>
+            installedSkill.installed_skill_id === observedOwnership.marker?.installed_skill_id,
         )
       : undefined;
     const ownershipCheck =
-      markerProjection !== undefined &&
-      !sorted.some((candidate) => resolve(candidate.path) === resolve(markerProjection.path))
+      markerInstalledSkill !== undefined &&
+      !sorted.some((candidate) => resolve(candidate.path) === resolve(markerInstalledSkill.path))
         ? ({ ownership: "invalid-marker" } as const)
         : observedOwnership;
     const managedMembership = (() => {
@@ -204,29 +204,29 @@ const scanSetupInstalledSkills = Effect.fn("Setup.scanInstalledSkills")(function
   indexes: ReturnType<typeof indexSetupLibrary>,
 ) {
   const { libraryCollectionsById } = indexes;
-  const projections: SetupInstalledSkill[] = [];
+  const installedSkills: SetupInstalledSkill[] = [];
   const fs = yield* FileSystem.FileSystem;
-  for (const projection of observedLibrary.installed_skills) {
+  for (const installedSkill of observedLibrary.installed_skills) {
     const skill = observedLibrary.skills.find(
-      (candidate) => candidate.skill_id === projection.skill_id,
+      (candidate) => candidate.skill_id === installedSkill.skill_id,
     );
     if (skill === undefined) continue;
-    const path = projection.path;
+    const path = installedSkill.path;
     const present = yield* fs.exists(path);
-    projections.push({
+    installedSkills.push({
       collectionId: skill.collection_id,
       collectionDisplayName: libraryCollectionsById.get(skill.collection_id)?.label ?? skill.name,
       skillId: skill.skill_id,
       name: skill.name,
       path,
       harnesses:
-        projection.destination === "legacy"
+        installedSkill.destination === "legacy"
           ? []
-          : [...installDestinationHarnesses[projection.destination]],
-      status: !present ? "missing" : projection.status === "installed" ? "current" : "modified",
+          : [...installDestinationHarnesses[installedSkill.destination]],
+      status: !present ? "missing" : installedSkill.status === "installed" ? "current" : "modified",
     });
   }
-  return projections;
+  return installedSkills;
 });
 
 export const scanSetupCopies = Effect.fn("Setup.scanCopies")(function* (
@@ -241,6 +241,6 @@ export const scanSetupCopies = Effect.fn("Setup.scanCopies")(function* (
     status: probe.status,
     command: probe.command,
   }));
-  const projections = yield* scanSetupInstalledSkills(evidence.observedLibrary, indexes);
-  return { instances, onboardingInstances, probes, projections };
+  const installedSkills = yield* scanSetupInstalledSkills(evidence.observedLibrary, indexes);
+  return { instances, onboardingInstances, probes, installedSkills };
 });

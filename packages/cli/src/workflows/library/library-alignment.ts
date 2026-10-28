@@ -156,17 +156,17 @@ export function aliasDevice(state: LibraryState, aliases: LibraryAliases): Libra
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
-    installed_skills: state.installed_skills.map((projection) => {
-      const skill = skillId(projection.skill_id, aliases);
+    installed_skills: state.installed_skills.map((installedSkill) => {
+      const skill = skillId(installedSkill.skill_id, aliases);
       return {
-        ...projection,
+        ...installedSkill,
         skill_id: skill,
         skill_version_id:
           aliases.versions.find(
             (alias) =>
               alias.skillId === skill &&
-              alias.from.skill_version_id === projection.skill_version_id,
-          )?.to.skill_version_id ?? projection.skill_version_id,
+              alias.from.skill_version_id === installedSkill.skill_version_id,
+          )?.to.skill_version_id ?? installedSkill.skill_version_id,
       };
     }),
     ...(state.ownershipIssues === undefined

@@ -31,7 +31,7 @@ export * from "./platform/link-stat.js";
 export * from "./platform/source-process.js";
 export * from "./platform/layer.js";
 export * from "./platform/path-identity.js";
-export * from "./projection/policy.js";
+export * from "./install/policy.js";
 export {
   InstalledSkillFailure,
   inspectOwnershipMarker,
@@ -44,10 +44,10 @@ export {
   type NativeInstalledSkillContext,
   type InstalledSkillMutationError,
   type ManageApproval,
-} from "./projection/mutation.js";
-export { inspectInstalledSkillBackups } from "./projection/backups.js";
+} from "./install/mutation.js";
+export { inspectInstalledSkillBackups } from "./install/backups.js";
 export { copyLocalTree } from "./platform/copy-tree.js";
-export { ensureSkillsDirectoryWritable } from "./projection/writable.js";
+export { ensureSkillsDirectoryWritable } from "./install/writable.js";
 export { discoveryPathExcluded } from "./sources/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
 export * from "./artifact/descriptor.js";

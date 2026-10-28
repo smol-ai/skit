@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import {
   applyHarnessInvocationPolicy,
   type HarnessInvocationWriteFailure,
-} from "../harnesses/projection.js";
+} from "../harnesses/write-invocation.js";
 import { installDestinationHarnesses } from "../harnesses/install-destinations.js";
 
 export type InvocationIntent =

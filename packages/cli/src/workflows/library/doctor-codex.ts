@@ -4,8 +4,8 @@ import {
   type DuplicateCopy,
   scanSkillsDirectory,
   readableSkillsDirectories,
-} from "../../projection/duplicates.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+} from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
@@ -156,8 +156,10 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
     const entry = yield* readCodexSkills(executable, cwd, undefined, true);
     const fs = yield* FileSystem.FileSystem;
     const managed = new Set(
-      yield* Effect.forEach(state.installed_skills, (projection) =>
-        fs.realPath(projection.path).pipe(Effect.orElseSucceed(() => resolve(projection.path))),
+      yield* Effect.forEach(state.installed_skills, (installedSkill) =>
+        fs
+          .realPath(installedSkill.path)
+          .pipe(Effect.orElseSucceed(() => resolve(installedSkill.path))),
       ),
     );
     const errors = [...entry.errors];

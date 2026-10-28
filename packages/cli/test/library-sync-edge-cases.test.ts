@@ -26,10 +26,10 @@ it.effect(
       assert.ok(local);
       yield* b.edit((state) => ({ ...state, enabled: enable([local.skill_id]) }));
       yield* b.project();
-      const projection = (yield* b.state).installed_skills[0];
-      assert.ok(projection);
-      yield* fs.writeFileString(join(projection.path, "SKILL.md"), "authored edit\n");
-      yield* b.retainProjectionEdit(projection);
+      const installedSkill = (yield* b.state).installed_skills[0];
+      assert.ok(installedSkill);
+      yield* fs.writeFileString(join(installedSkill.path, "SKILL.md"), "authored edit\n");
+      yield* b.retainInstalledSkillEdit(installedSkill);
       yield* a.sync();
       const before = yield* b.state;
       const head = yield* remote;
@@ -52,7 +52,7 @@ it.effect(
         assert.deepEqual(yield* b.state, before);
         assert.deepEqual(yield* remote, head);
         assert.equal(
-          yield* fs.readFileString(join(projection.path, "SKILL.md")),
+          yield* fs.readFileString(join(installedSkill.path, "SKILL.md")),
           "authored edit\n",
         );
       }
@@ -161,8 +161,8 @@ it.effect(
       yield* fs.remove(join(b.root, "same"), { recursive: true });
       yield* b.edit((state) => ({
         ...state,
-        installed_skills: state.installed_skills.map((projection) => ({
-          ...projection,
+        installed_skills: state.installed_skills.map((installedSkill) => ({
+          ...installedSkill,
           status: "suppressed",
           suppression_reason: "native_delete",
           suppressed_at: "2026-02-01T00:00:00Z",
@@ -228,9 +228,9 @@ for (const repository of [false, true]) {
             edited ? "native edit\n" : "A edit\n",
           );
           if (edited) {
-            const projection = after.installed_skills[0];
-            assert.ok(projection?.observed_digest);
-            assert.equal(projection.status, "conflicted");
+            const installedSkill = after.installed_skills[0];
+            assert.ok(installedSkill?.observed_digest);
+            assert.equal(installedSkill.status, "conflicted");
             assert.equal(
               yield* fs.readFileString(
                 join(
@@ -238,7 +238,7 @@ for (const repository of [false, true]) {
                   "variants",
                   "agents",
                   "review",
-                  projection.observed_digest.slice(7),
+                  installedSkill.observed_digest.slice(7),
                   "SKILL.md",
                 ),
               ),

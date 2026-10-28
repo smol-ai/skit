@@ -22,7 +22,7 @@ import {
   type Enabled,
 } from "@smolai/skit-core";
 import { SyncConflictDetail } from "./library-sync-contract.js";
-import { existingRepositorySkillsDirectory } from "../../projection/roots.js";
+import { existingRepositorySkillsDirectory } from "../../install/roots.js";
 
 const targets = ["agents", "claude"] as const;
 const Candidate = Schema.Struct({
@@ -144,7 +144,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
   rootFor: ((target: InstallDestination) => string | undefined) | undefined,
   deferDeviceConflicts: boolean,
 ) {
-  const projections: InstalledSkill[] = [];
+  const installedSkills: InstalledSkill[] = [];
   const retire: InstalledSkillId[] = [];
   const remove: InstalledSkillId[] = [];
   const conflicts: SyncConflictDetail[] = [];
@@ -186,34 +186,34 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
     );
   }
   for (const original of current.installed_skills) {
-    const projection = aligned.installed_skills.find(
+    const installedSkill = aligned.installed_skills.find(
       (item) => item.installed_skill_id === original.installed_skill_id,
     );
-    if (projection === undefined) continue;
-    const skill = manifest.skills.find((item) => item.skill_id === projection.skill_id);
+    if (installedSkill === undefined) continue;
+    const skill = manifest.skills.find((item) => item.skill_id === installedSkill.skill_id);
     const selected = skill === undefined ? undefined : currentSkillVersion(manifest, skill);
-    const global = enabledSkillIds(manifest, manifest.enabled).includes(projection.skill_id);
-    const repository = repositorySelectsInstalledSkill(aligned, projection);
-    const activeTarget = targets.find((target) => target === projection.destination);
+    const global = enabledSkillIds(manifest, manifest.enabled).includes(installedSkill.skill_id);
+    const repository = repositorySelectsInstalledSkill(aligned, installedSkill);
+    const activeTarget = targets.find((target) => target === installedSkill.destination);
     const active =
       activeTarget !== undefined && (rootFor === undefined || rootFor(activeTarget) !== undefined);
     const removing = !active || (!global && !repository);
-    const reidentifying = original.skill_id !== projection.skill_id;
+    const reidentifying = original.skill_id !== installedSkill.skill_id;
     const missingVersion = !skill?.versions.some(
-      (version) => version.skill_version_id === projection.skill_version_id,
+      (version) => version.skill_version_id === installedSkill.skill_version_id,
     );
     const root =
       global && !repository && activeTarget !== undefined ? rootFor?.(activeTarget) : undefined;
     const relocating =
       root !== undefined &&
       (yield* installDestinationPathIdentity(root)).comparisonKey !==
-        (yield* installDestinationPathIdentity(projection.root)).comparisonKey;
+        (yield* installDestinationPathIdentity(installedSkill.root)).comparisonKey;
     const changing =
       removing ||
       reidentifying ||
       missingVersion ||
       relocating ||
-      (selected !== undefined && selected.skill_version_id !== projection.skill_version_id);
+      (selected !== undefined && selected.skill_version_id !== installedSkill.skill_version_id);
     if (changing) {
       const ownership = yield* inspectInstalledSkill(original);
       if (ownership.kind === "conflicted") {
@@ -232,8 +232,8 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               resolution: "local",
             }),
           );
-          projections.push({
-            ...projection,
+          installedSkills.push({
+            ...installedSkill,
             status: "conflicted",
             observed_digest: ownership.observed,
           });
@@ -249,8 +249,8 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
           (!removing || !missingVersion) &&
           (!missingVersion || selected !== undefined)
         ) {
-          projections.push({
-            ...projection,
+          installedSkills.push({
+            ...installedSkill,
             ...(missingVersion && selected !== undefined
               ? { skill_version_id: selected.skill_version_id }
               : {}),
@@ -266,7 +266,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
             resolution: "local",
           }),
         );
-        projections.push(projection);
+        installedSkills.push(installedSkill);
         continue;
       }
     }
@@ -283,13 +283,13 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
           resolution: "local",
         }),
       );
-      projections.push(projection);
+      installedSkills.push(installedSkill);
       continue;
     }
     if (reidentifying) retire.push(original.installed_skill_id);
-    projections.push({
-      ...projection,
-      ...(reidentifying && projection.suppression_reason !== "native_delete"
+    installedSkills.push({
+      ...installedSkill,
+      ...(reidentifying && installedSkill.suppression_reason !== "native_delete"
         ? { status: "pending" as const }
         : {}),
       ...(missingVersion && selected !== undefined
@@ -298,7 +298,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
     });
   }
   return yield* SyncInstalledSkillPlan.makeEffect({
-    projections,
+    projections: installedSkills,
     retire,
     remove,
     conflicts,
@@ -328,14 +328,14 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
       Effect.gen(function* () {
         let retired = 0;
         for (const id of plan.retire) {
-          const projection = mutation.state.installed_skills.find(
+          const installedSkill = mutation.state.installed_skills.find(
             (item) => item.installed_skill_id === id,
           );
-          if (projection === undefined) continue;
+          if (installedSkill === undefined) continue;
           const outcome = yield* mutation.uninstall(
-            projection,
+            installedSkill,
             "throw",
-            `Refusing to remove modified Skill at ${projection.path}`,
+            `Refusing to remove modified Skill at ${installedSkill.path}`,
           );
           if (outcome.kind === "retired") retired++;
           if (plan.remove.includes(id))
@@ -344,7 +344,8 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
               mutation.state.installed_skills.length,
               ...mutation.state.installed_skills.filter((item) => item.installed_skill_id !== id),
             );
-          else if (projection.suppression_reason !== "native_delete") projection.status = "pending";
+          else if (installedSkill.suppression_reason !== "native_delete")
+            installedSkill.status = "pending";
         }
         return retired;
       }),

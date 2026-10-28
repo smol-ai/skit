@@ -34,8 +34,8 @@ export const updateCliCommand = Command.make(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const query = Option.getOrUndefined(input.subject);
-        const projectionSelector = Option.getOrUndefined(input.fromProjection);
-        if (projectionSelector !== undefined) {
+        const installedSkillSelector = Option.getOrUndefined(input.fromProjection);
+        if (installedSkillSelector !== undefined) {
           if (query === undefined)
             return yield* new EditImportMissing({
               message: "A Skill is required with --from-projection",
@@ -45,7 +45,7 @@ export const updateCliCommand = Command.make(
               ? "Inspecting changed installed-skill bytes"
               : "Retaining changed installed-skill bytes",
             Effect.gen(function* () {
-              const prepared = yield* prepareEditImport(query, projectionSelector);
+              const prepared = yield* prepareEditImport(query, installedSkillSelector);
               return input.dryRun
                 ? result("projectionRetentionPlan", prepared.preview)
                 : result("projectionRetention", yield* prepared.apply());

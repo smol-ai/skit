@@ -27,19 +27,19 @@ type File = Operation["files"][number];
 type CapturedFile = Effect.Success<ReturnType<typeof captureSetupFile>>;
 
 /** Scan timestamps are evidence, not a change to desired installed-skill ownership. */
-export const installedSkillChoice = (projection: InstalledSkill | undefined) =>
-  projection === undefined
+export const installedSkillChoice = (installedSkill: InstalledSkill | undefined) =>
+  installedSkill === undefined
     ? null
     : {
-        installed_skill_id: projection.installed_skill_id,
-        skill_id: projection.skill_id,
-        skill_version_id: projection.skill_version_id,
-        path: projection.path,
-        root: projection.root,
-        target: projection.destination,
-        expected_digest: projection.expected_digest,
-        status: projection.status,
-        suppressed_at: projection.suppressed_at,
+        installed_skill_id: installedSkill.installed_skill_id,
+        skill_id: installedSkill.skill_id,
+        skill_version_id: installedSkill.skill_version_id,
+        path: installedSkill.path,
+        root: installedSkill.root,
+        target: installedSkill.destination,
+        expected_digest: installedSkill.expected_digest,
+        status: installedSkill.status,
+        suppressed_at: installedSkill.suppressed_at,
       };
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
@@ -111,7 +111,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   preservationDirectory: string,
   priorPreservations: readonly string[],
   restoredState: LibraryState,
-  confirmedProjectionPaths: ReadonlySet<string>,
+  confirmedInstalledSkillPaths: ReadonlySet<string>,
 ) {
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
@@ -128,7 +128,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     source?: string;
     transfer?: "move" | "copy" | "rebuild";
   }[] = [];
-  const moves: { name: string; projection: InstalledSkill }[] = [];
+  const moves: { name: string; installedSkill: InstalledSkill }[] = [];
   const rebuilds = new Map<
     string,
     Effect.Success<ReturnType<typeof prepareInstalledSkillRebuild>>
@@ -143,7 +143,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     const saved = recovery.entries.filter((entry) => entry.path === file.path);
     const observed = yield* captureSetupFile(file.path);
     observations.push(observed);
-    const changedProjection = !equal(installedSkillChoice(prior), installedSkillChoice(after));
+    const changedInstalledSkill = !equal(installedSkillChoice(prior), installedSkillChoice(after));
     const possibleClaim =
       observed.entry?.marker !== file.entry?.marker &&
       after?.status === "installed" &&
@@ -151,12 +151,12 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     const approvedPath =
       operation.installedSkillPaths === undefined ||
       operation.installedSkillPaths.includes(file.path);
-    const claim = possibleClaim && approvedPath && confirmedProjectionPaths.has(file.path);
-    if (!saved.length && !changedProjection && possibleClaim && approvedPath && !claim) {
+    const claim = possibleClaim && approvedPath && confirmedInstalledSkillPaths.has(file.path);
+    if (!saved.length && !changedInstalledSkill && possibleClaim && approvedPath && !claim) {
       conflicts.push(`Setup's ownership claim is not confirmed: ${file.path}`);
       continue;
     }
-    if (!saved.length && !claim && !changedProjection) continue;
+    if (!saved.length && !claim && !changedInstalledSkill) continue;
     if ((yield* Effect.result(checkSetupGlobalContent(file.path)))._tag === "Failure") {
       conflicts.push(
         `Repository, authored or package-manager ownership protects this path: ${file.path}`,
@@ -244,7 +244,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       conflicts.push(`Occupied original path: ${file.path}`);
       continue;
     }
-    if (observed.entry && owned) moves.push({ name: basename(file.path), projection: current });
+    if (observed.entry && owned) moves.push({ name: basename(file.path), installedSkill: current });
     if (file.entry === null) {
       if (observed.entry) actions.push({ path: file.path, kind: "remove-created" });
       continue;
@@ -273,9 +273,9 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       )
         source = entry.recoveryPath;
     }
-    for (const projection of [prior, after]) {
-      if (source !== undefined || projection === undefined) continue;
-      for (const path of yield* inspectInstalledSkillBackups(projection)) {
+    for (const installedSkill of [prior, after]) {
+      if (source !== undefined || installedSkill === undefined) continue;
+      for (const path of yield* inspectInstalledSkillBackups(installedSkill)) {
         const evidence = yield* captureSetupFile(path);
         if (
           evidence.entry?.hash === file.entry.hash &&

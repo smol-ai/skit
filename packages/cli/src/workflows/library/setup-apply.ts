@@ -11,7 +11,7 @@ import {
   type Digest,
   type SkillId,
 } from "@smolai/skit-core";
-import { activeInstallDestinations, skillsDirectoryFor } from "../../projection/roots.js";
+import { activeInstallDestinations, skillsDirectoryFor } from "../../install/roots.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
@@ -109,7 +109,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     // Only enabled global copies install into this device's skills directories. Prove those roots
     // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
     // read-only) fails the apply whole instead of leaving a Library with no copies behind.
-    const projectedCopies = [...approval.bindings, ...approval.ownership].filter(
+    const installedCopies = [...approval.bindings, ...approval.ownership].filter(
       (copy) =>
         copy.duplicateAction !== "retain-only" &&
         isSetupInstallDestination(
@@ -120,7 +120,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
         ),
     );
-    const enablingCopies = projectedCopies.length > 0;
+    const enablingCopies = installedCopies.length > 0;
     const projects = enablingCopies || hasChangesToApply(reconciliation, versionChoices);
     if (projects)
       for (const target of yield* activeInstallDestinations(approval.setup.inventory))
@@ -145,7 +145,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       { ...approval, changes: reconciliation },
       scan.library,
       projects,
-      projectedCopies.map((copy) => copy.name),
+      installedCopies.map((copy) => copy.name),
     );
     const warnings: { name: string; message: string }[] = [];
     const recoveryDirectories: string[] = [];

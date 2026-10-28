@@ -1027,13 +1027,13 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
   Effect.gen(function* () {
     const f = yield* fixture();
     const authoredSkill = join(f.repository, "skills", "council");
-    const projectedSkill = join(f.codex, "council");
+    const installedSkill = join(f.codex, "council");
     const copiedSkill = join(f.claude, "council-copy");
     yield* f.fs.makeDirectory(authoredSkill, { recursive: true });
-    yield* f.fs.makeDirectory(projectedSkill, { recursive: true });
+    yield* f.fs.makeDirectory(installedSkill, { recursive: true });
     yield* f.fs.makeDirectory(copiedSkill, { recursive: true });
     yield* f.fs.writeFileString(join(authoredSkill, "SKILL.md"), skillDocument("council"));
-    yield* f.fs.writeFileString(join(projectedSkill, "SKILL.md"), skillDocument("council"));
+    yield* f.fs.writeFileString(join(installedSkill, "SKILL.md"), skillDocument("council"));
     yield* f.fs.writeFileString(join(copiedSkill, "SKILL.md"), skillDocument("council"));
     yield* f.fs.writeFileString(
       join(f.repository, "skit.json"),
@@ -1051,7 +1051,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     yield* git(f.repository, "add", "skit.json", "skit.remote.json", "skills/council/SKILL.md");
     yield* git(f.repository, "commit", "-qm", "authored skit");
 
-    const contentHash = yield* deterministicTreeHash(projectedSkill);
+    const contentHash = yield* deterministicTreeHash(installedSkill);
     const skitLocator = "skit://registry.test/tim/skills";
     const collectionId = makeCollectionId();
     const versionId = makeCollectionVersionId();
@@ -1059,9 +1059,9 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     const skillId = makeSkillId();
     const acquisitionId = makeImportId();
     const machineId = makeMachineId();
-    const projectionId = makeInstalledSkillId();
+    const installedSkillId = makeInstalledSkillId();
     const orphanedSkill = join(f.codex, "orphaned");
-    const orphanedProjectionId = makeInstalledSkillId();
+    const orphanedInstalledSkillId = makeInstalledSkillId();
     const orphanedCollectionId = makeCollectionId();
     const orphanedSkillId = makeSkillId();
     const orphanedSkillVersionId = makeSkillVersionId();
@@ -1072,7 +1072,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       JSON.stringify({
         schemaVersion: 2,
         projectionPolicyVersion: 1,
-        projection_id: orphanedProjectionId,
+        projection_id: orphanedInstalledSkillId,
         collection_id: orphanedCollectionId,
         skill_id: orphanedSkillId,
         skill_version_id: orphanedSkillVersionId,
@@ -1080,18 +1080,18 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
         harness: "codex",
       }),
     );
-    const projectionMarker = JSON.stringify({
+    const installedSkillMarker = JSON.stringify({
       schemaVersion: 2,
       projectionPolicyVersion: 1,
-      projection_id: projectionId,
+      projection_id: installedSkillId,
       collection_id: collectionId,
       skill_id: skillId,
       skill_version_id: skillVersionId,
       expected_digest: contentHash,
       harness: "codex",
     });
-    yield* f.fs.writeFileString(join(projectedSkill, ".skit-ownership.json"), projectionMarker);
-    yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), projectionMarker);
+    yield* f.fs.writeFileString(join(installedSkill, ".skit-ownership.json"), installedSkillMarker);
+    yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), installedSkillMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
       schemaVersion: 10,
       collections: [
@@ -1163,13 +1163,13 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       repositories: [],
       installed_skills: [
         {
-          installed_skill_id: projectionId,
+          installed_skill_id: installedSkillId,
           collection_id: collectionId,
           skill_id: skillId,
           skill_version_id: skillVersionId,
           destination: "agents",
           root: f.codex,
-          path: projectedSkill,
+          path: installedSkill,
           expected_digest: contentHash,
           status: "installed",
           installed_at: "2026-01-01T00:00:00.000Z",
@@ -1215,12 +1215,12 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "council" }],
     });
     expect(
-      observed.instances.find((instance) => instance.aliases.includes(projectedSkill))?.owner,
+      observed.instances.find((instance) => instance.aliases.includes(installedSkill))?.owner,
     ).toEqual({
       kind: "skit",
       membership: {
         kind: "in-library",
-        installedSkillId: projectionId,
+        installedSkillId: installedSkillId,
         collectionId,
         skillId,
         skillVersionId,
@@ -1237,7 +1237,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       kind: "skit",
       membership: {
         kind: "missing-from-library",
-        installedSkillId: orphanedProjectionId,
+        installedSkillId: orphanedInstalledSkillId,
         skillId: orphanedSkillId,
         skillVersionId: orphanedSkillVersionId,
       },
@@ -1330,9 +1330,9 @@ it.effect(
       const missingSkillId = makeSkillId();
       const acquisitionId = makeImportId();
       const machineId = makeMachineId();
-      const currentProjectionId = makeInstalledSkillId();
-      const missingProjectionId = makeInstalledSkillId();
-      const orphanedProjectionId = makeInstalledSkillId();
+      const currentInstalledSkillId = makeInstalledSkillId();
+      const missingInstalledSkillId = makeInstalledSkillId();
+      const orphanedInstalledSkillId = makeInstalledSkillId();
       const orphanedCollectionId = makeCollectionId();
       const orphanedSkillId = makeSkillId();
       const orphanedVersionId = makeSkillVersionId();
@@ -1341,7 +1341,7 @@ it.effect(
         JSON.stringify({
           schemaVersion: 2,
           projectionPolicyVersion: 1,
-          projection_id: currentProjectionId,
+          projection_id: currentInstalledSkillId,
           collection_id: collectionId,
           skill_id: currentSkillId,
           skill_version_id: currentVersionId,
@@ -1354,7 +1354,7 @@ it.effect(
         JSON.stringify({
           schemaVersion: 2,
           projectionPolicyVersion: 1,
-          projection_id: orphanedProjectionId,
+          projection_id: orphanedInstalledSkillId,
           collection_id: orphanedCollectionId,
           skill_id: orphanedSkillId,
           skill_version_id: orphanedVersionId,
@@ -1440,7 +1440,7 @@ it.effect(
         repositories: [],
         installed_skills: [
           {
-            installed_skill_id: currentProjectionId,
+            installed_skill_id: currentInstalledSkillId,
             collection_id: collectionId,
             skill_id: currentSkillId,
             skill_version_id: currentVersionId,
@@ -1452,7 +1452,7 @@ it.effect(
             installed_at: "2026-01-01T00:00:00.000Z",
           },
           {
-            installed_skill_id: missingProjectionId,
+            installed_skill_id: missingInstalledSkillId,
             collection_id: collectionId,
             skill_id: missingSkillId,
             skill_version_id: missingVersionId,

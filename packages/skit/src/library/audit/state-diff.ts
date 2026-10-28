@@ -174,12 +174,12 @@ export const diffLibraryState = (
       changes.push({ entity: "binding", id: current.scopeId, action: "invocation-changed" });
   }
 
-  const projections = compare(
+  const installedSkills = compare(
     before.installed_skills,
     after.installed_skills,
     (item) => item.installed_skill_id,
   );
-  for (const item of projections.added)
+  for (const item of installedSkills.added)
     changes.push({
       entity: "projection",
       id: item.installed_skill_id,
@@ -188,7 +188,7 @@ export const diffLibraryState = (
       path: item.path,
       digest: item.expected_digest,
     });
-  for (const item of projections.removed)
+  for (const item of installedSkills.removed)
     changes.push({
       entity: "projection",
       id: item.installed_skill_id,
@@ -196,7 +196,7 @@ export const diffLibraryState = (
       before: item.status,
       path: item.path,
     });
-  for (const { previous, current } of projections.kept) {
+  for (const { previous, current } of installedSkills.kept) {
     if (
       previous.status === current.status &&
       previous.skill_version_id === current.skill_version_id

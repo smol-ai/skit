@@ -17,7 +17,7 @@ import {
   writeJsonExclusive,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { leavePnpmSkill } from "../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../install/pnpm-skills.js";
 
 const Identity = Schema.Struct({ path: Schema.String, dev: Schema.Number, ino: Schema.Number });
 const EntryFields = {
@@ -176,7 +176,7 @@ export const prepareRecoveryMoves = (
 
 /** Preserve exactly reviewed, registered installed skills; marker text alone never grants ownership. */
 export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
-  requests: readonly { name: string; projection: InstalledSkill }[],
+  requests: readonly { name: string; installedSkill: InstalledSkill }[],
   operationDirectory?: string,
 ) {
   const store = yield* LibraryStore;
@@ -187,12 +187,12 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
   >();
   const moves: RecoveryMoveRequest[] = [];
   for (const request of requests) {
-    const expected = structuredClone(request.projection);
+    const expected = structuredClone(request.installedSkill);
     const path = resolve(expected.path);
     const check = Effect.gen(function* () {
       const state = yield* store.load;
       const current = state.installed_skills.find(
-        (projection) => projection.installed_skill_id === expected.installed_skill_id,
+        (installedSkill) => installedSkill.installed_skill_id === expected.installed_skill_id,
       );
       if (canonicalJson(current ?? null) !== canonicalJson(expected))
         return yield* new PlanIsStale();

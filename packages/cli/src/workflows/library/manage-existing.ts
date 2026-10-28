@@ -2,12 +2,12 @@ import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../../projection/roots.js";
+} from "../../install/roots.js";
 import {
   findDuplicates,
   readableSkillsDirectories,
   type DuplicateCopy,
-} from "../../projection/duplicates.js";
+} from "../../install/duplicates.js";
 import {
   applySetEnabledPlan,
   planSetEnabled,
@@ -17,7 +17,7 @@ import { PlanIsStale } from "../../library/failures.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
-import { leavePnpmSkill } from "../../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../../install/pnpm-skills.js";
 import {
   duplicateSymlinksToBackUp,
   ApprovedSymlink,
@@ -471,7 +471,7 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
     [
       {
         query: subjectId,
-        preserveUnselectedProjections: true,
+        preserveUnselectedInstalledSkills: true,
         all: false,
         allowDuplicate:
           selection.duplicateAction === "keep-both" ||
@@ -620,24 +620,25 @@ const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
     const path = join(root, name);
     const expectedPath = yield* canonical(path);
     const candidates = state.installed_skills.filter(
-      (projection) => projection.skill_id === skill?.skill_id && projection.status === "installed",
+      (installedSkill) =>
+        installedSkill.skill_id === skill?.skill_id && installedSkill.status === "installed",
     );
-    const installedPaths = yield* Effect.forEach(candidates, (projection) =>
-      canonical(projection.path),
+    const installedPaths = yield* Effect.forEach(candidates, (installedSkill) =>
+      canonical(installedSkill.path),
     );
     if (!(yield* fs.exists(join(path, "SKILL.md"))) || !installedPaths.includes(expectedPath))
       return {
         kind: "preserved" as const,
         message: `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
       };
-    const projection = candidates.find((candidate) => candidate.path === path);
-    const ownership = projection ? yield* inspectInstalledSkill(projection) : undefined;
+    const installedSkill = candidates.find((candidate) => candidate.path === path);
+    const ownership = installedSkill ? yield* inspectInstalledSkill(installedSkill) : undefined;
     if (
-      !projection ||
+      !installedSkill ||
       ownership?.kind !== "intact" ||
-      ownership.observed !== projection.expected_digest ||
-      ownership.marker.expected_digest !== projection.expected_digest ||
-      ownership.marker.skill_version_id !== projection.skill_version_id ||
+      ownership.observed !== installedSkill.expected_digest ||
+      ownership.marker.expected_digest !== installedSkill.expected_digest ||
+      ownership.marker.skill_version_id !== installedSkill.skill_version_id ||
       (yield* (yield* LinkStat).lstat(path)).type !== "Directory"
     )
       return {

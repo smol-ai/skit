@@ -349,15 +349,16 @@ export const skillUsageLayer = Layer.effect(
         if (options.progress) yield* options.progress(completed, files.length);
       }
       // Resolve only the small observed identity set, never every advertised skill.
-      const projections = new Map<string, InstalledSkillUsage[]>();
-      for (const projection of options.projections ?? []) {
-        const document = projection.path.endsWith("/SKILL.md")
-          ? projection.path
-          : join(projection.path, "SKILL.md");
+      const installedSkills = new Map<string, InstalledSkillUsage[]>();
+      for (const installedSkill of options.installedSkills ?? []) {
+        const document = installedSkill.path.endsWith("/SKILL.md")
+          ? installedSkill.path
+          : join(installedSkill.path, "SKILL.md");
         for (const key of new Set([resolve(document), yield* physical(resolve(document))])) {
-          const values = projections.get(key) ?? [];
-          if (!values.some((v) => v.skillId === projection.skillId)) values.push(projection);
-          projections.set(key, values);
+          const values = installedSkills.get(key) ?? [];
+          if (!values.some((v) => v.skillId === installedSkill.skillId))
+            values.push(installedSkill);
+          installedSkills.set(key, values);
         }
       }
       const identities = new Map<
@@ -393,7 +394,7 @@ export const skillUsageLayer = Layer.effect(
         if (!identity) {
           const canonical = lexical ? yield* physical(lexical) : null;
           const matches = canonical
-            ? (projections.get(canonical) ?? projections.get(lexical ?? "") ?? [])
+            ? (installedSkills.get(canonical) ?? installedSkills.get(lexical ?? "") ?? [])
             : [];
           const match = matches.length === 1 ? matches[0] : undefined;
           identity = {

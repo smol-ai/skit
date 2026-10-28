@@ -89,7 +89,11 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
               save: (next, base) =>
                 Effect.gen(function* () {
                   yield* store.save(next, base);
-                  if (next.installed_skills.some((projection) => projection.status === "installed"))
+                  if (
+                    next.installed_skills.some(
+                      (installedSkill) => installedSkill.status === "installed",
+                    )
+                  )
                     yield* f.fs.writeFileString(
                       join(f.duplicate, ".git"),
                       "gitdir: newly-owned-checkout\n",
@@ -123,7 +127,7 @@ it.effect(
       expect(yield* f.fs.exists(f.duplicate)).toBe(false);
       expect(
         (yield* f.home.durable).installed_skills.every(
-          (projection) => projection.status === "installed",
+          (installedSkill) => installedSkill.status === "installed",
         ),
       ).toBe(true);
       if (!applied.operationId) return yield* Effect.die(new Error("Missing operation ID"));
@@ -172,7 +176,11 @@ it.effect(
               save: (next, base) =>
                 Effect.gen(function* () {
                   yield* store.save(next, base);
-                  if (next.installed_skills.some((projection) => projection.status === "installed"))
+                  if (
+                    next.installed_skills.some(
+                      (installedSkill) => installedSkill.status === "installed",
+                    )
+                  )
                     yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
                 }),
             }),

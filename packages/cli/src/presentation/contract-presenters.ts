@@ -253,8 +253,8 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
       `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
       `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
       ...finding.instances.flatMap((instance) => {
-        const locations: readonly import("../projection/duplicates.js").SkillAlias[] = instance
-          .aliases?.length
+        const locations: readonly import("../install/duplicates.js").SkillAlias[] = instance.aliases
+          ?.length
           ? instance.aliases
           : [{ path: instance.path, via: "unknown-root" }];
         return locations.map(
@@ -654,27 +654,33 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v10">): stri
 }
 
 function renderSetupInstalledSkills(
-  projections: ContractDataForId<"skit.setup.v10">["installedSkills"],
+  installedSkills: ContractDataForId<"skit.setup.v10">["installedSkills"],
 ): string[] {
-  const collections = new Map<string, (typeof projections)[number][]>();
-  for (const projection of projections) {
-    const group = projection.collectionId ?? projection.skillId;
-    collections.set(group, [...(collections.get(group) ?? []), projection]);
+  const collections = new Map<string, (typeof installedSkills)[number][]>();
+  for (const installedSkill of installedSkills) {
+    const group = installedSkill.collectionId ?? installedSkill.skillId;
+    collections.set(group, [...(collections.get(group) ?? []), installedSkill]);
   }
   return [...collections.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([, projections]) => {
-      const names = [...new Set(projections.map((projection) => projection.name))].sort();
+    .flatMap(([, installedSkills]) => {
+      const names = [
+        ...new Set(installedSkills.map((installedSkill) => installedSkill.name)),
+      ].sort();
       const statuses = ["current", "modified", "missing"] as const;
       const counts = statuses.flatMap((status) => {
-        const count = projections.filter((projection) => projection.status === status).length;
+        const count = installedSkills.filter(
+          (installedSkill) => installedSkill.status === status,
+        ).length;
         return count ? [`${count} ${status}`] : [];
       });
-      const harnesses = [...new Set(projections.flatMap((projection) => projection.harnesses))]
+      const harnesses = [
+        ...new Set(installedSkills.flatMap((installedSkill) => installedSkill.harnesses)),
+      ]
         .sort()
         .map(harnessLabel);
       return [
-        `  ${projections[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${projections.length === names.length ? "" : ` · ${projections.length} installed copies`}`,
+        `  ${installedSkills[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` · ${installedSkills.length} installed copies`}`,
         ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
         `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
       ];
@@ -683,18 +689,20 @@ function renderSetupInstalledSkills(
 
 function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v10">): string[] {
   return data.authoredCollections.flatMap((collection) => {
-    const projections = data.installedSkills.filter(
-      (projection) => projection.collectionId === collection.collectionId,
+    const installedSkills = data.installedSkills.filter(
+      (installedSkill) => installedSkill.collectionId === collection.collectionId,
     );
     const statuses = ["current", "modified", "missing"] as const;
-    const projectionSummary = statuses.flatMap((status) => {
-      const count = projections.filter((projection) => projection.status === status).length;
+    const installedSkillSummary = statuses.flatMap((status) => {
+      const count = installedSkills.filter(
+        (installedSkill) => installedSkill.status === status,
+      ).length;
       return count ? [`${count} ${status}`] : [];
     });
     const names = collection.skills.map((skill) => skill.name);
     return [
       `  ${collection.namespace}/${collection.skit} · ${collection.repository}`,
-      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${projectionSummary.length ? ` · ${projectionSummary.join(" · ")} installed cop${projections.length === 1 ? "y" : "ies"}` : ""}`,
+      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${installedSkillSummary.length ? ` · ${installedSkillSummary.join(" · ")} installed cop${installedSkills.length === 1 ? "y" : "ies"}` : ""}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
       `    ${collection.origin}`,
     ];
@@ -796,8 +804,8 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v3">): s
       "",
       "Copies",
       ...data.installedSkills.map(
-        (projection) =>
-          `  ${projection.name} · ${projection.destination} · ${projection.status} · ${projection.path}`,
+        (installedSkill) =>
+          `  ${installedSkill.name} · ${installedSkill.destination} · ${installedSkill.status} · ${installedSkill.path}`,
       ),
     );
   if (data.changes?.length)
@@ -858,15 +866,16 @@ function renderSetup(data: ContractDataForId<"skit.setup.v10">): string {
       collection.collectionId ? [collection.collectionId] : [],
     ),
   );
-  const externalProjections = data.installedSkills.filter(
-    (projection) =>
-      projection.collectionId === undefined || !authoredCollectionIds.has(projection.collectionId),
+  const externalInstalledSkills = data.installedSkills.filter(
+    (installedSkill) =>
+      installedSkill.collectionId === undefined ||
+      !authoredCollectionIds.has(installedSkill.collectionId),
   );
-  if (externalProjections.length)
+  if (externalInstalledSkills.length)
     lines.push(
       "",
       "Existing SKIT installed skills",
-      ...renderSetupInstalledSkills(externalProjections),
+      ...renderSetupInstalledSkills(externalInstalledSkills),
     );
   if (data.changes?.length)
     lines.push(
@@ -1009,7 +1018,8 @@ const contractPresenters: ContractPresenters = {
       `Snapshot: ${data.snapshot_digest}`,
       `Destination: ${data.original_path}`,
       ...data.installed_skills.map(
-        (projection) => `${projection.destination} · ${projection.path} · ${projection.agreement}`,
+        (installedSkill) =>
+          `${installedSkill.destination} · ${installedSkill.path} · ${installedSkill.agreement}`,
       ),
     ].join("\n"),
   projectionRetention: (data) =>
@@ -1019,7 +1029,8 @@ const contractPresenters: ContractPresenters = {
         : `Reconciled ${data.skill_name} using retained Version ${data.imported_skill_version_id}`,
       `Previous Version: ${data.previous_skill_version_id}`,
       ...data.installed_skills.map(
-        (projection) => `${projection.destination} · ${projection.path} · ${projection.status}`,
+        (installedSkill) =>
+          `${installedSkill.destination} · ${installedSkill.path} · ${installedSkill.status}`,
       ),
     ].join("\n"),
   remove: renderRemove,

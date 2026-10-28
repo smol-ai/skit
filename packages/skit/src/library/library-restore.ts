@@ -415,12 +415,12 @@ export function strandedByRestore(current: LibraryState, manifest: LibraryManife
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),
   );
   const conflicts = [
-    ...current.installed_skills.flatMap((projection) =>
-      (!enabledSkillIds(manifest, manifest.enabled).includes(projection.skill_id) &&
-        !repositorySelectsInstalledSkill(current, projection)) ||
-      (skillIds.has(projection.skill_id) && versionIds.has(projection.skill_version_id))
+    ...current.installed_skills.flatMap((installedSkill) =>
+      (!enabledSkillIds(manifest, manifest.enabled).includes(installedSkill.skill_id) &&
+        !repositorySelectsInstalledSkill(current, installedSkill)) ||
+      (skillIds.has(installedSkill.skill_id) && versionIds.has(installedSkill.skill_version_id))
         ? []
-        : [`device:${projection.installed_skill_id}:managed-projection`],
+        : [`device:${installedSkill.installed_skill_id}:managed-projection`],
     ),
     ...current.repositories.flatMap((repository) =>
       repository.enabled.every((item) =>

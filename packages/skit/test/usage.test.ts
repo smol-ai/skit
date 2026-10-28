@@ -207,7 +207,7 @@ it.effect("path identity joins known installed skills and keeps same-name docume
     const report = yield* (yield* SkillUsage).scan({
       roots: [{ root, harness: "codex" }],
       end,
-      projections: [{ path: alias, skillId: "skill-example", name: "Example skill" }],
+      installedSkills: [{ path: alias, skillId: "skill-example", name: "Example skill" }],
     });
     expect(report.rows).toHaveLength(2);
     expect(report.rows).toEqual(
@@ -226,7 +226,7 @@ it.effect("path identity joins known installed skills and keeps same-name docume
     const ambiguous = yield* (yield* SkillUsage).scan({
       roots: [{ root, harness: "codex" }],
       end,
-      projections: [
+      installedSkills: [
         { path: alias, skillId: "one", name: "One" },
         { path: document, skillId: "two", name: "Two" },
       ],
@@ -1073,7 +1073,7 @@ it.effect(
       const options = {
         end,
         project: root,
-        projections: [
+        installedSkills: [
           { path: "/synthetic/skills/example", skillId: "example-id", name: "example" },
         ],
       };

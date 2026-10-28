@@ -15,7 +15,7 @@ const IGNORE_EVERYTHING = "*\n";
  * sees them; but a root mounted from another device shares that device only with its own entries,
  * and a rename is the only lossless move, so there they live hidden inside the root instead.
  */
-export const installedSkillWorkDirectory = Effect.fn("Projection.workDirectory")(function* (
+export const installedSkillWorkDirectory = Effect.fn("Install.workDirectory")(function* (
   root: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -29,13 +29,13 @@ export const installedSkillWorkDirectory = Effect.fn("Projection.workDirectory")
  * Move an owned copy aside instead of deleting it. It stays `pending` until the Library state that
  * no longer records it is saved, so its absence is never read as the user's deletion.
  */
-export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
-  projection: Pick<InstalledSkill, "root" | "path" | "installed_skill_id">,
+export const backUpInstalledSkill = Effect.fn("Install.backUp")(function* (
+  installedSkill: Pick<InstalledSkill, "root" | "path" | "installed_skill_id">,
   action: "replace" | "retire",
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const backups = join(yield* installedSkillWorkDirectory(projection.root), BACKUPS_DIRECTORY);
+  const backups = join(yield* installedSkillWorkDirectory(installedSkill.root), BACKUPS_DIRECTORY);
   yield* fs.makeDirectory(backups, { recursive: true, mode: 0o700 });
   // A repository can commit its own `.skit-backups`, so never follow a link planted there.
   if ((yield* links.lstat(backups)).type !== "Directory")
@@ -60,22 +60,22 @@ export const backUpInstalledSkill = Effect.fn("Projection.backUp")(function* (
   const stamp = new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "-");
   const backup = join(
     backups,
-    `pending-${projection.installed_skill_id}-${stamp}-${action}-${makeOperationId()}`,
+    `pending-${installedSkill.installed_skill_id}-${stamp}-${action}-${makeOperationId()}`,
   );
-  yield* fs.rename(projection.path, backup).pipe(Effect.uninterruptible);
+  yield* fs.rename(installedSkill.path, backup).pipe(Effect.uninterruptible);
   return backup;
 });
 
 /** Pending backups of one installed skill, wherever its root's device placed them. */
-const installedSkillBackups = Effect.fn("Projection.backups")(function* (
-  projection: Pick<InstalledSkill, "root" | "installed_skill_id">,
+const installedSkillBackups = Effect.fn("Install.backups")(function* (
+  installedSkill: Pick<InstalledSkill, "root" | "installed_skill_id">,
   includeKept: boolean,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const realRoot = yield* fs
-    .realPath(projection.root)
-    .pipe(Effect.orElseSucceed(() => resolve(projection.root)));
+    .realPath(installedSkill.root)
+    .pipe(Effect.orElseSucceed(() => resolve(installedSkill.root)));
   const pending: string[] = [];
   for (const workDirectory of [dirname(realRoot), realRoot]) {
     const backups = join(workDirectory, BACKUPS_DIRECTORY);
@@ -93,8 +93,8 @@ const installedSkillBackups = Effect.fn("Projection.backups")(function* (
       ...names
         .filter(
           (name) =>
-            name.startsWith(`pending-${projection.installed_skill_id}-`) ||
-            (includeKept && name.startsWith(`kept-${projection.installed_skill_id}-`)),
+            name.startsWith(`pending-${installedSkill.installed_skill_id}-`) ||
+            (includeKept && name.startsWith(`kept-${installedSkill.installed_skill_id}-`)),
         )
         .map((name) => join(backups, name)),
     );
@@ -104,18 +104,16 @@ const installedSkillBackups = Effect.fn("Projection.backups")(function* (
 
 /** Unsettled backups retain their existing narrow protocol. */
 export const pendingInstalledSkillBackups = (
-  projection: Pick<InstalledSkill, "root" | "installed_skill_id">,
-) => installedSkillBackups(projection, false);
+  installedSkill: Pick<InstalledSkill, "root" | "installed_skill_id">,
+) => installedSkillBackups(installedSkill, false);
 
 /** Inspect both kept and pending predecessors without following a redirected backup directory. */
 export const inspectInstalledSkillBackups = (
-  projection: Pick<InstalledSkill, "root" | "installed_skill_id">,
-) => installedSkillBackups(projection, true);
+  installedSkill: Pick<InstalledSkill, "root" | "installed_skill_id">,
+) => installedSkillBackups(installedSkill, true);
 
 /** A kept backup may hold bytes nothing else does. It stays until an operator removes it. */
-export const keepInstalledSkillBackup = Effect.fn("Projection.keepBackup")(function* (
-  backup: string,
-) {
+export const keepInstalledSkillBackup = Effect.fn("Install.keepBackup")(function* (backup: string) {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.rename(
     backup,
@@ -129,7 +127,7 @@ export const keepInstalledSkillBackup = Effect.fn("Projection.keepBackup")(funct
  * escaping, so no name can impersonate another entry. Undefined for anything else, such as a link,
  * which SKIT never writes and this comparison does not cover.
  */
-export const losslessTree = Effect.fn("Projection.losslessTree")(function* (root: string) {
+export const losslessTree = Effect.fn("Install.losslessTree")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const entries: Array<{ path: string[]; type: string; mode: number; sha256?: string }> = [];

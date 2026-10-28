@@ -73,9 +73,9 @@ const boundRawReview = Effect.gen(function* () {
     }).pipe(Effect.provide(layer)),
   );
   yield* project;
-  const projected = join(roots.codexRoot, "raw-review", "SKILL.md");
-  assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
-  const projection = Effect.gen(function* () {
+  const installed = join(roots.codexRoot, "raw-review", "SKILL.md");
+  assert.strictEqual(yield* fs.readFileString(installed), "first verbatim Skill\n");
+  const installedSkill = Effect.gen(function* () {
     const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(state);
     const row = state.installed_skills.find((item) => item.destination === "agents");
@@ -87,16 +87,16 @@ const boundRawReview = Effect.gen(function* () {
         skill === undefined ? undefined : currentSkillVersion(state, skill)?.skill_version_id,
     };
   });
-  return { fs, home, roots, layer, observe, project, projected, projection };
+  return { fs, home, roots, layer, observe, project, installedPath: installed, installedSkill };
 });
 
 it.effect("rewrites an untouched installed skill when the selected Version advances", () =>
   Effect.gen(function* () {
-    const { fs, observe, project, projected, projection } = yield* boundRawReview;
+    const { fs, observe, project, installedPath, installedSkill } = yield* boundRawReview;
     yield* observe("second verbatim Skill\n");
     yield* project;
-    assert.strictEqual(yield* fs.readFileString(projected), "second verbatim Skill\n");
-    const { row, selected } = yield* projection;
+    assert.strictEqual(yield* fs.readFileString(installedPath), "second verbatim Skill\n");
+    const { row, selected } = yield* installedSkill;
     assert.strictEqual(row.status, "installed");
     assert.strictEqual(row.skill_version_id, selected);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -106,12 +106,12 @@ it.effect(
   "keeps a locally edited installed skill conflicted when the selected Version advances",
   () =>
     Effect.gen(function* () {
-      const { fs, home, observe, project, projected, projection } = yield* boundRawReview;
-      yield* fs.writeFileString(projected, "my local edit\n");
+      const { fs, home, observe, project, installedPath, installedSkill } = yield* boundRawReview;
+      yield* fs.writeFileString(installedPath, "my local edit\n");
       yield* observe("second verbatim Skill\n");
       yield* project;
-      assert.strictEqual(yield* fs.readFileString(projected), "my local edit\n");
-      const { row } = yield* projection;
+      assert.strictEqual(yield* fs.readFileString(installedPath), "my local edit\n");
+      const { row } = yield* installedSkill;
       assert.strictEqual(row.status, "conflicted");
       const variants = join(home, "variants", "agents", "raw-review");
       const [variant, ...others] = yield* fs.readDirectory(variants);
@@ -127,7 +127,8 @@ it.effect(
 // Before the fix, an update left untouched installed skills recorded as conflicted at the new Version.
 it.effect("heals an untouched installed skill already recorded as conflicted", () =>
   Effect.gen(function* () {
-    const { fs, home, layer, observe, project, projected, projection } = yield* boundRawReview;
+    const { fs, home, layer, observe, project, installedPath, installedSkill } =
+      yield* boundRawReview;
     yield* observe("second verbatim Skill\n");
     const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(state);
@@ -153,15 +154,15 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
       ).pipe(Effect.provide(layer)),
     );
     yield* project;
-    assert.strictEqual(yield* fs.readFileString(projected), "second verbatim Skill\n");
-    const { row } = yield* projection;
+    assert.strictEqual(yield* fs.readFileString(installedPath), "second verbatim Skill\n");
+    const { row } = yield* installedSkill;
     assert.strictEqual(row.status, "installed");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect("re-enabling an unchanged Binding reconciles a changed global root", () =>
   Effect.gen(function* () {
-    const { fs, home, roots, layer, projected } = yield* boundRawReview;
+    const { fs, home, roots, layer, installedPath } = yield* boundRawReview;
     const newRoot = join(home, "relocated", "skills");
     const before = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     const skillId = before.skills[0]?.skill_id;
@@ -182,7 +183,7 @@ it.effect("re-enabling an unchanged Binding reconciles a changed global root", (
     );
     assert.strictEqual(changed.kind, "applied");
     assert.strictEqual(changed.value.changed, false);
-    assert.strictEqual(yield* fs.exists(projected), false);
+    assert.strictEqual(yield* fs.exists(installedPath), false);
     assert.strictEqual(
       yield* fs.readFileString(join(newRoot, "raw-review", "SKILL.md")),
       "first verbatim Skill\n",
@@ -202,7 +203,7 @@ for (const followedCollection of [false, true])
     `explicit enable recreates only the selected installed skill (followed Collection=${followedCollection})`,
     () =>
       Effect.gen(function* () {
-        const { fs, home, roots, layer, project, projected } = yield* boundRawReview;
+        const { fs, home, roots, layer, project, installedPath } = yield* boundRawReview;
         const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
         const otherSource = join(home, "other-source");
         yield* fs.makeDirectory(otherSource);
@@ -262,7 +263,7 @@ for (const followedCollection of [false, true])
         assert.strictEqual(suppressedRow?.status, "suppressed");
         assert.strictEqual(suppressedRow?.suppression_reason, "native_delete");
         yield* project;
-        assert.strictEqual(yield* fs.exists(projected), false);
+        assert.strictEqual(yield* fs.exists(installedPath), false);
         const before = yield* load;
 
         const enable = (dryRun: boolean) =>
@@ -286,12 +287,12 @@ for (const followedCollection of [false, true])
           );
         const preview = yield* enable(true);
         assert.strictEqual(preview.kind, "plan");
-        assert.strictEqual(yield* fs.exists(projected), false);
+        assert.strictEqual(yield* fs.exists(installedPath), false);
         assert.deepStrictEqual(yield* load, before);
         const applied = yield* enable(false);
         assert.strictEqual(applied.kind, "applied");
         assert.strictEqual(applied.value.changed, false);
-        assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
+        assert.strictEqual(yield* fs.readFileString(installedPath), "first verbatim Skill\n");
         const after = yield* load;
         const restored = after.installed_skills.find(
           (row) => row.skill_id === skillId && row.destination === "agents",
@@ -312,13 +313,13 @@ it.effect(
   "reconciling without routing keeps intact copies rather than treating them as inactive",
   () =>
     Effect.gen(function* () {
-      const { fs, home, layer, projected, projection } = yield* boundRawReview;
+      const { fs, home, layer, installedPath, installedSkill } = yield* boundRawReview;
       const reconciled = yield* writingTo(
         home,
         updateInstalledSkills({ variantsPath: join(home, "variants") }).pipe(Effect.provide(layer)),
       );
       assert.strictEqual(reconciled.retired, 0);
-      assert.strictEqual(yield* fs.readFileString(projected), "first verbatim Skill\n");
-      assert.strictEqual((yield* projection).row.status, "installed");
+      assert.strictEqual(yield* fs.readFileString(installedPath), "first verbatim Skill\n");
+      assert.strictEqual((yield* installedSkill).row.status, "installed");
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

@@ -15,8 +15,8 @@ const completedMessage = (stage: LibraryProgressStage, result: LibraryProgressCo
       ? result.changed
         ? "New snapshot retained"
         : "Source is current"
-      : result.projected
-        ? `${result.projected} installed skill${result.projected === 1 ? "" : "s"} updated`
+      : result.installed
+        ? `${result.installed} installed skill${result.installed === 1 ? "" : "s"} updated`
         : "No installed skills needed updating";
   return `${stage.subject.label} · ${message}`;
 };

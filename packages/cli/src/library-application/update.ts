@@ -1,6 +1,6 @@
 import { LibraryStore, withLibraryWriter, type LibraryState } from "@smolai/skit-core";
 import { Effect } from "effect";
-import type { InventoryRootOptions } from "../projection/roots.js";
+import type { InventoryRootOptions } from "../install/roots.js";
 import type { UpdateResult } from "../workflows/library/update-contract.js";
 import {
   latestSourceImport,

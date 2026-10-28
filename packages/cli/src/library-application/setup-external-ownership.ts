@@ -1,7 +1,7 @@
 import { dirname, join, relative, resolve } from "node:path";
 import { Effect } from "effect";
 import { LinkStat } from "@smolai/skit-core";
-import { leavePnpmSkill } from "../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../install/pnpm-skills.js";
 import { PlanIsStale } from "../library/failures.js";
 
 /** A registered marker cannot override repository, authored or package-manager ownership. */

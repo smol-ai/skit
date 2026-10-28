@@ -216,7 +216,9 @@ it.effect("applying the reviewed plan ID starts managing every recommended copy"
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
     assert.isNotEmpty(state.installed_skills);
-    assert.isTrue(state.installed_skills.every((projection) => projection.status === "installed"));
+    assert.isTrue(
+      state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
+    );
     // The result reports what happened, so a caller need not re-observe to find out.
     const report = Exit.isSuccess(exit) ? exit.value : undefined;
     assert.deepStrictEqual(
@@ -264,7 +266,7 @@ it.effect(
       const state = yield* f.home.durable;
       assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
       assert.isTrue(
-        state.installed_skills.every((projection) => projection.status === "installed"),
+        state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
       );
       yield* f.home.owned((yield* f.home.owned(prepareSetupUndo(operationId))).apply());
       assert.strictEqual(yield* fs.readLink(alias), originalLink);
@@ -302,9 +304,11 @@ it.effect("identical copies at each target are managed in place, not left to con
 
     assert.isTrue(Exit.isSuccess(exit));
     const state = yield* f.home.durable;
-    const gamma = state.installed_skills.filter((projection) => projection.path.endsWith("/gamma"));
+    const gamma = state.installed_skills.filter((installedSkill) =>
+      installedSkill.path.endsWith("/gamma"),
+    );
     assert.deepStrictEqual(
-      gamma.map((projection) => projection.status),
+      gamma.map((installedSkill) => installedSkill.status),
       ["installed", "installed"],
     );
     for (const skills of [join(f.root, ".claude", "skills"), join(f.root, ".agents", "skills")])

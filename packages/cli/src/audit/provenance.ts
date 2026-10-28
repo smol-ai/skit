@@ -8,7 +8,7 @@ import {
 import { dirname, join, normalize, sep } from "node:path";
 import { Effect } from "effect";
 import { canonical } from "./io.js";
-import { pnpmSkillOwner, type PnpmSkillCheck } from "../projection/pnpm-skills.js";
+import { pnpmSkillOwner, type PnpmSkillCheck } from "../install/pnpm-skills.js";
 
 function codexSystemSkillsRoot(path: string): string | null {
   const parts = normalize(path).split(sep);

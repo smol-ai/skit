@@ -181,7 +181,7 @@ export const harnessProfiles = {
       },
     ],
     skillMetadata: CODEX_SKILL_METADATA_CONTRACTS,
-    projection: {
+    installedSkill: {
       globalTarget: "codex-global-shared",
       projectTarget: "codex-project-agents",
       strategy: "copy",
@@ -324,7 +324,7 @@ export const harnessProfiles = {
         ],
       },
     ],
-    projection: {
+    installedSkill: {
       globalTarget: "claude-global-native",
       projectTarget: "claude-project-native",
       strategy: "copy",
@@ -464,7 +464,7 @@ export const harnessProfiles = {
         ],
       },
     ],
-    projection: {
+    installedSkill: {
       globalTarget: "opencode-global-legacy",
       projectTarget: "opencode-project-native",
       strategy: "copy",
@@ -607,7 +607,7 @@ export const harnessProfiles = {
         ],
       },
     ],
-    projection: {
+    installedSkill: {
       globalTarget: "devin-global-native",
       projectTarget: "devin-project-native",
       strategy: "copy",
@@ -654,6 +654,6 @@ export function installSkillsDirectory(
 ): string | null {
   const profile = harnessProfile(harness);
   const id =
-    scope === "global" ? profile.projection.globalTarget : profile.projection.projectTarget;
+    scope === "global" ? profile.installedSkill.globalTarget : profile.installedSkill.projectTarget;
   return id ? resolveSkillsDirectory(skillsDirectory(profile, id), context) : null;
 }

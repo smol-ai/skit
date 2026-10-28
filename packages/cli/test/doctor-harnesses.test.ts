@@ -400,7 +400,7 @@ test.each([
 ])("doctor keeps OpenCode warnings for %s", (kind) => {
   const { state, check } = collisionFixture();
   const claude = state.installed_skills[1];
-  if (!claude) throw new Error("Missing fixture projection");
+  if (!claude) throw new Error("Missing fixture installed skill");
   if (kind === "different-content") claude.observed_digest = `sha256:${"b".repeat(64)}`;
   if (kind === "different-version")
     state.installed_skills[1] = { ...claude, skill_version_id: makeSkillVersionId() };
@@ -421,7 +421,7 @@ test.each([
 test("doctor accepts intact target-specific invocation renderings of the same Version", () => {
   const { state, check } = collisionFixture();
   const claude = state.installed_skills[1];
-  if (!claude) throw new Error("Missing fixture projection");
+  if (!claude) throw new Error("Missing fixture installed skill");
   const claudeDigest = `sha256:${"b".repeat(64)}`;
   state.installed_skills[1] = {
     ...claude,

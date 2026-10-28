@@ -142,7 +142,7 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-for (const failurePhase of ["projection", "source-cleanup"] as const) {
+for (const failurePhase of ["install", "source-cleanup"] as const) {
   it.effect(
     `repairs bound installed skills after ${failurePhase} failure with a current Source`,
     () =>
@@ -167,8 +167,8 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
             }),
           ),
         );
-        const projectionPath = join(f.root, "codex", "broken", "SKILL.md");
-        const original = yield* f.fs.readFileString(projectionPath);
+        const installedSkillPath = join(f.root, "codex", "broken", "SKILL.md");
+        const original = yield* f.fs.readFileString(installedSkillPath);
         f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
         let failed = false;
         const outcomes = yield* f.run(
@@ -200,7 +200,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
             Effect.provideService(FileSystem.FileSystem, {
               ...f.fs,
               makeTempDirectoryScoped: (input) =>
-                failurePhase === "projection" && input?.prefix === ".skit-stage-" && !failed
+                failurePhase === "install" && input?.prefix === ".skit-stage-" && !failed
                   ? Effect.gen(function* () {
                       failed = true;
                       return yield* Effect.fail(
@@ -208,7 +208,7 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
                           _tag: "PermissionDenied",
                           module: "FileSystem",
                           method: "makeTempDirectoryScoped",
-                          pathOrDescriptor: join(f.root, "projection-stage"),
+                          pathOrDescriptor: join(f.root, "install-stage"),
                         }),
                       );
                     })
@@ -219,17 +219,17 @@ for (const failurePhase of ["projection", "source-cleanup"] as const) {
         assert.isTrue(failed);
         assert.isTrue("status" in outcomes[0]!);
         if (!("status" in outcomes[0]!)) return;
-        assert.strictEqual(outcomes[0].phase, failurePhase === "projection" ? "install" : "source");
+        assert.strictEqual(outcomes[0].phase, failurePhase === "install" ? "install" : "source");
         assert.strictEqual(outcomes[0].source_imported, true);
         assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-        assert.strictEqual(yield* f.fs.readFileString(projectionPath), original);
+        assert.strictEqual(yield* f.fs.readFileString(installedSkillPath), original);
         const retained = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
         const retry = yield* writingTo(
           f.home,
           f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
-        assert.include(yield* f.fs.readFileString(projectionPath), "after");
+        assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
         const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
         assert.strictEqual(after.imports.length, retained.imports.length);
         const unchanged = yield* writingTo(

@@ -3,7 +3,7 @@ import { parse } from "yaml";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
-import { applyInvocationPolicy, overrideInvocationIntent } from "../src/projection/policy.js";
+import { applyInvocationPolicy, overrideInvocationIntent } from "../src/install/policy.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const makeDirectory = (path: string) => FileSystem.FileSystem.use((fs) => fs.makeDirectory(path));
@@ -127,9 +127,9 @@ it.effect("OpenCode overwrites an authored implicit value and preserves CRLF", (
       overrideInvocationIntent("explicit"),
     );
 
-    const projected = yield* read(join(directory, "SKILL.md"));
-    expect(projected).not.toMatch(/(?<!\r)\n/);
-    expect(frontmatter(projected)).toMatchObject({
+    const installed = yield* read(join(directory, "SKILL.md"));
+    expect(installed).not.toMatch(/(?<!\r)\n/);
+    expect(frontmatter(installed)).toMatchObject({
       metadata: { "opencode/autoinvoke": "false", other: "keep" },
     });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -280,9 +280,9 @@ it.effect("safely replaces an empty Claude invocation value", () =>
       overrideInvocationIntent("explicit"),
     );
 
-    const projected = yield* read(join(directory, "SKILL.md"));
-    expect(projected).toContain("disable-model-invocation: true");
-    expect(projected).toContain("---\n# Review");
+    const installed = yield* read(join(directory, "SKILL.md"));
+    expect(installed).toContain("disable-model-invocation: true");
+    expect(installed).toContain("---\n# Review");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -345,10 +345,10 @@ it.effect("does not treat an inline separator as the frontmatter delimiter", () 
 
     yield* applyInvocationPolicy(directory, "claude", "explicit");
 
-    const projected = yield* read(join(directory, "SKILL.md"));
-    expect(projected).toContain("description: separator is ---\n");
-    expect(projected).toContain("other: x\n");
-    expect(parse(projected.match(/^---\n([\s\S]*?)^---$/m)?.[1] ?? "")).toMatchObject({
+    const installed = yield* read(join(directory, "SKILL.md"));
+    expect(installed).toContain("description: separator is ---\n");
+    expect(installed).toContain("other: x\n");
+    expect(parse(installed.match(/^---\n([\s\S]*?)^---$/m)?.[1] ?? "")).toMatchObject({
       description: "separator is ---",
       other: "x",
       "disable-model-invocation": true,
@@ -376,8 +376,8 @@ it.effect("preserves CRLF throughout Claude frontmatter", () =>
 
     yield* applyInvocationPolicy(directory, "claude", "explicit");
 
-    const projected = yield* read(join(directory, "SKILL.md"));
-    expect(projected).not.toMatch(/(?<!\r)\n/);
-    expect(projected).toContain("disable-model-invocation: true\r\n");
+    const installed = yield* read(join(directory, "SKILL.md"));
+    expect(installed).not.toMatch(/(?<!\r)\n/);
+    expect(installed).toContain("disable-model-invocation: true\r\n");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

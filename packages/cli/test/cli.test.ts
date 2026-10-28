@@ -814,13 +814,13 @@ describe("CLI contracts", () => {
     const selectedDigest = preview.data.observed_digest;
     const marker = JSON.parse(markerBefore.claude);
     await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
-    const projection = partialState.installed_skills.find(
+    const installedSkill = partialState.installed_skills.find(
       (candidate: { path: string }) => candidate.path === paths.claude,
     );
-    projection.skill_version_id = marker.skill_version_id;
-    projection.expected_digest = marker.expected_digest;
-    projection.observed_digest = selectedDigest;
-    projection.status = "conflicted";
+    installedSkill.skill_version_id = marker.skill_version_id;
+    installedSkill.expected_digest = marker.expected_digest;
+    installedSkill.observed_digest = selectedDigest;
+    installedSkill.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),

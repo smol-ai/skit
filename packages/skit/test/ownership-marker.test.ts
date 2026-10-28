@@ -5,7 +5,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
-import { parseOwnershipMarker } from "../src/projection/mutation.js";
+import { parseOwnershipMarker } from "../src/install/mutation.js";
 
 const current = {
   schemaVersion: 5,

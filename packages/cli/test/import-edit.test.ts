@@ -13,7 +13,7 @@ import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 
-const projectionFixture = Effect.gen(function* () {
+const installedSkillFixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-projection-retain-" });
   const roots = isolatedRoots(workspace);
@@ -80,7 +80,7 @@ it.effect(
   "retains explicitly selected installed-skill bytes and accepts only identical observations",
   () =>
     Effect.gen(function* () {
-      const { fs, roots, home, source, skill, storeLayer } = yield* projectionFixture;
+      const { fs, roots, home, source, skill, storeLayer } = yield* installedSkillFixture;
       const before = yield* LibraryStore.use((store) => store.load).pipe(
         Effect.provide(storeLayer),
       );
@@ -90,7 +90,10 @@ it.effect(
       const plan = prepared.preview;
       assert.strictEqual(plan.skill_id, skill.skill_id);
       assert.deepStrictEqual(
-        plan.installed_skills.map((projection) => [projection.destination, projection.agreement]),
+        plan.installed_skills.map((installedSkill) => [
+          installedSkill.destination,
+          installedSkill.agreement,
+        ]),
         [
           ["agents", "selected"],
           ["claude", "different"],
@@ -101,7 +104,10 @@ it.effect(
 
       const result = yield* prepared.apply().pipe(Effect.provide(storeLayer));
       assert.deepStrictEqual(
-        result.installed_skills.map((projection) => [projection.destination, projection.status]),
+        result.installed_skills.map((installedSkill) => [
+          installedSkill.destination,
+          installedSkill.status,
+        ]),
         [
           ["agents", "installed"],
           ["claude", "conflicted"],
@@ -157,7 +163,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
   "refuses a prepared retention after %s changes without retaining or projecting",
   (change) =>
     Effect.gen(function* () {
-      const f = yield* projectionFixture;
+      const f = yield* installedSkillFixture;
       const prepared = yield* prepareEditImport(f.skill.name, "agents").pipe(
         Effect.provide(f.storeLayer),
       );
@@ -206,7 +212,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
 
 it.effect("manages identical edited copies into one retained Version", () =>
   Effect.gen(function* () {
-    const f = yield* projectionFixture;
+    const f = yield* installedSkillFixture;
     yield* f.fs.writeFileString(
       join(f.roots.claudeRoot, "review", "SKILL.md"),
       "selected change\n",

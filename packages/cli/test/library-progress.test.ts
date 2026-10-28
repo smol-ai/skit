@@ -69,8 +69,8 @@ it.effect("a headless update emits domain progress and records one attributed tr
       [
         ["started", "source"],
         ["completed", "source"],
-        ["started", "projection"],
-        ["completed", "projection"],
+        ["started", "install"],
+        ["completed", "install"],
       ],
     );
     const after = yield* home.owned(LibraryStore.use((store) => store.load));

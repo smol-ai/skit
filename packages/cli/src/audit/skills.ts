@@ -14,7 +14,7 @@ import {
 import { Effect } from "effect";
 import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
-import { makePnpmSkillCheck } from "../projection/pnpm-skills.js";
+import { makePnpmSkillCheck } from "../install/pnpm-skills.js";
 import type { AuditFinding, AuditEntry } from "./types.js";
 
 function frontmatterProblem(

@@ -19,7 +19,7 @@ import {
   ConflictingInvocationDeclaration,
   DuplicateSkillNames,
   DuplicateSkillPaths,
-  ProjectedPathCollision,
+  InstalledPathCollision,
   ReadmeFrontmatterMissing,
   SharedTargetCollision,
 } from "../failures.js";
@@ -170,7 +170,7 @@ export function hashParts(parts: Array<string | Uint8Array>): Digest {
   return `sha256:${createHash("sha256").update(encodeHashParts(parts)).digest("hex")}`;
 }
 
-export interface ProjectedSkillFile {
+export interface InstalledSkillFile {
   bytes: Uint8Array;
   executable?: boolean;
 }
@@ -183,13 +183,13 @@ export function projectSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Map<string, ProjectedSkillFile>, SharedTargetCollision> {
-  const projected = new Map<string, ProjectedSkillFile>();
+): Result.Result<Map<string, InstalledSkillFile>, SharedTargetCollision> {
+  const installed = new Map<string, InstalledSkillFile>();
   const normalizedSkillPath = skillPath.normalize("NFC");
   for (const file of files) {
     const path = file.path.normalize("NFC");
     if (path.startsWith(`${normalizedSkillPath}/`))
-      projected.set(path.slice(normalizedSkillPath.length + 1), file);
+      installed.set(path.slice(normalizedSkillPath.length + 1), file);
   }
   for (const mapping of shared)
     for (const file of files) {
@@ -198,10 +198,10 @@ export function projectSkillFiles(
       if (path !== from && !path.startsWith(`${from}/`)) continue;
       const suffix = path === from ? "" : path.slice(from.length + 1);
       const target = (suffix ? `${mapping.to}/${suffix}` : mapping.to).normalize("NFC");
-      if (projected.has(target)) return Result.fail(new SharedTargetCollision({ target }));
-      projected.set(target, file);
+      if (installed.has(target)) return Result.fail(new SharedTargetCollision({ target }));
+      installed.set(target, file);
     }
-  return Result.succeed(projected);
+  return Result.succeed(installed);
 }
 
 /** A Release's file paths, NFC-normalised and sorted so every directory is one contiguous range. */
@@ -269,28 +269,28 @@ export function measureSkillProjection(
   return measured;
 }
 
-export function hashProjectedSkillFiles(
+export function hashInstalledSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Digest, SharedTargetCollision | ProjectedPathCollision> {
-  return Result.map(projectedSkillHashParts(files, skillPath, shared), hashParts);
+): Result.Result<Digest, SharedTargetCollision | InstalledPathCollision> {
+  return Result.map(installedSkillHashParts(files, skillPath, shared), hashParts);
 }
 
 /** Canonical digest inputs, separated so every runtime can supply its native SHA-256. */
-export function projectedSkillHashParts(
+export function installedSkillHashParts(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Array<string | Uint8Array>, SharedTargetCollision | ProjectedPathCollision> {
-  const projected = projectSkillFiles(files, skillPath, shared);
-  if (Result.isFailure(projected)) return Result.fail(projected.failure);
-  interface ProjectedNode {
-    children: Map<string, ProjectedNode>;
+): Result.Result<Array<string | Uint8Array>, SharedTargetCollision | InstalledPathCollision> {
+  const installed = projectSkillFiles(files, skillPath, shared);
+  if (Result.isFailure(installed)) return Result.fail(installed.failure);
+  interface InstalledNode {
+    children: Map<string, InstalledNode>;
     file?: { bytes: Uint8Array; executable?: boolean };
   }
-  const root: ProjectedNode = { children: new Map() };
-  for (const [path, file] of projected.success) {
+  const root: InstalledNode = { children: new Map() };
+  for (const [path, file] of installed.success) {
     const segments = path.split("/");
     let node = root;
     for (const [index, segment] of segments.entries()) {
@@ -300,14 +300,14 @@ export function projectedSkillHashParts(
         node.children.set(segment, child);
       }
       if (node.file || (index === segments.length - 1 && child.children.size > 0))
-        return Result.fail(new ProjectedPathCollision({ path, kind: "file-or-directory" }));
+        return Result.fail(new InstalledPathCollision({ path, kind: "file-or-directory" }));
       node = child;
     }
-    if (node.file) return Result.fail(new ProjectedPathCollision({ path, kind: "file" }));
+    if (node.file) return Result.fail(new InstalledPathCollision({ path, kind: "file" }));
     node.file = file;
   }
   const parts: Array<string | Uint8Array> = [];
-  function walk(node: ProjectedNode, parent = ""): void {
+  function walk(node: InstalledNode, parent = ""): void {
     for (const name of [...node.children.keys()].sort()) {
       const child = node.children.get(name)!;
       const path = parent ? `${parent}/${name}` : name;

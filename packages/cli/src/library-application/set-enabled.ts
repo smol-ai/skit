@@ -23,14 +23,14 @@ import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../projection/roots.js";
+} from "../install/roots.js";
 import {
   isEntryLink,
   findDuplicates,
   InstalledSkillWouldDuplicate,
   InstalledSkillWouldReplaceLink,
   type DuplicateScanError,
-} from "../projection/duplicates.js";
+} from "../install/duplicates.js";
 import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import {
   calculateSetEnabled,
@@ -164,21 +164,23 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
     const bound = new Set(enabledSkillIds(state, plan.enabled));
     for (const target of targets) {
       const root = skillsDirectoryFor(target, scope, configuration);
-      const projections = state.installed_skills.filter(
-        (projection) => projection.root === root && projection.destination === target,
+      const installedSkills = state.installed_skills.filter(
+        (installedSkill) => installedSkill.root === root && installedSkill.destination === target,
       );
       if (options.enabled)
         for (const skillId of skillIds) {
-          const projection = projections.find((candidate) => candidate.skill_id === skillId);
+          const installedSkill = installedSkills.find(
+            (candidate) => candidate.skill_id === skillId,
+          );
           repair ||=
-            projection === undefined ||
-            projection.status !== "installed" ||
-            !(yield* fs.exists(projection.path)) ||
-            (yield* deterministicTreeHash(projection.path)) !== projection.expected_digest;
+            installedSkill === undefined ||
+            installedSkill.status !== "installed" ||
+            !(yield* fs.exists(installedSkill.path)) ||
+            (yield* deterministicTreeHash(installedSkill.path)) !== installedSkill.expected_digest;
         }
       else if (hasList)
-        for (const projection of projections)
-          if (!bound.has(projection.skill_id)) repair ||= yield* fs.exists(projection.path);
+        for (const installedSkill of installedSkills)
+          if (!bound.has(installedSkill.skill_id)) repair ||= yield* fs.exists(installedSkill.path);
     }
   }
   return {
@@ -204,13 +206,13 @@ const planRequests = Effect.fn("SetEnabled.planRequests")(function* (
   };
   const captured = structuredClone(requests);
   const targets = yield* activeInstallDestinations(routing);
-  let projected = current;
+  let installed = current;
   const changes = [];
   for (const request of captured) {
-    const change = yield* planChange(projected, request, routing, targets);
+    const change = yield* planChange(installed, request, routing, targets);
     changes.push(change);
     // Later plans see earlier intent at the same scope, just as apply does.
-    if (change.changed) projected = setEnabledAt(projected, change.scope, change);
+    if (change.changed) installed = setEnabledAt(installed, change.scope, change);
   }
   const plan: SetEnabledPlan = { [planType]: true, changes: structuredClone(changes) };
   preparedPlans.set(plan, {
@@ -369,7 +371,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
         variantsPath: store.variantsPath,
         onlyScopes: hasList ? [plan] : [],
         restoreNativeDeletedSkills: options.enabled ? skillIds : [],
-        ...(options.preserveUnselectedProjections ? { onlySkillIds: skillIds } : {}),
+        ...(options.preserveUnselectedInstalledSkills ? { onlySkillIds: skillIds } : {}),
         ...(options.manage === undefined ? {} : { manage: options.manage }),
         manageIdentical: options.enabled,
       });
@@ -389,7 +391,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const recorded = Result.isSuccess(reconciled)
     ? reconciled.success
     : ((yield* lastSavedLibraryState) ?? current);
-  const projections = recorded.installed_skills.flatMap(
+  const installedSkills = recorded.installed_skills.flatMap(
     ({ destination, root, path, status, skill_id }) =>
       destination !== "legacy" &&
       skillIds.includes(skill_id) &&
@@ -401,22 +403,22 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const missing = options.enabled
     ? destinations.filter(
         (destination) =>
-          !projections.some(
-            (projection) =>
-              projection.destination === destination.destination &&
-              projection.path === destination.path &&
-              projection.status === "installed",
+          !installedSkills.some(
+            (installedSkill) =>
+              installedSkill.destination === destination.destination &&
+              installedSkill.path === destination.path &&
+              installedSkill.status === "installed",
           ),
       )
     : [];
-  const unresolved = projections.filter(
-    (projection) =>
+  const unresolved = installedSkills.filter(
+    (installedSkill) =>
       !options.enabled ||
-      projection.status !== "installed" ||
+      installedSkill.status !== "installed" ||
       !destinations.some(
         (destination) =>
-          destination.destination === projection.destination &&
-          destination.path === projection.path,
+          destination.destination === installedSkill.destination &&
+          destination.path === installedSkill.path,
       ),
   );
   const unresolvedPaths = [
@@ -434,7 +436,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
     ...(repair ? { repair } : {}),
     ...(duplicates.length ? { duplicates: duplicates } : {}),
     ...(warnings.length ? { warnings } : {}),
-    installed_skills: projections,
+    installed_skills: installedSkills,
     application: {
       intent: plan.changed ? "saved" : "unchanged",
       revision: libraryStateRevision(recorded),

@@ -603,7 +603,7 @@ it.effect("cleanup uses one captured Library and an injected usage scanner", () 
           Effect.sync(() => {
             assert.strictEqual(loads, 1);
             assert.strictEqual(options.days, 14);
-            assert.ok(options.projections?.some((p) => p.name === "alpha"));
+            assert.ok(options.installedSkills?.some((p) => p.name === "alpha"));
             return f.usage;
           }),
       }),
@@ -987,7 +987,7 @@ it.effect(
       assert.strictEqual(completed.value.application.intent, "unchanged");
       assert.strictEqual(completed.value.application.status, "complete");
       assert.deepStrictEqual(
-        completed.value.installed_skills.map((projection) => projection.status),
+        completed.value.installed_skills.map((installedSkill) => installedSkill.status),
         ["installed", "installed"],
       );
       assert.strictEqual(
@@ -1164,7 +1164,7 @@ it.effect.each(["defect", "interruption"] as const)(
             rename: (from, to) =>
               to === join(f.destination, "alpha")
                 ? kind === "defect"
-                  ? Effect.die("Test projection defect")
+                  ? Effect.die("Test install defect")
                   : Effect.interrupt
                 : f.fs.rename(from, to),
           }),

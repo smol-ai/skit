@@ -19,8 +19,8 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { readSkillsLock } from "./skills-sh-lock-source.js";
-import { readableSkillsDirectories } from "../../projection/duplicates.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import { readableSkillsDirectories } from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
 import type {

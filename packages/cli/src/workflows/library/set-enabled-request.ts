@@ -24,7 +24,7 @@ export interface SetEnabledRequest {
   readonly enabled: boolean;
   readonly invocation?: InvocationOption;
   /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
-  readonly preserveUnselectedProjections?: boolean;
+  readonly preserveUnselectedInstalledSkills?: boolean;
   readonly allowDuplicate?: boolean;
   /** Setup consent applies only to these exact symlinks, until installing succeeds. */
   readonly allowedDuplicateSymlinks?: readonly {

@@ -21,7 +21,7 @@ const isPermissionDenied = (error: PlatformError): boolean =>
  * saving Library state, so a sandboxed or read-only root fails without leaving a half-applied
  * Library behind; materializing runs it again, so every copy write fails the same way.
  */
-export const ensureSkillsDirectoryWritable = Effect.fn("Projection.ensureSkillsDirectoryWritable")(
+export const ensureSkillsDirectoryWritable = Effect.fn("Install.ensureSkillsDirectoryWritable")(
   function* (root: string) {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });

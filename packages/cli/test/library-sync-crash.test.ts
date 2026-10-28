@@ -187,7 +187,7 @@ const deviceFields = (state: LibraryState) => ({
   policies: state.invocation_policies,
   repositories: state.repositories,
   assessmentAcceptances: state.assessmentAcceptances,
-  projections: state.installed_skills,
+  installedSkills: state.installed_skills,
 });
 
 it.effect("every declared device field survives a push, a merge and a clean sync", () =>

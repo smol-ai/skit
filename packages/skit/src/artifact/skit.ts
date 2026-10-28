@@ -23,7 +23,7 @@ import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import {
   hashParts,
-  hashProjectedSkillFiles,
+  hashInstalledSkillFiles,
   parseSkillExample,
   parseSkitConfig,
   parseSkitReadme,
@@ -31,7 +31,7 @@ import {
 import {
   type DescriptorFailure,
   type HarnessMetadataInvalid,
-  type ProjectedPathCollision,
+  type InstalledPathCollision,
   type SharedTargetCollision,
 } from "../failures.js";
 
@@ -73,7 +73,7 @@ function releaseIdentityFromEntries(
   tree: TreeEntry[],
   release: string,
   releaseContentHash?: Digest,
-): Result.Result<SkitReleaseIdentity, SharedTargetCollision | ProjectedPathCollision> {
+): Result.Result<SkitReleaseIdentity, SharedTargetCollision | InstalledPathCollision> {
   const files = tree.flatMap((entry) =>
     entry.kind === "file"
       ? [{ path: entry.path, bytes: entry.bytes, executable: entry.mode === 0o755 }]
@@ -82,7 +82,7 @@ function releaseIdentityFromEntries(
   return Result.map(
     Result.all(
       descriptor.skills.map((skill) =>
-        Result.map(hashProjectedSkillFiles(files, skill.path, skill.shared), (contentHash) => ({
+        Result.map(hashInstalledSkillFiles(files, skill.path, skill.shared), (contentHash) => ({
           name: skill.name,
           contentHash,
           enabled: skill.default_enabled,
@@ -151,7 +151,7 @@ export function validateSkitDirectory(
   ValidatedSkit,
   | DescriptorFailure
   | SharedTargetCollision
-  | ProjectedPathCollision
+  | InstalledPathCollision
   | HarnessMetadataInvalid
   | TreeError
   | PlatformError,

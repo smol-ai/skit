@@ -1,4 +1,4 @@
-import { InstalledSkillWouldDuplicate } from "../projection/duplicates.js";
+import { InstalledSkillWouldDuplicate } from "../install/duplicates.js";
 import type { SkillMetadata } from "./skill-metadata.js";
 import {
   collectionVersionPath,

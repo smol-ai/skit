@@ -145,17 +145,17 @@ it.effect(
           });
         }),
       );
-      const projected = join(targetRoot, "review");
+      const installed = join(targetRoot, "review");
       assert.strictEqual(
-        yield* f.fs.readFileString(join(projected, "context.md")),
+        yield* f.fs.readFileString(join(installed, "context.md")),
         f.files["shared/context.md"],
       );
       assert.strictEqual(
-        yield* f.fs.readFileString(join(projected, "SKILL.md")),
+        yield* f.fs.readFileString(join(installed, "SKILL.md")),
         f.files["skills/review/SKILL.md"],
       );
       for (const path of ["README.md", "skit.json", ".gitignore", "skills/.gitkeep"])
-        assert.isFalse(yield* f.fs.exists(join(projected, path)));
+        assert.isFalse(yield* f.fs.exists(join(installed, path)));
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

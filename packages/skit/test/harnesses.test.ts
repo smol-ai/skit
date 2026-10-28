@@ -133,8 +133,8 @@ function assertHarnessCatalog(profiles: Readonly<Record<string, HarnessProfile>>
       pathClaims.set(pathKey, root);
     }
     for (const [scope, target] of [
-      ["global", profile.projection.globalTarget],
-      ["project", profile.projection.projectTarget],
+      ["global", profile.installedSkill.globalTarget],
+      ["project", profile.installedSkill.projectTarget],
     ] as const) {
       if (!target) continue;
       const root = skillsDirectory(profile, target);
@@ -184,13 +184,16 @@ describe("Harness Profile catalog", () => {
     expect(new Set(profiles.map((item) => item.profile.id)).size).toBe(profiles.length);
     expect(() => JSON.stringify(profiles)).not.toThrow();
     for (const profile of profiles)
-      for (const target of [profile.projection.globalTarget, profile.projection.projectTarget])
+      for (const target of [
+        profile.installedSkill.globalTarget,
+        profile.installedSkill.projectTarget,
+      ])
         if (target) expect(skillsDirectory(profile, target).writable).toBe(true);
   });
 
   test("preserves the existing Codex compatibility install destination", () => {
     const profile = harnessProfile("codex");
-    const target = skillsDirectory(profile, profile.projection.globalTarget!);
+    const target = skillsDirectory(profile, profile.installedSkill.globalTarget!);
     expect(target).toEqual(
       expect.objectContaining({ role: "compatibility", path: ".agents/skills", writable: true }),
     );
@@ -310,7 +313,7 @@ describe("Harness Profile catalog", () => {
       string,
       HarnessProfile
     >;
-    wrongScope.codex.projection.globalTarget = "codex-project-agents";
+    wrongScope.codex.installedSkill.globalTarget = "codex-project-agents";
     expect(() => assertHarnessCatalog(wrongScope)).toThrow("Install destination has wrong scope");
   });
 

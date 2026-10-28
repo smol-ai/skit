@@ -349,17 +349,17 @@ export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(fu
       }
     }
     const managed = new Map<string, string>();
-    for (const projection of state.installed_skills) {
+    for (const installedSkill of state.installed_skills) {
       const path = yield* fs
-        .realPath(join(projection.path, "SKILL.md"))
+        .realPath(join(installedSkill.path, "SKILL.md"))
         .pipe(
           Effect.catchTag("PlatformError", (e) =>
             e.reason._tag === "NotFound"
-              ? Effect.succeed(resolve(projection.path, "SKILL.md"))
+              ? Effect.succeed(resolve(installedSkill.path, "SKILL.md"))
               : Effect.fail(e),
           ),
         );
-      const skill = state.skills.find((s) => s.skill_id === projection.skill_id);
+      const skill = state.skills.find((s) => s.skill_id === installedSkill.skill_id);
       if (skill) managed.set(path, skill.collection_id);
     }
     const entries = new Map<string, ClaudeListingEntry>();

@@ -12,7 +12,7 @@ import {
   type SetupExplicitSelection,
 } from "../workflows/library/setup-decisions.js";
 import type { SetupReview, SetupReviewSummary } from "../workflows/library/setup-review.js";
-import type { InventoryRootOptions } from "../projection/roots.js";
+import type { InventoryRootOptions } from "../install/roots.js";
 import { CommandAction } from "./command-actions.js";
 
 const Choice = Schema.Struct({

@@ -151,7 +151,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     owned,
     durable,
     writeDurable,
-    projection: (harness: HarnessName, ...segments: string[]) =>
+    installedSkill: (harness: HarnessName, ...segments: string[]) =>
       harness === "devin"
         ? join(inventory.configHome, "devin", "skills", ...segments)
         : join(harnessRoot, directoryFor(harness), ...segments),

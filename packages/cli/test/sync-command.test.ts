@@ -66,7 +66,7 @@ it.effect("Library sync preserves credential configuration failures", () =>
       authState: Result.fail(failure),
       apply: false,
       adopt: false,
-      projection: { rootFor: () => undefined },
+      installedSkill: { rootFor: () => undefined },
     }),
   ).pipe(
     Effect.flip,

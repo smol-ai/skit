@@ -6,11 +6,7 @@ import { Effect, FileSystem, Logger, References, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { skitLayer } from "@smolai/skit-core";
-import {
-  makePnpmSkillCheck,
-  pnpmSkillOwner,
-  leavePnpmSkill,
-} from "../src/projection/pnpm-skills.js";
+import { makePnpmSkillCheck, pnpmSkillOwner, leavePnpmSkill } from "../src/install/pnpm-skills.js";
 import { fileProvenance } from "../src/audit/provenance.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { SetupResult } from "../src/workflows/library/setup-contract.js";

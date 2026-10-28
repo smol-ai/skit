@@ -6,7 +6,7 @@ import { ZipFile } from "yazl";
 import type {
   DescriptorFailure,
   HarnessMetadataInvalid,
-  ProjectedPathCollision,
+  InstalledPathCollision,
   SharedTargetCollision,
 } from "../failures.js";
 import { SkitValidationFailed } from "../failures.js";
@@ -22,7 +22,7 @@ export function createSkitArchive(
   | DescriptorFailure
   | SkitValidationFailed
   | HarnessMetadataInvalid
-  | ProjectedPathCollision
+  | InstalledPathCollision
   | SharedTargetCollision
   | TreeError
   | PlatformError,

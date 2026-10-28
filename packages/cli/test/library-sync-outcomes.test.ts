@@ -570,14 +570,14 @@ const cases: readonly {
           yield* b.sync();
         } else yield* a.retain("first", update);
         // An edit the selected Version would replace, and a Skill reconciliation must newly install.
-        const projection = (yield* a.state).installed_skills[0]!;
-        yield* fs.writeFileString(join(projection.path, "SKILL.md"), "unretained edit\n");
+        const installedSkill = (yield* a.state).installed_skills[0]!;
+        yield* fs.writeFileString(join(installedSkill.path, "SKILL.md"), "unretained edit\n");
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
         inject({ _tag: "ObstructAfterSave", home: a.home, path: join(a.root, "second") });
         assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
-        const observed = yield* deterministicTreeHash(projection.path);
+        const observed = yield* deterministicTreeHash(installedSkill.path);
         const recorded = (yield* a.state).installed_skills.find(
-          (item) => item.installed_skill_id === projection.installed_skill_id,
+          (item) => item.installed_skill_id === installedSkill.installed_skill_id,
         );
         assert.deepStrictEqual(
           [recorded?.status, recorded?.observed_digest],
@@ -586,7 +586,7 @@ const cases: readonly {
         yield* fs.remove(join(a.root, "second"));
         assert.strictEqual((yield* a.sync()).status, "clean");
         assert.strictEqual(
-          yield* fs.readFileString(join(projection.path, "SKILL.md")),
+          yield* fs.readFileString(join(installedSkill.path, "SKILL.md")),
           "unretained edit\n",
         );
         assert.strictEqual(

@@ -298,10 +298,10 @@ export const classifySetupOnboarding = (
       });
       continue;
     }
-    const projectionTargets = group.filter(
+    const installDestinations = group.filter(
       (instance) => instance.scope === "global" && instance.harnesses.length > 0,
     );
-    if (projectionTargets.length === group.length && hashes.size === 1) {
+    if (installDestinations.length === group.length && hashes.size === 1) {
       candidates.push({
         ...base,
         action: "manage-locally",

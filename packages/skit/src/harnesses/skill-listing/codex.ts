@@ -67,15 +67,15 @@ export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(fu
       positive(configuration.config.model_context_window) ??
       Option.getOrNull(modelContextWindow("openai", model));
     const collectionsByPath = new Map<string, string>();
-    for (const projection of state.installed_skills.filter(
-      (projection) =>
-        projection.destination === "agents" && projection.suppression_reason === undefined,
+    for (const installedSkill of state.installed_skills.filter(
+      (installedSkill) =>
+        installedSkill.destination === "agents" && installedSkill.suppression_reason === undefined,
     )) {
-      const skill = state.skills.find((skill) => skill.skill_id === projection.skill_id);
+      const skill = state.skills.find((skill) => skill.skill_id === installedSkill.skill_id);
       if (skill === undefined) continue;
       const path = yield* fs
-        .realPath(join(projection.path, "SKILL.md"))
-        .pipe(Effect.orElseSucceed(() => resolve(projection.path, "SKILL.md")));
+        .realPath(join(installedSkill.path, "SKILL.md"))
+        .pipe(Effect.orElseSucceed(() => resolve(installedSkill.path, "SKILL.md")));
       collectionsByPath.set(path, skill.collection_id);
     }
     const seen = new Set<string>();

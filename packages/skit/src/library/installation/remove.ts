@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
-import { withInstalledSkillMutation } from "../../projection/mutation.js";
+import { withInstalledSkillMutation } from "../../install/mutation.js";
 import { removeFromEnabled } from "../enabled.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
@@ -71,15 +71,17 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
     (mutation) =>
       Effect.gen(function* () {
         let retired = 0;
-        for (const projection of mutation.state.installed_skills.filter((item) =>
+        for (const installedSkill of mutation.state.installed_skills.filter((item) =>
           removedSkillIds.has(item.skill_id),
         )) {
-          const skill = mutation.state.skills.find((item) => item.skill_id === projection.skill_id);
+          const skill = mutation.state.skills.find(
+            (item) => item.skill_id === installedSkill.skill_id,
+          );
           if (skill === undefined) continue;
           const outcome = yield* mutation.uninstall(
-            projection,
+            installedSkill,
             "throw",
-            `Refusing to remove modified ${skill.name} at ${projection.path}`,
+            `Refusing to remove modified ${skill.name} at ${installedSkill.path}`,
           );
           if (outcome.kind === "retired") retired++;
         }

@@ -18,7 +18,7 @@ import {
   sourceImports,
   skitLayer,
 } from "@smolai/skit-core";
-import { skillsDirectoryFor } from "../src/projection/roots.js";
+import { skillsDirectoryFor } from "../src/install/roots.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { inspectSetupOperation } from "../src/library-application/setup-operation.js";

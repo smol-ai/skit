@@ -111,7 +111,7 @@ export interface HarnessProfile {
   documentation: readonly HarnessDocumentationSource[];
   frontmatter: readonly HarnessFrontmatterContract[];
   skillMetadata?: readonly HarnessSkillMetadataContract[];
-  projection: {
+  installedSkill: {
     globalTarget: string | null;
     projectTarget: string | null;
     strategy: "copy" | "symlink";

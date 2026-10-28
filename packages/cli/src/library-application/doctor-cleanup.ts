@@ -13,7 +13,7 @@ import {
   skillsDirectoryFor,
   existingRepositorySkillsDirectory,
   type InventoryRootOptions,
-} from "../projection/roots.js";
+} from "../install/roots.js";
 import { scanLocalUsage } from "./local-usage.js";
 
 type Estimated = Extract<ListingBudget, { _tag: "Estimated" }>;
@@ -44,13 +44,13 @@ export function suggestDoctorCleanup(
   const placements = enabledCollections(state);
   for (const budget of budgets) {
     for (const entry of budget.entries) {
-      const projection = state.installed_skills.find(
+      const installedSkill = state.installed_skills.find(
         (p) => resolve(p.path, "SKILL.md") === resolve(entry.path) && p.status === "installed",
       );
-      const skill = state.skills.find((s) => s.skill_id === projection?.skill_id);
-      if (!projection || !skill || projection.destination === "legacy" || entry.demand <= 0)
+      const skill = state.skills.find((s) => s.skill_id === installedSkill?.skill_id);
+      if (!installedSkill || !skill || installedSkill.destination === "legacy" || entry.demand <= 0)
         continue;
-      const target = projection.destination;
+      const target = installedSkill.destination;
       // Any observed access protects the skill, including zero-use raw read evidence.
       if (
         usage.rows.some(
@@ -70,7 +70,7 @@ export function suggestDoctorCleanup(
               ? (existingRepositorySkillsDirectory(state, p.scope.root, target) ??
                   skillsDirectoryFor(target, p.scope, configuration))
               : skillsDirectoryFor(target, p.scope, configuration),
-          ) === resolve(projection.root),
+          ) === resolve(installedSkill.root),
       );
       if (matching.length !== 1) continue;
       const scope = matching[0].scope;

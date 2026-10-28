@@ -99,8 +99,8 @@ it.effect(
               : version,
           ),
         })),
-        installed_skills: state.installed_skills.map((projection) => ({
-          ...projection,
+        installed_skills: state.installed_skills.map((installedSkill) => ({
+          ...installedSkill,
           skill_version_id: equivalentId,
         })),
       }));

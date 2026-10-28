@@ -15,8 +15,8 @@ import {
   activeInstallDestinations,
   skillsDirectoryFor,
   existingRepositorySkillsDirectory,
-} from "../../projection/roots.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+} from "../../install/roots.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 
 export interface UpdateInstalledSkillsOptions {
   readonly roots?: InventoryRootOptions;
@@ -62,7 +62,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
     { variantsPath: options.variantsPath, activeDestinations: activeTargets },
   );
 
-  let projected = 0;
+  let installed = 0;
   const lists = options.includeRepositories
     ? intent.byScope
     : (options.onlyScopes ?? intent.byScope);
@@ -78,7 +78,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
               : undefined
             : skillsDirectoryFor(target, scope, options.roots);
       if (root === undefined) continue;
-      projected += yield* installEnabledSkills({
+      installed += yield* installEnabledSkills({
         target,
         scope,
         root,
@@ -91,5 +91,5 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       outcomes.push({ target, scope });
     }
   }
-  return { projected, retired, outcomes };
+  return { installed, retired, outcomes };
 }, withLibraryWriter);

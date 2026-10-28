@@ -104,14 +104,14 @@ it.effect(
       expect(invocationBriefing(policy)).toContain("Claude Code: Only when asked");
       expect(invocationBriefing(policy)).toContain("Codex: Automatically");
 
-      const projection = (yield* home.durable).installed_skills.find(
+      const installedSkill = (yield* home.durable).installed_skills.find(
         (copy) => copy.destination === "agents",
       )!;
       const files = new Map([
-        ["SKILL.md", yield* fs.readFileString(join(projection.path, "SKILL.md"))],
+        ["SKILL.md", yield* fs.readFileString(join(installedSkill.path, "SKILL.md"))],
         [
           "agents/openai.yaml",
-          yield* fs.readFileString(join(projection.path, "agents/openai.yaml")),
+          yield* fs.readFileString(join(installedSkill.path, "agents/openai.yaml")),
         ],
       ]);
       const actual = Result.getOrThrow(

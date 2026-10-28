@@ -78,10 +78,9 @@ describe("observe", () => {
 
     expect(observation.library.exists).toBe(true);
     expect(observation.library.skills).toEqual(["release-notes"]);
-    expect(observation.library.projections.map((projection) => projection.target).sort()).toEqual([
-      "agents",
-      "claude",
-    ]);
+    expect(
+      observation.library.installedSkills.map((installedSkill) => installedSkill.target).sort(),
+    ).toEqual(["agents", "claude"]);
   });
 });
 
@@ -152,7 +151,7 @@ describe("setup verifier rejects broken final states", () => {
       join(run.home, ".skit", "state.json"),
       JSON.stringify({
         skills: [{ name: "release-notes" }],
-        projections: ["agents", "claude"].map((target) => ({
+        installedSkills: ["agents", "claude"].map((target) => ({
           target,
           path: join(run.home, target === "agents" ? ".agents" : ".claude", "skills/release-notes"),
           status: "installed",

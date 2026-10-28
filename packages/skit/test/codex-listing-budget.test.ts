@@ -172,7 +172,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       const skillId = makeSkillId();
       const collectionId = makeCollectionId();
       const versionId = makeSkillVersionId();
-      const stateWithProjection = {
+      const stateWithInstalledSkill = {
         ...state,
         skills: [
           {
@@ -198,7 +198,11 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         ],
       };
       const options = { cwd: f.root };
-      const first = yield* readCodexListingBudget(stateWithProjection, options, process.execPath);
+      const first = yield* readCodexListingBudget(
+        stateWithInstalledSkill,
+        options,
+        process.execPath,
+      );
       expect(first).toMatchObject({
         _tag: "Estimated",
         limit: 10_000,
@@ -206,7 +210,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         collections: [{ collectionId, skills: 1 }],
       });
       const withRejectedSkill = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
         {
@@ -228,7 +232,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       });
       yield* fs.writeFileString(metadataPath, "policy:\n  allow_implicit_invocation: true\n");
       const refreshed = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
       );
@@ -238,7 +242,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       });
       yield* fs.remove(join(f.home, ".codex", "models_cache.json"));
       const fallback = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
       );
@@ -258,7 +262,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       );
       // The invocation adapter reads the one field without expanding aliases elsewhere.
       const excessiveAliases = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
       );
@@ -268,14 +272,14 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         "disabled: &off false\npolicy:\n  allow_implicit_invocation: *off\n",
       );
       const aliasedExplicit = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
       );
       expect(aliasedExplicit).toMatchObject({ _tag: "Estimated", entries: [{ name: "review" }] });
       yield* fs.writeFileString(metadataPath, "policy: {allow_implicit_invocation: no-policy}\n");
       const unreadable = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
       );
@@ -286,18 +290,18 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       ]) {
         yield* fs.writeFileString(metadataPath, text);
         expect(
-          yield* readCodexListingBudget(stateWithProjection, options, process.execPath),
+          yield* readCodexListingBudget(stateWithInstalledSkill, options, process.execPath),
         ).toMatchObject({ _tag: "Unavailable" });
       }
       yield* fs.writeFileString(metadataPath, "policy: [invalid");
       const malformed = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         options,
         process.execPath,
       );
       expect(malformed).toMatchObject({ _tag: "Unavailable" });
       const skipped = yield* readCodexListingBudget(
-        stateWithProjection,
+        stateWithInstalledSkill,
         { ...options, overrides: { codex: ["/custom"] } },
         process.execPath,
       );

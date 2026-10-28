@@ -149,15 +149,15 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       assert.strictEqual(unchanged.outcome.pending.facts[0]?.writes, "nothing to change");
     assert.deepStrictEqual(libraryCollectionScopes(enabled, collectionId), scopes);
     const beforeRepair = yield* home.durable;
-    const projection = beforeRepair.installed_skills[0]!;
-    yield* fs.remove(projection.path, { recursive: true });
+    const installedSkill = beforeRepair.installed_skills[0]!;
+    yield* fs.remove(installedSkill.path, { recursive: true });
     const repair = yield* home.owned(
       proposeLibraryCollectionChange(enabled, home.bindings, collectionId, true, scopes),
     );
     assert.strictEqual(repair.outcome.kind, "preview");
     const repaired = yield* home.owned(confirmLibraryChange(repair));
     assert.strictEqual(repaired.outcome?.kind, "applied");
-    assert.ok(yield* fs.exists(projection.path));
+    assert.ok(yield* fs.exists(installedSkill.path));
 
     const withLeftover = yield* home.durable;
     const beta = withLeftover.skills.find((skill) => skill.name === "beta")!;

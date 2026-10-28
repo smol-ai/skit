@@ -82,7 +82,7 @@ it.effect(
           const store = yield* LibraryStore;
           const state = yield* store.load;
           const prior = state.installed_skills.find(
-            (projection) => projection.path === f.successor,
+            (installedSkill) => installedSkill.path === f.successor,
           )!;
           const rebuilt = yield* prepareInstalledSkillRebuild(state, store.originalsPath, prior, {
             source: "declared",

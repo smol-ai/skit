@@ -6,7 +6,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
-import type { InventoryRootOptions } from "../projection/roots.js";
+import type { InventoryRootOptions } from "../install/roots.js";
 import { importSource, inspectLibrarySource } from "./import-source.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
 import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
@@ -223,7 +223,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       );
       sourceRetained = true;
       const changed = retained.snapshot_digest !== priorTree.digest;
-      let projected = 0;
+      let installed = 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
       // Reconcile even when the Source is current: a previous run may have retained
@@ -232,7 +232,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         const current = yield* (yield* LibraryStore).load;
         phase = "install";
         const reconciled = yield* progress.around(
-          { kind: "projection", subject },
+          { kind: "install", subject },
           updateInstalledSkills({
             roots: options.roots,
             variantsPath: store.variantsPath,
@@ -247,9 +247,9 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
               ),
             ),
           }),
-          (value) => ({ kind: "projections-reconciled", projected: value.projected }),
+          (value) => ({ kind: "installed-skills-updated", installed: value.installed }),
         );
-        projected = reconciled.projected;
+        installed = reconciled.installed;
       }
       const after = yield* (yield* LibraryStore).load;
       const retainedTree = after.collection_versions.find(
@@ -262,7 +262,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         selected_collection_version_id: retained.collection_version_id,
         snapshot_digest: retained.snapshot_digest,
         changed,
-        installed: projected,
+        installed: installed,
         label: before.label,
         ...("diagnostics" in retained && retained.diagnostics?.length
           ? { diagnostics: retained.diagnostics }

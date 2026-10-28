@@ -30,8 +30,8 @@ import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { selectDeviceSkills } from "./device-selection.js";
 import { OptionCombinationInvalid } from "../failures.js";
-import { findDuplicates } from "../../projection/duplicates.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import { findDuplicates } from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 
 const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({
   status: "conflicted" as const,
@@ -51,10 +51,10 @@ const emptyManifest: LibraryManifest = currentLibraryManifest({
 const same = (a: LibraryManifest, b: LibraryManifest) =>
   canonicalJson(normalizeLibraryManifest(a)) === canonicalJson(normalizeLibraryManifest(b));
 const installedSkillCounts = (result: {
-  readonly projected: number;
+  readonly installed: number;
   readonly retired: number;
 }) => ({
-  installed: result.projected,
+  installed: result.installed,
   uninstalled: result.retired,
 });
 export class SyncLocalChanged
@@ -86,7 +86,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       | "follow-account"
       | { readonly skills: readonly string[]; readonly collections: readonly string[] };
     inventory?: InventoryRootOptions;
-    projection?: {
+    installedSkill?: {
       rootFor: (target: InstallDestination) => string | undefined;
     };
     onPlan?: (plan: SyncPlan) => Effect.Effect<void>;
@@ -96,10 +96,10 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const progress = options.progress ?? silentSyncProgress;
 
     const store = yield* LibraryStore;
-    const projectionOptions = {
+    const installedSkillOptions = {
       home: store.home,
       variantsPath: store.variantsPath,
-      ...(options.projection === undefined ? {} : { rootFor: options.projection.rootFor }),
+      ...(options.installedSkill === undefined ? {} : { rootFor: options.installedSkill.rootFor }),
     };
     const api = yield* librarySyncApi({ origin: options.origin, token: options.token });
     const local = yield* progress.around({ kind: "inspect-local" }, store.inspect);
@@ -204,7 +204,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       { kind: "check-destinations" },
       resolveSyncInstalledSkillCollisions(
         installation.manifest,
-        options.projection?.rootFor,
+        options.installedSkill?.rootFor,
         options.keepEnabled,
         device,
       ),
@@ -216,13 +216,13 @@ export const syncLibrary = Effect.fn("Library.sync")(
       collision.manifest.enabled,
     );
     const transition = yield* progress.around(
-      { kind: "check-projections" },
+      { kind: "check-installed-skills" },
       prepareSyncDeviceTransition({
         current: local.present ? local.state : undefined,
         aligned: device,
         baseline: merge.device,
         manifest: effectiveManifest,
-        rootFor: options.projection?.rootFor,
+        rootFor: options.installedSkill?.rootFor,
         deferDeviceConflicts: choosing,
       }),
     );
@@ -243,18 +243,20 @@ export const syncLibrary = Effect.fn("Library.sync")(
             .save({ ...device, sync_ancestry }, local.state)
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       }
-      const projections = options.apply
+      const installedSkills = options.apply
         ? yield* reconcileSelected()
         : { installed: 0, uninstalled: 0, issues: [] as string[] };
       return {
-        status: projections.issues.length ? ("enablement_incomplete" as const) : ("clean" as const),
-        ...(projections.issues.length
-          ? { sync_status: "clean" as const, enablement_issues: projections.issues }
+        status: installedSkills.issues.length
+          ? ("enablement_incomplete" as const)
+          : ("clean" as const),
+        ...(installedSkills.issues.length
+          ? { sync_status: "clean" as const, enablement_issues: installedSkills.issues }
           : {}),
         changed: false,
         revision_id: remote.revision_id,
-        installed: projections.installed,
-        uninstalled: projections.uninstalled,
+        installed: installedSkills.installed,
+        uninstalled: installedSkills.uninstalled,
       };
     }
 
@@ -320,7 +322,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
         .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged()))),
     );
 
-    const projections = yield* reconcileSelected();
+    const installedSkills = yield* reconcileSelected();
     const syncStatus =
       remote === null
         ? ("pushed" as const)
@@ -328,14 +330,14 @@ export const syncLibrary = Effect.fn("Library.sync")(
           ? ("pulled" as const)
           : ("merged" as const);
     return {
-      status: projections.issues.length ? ("enablement_incomplete" as const) : syncStatus,
-      ...(projections.issues.length
-        ? { sync_status: syncStatus, enablement_issues: projections.issues }
+      status: installedSkills.issues.length ? ("enablement_incomplete" as const) : syncStatus,
+      ...(installedSkills.issues.length
+        ? { sync_status: syncStatus, enablement_issues: installedSkills.issues }
         : {}),
       revision_id: saved.revision_id,
       snapshots,
-      installed: projections.installed,
-      uninstalled: retired + projections.uninstalled,
+      installed: installedSkills.installed,
+      uninstalled: retired + installedSkills.uninstalled,
       plan,
     };
 
@@ -345,7 +347,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
           const result = yield* progress.around(
             { kind: "enable" },
             updateInstalledSkills({
-              ...projectionOptions,
+              ...installedSkillOptions,
               includeRepositories: true,
             }),
           );
@@ -386,7 +388,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
           progress.around(
             { kind: "enable" },
             updateInstalledSkills({
-              ...projectionOptions,
+              ...installedSkillOptions,
               includeRepositories: true,
             }),
           ),
@@ -403,15 +405,15 @@ export const syncLibrary = Effect.fn("Library.sync")(
             enabledSkillIds(after, global.enabled),
           ),
         );
-        for (const projection of after.installed_skills.filter(
+        for (const installedSkill of after.installed_skills.filter(
           (item) =>
             ids.has(item.skill_id) &&
             item.status === "conflicted" &&
             (item.destination === "agents" || item.destination === "claude") &&
-            options.projection?.rootFor(item.destination) !== undefined,
+            options.installedSkill?.rootFor(item.destination) !== undefined,
         ))
           issues.push(
-            `Cannot install at ${projection.path}: existing content or ownership conflicts. Preserve it and review before retrying.`,
+            `Cannot install at ${installedSkill.path}: existing content or ownership conflicts. Preserve it and review before retrying.`,
           );
         return { ...installedSkillCounts(attempt.success), issues };
       });

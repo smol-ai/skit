@@ -1,13 +1,13 @@
 import { Data, Clock, Effect } from "effect";
 import { resolve } from "node:path";
 import type { OwnershipMarker } from "../../contracts.js";
-import { declaredInvocationIntent, overrideInvocationIntent } from "../../projection/policy.js";
+import { declaredInvocationIntent, overrideInvocationIntent } from "../../install/policy.js";
 import {
   inspectOwnershipMarker,
   inspectInstalledSkill,
   withInstalledSkillMutation,
   type ManageApproval,
-} from "../../projection/mutation.js";
+} from "../../install/mutation.js";
 import { pathIsWithin, installDestinationPathIdentity } from "../../platform/path-identity.js";
 import { UninstallConflict } from "../../failures.js";
 import { repositorySelectsInstalledSkill } from "./uninstall.js";
@@ -95,34 +95,35 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
     rootKeys.set(root, identity.comparisonKey);
     canonicalRoots.set(root, identity.canonicalPath ?? resolve(root));
   }
-  const atTarget = (projection: InstalledSkill) =>
-    projection.destination === options.target &&
-    (options.onlySkillIds === undefined || options.onlySkillIds.includes(projection.skill_id)) &&
-    rootKeys.get(projection.root) === rootKeys.get(options.root);
+  const atTarget = (installedSkill: InstalledSkill) =>
+    installedSkill.destination === options.target &&
+    (options.onlySkillIds === undefined ||
+      options.onlySkillIds.includes(installedSkill.skill_id)) &&
+    rootKeys.get(installedSkill.root) === rootKeys.get(options.root);
   const former =
     scope.kind === "global"
       ? state.installed_skills.filter(
-          (projection) =>
-            projection.destination === options.target &&
-            !atTarget(projection) &&
-            boundSkillIds.includes(projection.skill_id) &&
-            !repositorySelectsInstalledSkill(state, projection) &&
+          (installedSkill) =>
+            installedSkill.destination === options.target &&
+            !atTarget(installedSkill) &&
+            boundSkillIds.includes(installedSkill.skill_id) &&
+            !repositorySelectsInstalledSkill(state, installedSkill) &&
             !state.repositories.some(
               (repository) =>
-                enabledSkillIds(state, repository.enabled).includes(projection.skill_id) &&
+                enabledSkillIds(state, repository.enabled).includes(installedSkill.skill_id) &&
                 pathIsWithin(
                   canonicalRoots.get(repository.root) ?? repository.root,
-                  canonicalRoots.get(projection.root) ?? projection.root,
+                  canonicalRoots.get(installedSkill.root) ?? installedSkill.root,
                 ),
             ),
         )
       : [];
-  const retirementMessage = (projection: InstalledSkill) =>
-    `Refusing to relocate modified Skill from ${projection.path}`;
+  const retirementMessage = (installedSkill: InstalledSkill) =>
+    `Refusing to relocate modified Skill from ${installedSkill.path}`;
   // Refuse an edited former copy before creating another installation or removing any old copy.
-  for (const projection of former) {
-    if ((yield* inspectInstalledSkill(projection)).kind === "conflicted")
-      return yield* new UninstallConflict({ detail: retirementMessage(projection) });
+  for (const installedSkill of former) {
+    if ((yield* inspectInstalledSkill(installedSkill)).kind === "conflicted")
+      return yield* new UninstallConflict({ detail: retirementMessage(installedSkill) });
   }
   const result = yield* withInstalledSkillMutation(
     state,
@@ -167,10 +168,11 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
           const previousRows = state.installed_skills.filter(
             (candidate) => candidate.skill_id === item.skill.skill_id && atTarget(candidate),
           );
-          const priorProjection = previousRows[0];
-          const projectionId = priorProjection?.installed_skill_id ?? makeInstalledSkillId();
+          const priorInstalledSkill = previousRows[0];
+          const installedSkillId =
+            priorInstalledSkill?.installed_skill_id ?? makeInstalledSkillId();
           const policy = enabled.invocation_policies?.[item.skill.skill_id];
-          const projected = yield* mutation.project({
+          const installed = yield* mutation.install({
             installation: { libraryPath: source.libraryPath },
             skill: {
               skillId: item.skill.skill_id,
@@ -187,29 +189,29 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
               : { declaredInvocation: source.declaredInvocation }),
             invocationIntent:
               policy === undefined ? declaredInvocationIntent : overrideInvocationIntent(policy),
-            ...(priorProjection === undefined ? {} : { previous: priorProjection }),
+            ...(priorInstalledSkill === undefined ? {} : { previous: priorInstalledSkill }),
             identity: {
-              projectionId,
+              installedSkillId,
               skillId: item.skill.skill_id,
               skillVersionId: item.version.skill_version_id,
             },
-            ...(options.acceptedObservations?.get(projectionId) === undefined
+            ...(options.acceptedObservations?.get(installedSkillId) === undefined
               ? {}
               : {
                   replacement: {
-                    projectionId,
-                    ...options.acceptedObservations.get(projectionId)!,
+                    installedSkillId,
+                    ...options.acceptedObservations.get(installedSkillId)!,
                   },
                 }),
             ...(options.manage === undefined ? {} : { manage: options.manage }),
             ...(options.manageIdentical ? { manageIdentical: true } : {}),
             restoreNativeDeletion:
               options.restoreNativeDeletedSkills?.includes(item.skill.skill_id) ?? false,
-            projectedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+            installedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           });
-          mutation.state.installed_skills.push(projected);
+          mutation.state.installed_skills.push(installed);
           // Keep the last working copy when the new destination is blocked or locally modified.
-          if (projected.status === "installed")
+          if (installed.status === "installed")
             toRetire.push(
               ...former.filter((candidate) => candidate.skill_id === item.skill.skill_id),
             );
@@ -229,5 +231,5 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
         return selected.length;
       }),
   );
-  return result.projected;
+  return result.installed;
 });

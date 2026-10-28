@@ -89,7 +89,9 @@ it.effect(
       expect(result.data.added).toEqual([{ name: "review", sourcePath: f.source }]);
       expect(result.data.installedSkills.length).toBeGreaterThan(0);
       expect(
-        result.data.installedSkills.every((projection) => projection.status === "installed"),
+        result.data.installedSkills.every(
+          (installedSkill) => installedSkill.status === "installed",
+        ),
       ).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain(
         "Original review bytes",

@@ -33,7 +33,7 @@ export interface LibraryObservation {
   readonly exists: boolean;
   readonly problems: readonly string[];
   readonly skills: readonly string[];
-  readonly projections: readonly { target: string; path: string; status: string }[];
+  readonly installedSkills: readonly { target: string; path: string; status: string }[];
 }
 
 export interface Observation {
@@ -106,7 +106,7 @@ export async function observe(home: string, fixture: Fixture): Promise<Observati
  */
 export function preservationFailures(observation: Observation): string[] {
   const accounted = new Set([
-    ...observation.library.projections.map((projection) => projection.path),
+    ...observation.library.installedSkills.map((installedSkill) => installedSkill.path),
     ...observation.userLinks.map((link) => link.path),
     ...observation.userFiles.map((file) => file.path.split("/").slice(0, 3).join("/")),
   ]);
@@ -130,10 +130,10 @@ function readJson<T>(path: string): T | undefined {
 
 async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryObservation> {
   const state = readJson<unknown>(join(home, ".skit", "state.json"));
-  if (!state) return { exists: false, skills: [], projections: [], problems: [] };
+  if (!state) return { exists: false, skills: [], installedSkills: [], problems: [] };
   const decoded = Schema.decodeUnknownResult(LibraryState)(state);
   if (Result.isFailure(decoded))
-    return { exists: true, skills: [], projections: [], problems: ["invalid Library state"] };
+    return { exists: true, skills: [], installedSkills: [], problems: ["invalid Library state"] };
   return Effect.runPromise(
     Effect.gen(function* () {
       // Observe a private snapshot: this verifies installed-skill bytes and markers without repairing
@@ -166,10 +166,10 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
       return {
         exists: true,
         skills: observed.skills.map((skill) => skill.name),
-        projections: observed.installed_skills.map((projection) => ({
-          target: projection.destination,
-          path: relativeToHome(home, projection.path),
-          status: projection.status,
+        installedSkills: observed.installed_skills.map((installedSkill) => ({
+          target: installedSkill.destination,
+          path: relativeToHome(home, installedSkill.path),
+          status: installedSkill.status,
         })),
         problems,
       };
@@ -289,8 +289,8 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `## Final state`,
     "",
     `Library: ${observation.library.exists ? `${observation.library.skills.length} skill(s): ${observation.library.skills.join(", ")}` : "none"}`,
-    ...observation.library.projections.map(
-      (p) => `- projection ${p.target} · ${p.status} · ${p.path}`,
+    ...observation.library.installedSkills.map(
+      (p) => `- installed skill ${p.target} · ${p.status} · ${p.path}`,
     ),
     ...observation.userFiles.map((f) => `- user file ${f.status}: ${f.path}`),
     ...observation.userLinks.map((l) => `- user link ${l.status}: ${l.path}`),

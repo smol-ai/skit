@@ -37,7 +37,7 @@ export interface RunIndexEntry {
   readonly exitCode: number | null;
   readonly failures: readonly string[];
   readonly librarySkills: number;
-  readonly projections: Readonly<Record<string, number>>;
+  readonly installedSkills: Readonly<Record<string, number>>;
   readonly path: string;
 }
 
@@ -78,9 +78,9 @@ export function archiveRun(run: RunRoot, report: TrialReport): string {
   if (existsSync(sessions))
     cpSync(sessions, join(destination, "codex-sessions"), { recursive: true });
 
-  const projections: Record<string, number> = {};
-  for (const projection of report.observation.library.projections)
-    projections[projection.status] = (projections[projection.status] ?? 0) + 1;
+  const installedSkills: Record<string, number> = {};
+  for (const installedSkill of report.observation.library.installedSkills)
+    installedSkills[installedSkill.status] = (installedSkills[installedSkill.status] ?? 0) + 1;
   const entry: RunIndexEntry = {
     runId: run.id,
     case: report.case,
@@ -95,7 +95,7 @@ export function archiveRun(run: RunRoot, report: TrialReport): string {
     exitCode: report.codex.exitCode,
     failures: report.failures,
     librarySkills: report.observation.library.skills.length,
-    projections,
+    installedSkills,
     path: destination,
   };
   appendFileSync(join(archiveDir, "runs.jsonl"), `${JSON.stringify(entry)}\n`);

@@ -3,8 +3,8 @@ import {
   scanSkillsDirectory,
   readableSkillsDirectories,
   type DuplicateScanError,
-} from "../../projection/duplicates.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+} from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -416,22 +416,22 @@ export function classifyOpenCodeWarnings(
     if (!skill.path) continue;
     const selectedPath = resolve(skill.path);
     const agents = state.installed_skills.find(
-      (projection) =>
-        projection.destination === "agents" &&
-        projection.status === "installed" &&
-        resolve(join(projection.path, "SKILL.md")) === selectedPath,
+      (installedSkill) =>
+        installedSkill.destination === "agents" &&
+        installedSkill.status === "installed" &&
+        resolve(join(installedSkill.path, "SKILL.md")) === selectedPath,
     );
     if (!agents || agents.observed_digest !== agents.expected_digest) continue;
     const claude = state.installed_skills.find(
-      (projection) =>
-        projection.destination === "claude" &&
-        projection.status === "installed" &&
-        projection.skill_id === agents.skill_id &&
-        projection.skill_version_id === agents.skill_version_id &&
+      (installedSkill) =>
+        installedSkill.destination === "claude" &&
+        installedSkill.status === "installed" &&
+        installedSkill.skill_id === agents.skill_id &&
+        installedSkill.skill_version_id === agents.skill_version_id &&
         // Targets render the same retained Version with different native invocation fields.
         // Each copy must match its own recorded rendering, not the other target's bytes.
-        projection.observed_digest === projection.expected_digest &&
-        dirname(dirname(projection.root)) === dirname(dirname(agents.root)),
+        installedSkill.observed_digest === installedSkill.expected_digest &&
+        dirname(dirname(installedSkill.root)) === dirname(dirname(agents.root)),
     );
     if (!claude) continue;
     const paths = new Set([

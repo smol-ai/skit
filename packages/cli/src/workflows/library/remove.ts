@@ -50,8 +50,8 @@ export const planRemove = Effect.fn("Library.planRemove")(function* (
         skills.some((skill) => skill.skill_id === skillId),
       ),
     ).length,
-    installed_skills: state.installed_skills.filter((projection) =>
-      skills.some((skill) => skill.skill_id === projection.skill_id),
+    installed_skills: state.installed_skills.filter((installedSkill) =>
+      skills.some((skill) => skill.skill_id === installedSkill.skill_id),
     ).length,
   };
 });

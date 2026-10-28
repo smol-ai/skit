@@ -116,7 +116,7 @@ export const syncJourney = (failDownload: boolean) =>
         }),
         apply: true,
         adopt: false,
-        projection: {
+        installedSkill: {
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
         },
       }).pipe(

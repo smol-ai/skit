@@ -22,7 +22,7 @@ import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../../projection/roots.js";
+} from "../../install/roots.js";
 import type {
   InstalledSkillChange,
   SetupSkillInstance,
@@ -99,34 +99,34 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
   if (selected.size === 0) return [];
   const targets = yield* activeInstallDestinations(roots);
   const facts: InstalledSkillChange[] = [];
-  for (const projection of state.installed_skills) {
-    const target = projection.destination;
+  for (const installedSkill of state.installed_skills) {
+    const target = installedSkill.destination;
     if (
       target === "legacy" ||
-      !selected.has(projection.skill_id) ||
-      repositorySelectsInstalledSkill(state, projection)
+      !selected.has(installedSkill.skill_id) ||
+      repositorySelectsInstalledSkill(state, installedSkill)
     )
       continue;
-    const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
+    const skill = state.skills.find((item) => item.skill_id === installedSkill.skill_id);
     if (!skill) continue;
     const version = currentSkillVersion(state, skill);
     const base = {
-      installedSkillId: projection.installed_skill_id,
+      installedSkillId: installedSkill.installed_skill_id,
       skillId: skill.skill_id,
       name: skill.name,
-      path: projection.path,
+      path: installedSkill.path,
       destination: target,
-      baselineHash: projection.expected_digest,
+      baselineHash: installedSkill.expected_digest,
       ...(version ? { desiredVersionId: version.skill_version_id } : {}),
       metadataChanged: false,
     };
-    const observed = yield* Effect.result(captureSetupFile(resolve(projection.path)));
+    const observed = yield* Effect.result(captureSetupFile(resolve(installedSkill.path)));
     if (observed._tag === "Failure") {
       facts.push({
         ...base,
         status: "protected",
         reason: "Current copy could not be fully observed",
-        evidence: hashParts([projection.path, "unreadable"]),
+        evidence: hashParts([installedSkill.path, "unreadable"]),
       });
       continue;
     }
@@ -140,14 +140,14 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
     });
     if (
       !targets.includes(target) ||
-      resolve(projection.path) !==
+      resolve(installedSkill.path) !==
         join(resolve(skillsDirectoryFor(target, { kind: "global" }, roots)), skill.name)
     ) {
       facts.push(protect("The recorded copy is outside the active global route"));
       continue;
     }
     if (before.entry === null) {
-      const displaced = yield* installedSkillDisplaced(projection);
+      const displaced = yield* installedSkillDisplaced(installedSkill);
       facts.push(
         displaced
           ? protect("An unsettled backup explains the missing copy")
@@ -166,12 +166,12 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       );
       continue;
     }
-    const physical = join(before.anchor.physicalPath, basename(projection.path));
+    const physical = join(before.anchor.physicalPath, basename(installedSkill.path));
     const instance = instances.find(
       (item) =>
-        item.path === projection.path ||
+        item.path === installedSkill.path ||
         item.path === physical ||
-        item.aliases.includes(projection.path),
+        item.aliases.includes(installedSkill.path),
     );
     if (
       !instance ||
@@ -179,12 +179,12 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       instance.git.repository ||
       instance.owner.kind !== "skit" ||
       instance.owner.membership.kind !== "in-library" ||
-      instance.owner.membership.installedSkillId !== projection.installed_skill_id
+      instance.owner.membership.installedSkillId !== installedSkill.installed_skill_id
     ) {
       facts.push(protect("Global reader scope and Library ownership are not fully corroborated"));
       continue;
     }
-    if ((yield* Effect.result(checkSetupGlobalContent(projection.path)))._tag === "Failure") {
+    if ((yield* Effect.result(checkSetupGlobalContent(installedSkill.path)))._tag === "Failure") {
       facts.push(
         protect(
           "Repository, authored or package-manager protection prevents automatic reconciliation",
@@ -192,13 +192,13 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       );
       continue;
     }
-    const marker = yield* inspectOwnershipMarker(projection.path);
+    const marker = yield* inspectOwnershipMarker(installedSkill.path);
     if (
       marker.kind !== "valid" ||
-      marker.marker.installed_skill_id !== projection.installed_skill_id ||
-      marker.marker.skill_id !== projection.skill_id ||
-      marker.marker.skill_version_id !== projection.skill_version_id ||
-      marker.marker.expected_digest !== projection.expected_digest ||
+      marker.marker.installed_skill_id !== installedSkill.installed_skill_id ||
+      marker.marker.skill_id !== installedSkill.skill_id ||
+      marker.marker.skill_version_id !== installedSkill.skill_version_id ||
+      marker.marker.expected_digest !== installedSkill.expected_digest ||
       !version
     ) {
       facts.push(protect("The marker disagrees with the registered last-written baseline"));
@@ -211,7 +211,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
           const renderer = yield* prepareInstalledSkillRebuild(
             state,
             store.originalsPath,
-            { ...projection, skill_version_id: version.skill_version_id },
+            { ...installedSkill, skill_version_id: version.skill_version_id },
             policy === undefined ? { source: "declared" } : { source: "override", policy },
           );
           const directory = yield* fs.makeTempDirectoryScoped({ prefix: "skit-setup-desired-" });
@@ -225,8 +225,8 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       facts.push(protect("The selected retained version could not be rendered"));
       continue;
     }
-    const current = yield* deterministicTreeHash(projection.path);
-    const after = yield* captureSetupFile(resolve(projection.path));
+    const current = yield* deterministicTreeHash(installedSkill.path);
+    const after = yield* captureSetupFile(resolve(installedSkill.path));
     if (canonicalJson(before) !== canonicalJson(after)) {
       facts.push(protect("The copy changed during observation"));
       continue;
@@ -234,9 +234,9 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
     const status =
       current === desired.success
         ? "unchanged"
-        : current === projection.expected_digest
+        : current === installedSkill.expected_digest
           ? "incoming-update"
-          : desired.success === projection.expected_digest
+          : desired.success === installedSkill.expected_digest
             ? "local-only"
             : "competing";
     facts.push({
@@ -247,9 +247,9 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       desiredHash: desired.success,
       metadataChanged:
         status === "unchanged" &&
-        (projection.skill_version_id !== version.skill_version_id ||
-          projection.expected_digest !== desired.success ||
-          projection.status !== "installed"),
+        (installedSkill.skill_version_id !== version.skill_version_id ||
+          installedSkill.expected_digest !== desired.success ||
+          installedSkill.status !== "installed"),
     });
   }
   return facts.sort((left, right) => left.path.localeCompare(right.path));
@@ -265,17 +265,17 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
   for (const fact of facts) {
     if (fact.status === "native-delete") continue;
     const state = yield* store.load;
-    const projection = state.installed_skills.find(
+    const installedSkill = state.installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
     );
     const skill = state.skills.find((item) => item.skill_id === fact.skillId);
     if (
-      !projection ||
+      !installedSkill ||
       !skill ||
       !enabledSkillIds(state, globalEnabled(state).enabled).includes(fact.skillId) ||
       currentSkillVersion(state, skill)?.skill_version_id !== fact.desiredVersionId ||
-      projection.path !== fact.path ||
-      projection.destination !== fact.destination
+      installedSkill.path !== fact.path ||
+      installedSkill.destination !== fact.destination
     )
       return yield* new PlanIsStale();
     if (fact.status !== "incoming-update" && !fact.metadataChanged) continue;
@@ -284,18 +284,18 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
     const marker = yield* inspectOwnershipMarker(fact.path);
     if (
       marker.kind !== "valid" ||
-      marker.marker.installed_skill_id !== projection.installed_skill_id ||
-      marker.marker.skill_id !== projection.skill_id ||
-      marker.marker.skill_version_id !== projection.skill_version_id ||
-      marker.marker.expected_digest !== projection.expected_digest
+      marker.marker.installed_skill_id !== installedSkill.installed_skill_id ||
+      marker.marker.skill_id !== installedSkill.skill_id ||
+      marker.marker.skill_version_id !== installedSkill.skill_version_id ||
+      marker.marker.expected_digest !== installedSkill.expected_digest
     )
       return yield* new PlanIsStale();
     // Another approved additive setup stage may already have aligned this exact copy.
     if (
       current === fact.desiredHash &&
-      projection.skill_version_id === fact.desiredVersionId &&
-      projection.expected_digest === fact.desiredHash &&
-      projection.status === "installed"
+      installedSkill.skill_version_id === fact.desiredVersionId &&
+      installedSkill.expected_digest === fact.desiredHash &&
+      installedSkill.status === "installed"
     )
       continue;
     const evidence = hashParts([canonicalJson(yield* captureSetupFile(resolve(fact.path)))]);
@@ -303,7 +303,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
     yield* installEnabledSkills({
       target: fact.destination,
       scope: { kind: "global" },
-      root: projection.root,
+      root: installedSkill.root,
       variantsPath: store.variantsPath,
       onlySkillIds: [fact.skillId],
       ...(current === fact.desiredHash

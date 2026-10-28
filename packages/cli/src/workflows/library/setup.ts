@@ -2,12 +2,12 @@ import { join } from "node:path";
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
 import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
-import { isEntryLink, findDuplicates } from "../../projection/duplicates.js";
+import { isEntryLink, findDuplicates } from "../../install/duplicates.js";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../../projection/roots.js";
+} from "../../install/roots.js";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { scanSetupCopies } from "./setup-scan.js";
@@ -82,7 +82,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       discoveryComplete,
       locks,
     } = evidence;
-    const { instances, onboardingInstances, probes, projections } = yield* scanSetupCopies(
+    const { instances, onboardingInstances, probes, installedSkills } = yield* scanSetupCopies(
       evidence,
       options.inventory.home,
       options.probePath,
@@ -199,7 +199,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       // internal inventory for planning above, but expose only configured or invalid repositories.
       repositoryConfigs: repositoryConfigs.filter((config) => config.status !== "missing"),
       authoredCollections,
-      installedSkills: projections.sort((left, right) =>
+      installedSkills: installedSkills.sort((left, right) =>
         `${left.collectionId}\0${left.skillId}\0${left.path ?? ""}`.localeCompare(
           `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
         ),

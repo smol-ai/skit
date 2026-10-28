@@ -376,14 +376,14 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
     });
   const state = structuredClone(current.state);
   const skill = state.skills.find((candidate) => candidate.skill_id === request.skillId);
-  const projection = state.installed_skills.find(
+  const installedSkill = state.installed_skills.find(
     (candidate) => candidate.installed_skill_id === request.installedSkillId,
   );
   if (
     skill === undefined ||
-    projection === undefined ||
-    projection.skill_id !== skill.skill_id ||
-    projection.path !== request.path
+    installedSkill === undefined ||
+    installedSkill.skill_id !== skill.skill_id ||
+    installedSkill.path !== request.path
   )
     return yield* new InstalledSkillChanged({ path: request.path });
 

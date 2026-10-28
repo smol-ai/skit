@@ -3,7 +3,7 @@ import {
   installDestinationsFor,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../projection/roots.js";
+} from "../install/roots.js";
 
 export interface LibraryInstallationConfiguration {
   /** A target's global root, or undefined when the target is inactive on this device. */

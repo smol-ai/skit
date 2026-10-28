@@ -30,14 +30,14 @@ export function existingRepositorySkillsDirectory(
   target: InstallDestination,
 ): string | undefined {
   return state.installed_skills.find(
-    (projection) =>
-      projection.destination === target &&
-      pathIsWithin(root, projection.root) &&
+    (installedSkill) =>
+      installedSkill.destination === target &&
+      pathIsWithin(root, installedSkill.root) &&
       !state.repositories.some(
         (other) =>
           other.root !== root &&
           pathIsWithin(root, other.root) &&
-          pathIsWithin(other.root, projection.root),
+          pathIsWithin(other.root, installedSkill.root),
       ),
   )?.root;
 }
@@ -60,16 +60,16 @@ export function skillsDirectoryFor(
 }
 
 /** The targets this device materializes into: `.agents` always, `.claude` only with Claude Code. */
-export const activeInstallDestinations = Effect.fn("Projection.activeInstallDestinations")(
-  function* (options: InventoryRootOptions) {
-    const detected = yield* detectInstalledHarnesses({
-      home: options.home,
-      configHome: options.configHome,
-      overrides: options.overrides,
-    });
-    return installDestinationsFor(detected);
-  },
-);
+export const activeInstallDestinations = Effect.fn("Install.activeInstallDestinations")(function* (
+  options: InventoryRootOptions,
+) {
+  const detected = yield* detectInstalledHarnesses({
+    home: options.home,
+    configHome: options.configHome,
+    overrides: options.overrides,
+  });
+  return installDestinationsFor(detected);
+});
 
 export const installDestinationsFor = (
   detected: readonly HarnessName[],
